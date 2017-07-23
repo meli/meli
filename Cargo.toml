@@ -1,0 +1,12 @@
+[package]
+name = "nutt"
+version = "0.1.0"
+authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
+
+[dependencies]
+mailparse = "0.5.1"
+maildir = "0.1.1"
+[dependencies.ncurses]
+features = ["wide"]
+optional = false
+version = "5.86.0"
