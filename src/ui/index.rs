@@ -1,26 +1,46 @@
+/*
+ * meli - ui module.
+ *
+ * Copyright 2017 Manos Pitsidianakis
+ * 
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
 extern crate ncurses;
 extern crate maildir;
 extern crate mailparse;
-use mailparse::*;
+extern crate chrono;
+use mailbox::*;
 
+use self::chrono::NaiveDateTime;
+
+/* Index represents a UI list of mails */
 pub struct Index {
-    mailbox: Vec<(usize, maildir::MailEntry)>,
-    length: usize,
+    mailbox: Mailbox,
 
     win: ncurses::WINDOW,
     pad: ncurses::WINDOW,
     screen_width: i32,
     screen_height: i32,
 
+    threaded: bool,
+
     cursor_idx: usize,
 }
 impl Index {
-    pub fn new(iter: maildir::MailEntries) -> Index {
-        let mut collection: Vec<(usize, maildir::MailEntry)> = Vec::new();
-        for (i, x) in iter.enumerate() {
-            collection.push((i, x.unwrap()));
-        }
-        let length = collection.len();
+    pub fn new(mailbox: Mailbox) -> Index {
         let mut screen_height = 0;
         let mut screen_width = 0;
         /* Get the screen bounds. */
@@ -28,20 +48,20 @@ impl Index {
         // let win = ncurses::newwin( ncurses::LINES(), ncurses::COLS()-30, 0, 30);
         let win = ncurses::newwin(0, 0, 0, 0);
         ncurses::getmaxyx(win, &mut screen_height, &mut screen_width);
+        //eprintln!("length is {}\n", length);
+        let pad = ncurses::newpad(mailbox.get_length() as i32, screen_width);
         ncurses::wbkgd(
-            win,
+            pad,
             ' ' as ncurses::chtype |
                 ncurses::COLOR_PAIR(super::COLOR_PAIR_DEFAULT) as ncurses::chtype,
         );
-        //eprintln!("length is {}\n", length);
-        let pad = ncurses::newpad(length as i32, screen_width);
         Index {
-            mailbox: collection,
-            length: length,
+            mailbox: mailbox,
             win: win,
             pad: pad,
             screen_width: 0,
             screen_height: 0,
+            threaded: true,
             cursor_idx: 0,
         }
     }
@@ -53,13 +73,30 @@ impl Index {
 
         ncurses::wclear(self.pad);
 
-        for &mut (i, ref mut x) in self.mailbox.as_mut_slice() {
-            if i == self.cursor_idx {
-                ncurses::wattron(self.pad, ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
+        let mut idx = 0;
+        if self.threaded {
+            /* Draw threaded view. */
+            for i in self.mailbox.threaded_collection.iter() {
+                let container = self.mailbox.get_thread(*i);
+
+                assert!(container.has_message(), true);
+                let x = &self.mailbox.collection[container.get_message().unwrap()];
+                if idx == self.cursor_idx {
+                    Index::draw_entry(self.pad, x, idx, container.get_indentation(), false, true);
+                } else {
+                    Index::draw_entry(self.pad, x, idx, container.get_indentation(), false, false);
+                }
+                idx += 1;
+
             }
-            Index::draw_entry(self.pad, x, i);
-            if i == self.cursor_idx {
-                ncurses::wattroff(self.pad, ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
+        } else {
+            for x in self.mailbox.collection.as_mut_slice() {
+                if idx == self.cursor_idx {
+                    Index::draw_entry(self.pad, x, idx, 0, false, true);
+                } else {
+                    Index::draw_entry(self.pad, x, idx, 0, false, false);
+                }
+                idx += 1;
             }
         }
         ncurses::getmaxyx(self.win, &mut self.screen_height, &mut self.screen_width);
@@ -94,7 +131,7 @@ impl Index {
                 }
             }
             ncurses::KEY_DOWN => {
-                if self.cursor_idx < self.length - 1 {
+                if self.cursor_idx < self.mailbox.get_length() - 1 {
                     self.cursor_idx += 1;
                 } else {
                     return;
@@ -109,16 +146,26 @@ impl Index {
         ncurses::wmove(self.pad, self.cursor_idx as i32, 0);
         /* Borrow x from self.mailbox in separate scopes or else borrow checker complains */
         {
-            let (_, ref mut x) = self.mailbox.as_mut_slice()[self.cursor_idx];
-            ncurses::wattron(self.pad, ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
-            Index::draw_entry(self.pad, x, self.cursor_idx);
-            ncurses::wattroff(self.pad, ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
+            let i: usize = 
+            if self.threaded { 
+                self.mailbox.get_threaded_mail(self.cursor_idx)
+            } else {
+                self.cursor_idx
+            };
+            let (ref mut x, thread) = self.mailbox.get_mail_and_thread(i);
+            Index::draw_entry(self.pad, x, self.cursor_idx, thread.get_indentation(), false, true);
         }
         /* Draw previous highlighted entry normally */
         ncurses::wmove(self.pad, prev_idx as i32, 0);
         {
-            let (_, ref mut x) = self.mailbox.as_mut_slice()[prev_idx];
-            Index::draw_entry(self.pad, x, prev_idx);
+            let i: usize = 
+            if self.threaded { 
+                self.mailbox.get_threaded_mail(prev_idx)
+            } else {
+                prev_idx
+            };
+            let (ref mut x, thread) = self.mailbox.get_mail_and_thread(i);
+            Index::draw_entry(self.pad, x, prev_idx, thread.get_indentation(), false, false);
         }
 
         /* Calculate the pad row of the first entry to be displayed in the window */
@@ -134,14 +181,16 @@ impl Index {
          *      ┌- i
          *      │  i+1
          *      │  i+2
-         *    r ┥  ...
+         *    r ┤  ...
          *      │  n
          *      │  ..  ┐
-         *      │  i-2 ├ 'dead' entries (must be empty)
+         *      │  i-2 ├ 'dead' entries (must be cleared)
          *      └  i-1 ┘
          */
-        if pminrow != pminrow_prev && pminrow + self.screen_height > self.length as i32 {
-            /* touch Index window (tell ncurses to redraw the entire window in next refresh */
+        if pminrow != pminrow_prev &&
+            pminrow + self.screen_height > self.mailbox.get_length() as i32 {
+            /* touch Index window (tell ncurses to redraw the entire window in
+             * next refresh) */
             ncurses::touchwin(self.win);
             ncurses::wrefresh(self.win);
         }
@@ -155,29 +204,54 @@ impl Index {
             self.screen_width - 1,
         );
     }
-    fn draw_entry(win: ncurses::WINDOW, entry: &mut maildir::MailEntry, i: usize) {
+    fn draw_entry(win: ncurses::WINDOW, mail: &Mail, i: usize, indent: usize,
+                  has_sibling: bool, highlight: bool) {
+        if highlight {
+            ncurses::wattron(win,
+                             ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
+        }
         ncurses::waddstr(win, &format!("{}\t", i));
-        let d = entry.headers().unwrap().get_first_value("Date").unwrap();
-        match d {
-            Some(t) => {
-                ncurses::waddstr(win, &t.to_string());
-            }
-            _ => {}
+        let dt = NaiveDateTime::from_timestamp(mail.get_date(), 0);
+        ncurses::waddstr(win, &dt.format("%Y-%m-%d %H:%M:%S").to_string());
+        ncurses::waddch(win, '\t' as u64);
+        for _ in 0..indent {
+            ncurses::waddch(win, ' ' as u64);
         }
-        ncurses::waddch(win, ' ' as u64);
-        let c = entry.headers().unwrap().get_first_value("Subject").unwrap();
-        match c {
-            Some(t) => {
-                ncurses::waddstr(win, &t.to_string());
+        if indent > 0 {
+            ncurses::wattron(win,
+                             ncurses::COLOR_PAIR(super::COLOR_PAIR_THREAD_INDENT));
+            if has_sibling {
+                ncurses::waddstr(win, "│");
+            } else {
+                ncurses::waddstr(win, "└");
             }
-            _ => {}
+            ncurses::waddstr(win, "->");
+            ncurses::wattroff(win,
+                              ncurses::COLOR_PAIR(super::COLOR_PAIR_THREAD_INDENT));
         }
-        ncurses::wprintw(win, "\n");
+        if highlight {
+            ncurses::wattron(win,
+                             ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
+        }
+        ncurses::waddstr(win, &format!("{:.85}",mail.get_subject()));
+        if highlight { 
+            ncurses::wattroff(win,
+                              ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
+        }
+        ncurses::waddstr(win, "\n");
     }
     pub fn show_pager(&mut self) {
-        ncurses::getmaxyx(self.win, &mut self.screen_height, &mut self.screen_width);
-        let (_, ref mut mail) = self.mailbox[self.cursor_idx];
-        let mut pager = super::pager::Pager::new(self.win, mail);
+        ncurses::getmaxyx(self.win,
+                          &mut self.screen_height, &mut self.screen_width);
+        let x: &mut Mail;
+        
+        if self.threaded { 
+            let i = self.mailbox.get_threaded_mail(self.cursor_idx);
+            x = &mut self.mailbox.collection[i];
+        } else {
+            x = &mut self.mailbox.collection[self.cursor_idx];
+        }
+        let mut pager = super::pager::Pager::new(self.win, &mut x.get_entry());
         pager.scroll(ncurses::KEY_DOWN);
         pager.scroll(ncurses::KEY_UP);
         let mut ch = ncurses::getch();
@@ -191,19 +265,14 @@ impl Index {
                 }
                 _ => {}
             }
-            // ncurses::wprintw(pager, "test\n");
-            //ncurses::wrefresh(pager);
             ch = ncurses::getch();
         }
-        drop(pager);
+        drop(pager); // drop pager before next refresh
         ncurses::wrefresh(self.win);
     }
 }
-impl Drop for Index {
+impl Drop for Index  {
     fn drop(&mut self) {
-        /* Final prompt before closing. */
-        //ncurses::mv(self.screen_height - 1, 0);
-        //prompt();
         ncurses::delwin(self.win);
         ncurses::delwin(self.pad);
         ncurses::endwin();

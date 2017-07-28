@@ -10,9 +10,8 @@ fn main() {
     let locale_conf = ncurses::LcCategory::all;
     ncurses::setlocale(locale_conf, "en_US.UTF-8");
     ui::initialize();
-    let maildir = maildir::Maildir::from("./Inbox");
-    let iter = maildir.list_cur();
-    let mut index = Index::new(iter);
+    let mailbox = Mailbox::new("PATH");
+    let mut index = Index::new(mailbox);
     ncurses::refresh();
 
     index.draw();

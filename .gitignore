@@ -7,4 +7,3 @@ target/
 **/*.rs.bk
 .gdb_history
 *.log
-

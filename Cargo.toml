@@ -6,6 +6,8 @@ authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 [dependencies]
 mailparse = "0.5.1"
 maildir = "0.1.1"
+chrono = "0.4"
+
 [dependencies.ncurses]
 features = ["wide"]
 optional = false

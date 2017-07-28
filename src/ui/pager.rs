@@ -1,7 +1,30 @@
+/*
+ * meli - ui module.
+ *
+ * Copyright 2017 Manos Pitsidianakis
+ * 
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
 extern crate ncurses;
 extern crate maildir;
 extern crate mailparse;
-use mailparse::*;
+use self::mailparse::*;
+
+/* Pager represents the part of the UI that shows the mail headers and body for
+ * viewing */
 pub struct Pager {
     win: ncurses::WINDOW,
     pad: ncurses::WINDOW,
@@ -12,8 +35,8 @@ pub struct Pager {
 }
 
 impl Pager {
-    pub fn new(parent: ncurses::WINDOW, entry: &mut maildir::MailEntry) -> Pager {
-
+    pub fn new(parent: ncurses::WINDOW,
+               entry: &mut maildir::MailEntry) -> Pager {
         let mut screen_height = 0;
         let mut screen_width = 0;
         ncurses::getmaxyx(parent, &mut screen_height, &mut screen_width);
@@ -32,11 +55,15 @@ impl Pager {
         for _ in 1..screen_width + 1 {
             ncurses::waddstr(win, "─");
         }
-        //ncurses::wprintw(win, "\n");
-        let (mail_pad, rows, header_height) = Pager::print_entry(win, entry);
+        let (pad, rows, header_height) = Pager::print_entry(win, entry);
+        ncurses::wbkgd(
+            pad,
+            ' ' as ncurses::chtype |
+                ncurses::COLOR_PAIR(super::COLOR_PAIR_DEFAULT) as ncurses::chtype,
+        );
         ncurses::wrefresh(win);
         Pager {
-            pad: mail_pad,
+            pad: pad,
             win: win,
             rows: rows,
             header_height: header_height,
@@ -163,8 +190,7 @@ impl Pager {
     fn print_entry_content(
         win: ncurses::WINDOW,
         mail: &mut maildir::MailEntry,
-        height: i32,
-    ) -> (ncurses::WINDOW, i32, i32) {
+        height: i32) -> (ncurses::WINDOW, i32, i32) {
         let mut h = 0;
         let mut w = 0;
         /* height and width of self.win, the pager window */
@@ -210,17 +236,15 @@ impl Pager {
     }
     fn print_entry(
         win: ncurses::WINDOW,
-        mail: &mut maildir::MailEntry,
-    ) -> (ncurses::WINDOW, i32, i32) {
+        mail: &mut maildir::MailEntry) -> (ncurses::WINDOW, i32, i32) {
         let header_height = Pager::print_entry_headers(win, mail);
         Pager::print_entry_content(win, mail, header_height + 2)
     }
 }
 
-
 impl Drop for Pager {
     fn drop(&mut self) {
-        //ncurses::touchwin(self.win);
+        ncurses::wclear(self.win);
         ncurses::delwin(self.win);
         ncurses::delwin(self.pad);
     }
