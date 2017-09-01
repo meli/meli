@@ -19,9 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 extern crate ncurses;
-extern crate maildir;
-extern crate mailparse;
-use self::mailparse::*;
+
+use super::super::mailbox;
 
 /* Pager represents the part of the UI that shows the mail headers and body for
  * viewing */
@@ -36,7 +35,7 @@ pub struct Pager {
 
 impl Pager {
     pub fn new(parent: ncurses::WINDOW,
-               entry: &mut maildir::MailEntry) -> Pager {
+               entry: &mut mailbox::Mail) -> Pager {
         let mut screen_height = 0;
         let mut screen_width = 0;
         ncurses::getmaxyx(parent, &mut screen_height, &mut screen_width);
@@ -136,50 +135,56 @@ impl Pager {
             w - 1,
         );
     }
-    fn print_entry_headers(win: ncurses::WINDOW, mail: &mut maildir::MailEntry) -> i32 {
+    fn print_entry_headers(win: ncurses::WINDOW, mail: &mut mailbox::Mail) -> i32 {
         let mut i = 0;
         ncurses::wattron(win, ncurses::COLOR_PAIR(super::COLOR_PAIR_HEADERS));
         ncurses::waddstr(win, "Date: ");
         ncurses::waddstr(
             win,
-            &mail.headers()
-                .unwrap()
-                .get_first_value("Date")
-                .unwrap()
-                .unwrap(),
+            mail.get_date_as_str()
         );
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "From: ");
         ncurses::waddstr(
             win,
-            &mail.headers()
-                .unwrap()
-                .get_first_value("From")
-                .unwrap()
-                .unwrap(),
+            &mail.get_from(),
         );
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "To: ");
         ncurses::waddstr(
             win,
-            &mail.headers()
-                .unwrap()
-                .get_first_value("To")
-                .unwrap()
-                .unwrap(),
+            &mail.get_to(),
         );
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "Subject: ");
         ncurses::waddstr(
             win,
-            &mail.headers()
-                .unwrap()
-                .get_first_value("Subject")
-                .unwrap()
-                .unwrap(),
+            &mail.get_subject(),
+        );
+        ncurses::waddstr(win, "\n");
+        i += 1;
+        ncurses::waddstr(win, "Message-ID: ");
+        ncurses::waddstr(
+            win,
+            &mail.get_message_id_raw(),
+            //&mail.get_message_id(),
+        );
+        ncurses::waddstr(win, "\n");
+        i += 1;
+        ncurses::waddstr(win, "References: ");
+        ncurses::waddstr(
+            win,
+            &format!("{:?}", mail.get_references()),
+        );
+        ncurses::waddstr(win, "\n");
+        i += 1;
+        ncurses::waddstr(win, "In-Reply-To: ");
+        ncurses::waddstr(
+            win,
+            &mail.get_in_reply_to_raw(),
         );
         ncurses::waddstr(win, "\n");
         i += 1;
@@ -189,7 +194,7 @@ impl Pager {
     }
     fn print_entry_content(
         win: ncurses::WINDOW,
-        mail: &mut maildir::MailEntry,
+        mail: &mut mailbox::Mail,
         height: i32) -> (ncurses::WINDOW, i32, i32) {
         let mut h = 0;
         let mut w = 0;
@@ -199,44 +204,31 @@ impl Pager {
         let mut y = 0;
         /* y,x coordinates of upper left corner of win */
         ncurses::getparyx(win, &mut y, &mut x);
-        match &mail.parsed() {
-            &Ok(ref v) => {
-                match &v.get_body() {
-                    &Ok(ref b) => {
-                        let lines: Vec<&str> = b.split('\n').collect();
-                        let lines_length = lines.len();
-                        let pad = ncurses::newpad(lines_length as i32, 1024);
-                        ncurses::wclear(pad);
-                        for l in lines {
-                            ncurses::waddstr(pad, &l.replace("%", "%%"));
-                            ncurses::waddstr(pad, "\n");
-                        }
-                        /*
-                         *      ┌ ┏━━━━━━━━━┓         ┐
-                         *      │ ┃         ┃         │
-                         *      y ┃         ┃         │
-                         *      │ ┃         ┃         │
-                         *      ├ x━━━━━━━━━┫ ┐       │ index
-                         *      │ ┃         ┃ │       │
-                         *      h ┃         ┃ │ pager │
-                         *      └ ┗━━━━━━━━━w ┘       ┘
-                         */
-                        ncurses::pnoutrefresh(pad, 0, 0, y + height, x, y + height - 1, w - 1);
-                        return (pad, lines_length as i32, height);
-                    }
-                    _ => {
-                        return (ncurses::newpad(0, 0), 0, height);
-                    }
-                }
-            }
-            _ => {
-                return (ncurses::newpad(0, 0), 0, height);
-            }
+        let body = mail.get_body();
+        let lines: Vec<&str> = body.trim().split('\n').collect();
+        let lines_length = lines.len();
+        let pad = ncurses::newpad(lines_length as i32, 1024);
+        ncurses::wclear(pad);
+        for l in lines {
+            ncurses::waddstr(pad, &l.replace("%", "%%"));
+            ncurses::waddstr(pad, "\n");
         }
+        /*
+         *      ┌ ┏━━━━━━━━━┓         ┐
+         *      │ ┃         ┃         │
+         *      y ┃         ┃         │
+         *      │ ┃         ┃         │
+         *      ├ x━━━━━━━━━┫ ┐       │ index
+         *      │ ┃         ┃ │       │
+         *      h ┃         ┃ │ pager │
+         *      └ ┗━━━━━━━━━w ┘       ┘
+         */
+        ncurses::pnoutrefresh(pad, 0, 0, y + height, x, y + height - 1, w - 1);
+        return (pad, lines_length as i32, height);
     }
     fn print_entry(
         win: ncurses::WINDOW,
-        mail: &mut maildir::MailEntry) -> (ncurses::WINDOW, i32, i32) {
+        mail: &mut mailbox::Mail) -> (ncurses::WINDOW, i32, i32) {
         let header_height = Pager::print_entry_headers(win, mail);
         Pager::print_entry_content(win, mail, header_height + 2)
     }
@@ -244,8 +236,9 @@ impl Pager {
 
 impl Drop for Pager {
     fn drop(&mut self) {
-        ncurses::wclear(self.win);
-        ncurses::delwin(self.win);
         ncurses::delwin(self.pad);
+        ncurses::wclear(self.win);
+        ncurses::wrefresh(self.win);
+        ncurses::delwin(self.win);
     }
 }

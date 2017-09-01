@@ -19,12 +19,51 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 extern crate ncurses;
-extern crate maildir;
-extern crate mailparse;
 extern crate chrono;
+use mailbox::email::Mail;
 use mailbox::*;
+use error::MeliError;
+use std::error::Error;
 
-use self::chrono::NaiveDateTime;
+//use self::chrono::NaiveDateTime;
+
+pub trait Window {
+    fn draw(&mut self) -> ();
+    fn handle_input(&mut self, input: i32) -> ();
+}
+
+pub struct ErrorWindow {
+    description: String,
+
+    win: ncurses::WINDOW,
+}
+
+impl Window for ErrorWindow {
+    fn draw(&mut self) -> () {
+        ncurses::waddstr(self.win, &self.description);
+        ncurses::wrefresh(self.win);
+    }
+    fn handle_input(&mut self, _: i32) -> () {
+
+
+    }
+}
+impl ErrorWindow {
+    pub fn new(err: MeliError) -> Self {
+        /*
+        let mut screen_height = 0;
+        let mut screen_width = 0;
+        /* Get the screen bounds. */
+        ncurses::getmaxyx(ncurses::stdscr(), &mut screen_height, &mut screen_width);
+        // let win = ncurses::newwin( ncurses::LINES(), ncurses::COLS()-30, 0, 30);
+        */
+        let win = ncurses::newwin(0, 0, 0, 0);
+        ErrorWindow {
+            description: err.description().to_string(),
+            win: win,
+        }
+    }
+}
 
 /* Index represents a UI list of mails */
 pub struct Index {
@@ -35,68 +74,90 @@ pub struct Index {
     screen_width: i32,
     screen_height: i32,
 
+    /* threading */
     threaded: bool,
+
 
     cursor_idx: usize,
 }
-impl Index {
-    pub fn new(mailbox: Mailbox) -> Index {
-        let mut screen_height = 0;
-        let mut screen_width = 0;
-        /* Get the screen bounds. */
-        ncurses::getmaxyx(ncurses::stdscr(), &mut screen_height, &mut screen_width);
-        // let win = ncurses::newwin( ncurses::LINES(), ncurses::COLS()-30, 0, 30);
-        let win = ncurses::newwin(0, 0, 0, 0);
-        ncurses::getmaxyx(win, &mut screen_height, &mut screen_width);
-        //eprintln!("length is {}\n", length);
-        let pad = ncurses::newpad(mailbox.get_length() as i32, screen_width);
-        ncurses::wbkgd(
-            pad,
-            ' ' as ncurses::chtype |
-                ncurses::COLOR_PAIR(super::COLOR_PAIR_DEFAULT) as ncurses::chtype,
-        );
-        Index {
-            mailbox: mailbox,
-            win: win,
-            pad: pad,
-            screen_width: 0,
-            screen_height: 0,
-            threaded: true,
-            cursor_idx: 0,
-        }
-    }
 
-    pub fn draw(&mut self) {
+
+impl Window for Index {
+    fn draw(&mut self) {
+        if self.mailbox.get_length() == 0 {
+            return;
+        }
         let mut x = 0;
         let mut y = 0;
         ncurses::getbegyx(self.win, &mut y, &mut x);
 
         ncurses::wclear(self.pad);
 
-        let mut idx = 0;
         if self.threaded {
+            let mut indentations : Vec<bool> = Vec::with_capacity(6);
             /* Draw threaded view. */
-            for i in self.mailbox.threaded_collection.iter() {
+            let mut iter = self.mailbox.threaded_collection.iter().enumerate().peekable();
+            /* This is just a desugared for loop so that we can use .peek() */
+            loop {
+                match iter.next() {
+                    Some((idx, i)) => {
+                        let container = self.mailbox.get_thread(*i);
+                        let indentation = container.get_indentation();
+
+                        assert_eq!(container.has_message(), true);
+                        match iter.peek() {
+                            Some(&(_, x)) if self.mailbox.get_thread(*x).get_indentation() == indentation => {
+                                indentations.pop();
+                                indentations.push(true);
+                            },
+                            _ => {
+                                indentations.pop();
+                                indentations.push(false);
+                            }
+                        }
+                        if container.has_sibling() {
+                            indentations.pop();
+                            indentations.push(true);
+                        } 
+                        let x = &self.mailbox.collection[container.get_message().unwrap()];
+                        Index::draw_entry(self.pad, x, idx, indentation, container.has_sibling(), container.has_parent(), idx == self.cursor_idx, container.get_show_subject(), Some(&indentations));
+                        match iter.peek() {
+                            Some(&(_, x)) if self.mailbox.get_thread(*x).get_indentation() > indentation => {
+                                indentations.push(false);
+                            },
+                            Some(&(_, x)) if self.mailbox.get_thread(*x).get_indentation() < indentation => {
+                                for _ in 0..(indentation - self.mailbox.get_thread(*x).get_indentation()) {
+                                    indentations.pop();
+                                }
+                            },
+                            _ => {
+                            }
+                        }
+                    },
+                    None => break,
+                }
+            }
+            /*
+            for (idx, i) in self.mailbox.threaded_collection.iter().enumerate() {
                 let container = self.mailbox.get_thread(*i);
 
-                assert!(container.has_message(), true);
+                assert_eq!(container.has_message(), true);
+                if container.has_sibling() {
+                    indentations.pop();
+                    indentations.push(true);
+                } 
                 let x = &self.mailbox.collection[container.get_message().unwrap()];
-                if idx == self.cursor_idx {
-                    Index::draw_entry(self.pad, x, idx, container.get_indentation(), false, true);
+                Index::draw_entry(self.pad, x, idx, container.get_indentation(), container.has_sibling(), idx == self.cursor_idx, container.get_show_subject(), Some(&indentations));
+                if container.has_children() {
+                    indentations.push(false);
                 } else {
-                    Index::draw_entry(self.pad, x, idx, container.get_indentation(), false, false);
+                    indentations.pop();
                 }
-                idx += 1;
-
             }
+            */
         } else {
-            for x in self.mailbox.collection.as_mut_slice() {
-                if idx == self.cursor_idx {
-                    Index::draw_entry(self.pad, x, idx, 0, false, true);
-                } else {
-                    Index::draw_entry(self.pad, x, idx, 0, false, false);
-                }
-                idx += 1;
+            for (idx, x) in self.mailbox.collection.as_mut_slice().iter().enumerate() {
+                Index::draw_entry(self.pad, x, idx, 0, false, false, idx == self.cursor_idx, true, None);
             }
         }
         ncurses::getmaxyx(self.win, &mut self.screen_height, &mut self.screen_width);
@@ -113,7 +174,10 @@ impl Index {
         );
     }
 
-    pub fn scroll(&mut self, motion: i32) {
+    fn handle_input(&mut self, motion: i32) {
+        if self.mailbox.get_length() == 0 {
+            return;
+        }
         ncurses::getmaxyx(self.win, &mut self.screen_height, &mut self.screen_width);
         if self.screen_height == 0 {
             return;
@@ -129,14 +193,18 @@ impl Index {
                 } else {
                     return;
                 }
-            }
+            },
             ncurses::KEY_DOWN => {
                 if self.cursor_idx < self.mailbox.get_length() - 1 {
                     self.cursor_idx += 1;
                 } else {
                     return;
                 }
-            }
+            },
+            10 => {
+                self.show_pager();
+                self.draw();
+            },
             _ => {
                 return;
             }
@@ -146,26 +214,41 @@ impl Index {
         ncurses::wmove(self.pad, self.cursor_idx as i32, 0);
         /* Borrow x from self.mailbox in separate scopes or else borrow checker complains */
         {
-            let i: usize = 
-            if self.threaded { 
-                self.mailbox.get_threaded_mail(self.cursor_idx)
-            } else {
-                self.cursor_idx
-            };
-            let (ref mut x, thread) = self.mailbox.get_mail_and_thread(i);
-            Index::draw_entry(self.pad, x, self.cursor_idx, thread.get_indentation(), false, true);
+            let pair = super::COLOR_PAIR_CURSOR;
+            ncurses::wchgat(self.pad, -1, 0, pair);
         }
         /* Draw previous highlighted entry normally */
         ncurses::wmove(self.pad, prev_idx as i32, 0);
         {
-            let i: usize = 
-            if self.threaded { 
-                self.mailbox.get_threaded_mail(prev_idx)
-            } else {
-                prev_idx
+            let pair = match self.threaded {
+                true if prev_idx % 2 == 0 => super::COLOR_PAIR_THREAD_EVEN,
+                true => super::COLOR_PAIR_THREAD_ODD,
+                false => super::COLOR_PAIR_DEFAULT,
             };
-            let (ref mut x, thread) = self.mailbox.get_mail_and_thread(i);
-            Index::draw_entry(self.pad, x, prev_idx, thread.get_indentation(), false, false);
+            ncurses::wchgat(self.pad, 32, 0, pair);
+            ncurses::wmove(self.pad, prev_idx as i32, 32);
+            /* If first character in subject column is space, we need to check for indentation
+             * characters and highlight them appropriately */
+            if (ncurses::winch(self.pad) & ncurses::A_CHARTEXT()) == ' ' as u64 {
+                let mut x = 32;
+                loop {
+                    match ncurses::mvwinch(self.pad, prev_idx as i32, x) & ncurses::A_CHARTEXT() {
+                        32 => {  /* ASCII code for space */
+                            ncurses::wchgat(self.pad, x, 0, pair);
+                        },
+                        62 => { /* ASCII code for '>' */
+                            ncurses::wchgat(self.pad, x, 0, super::COLOR_PAIR_THREAD_INDENT);
+                            ncurses::wmove(self.pad, prev_idx as i32, x + 1);
+                            break;
+                        }
+                        _ => {
+                            ncurses::wchgat(self.pad, x, 0, super::COLOR_PAIR_THREAD_INDENT);
+                        },
+                    }
+                    x += 1;
+                }
+            } 
+            ncurses::wchgat(self.pad, -1, 0, pair);
         }
 
         /* Calculate the pad row of the first entry to be displayed in the window */
@@ -189,9 +272,9 @@ impl Index {
          */
         if pminrow != pminrow_prev &&
             pminrow + self.screen_height > self.mailbox.get_length() as i32 {
-            /* touch Index window (tell ncurses to redraw the entire window in
-             * next refresh) */
-            ncurses::touchwin(self.win);
+            /* touch dead entries in index (tell ncurses to redraw the empty lines next refresh) */
+            let live_entries = self.mailbox.get_length() as i32 - pminrow;
+            ncurses::wredrawln(self.win, live_entries, self.screen_height);
             ncurses::wrefresh(self.win);
         }
         ncurses::prefresh(
@@ -204,43 +287,120 @@ impl Index {
             self.screen_width - 1,
         );
     }
-    fn draw_entry(win: ncurses::WINDOW, mail: &Mail, i: usize, indent: usize,
-                  has_sibling: bool, highlight: bool) {
-        if highlight {
-            ncurses::wattron(win,
-                             ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
+}
+impl Index {
+    pub fn new(mailbox: Mailbox) -> Index {
+        let mut screen_height = 0;
+        let mut screen_width = 0;
+        /* Get the screen bounds. */
+        ncurses::getmaxyx(ncurses::stdscr(), &mut screen_height, &mut screen_width);
+        // let win = ncurses::newwin( ncurses::LINES(), ncurses::COLS()-30, 0, 30);
+        let win = ncurses::newwin(0, 0, 0, 0);
+        ncurses::getmaxyx(win, &mut screen_height, &mut screen_width);
+        //eprintln!("length is {}\n", length);
+        let mailbox_length = mailbox.get_length();
+        let pad = ncurses::newpad(mailbox_length as i32, screen_width);
+        ncurses::wbkgd(
+            pad,
+            ' ' as ncurses::chtype |
+                ncurses::COLOR_PAIR(super::COLOR_PAIR_DEFAULT) as ncurses::chtype,
+        );
+        if mailbox_length == 0 {
+            ncurses::printw(&format!("Mailbox {} is empty.\n", mailbox.path));
+            ncurses::refresh();
         }
+        let mut color = true;
+        let mut thread_color = Vec::with_capacity(mailbox_length);
+        for i in &mailbox.threaded_collection {
+            let container = mailbox.get_thread(*i);
+            if !container.has_parent() {
+                color = !color;
+            }
+            thread_color.push(color);
+        }
+        Index {
+            mailbox: mailbox,
+            win: win,
+            pad: pad,
+            screen_width: 0,
+            screen_height: 0,
+            threaded: true,
+            cursor_idx: 0,
+        }
+    }
+
+    /* draw_entry() doesn't take &mut self because borrow checker complains if it's called from
+     * another method. */
+    fn draw_entry(win: ncurses::WINDOW, mail: &Mail, i: usize, indent: usize,
+                  has_sibling: bool, has_parent: bool, highlight: bool,
+                  show_subject: bool, indentations: Option<&Vec<bool>>) {
+        /* TODO: use addchstr */
+        let pair =
+            if highlight {
+                super::COLOR_PAIR_CURSOR
+            } else if i % 2 == 0 {
+                super::COLOR_PAIR_THREAD_EVEN
+            } else {
+                super::COLOR_PAIR_THREAD_ODD
+            };
+        let attr = ncurses::COLOR_PAIR(pair);
+        ncurses::wattron(win, attr);
+
         ncurses::waddstr(win, &format!("{}\t", i));
-        let dt = NaiveDateTime::from_timestamp(mail.get_date(), 0);
-        ncurses::waddstr(win, &dt.format("%Y-%m-%d %H:%M:%S").to_string());
+        ncurses::waddstr(win, &mail.get_datetime().format("%Y-%m-%d %H:%M:%S").to_string());
         ncurses::waddch(win, '\t' as u64);
-        for _ in 0..indent {
-            ncurses::waddch(win, ' ' as u64);
+        for i in 0..indent {
+            if indentations.is_some() && indentations.unwrap().len() > i && indentations.unwrap()[i] {
+                ncurses::wattron(win, ncurses::COLOR_PAIR(super::COLOR_PAIR_THREAD_INDENT));
+                ncurses::waddstr(win, "│");
+                ncurses::wattroff(win, ncurses::COLOR_PAIR(super::COLOR_PAIR_THREAD_INDENT));
+                ncurses::wattron(win, attr);
+            } else {
+                ncurses::waddch(win, ' ' as u64);
+            }
+            if i > 0 {
+                ncurses::waddch(win, ' ' as u64);
+            }
         }
         if indent > 0 {
-            ncurses::wattron(win,
-                             ncurses::COLOR_PAIR(super::COLOR_PAIR_THREAD_INDENT));
-            if has_sibling {
-                ncurses::waddstr(win, "│");
+            ncurses::wattron(win, ncurses::COLOR_PAIR(super::COLOR_PAIR_THREAD_INDENT));
+            if has_sibling && has_parent {
+                ncurses::waddstr(win, "├");
+            } else if has_sibling {
+                ncurses::waddstr(win, "┬");
             } else {
                 ncurses::waddstr(win, "└");
             }
-            ncurses::waddstr(win, "->");
-            ncurses::wattroff(win,
-                              ncurses::COLOR_PAIR(super::COLOR_PAIR_THREAD_INDENT));
+            ncurses::waddstr(win, "─>");
+            ncurses::wattroff(win, ncurses::COLOR_PAIR(super::COLOR_PAIR_THREAD_INDENT));
         }
-        if highlight {
-            ncurses::wattron(win,
-                             ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
+        ncurses::wattron(win, attr);
+        if show_subject {
+            ncurses::waddstr(win, &format!("{:.85}",mail.get_subject()));
+            /*
+            if indent == 0 {
+                if mail.get_subject().chars().count() < 85 {
+                    for _ in 0..(85 - mail.get_subject().chars().count()) {
+                        ncurses::waddstr(win, "▔");
+                    }
+                }
+                ncurses::waddstr(win,"▔");
+            }*/
         }
-        ncurses::waddstr(win, &format!("{:.85}",mail.get_subject()));
-        if highlight { 
-            ncurses::wattroff(win,
-                              ncurses::COLOR_PAIR(super::COLOR_PAIR_CURSOR));
-        }
-        ncurses::waddstr(win, "\n");
+        let mut screen_height = 0;
+        let mut screen_width = 0;
+        /* Get the screen bounds. */
+        let mut x = 0;
+        let mut y = 0;
+        ncurses::getmaxyx(win, &mut screen_height, &mut screen_width);
+        ncurses::getyx(win, &mut y, &mut x);
+        ncurses::waddstr(win, &" ".repeat((screen_width - x) as usize));
+        ncurses::wattroff(win, attr);
     }
-    pub fn show_pager(&mut self) {
+    fn show_pager(&mut self) {
+        if self.mailbox.get_length() == 0 {
+            return;
+        }
         ncurses::getmaxyx(self.win,
                           &mut self.screen_height, &mut self.screen_width);
         let x: &mut Mail;
@@ -251,7 +411,7 @@ impl Index {
         } else {
             x = &mut self.mailbox.collection[self.cursor_idx];
         }
-        let mut pager = super::pager::Pager::new(self.win, &mut x.get_entry());
+        let mut pager = super::pager::Pager::new(self.win, x);
         pager.scroll(ncurses::KEY_DOWN);
         pager.scroll(ncurses::KEY_UP);
         let mut ch = ncurses::getch();
@@ -267,14 +427,12 @@ impl Index {
             }
             ch = ncurses::getch();
         }
-        drop(pager); // drop pager before next refresh
-        ncurses::wrefresh(self.win);
     }
 }
 impl Drop for Index  {
     fn drop(&mut self) {
+        ncurses::wclear(self.win);
         ncurses::delwin(self.win);
         ncurses::delwin(self.pad);
-        ncurses::endwin();
     }
 }
