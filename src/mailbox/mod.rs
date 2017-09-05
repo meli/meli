@@ -24,11 +24,15 @@
 use std::option::Option;
 use std::collections::HashMap;
 use std;
-mod maildir;
 pub mod email;
-mod parser;
 pub use self::email::*;
-use mailbox::maildir::MailBackend;
+
+/* Mail backends. Currently only maildir is supported */
+mod backends;
+use mailbox::backends::MailBackend;
+
+use mailbox::backends::maildir;
+
 use error::Result;
 
 

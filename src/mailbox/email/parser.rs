@@ -60,7 +60,11 @@ named!(headers<std::vec::Vec<(&str, std::vec::Vec<&str>)>>,
 
 named!(pub mail<(std::vec::Vec<(&str, std::vec::Vec<&str>)>, &[u8])>, 
        separated_pair!(headers, tag!("\n"), take_while!(call!(|_| { true }))));
-       //pair!(headers, take_while!(call!(|_| { true }))));
+named!(pub attachment<(std::vec::Vec<(&str, std::vec::Vec<&str>)>, &[u8])>, 
+       do_parse!(
+            opt!(is_a!(" \n\t\r")) >>
+       pair: pair!(many0!(complete!(header)), take_while!(call!(|_| { true }))) >>
+       ( { pair } )));
 
 /* try chrono parse_from_str with several formats 
  * https://docs.rs/chrono/0.4.0/chrono/struct.DateTime.html#method.parse_from_str
@@ -174,3 +178,66 @@ named!(pub message_id<&str>,
 
 named!(pub references<Vec<&str>>, many0!(preceded!(is_not!("<"), message_id)));
 
+named_args!(pub attachments<'a>(boundary: &'a str, boundary_end: &'a str) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >, 
+            dbg!(alt_complete!(do_parse!(
+                take_until!(boundary) >>
+                vecs: many0!(complete!(do_parse!(
+                            tag!(boundary) >>
+                            tag!("\n") >>
+                            body: take_until1!(boundary)  >>
+                            ( { body } )))) >>
+                tag!(boundary_end) >>
+                tag!("\n") >>
+                take_while!(call!(|_| { true })) >>
+                ( {
+                    vecs
+                } )
+            ) | do_parse!(
+                        take_until!(boundary_end) >>
+                        tag!(boundary_end) >>
+                        ( { Vec::<&[u8]>::new() } ))
+                    )));
+#[test]
+fn test_attachments() {
+    use std::io::Read;
+    let mut buffer: Vec<u8> = Vec::new();
+    let _ = std::fs::File::open("test/attachment_test").unwrap().read_to_end(&mut buffer);
+    let boundary = "--b1_4382d284f0c601a737bb32aaeda53160";
+    let (_, body) = match mail(&buffer).to_full_result() {
+        Ok(v) => v,
+        Err(_) => { panic!() }
+     };
+    //eprintln!("{:?}",std::str::from_utf8(body));
+    let attachments = attachments(body, boundary).to_full_result().unwrap();
+    assert_eq!(attachments.len(), 4);
+}
+
+
+named!(pub content_type< (&str, &str, Vec<(&str, &str)>) >, 
+       do_parse!(
+           _type: map_res!(take_until!("/"), std::str::from_utf8) >>
+           tag!("/") >>
+           _subtype: map_res!(is_not!(";"), std::str::from_utf8) >>
+           parameters: many0!(preceded!(tag!(";"), pair!(
+                       terminated!(map_res!(ws!(take_until!("=")), std::str::from_utf8), tag!("=")),
+                       map_res!(ws!(alt_complete!(
+                                   delimited!(tag!("\""), take_until!("\""), tag!("\"")) | is_not!(";")
+                                   )), std::str::from_utf8)))) >>
+           ( {
+               (_type, _subtype, parameters)
+           } )
+           ));
+
+
+named!(pub quoted_printable_text<String>,
+   do_parse!(
+       bytes: many0!(alt_complete!(
+               preceded!(tag!("=\n"), quoted_printable_byte) |
+               preceded!(tag!("=\n"), le_u8) |
+               quoted_printable_byte |
+               le_u8)) >>
+       ( {
+           String::from_utf8_lossy(&bytes).into_owned()
+       } )
+   )
+);

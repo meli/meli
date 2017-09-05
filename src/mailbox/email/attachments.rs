@@ -1,0 +1,308 @@
+use super::parser;
+
+/*
+ *
+ * Data
+ * Text { content: String }
+ * Multipart
+ */
+
+#[derive(Clone,Debug, PartialEq)]
+pub enum MultipartType {
+    Mixed,
+    Alternative,
+    Digest,
+    Unsupported { tag: String },
+}
+#[derive(Clone,Debug)]
+pub enum AttachmentType {
+    Data { tag: String },
+    Text { content: String },
+    Multipart { of_type: MultipartType, subattachments: Vec<Box<Attachment>>, }
+}
+#[derive(Clone,Debug)]
+pub enum ContentType {
+    Text,
+    Multipart { boundary: String },
+    Unsupported { tag: String },
+}
+
+impl ::std::fmt::Display for ContentType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        match *self {
+            ContentType::Text => {
+                write!(f, "text")
+            },
+            ContentType::Multipart { boundary: _ } => {
+                write!(f, "multipart")
+            },
+            ContentType::Unsupported { tag: ref t } => {
+                write!(f, "{}", t)
+            },
+        }
+    }
+}
+#[derive(Clone,Debug, PartialEq)]
+pub enum ContentSubType {
+    Plain,
+    Other { tag: String },
+}
+impl ::std::fmt::Display for ContentSubType {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        match *self {
+            ContentSubType::Plain => {
+                write!(f, "plain")
+            },
+            ContentSubType::Other { tag: ref t } => {
+                write!(f, "{}", t)
+            },
+        }
+    }
+}
+#[derive(Clone,Debug)]
+pub enum ContentTransferEncoding {
+    _8Bit,
+    _7Bit,
+    Base64,
+    QuotedPrintable,
+    Other { tag: String },
+}
+
+pub struct AttachmentBuilder {
+    content_type: (ContentType, ContentSubType),
+    content_transfer_encoding: ContentTransferEncoding,
+
+    raw: Box<Vec<u8>>,
+}
+
+impl AttachmentBuilder {
+    pub fn new(content: &[u8]) -> Self {
+        AttachmentBuilder {
+            content_type: (ContentType::Text, ContentSubType::Plain),
+            content_transfer_encoding: ContentTransferEncoding::_7Bit,
+            raw: Box::new(content.to_vec()),
+        }
+    }
+    pub fn content_type(&mut self, value: &str) -> &Self {
+        match parser::content_type(value.as_bytes()).to_full_result() {
+            Ok((ct, cst, params)) => {
+                match ct.to_lowercase().as_ref() {
+                    "multipart" => {
+                        let mut boundary = None;
+                        for (n, v) in params {
+                            if n.to_lowercase() == "boundary" {
+                                boundary = Some(format!("--{}", v).to_string());
+                                break;
+                            }
+                        }
+                        assert!(boundary.is_some());
+                        self.content_type.0 = ContentType::Multipart { boundary: boundary.unwrap() };
+                        self.content_type.1 = ContentSubType::Other { tag: cst.to_string() };
+                    },
+                    "text" => {
+                        self.content_type.0 = ContentType::Text;
+                        let cst = cst.to_lowercase();
+                        match cst.as_ref() {
+                            "plain" => {},
+                            _ => {
+                                self.content_type.1 = ContentSubType::Other { tag: cst };
+                            },
+                        }
+                    },
+                    unsupported_type => {
+                        self.content_type.0 = ContentType::Unsupported { tag: unsupported_type.to_string() };
+                        self.content_type.1 = ContentSubType::Other { tag: cst.to_string() };
+                    },
+                }
+
+            },
+            _ => {},
+        }
+        self
+    }
+    pub fn content_transfer_encoding(&mut self, value: &str) -> &Self {
+        self.content_transfer_encoding =
+            match value.to_lowercase().as_ref() {
+                "base64" => {
+                    ContentTransferEncoding::Base64
+                },
+                "7bit" => {
+                    ContentTransferEncoding::_7Bit
+                },
+                "8bit" => {
+                    ContentTransferEncoding::_8Bit
+                },
+                "quoted-printable" => {
+                    ContentTransferEncoding::QuotedPrintable
+                },
+                k => {
+                    ContentTransferEncoding::Other { tag: k.to_string() }
+                },
+            };
+        self
+    }
+    fn decode(&self) -> String {
+            match self.content_transfer_encoding {
+                ContentTransferEncoding::Base64 => {
+                    match ::base64::decode(&::std::str::from_utf8(&self.raw).unwrap().trim().lines().fold(String::with_capacity(self.raw.len()), |mut acc, x| { acc.push_str(x); acc })) {
+                        Ok( ref v ) => {
+                            String::from_utf8_lossy(v).into_owned()
+                        },
+                        _ => {
+                            String::from_utf8_lossy(&self.raw).into_owned()
+                        }
+                    }
+                },
+                ContentTransferEncoding::QuotedPrintable => {
+                    parser::quoted_printable_text(&self.raw).to_full_result().unwrap()
+                },
+                ContentTransferEncoding::_7Bit | ContentTransferEncoding::_8Bit => {
+                    String::from_utf8_lossy(&self.raw).into_owned()
+                },
+                ContentTransferEncoding::Other { tag: _ } => {
+                    String::from_utf8_lossy(&self.raw).into_owned()
+                }
+            }
+    }
+    pub fn build(self) -> Attachment {
+        let attachment_type =
+        match self.content_type.0 {
+            ContentType::Text => {
+                AttachmentType::Text { content: self.decode() }
+            },
+            ContentType::Multipart { boundary: ref b } => {
+                let multipart_type =
+                    match self.content_type.1 {
+                        ContentSubType::Other { ref tag } => {
+                            match tag.to_lowercase().as_ref() {
+                                "mixed" => {
+                                    MultipartType::Mixed
+                                },
+                                "alternative" => {
+                                    MultipartType::Alternative
+                                },
+                                "digest" => {
+                                    MultipartType::Digest
+                                },
+                                t => {
+                                    MultipartType::Unsupported { tag: t.to_string() }
+                                },
+                            }
+                        },
+                        _ => {
+                            panic!();
+                        }
+                    };
+                AttachmentType::Multipart {
+                    of_type: multipart_type,
+                    subattachments: Attachment::subattachments(&self.raw, &b),
+                }
+            },
+            ContentType::Unsupported { ref tag } => {
+                AttachmentType::Data { tag: tag.clone() }
+            },
+        };
+        Attachment {
+            content_type: self.content_type,
+            content_transfer_encoding: self.content_transfer_encoding,
+            raw: self.raw,
+            attachment_type: attachment_type,
+        }
+
+
+    }
+}
+
+
+#[derive(Clone,Debug)]
+pub struct Attachment {
+    content_type: (ContentType, ContentSubType),
+    content_transfer_encoding: ContentTransferEncoding,
+
+    raw: Box<Vec<u8>>,
+
+    attachment_type: AttachmentType,
+}
+
+impl Attachment {
+    fn get_text_recursive(&self, text: &mut String) {
+        match self.attachment_type {
+            AttachmentType::Data { tag: _ } => {
+                text.push_str(&format!("Data attachment of type {}", self.get_tag()));
+            },
+            AttachmentType::Text { content: ref t } => {
+                text.push_str(t);
+            },
+            AttachmentType::Multipart {
+                of_type: ref multipart_type,
+                subattachments: ref sub_att_vec,
+            } => {
+                if *multipart_type == MultipartType::Alternative {
+                    for a in sub_att_vec {
+                        if a.content_type.1 == ContentSubType::Plain {
+                            a.get_text_recursive(text);
+                            break;
+                        }
+                    }
+                } else {
+                    for a in sub_att_vec {
+                        a.get_text_recursive(text);
+                        text.push_str("\n\n");
+                    }
+                }
+            },
+        }
+    }
+    pub fn get_text(&self) -> String {
+        let mut text = String::with_capacity(self.raw.len());
+        self.get_text_recursive(&mut text);
+        text
+    }
+    pub fn get_description(&self) -> String {
+        unimplemented!()
+    }
+    pub fn get_tag(&self) -> String {
+        format!("{}/{}", self.content_type.0, self.content_type.1).to_string()
+    }
+    pub fn subattachments(raw: &[u8], boundary: &str) -> Vec<Box<Attachment>> {
+        match parser::attachments(raw, boundary, &format!("{}--", boundary)).to_full_result() {
+            Ok(attachments) => {
+                let mut vec = Vec::with_capacity(attachments.len());
+                for a in attachments {
+                    let (headers, body) = match parser::attachment(a).to_full_result() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            eprintln!("error in parsing attachment");
+                            eprintln!("\n-------------------------------");
+                            eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
+                            eprintln!("-------------------------------\n");
+
+                            continue;}
+                    };
+                    let mut builder = AttachmentBuilder::new(body);
+                    for (name, value) in headers {
+                        match name.to_lowercase().as_ref(){
+                            "content-type" => {
+                                let value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(x); acc });
+                                builder.content_type(&value);
+                            },
+                            "content-transfer-encoding" => {
+                                let value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(x); acc });
+                                builder.content_transfer_encoding(&value);
+                            },
+                            _ => {
+                            },
+                        }
+                    }
+                    vec.push(Box::new(builder.build()));
+                }
+                vec
+            },
+            a => {
+                eprintln!("error in 469 {:?}\n\traw: {:?}\n\tboundary: {:?}", a, ::std::str::from_utf8(raw).unwrap(), boundary);
+                Vec::new()
+            },
+
+        }
+    }
+}

@@ -6,7 +6,10 @@ use std::fmt;
 use std::option::Option;
 
 use std::io::prelude::*;
-use mailbox::parser::*;
+mod parser;
+mod attachments;
+
+use self::attachments::*;
 
 use chrono;
 use chrono::TimeZone;
@@ -48,7 +51,7 @@ impl StrBuild for MessageID {
 #[test]
 fn test_strbuilder() {
     let m_id = "<20170825132332.6734-1-el13635@mail.ntua.gr>";
-    let (_, slice) = message_id(m_id.as_bytes()).unwrap();
+    let (_, slice) = parser::message_id(m_id.as_bytes()).unwrap();
     assert_eq!(MessageID::new(m_id, slice), MessageID (m_id.to_string(), StrBuilder{offset: 1, length: 43}));
 }
 
@@ -75,14 +78,13 @@ pub struct Mail {
     date: String,
     from: Option<String>,
     to: Option<String>,
-    body: String,
+    body: Option<Attachment>,
     subject: Option<String>,
     message_id: Option<MessageID>,
     in_reply_to: Option<MessageID>,
     references: Option<References>,
 
     datetime: Option<chrono::DateTime<chrono::FixedOffset>>,
-
     thread: usize,
 }
 
@@ -111,8 +113,8 @@ impl Mail {
             None => "",
         }
     }
-    pub fn get_body(&self) -> &str {
-        &self.body
+    pub fn get_body(&self) -> &Attachment {
+        self.body.as_ref().unwrap()
     }
     pub fn get_subject(&self) -> &str {
         match self.subject {
@@ -154,7 +156,7 @@ impl Mail {
         self.to = Some(new_val);
     }
     fn set_in_reply_to(&mut self, new_val: &str) -> () {
-        let slice = match message_id(new_val.as_bytes()).to_full_result() {
+        let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
             Ok(v) => { v },
             Err(v) => { eprintln!("{} {:?}",new_val, v); 
                 self.in_reply_to = None;
@@ -166,7 +168,7 @@ impl Mail {
         self.subject = Some(new_val);
     }
     fn set_message_id(&mut self, new_val: &str) -> () {
-        let slice = match message_id(new_val.as_bytes()).to_full_result() {
+        let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
             Ok(v) => { v },
             Err(v) => { eprintln!("{} {:?}",new_val, v); 
                 self.message_id = None;
@@ -175,7 +177,7 @@ impl Mail {
         self.message_id = Some(MessageID::new(new_val, slice));
     }
     fn push_references(&mut self, new_val: &str) -> () {
-        let slice = match message_id(new_val.as_bytes()).to_full_result() {
+        let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
             Ok(v) => { v },
             Err(v) => { eprintln!("{} {:?}",new_val, v); 
                 return; }
@@ -213,8 +215,8 @@ impl Mail {
             None => Vec::new(),
         }
     }
-    pub fn set_body(&mut self, new_val: String) -> () {
-        self.body = new_val;
+    pub fn set_body(&mut self, new_val: Attachment) -> () {
+        self.body = Some(new_val);
     }
     pub fn get_thread(&self) -> usize {
         self.thread
@@ -226,33 +228,32 @@ impl Mail {
         self.datetime = new_val;
     }
     pub fn new() -> Self {
-     Mail {
-         date: "".to_string(),
-         from: None,
-         to: None,
-         body: "".to_string(),
-         subject: None,
-         message_id: None,
-         in_reply_to: None,
-         references: None,
+        Mail {
+            date: "".to_string(),
+            from: None,
+            to: None,
+            body: None,
+            subject: None,
+            message_id: None,
+            in_reply_to: None,
+            references: None,
 
-         datetime: None,
+            datetime: None,
 
-         thread: 0,
+            thread: 0,
      }
     }
     pub fn from(path: std::string::String) -> Option<Self> {
      let f = Mmap::open_path(path.clone(), Protection::Read).unwrap();
      let file = unsafe { f.as_slice() };
-     let (headers, body) = match mail(file).to_full_result() {
+     let (headers, body) = match parser::mail(file).to_full_result() {
         Ok(v) => v,
         Err(_) => { 
             eprintln!("error in parsing");
             let path = std::path::PathBuf::from(&path);
 
-            let mut czc = std::fs::File::open(path).unwrap();
             let mut buffer = Vec::new();
-            let _ =  czc.read_to_end(&mut buffer);
+            let _ =  std::fs::File::open(path).unwrap().read_to_end(&mut buffer);
             eprintln!("\n-------------------------------");
             eprintln!("{}\n", std::string::String::from_utf8_lossy(&buffer)); 
             eprintln!("-------------------------------\n");
@@ -263,6 +264,7 @@ impl Mail {
      let mut in_reply_to = None;
      let mut datetime = None;
 
+     let mut builder = AttachmentBuilder::new(body);
      for (name, value) in headers {
          if value.len() == 1 && value[0].is_empty() {
              continue;
@@ -270,7 +272,7 @@ impl Mail {
          match name {
              "To" => {
                  let value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(x); acc });
-                 let parse_result = subject(value.as_bytes());
+                 let parse_result = parser::subject(value.as_bytes());
                  let value = match parse_result.is_done() {
                      true => {
                          parse_result.to_full_result().unwrap()
@@ -283,7 +285,7 @@ impl Mail {
              },
              "From" => {
                  let value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(x); acc });
-                 let parse_result = subject(value.as_bytes());
+                 let parse_result = parser::subject(value.as_bytes());
                  let value = match parse_result.is_done() {
                      true => {
                          parse_result.to_full_result().unwrap()
@@ -296,7 +298,7 @@ impl Mail {
              },
              "Subject" => {
                  let value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(" "); acc.push_str(x); acc });
-                 let parse_result = subject(value.trim().as_bytes());
+                 let parse_result = parser::subject(value.trim().as_bytes());
                  let value = match parse_result.is_done() {
                      true => {
                          parse_result.to_full_result().unwrap()
@@ -313,7 +315,7 @@ impl Mail {
              "References" => {
                  let folded_value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(x); acc });
                  {
-                     let parse_result = references(&folded_value.as_bytes());
+                     let parse_result = parser::references(&folded_value.as_bytes());
                      match parse_result.is_done() {
                          true => {
                              for v in parse_result.to_full_result().unwrap() {
@@ -334,6 +336,14 @@ impl Mail {
                  mail.set_date(value.clone());
                  datetime = Some(value);
              },
+             "Content-Transfer-Encoding" => {
+                 let value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(x); acc });
+                 builder.content_transfer_encoding(&value);
+             },
+             "Content-Type" => {
+                 let value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(x); acc });
+                 builder.content_type(&value);
+             },
              _ => {},
          }
      };
@@ -342,10 +352,10 @@ impl Mail {
              mail.push_references(x);
          },
          None => {},
-     }
-     mail.set_body(String::from_utf8_lossy(body).into_owned());
+     };
+     mail.set_body(builder.build());
      if datetime.is_some() {
-         mail.set_datetime(date(&datetime.unwrap()));
+         mail.set_datetime(parser::date(&datetime.unwrap()));
      }
 
      Some(mail)

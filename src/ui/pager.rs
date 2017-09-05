@@ -204,9 +204,11 @@ impl Pager {
         let mut y = 0;
         /* y,x coordinates of upper left corner of win */
         ncurses::getparyx(win, &mut y, &mut x);
-        let body = mail.get_body();
-        let lines: Vec<&str> = body.trim().split('\n').collect();
+        
+        let text = mail.get_body().get_text();
+        let lines: Vec<&str> = text.trim().split('\n').collect();
         let lines_length = lines.len();
+
         let pad = ncurses::newpad(lines_length as i32, 1024);
         ncurses::wclear(pad);
         for l in lines {

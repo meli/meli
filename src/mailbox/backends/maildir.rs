@@ -21,17 +21,15 @@
 //use std::io::prelude::*;
 //use std::fs::File;
 use std::path::PathBuf;
-use super::email::Mail;
+use mailbox::email::Mail;
 use error::{MeliError, Result};
 
+use mailbox::backends::MailBackend;
 
-pub trait MailBackend {
-    fn get(&self) -> Result<Vec<Mail>>;
-}
 pub struct MaildirType {
     path: String,
 }
-    
+
 impl MailBackend for MaildirType {
     fn get(&self) -> Result<Vec<Mail>> {
         MaildirType::is_valid(&self.path)?;
