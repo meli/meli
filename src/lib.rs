@@ -1,5 +1,5 @@
 /*
- * meli - backends module
+ * meli - lib.rs
  *
  * Copyright 2017 Manos Pitsidianakis
  *
@@ -18,11 +18,16 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-pub mod maildir;
+pub mod mailbox;
+pub mod conf;
+pub mod error;
 
-use mailbox::email::Mail;
-use error::Result;
 
-pub trait MailBackend {
-    fn get(&self) -> Result<Vec<Mail>>;
-}
+#[macro_use]
+extern crate serde_derive;
+/* parser */
+#[macro_use]
+extern crate nom;
+extern crate chrono;
+extern crate base64;
+extern crate memmap;

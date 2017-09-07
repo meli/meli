@@ -1,4 +1,26 @@
-use super::parser;
+/*
+ * meli - attachments module
+ *
+ * Copyright 2017 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
+use mailbox::email::parser;
+
+use std::fmt::{Display, Formatter, Result};
 
 /*
  *
@@ -18,7 +40,7 @@ pub enum MultipartType {
 pub enum AttachmentType {
     Data { tag: String },
     Text { content: String },
-    Multipart { of_type: MultipartType, subattachments: Vec<Box<Attachment>>, }
+    Multipart { of_type: MultipartType, subattachments: Vec<Attachment>, }
 }
 #[derive(Clone,Debug)]
 pub enum ContentType {
@@ -27,13 +49,13 @@ pub enum ContentType {
     Unsupported { tag: String },
 }
 
-impl ::std::fmt::Display for ContentType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+impl Display for ContentType {
+    fn fmt(&self, f: &mut Formatter) -> Result {
         match *self {
             ContentType::Text => {
                 write!(f, "text")
             },
-            ContentType::Multipart { boundary: _ } => {
+            ContentType::Multipart { .. } => {
                 write!(f, "multipart")
             },
             ContentType::Unsupported { tag: ref t } => {
@@ -47,8 +69,8 @@ pub enum ContentSubType {
     Plain,
     Other { tag: String },
 }
-impl ::std::fmt::Display for ContentSubType {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+impl Display for ContentSubType {
+    fn fmt(&self, f: &mut Formatter) -> Result {
         match *self {
             ContentSubType::Plain => {
                 write!(f, "plain")
@@ -72,7 +94,7 @@ pub struct AttachmentBuilder {
     content_type: (ContentType, ContentSubType),
     content_transfer_encoding: ContentTransferEncoding,
 
-    raw: Box<Vec<u8>>,
+    raw: Vec<u8>,
 }
 
 impl AttachmentBuilder {
@@ -80,18 +102,18 @@ impl AttachmentBuilder {
         AttachmentBuilder {
             content_type: (ContentType::Text, ContentSubType::Plain),
             content_transfer_encoding: ContentTransferEncoding::_7Bit,
-            raw: Box::new(content.to_vec()),
+            raw: content.to_vec(),
         }
     }
     pub fn content_type(&mut self, value: &str) -> &Self {
         match parser::content_type(value.as_bytes()).to_full_result() {
-            Ok((ct, cst, params)) => {
+Ok((ct, cst, params)) => {
                 match ct.to_lowercase().as_ref() {
                     "multipart" => {
                         let mut boundary = None;
                         for (n, v) in params {
                             if n.to_lowercase() == "boundary" {
-                                boundary = Some(format!("--{}", v).to_string());
+                                boundary = Some(format!("--{}--", v).to_string());
                                 break;
                             }
                         }
@@ -114,9 +136,10 @@ impl AttachmentBuilder {
                         self.content_type.1 = ContentSubType::Other { tag: cst.to_string() };
                     },
                 }
-
-            },
-            _ => {},
+        },
+        Err(v) => {
+            eprintln!("parsing error in content_type: {:?} {:?}", value, v);
+        }
         }
         self
     }
@@ -156,10 +179,7 @@ impl AttachmentBuilder {
                 ContentTransferEncoding::QuotedPrintable => {
                     parser::quoted_printable_text(&self.raw).to_full_result().unwrap()
                 },
-                ContentTransferEncoding::_7Bit | ContentTransferEncoding::_8Bit => {
-                    String::from_utf8_lossy(&self.raw).into_owned()
-                },
-                ContentTransferEncoding::Other { tag: _ } => {
+                ContentTransferEncoding::_7Bit | ContentTransferEncoding::_8Bit | ContentTransferEncoding::Other { .. } => {
                     String::from_utf8_lossy(&self.raw).into_owned()
                 }
             }
@@ -190,12 +210,12 @@ impl AttachmentBuilder {
                             }
                         },
                         _ => {
-                            panic!();
+                            panic!()
                         }
                     };
                 AttachmentType::Multipart {
                     of_type: multipart_type,
-                    subattachments: Attachment::subattachments(&self.raw, &b),
+                    subattachments: Attachment::subattachments(&self.raw, b),
                 }
             },
             ContentType::Unsupported { ref tag } => {
@@ -219,7 +239,7 @@ pub struct Attachment {
     content_type: (ContentType, ContentSubType),
     content_transfer_encoding: ContentTransferEncoding,
 
-    raw: Box<Vec<u8>>,
+    raw: Vec<u8>,
 
     attachment_type: AttachmentType,
 }
@@ -227,7 +247,7 @@ pub struct Attachment {
 impl Attachment {
     fn get_text_recursive(&self, text: &mut String) {
         match self.attachment_type {
-            AttachmentType::Data { tag: _ } => {
+            AttachmentType::Data { .. } => {
                 text.push_str(&format!("Data attachment of type {}", self.get_tag()));
             },
             AttachmentType::Text { content: ref t } => {
@@ -264,8 +284,9 @@ impl Attachment {
     pub fn get_tag(&self) -> String {
         format!("{}/{}", self.content_type.0, self.content_type.1).to_string()
     }
-    pub fn subattachments(raw: &[u8], boundary: &str) -> Vec<Box<Attachment>> {
-        match parser::attachments(raw, boundary, &format!("{}--", boundary)).to_full_result() {
+    pub fn subattachments(raw: &[u8], boundary: &str) -> Vec<Attachment> {
+        let boundary_length = boundary.len();
+        match parser::attachments(raw, &boundary[0..boundary_length - 2], boundary).to_full_result() {
             Ok(attachments) => {
                 let mut vec = Vec::with_capacity(attachments.len());
                 for a in attachments {
@@ -277,24 +298,23 @@ impl Attachment {
                             eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
                             eprintln!("-------------------------------\n");
 
-                            continue;}
+                            continue
+                        }
                     };
                     let mut builder = AttachmentBuilder::new(body);
                     for (name, value) in headers {
                         match name.to_lowercase().as_ref(){
                             "content-type" => {
-                                let value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(x); acc });
-                                builder.content_type(&value);
+                                builder.content_type(value);
                             },
                             "content-transfer-encoding" => {
-                                let value = value.iter().fold(String::new(), |mut acc, x| { acc.push_str(x); acc });
-                                builder.content_transfer_encoding(&value);
+                                builder.content_transfer_encoding(value);
                             },
                             _ => {
                             },
                         }
                     }
-                    vec.push(Box::new(builder.build()));
+                    vec.push(builder.build());
                 }
                 vec
             },

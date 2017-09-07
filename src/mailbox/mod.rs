@@ -19,32 +19,25 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-//use std::cmp::Ordering;
-//use std::fmt;
+pub mod email;
+pub use self::email::*;
+/* Mail backends. Currently only maildir is supported */
+pub mod backends;
+use mailbox::backends::MailBackend;
+use mailbox::backends::maildir;
+use error::Result;
+
 use std::option::Option;
 use std::collections::HashMap;
 use std;
-pub mod email;
-pub use self::email::*;
-
-/* Mail backends. Currently only maildir is supported */
-mod backends;
-use mailbox::backends::MailBackend;
-
-use mailbox::backends::maildir;
-
-use error::Result;
-
-
 
 type UnixTimestamp = i64;
-
 
 /*a Mailbox represents a folder of mail. Currently only Maildir is supported.*/
 #[derive(Debug)]
 pub struct Mailbox{
     pub path: String,
-    pub collection: Box<Vec<Mail>>,
+    pub collection: Vec<Mail>,
     pub threaded_collection: Vec<usize>,
     threads: Vec<Thread>,
     length: usize,
@@ -102,27 +95,22 @@ impl Thread {
     pub fn get_indentation(&self) -> usize {
         self.indentation
     }
-    fn is_descendant(&self, threads: &Vec<Thread>, other: &Thread) -> bool {
+    fn is_descendant(&self, threads: &[Thread], other: &Thread) -> bool {
         if self == other {
             return true;
         }
-        match self.first_child {
-            Some(v) => {
-                if threads[v].is_descendant(threads, other) {
-                    return true;
-                }
-            },
-            None => {}
+
+        if let Some(v) = self.first_child {
+            if threads[v].is_descendant(threads, other) {
+                return true;
+            }
         };
-        match self.next_sibling {
-            Some(v) => {
-                if threads[v].is_descendant(threads, other) {
-                    return true;
-                }
-            },
-            None => {}
+        if let Some(v) = self.next_sibling {
+            if threads[v].is_descendant(threads, other) {
+                return true;
+            }
         };
-        return false;
+        false
     }
     fn set_show_subject(&mut self, set: bool) -> () {
         self.show_subject = set;
@@ -145,12 +133,12 @@ impl PartialEq for Thread {
     }
 }
 
-fn build_collection(threads: &mut Vec<Thread>, id_table: &mut HashMap<std::string::String, usize>, collection: &mut Box<Vec<Mail>>) -> () {
+fn build_collection(threads: &mut Vec<Thread>, id_table: &mut HashMap<std::string::String, usize>, collection: &mut [Mail]) -> () {
     for (i, x) in collection.iter_mut().enumerate() {
         let x_index; /* x's index in threads */
         let m_id = x.get_message_id_raw().to_string();
         if id_table.contains_key(&m_id) {
-            let t = *(id_table.get(&m_id).unwrap());
+            let t = id_table[&m_id];
             /* the already existing Thread should be empty, since we're
              * seeing this message for the first time */
             if threads[t].message.is_some() {
@@ -190,12 +178,12 @@ fn build_collection(threads: &mut Vec<Thread>, id_table: &mut HashMap<std::strin
          * Do not add a link if adding that link would introduce a loop: that is, before asserting A->B, search down the children of B to see if A is reachable, and also search down the children of A to see if B is reachable. If either is already reachable as a child of the other, don't add the link.
          */
         let mut curr_ref = x_index;
-        'ref_loop: for &r in x.get_references().iter().rev() {
+        for &r in x.get_references().iter().rev() {
             let parent_id =
                 if id_table.contains_key(r.get_raw()) {
-                    let p = *(id_table.get(r.get_raw()).unwrap());
-                    if !(threads[p].is_descendant(&threads, &threads[curr_ref]) ||
-                         threads[curr_ref].is_descendant(&threads, &threads[p])) {
+                    let p = id_table[r.get_raw()];
+                    if !(threads[p].is_descendant(threads, &threads[curr_ref]) ||
+                         threads[curr_ref].is_descendant(threads, &threads[p])) {
                         threads[curr_ref].parent = Some(p);
                         if threads[p].first_child.is_none() {
                             threads[p].first_child = Some(curr_ref);
@@ -229,7 +217,7 @@ fn build_collection(threads: &mut Vec<Thread>, id_table: &mut HashMap<std::strin
             /* update thread date */
             let mut parent_iter = parent_id;
             'date: loop {
-                let mut p = &mut threads[parent_iter];
+                let p = &mut threads[parent_iter];
                 if p.date < x.get_date() {
                     p.date = x.get_date();
                 }
@@ -248,7 +236,7 @@ fn build_collection(threads: &mut Vec<Thread>, id_table: &mut HashMap<std::strin
 
 impl Mailbox {
     pub fn new(path: &str, sent_folder: Option<&str>) -> Result<Mailbox> {
-        let mut collection: Box<Vec<Mail>> = Box::new(maildir::MaildirType::new(path).get()?);
+        let mut collection: Vec<Mail> = maildir::MaildirType::new(path).get()?;
         /* To reconstruct thread information from the mails we need: */
 
         /* a vector to hold thread members */
@@ -278,7 +266,7 @@ impl Mailbox {
                     idx += 1;
                 }
                 if id_table.contains_key(x.get_message_id_raw()) {
-                    let c = *(id_table.get(x.get_message_id_raw()).unwrap());
+                    let c = id_table[x.get_message_id_raw()];
                     if threads[c].message.is_some() {
                         /* skip duplicate message-id, but this should be handled instead */
                         continue;
@@ -289,7 +277,7 @@ impl Mailbox {
                     x.set_thread(c);
                 }
                 if !x.get_in_reply_to_raw().is_empty() && id_table.contains_key(x.get_in_reply_to_raw()) {
-                    let p = *(id_table.get(x.get_in_reply_to_raw()).unwrap());
+                    let p = id_table[x.get_in_reply_to_raw()];
                     let c = if !id_table.contains_key(x.get_message_id_raw()) {
                         threads.push(
                             Thread {
@@ -307,7 +295,7 @@ impl Mailbox {
                         tidx += 1;
                         tidx - 1
                     } else {
-                        *(id_table.get(x.get_message_id_raw()).unwrap())
+                        id_table[x.get_message_id_raw()]
                     };
                     threads[c].parent = Some(p);
                     if threads[p].is_descendant(&threads, &threads[c]) ||
@@ -328,7 +316,7 @@ impl Mailbox {
                     /* update thread date */
                     let mut parent_iter = p;
                     'date: loop {
-                        let mut p = &mut threads[parent_iter];
+                        let p = &mut threads[parent_iter];
                         if p.date < x.get_date() {
                             p.date = x.get_date();
                         }
@@ -343,7 +331,7 @@ impl Mailbox {
         /* Walk over the elements of id_table, and gather a list of the Thread objects that have
          * no parents. These are the root messages of each thread */
         let mut root_set = Vec::with_capacity(collection.len());
-        'root_set: for (_,v) in id_table.iter() {
+        'root_set: for v in id_table.values() {
             if threads[*v].parent.is_none() {
                 if !threads[*v].has_message() && threads[*v].has_children() && !threads[threads[*v].first_child.unwrap()].has_sibling() {
                     /* Do not promote the children if doing so would promote them to the root set
@@ -352,13 +340,13 @@ impl Mailbox {
                     continue 'root_set;
                 }
                 root_set.push(*v);
-            } 
+            }
         }
         root_set.sort_by(|a, b| threads[*b].date.cmp(&threads[*a].date));
 
         /* Group messages together by thread in a collection so we can print them together */
         let mut threaded_collection: Vec<usize> = Vec::with_capacity(collection.len());
-        fn build_threaded(threads: &mut Vec<Thread>, indentation: usize, threaded: &mut Vec<usize>, i: usize, root_subject_idx: usize, collection: &Vec<Mail>) {
+        fn build_threaded(threads: &mut Vec<Thread>, indentation: usize, threaded: &mut Vec<usize>, i: usize, root_subject_idx: usize, collection: &[Mail]) {
             let thread = threads[i];
             if threads[root_subject_idx].has_message() {
                 let root_subject = collection[threads[root_subject_idx].get_message().unwrap()].get_subject();
@@ -375,7 +363,7 @@ impl Mailbox {
             if thread.has_parent() && !threads[thread.get_parent().unwrap()].has_message() {
                 threads[i].parent = None;
             }
-            let indentation = 
+            let indentation =
                 if thread.has_message() {
                     threads[i].set_indentation(indentation);
                     if !threaded.contains(&i) {
@@ -421,8 +409,7 @@ impl Mailbox {
         thread.get_message().unwrap()
     }
     pub fn get_mail_and_thread(&mut self, i: usize) -> (&mut Mail, Thread) {
-        
-            let ref mut x = self.collection.as_mut_slice()[i];
+            let x = &mut self.collection.as_mut_slice()[i];
             let thread = self.threads[x.get_thread()];
             (x, thread)
     }

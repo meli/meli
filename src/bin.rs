@@ -1,8 +1,8 @@
 /*
- * meli - main.rs
+ * meli - bin.rs
  *
  * Copyright 2017 Manos Pitsidianakis
- * 
+ *
  * This file is part of meli.
  *
  * meli is free software: you can redistribute it and/or modify
@@ -18,41 +18,31 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-extern crate ncurses;
 
-pub mod mailbox;
 mod ui;
-mod conf;
-mod error;
-
 use ui::index::*;
+
+extern crate melib;
+use melib::*;
 use mailbox::*;
 use conf::*;
 
-#[macro_use]
-extern crate serde_derive;
-/* parser */
-#[macro_use]
-extern crate nom;
-extern crate chrono;
-extern crate base64;
-extern crate memmap;
+extern crate ncurses;
 
 fn main() {
     let locale_conf = ncurses::LcCategory::all;
     ncurses::setlocale(locale_conf, "en_US.UTF-8");
     let set = Settings::new();
     let ui = ui::TUI::initialize();
-    //let mailbox = Mailbox::new("/home/epilys/Downloads/rust/nutt/Inbox4");
     let mut j = 0;
-    let folder_length = set.accounts.get("norn").unwrap().folders.len();
+    let folder_length = set.accounts["norn"].folders.len();
     'main : loop  {
         ncurses::touchwin(ncurses::stdscr());
         ncurses::mv(0,0);
-        let mailbox = Mailbox::new(&set.accounts.get("norn").unwrap().folders[j],
-        Some(&set.accounts.get("norn").unwrap().sent_folder));
+        let mailbox = Mailbox::new(&set.accounts["norn"].folders[j],
+        Some(&set.accounts["norn"].sent_folder));
         let mut index: Box<Window> = match mailbox {
-            Ok(v) => { 
+            Ok(v) => {
                 Box::new(Index::new(v))
             },
             Err(v) => {
@@ -92,6 +82,11 @@ fn main() {
                         j -= 1;
                         break 'inner;
                     }
+                },
+                Some(ncurses::WchResult::KeyCode(ncurses::KEY_RESIZE)) => {
+                    eprintln!("key_resize");
+                    index.redraw();
+                    continue;
                 },
                 _ => {}
             }

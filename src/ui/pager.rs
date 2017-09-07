@@ -2,7 +2,7 @@
  * meli - ui module.
  *
  * Copyright 2017 Manos Pitsidianakis
- * 
+ *
  * This file is part of meli.
  *
  * meli is free software: you can redistribute it and/or modify
@@ -18,9 +18,10 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-extern crate ncurses;
 
-use super::super::mailbox;
+use mailbox;
+
+extern crate ncurses;
 
 /* Pager represents the part of the UI that shows the mail headers and body for
  * viewing */
@@ -148,29 +149,29 @@ impl Pager {
         ncurses::waddstr(win, "From: ");
         ncurses::waddstr(
             win,
-            &mail.get_from(),
+            mail.get_from(),
         );
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "To: ");
         ncurses::waddstr(
             win,
-            &mail.get_to(),
+            mail.get_to(),
         );
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "Subject: ");
         ncurses::waddstr(
             win,
-            &mail.get_subject(),
+            mail.get_subject(),
         );
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "Message-ID: ");
         ncurses::waddstr(
             win,
-            &mail.get_message_id_raw(),
-            //&mail.get_message_id(),
+            mail.get_message_id_raw(),
+            //mail.get_message_id(),
         );
         ncurses::waddstr(win, "\n");
         i += 1;
@@ -184,7 +185,7 @@ impl Pager {
         ncurses::waddstr(win, "In-Reply-To: ");
         ncurses::waddstr(
             win,
-            &mail.get_in_reply_to_raw(),
+            mail.get_in_reply_to_raw(),
         );
         ncurses::waddstr(win, "\n");
         i += 1;
@@ -204,7 +205,7 @@ impl Pager {
         let mut y = 0;
         /* y,x coordinates of upper left corner of win */
         ncurses::getparyx(win, &mut y, &mut x);
-        
+
         let text = mail.get_body().get_text();
         let lines: Vec<&str> = text.trim().split('\n').collect();
         let lines_length = lines.len();
@@ -226,7 +227,7 @@ impl Pager {
          *      └ ┗━━━━━━━━━w ┘       ┘
          */
         ncurses::pnoutrefresh(pad, 0, 0, y + height, x, y + height - 1, w - 1);
-        return (pad, lines_length as i32, height);
+        (pad, lines_length as i32, height)
     }
     fn print_entry(
         win: ncurses::WINDOW,

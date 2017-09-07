@@ -2,7 +2,7 @@
  * meli - configuration module.
  *
  * Copyright 2017 Manos Pitsidianakis
- * 
+ *
  * This file is part of meli.
  *
  * meli is free software: you can redistribute it and/or modify
@@ -21,7 +21,6 @@
 
 extern crate xdg;
 extern crate config;
-
 use std::collections::HashMap;
 use std::io;
 use std::fs;
@@ -34,10 +33,13 @@ enum MailFormat {
 
 impl MailFormat {
     pub fn from_str(x: &str) -> MailFormat {
-        match x {
-            "maildir" | "Maildir" | 
-            "MailDir" => { MailFormat::Maildir },
-            _ => { panic!("Unrecognizable mail format");}
+        match x.to_lowercase().as_ref() {
+            "maildir" => {
+                MailFormat::Maildir
+            },
+            _ => {
+               panic!("Unrecognizable mail format")
+            }
         }
     }
 }
@@ -78,13 +80,13 @@ impl FileSettings {
         let mut s = Config::new();
         let s = s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml));
 
-        match s.is_ok() { //.unwrap_or(Settings { });
-            true => { s.unwrap().deserialize().unwrap() },
-            false => {
-                eprintln!("{:?}",s.err().unwrap());
-                let mut buf = String::new();
-                io::stdin().read_line(&mut buf).expect("Failed to read line");
-                FileSettings { ..Default::default() } },
+        if s.is_ok() {
+            s.unwrap().deserialize().unwrap()
+        } else {
+            eprintln!("{:?}",s.err().unwrap());
+            let mut buf = String::new();
+            io::stdin().read_line(&mut buf).expect("Failed to read line");
+            FileSettings { ..Default::default() }
         }
     }
 }
@@ -92,13 +94,13 @@ impl FileSettings {
 impl Settings {
     pub fn new() -> Settings {
         let fs = FileSettings::new();
-        let mut s: HashMap<String, Account> = HashMap::new(); 
-        
+        let mut s: HashMap<String, Account> = HashMap::new();
+
         for (id, x) in fs.accounts {
             let mut folders = Vec::new();
             fn recurse_folders<P: AsRef<Path>>(folders: &mut Vec<String>, p: P) {
             for mut f in fs::read_dir(p).unwrap() {
-                for f in f.iter_mut().next() {
+                for f in f.iter_mut() {
                     {
                         let path = f.path();
                         if path.ends_with("cur") || path.ends_with("new") ||
@@ -110,8 +112,8 @@ impl Settings {
                             recurse_folders(folders, path);
                         }
                     }
-                } 
-                
+                }
+
             }
             };
             let path = PathBuf::from(&x.folders);
