@@ -21,9 +21,9 @@
 use mailbox::email::Mail;
 use mailbox::*;
 use error::MeliError;
+use std::error::Error;
 
 extern crate ncurses;
-use std::error::Error;
 
 pub trait Window {
     fn draw(&mut self) -> ();

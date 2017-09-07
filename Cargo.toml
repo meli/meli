@@ -21,6 +21,7 @@ nom = "3.2.0"
 memmap = "*"
 base64 = "*"
 crossbeam = "^0.3.0"
+fnv = "1.0.3"
 
 [dependencies.ncurses]
 features = ["wide"]

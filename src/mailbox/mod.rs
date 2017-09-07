@@ -27,8 +27,10 @@ use mailbox::backends::MailBackend;
 use mailbox::backends::maildir;
 use error::Result;
 
+extern crate fnv;
+
+use self::fnv::FnvHashMap;
 use std::option::Option;
-use std::collections::HashMap;
 use std;
 
 type UnixTimestamp = i64;
@@ -133,7 +135,7 @@ impl PartialEq for Thread {
     }
 }
 
-fn build_collection(threads: &mut Vec<Thread>, id_table: &mut HashMap<std::string::String, usize>, collection: &mut [Mail]) -> () {
+fn build_collection(threads: &mut Vec<Thread>, id_table: &mut FnvHashMap<std::string::String, usize>, collection: &mut [Mail]) -> () {
     for (i, x) in collection.iter_mut().enumerate() {
         let x_index; /* x's index in threads */
         let m_id = x.get_message_id_raw().to_string();
@@ -242,7 +244,7 @@ impl Mailbox {
         /* a vector to hold thread members */
         let mut threads: Vec<Thread> = Vec::with_capacity((collection.len() as f64 * 1.2) as usize);
         /* A hash table of Message IDs */
-        let mut id_table: HashMap<std::string::String, usize> = HashMap::with_capacity(collection.len());
+        let mut id_table: FnvHashMap<std::string::String, usize> = FnvHashMap::with_capacity_and_hasher(collection.len(), Default::default());
 
         collection.sort_by(|a, b| a.get_date().cmp(&b.get_date()));
         /* Add each message to id_table and threads, and link them together according to the

@@ -90,10 +90,6 @@ named!(pub attachment<(std::vec::Vec<(&str, &str)>, &[u8])>,
        pair: pair!(many0!(complete!(header)), take_while!(call!(|_| { true }))) >>
        ( { pair } )));
 
-/* try chrono parse_from_str with several formats
- * https://docs.rs/chrono/0.4.0/chrono/struct.DateTime.html#method.parse_from_str
- */
-
 /* Header parsers */
 
 /* Encoded words
@@ -133,7 +129,7 @@ named!(utf8_token<Vec<u8>>, alt_complete!(
         call!(utf8_token_quoted_p)));
 
 named!(utf8_token_list<String>, ws!(do_parse!(
-        list: separated_nonempty_list!(complete!(tag!(" ")), utf8_token) >>
+        list: separated_nonempty_list!(complete!(is_a!(" ")), utf8_token) >>
         ( {
             let list_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc });
             let bytes = list.iter().fold(Vec::with_capacity(list_len), |mut acc, x| { acc.append(&mut x.clone()); acc});
@@ -172,6 +168,8 @@ fn test_subject() {
     assert_eq!((&b""[..], "list.free.de mailing list memberships reminder".to_string()), subject(subject_s).unwrap());
     let subject_s = "=?UTF-8?B?zp3Orc6/IM+Az4HOv8+Dz4nPgM65zrrPjCDOvM6uzr3Phc68zrEgzrHPhs6v?= =?UTF-8?B?z4fOuM63?=".as_bytes();
     assert_eq!((&b""[..], "Νέο προσωπικό μήνυμα αφίχθη".to_string()), subject(subject_s).unwrap());
+    let subject_s = "=?utf-8?B?bW9vZGxlOiDOsc69zrHPg866z4zPgM63z4POtyDOv868zqzOtM6xz4Igz4M=?=  =?utf-8?B?z4XOts63z4TOrs+DzrXPic69?=".as_bytes();
+    assert_eq!((&b""[..], "moodle: ανασκόπηση ομάδας συζητήσεων".to_string()), subject(subject_s).unwrap());
 }
 fn eat_comments(input: &str) -> String {
     let mut in_comment = false;
