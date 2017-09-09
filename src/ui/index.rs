@@ -94,7 +94,7 @@ impl Window for Index {
         let mut y = 0;
         ncurses::getbegyx(self.win, &mut y, &mut x);
 
-        ncurses::wclear(self.pad);
+        //ncurses::wclear(self.pad);
 
         if self.threaded {
             let mut indentations : Vec<bool> = Vec::with_capacity(6);
@@ -172,16 +172,23 @@ impl Window for Index {
         );
     }
     fn redraw(&mut self) -> () {
+        ncurses::wnoutrefresh(self.win);
+        ncurses::doupdate();
         if self.mailbox.get_length() == 0 {
             return;
         } 
+        /* Draw newly highlighted entry */
+        ncurses::wmove(self.pad, self.cursor_idx as i32, 0);
+        let pair = super::COLOR_PAIR_CURSOR;
+        ncurses::wchgat(self.pad, -1, 0, pair);
         ncurses::getmaxyx(self.win, &mut self.screen_height, &mut self.screen_width);
         let mut x = 0;
         let mut y = 0;
         ncurses::getbegyx(self.win, &mut y, &mut x);
         let pminrow =
             (self.cursor_idx as i32).wrapping_div(self.screen_height) * self.screen_height;
-        ncurses::touchline(self.pad, 1, 1); ncurses::prefresh(
+        ncurses::touchline(self.pad, 1, 1);
+        ncurses::prefresh(
             self.pad,
             pminrow,
             0,
@@ -446,8 +453,8 @@ impl Index {
 }
 impl Drop for Index  {
     fn drop(&mut self) {
+        ncurses::delwin(self.pad);
         ncurses::wclear(self.win);
         ncurses::delwin(self.win);
-        ncurses::delwin(self.pad);
     }
 }

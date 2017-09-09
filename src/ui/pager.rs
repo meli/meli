@@ -51,7 +51,7 @@ impl Pager {
             x,
         );
         ncurses::wclear(win);
-        ncurses::touchwin(win);
+        //ncurses::touchwin(win);
         for _ in 1..screen_width + 1 {
             ncurses::waddstr(win, "─");
         }
@@ -241,7 +241,6 @@ impl Drop for Pager {
     fn drop(&mut self) {
         ncurses::delwin(self.pad);
         ncurses::wclear(self.win);
-        ncurses::wrefresh(self.win);
         ncurses::delwin(self.win);
     }
 }

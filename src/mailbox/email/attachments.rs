@@ -21,6 +21,7 @@
 use mailbox::email::parser;
 
 use std::fmt::{Display, Formatter, Result};
+use std::ascii::AsciiExt;
 
 /*
  *
@@ -107,61 +108,47 @@ impl AttachmentBuilder {
     }
     pub fn content_type(&mut self, value: &str) -> &Self {
         match parser::content_type(value.as_bytes()).to_full_result() {
-Ok((ct, cst, params)) => {
-                match ct.to_lowercase().as_ref() {
-                    "multipart" => {
-                        let mut boundary = None;
-                        for (n, v) in params {
-                            if n.to_lowercase() == "boundary" {
-                                boundary = Some(format!("--{}--", v).to_string());
-                                break;
-                            }
+            Ok((ct, cst, params)) => {
+                if ct.eq_ignore_ascii_case("multipart") {
+                    let mut boundary = None;
+                    for (n, v) in params {
+                        if n.eq_ignore_ascii_case("boundary") {
+                            boundary = Some(format!("--{}--", v).to_string());
+                            break;
                         }
-                        assert!(boundary.is_some());
-                        self.content_type.0 = ContentType::Multipart { boundary: boundary.unwrap() };
-                        self.content_type.1 = ContentSubType::Other { tag: cst.to_string() };
-                    },
-                    "text" => {
-                        self.content_type.0 = ContentType::Text;
-                        let cst = cst.to_lowercase();
-                        match cst.as_ref() {
-                            "plain" => {},
-                            _ => {
-                                self.content_type.1 = ContentSubType::Other { tag: cst };
-                            },
-                        }
-                    },
-                    unsupported_type => {
-                        self.content_type.0 = ContentType::Unsupported { tag: unsupported_type.to_string() };
-                        self.content_type.1 = ContentSubType::Other { tag: cst.to_string() };
-                    },
+                    }
+                    assert!(boundary.is_some());
+                    self.content_type.0 = ContentType::Multipart { boundary: boundary.unwrap() };
+                    self.content_type.1 = ContentSubType::Other { tag: cst.to_string() };
+                } else if ct.eq_ignore_ascii_case("text") {
+                    self.content_type.0 = ContentType::Text;
+                    if !cst.eq_ignore_ascii_case("plain") {
+                        self.content_type.1 = ContentSubType::Other { tag: cst.to_ascii_lowercase() };
+                    }
+                } else {
+                    self.content_type.0 = ContentType::Unsupported { tag: ct.to_ascii_lowercase() };
+                    self.content_type.1 = ContentSubType::Other { tag: cst.to_ascii_lowercase() };
                 }
-        },
-        Err(v) => {
-            eprintln!("parsing error in content_type: {:?} {:?}", value, v);
-        }
-        }
-        self
+            },
+    Err(v) => {
+        eprintln!("parsing error in content_type: {:?} {:?}", value, v);
+    }
+}
+self
     }
     pub fn content_transfer_encoding(&mut self, value: &str) -> &Self {
         self.content_transfer_encoding =
-            match value.to_lowercase().as_ref() {
-                "base64" => {
+            if value.eq_ignore_ascii_case("base64") {
                     ContentTransferEncoding::Base64
-                },
-                "7bit" => {
+                } else if value.eq_ignore_ascii_case("7bit") {
                     ContentTransferEncoding::_7Bit
-                },
-                "8bit" => {
+                } else if value.eq_ignore_ascii_case("8bit") {
                     ContentTransferEncoding::_8Bit
-                },
-                "quoted-printable" => {
+                } else if value.eq_ignore_ascii_case("quoted-printable") {
                     ContentTransferEncoding::QuotedPrintable
-                },
-                k => {
-                    ContentTransferEncoding::Other { tag: k.to_string() }
-                },
-            };
+                } else {
+                    ContentTransferEncoding::Other { tag: value.to_ascii_lowercase() }
+                };
         self
     }
     fn decode(&self) -> String {
@@ -194,7 +181,7 @@ Ok((ct, cst, params)) => {
                 let multipart_type =
                     match self.content_type.1 {
                         ContentSubType::Other { ref tag } => {
-                            match tag.to_lowercase().as_ref() {
+                            match tag.as_ref() {
                                 "mixed" => {
                                     MultipartType::Mixed
                                 },
@@ -303,15 +290,10 @@ impl Attachment {
                     };
                     let mut builder = AttachmentBuilder::new(body);
                     for (name, value) in headers {
-                        match name.to_lowercase().as_ref(){
-                            "content-type" => {
-                                builder.content_type(value);
-                            },
-                            "content-transfer-encoding" => {
-                                builder.content_transfer_encoding(value);
-                            },
-                            _ => {
-                            },
+                        if name.eq_ignore_ascii_case("content-type") {
+                            builder.content_type(value);
+                        } else if  name.eq_ignore_ascii_case("content-transfer-encoding") {
+                            builder.content_transfer_encoding(value);
                         }
                     }
                     vec.push(builder.build());

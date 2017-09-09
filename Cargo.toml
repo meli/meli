@@ -30,3 +30,4 @@ version = "5.86.0"
 
 [profile.release]
 lto = true
+#debug = true

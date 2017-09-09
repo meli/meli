@@ -25,7 +25,7 @@ use std::io;
 
 pub type Result<T> = result::Result<T, MeliError>;
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct MeliError {
     details: String
 }
