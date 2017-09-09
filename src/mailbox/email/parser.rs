@@ -23,13 +23,38 @@ use std::str::from_utf8;
 use base64;
 use chrono;
 use nom::{le_u8, is_hex_digit};
+use nom::{IResult,Needed,ErrorKind};
 
-/* Wow this sucks! */
+fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8],u8> {
+    if input.is_empty() || input.len() < 3 {
+        IResult::Incomplete(Needed::Size(1))
+    } else if input[0] != b'=' {
+        IResult::Error(error_code!(ErrorKind::Custom(43)))
+    } else if is_hex_digit(input[1]) && is_hex_digit(input[2]) {
+        let a = if input[1] < b':' {
+            input[1] - 48
+        } else {
+            input[1] - 55
+        };
+        let b = if input[2] < b':' {
+            input[2] - 48
+        } else {
+            input[2] - 55
+        };
+
+        IResult::Done(&input[3..], a*16+b)
+    } else {
+        IResult::Error(error_code!(ErrorKind::Custom(43)))
+    }
+}
+
+/*
 named!(quoted_printable_byte<u8>, do_parse!(
         p: map_res!(preceded!(tag!("="), verify!(complete!(take!(2)), |s: &[u8]| is_hex_digit(s[0]) && is_hex_digit(s[1]) )), from_utf8) >>
         ( {
             u8::from_str_radix(p, 16).unwrap()
         } )));
+        */
 
 
 // Parser definition
@@ -42,7 +67,6 @@ named!(quoted_printable_byte<u8>, do_parse!(
  * 	Tue,  5 Jan 2016 21:30:44 +0100 (CET)
  */
 
-use nom::{IResult,Needed,ErrorKind};
 
 fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
     if input.is_empty() || input[0] == b'\n' {
@@ -73,7 +97,7 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
 
 /* Parse the name part of the header -> &str */
 named!(name<&str>,
-       verify!(map_res!(take_until1!(":"), from_utf8), | v: &str | !v.contains('\n') ));
+       map_res!(is_not!(":\n"), from_utf8));
 
 /* Parse a single header as a tuple -> (&str, Vec<&str>) */
 named!(header<(&str, &str)>,
@@ -129,7 +153,7 @@ named!(utf8_token<Vec<u8>>, alt_complete!(
         call!(utf8_token_quoted_p)));
 
 named!(utf8_token_list<String>, ws!(do_parse!(
-        list: separated_nonempty_list!(complete!(is_a!(" ")), utf8_token) >>
+        list: separated_nonempty_list!(complete!(is_a!(" \n\r\t")), utf8_token) >>
         ( {
             let list_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc });
             let bytes = list.iter().fold(Vec::with_capacity(list_len), |mut acc, x| { acc.append(&mut x.clone()); acc});
@@ -170,6 +194,10 @@ fn test_subject() {
     assert_eq!((&b""[..], "Νέο προσωπικό μήνυμα αφίχθη".to_string()), subject(subject_s).unwrap());
     let subject_s = "=?utf-8?B?bW9vZGxlOiDOsc69zrHPg866z4zPgM63z4POtyDOv868zqzOtM6xz4Igz4M=?=  =?utf-8?B?z4XOts63z4TOrs+DzrXPic69?=".as_bytes();
     assert_eq!((&b""[..], "moodle: ανασκόπηση ομάδας συζητήσεων".to_string()), subject(subject_s).unwrap());
+    let subject_s = "=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?=
+ =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?=
+ =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=".as_bytes();
+    assert_eq!((&b""[..], "Πρόσθετη εξεταστική".to_string()), subject(subject_s).unwrap());
 }
 fn eat_comments(input: &str) -> String {
     let mut in_comment = false;
