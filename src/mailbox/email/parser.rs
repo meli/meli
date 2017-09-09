@@ -33,13 +33,17 @@ fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8],u8> {
     } else if is_hex_digit(input[1]) && is_hex_digit(input[2]) {
         let a = if input[1] < b':' {
             input[1] - 48
-        } else {
+        } else if input[1] < b'[' {
             input[1] - 55
+        } else {
+            input[1] - 87
         };
         let b = if input[2] < b':' {
             input[2] - 48
-        } else {
+        } else if input[2] < b'[' {
             input[2] - 55
+        } else {
+            input[2] - 87
         };
 
         IResult::Done(&input[3..], a*16+b)
@@ -70,7 +74,7 @@ named!(quoted_printable_byte<u8>, do_parse!(
 
 fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
     if input.is_empty() || input[0] == b'\n' {
-        IResult::Incomplete(Needed::Size(1))
+        IResult::Incomplete(Needed::Unknown)
     } else {
         let input_len = input.len();
         for (i, x) in input.iter().enumerate() {
