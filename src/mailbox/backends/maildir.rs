@@ -21,15 +21,64 @@
 
 use mailbox::email::Mail;
 use error::{MeliError, Result};
-use mailbox::backends::MailBackend;
+use mailbox::backends::{MailBackend, BackendOp, BackendOpGenerator};
 
 extern crate crossbeam;
 use std::path::PathBuf;
+use memmap::{Mmap, Protection};
 
 
 pub struct MaildirType {
     path: String,
 }
+
+#[derive(Debug,Default)]
+pub struct MaildirOp {
+    path: String,
+    slice: Option<Mmap>,
+}
+
+impl Clone for MaildirOp {
+    fn clone(&self) -> Self {
+        MaildirOp {
+            path: self.path.clone(),
+            slice: None,
+        }
+    }
+}
+
+impl MaildirOp {
+    fn new(path: String) -> Self {
+        MaildirOp {
+            path: path,
+            slice: None,
+        }
+    }
+}
+
+impl BackendOp for MaildirOp {
+    fn description(&self) -> String {
+       format!("Path of file: {}", self.path)
+    }
+    fn as_bytes(&mut self) -> Result<&[u8]> {
+        if self.slice.is_none() {
+                self.slice = Some(Mmap::open_path(self.path.to_string(), Protection::Read).unwrap());
+        }
+        Ok(unsafe { self.slice.as_ref().unwrap().as_slice() })
+    }
+    /*
+    fn fetch_headers(&mut self) -> Result<&[u8]> {
+        let raw = self.as_bytes()?;
+        let result = parser::headers_raw(raw).to_full_result()?;
+        Ok(result)
+    }
+    fn fetch_body(&mut self) -> Result<&[u8]> {
+        let raw = self.as_bytes()?;
+        let result = parser::headers_raw(raw).to_full_result()?;
+        Ok(result)
+    }*/
+}
+
 
 impl MailBackend for MaildirType {
     fn get(&self) -> Result<Vec<Mail>> {
@@ -120,7 +169,10 @@ panic!("didn't parse"); },
                     let s = scope.spawn(move || {
                         let mut local_r:Vec<Mail> = Vec::with_capacity(chunk.len());
                         for e in chunk {
-                            if let Some(e) =  Mail::from(e) {
+                            let e_copy = e.to_string();
+                            if let Some(e) = Mail::from(Box::new(BackendOpGenerator::new(Box::new(move || {
+                               Box::new(MaildirOp::new(e_copy.clone())) 
+                            } )))) {
                                 local_r.push(e);
                             }
                         }

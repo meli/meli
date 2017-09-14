@@ -26,6 +26,8 @@ pub mod backends;
 use mailbox::backends::MailBackend;
 use mailbox::backends::maildir;
 use error::Result;
+pub mod accounts;
+pub use mailbox::accounts::Account;
 
 extern crate fnv;
 
@@ -36,7 +38,7 @@ use std;
 type UnixTimestamp = i64;
 
 /*a Mailbox represents a folder of mail. Currently only Maildir is supported.*/
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct Mailbox{
     pub path: String,
     pub collection: Vec<Mail>,
@@ -135,7 +137,8 @@ impl PartialEq for Thread {
     }
 }
 
-fn build_collection(threads: &mut Vec<Thread>, id_table: &mut FnvHashMap<std::string::String, usize>, collection: &mut [Mail]) -> () {
+fn build_collection(threads: &mut Vec<Thread>, id_table: &mut FnvHashMap<std::string::String, usize>, collection: &mut [Mail]) -> () 
+{
     for (i, x) in collection.iter_mut().enumerate() {
         let x_index; /* x's index in threads */
         let m_id = x.get_message_id_raw().to_string();
@@ -173,7 +176,7 @@ fn build_collection(threads: &mut Vec<Thread>, id_table: &mut FnvHashMap<std::st
          *
          * Find a Thread object for the given Message-ID:
          * If there's one in id_table use that;
-         * Otherwise, make (and index) one with a null Message 
+         * Otherwise, make (and index) one with a null Message
          *
          * Link the References field's Threads together in the order implied by the References header.
          * If they are already linked, don't change the existing links.
@@ -228,16 +231,14 @@ fn build_collection(threads: &mut Vec<Thread>, id_table: &mut FnvHashMap<std::st
                     None => { break 'date; },
                 }
             }
-            if threads[curr_ref].parent.is_none() {
-                threads[curr_ref].parent = Some(parent_id);
-            }
             curr_ref = parent_id;
         }
     }
 }
 
-impl Mailbox {
-    pub fn new(path: &str, sent_folder: Option<&str>) -> Result<Mailbox> {
+impl Mailbox
+{
+    pub fn new(path: &str, sent_folder: &Option<Result<Mailbox>>) -> Result<Mailbox> {
         let mut collection: Vec<Mail> = maildir::MaildirType::new(path).get()?;
         /* To reconstruct thread information from the mails we need: */
 
@@ -260,78 +261,84 @@ impl Mailbox {
          *  - if a message in this folder is a reply to a message we sent, we will add it to the
          *    threading
          */
-        if sent_folder.is_some() {
-            for mut x in maildir::MaildirType::new(sent_folder.unwrap()).get().unwrap() {
-                if id_table.contains_key(x.get_message_id_raw()) ||
-                (!x.get_in_reply_to_raw().is_empty() && id_table.contains_key(x.get_in_reply_to_raw())) {
-                    collection.push(x.clone());
-                    idx += 1;
-                }
-                if id_table.contains_key(x.get_message_id_raw()) {
-                    let c = id_table[x.get_message_id_raw()];
-                    if threads[c].message.is_some() {
-                        /* skip duplicate message-id, but this should be handled instead */
-                        continue;
-                    }
-                    threads[c].message = Some(idx-1);
-                    assert!(threads[c].has_children());
-                    threads[c].date = x.get_date();
-                    x.set_thread(c);
-                }
-                if !x.get_in_reply_to_raw().is_empty() && id_table.contains_key(x.get_in_reply_to_raw()) {
-                    let p = id_table[x.get_in_reply_to_raw()];
-                    let c = if !id_table.contains_key(x.get_message_id_raw()) {
-                        threads.push(
-                            Thread {
-                                message: Some(idx-1),
-                                id: tidx,
-                                parent: Some(p),
-                                first_child: None,
-                                next_sibling: None,
-                                date: x.get_date(),
-                                indentation: 0,
-                                show_subject: true,
-                            });
-                        id_table.insert(x.get_message_id_raw().to_string(), tidx);
-                        x.set_thread(tidx);
-                        tidx += 1;
-                        tidx - 1
-                    } else {
-                        id_table[x.get_message_id_raw()]
-                    };
-                    threads[c].parent = Some(p);
-                    if threads[p].is_descendant(&threads, &threads[c]) ||
-                       threads[c].is_descendant(&threads, &threads[p]) {
-                            continue;
-                       }
-                    if threads[p].first_child.is_none() {
-                        threads[p].first_child = Some(c);
-                    } else {
-                        let mut fc = threads[p].first_child.unwrap();
-                        while threads[fc].next_sibling.is_some() {
-                            threads[fc].parent = Some(p);
-                            fc = threads[fc].next_sibling.unwrap();
+
+        if let &Some(ref sent_box) = sent_folder {
+            if sent_box.is_ok() {
+                let sent_mailbox = sent_box.as_ref();
+                let sent_mailbox = sent_mailbox.unwrap();;
+
+                for ref x in &sent_mailbox.collection {
+                    if id_table.contains_key(x.get_message_id_raw()) ||
+                        (!x.get_in_reply_to_raw().is_empty() && id_table.contains_key(x.get_in_reply_to_raw())) {
+                            let mut x: Mail = (*x).clone();
+                            if id_table.contains_key(x.get_message_id_raw()) {
+                                let c = id_table[x.get_message_id_raw()];
+                                if threads[c].message.is_some() {
+                                    /* skip duplicate message-id, but this should be handled instead */
+                                    continue;
+                                }
+                                threads[c].message = Some(idx);
+                                assert!(threads[c].has_children());
+                                threads[c].date = x.get_date();
+                                x.set_thread(c);
+                            } else if !x.get_in_reply_to_raw().is_empty() && id_table.contains_key(x.get_in_reply_to_raw()) {
+                                let p = id_table[x.get_in_reply_to_raw()];
+                                let c = if id_table.contains_key(x.get_message_id_raw()) {
+                                    id_table[x.get_message_id_raw()]
+                                } else {
+                                    threads.push(
+                                        Thread {
+                                            message: Some(idx),
+                                            id: tidx,
+                                            parent: Some(p),
+                                            first_child: None,
+                                            next_sibling: None,
+                                            date: x.get_date(),
+                                            indentation: 0,
+                                            show_subject: true,
+                                        });
+                                    id_table.insert(x.get_message_id_raw().to_string(), tidx);
+                                    x.set_thread(tidx);
+                                    tidx += 1;
+                                    tidx - 1
+                                };
+                                threads[c].parent = Some(p);
+                                if threads[p].is_descendant(&threads, &threads[c]) ||
+                                    threads[c].is_descendant(&threads, &threads[p]) {
+                                        continue;
+                                    }
+                                if threads[p].first_child.is_none() {
+                                    threads[p].first_child = Some(c);
+                                } else {
+                                    let mut fc = threads[p].first_child.unwrap();
+                                    while threads[fc].next_sibling.is_some() {
+                                        threads[fc].parent = Some(p);
+                                        fc = threads[fc].next_sibling.unwrap();
+                                    }
+                                    threads[fc].next_sibling = Some(c);
+                                    threads[fc].parent = Some(p);
+                                }
+                                /* update thread date */
+                                let mut parent_iter = p;
+                                'date: loop {
+                                    let p = &mut threads[parent_iter];
+                                    if p.date < x.get_date() {
+                                        p.date = x.get_date();
+                                    }
+                                    match p.parent {
+                                        Some(p) => { parent_iter = p; },
+                                        None => { break 'date; },
+                                    }
+                                }
+                            }
+                            collection.push(x);
+                            idx += 1;
                         }
-                        threads[fc].next_sibling = Some(c);
-                        threads[fc].parent = Some(p);
-                    }
-                    /* update thread date */
-                    let mut parent_iter = p;
-                    'date: loop {
-                        let p = &mut threads[parent_iter];
-                        if p.date < x.get_date() {
-                            p.date = x.get_date();
-                        }
-                        match p.parent {
-                            Some(p) => { parent_iter = p; },
-                            None => { break 'date; },
-                        }
-                    }
                 }
             }
         }
-        /* Walk over the elements of id_table, and gather a list of the Thread objects that have
-         * no parents. These are the root messages of each thread */
+            /* Walk over the elements of id_table, and gather a list of the Thread objects that have
+             * no parents. These are the root messages of each thread */
         let mut root_set = Vec::with_capacity(collection.len());
         'root_set: for v in id_table.values() {
             if threads[*v].parent.is_none() {
@@ -348,7 +355,8 @@ impl Mailbox {
 
         /* Group messages together by thread in a collection so we can print them together */
         let mut threaded_collection: Vec<usize> = Vec::with_capacity(collection.len());
-        fn build_threaded(threads: &mut Vec<Thread>, indentation: usize, threaded: &mut Vec<usize>, i: usize, root_subject_idx: usize, collection: &[Mail]) {
+        fn build_threaded(threads: &mut Vec<Thread>, indentation: usize, threaded: &mut Vec<usize>, i: usize, root_subject_idx: usize, collection: &[Mail])
+            {
             let thread = threads[i];
             if threads[root_subject_idx].has_message() {
                 let root_subject = collection[threads[root_subject_idx].get_message().unwrap()].get_subject();

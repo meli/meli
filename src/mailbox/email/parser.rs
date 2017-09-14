@@ -110,12 +110,22 @@ named!(header<(&str, &str)>,
 named!(headers<std::vec::Vec<(&str, &str)>>,
        many1!(complete!(header)));
 
+named!(pub headers_raw<&[u8]>,
+       take_until1!("\n\n"));
+
+named!(pub body_raw<&[u8]>,
+       do_parse!(
+           take_until1!("\n\n") >>
+           body: take_while!(call!(|_| true)) >>
+           ( { body } )));
+
+
 named!(pub mail<(std::vec::Vec<(&str, &str)>, &[u8])>,
-       separated_pair!(headers, tag!("\n"), take_while!(call!(|_| { true }))));
+       separated_pair!(headers, tag!("\n"), take_while!(call!(|_| true))));
 named!(pub attachment<(std::vec::Vec<(&str, &str)>, &[u8])>,
        do_parse!(
             opt!(is_a!(" \n\t\r")) >>
-       pair: pair!(many0!(complete!(header)), take_while!(call!(|_| { true }))) >>
+       pair: pair!(many0!(complete!(header)), take_while!(call!(|_| true))) >>
        ( { pair } )));
 
 /* Header parsers */
@@ -250,7 +260,23 @@ named!(pub message_id<&str>,
         map_res!(complete!(delimited!(tag!("<"), take_until1!(">"), tag!(">"))), from_utf8)
  );
 
-named!(pub references<Vec<&str>>, many0!(preceded!(is_not!("<"), message_id)));
+fn message_id_peek(input: &[u8]) -> IResult<&[u8],&str> {
+    let input_length = input.len();
+    if input.is_empty()  {
+        IResult::Incomplete(Needed::Size(1))
+    } else if input_length == 2 || input[0] != b'<'  {
+        IResult::Error(error_code!(ErrorKind::Custom(43)))
+    } else {
+        for i in 1..input_length {
+            if input[i] == b'>' {
+                return IResult::Done(&input[i+1..], from_utf8(&input[0..i+1]).unwrap());
+            }
+        }
+        IResult::Incomplete(Needed::Unknown)
+    }
+}
+
+named!(pub references<Vec<&str>>, separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
 
 named_args!(pub attachments<'a>(boundary: &'a str, boundary_end: &'a str) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
             alt_complete!(do_parse!(

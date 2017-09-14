@@ -26,8 +26,8 @@ use std::io;
 use std::fs;
 use std::path::{PathBuf, Path};
 
-#[derive(Debug)]
-enum MailFormat {
+#[derive(Debug,Clone)]
+pub enum MailFormat {
     Maildir
 }
 
@@ -57,8 +57,8 @@ struct FileSettings {
     accounts: HashMap<String, FileAccount>,
 }
 
-#[derive(Debug)]
-pub struct Account {
+#[derive(Debug,Clone)]
+pub struct AccountSettings {
     pub folders: Vec<String>,
     format: MailFormat,
     pub sent_folder: String,
@@ -66,7 +66,7 @@ pub struct Account {
 }
 #[derive(Debug)]
 pub struct Settings {
-   pub accounts: HashMap<String, Account>,
+   pub accounts: HashMap<String, AccountSettings>,
 }
 
 
@@ -94,7 +94,7 @@ impl FileSettings {
 impl Settings {
     pub fn new() -> Settings {
         let fs = FileSettings::new();
-        let mut s: HashMap<String, Account> = HashMap::new();
+        let mut s: HashMap<String, AccountSettings> = HashMap::new();
 
         for (id, x) in fs.accounts {
             let mut folders = Vec::new();
@@ -121,7 +121,7 @@ impl Settings {
                 folders.push(path.to_str().unwrap().to_string());
             }
             recurse_folders(&mut folders, &x.folders);
-            s.insert(id.clone(), Account {
+            s.insert(id.clone(), AccountSettings {
                 folders: folders,
                 format: MailFormat::from_str(&x.format),
                 sent_folder: x.sent_folder.clone(),

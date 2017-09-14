@@ -313,7 +313,8 @@ impl Window for Index {
     }
 }
 impl Index {
-    pub fn new(mailbox: Mailbox) -> Index {
+    pub fn new(mailbox: &Mailbox) -> Index {
+        let mailbox = (*mailbox).clone();
         let mut screen_height = 0;
         let mut screen_width = 0;
         /* Get the screen bounds. */

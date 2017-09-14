@@ -23,6 +23,8 @@ use std::fmt;
 use std::result;
 use std::io;
 
+use nom;
+
 pub type Result<T> = result::Result<T, MeliError>;
 
 #[derive(Debug,Clone)]
@@ -55,3 +57,9 @@ impl From<io::Error> for MeliError {
     }
 }
 
+impl From<nom::IError> for MeliError {
+    #[inline]
+    fn from(kind: nom::IError) -> MeliError {
+        MeliError::new(format!("{:?}", kind))
+    }
+}

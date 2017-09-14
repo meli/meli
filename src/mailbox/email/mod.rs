@@ -19,17 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-mod parser;
+pub mod parser;
 mod attachments;
+use mailbox::backends::BackendOpGenerator;
 use self::attachments::*;
 
 use std::string::String;
-use memmap::{Mmap, Protection};
-use std;
+//use std;
 use std::cmp::Ordering;
 use std::fmt;
 use std::option::Option;
-use std::io::prelude::*;
+//use std::io::prelude::*;
+use std::ascii::AsciiExt;
 
 use chrono;
 use chrono::TimeZone;
@@ -92,9 +93,11 @@ struct References {
     refs: Vec<MessageID>,
 }
 
+use std::sync::Arc;
 /* A very primitive mail object */
-#[derive(Clone,Debug,Default)]
-pub struct Mail {
+#[derive(Debug, Clone)]
+pub struct Mail
+{
     date: String,
     from: Option<String>,
     to: Option<String>,
@@ -106,9 +109,13 @@ pub struct Mail {
 
     datetime: Option<chrono::DateTime<chrono::FixedOffset>>,
     thread: usize,
+
+    operation_token: Arc<Box<BackendOpGenerator>>,
 }
 
-impl Mail {
+
+impl Mail
+{
     pub fn get_date(&self) -> i64 {
         match self.datetime {
             Some(v) => v.timestamp(),
@@ -247,7 +254,7 @@ impl Mail {
     pub fn set_datetime(&mut self, new_val: Option<chrono::DateTime<chrono::FixedOffset>>) -> () {
         self.datetime = new_val;
     }
-    pub fn new() -> Self {
+    pub fn new(token: Box<BackendOpGenerator>) -> Self {
         Mail {
             date: "".to_string(),
             from: None,
@@ -261,106 +268,99 @@ impl Mail {
             datetime: None,
 
             thread: 0,
-     }
+
+            operation_token: Arc::new(token),
+
+        }
     }
-    pub fn from(path: &str) -> Option<Self> {
-     let f = Mmap::open_path(path.to_string(), Protection::Read).unwrap();
-     let file = unsafe { f.as_slice() };
-     let (headers, body) = match parser::mail(file).to_full_result() {
-        Ok(v) => v,
-        Err(_) => {
-            eprintln!("error in parsing mail");
-            let path = std::path::PathBuf::from(path);
+    pub fn from(operation_token: Box<BackendOpGenerator>) -> Option<Mail> {
+        let mut operation = operation_token.generate();
+        let file = operation.as_bytes();
+        if file.is_err() {
+            return None;
+        }
+        let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
+            Ok(v) => v,
+            Err(_) => {
+                let operation = operation_token.generate();
+                eprintln!("error in parsing mail\n{}", operation.description());
+                return None;
+            }
+        };
+        let mut mail = Mail::new(operation_token);
+        let mut in_reply_to = None;
+        let mut datetime = None;
 
-            let mut buffer = Vec::new();
-            let _ =  std::fs::File::open(path).unwrap().read_to_end(&mut buffer);
-            eprintln!("\n-------------------------------");
-            eprintln!("{}\n", std::string::String::from_utf8_lossy(&buffer));
-            eprintln!("-------------------------------\n");
+        let mut builder = AttachmentBuilder::new(body);
+        for (name, value) in headers {
+            if value.len() == 1 && value.is_empty() {
+                continue;
+            }
+            if name.eq_ignore_ascii_case("to") {
+                let parse_result = parser::subject(value.as_bytes());
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    "".to_string()
+                };
+                mail.set_to(value);
+            } else if name.eq_ignore_ascii_case("from") {
+                let parse_result = parser::subject(value.as_bytes());
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    "".to_string()
+                };
+                mail.set_from(value);
+            } else if name.eq_ignore_ascii_case("subject") {
+                let parse_result = parser::subject(value.trim().as_bytes());
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    "".to_string()
+                };
+                mail.set_subject(value);
+            } else if name.eq_ignore_ascii_case("message-id") {
+                mail.set_message_id(value);
+            } else if name.eq_ignore_ascii_case("references") {
+                {
+                    let parse_result = parser::references(value.as_bytes());
+                    eprintln!("{:?}", value);
+                    if parse_result.is_done() {
+                        for v in parse_result.to_full_result().unwrap() {
+                            eprintln!("pushing {:?}", v);
+                            mail.push_references(v);
+                        }
+                    }
+                    eprintln!("\n\n");
+                }
+                mail.set_references(value.to_string());
+            } else if name.eq_ignore_ascii_case("in-reply-to") {
+                mail.set_in_reply_to(value);
+                in_reply_to = Some(value);
+            } else if name.eq_ignore_ascii_case("date") {
+                mail.set_date(value.to_string());
+                datetime = Some(value.to_string());
+            } else if name.eq_ignore_ascii_case("content-transfer-encoding") {
+                builder.content_transfer_encoding(value);
+            } else if name.eq_ignore_ascii_case("content-type") {
+                builder.content_type(value);
+            }
+        }
+        if let Some(ref mut x) = in_reply_to {
+            mail.push_references(x);
+        }
+        mail.set_body(builder.build());
+        if let Some(ref mut d) = datetime {
+            mail.set_datetime(parser::date(d));
+        }
 
-            return None; }
-     };
-     let mut mail = Mail::new();
-     let mut in_reply_to = None;
-     let mut datetime = None;
-
-     let mut builder = AttachmentBuilder::new(body);
-     for (name, value) in headers {
-         if value.len() == 1 && value.is_empty() {
-             continue;
-         }
-         match name {
-             "To" => {
-                 let parse_result = parser::subject(value.as_bytes());
-                 let value = if parse_result.is_done() {
-                     parse_result.to_full_result().unwrap()
-                 } else {
-                     "".to_string()
-                 };
-                 mail.set_to(value);
-             },
-             "From" => {
-                 let parse_result = parser::subject(value.as_bytes());
-                 let value = if parse_result.is_done() {
-                     parse_result.to_full_result().unwrap()
-                 } else {
-                     "".to_string()
-                 };
-                 mail.set_from(value);
-             },
-             "Subject" => {
-                 let parse_result = parser::subject(value.trim().as_bytes());
-                 let value = if parse_result.is_done() {
-                     parse_result.to_full_result().unwrap()
-                 } else {
-                     "".to_string()
-                 };
-                 mail.set_subject(value);
-             },
-             "Message-ID" | "Message-Id" | "Message-id" | "message-id" => {
-                 mail.set_message_id(value);
-             },
-             "References" => {
-                 {
-                     let parse_result = parser::references(value.as_bytes());
-                     if parse_result.is_done() {
-                         for v in parse_result.to_full_result().unwrap() {
-                             mail.push_references(v);
-                         }
-                     }
-                 }
-                 mail.set_references(value.to_string());
-             },
-             "In-Reply-To" | "In-reply-to" | "In-Reply-to" | "in-reply-to" => {
-                 mail.set_in_reply_to(value);
-                 in_reply_to = Some(value); },
-             "Date" => {
-                 mail.set_date(value.to_string());
-                 datetime = Some(value.to_string());
-             },
-             "Content-Transfer-Encoding" => {
-                 builder.content_transfer_encoding(value);
-             },
-             "Content-Type" => {
-                 builder.content_type(value);
-             },
-             _ => {},
-         }
-     };
-     if let Some(ref mut x) = in_reply_to {
-         mail.push_references(x);
-     };
-     mail.set_body(builder.build());
-     if let Some(ref mut d) = datetime {
-         mail.set_datetime(parser::date(d));
-     }
-
-     Some(mail)
+        Some(mail)
     }
 }
 
 impl Eq for Mail {}
-impl Ord for  Mail {
+impl Ord for Mail {
     fn cmp(&self, other: &Mail) -> Ordering {
         self.get_datetime().cmp(&other.get_datetime())
     }

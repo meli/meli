@@ -36,17 +36,17 @@ fn main() {
     let ui = ui::TUI::initialize();
     let mut j = 0;
     let folder_length = set.accounts["norn"].folders.len();
+    let mut account = Account::new("norn".to_string(), set.accounts["norn"].clone());
     'main : loop  {
         ncurses::touchwin(ncurses::stdscr());
         ncurses::mv(0,0);
-        let mailbox = Mailbox::new(&set.accounts["norn"].folders[j],
-        Some(&set.accounts["norn"].sent_folder));
-        let mut index: Box<Window> = match mailbox {
-            Ok(v) => {
+        let mailbox = &mut account[j];
+        let mut index: Box<Window> = match mailbox.as_ref().unwrap() {
+            &Ok(ref v) => {
                 Box::new(Index::new(v))
             },
-            Err(v) => {
-               Box::new(ErrorWindow::new(v))
+            &Err(ref v) => {
+               Box::new(ErrorWindow::new((*v).clone()))
             }
         };
         //eprintln!("{:?}", set);
