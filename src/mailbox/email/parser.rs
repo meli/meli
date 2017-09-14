@@ -107,7 +107,7 @@ named!(name<&str>,
 named!(header<(&str, &str)>,
        separated_pair!(complete!(name), ws!(tag!(":")), complete!(header_value)));
 /* Parse all headers -> Vec<(&str, Vec<&str>)> */
-named!(headers<std::vec::Vec<(&str, &str)>>,
+named!(pub headers<std::vec::Vec<(&str, &str)>>,
        many1!(complete!(header)));
 
 named!(pub headers_raw<&[u8]>,

@@ -37,8 +37,8 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn as_bytes(&mut self) -> Result<&[u8]>;
     //fn delete(&self) -> ();
     //fn copy(&self
-    //fn fetch_headers(&mut self) -> Result<&[u8]>;
-    //fn fetch_body(&mut self) -> Result<&[u8]>;
+    fn fetch_headers(&mut self) -> Result<&[u8]>;
+    fn fetch_body(&mut self) -> Result<&[u8]>;
 }
 
 /* BackendOpGenerator is a wrapper for a closure that returns a BackendOp object */

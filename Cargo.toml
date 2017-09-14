@@ -29,5 +29,5 @@ optional = false
 version = "5.86.0"
 
 [profile.release]
-lto = true
-#debug = true
+#lto = true
+debug = true

@@ -108,6 +108,7 @@ pub struct Mail
     references: Option<References>,
 
     datetime: Option<chrono::DateTime<chrono::FixedOffset>>,
+    timestamp: i64,
     thread: usize,
 
     operation_token: Arc<Box<BackendOpGenerator>>,
@@ -117,10 +118,7 @@ pub struct Mail
 impl Mail
 {
     pub fn get_date(&self) -> i64 {
-        match self.datetime {
-            Some(v) => v.timestamp(),
-            None => 0,
-        }
+        self.timestamp 
     }
     pub fn get_datetime(&self) -> chrono::DateTime<chrono::FixedOffset> {
         self.datetime.unwrap_or_else(|| { chrono::FixedOffset::west(0).ymd(1970, 1, 1).and_hms(0, 0, 0)})
@@ -140,8 +138,29 @@ impl Mail
             None => "",
         }
     }
-    pub fn get_body(&self) -> &Attachment {
-        self.body.as_ref().unwrap()
+    pub fn get_body(&self) -> Attachment {
+        let mut operation = self.operation_token.generate();
+        let file = operation.as_bytes();
+        let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
+            Ok(v) => v,
+            Err(_) => {
+                let operation = self.operation_token.generate();
+                eprintln!("error in parsing mail\n{}", operation.description());
+                panic!();
+            },
+        };
+        let mut builder = AttachmentBuilder::new(body);
+        for (name, value) in headers {
+            if value.len() == 1 && value.is_empty() {
+                continue;
+            }
+            if name.eq_ignore_ascii_case("content-transfer-encoding") {
+                builder.content_transfer_encoding(value);
+            } else if name.eq_ignore_ascii_case("content-type") {
+                builder.content_type(value);
+            }
+        }
+        builder.build()
     }
     pub fn get_subject(&self) -> &str {
         match self.subject {
@@ -253,6 +272,12 @@ impl Mail
     }
     pub fn set_datetime(&mut self, new_val: Option<chrono::DateTime<chrono::FixedOffset>>) -> () {
         self.datetime = new_val;
+        if let Some(v) = self.datetime {
+            self.timestamp = v.timestamp();
+            if self.timestamp == 1485962960 {
+                eprintln!("it's {:?}", self);
+            }
+        }
     }
     pub fn new(token: Box<BackendOpGenerator>) -> Self {
         Mail {
@@ -266,6 +291,7 @@ impl Mail
             references: None,
 
             datetime: None,
+            timestamp: 0,
 
             thread: 0,
 
@@ -275,23 +301,21 @@ impl Mail
     }
     pub fn from(operation_token: Box<BackendOpGenerator>) -> Option<Mail> {
         let mut operation = operation_token.generate();
-        let file = operation.as_bytes();
-        if file.is_err() {
-            return None;
-        }
-        let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
-            Ok(v) => v,
-            Err(_) => {
+        let headers = match parser::headers(operation.fetch_headers().unwrap()).to_full_result() {
+            Ok(v) => {
+                v
+            },
+            _ => {
                 let operation = operation_token.generate();
                 eprintln!("error in parsing mail\n{}", operation.description());
                 return None;
-            }
+            },
         };
+
         let mut mail = Mail::new(operation_token);
         let mut in_reply_to = None;
         let mut datetime = None;
 
-        let mut builder = AttachmentBuilder::new(body);
         for (name, value) in headers {
             if value.len() == 1 && value.is_empty() {
                 continue;
@@ -325,14 +349,11 @@ impl Mail
             } else if name.eq_ignore_ascii_case("references") {
                 {
                     let parse_result = parser::references(value.as_bytes());
-                    eprintln!("{:?}", value);
                     if parse_result.is_done() {
                         for v in parse_result.to_full_result().unwrap() {
-                            eprintln!("pushing {:?}", v);
                             mail.push_references(v);
                         }
                     }
-                    eprintln!("\n\n");
                 }
                 mail.set_references(value.to_string());
             } else if name.eq_ignore_ascii_case("in-reply-to") {
@@ -341,16 +362,11 @@ impl Mail
             } else if name.eq_ignore_ascii_case("date") {
                 mail.set_date(value.to_string());
                 datetime = Some(value.to_string());
-            } else if name.eq_ignore_ascii_case("content-transfer-encoding") {
-                builder.content_transfer_encoding(value);
-            } else if name.eq_ignore_ascii_case("content-type") {
-                builder.content_type(value);
             }
         }
         if let Some(ref mut x) = in_reply_to {
             mail.push_references(x);
         }
-        mail.set_body(builder.build());
         if let Some(ref mut d) = datetime {
             mail.set_datetime(parser::date(d));
         }

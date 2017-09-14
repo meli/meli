@@ -22,6 +22,7 @@
 use mailbox::email::Mail;
 use error::{MeliError, Result};
 use mailbox::backends::{MailBackend, BackendOp, BackendOpGenerator};
+use mailbox::email::parser;
 
 extern crate crossbeam;
 use std::path::PathBuf;
@@ -48,7 +49,7 @@ impl Clone for MaildirOp {
 }
 
 impl MaildirOp {
-    fn new(path: String) -> Self {
+    pub fn new(path: String) -> Self {
         MaildirOp {
             path: path,
             slice: None,
@@ -66,7 +67,6 @@ impl BackendOp for MaildirOp {
         }
         Ok(unsafe { self.slice.as_ref().unwrap().as_slice() })
     }
-    /*
     fn fetch_headers(&mut self) -> Result<&[u8]> {
         let raw = self.as_bytes()?;
         let result = parser::headers_raw(raw).to_full_result()?;
@@ -76,7 +76,7 @@ impl BackendOp for MaildirOp {
         let raw = self.as_bytes()?;
         let result = parser::headers_raw(raw).to_full_result()?;
         Ok(result)
-    }*/
+    }
 }
 
 
