@@ -24,6 +24,8 @@ use base64;
 use chrono;
 use nom::{le_u8, is_hex_digit};
 use nom::{IResult,Needed,ErrorKind};
+use nom::{Compare, CompareResult};
+use encoding::{Encoding, DecoderTrap};
 
 fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8],u8> {
     if input.is_empty() || input.len() < 3 {
@@ -51,15 +53,6 @@ fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8],u8> {
         IResult::Error(error_code!(ErrorKind::Custom(43)))
     }
 }
-
-/*
-named!(quoted_printable_byte<u8>, do_parse!(
-        p: map_res!(preceded!(tag!("="), verify!(complete!(take!(2)), |s: &[u8]| is_hex_digit(s[0]) && is_hex_digit(s[1]) )), from_utf8) >>
-        ( {
-            u8::from_str_radix(p, 16).unwrap()
-        } )));
-        */
-
 
 // Parser definition
 
@@ -133,41 +126,122 @@ named!(pub attachment<(std::vec::Vec<(&str, &str)>, &[u8])>,
 /* Encoded words
  *"=?charset?encoding?encoded text?=".
  */
-named!(utf8_token_base64<Vec<u8>>, do_parse!(
-        encoded: complete!(delimited!(tag_no_case!("=?UTF-8?B?"), take_until1!("?="), tag!("?="))) >>
-        ( {
-            match base64::decode(encoded) {
-                Ok(v) => {
-                    v
+
+/* TODO: make a map of encodings and decoding functions so that they can be reused and easily
+ * extended */
+use encoding::all::{ISO_8859_1,ISO_8859_2, ISO_8859_7, WINDOWS_1253, GBK};
+
+fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+    if input.len() < 5 {
+        return IResult::Incomplete(Needed::Unknown);
+    } else if input[0] != b'=' || input[1] != b'?' {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)))
+    }
+    for tag in &["UTF-8", "iso-8859-7", "windows-1253", "iso-8859-1", "iso-8859-2", "gbk"] {
+        if let CompareResult::Ok = (&input[2..]).compare_no_case(*tag) {
+            let tag_len = tag.len();
+            /* tag must end with ?_? where _ is either Q or B, eg: =?UTF-8?B? */
+            if input[2+tag_len] != b'?' || input[2+tag_len+2] != b'?' {
+                return IResult::Error(error_code!(ErrorKind::Custom(43)))
+            }
+            /* See if input ends with "?=" and get ending index */
+            let mut encoded_idx = None;
+            for i in (5+tag_len)..input.len() {
+                if input[i] == b'?' && i < input.len() && input[i+1] == b'=' {
+                    encoded_idx = Some(i);
+                    break;
+                }
+            };
+            if encoded_idx.is_none() {
+                return IResult::Error(error_code!(ErrorKind::Custom(43)))
+            }
+            let encoded = &input[5+tag_len..encoded_idx.unwrap()];
+
+            let s:Vec<u8> = match input[2+tag_len+1] {
+                b'b' | b'B' => {
+                    match base64::decode(encoded) {
+                        Ok(v) => {
+                            v
+                        },
+                        Err(_) => {
+                            encoded.to_vec()
+                        },
+                    }
                 },
-                Err(_) => {
-                    encoded.to_vec()
+                b'q' | b'Q' => {
+                    match get_quoted_printed_bytes(encoded) {
+                        IResult::Done(b"", s) => {
+                            s
+                        },
+                        _ => {
+                            return IResult::Error(error_code!(ErrorKind::Custom(43)))
+                        },
+                    }
+
+                },
+                _ => {
+                    return IResult::Error(error_code!(ErrorKind::Custom(43)))
+                },
+            };
+
+            match *tag {
+                "UTF-8" => {
+                    return IResult::Done(&input[encoded_idx.unwrap()+2..], s);
+                },
+                "iso-8859-7" => {
+                    return if let Ok(v) = ISO_8859_7.decode(&s, DecoderTrap::Strict) {
+                        IResult::Done(&input[encoded_idx.unwrap()+2..], v.into_bytes())
+                    } else {
+                        IResult::Error(error_code!(ErrorKind::Custom(43)))
+                    }
+                },
+                "windows-1253" => {
+                    return if let Ok(v) = WINDOWS_1253.decode(&s, DecoderTrap::Strict) {
+                        IResult::Done(&input[encoded_idx.unwrap()+2..], v.into_bytes())
+                    } else {
+                        IResult::Error(error_code!(ErrorKind::Custom(43)))
+                    }
+                },
+                "iso-8859-1" => {
+                    return if let Ok(v) = ISO_8859_1.decode(&s, DecoderTrap::Strict) {
+                        IResult::Done(&input[encoded_idx.unwrap()+2..], v.into_bytes())
+                    } else {
+                        IResult::Error(error_code!(ErrorKind::Custom(43)))
+                    }
+                },
+                "iso-8859-2" => {
+                    return if let Ok(v) = ISO_8859_2.decode(&s, DecoderTrap::Strict) {
+                        IResult::Done(&input[encoded_idx.unwrap()+2..], v.into_bytes())
+                    } else {
+                        IResult::Error(error_code!(ErrorKind::Custom(43)))
+                    }
+                },
+                "gbk" => {
+                    return if let Ok(v) = GBK.decode(&s, DecoderTrap::Strict) {
+                        IResult::Done(&input[encoded_idx.unwrap()+2..], v.into_bytes())
+                    } else {
+                        IResult::Error(error_code!(ErrorKind::Custom(43)))
+                    }
+                },
+                _ => {
+                    panic!();
                 },
             }
-        } )
-        ));
-
-named!(utf8_token_quoted_p_raw<&[u8], &[u8]>,
-       complete!(delimited!(tag_no_case!("=?UTF-8?q?"), take_until1!("?="), tag!("?="))));
-
-//named!(utf8_token_quoted_p<String>, escaped_transform!(call!(alpha), '=', quoted_printable_byte));
+        } else {
+            continue;
+        }
+    }
+    eprintln!("unknown tag is {:?}", from_utf8(&input[2..20]));
+    IResult::Error(error_code!(ErrorKind::Custom(43)))
+}
 
 named!(qp_underscore_header<u8>,
        do_parse!(tag!("_") >> ( { b' ' } )));
 
-named!(utf8_token_quoted_p<Vec<u8>>, do_parse!(
-        raw: call!(utf8_token_quoted_p_raw) >>
-        ( {
-            named!(get_bytes<Vec<u8>>, many0!(alt_complete!(quoted_printable_byte | qp_underscore_header | le_u8)));
-            get_bytes(raw).to_full_result().unwrap()
-        } )));
+named!(get_quoted_printed_bytes<Vec<u8>>, many0!(alt_complete!(quoted_printable_byte | qp_underscore_header | le_u8)));
 
-named!(utf8_token<Vec<u8>>, alt_complete!(
-        utf8_token_base64 |
-        call!(utf8_token_quoted_p)));
-
-named!(utf8_token_list<String>, ws!(do_parse!(
-        list: separated_nonempty_list!(complete!(is_a!(" \n\r\t")), utf8_token) >>
+named!(encoded_word_list<String>, ws!(do_parse!(
+        list: separated_nonempty_list!(complete!(is_a!(" \n\r\t")), encoded_word) >>
         ( {
             let list_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc });
             let bytes = list.iter().fold(Vec::with_capacity(list_len), |mut acc, x| { acc.append(&mut x.clone()); acc});
@@ -180,9 +254,8 @@ named!(ascii_token<String>, do_parse!(
             String::from_utf8_lossy(word).into_owned()
         } )));
 
-/* Lots of copying here. TODO: fix it */
 named!(pub subject<String>, ws!(do_parse!(
-        list: many0!(alt_complete!( utf8_token_list | ascii_token)) >>
+        list: many0!(alt_complete!( encoded_word_list | ascii_token)) >>
         ( {
             let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc }) + list.len() - 1;
             let list_len = list.len();
@@ -204,10 +277,20 @@ named!(pub subject<String>, ws!(do_parse!(
 fn test_subject() {
     let subject_s = "list.free.de mailing list memberships reminder".as_bytes();
     assert_eq!((&b""[..], "list.free.de mailing list memberships reminder".to_string()), subject(subject_s).unwrap());
+
     let subject_s = "=?UTF-8?B?zp3Orc6/IM+Az4HOv8+Dz4nPgM65zrrPjCDOvM6uzr3Phc68zrEgzrHPhs6v?= =?UTF-8?B?z4fOuM63?=".as_bytes();
     assert_eq!((&b""[..], "Νέο προσωπικό μήνυμα αφίχθη".to_string()), subject(subject_s).unwrap());
+
     let subject_s = "=?utf-8?B?bW9vZGxlOiDOsc69zrHPg866z4zPgM63z4POtyDOv868zqzOtM6xz4Igz4M=?=  =?utf-8?B?z4XOts63z4TOrs+DzrXPic69?=".as_bytes();
     assert_eq!((&b""[..], "moodle: ανασκόπηση ομάδας συζητήσεων".to_string()), subject(subject_s).unwrap());
+
+    let subject_s = "=?UTF-8?B?zp3Orc6/IM+Az4HOv8+Dz4nPgM65zrrPjCDOvM6uzr3Phc68zrEgzrHPhs6v?=".as_bytes();
+    assert_eq!("Νέο προσωπικό μήνυμα αφί".to_string(), from_utf8(&encoded_word(subject_s).to_full_result().unwrap()).unwrap());
+    let subject_s = "=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?=".as_bytes();
+    assert_eq!("Πρόσθε".to_string(), from_utf8(&encoded_word(subject_s).to_full_result().unwrap()).unwrap());
+    let subject_s = "=?iso-8859-7?B?UmU6INDx/OLr5+zhIOzlIPTn7SDh9fHp4e3eIOLh8eTp4Q==?=".as_bytes();
+    assert_eq!("Re: Πρόβλημα με την αυριανή βαρδια".to_string(), from_utf8(&encoded_word(subject_s).to_full_result().unwrap()).unwrap());
+
     let subject_s = "=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?=
  =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?=
  =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=".as_bytes();
