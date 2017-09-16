@@ -31,3 +31,4 @@ extern crate nom;
 extern crate chrono;
 extern crate base64;
 extern crate memmap;
+extern crate encoding;

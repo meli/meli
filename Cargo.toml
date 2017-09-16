@@ -22,6 +22,7 @@ memmap = "*"
 base64 = "*"
 crossbeam = "^0.3.0"
 fnv = "1.0.3"
+encoding = "0.2.33"
 
 [dependencies.ncurses]
 features = ["wide"]

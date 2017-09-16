@@ -91,6 +91,8 @@ pub enum ContentTransferEncoding {
     Other { tag: String },
 }
 
+/// TODO: Add example.
+///
 pub struct AttachmentBuilder {
     content_type: (ContentType, ContentSubType),
     content_transfer_encoding: ContentTransferEncoding,
@@ -156,7 +158,12 @@ self
                 ContentTransferEncoding::Base64 => {
                     match ::base64::decode(&::std::str::from_utf8(&self.raw).unwrap().trim().lines().fold(String::with_capacity(self.raw.len()), |mut acc, x| { acc.push_str(x); acc })) {
                         Ok( ref v ) => {
-                            String::from_utf8_lossy(v).into_owned()
+                            let s = String::from_utf8_lossy(v);
+                            if s.find("\r\n").is_some() {
+                                s.replace("\r\n","\n")
+                            } else {
+                                s.into_owned()
+                            }
                         },
                         _ => {
                             String::from_utf8_lossy(&self.raw).into_owned()

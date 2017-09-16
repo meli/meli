@@ -183,7 +183,12 @@ fn build_collection(threads: &mut Vec<Thread>, id_table: &mut FnvHashMap<std::st
          * Do not add a link if adding that link would introduce a loop: that is, before asserting A->B, search down the children of B to see if A is reachable, and also search down the children of A to see if B is reachable. If either is already reachable as a child of the other, don't add the link.
          */
         let mut curr_ref = x_index;
+        let mut iasf = 0;
         for &r in x.get_references().iter().rev() {
+            if iasf == 1 {
+                continue;
+            }
+            iasf += 1;
             let parent_id =
                 if id_table.contains_key(r.get_raw()) {
                     let p = id_table[r.get_raw()];
@@ -216,6 +221,9 @@ fn build_collection(threads: &mut Vec<Thread>, id_table: &mut FnvHashMap<std::st
                             indentation: 0,
                             show_subject: true,
                         });
+                    if threads[curr_ref].parent.is_none() {
+                        threads[curr_ref].parent = Some(idx);
+                    }
                     id_table.insert(r.get_raw().to_string(), idx);
                     idx
                 };

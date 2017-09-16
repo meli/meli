@@ -231,8 +231,16 @@ impl Mail
         let new_ref = MessageID::new(new_val, slice);
         match self.references {
             Some(ref mut s) => {
-                if s.refs.contains(&new_ref) {
-                    return;
+                if s.refs.contains(&new_ref)  {
+                    if s.refs[s.refs.len() - 1] != new_ref {
+                        if let Some(index) = s.refs.iter().position(|ref x| **x == new_ref) {
+                            s.refs.remove(index);
+                        } else {
+                            panic!();
+                        }
+                    } else {
+                        return;
+                    }
                 }
                 s.refs.push(new_ref);
             },
