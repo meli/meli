@@ -30,9 +30,7 @@ use encoding::{Encoding, DecoderTrap};
 fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8],u8> {
     if input.is_empty() || input.len() < 3 {
         IResult::Incomplete(Needed::Size(1))
-    } else if input[0] != b'=' {
-        IResult::Error(error_code!(ErrorKind::Custom(43)))
-    } else if is_hex_digit(input[1]) && is_hex_digit(input[2]) {
+    } else if input[0] == b'=' && is_hex_digit(input[1]) && is_hex_digit(input[2]) {
         let a = if input[1] < b':' {
             input[1] - 48
         } else if input[1] < b'[' {
@@ -47,7 +45,6 @@ fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8],u8> {
         } else {
             input[2] - 87
         };
-
         IResult::Done(&input[3..], a*16+b)
     } else {
         IResult::Error(error_code!(ErrorKind::Custom(43)))
@@ -350,8 +347,8 @@ fn message_id_peek(input: &[u8]) -> IResult<&[u8],&str> {
     } else if input_length == 2 || input[0] != b'<'  {
         IResult::Error(error_code!(ErrorKind::Custom(43)))
     } else {
-        for i in 1..input_length {
-            if input[i] == b'>' {
+        for (i, &x) in input.iter().take(input_length).enumerate().skip(1) {
+            if x == b'>' {
                 return IResult::Done(&input[i+1..], from_utf8(&input[0..i+1]).unwrap());
             }
         }

@@ -37,7 +37,7 @@ pub struct Account {
 impl Account {
     pub fn new(name: String, settings: AccountSettings) -> Self {
        eprintln!("new acc" );
-       let sent_folder =  settings.folders.iter().position(|ref x| **x == settings.sent_folder);
+       let sent_folder =  settings.folders.iter().position(|x| *x == settings.sent_folder);
        let mut folders = Vec::with_capacity(settings.folders.len());
        for _ in 0..settings.folders.len()  {
            folders.push(None);

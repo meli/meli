@@ -36,7 +36,7 @@ pub struct Pager {
 
 impl Pager {
     pub fn new(parent: ncurses::WINDOW,
-               entry: &mut mailbox::Mail) -> Pager {
+               entry: &mut mailbox::Envelope) -> Pager {
         let mut screen_height = 0;
         let mut screen_width = 0;
         ncurses::getmaxyx(parent, &mut screen_height, &mut screen_width);
@@ -136,7 +136,7 @@ impl Pager {
             w - 1,
         );
     }
-    fn print_entry_headers(win: ncurses::WINDOW, mail: &mut mailbox::Mail) -> i32 {
+    fn print_entry_headers(win: ncurses::WINDOW, mail: &mut mailbox::Envelope) -> i32 {
         let mut i = 0;
         ncurses::wattron(win, ncurses::COLOR_PAIR(super::COLOR_PAIR_HEADERS));
         ncurses::waddstr(win, "Date: ");
@@ -195,7 +195,7 @@ impl Pager {
     }
     fn print_entry_content(
         win: ncurses::WINDOW,
-        mail: &mut mailbox::Mail,
+        mail: &mut mailbox::Envelope,
         height: i32) -> (ncurses::WINDOW, i32, i32) {
         let mut h = 0;
         let mut w = 0;
@@ -231,7 +231,7 @@ impl Pager {
     }
     fn print_entry(
         win: ncurses::WINDOW,
-        mail: &mut mailbox::Mail) -> (ncurses::WINDOW, i32, i32) {
+        mail: &mut mailbox::Envelope) -> (ncurses::WINDOW, i32, i32) {
         let header_height = Pager::print_entry_headers(win, mail);
         Pager::print_entry_content(win, mail, header_height + 2)
     }

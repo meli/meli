@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use mailbox::email::Mail;
+use mailbox::email::Envelope;
 use error::{MeliError, Result};
 use mailbox::backends::{MailBackend, BackendOp, BackendOpGenerator};
 use mailbox::email::parser;
@@ -81,7 +81,7 @@ impl BackendOp for MaildirOp {
 
 
 impl MailBackend for MaildirType {
-    fn get(&self) -> Result<Vec<Mail>> {
+    fn get(&self) -> Result<Vec<Envelope>> {
         self.get_multicore(4)
         /*
 
@@ -124,7 +124,7 @@ impl MaildirType {
         }
         Ok(())
     }
-    pub fn get_multicore(&self, cores: usize) -> Result<Vec<Mail>> {
+    pub fn get_multicore(&self, cores: usize) -> Result<Vec<Envelope>> {
         MaildirType::is_valid(&self.path)?;
         let mut path = PathBuf::from(&self.path);
         path.push("cur");
@@ -167,10 +167,10 @@ panic!("didn't parse"); },
                 };
                 for chunk in files.chunks(chunk_size) {
                     let s = scope.spawn(move || {
-                        let mut local_r:Vec<Mail> = Vec::with_capacity(chunk.len());
+                        let mut local_r:Vec<Envelope> = Vec::with_capacity(chunk.len());
                         for e in chunk {
                             let e_copy = e.to_string();
-                            if let Some(e) = Mail::from(Box::new(BackendOpGenerator::new(Box::new(move || {
+                            if let Some(e) = Envelope::from(Box::new(BackendOpGenerator::new(Box::new(move || {
                                Box::new(MaildirOp::new(e_copy.clone())) 
                             } )))) {
                                 local_r.push(e);

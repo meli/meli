@@ -96,7 +96,7 @@ struct References {
 use std::sync::Arc;
 /* A very primitive mail object */
 #[derive(Debug, Clone)]
-pub struct Mail
+pub struct Envelope
 {
     date: String,
     from: Option<String>,
@@ -115,7 +115,7 @@ pub struct Mail
 }
 
 
-impl Mail
+impl Envelope
 {
     pub fn get_date(&self) -> i64 {
         self.timestamp 
@@ -146,7 +146,7 @@ impl Mail
             Err(_) => {
                 let operation = self.operation_token.generate();
                 eprintln!("error in parsing mail\n{}", operation.description());
-                panic!();
+                panic!()
             },
         };
         let mut builder = AttachmentBuilder::new(body);
@@ -233,7 +233,7 @@ impl Mail
             Some(ref mut s) => {
                 if s.refs.contains(&new_ref)  {
                     if s.refs[s.refs.len() - 1] != new_ref {
-                        if let Some(index) = s.refs.iter().position(|ref x| **x == new_ref) {
+                        if let Some(index) = s.refs.iter().position(|x| *x == new_ref) {
                             s.refs.remove(index);
                         } else {
                             panic!();
@@ -282,13 +282,10 @@ impl Mail
         self.datetime = new_val;
         if let Some(v) = self.datetime {
             self.timestamp = v.timestamp();
-            if self.timestamp == 1485962960 {
-                eprintln!("it's {:?}", self);
-            }
         }
     }
     pub fn new(token: Box<BackendOpGenerator>) -> Self {
-        Mail {
+        Envelope {
             date: "".to_string(),
             from: None,
             to: None,
@@ -307,7 +304,7 @@ impl Mail
 
         }
     }
-    pub fn from(operation_token: Box<BackendOpGenerator>) -> Option<Mail> {
+    pub fn from(operation_token: Box<BackendOpGenerator>) -> Option<Envelope> {
         let mut operation = operation_token.generate();
         let headers = match parser::headers(operation.fetch_headers().unwrap()).to_full_result() {
             Ok(v) => {
@@ -320,7 +317,7 @@ impl Mail
             },
         };
 
-        let mut mail = Mail::new(operation_token);
+        let mut mail = Envelope::new(operation_token);
         let mut in_reply_to = None;
         let mut datetime = None;
 
@@ -383,20 +380,20 @@ impl Mail
     }
 }
 
-impl Eq for Mail {}
-impl Ord for Mail {
-    fn cmp(&self, other: &Mail) -> Ordering {
+impl Eq for Envelope {}
+impl Ord for Envelope {
+    fn cmp(&self, other: &Envelope) -> Ordering {
         self.get_datetime().cmp(&other.get_datetime())
     }
 }
-impl PartialOrd for Mail {
-    fn partial_cmp(&self, other: &Mail) -> Option<Ordering> {
+impl PartialOrd for Envelope {
+    fn partial_cmp(&self, other: &Envelope) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl PartialEq for Mail {
-    fn eq(&self, other: &Mail) -> bool {
+impl PartialEq for Envelope {
+    fn eq(&self, other: &Envelope) -> bool {
         self.get_message_id_raw() == other.get_message_id_raw()
     }
 }

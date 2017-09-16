@@ -41,11 +41,11 @@ fn main() {
         ncurses::touchwin(ncurses::stdscr());
         ncurses::mv(0,0);
         let mailbox = &mut account[j];
-        let mut index: Box<Window> = match mailbox.as_ref().unwrap() {
-            &Ok(ref v) => {
+        let mut index: Box<Window> = match *mailbox.as_ref().unwrap() {
+            Ok(ref v) => {
                 Box::new(Index::new(v))
             },
-            &Err(ref v) => {
+            Err(ref v) => {
                Box::new(ErrorWindow::new((*v).clone()))
             }
         };

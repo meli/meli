@@ -1,6 +1,5 @@
 #![feature(test)]
 extern crate melib;
-use melib::mailbox::backends::MailBackend;
 use melib::mailbox::backends::maildir::*;
 
 extern crate test;

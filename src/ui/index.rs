@@ -18,7 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use mailbox::email::Mail;
+use mailbox::email::Envelope;
 use mailbox::*;
 use error::MeliError;
 use std::error::Error;
@@ -356,7 +356,7 @@ impl Index {
 
     /* draw_entry() doesn't take &mut self because borrow checker complains if it's called from
      * another method. */
-    fn draw_entry(win: ncurses::WINDOW, mail: &Mail, i: usize, indent: usize,
+    fn draw_entry(win: ncurses::WINDOW, mail: &Envelope, i: usize, indent: usize,
                   has_sibling: bool, has_parent: bool, highlight: bool,
                   show_subject: bool, indentations: Option<&Vec<bool>>) {
         /* TODO: use addchstr */
@@ -428,7 +428,7 @@ impl Index {
         }
         ncurses::getmaxyx(self.win,
                           &mut self.screen_height, &mut self.screen_width);
-        let x: &mut Mail = if self.threaded {
+        let x: &mut Envelope = if self.threaded {
             let i = self.mailbox.get_threaded_mail(self.cursor_idx);
             &mut self.mailbox.collection[i]
         } else {
