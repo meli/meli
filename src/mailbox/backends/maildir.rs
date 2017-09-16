@@ -21,7 +21,7 @@
 
 use mailbox::email::Envelope;
 use error::{MeliError, Result};
-use mailbox::backends::{MailBackend, BackendOp, BackendOpGenerator};
+use mailbox::backends::{BackendOp, BackendOpGenerator, MailBackend};
 use mailbox::email::parser;
 
 extern crate crossbeam;
@@ -33,7 +33,7 @@ pub struct MaildirType {
     path: String,
 }
 
-#[derive(Debug,Default)]
+#[derive(Debug, Default)]
 pub struct MaildirOp {
     path: String,
     slice: Option<Mmap>,
@@ -59,11 +59,13 @@ impl MaildirOp {
 
 impl BackendOp for MaildirOp {
     fn description(&self) -> String {
-       format!("Path of file: {}", self.path)
+        format!("Path of file: {}", self.path)
     }
     fn as_bytes(&mut self) -> Result<&[u8]> {
         if self.slice.is_none() {
-                self.slice = Some(Mmap::open_path(self.path.to_string(), Protection::Read).unwrap());
+            self.slice = Some(
+                Mmap::open_path(self.path.to_string(), Protection::Read).unwrap(),
+            );
         }
         Ok(unsafe { self.slice.as_ref().unwrap().as_slice() })
     }
@@ -110,7 +112,7 @@ impl MailBackend for MaildirType {
 impl MaildirType {
     pub fn new(path: &str) -> Self {
         MaildirType {
-            path: path.to_string()
+            path: path.to_string(),
         }
     }
     fn is_valid(path: &str) -> Result<()> {
@@ -118,7 +120,9 @@ impl MaildirType {
         for d in &["cur", "new", "tmp"] {
             p.push(d);
             if !p.is_dir() {
-                return Err(MeliError::new(format!("{} is not a valid maildir folder", path)));
+                return Err(MeliError::new(
+                    format!("{} is not a valid maildir folder", path),
+                ));
             }
             p.pop();
         }
@@ -155,7 +159,6 @@ panic!("didn't parse"); },
 
             r.push(m);
             */
-
         }
         let mut threads = Vec::with_capacity(cores);
         if !files.is_empty() {
@@ -163,16 +166,16 @@ panic!("didn't parse"); },
                 let chunk_size = if count / cores > 0 {
                     count / cores
                 } else {
-                    count 
+                    count
                 };
                 for chunk in files.chunks(chunk_size) {
                     let s = scope.spawn(move || {
-                        let mut local_r:Vec<Envelope> = Vec::with_capacity(chunk.len());
+                        let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
                         for e in chunk {
                             let e_copy = e.to_string();
-                            if let Some(e) = Envelope::from(Box::new(BackendOpGenerator::new(Box::new(move || {
-                               Box::new(MaildirOp::new(e_copy.clone())) 
-                            } )))) {
+                            if let Some(e) = Envelope::from(Box::new(BackendOpGenerator::new(
+                                Box::new(move || Box::new(MaildirOp::new(e_copy.clone()))),
+                            ))) {
                                 local_r.push(e);
                             }
                         }

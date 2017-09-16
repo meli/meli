@@ -25,6 +25,7 @@ use mailbox::backends::BackendOpGenerator;
 use self::attachments::*;
 
 use std::string::String;
+use std::sync::Arc;
 //use std;
 use std::cmp::Ordering;
 use std::fmt;
@@ -36,7 +37,7 @@ use chrono;
 use chrono::TimeZone;
 
 /* Helper struct to return slices from a struct on demand */
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 struct StrBuilder {
     offset: usize,
     length: usize,
@@ -49,15 +50,18 @@ pub trait StrBuild {
 }
 
 #[derive(Clone)]
-pub struct MessageID (String, StrBuilder);
+pub struct MessageID(String, StrBuilder);
 
 impl StrBuild for MessageID {
     fn new(string: &str, slice: &str) -> Self {
         let offset = string.find(slice).unwrap();
-        MessageID (string.to_string(), StrBuilder {
-            offset: offset,
-            length: slice.len() + 1,
-        })
+        MessageID(
+            string.to_string(),
+            StrBuilder {
+                offset: offset,
+                length: slice.len() + 1,
+            },
+        )
     }
     fn get_raw(&self) -> &str {
         let offset = self.1.offset;
@@ -73,7 +77,16 @@ impl StrBuild for MessageID {
 fn test_strbuilder() {
     let m_id = "<20170825132332.6734-1-el13635@mail.ntua.gr>";
     let (_, slice) = parser::message_id(m_id.as_bytes()).unwrap();
-    assert_eq!(MessageID::new(m_id, slice), MessageID (m_id.to_string(), StrBuilder{offset: 1, length: 43}));
+    assert_eq!(
+        MessageID::new(m_id, slice),
+        MessageID(
+            m_id.to_string(),
+            StrBuilder {
+                offset: 1,
+                length: 43,
+            }
+        )
+    );
 }
 
 impl PartialEq for MessageID {
@@ -87,17 +100,15 @@ impl fmt::Debug for MessageID {
     }
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 struct References {
     raw: String,
     refs: Vec<MessageID>,
 }
 
-use std::sync::Arc;
 /* A very primitive mail object */
 #[derive(Debug, Clone)]
-pub struct Envelope
-{
+pub struct Envelope {
     date: String,
     from: Option<String>,
     to: Option<String>,
@@ -115,13 +126,16 @@ pub struct Envelope
 }
 
 
-impl Envelope
-{
+impl Envelope {
     pub fn get_date(&self) -> i64 {
-        self.timestamp 
+        self.timestamp
     }
     pub fn get_datetime(&self) -> chrono::DateTime<chrono::FixedOffset> {
-        self.datetime.unwrap_or_else(|| { chrono::FixedOffset::west(0).ymd(1970, 1, 1).and_hms(0, 0, 0)})
+        self.datetime.unwrap_or_else(|| {
+            chrono::FixedOffset::west(0)
+                .ymd(1970, 1, 1)
+                .and_hms(0, 0, 0)
+        })
     }
     pub fn get_date_as_str(&self) -> &str {
         &self.date
@@ -147,7 +161,7 @@ impl Envelope
                 let operation = self.operation_token.generate();
                 eprintln!("error in parsing mail\n{}", operation.description());
                 panic!()
-            },
+            }
         };
         let mut builder = AttachmentBuilder::new(body);
         for (name, value) in headers {
@@ -165,19 +179,19 @@ impl Envelope
     pub fn get_subject(&self) -> &str {
         match self.subject {
             Some(ref s) => s,
-            _ => ""
+            _ => "",
         }
     }
     pub fn get_in_reply_to(&self) -> &str {
         match self.in_reply_to {
             Some(ref s) => s.get_val(),
-            _ => ""
+            _ => "",
         }
     }
     pub fn get_in_reply_to_raw(&self) -> &str {
         match self.in_reply_to {
             Some(ref s) => s.get_raw(),
-            _ => ""
+            _ => "",
         }
     }
     pub fn get_message_id(&self) -> &str {
@@ -203,10 +217,12 @@ impl Envelope
     }
     fn set_in_reply_to(&mut self, new_val: &str) -> () {
         let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
-            Ok(v) => { v },
-            Err(v) => { eprintln!("{} {:?}",new_val, v); 
+            Ok(v) => v,
+            Err(v) => {
+                eprintln!("{} {:?}", new_val, v);
                 self.in_reply_to = None;
-                return; }
+                return;
+            }
         };
         self.in_reply_to = Some(MessageID::new(new_val, slice));
     }
@@ -215,23 +231,27 @@ impl Envelope
     }
     fn set_message_id(&mut self, new_val: &str) -> () {
         let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
-            Ok(v) => { v },
-            Err(v) => { eprintln!("{} {:?}",new_val, v); 
+            Ok(v) => v,
+            Err(v) => {
+                eprintln!("{} {:?}", new_val, v);
                 self.message_id = None;
-                return; }
+                return;
+            }
         };
         self.message_id = Some(MessageID::new(new_val, slice));
     }
     fn push_references(&mut self, new_val: &str) -> () {
         let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
-            Ok(v) => { v },
-            Err(v) => { eprintln!("{} {:?}",new_val, v); 
-                return; }
+            Ok(v) => v,
+            Err(v) => {
+                eprintln!("{} {:?}", new_val, v);
+                return;
+            }
         };
         let new_ref = MessageID::new(new_val, slice);
         match self.references {
             Some(ref mut s) => {
-                if s.refs.contains(&new_ref)  {
+                if s.refs.contains(&new_ref) {
                     if s.refs[s.refs.len() - 1] != new_ref {
                         if let Some(index) = s.refs.iter().position(|x| *x == new_ref) {
                             s.refs.remove(index);
@@ -243,29 +263,39 @@ impl Envelope
                     }
                 }
                 s.refs.push(new_ref);
-            },
+            }
             None => {
                 let mut v = Vec::new();
                 v.push(new_ref);
-                self.references = Some(References { raw: "".to_string(), refs: v, });
+                self.references = Some(References {
+                    raw: "".to_string(),
+                    refs: v,
+                });
             }
         }
-
     }
     fn set_references(&mut self, new_val: String) -> () {
         match self.references {
             Some(ref mut s) => {
                 s.raw = new_val;
-            },
+            }
             None => {
                 let v = Vec::new();
-                self.references = Some(References { raw: new_val, refs: v, });
+                self.references = Some(References {
+                    raw: new_val,
+                    refs: v,
+                });
             }
         }
     }
     pub fn get_references(&self) -> Vec<&MessageID> {
         match self.references {
-            Some(ref s) => s.refs.iter().fold(Vec::with_capacity(s.refs.len()), |mut acc, x| { acc.push(x); acc }),
+            Some(ref s) => s.refs
+                .iter()
+                .fold(Vec::with_capacity(s.refs.len()), |mut acc, x| {
+                    acc.push(x);
+                    acc
+                }),
             None => Vec::new(),
         }
     }
@@ -276,7 +306,7 @@ impl Envelope
         self.thread
     }
     pub fn set_thread(&mut self, new_val: usize) -> () {
-        self.thread =  new_val;
+        self.thread = new_val;
     }
     pub fn set_datetime(&mut self, new_val: Option<chrono::DateTime<chrono::FixedOffset>>) -> () {
         self.datetime = new_val;
@@ -301,20 +331,17 @@ impl Envelope
             thread: 0,
 
             operation_token: Arc::new(token),
-
         }
     }
     pub fn from(operation_token: Box<BackendOpGenerator>) -> Option<Envelope> {
         let mut operation = operation_token.generate();
         let headers = match parser::headers(operation.fetch_headers().unwrap()).to_full_result() {
-            Ok(v) => {
-                v
-            },
+            Ok(v) => v,
             _ => {
                 let operation = operation_token.generate();
                 eprintln!("error in parsing mail\n{}", operation.description());
                 return None;
-            },
+            }
         };
 
         let mut mail = Envelope::new(operation_token);

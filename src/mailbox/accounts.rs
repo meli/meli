@@ -21,7 +21,7 @@
 
 use mailbox::*;
 use conf::AccountSettings;
-use std::ops::{IndexMut, Index};
+use std::ops::{Index, IndexMut};
 #[derive(Debug)]
 pub struct Account {
     name: String,
@@ -29,19 +29,21 @@ pub struct Account {
 
     sent_folder: Option<usize>,
 
-
     settings: AccountSettings,
 }
 
 
 impl Account {
     pub fn new(name: String, settings: AccountSettings) -> Self {
-       eprintln!("new acc" );
-       let sent_folder =  settings.folders.iter().position(|x| *x == settings.sent_folder);
-       let mut folders = Vec::with_capacity(settings.folders.len());
-       for _ in 0..settings.folders.len()  {
-           folders.push(None);
-       }
+        eprintln!("new acc");
+        let sent_folder = settings
+            .folders
+            .iter()
+            .position(|x| *x == settings.sent_folder);
+        let mut folders = Vec::with_capacity(settings.folders.len());
+        for _ in 0..settings.folders.len() {
+            folders.push(None);
+        }
         Account {
             name: name,
             folders: folders,
@@ -60,8 +62,7 @@ impl Index<usize> for Account {
     }
 }
 
-impl IndexMut<usize> for Account 
-{
+impl IndexMut<usize> for Account {
     fn index_mut(&mut self, index: usize) -> &mut Option<Result<Mailbox>> {
         if self.folders[index].is_none() {
             eprintln!("building folder {:?}", self.settings.folders[index]);
@@ -73,14 +74,18 @@ impl IndexMut<usize> for Account
                     self.folders[index] = Some(Mailbox::new(&path, &None));
                     eprintln!("Done!");
                 } else {
-                    eprintln!("Now building folder {:?} with sent_folder", self.settings.folders[index]);
-                    let (sent, cur) =
-                    {
+                    eprintln!(
+                        "Now building folder {:?} with sent_folder",
+                        self.settings.folders[index]
+                    );
+                    let (sent, cur) = {
                         let ptr = self.folders.as_mut_ptr();
                         unsafe {
                             use std::slice::from_raw_parts_mut;
-                            (from_raw_parts_mut(ptr.offset(id as isize), id+1),
-                            from_raw_parts_mut(ptr.offset(index as isize), index+1))
+                            (
+                                from_raw_parts_mut(ptr.offset(id as isize), id + 1),
+                                from_raw_parts_mut(ptr.offset(index as isize), index + 1),
+                            )
                         }
                     };
                     let sent_path = self.settings.folders[id].clone();
@@ -93,13 +98,14 @@ impl IndexMut<usize> for Account
                     eprintln!("Done!");
                 }
             } else {
-                    eprintln!("Now building folder {:?} without sent_folder", self.settings.folders[index]);
-                    self.folders[index] = Some(Mailbox::new(&path, &None));
-                    eprintln!("Done!");
+                eprintln!(
+                    "Now building folder {:?} without sent_folder",
+                    self.settings.folders[index]
+                );
+                self.folders[index] = Some(Mailbox::new(&path, &None));
+                eprintln!("Done!");
             };
         }
         &mut self.folders[index]
     }
-
-
 }

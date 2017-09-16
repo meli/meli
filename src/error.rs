@@ -27,20 +27,25 @@ use nom;
 
 pub type Result<T> = result::Result<T, MeliError>;
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct MeliError {
-    details: String
+    details: String,
 }
 
 impl MeliError {
-    pub fn new<M>(msg: M) -> MeliError where M: Into<String> {
-        MeliError{details: msg.into()}
+    pub fn new<M>(msg: M) -> MeliError
+    where
+        M: Into<String>,
+    {
+        MeliError {
+            details: msg.into(),
+        }
     }
 }
 
 impl fmt::Display for MeliError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f,"{}",self.details)
+        write!(f, "{}", self.details)
     }
 }
 

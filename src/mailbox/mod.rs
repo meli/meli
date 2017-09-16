@@ -29,14 +29,14 @@ use error::Result;
 pub mod accounts;
 pub use mailbox::accounts::Account;
 mod thread;
-use mailbox::thread::{Container, build_threads};
+use mailbox::thread::{build_threads, Container};
 
 use std::option::Option;
 
 
 /*a Mailbox represents a folder of mail. Currently only Maildir is supported.*/
-#[derive(Debug,Clone)]
-pub struct Mailbox{
+#[derive(Debug, Clone)]
+pub struct Mailbox {
     pub path: String,
     pub collection: Vec<Envelope>,
     pub threaded_collection: Vec<usize>,
@@ -45,8 +45,7 @@ pub struct Mailbox{
 }
 
 
-impl Mailbox
-{
+impl Mailbox {
     pub fn new(path: &str, sent_folder: &Option<Result<Mailbox>>) -> Result<Mailbox> {
         let mut collection: Vec<Envelope> = maildir::MaildirType::new(path).get()?;
         collection.sort_by(|a, b| a.get_date().cmp(&b.get_date()));
@@ -70,12 +69,11 @@ impl Mailbox
         thread.get_message().unwrap()
     }
     pub fn get_mail_and_thread(&mut self, i: usize) -> (&mut Envelope, Container) {
-            let x = &mut self.collection.as_mut_slice()[i];
-            let thread = self.threads[x.get_thread()];
-            (x, thread)
+        let x = &mut self.collection.as_mut_slice()[i];
+        let thread = self.threads[x.get_thread()];
+        (x, thread)
     }
     pub fn get_thread(&self, i: usize) -> &Container {
         &self.threads[i]
     }
 }
-

@@ -35,8 +35,7 @@ pub struct Pager {
 }
 
 impl Pager {
-    pub fn new(parent: ncurses::WINDOW,
-               entry: &mut mailbox::Envelope) -> Pager {
+    pub fn new(parent: ncurses::WINDOW, entry: &mut mailbox::Envelope) -> Pager {
         let mut screen_height = 0;
         let mut screen_width = 0;
         ncurses::getmaxyx(parent, &mut screen_height, &mut screen_width);
@@ -85,16 +84,13 @@ impl Pager {
             return;
         }
         match motion {
-            ncurses::KEY_UP => {
-                if self.curr_y > 0 {
-                    self.curr_y -= 1;
-                }
-            }
-            ncurses::KEY_DOWN => {
-                if self.curr_y < self.rows && self.rows - self.curr_y > pager_size {
-                    self.curr_y += 1;
-                }
-            }
+            ncurses::KEY_UP => if self.curr_y > 0 {
+                self.curr_y -= 1;
+            },
+            ncurses::KEY_DOWN => if self.curr_y < self.rows && self.rows - self.curr_y > pager_size
+            {
+                self.curr_y += 1;
+            },
             ncurses::KEY_NPAGE => {
                 if self.curr_y + h < self.rows && self.rows - self.curr_y - h > pager_size {
                     self.curr_y += pager_size;
@@ -106,13 +102,11 @@ impl Pager {
                     };
                 }
             }
-            ncurses::KEY_PPAGE => {
-                if self.curr_y >= pager_size {
-                    self.curr_y -= pager_size;
-                } else {
-                    self.curr_y = 0
-                }
-            }
+            ncurses::KEY_PPAGE => if self.curr_y >= pager_size {
+                self.curr_y -= pager_size;
+            } else {
+                self.curr_y = 0
+            },
             _ => {}
         }
         /*
@@ -140,31 +134,19 @@ impl Pager {
         let mut i = 0;
         ncurses::wattron(win, ncurses::COLOR_PAIR(super::COLOR_PAIR_HEADERS));
         ncurses::waddstr(win, "Date: ");
-        ncurses::waddstr(
-            win,
-            mail.get_date_as_str()
-        );
+        ncurses::waddstr(win, mail.get_date_as_str());
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "From: ");
-        ncurses::waddstr(
-            win,
-            mail.get_from(),
-        );
+        ncurses::waddstr(win, mail.get_from());
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "To: ");
-        ncurses::waddstr(
-            win,
-            mail.get_to(),
-        );
+        ncurses::waddstr(win, mail.get_to());
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "Subject: ");
-        ncurses::waddstr(
-            win,
-            mail.get_subject(),
-        );
+        ncurses::waddstr(win, mail.get_subject());
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "Message-ID: ");
@@ -176,17 +158,11 @@ impl Pager {
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "References: ");
-        ncurses::waddstr(
-            win,
-            &format!("{:?}", mail.get_references()),
-        );
+        ncurses::waddstr(win, &format!("{:?}", mail.get_references()));
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::waddstr(win, "In-Reply-To: ");
-        ncurses::waddstr(
-            win,
-            mail.get_in_reply_to_raw(),
-        );
+        ncurses::waddstr(win, mail.get_in_reply_to_raw());
         ncurses::waddstr(win, "\n");
         i += 1;
         ncurses::wattroff(win, ncurses::COLOR_PAIR(super::COLOR_PAIR_HEADERS));
@@ -196,7 +172,8 @@ impl Pager {
     fn print_entry_content(
         win: ncurses::WINDOW,
         mail: &mut mailbox::Envelope,
-        height: i32) -> (ncurses::WINDOW, i32, i32) {
+        height: i32,
+    ) -> (ncurses::WINDOW, i32, i32) {
         let mut h = 0;
         let mut w = 0;
         /* height and width of self.win, the pager window */
@@ -231,7 +208,8 @@ impl Pager {
     }
     fn print_entry(
         win: ncurses::WINDOW,
-        mail: &mut mailbox::Envelope) -> (ncurses::WINDOW, i32, i32) {
+        mail: &mut mailbox::Envelope,
+    ) -> (ncurses::WINDOW, i32, i32) {
         let header_height = Pager::print_entry_headers(win, mail);
         Pager::print_entry_content(win, mail, header_height + 2)
     }

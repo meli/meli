@@ -75,9 +75,9 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn fetch_body(&mut self) -> Result<&[u8]>;
 }
 
-/// `BackendOpGenerator` is a wrapper for a closure that returns a `BackendOp` object 
+/// `BackendOpGenerator` is a wrapper for a closure that returns a `BackendOp` object
 /// See `BackendOp` for details.
- /*
+/*
  * I know this sucks, but that's the best way I found that rustc deems safe.
  * */
 pub struct BackendOpGenerator(Box<Fn() -> Box<BackendOp>>);
@@ -97,4 +97,3 @@ impl fmt::Debug for BackendOpGenerator {
         write!(f, "BackendOpGenerator: {}", op.description())
     }
 }
-    

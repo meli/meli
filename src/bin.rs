@@ -37,17 +37,13 @@ fn main() {
     let mut j = 0;
     let folder_length = set.accounts["norn"].folders.len();
     let mut account = Account::new("norn".to_string(), set.accounts["norn"].clone());
-    'main : loop  {
+    'main: loop {
         ncurses::touchwin(ncurses::stdscr());
-        ncurses::mv(0,0);
+        ncurses::mv(0, 0);
         let mailbox = &mut account[j];
         let mut index: Box<Window> = match *mailbox.as_ref().unwrap() {
-            Ok(ref v) => {
-                Box::new(Index::new(v))
-            },
-            Err(ref v) => {
-               Box::new(ErrorWindow::new((*v).clone()))
-            }
+            Ok(ref v) => Box::new(Index::new(v)),
+            Err(ref v) => Box::new(ErrorWindow::new((*v).clone())),
         };
         //eprintln!("{:?}", set);
         ncurses::refresh();
@@ -55,39 +51,35 @@ fn main() {
         index.draw();
 
         let mut ch;
-        'inner : loop {
+        'inner: loop {
             ch = ncurses::get_wch();
             match ch {
                 Some(ncurses::WchResult::KeyCode(k @ ncurses::KEY_UP)) |
-                    Some(ncurses::WchResult::KeyCode(k @ ncurses::KEY_DOWN)) => {
-                        index.handle_input(k);
-                        continue;
-                    }
+                Some(ncurses::WchResult::KeyCode(k @ ncurses::KEY_DOWN)) => {
+                    index.handle_input(k);
+                    continue;
+                }
                 Some(ncurses::WchResult::Char(k @ 10)) => {
                     index.handle_input(k as i32);
                     continue;
                 }
                 Some(ncurses::WchResult::KeyCode(ncurses::KEY_F1)) |
-                    Some(ncurses::WchResult::Char(113)) => {
-                        break 'main;
-                    },
-                Some(ncurses::WchResult::Char(74)) => {
-                    if j < folder_length - 1 {
-                        j += 1;
-                        break 'inner;
-                    }
+                Some(ncurses::WchResult::Char(113)) => {
+                    break 'main;
+                }
+                Some(ncurses::WchResult::Char(74)) => if j < folder_length - 1 {
+                    j += 1;
+                    break 'inner;
                 },
-                Some(ncurses::WchResult::Char(75)) => {
-                    if j > 0 {
-                        j -= 1;
-                        break 'inner;
-                    }
+                Some(ncurses::WchResult::Char(75)) => if j > 0 {
+                    j -= 1;
+                    break 'inner;
                 },
                 Some(ncurses::WchResult::KeyCode(ncurses::KEY_RESIZE)) => {
                     eprintln!("key_resize");
                     index.redraw();
                     continue;
-                },
+                }
                 _ => {}
             }
         }

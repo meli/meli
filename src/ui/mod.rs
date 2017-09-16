@@ -55,7 +55,7 @@ impl TUI {
         /* Set the window's background color. */
         ncurses::bkgd(
             ' ' as ncurses::chtype | ncurses::COLOR_PAIR(COLOR_PAIR_DEFAULT) as ncurses::chtype,
-            );
+        );
         TUI {}
     }
 }
