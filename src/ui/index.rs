@@ -338,7 +338,14 @@ impl Window for Index {
 }
 impl Index {
     pub fn new(mailbox: &Mailbox) -> Index {
-        let mailbox = (*mailbox).clone();
+        let mailbox = mailbox.clone();
+        let mut unread_count = 0;
+        for e in &mailbox.collection {
+            if !e.is_seen() {
+                unread_count += 1;
+            }
+        }
+        eprintln!("unread count {}", unread_count);
         let mut screen_height = 0;
         let mut screen_width = 0;
         /* Get the screen bounds. */

@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use mailbox::email::Envelope;
+use mailbox::email::{Envelope, Flag};
 use error::{MeliError, Result};
 use mailbox::backends::{BackendOp, BackendOpGenerator, MailBackend};
 use mailbox::email::parser;
@@ -78,6 +78,31 @@ impl BackendOp for MaildirOp {
         let raw = self.as_bytes()?;
         let result = parser::headers_raw(raw).to_full_result()?;
         Ok(result)
+    }
+    fn fetch_flags(&self) -> Flag {
+        let mut flag = Flag::default();
+        let path = PathBuf::from(&self.path);
+        let filename = path.file_name().unwrap().to_str().unwrap();
+        if !filename.contains(":2,") {
+            return flag;
+        }
+
+        for f in filename.chars().rev() {
+            match f {
+                ',' => break,
+                'P' => flag |= Flag::PASSED,
+                'R' => flag |= Flag::REPLIED,
+                'S' => flag |= Flag::SEEN,
+                'T' => flag |= Flag::TRASHED,
+                'D' => flag |= Flag::DRAFT,
+                'F' => flag |= Flag::FLAGGED,
+                 _  => panic!(),
+            }
+
+        }
+
+
+        flag
     }
 }
 

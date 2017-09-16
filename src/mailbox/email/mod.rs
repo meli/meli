@@ -106,6 +106,19 @@ struct References {
     refs: Vec<MessageID>,
 }
 
+
+bitflags! {
+    #[derive(Default)]
+    pub struct Flag: u8 {
+        const PASSED  =  0b00000001;
+        const REPLIED =  0b00000010;
+        const SEEN    =  0b00000100;
+        const TRASHED =  0b00001000;
+        const DRAFT   =  0b00010000;
+        const FLAGGED =  0b00100000;
+    }
+}
+
 /* A very primitive mail object */
 #[derive(Debug, Clone)]
 pub struct Envelope {
@@ -123,6 +136,8 @@ pub struct Envelope {
     thread: usize,
 
     operation_token: Arc<Box<BackendOpGenerator>>,
+
+    flags: Flag,
 }
 
 
@@ -314,6 +329,12 @@ impl Envelope {
             self.timestamp = v.timestamp();
         }
     }
+    pub fn get_flags(&self) -> Flag {
+        self.flags
+    }
+    pub fn is_seen(&self) -> bool {
+        !(self.flags & Flag::SEEN).is_empty()
+    }
     pub fn new(token: Box<BackendOpGenerator>) -> Self {
         Envelope {
             date: "".to_string(),
@@ -331,20 +352,27 @@ impl Envelope {
             thread: 0,
 
             operation_token: Arc::new(token),
+            flags: Flag::default(),
         }
     }
     pub fn from(operation_token: Box<BackendOpGenerator>) -> Option<Envelope> {
-        let mut operation = operation_token.generate();
+        let operation = operation_token.generate();
+        let mut e = Envelope::new(operation_token);
+        e.flags = operation.fetch_flags();
+        Some(e)
+    }
+
+    pub fn populate_headers(&mut self) -> () {
+        let mut operation = self.operation_token.generate();
         let headers = match parser::headers(operation.fetch_headers().unwrap()).to_full_result() {
             Ok(v) => v,
             _ => {
-                let operation = operation_token.generate();
+                let operation = self.operation_token.generate();
                 eprintln!("error in parsing mail\n{}", operation.description());
-                return None;
+                return;
             }
         };
 
-        let mut mail = Envelope::new(operation_token);
         let mut in_reply_to = None;
         let mut datetime = None;
 
@@ -359,7 +387,7 @@ impl Envelope {
                 } else {
                     "".to_string()
                 };
-                mail.set_to(value);
+                self.set_to(value);
             } else if name.eq_ignore_ascii_case("from") {
                 let parse_result = parser::subject(value.as_bytes());
                 let value = if parse_result.is_done() {
@@ -367,7 +395,7 @@ impl Envelope {
                 } else {
                     "".to_string()
                 };
-                mail.set_from(value);
+                self.set_from(value);
             } else if name.eq_ignore_ascii_case("subject") {
                 let parse_result = parser::subject(value.trim().as_bytes());
                 let value = if parse_result.is_done() {
@@ -375,35 +403,33 @@ impl Envelope {
                 } else {
                     "".to_string()
                 };
-                mail.set_subject(value);
+                self.set_subject(value);
             } else if name.eq_ignore_ascii_case("message-id") {
-                mail.set_message_id(value);
+                self.set_message_id(value);
             } else if name.eq_ignore_ascii_case("references") {
                 {
                     let parse_result = parser::references(value.as_bytes());
                     if parse_result.is_done() {
                         for v in parse_result.to_full_result().unwrap() {
-                            mail.push_references(v);
+                            self.push_references(v);
                         }
                     }
                 }
-                mail.set_references(value.to_string());
+                self.set_references(value.to_string());
             } else if name.eq_ignore_ascii_case("in-reply-to") {
-                mail.set_in_reply_to(value);
+                self.set_in_reply_to(value);
                 in_reply_to = Some(value);
             } else if name.eq_ignore_ascii_case("date") {
-                mail.set_date(value.to_string());
+                self.set_date(value.to_string());
                 datetime = Some(value.to_string());
             }
         }
         if let Some(ref mut x) = in_reply_to {
-            mail.push_references(x);
+            self.push_references(x);
         }
         if let Some(ref mut d) = datetime {
-            mail.set_datetime(parser::date(d));
+            self.set_datetime(parser::date(d));
         }
-
-        Some(mail)
     }
 }
 

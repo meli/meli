@@ -19,15 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* a Container struct is needed to describe the Thread tree forest during creation
- * of threads. Because of Rust's memory model, we store indexes of other node
- * instead of references and every reference is passed through the Container owner
- * (a Vec<Container>).
- *
- * message refers to a Envelope entry in a Vec. If it's empty, the Container is
- * nonexistent in our Mailbox but we know it exists (for example we have a copy
- * of a reply to a mail but we don't have its copy.
- */
 use mailbox::email::*;
 use mailbox::Mailbox;
 use error::Result;
@@ -40,6 +31,13 @@ use std;
 
 type UnixTimestamp = i64;
 
+/// A `Container` struct is needed to describe the thread tree forest during creation of threads.
+/// Because of Rust's memory model, we store indexes of Envelopes inside a collection instead of
+/// references and every reference is passed through the `Container` owner (a `Vec<Container>`).
+//
+/// `message` refers to a `Envelope` entry in a `Vec`. If it's empty, the `Container` is
+/// nonexistent in our `Mailbox` but we know it exists (for example we have a copy
+/// of a reply to a mail but we don't have its copy.
 #[derive(Clone, Copy, Debug)]
 pub struct Container {
     id: usize,
@@ -230,6 +228,7 @@ fn build_collection(
 }
 
 
+/// Builds threads from a collection.
 pub fn build_threads(
     collection: &mut Vec<Envelope>,
     sent_folder: &Option<Result<Mailbox>>,

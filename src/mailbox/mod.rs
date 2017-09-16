@@ -34,7 +34,7 @@ use mailbox::thread::{build_threads, Container};
 use std::option::Option;
 
 
-/*a Mailbox represents a folder of mail. Currently only Maildir is supported.*/
+/// `Mailbox` represents a folder of mail. Currently only `Maildir` is supported.
 #[derive(Debug, Clone)]
 pub struct Mailbox {
     pub path: String,
@@ -48,6 +48,9 @@ pub struct Mailbox {
 impl Mailbox {
     pub fn new(path: &str, sent_folder: &Option<Result<Mailbox>>) -> Result<Mailbox> {
         let mut collection: Vec<Envelope> = maildir::MaildirType::new(path).get()?;
+        for e in &mut collection {
+            e.populate_headers();
+        }
         collection.sort_by(|a, b| a.get_date().cmp(&b.get_date()));
         let (threads, threaded_collection) = build_threads(&mut collection, sent_folder);
 

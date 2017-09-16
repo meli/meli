@@ -20,7 +20,7 @@
  */
 pub mod maildir;
 
-use mailbox::email::Envelope;
+use mailbox::email::{Envelope, Flag};
 use error::Result;
 
 use std::fmt;
@@ -59,6 +59,9 @@ pub trait MailBackend {
 ///     fn fetch_body(&mut self) -> Result<&[u8]> {
 ///         unimplemented!()
 ///     }
+///     fn fetch_flags((&self) -> Flag {
+///         unimplemented!()
+///     }
 /// }
 ///
 /// let foogen = BackendOpGenerator::new(Box::new(|| Box::new(FooOp {})));
@@ -73,6 +76,7 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     //fn copy(&self
     fn fetch_headers(&mut self) -> Result<&[u8]>;
     fn fetch_body(&mut self) -> Result<&[u8]>;
+    fn fetch_flags(&self) -> Flag;
 }
 
 /// `BackendOpGenerator` is a wrapper for a closure that returns a `BackendOp` object

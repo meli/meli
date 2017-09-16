@@ -32,3 +32,6 @@ extern crate chrono;
 extern crate base64;
 extern crate memmap;
 extern crate encoding;
+
+#[macro_use]
+extern crate bitflags;
