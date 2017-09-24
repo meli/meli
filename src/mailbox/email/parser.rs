@@ -69,15 +69,17 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
         let input_len = input.len();
         for (i, x) in input.iter().enumerate() {
             if *x == b'\n' {
-                if (i + 1) < input_len &&
-                    ((input[i + 1] != b' ' && input[i + 1] != b'\t') || input[i + 1] == b'\n')
+                if (i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t'
                 {
                     return match from_utf8(&input[0..i]) {
                         Ok(v) => IResult::Done(&input[(i + 1)..], v),
                         Err(_) => IResult::Error(error_code!(ErrorKind::Custom(43))),
                     };
-                } else if i + 1 > input_len {
-                    return IResult::Incomplete(Needed::Size(1));
+                } else if i + 1 == input_len {
+                    return match from_utf8(input) {
+                        Ok(v) => IResult::Done(&input[(i + 1)..], v),
+                        Err(_) => IResult::Error(error_code!(ErrorKind::Custom(43))),
+                    };
                 }
             }
         }
@@ -98,8 +100,20 @@ named!(
 named!(pub headers<std::vec::Vec<(&str, &str)>>,
        many1!(complete!(header)));
 
-named!(pub headers_raw<&[u8]>,
-       take_until1!("\n\n"));
+//named!(pub headers_raw<&[u8]>,
+       //take_until1!("\n\n"));
+
+pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    if input.is_empty() {
+        return IResult::Incomplete(Needed::Unknown)
+    }
+    for (i, x) in input.iter().enumerate() {
+        if *x == b'\n' && i + 1 < input.len() && input[i+1] == b'\n' {
+            return IResult::Done(&input[(i + 1)..], &input[0..i+1]);
+        }
+    }
+    return IResult::Error(error_code!(ErrorKind::Custom(43)));
+}
 
 named!(pub body_raw<&[u8]>,
        do_parse!(
