@@ -156,6 +156,7 @@ impl AttachmentBuilder {
         self
     }
     fn decode(&self) -> String {
+        // TODO: Use charset for decoding
         match self.content_transfer_encoding {
             ContentTransferEncoding::Base64 => {
                 match ::base64::decode(&::std::str::from_utf8(&self.raw)
@@ -178,8 +179,8 @@ impl AttachmentBuilder {
                 }
             }
             ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_text(&self.raw)
-                .to_full_result()
-                .unwrap(),
+                                                        .to_full_result()
+                                                        .unwrap(),
             ContentTransferEncoding::_7Bit |
             ContentTransferEncoding::_8Bit |
             ContentTransferEncoding::Other { .. } => {

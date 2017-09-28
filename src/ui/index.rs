@@ -21,6 +21,8 @@
 use mailbox::email::Envelope;
 use mailbox::*;
 use error::MeliError;
+
+use super::pager::Pager;
 use std::error::Error;
 
 extern crate ncurses;
@@ -28,7 +30,7 @@ extern crate ncurses;
 pub trait Window {
     fn draw(&mut self) -> ();
     fn redraw(&mut self) -> ();
-    fn handle_input(&mut self, input: i32) -> ();
+    fn handle_input(&mut self, input: i32) -> bool;
 }
 
 pub struct ErrorWindow {
@@ -46,7 +48,7 @@ impl Window for ErrorWindow {
         ncurses::waddstr(self.win, &self.description);
         ncurses::wrefresh(self.win);
     }
-    fn handle_input(&mut self, _: i32) -> () {}
+    fn handle_input(&mut self, _: i32) -> bool { false }
 }
 impl ErrorWindow {
     pub fn new(err: MeliError) -> Self {
@@ -78,12 +80,14 @@ pub struct Index {
     threaded: bool,
 
     cursor_idx: usize,
+
+    pager: Option<Pager>,
 }
 
 
 impl Window for Index {
     fn draw(&mut self) {
-        if self.mailbox.get_length() == 0 {
+        if self.get_length() == 0 {
             return;
         }
         let mut x = 0;
@@ -199,7 +203,7 @@ impl Window for Index {
     fn redraw(&mut self) -> () {
         ncurses::wnoutrefresh(self.win);
         ncurses::doupdate();
-        if self.mailbox.get_length() == 0 {
+        if self.get_length() == 0 {
             return;
         }
         /* Draw newly highlighted entry */
@@ -224,13 +228,31 @@ impl Window for Index {
         );
         ncurses::wrefresh(self.win);
     }
-    fn handle_input(&mut self, motion: i32) {
-        if self.mailbox.get_length() == 0 {
-            return;
+    fn handle_input(&mut self, motion: i32) -> bool {
+        if self.get_length() == 0 {
+            return false;
         }
         ncurses::getmaxyx(self.win, &mut self.screen_height, &mut self.screen_width);
         if self.screen_height == 0 {
-            return;
+            return false;
+        }
+        if self.pager.is_some() {
+            match motion {
+                m @ ncurses::KEY_UP |
+                m @ ncurses::KEY_DOWN |
+                m @ ncurses::KEY_NPAGE |
+                m @ ncurses::KEY_PPAGE => {
+                    self.pager.as_mut().unwrap().scroll(m);
+                    return true;
+                },
+                ncurses::KEY_F1 => {
+                    self.pager = None;
+                    self.redraw();
+                    return true;
+                },
+                _ => {}
+            }
+            return false;
         }
         let mut x = 0;
         let mut y = 0;
@@ -240,19 +262,19 @@ impl Window for Index {
             ncurses::KEY_UP => if self.cursor_idx > 0 {
                 self.cursor_idx -= 1;
             } else {
-                return;
+                return false;
             },
-            ncurses::KEY_DOWN => if self.cursor_idx < self.mailbox.get_length() - 1 {
+            ncurses::KEY_DOWN => if self.cursor_idx < self.get_length() - 1 {
                 self.cursor_idx += 1;
             } else {
-                return;
+                return false;
             },
             10 => {
                 self.show_pager();
-                self.redraw();
+                return true;
             }
             _ => {
-                return;
+                return false;
             }
         }
 
@@ -318,10 +340,10 @@ impl Window for Index {
          *      └  i-1 ┘
          */
         if pminrow != pminrow_prev &&
-            pminrow + self.screen_height > self.mailbox.get_length() as i32
+            pminrow + self.screen_height > self.get_length() as i32
         {
             /* touch dead entries in index (tell ncurses to redraw the empty lines next refresh) */
-            let live_entries = self.mailbox.get_length() as i32 - pminrow;
+            let live_entries = self.get_length() as i32 - pminrow;
             ncurses::wredrawln(self.win, live_entries, self.screen_height);
             ncurses::wrefresh(self.win);
         }
@@ -334,6 +356,7 @@ impl Window for Index {
             self.screen_height - 1,
             self.screen_width - 1,
         );
+        return true;
     }
 }
 impl Index {
@@ -365,15 +388,6 @@ impl Index {
             ncurses::printw(&format!("Mailbox {} is empty.\n", mailbox.path));
             ncurses::refresh();
         }
-        let mut color = true;
-        let mut thread_color = Vec::with_capacity(mailbox_length);
-        for i in &mailbox.threaded_collection {
-            let container = mailbox.get_thread(*i);
-            if !container.has_parent() {
-                color = !color;
-            }
-            thread_color.push(color);
-        }
         Index {
             mailbox: mailbox,
             win: win,
@@ -382,9 +396,16 @@ impl Index {
             screen_height: 0,
             threaded: true,
             cursor_idx: 0,
+            pager: None,
         }
     }
-
+    fn get_length(&self) -> usize {
+        if self.threaded {
+            self.mailbox.threaded_collection.len()
+        } else {
+            self.mailbox.get_length()
+        }
+    }
     /* draw_entry() doesn't take &mut self because borrow checker complains if it's called from
      * another method. */
     fn draw_entry(
@@ -465,7 +486,7 @@ impl Index {
         ncurses::wattroff(win, attr);
     }
     fn show_pager(&mut self) {
-        if self.mailbox.get_length() == 0 {
+        if self.get_length() == 0 {
             return;
         }
         ncurses::getmaxyx(self.win, &mut self.screen_height, &mut self.screen_width);
@@ -475,22 +496,11 @@ impl Index {
         } else {
             &mut self.mailbox.collection[self.cursor_idx]
         };
-        let mut pager = super::pager::Pager::new(self.win, x);
+        let mut pager = Pager::new(self.win, x);
+        /* TODO: Fix this: */
         pager.scroll(ncurses::KEY_DOWN);
         pager.scroll(ncurses::KEY_UP);
-        let mut ch = ncurses::getch();
-        while ch != ncurses::KEY_F(1) {
-            match ch {
-                m @ ncurses::KEY_UP |
-                m @ ncurses::KEY_DOWN |
-                m @ ncurses::KEY_NPAGE |
-                m @ ncurses::KEY_PPAGE => {
-                    pager.scroll(m);
-                }
-                _ => {}
-            }
-            ch = ncurses::getch();
-        }
+        self.pager = Some(pager);
     }
 }
 impl Drop for Index {

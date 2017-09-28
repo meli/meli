@@ -23,6 +23,8 @@ pub mod index;
 pub mod pager;
 
 extern crate ncurses;
+extern crate melib;
+use melib::mailbox::backends::RefreshEvent;
 
 /* Color pairs; foreground && background. */
 pub static COLOR_PAIR_DEFAULT: i16 = 1;
@@ -62,5 +64,17 @@ impl TUI {
 impl Drop for TUI {
     fn drop(&mut self) {
         ncurses::endwin();
+    }
+}
+
+pub enum ThreadEvent {
+  Input(ncurses::WchResult),
+  RefreshMailbox{ name: String },
+  //Decode { _ }, // For gpg2 signature check
+}
+
+impl From<RefreshEvent> for ThreadEvent {
+    fn from(event: RefreshEvent) -> Self {
+        ThreadEvent::RefreshMailbox { name: event.folder }
     }
 }

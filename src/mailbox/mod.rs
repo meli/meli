@@ -41,31 +41,25 @@ pub struct Mailbox {
     pub collection: Vec<Envelope>,
     pub threaded_collection: Vec<usize>,
     threads: Vec<Container>,
-    length: usize,
 }
 
 
 impl Mailbox {
     pub fn new(path: &str, sent_folder: &Option<Result<Mailbox>>) -> Result<Mailbox> {
         let mut collection: Vec<Envelope> = maildir::MaildirType::new(path).get()?;
-        for e in &mut collection {
-            e.populate_headers();
-        }
         collection.sort_by(|a, b| a.get_date().cmp(&b.get_date()));
         let (threads, threaded_collection) = build_threads(&mut collection, sent_folder);
 
-        let length = collection.len();
 
         Ok(Mailbox {
             path: path.to_string(),
             collection: collection,
             threads: threads,
-            length: length,
             threaded_collection: threaded_collection,
         })
     }
     pub fn get_length(&self) -> usize {
-        self.length
+        self.collection.len()
     }
     pub fn get_threaded_mail(&self, i: usize) -> usize {
         let thread = self.threads[self.threaded_collection[i]];

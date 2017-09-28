@@ -20,6 +20,7 @@
  */
 
 use mailbox::*;
+use mailbox::backends::RefreshEventConsumer;
 use conf::AccountSettings;
 use std::ops::{Index, IndexMut};
 #[derive(Debug)]
@@ -30,9 +31,11 @@ pub struct Account {
     sent_folder: Option<usize>,
 
     settings: AccountSettings,
+    pub backend: Box<MailBackend>,
 }
 
 
+use mailbox::backends::maildir::MaildirType;
 impl Account {
     pub fn new(name: String, settings: AccountSettings) -> Self {
         eprintln!("new acc");
@@ -44,6 +47,7 @@ impl Account {
         for _ in 0..settings.folders.len() {
             folders.push(None);
         }
+        let backend = Box::new(MaildirType::new(""));
         Account {
             name: name,
             folders: folders,
@@ -51,7 +55,11 @@ impl Account {
             sent_folder: sent_folder,
 
             settings: settings,
+            backend: backend,
         }
+    }
+    pub fn watch(&self, r: RefreshEventConsumer) -> () {
+        self.backend.watch(r, &self.settings.folders);
     }
 }
 

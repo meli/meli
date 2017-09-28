@@ -24,6 +24,7 @@ crossbeam = "^0.3.0"
 fnv = "1.0.3"
 encoding = "0.2.33"
 bitflags = "1.0"
+notify = "4.0.1"
 
 [dependencies.ncurses]
 features = ["wide"]

@@ -21,17 +21,22 @@
 
 use mailbox::email::{Envelope, Flag};
 use error::{MeliError, Result};
-use mailbox::backends::{BackendOp, BackendOpGenerator, MailBackend};
+use mailbox::backends::{BackendOp, BackendOpGenerator, MailBackend, RefreshEvent, RefreshEventConsumer};
 use mailbox::email::parser;
 
+extern crate notify;
+
+use self::notify::{Watcher, RecursiveMode, watcher};
+use std::time::Duration;
+
+use std::sync::mpsc::channel;
+//use std::sync::mpsc::sync_channel;
+//use std::sync::mpsc::SyncSender;
+//use std::time::Duration;
+use std::thread;
 extern crate crossbeam;
 use std::path::PathBuf;
 use memmap::{Mmap, Protection};
-
-
-pub struct MaildirType {
-    path: String,
-}
 
 #[derive(Debug, Default)]
 pub struct MaildirOp {
@@ -64,9 +69,10 @@ impl BackendOp for MaildirOp {
     fn as_bytes(&mut self) -> Result<&[u8]> {
         if self.slice.is_none() {
             self.slice = Some(
-                Mmap::open_path(self.path.to_string(), Protection::Read).unwrap(),
+                Mmap::open_path(self.path.to_string(), Protection::Read)?,
             );
         }
+        /* Unwrap is safe since we use ? above. */
         Ok(unsafe { self.slice.as_ref().unwrap().as_slice() })
     }
     fn fetch_headers(&mut self) -> Result<&[u8]> {
@@ -107,6 +113,12 @@ impl BackendOp for MaildirOp {
 }
 
 
+#[derive(Debug)]
+pub struct MaildirType {
+    path: String,
+}
+
+
 impl MailBackend for MaildirType {
     fn get(&self) -> Result<Vec<Envelope>> {
         self.get_multicore(4)
@@ -131,6 +143,34 @@ impl MailBackend for MaildirType {
         }
         Ok(r)
             */
+    }
+    fn watch(&self, sender: RefreshEventConsumer, folders: &[String]) -> () {
+        let folders = folders.to_vec();
+
+        thread::Builder::new().name("folder watch".to_string()).spawn(move || {
+            let (tx, rx) = channel();
+            let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
+            for f in folders {
+                if MaildirType::is_valid(&f).is_err() {
+                    continue;
+                }
+                let mut p = PathBuf::from(&f);
+                p.push("cur");
+                watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
+                p.pop();
+                p.push("new");
+                watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
+                eprintln!("watching {:?}", f);
+            }
+            loop {
+                match rx.recv() {
+                    Ok(event) => {
+                        sender.send(RefreshEvent { folder: format!("{:?}", event) });
+                    }
+                    Err(e) => eprintln!("watch error: {:?}", e),
+                }
+            }
+        }).unwrap();
     }
 }
 
@@ -198,9 +238,10 @@ panic!("didn't parse"); },
                         let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
                         for e in chunk {
                             let e_copy = e.to_string();
-                            if let Some(e) = Envelope::from(Box::new(BackendOpGenerator::new(
+                            if let Some(mut e) = Envelope::from(Box::new(BackendOpGenerator::new(
                                 Box::new(move || Box::new(MaildirOp::new(e_copy.clone()))),
                             ))) {
+                                e.populate_headers();
                                 local_r.push(e);
                             }
                         }
