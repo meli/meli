@@ -424,6 +424,11 @@ impl Envelope {
                 datetime = Some(value.to_string());
             }
         }
+        /*
+         * https://tools.ietf.org/html/rfc5322#section-3.6.4
+         *
+         * if self.message_id.is_none() { ...
+         */
         if let Some(ref mut x) = in_reply_to {
             self.push_references(x);
         }

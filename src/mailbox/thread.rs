@@ -123,6 +123,9 @@ fn build_collection(
     for (i, x) in collection.iter_mut().enumerate() {
         let x_index; /* x's index in threads */
         let m_id = x.get_message_id_raw().to_string();
+        /* TODO: Check for missing Message-ID.
+         * Solutions: generate a hidden one
+         */
         if id_table.contains_key(&m_id) {
             let t = id_table[&m_id];
             /* the already existing Container should be empty, since we're
