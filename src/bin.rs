@@ -36,6 +36,13 @@ fn main() {
     ncurses::setlocale(locale_conf, "en_US.UTF-8");
     let set = Settings::new();
     let ui = ui::TUI::initialize();
+    let mut backends = Backends::new();
+    backends
+        .register(
+            "maildir".to_string(),
+            Box::new(|| Box::new(MaildirType::new(""))),
+        )
+        .unwrap();
 
     let (sender, receiver): (SyncSender<ThreadEvent>, Receiver<ThreadEvent>) =
         sync_channel(::std::mem::size_of::<ThreadEvent>());
@@ -55,7 +62,7 @@ fn main() {
 
     let mut j = 0;
     let folder_length = set.accounts["norn"].folders.len();
-    let mut account = Account::new("norn".to_string(), set.accounts["norn"].clone());
+    let mut account = Account::new("norn".to_string(), set.accounts["norn"].clone(), backends);
     {
         let sender = sender.clone();
         account.watch(RefreshEventConsumer::new(Box::new(move |r| {

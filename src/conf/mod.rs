@@ -26,20 +26,6 @@ use std::io;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone)]
-pub enum MailFormat {
-    Maildir,
-}
-
-impl MailFormat {
-    pub fn from_str(x: &str) -> MailFormat {
-        match x.to_lowercase().as_ref() {
-            "maildir" => MailFormat::Maildir,
-            _ => panic!("Unrecognizable mail format"),
-        }
-    }
-}
-
 #[derive(Debug, Deserialize)]
 struct FileAccount {
     folders: String,
@@ -56,10 +42,17 @@ struct FileSettings {
 #[derive(Debug, Clone)]
 pub struct AccountSettings {
     pub folders: Vec<String>,
-    format: MailFormat,
+    format: String,
     pub sent_folder: String,
     threaded: bool,
 }
+
+impl AccountSettings {
+    pub fn get_format(&self) -> &str {
+        &self.format
+    }
+}
+
 #[derive(Debug)]
 pub struct Settings {
     pub accounts: HashMap<String, AccountSettings>,
@@ -126,7 +119,7 @@ impl Settings {
                 id.clone(),
                 AccountSettings {
                     folders: folders,
-                    format: MailFormat::from_str(&x.format),
+                    format: x.format.to_lowercase(),
                     sent_folder: x.sent_folder.clone(),
                     threaded: x.threaded,
                 },

@@ -24,7 +24,6 @@ pub use self::email::*;
 /* Mail backends. Currently only maildir is supported */
 pub mod backends;
 use mailbox::backends::MailBackend;
-use mailbox::backends::maildir;
 use error::Result;
 pub mod accounts;
 pub use mailbox::accounts::Account;
@@ -45,12 +44,10 @@ pub struct Mailbox {
 
 
 impl Mailbox {
-    pub fn new(path: &str, sent_folder: &Option<Result<Mailbox>>) -> Result<Mailbox> {
-        let mut collection: Vec<Envelope> = maildir::MaildirType::new(path).get()?;
+    pub fn new(path: &str, sent_folder: &Option<Result<Mailbox>>, collection: Result<Vec<Envelope>>) -> Result<Mailbox> {
+        let mut collection: Vec<Envelope> = collection?;
         collection.sort_by(|a, b| a.get_date().cmp(&b.get_date()));
         let (threads, threaded_collection) = build_threads(&mut collection, sent_folder);
-
-
         Ok(Mailbox {
             path: path.to_string(),
             collection: collection,

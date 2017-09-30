@@ -20,7 +20,7 @@
  */
 
 use mailbox::*;
-use mailbox::backends::RefreshEventConsumer;
+use mailbox::backends::{RefreshEventConsumer, Backends};
 use conf::AccountSettings;
 use std::ops::{Index, IndexMut};
 #[derive(Debug)]
@@ -35,9 +35,8 @@ pub struct Account {
 }
 
 
-use mailbox::backends::maildir::MaildirType;
 impl Account {
-    pub fn new(name: String, settings: AccountSettings) -> Self {
+    pub fn new(name: String, settings: AccountSettings, backends: Backends) -> Self {
         eprintln!("new acc");
         let sent_folder = settings
             .folders
@@ -47,7 +46,7 @@ impl Account {
         for _ in 0..settings.folders.len() {
             folders.push(None);
         }
-        let backend = Box::new(MaildirType::new(""));
+        let backend = backends.get(settings.get_format()).unwrap();
         Account {
             name: name,
             folders: folders,
@@ -79,7 +78,7 @@ impl IndexMut<usize> for Account {
                 let id = self.sent_folder.unwrap();
                 if id == index {
                     eprintln!("building sent_folder..");
-                    self.folders[index] = Some(Mailbox::new(&path, &None));
+                    self.folders[index] = Some(Mailbox::new(&path, &None, self.backend.get(&path)));
                     eprintln!("Done!");
                 } else {
                     eprintln!(
@@ -99,10 +98,10 @@ impl IndexMut<usize> for Account {
                     let sent_path = self.settings.folders[id].clone();
                     if sent[0].is_none() {
                         eprintln!("\tbuilding sent_folder..");
-                        sent[0] = Some(Mailbox::new(&sent_path, &None));
+                        sent[0] = Some(Mailbox::new(&sent_path, &None, self.backend.get(&path)));
                         eprintln!("\tDone!");
                     }
-                    cur[0] = Some(Mailbox::new(&path, &sent[0]));
+                    cur[0] = Some(Mailbox::new(&path, &sent[0],self.backend.get(&path)));
                     eprintln!("Done!");
                 }
             } else {
@@ -110,7 +109,7 @@ impl IndexMut<usize> for Account {
                     "Now building folder {:?} without sent_folder",
                     self.settings.folders[index]
                 );
-                self.folders[index] = Some(Mailbox::new(&path, &None));
+                self.folders[index] = Some(Mailbox::new(&path, &None,self.backend.get(&path)));
                 eprintln!("Done!");
             };
         }

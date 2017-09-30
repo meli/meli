@@ -21,14 +21,51 @@
 pub mod maildir;
 
 use mailbox::email::{Envelope, Flag};
-use error::Result;
-
+use error::{MeliError, Result};
 use std::fmt;
+
+
+extern crate fnv;
+use self::fnv::FnvHashMap;
+use std;
+pub struct Backends {
+    map: FnvHashMap<std::string::String, Box<Fn() -> Box<MailBackend>>>,
+}
+
+impl Backends {
+    pub fn new() -> Self {
+        Backends {
+            map: FnvHashMap::with_capacity_and_hasher(1, Default::default())
+        }
+    }
+
+    pub fn get(&self, key: &str) -> Result<Box<MailBackend>> {
+        if !self.map.contains_key(key) {
+            return Err(MeliError::new(
+                    format!("{} is not a valid mail backend", key),
+                    ));
+        }
+        Ok(self.map[key]())
+    }
+    pub fn register(&mut self, key: String, backend: Box<Fn() -> Box<MailBackend>>) -> Result<()> {
+        if self.map.contains_key(&key) {
+            return Err(MeliError::new(
+                    format!("{} is an already registered backend", key),
+                    ));
+        }
+        self.map.insert(key, backend);
+        Ok(())
+    }
+}
+
 
 pub struct RefreshEvent {
     pub folder: String,
 }
 
+/// A `RefreshEventConsumer` is a boxed closure that must be used to consume a `RefreshEvent` and
+/// send it to a UI provided channel. We need this level of abstraction to provide an interface for
+/// all users of mailbox refresh events.
 pub struct RefreshEventConsumer(Box<Fn(RefreshEvent) -> ()>);
 unsafe impl Send for RefreshEventConsumer {}
 unsafe impl Sync for RefreshEventConsumer {}
@@ -41,9 +78,10 @@ impl RefreshEventConsumer {
     }
 }
 pub trait MailBackend: ::std::fmt::Debug {
-    fn get(&self) -> Result<Vec<Envelope>>;
+    fn get(&self, path: &str) -> Result<Vec<Envelope>>;
     fn watch(&self, sender:RefreshEventConsumer, folders: &[String]) -> ();
     //fn new(folders: &Vec<String>) -> Box<Self>;
+    //login function
 }
 
 /// A `BackendOp` manages common operations for the various mail backends. They only live for the

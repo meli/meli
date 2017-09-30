@@ -120,8 +120,8 @@ pub struct MaildirType {
 
 
 impl MailBackend for MaildirType {
-    fn get(&self) -> Result<Vec<Envelope>> {
-        self.get_multicore(4)
+    fn get(&self, path: &str) -> Result<Vec<Envelope>> {
+        self.get_multicore(4, path)
         /*
 
         MaildirType::is_valid(&self.path)?;
@@ -193,9 +193,9 @@ impl MaildirType {
         }
         Ok(())
     }
-    pub fn get_multicore(&self, cores: usize) -> Result<Vec<Envelope>> {
-        MaildirType::is_valid(&self.path)?;
-        let mut path = PathBuf::from(&self.path);
+    pub fn get_multicore(&self, cores: usize, path: &str) -> Result<Vec<Envelope>> {
+        MaildirType::is_valid(path)?;
+        let mut path = PathBuf::from(path);
         path.push("cur");
         let iter = path.read_dir()?;
         let count = path.read_dir()?.count();
