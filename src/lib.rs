@@ -40,4 +40,3 @@ pub use mailbox::*;
 pub use conf::*;
 
 pub use mailbox::backends::{RefreshEventConsumer, Backends};
-pub use mailbox::backends::maildir::MaildirType;

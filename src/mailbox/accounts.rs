@@ -46,7 +46,7 @@ impl Account {
         for _ in 0..settings.folders.len() {
             folders.push(None);
         }
-        let backend = backends.get(settings.get_format()).unwrap();
+        let backend = backends.get(settings.get_format());
         Account {
             name: name,
             folders: folders,

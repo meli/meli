@@ -36,13 +36,7 @@ fn main() {
     ncurses::setlocale(locale_conf, "en_US.UTF-8");
     let set = Settings::new();
     let ui = ui::TUI::initialize();
-    let mut backends = Backends::new();
-    backends
-        .register(
-            "maildir".to_string(),
-            Box::new(|| Box::new(MaildirType::new(""))),
-        )
-        .unwrap();
+    let backends = Backends::new();
 
     let (sender, receiver): (SyncSender<ThreadEvent>, Receiver<ThreadEvent>) =
         sync_channel(::std::mem::size_of::<ThreadEvent>());

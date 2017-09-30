@@ -21,40 +21,40 @@
 pub mod maildir;
 
 use mailbox::email::{Envelope, Flag};
-use error::{MeliError, Result};
+use mailbox::backends::maildir::MaildirType;
+use error::Result;
 use std::fmt;
 
 
 extern crate fnv;
 use self::fnv::FnvHashMap;
 use std;
+
+/// A hashmap containing all available mail backends.
 pub struct Backends {
     map: FnvHashMap<std::string::String, Box<Fn() -> Box<MailBackend>>>,
 }
 
 impl Backends {
     pub fn new() -> Self {
-        Backends {
+        let mut b = Backends {
             map: FnvHashMap::with_capacity_and_hasher(1, Default::default())
-        }
+        };
+        b.register("maildir".to_string(), Box::new(|| Box::new(MaildirType::new(""))));
+        b
     }
 
-    pub fn get(&self, key: &str) -> Result<Box<MailBackend>> {
+    pub fn get(&self, key: &str) -> Box<MailBackend> {
         if !self.map.contains_key(key) {
-            return Err(MeliError::new(
-                    format!("{} is not a valid mail backend", key),
-                    ));
+            panic!("{} is not a valid mail backend", key);
         }
-        Ok(self.map[key]())
+        self.map[key]()
     }
-    pub fn register(&mut self, key: String, backend: Box<Fn() -> Box<MailBackend>>) -> Result<()> {
+    pub fn register(&mut self, key: String, backend: Box<Fn() -> Box<MailBackend>>) -> () {
         if self.map.contains_key(&key) {
-            return Err(MeliError::new(
-                    format!("{} is an already registered backend", key),
-                    ));
+            panic!("{} is an already registered backend", key);
         }
         self.map.insert(key, backend);
-        Ok(())
     }
 }
 
