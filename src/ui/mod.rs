@@ -33,6 +33,8 @@ pub static COLOR_PAIR_HEADERS: i16 = 3;
 pub static COLOR_PAIR_THREAD_INDENT: i16 = 4;
 pub static COLOR_PAIR_THREAD_ODD: i16 = 5;
 pub static COLOR_PAIR_THREAD_EVEN: i16 = 6;
+pub static COLOR_PAIR_UNREAD_ODD: i16 = 7;
+pub static COLOR_PAIR_UNREAD_EVEN: i16 = 8;
 
 pub struct TUI;
 
@@ -53,6 +55,8 @@ impl TUI {
         ncurses::init_pair(COLOR_PAIR_THREAD_INDENT, 5, 0);
         ncurses::init_pair(COLOR_PAIR_THREAD_ODD, 15, 0);
         ncurses::init_pair(COLOR_PAIR_THREAD_EVEN, 15, 233);
+        ncurses::init_pair(COLOR_PAIR_UNREAD_ODD, 15, 7);
+        ncurses::init_pair(COLOR_PAIR_UNREAD_EVEN, 15, 8);
 
         /* Set the window's background color. */
         ncurses::bkgd(

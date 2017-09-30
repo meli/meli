@@ -285,13 +285,26 @@ impl Window for Index {
         /* Draw previous highlighted entry normally */
         ncurses::wmove(self.pad, prev_idx as i32, 0);
         {
-            let pair = if self.threaded && prev_idx % 2 == 0 {
-                super::COLOR_PAIR_THREAD_EVEN
-            } else if self.threaded {
-                super::COLOR_PAIR_THREAD_ODD
+            let envelope: &Envelope = if self.threaded {
+                let i = self.mailbox.get_threaded_mail(prev_idx);
+                &self.mailbox.collection[i]
+            } else {
+                &self.mailbox.collection[prev_idx]
+            };
+            let pair = if self.threaded {
+                if prev_idx % 2 == 0 && envelope.is_seen() {
+                    super::COLOR_PAIR_THREAD_EVEN
+                } else if prev_idx % 2 == 0 {
+                    super::COLOR_PAIR_UNREAD_EVEN
+                } else if envelope.is_seen() {
+                    super::COLOR_PAIR_THREAD_ODD
+                } else {
+                    super::COLOR_PAIR_UNREAD_ODD
+                }
             } else {
                 super::COLOR_PAIR_DEFAULT
             };
+
             ncurses::wchgat(self.pad, 32, 0, pair);
             ncurses::wmove(self.pad, prev_idx as i32, 32);
             /* If first character in subject column is space, we need to check for indentation
@@ -422,10 +435,14 @@ impl Index {
         /* TODO: use addchstr */
         let pair = if highlight {
             super::COLOR_PAIR_CURSOR
-        } else if i % 2 == 0 {
+        } else if i % 2 == 0 && mail.is_seen() {
             super::COLOR_PAIR_THREAD_EVEN
-        } else {
+        } else if i % 2 == 0 {
+            super::COLOR_PAIR_UNREAD_EVEN
+        } else if mail.is_seen() {
             super::COLOR_PAIR_THREAD_ODD
+        } else {
+            super::COLOR_PAIR_UNREAD_ODD
         };
         let attr = ncurses::COLOR_PAIR(pair);
         ncurses::wattron(win, attr);
