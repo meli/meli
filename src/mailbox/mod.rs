@@ -27,13 +27,13 @@ use mailbox::backends::MailBackend;
 use error::Result;
 pub mod accounts;
 pub use mailbox::accounts::Account;
-mod thread;
-use mailbox::thread::{build_threads, Container};
+pub mod thread;
+pub use mailbox::thread::{build_threads, Container};
 
 use std::option::Option;
 
 
-/// `Mailbox` represents a folder of mail. Currently only `Maildir` is supported.
+/// `Mailbox` represents a folder of mail.
 #[derive(Debug, Clone)]
 pub struct Mailbox {
     pub path: String,

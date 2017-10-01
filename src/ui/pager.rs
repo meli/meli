@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use mailbox;
+use super::*;
 
 extern crate ncurses;
 
@@ -35,7 +35,7 @@ pub struct Pager {
 }
 
 impl Pager {
-    pub fn new(parent: ncurses::WINDOW, entry: &mut mailbox::Envelope) -> Pager {
+    pub fn new(parent: ncurses::WINDOW, entry: &mut Envelope) -> Pager {
         let mut screen_height = 0;
         let mut screen_width = 0;
         ncurses::getmaxyx(parent, &mut screen_height, &mut screen_width);
@@ -130,7 +130,7 @@ impl Pager {
             w - 1,
         );
     }
-    fn print_entry_headers(win: ncurses::WINDOW, mail: &mut mailbox::Envelope) -> i32 {
+    fn print_entry_headers(win: ncurses::WINDOW, mail: &mut Envelope) -> i32 {
         let mut i = 0;
         ncurses::wattron(win, ncurses::COLOR_PAIR(super::COLOR_PAIR_HEADERS));
         ncurses::waddstr(win, "Date: ");
@@ -171,7 +171,7 @@ impl Pager {
     }
     fn print_entry_content(
         win: ncurses::WINDOW,
-        mail: &mut mailbox::Envelope,
+        mail: &mut Envelope,
         height: i32,
     ) -> (ncurses::WINDOW, i32, i32) {
         let mut h = 0;
@@ -208,7 +208,7 @@ impl Pager {
     }
     fn print_entry(
         win: ncurses::WINDOW,
-        mail: &mut mailbox::Envelope,
+        mail: &mut Envelope,
     ) -> (ncurses::WINDOW, i32, i32) {
         let header_height = Pager::print_entry_headers(win, mail);
         Pager::print_entry_content(win, mail, header_height + 2)

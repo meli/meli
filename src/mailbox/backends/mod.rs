@@ -95,7 +95,8 @@ pub trait MailBackend: ::std::fmt::Debug {
 /// # Example
 /// ```
 /// use melib::mailbox::backends::{BackendOp, BackendOpGenerator};
-/// use melib::error::Result;
+/// use melib::Result;
+/// use melib::{Envelope, Flag};
 ///
 /// #[derive(Debug)]
 /// struct FooOp {}
@@ -113,7 +114,7 @@ pub trait MailBackend: ::std::fmt::Debug {
 ///     fn fetch_body(&mut self) -> Result<&[u8]> {
 ///         unimplemented!()
 ///     }
-///     fn fetch_flags((&self) -> Flag {
+///     fn fetch_flags(&self) -> Flag {
 ///         unimplemented!()
 ///     }
 /// }

@@ -38,6 +38,7 @@ extern crate crossbeam;
 use std::path::PathBuf;
 use memmap::{Mmap, Protection};
 
+/// `BackendOp` implementor for Maildir
 #[derive(Debug, Default)]
 pub struct MaildirOp {
     path: String,
@@ -113,6 +114,7 @@ impl BackendOp for MaildirOp {
 }
 
 
+/// Maildir backend https://cr.yp.to/proto/maildir.html
 #[derive(Debug)]
 pub struct MaildirType {
     path: String,
@@ -215,7 +217,7 @@ impl MaildirType {
             let m = match Email::parse(&buffer) {
                 Ok((v, rest)) => match rest.len() {
                     0 => v,
-                    _ => 
+                    _ =>
                     { eprintln!("{:?}", String::from_utf8(rest.to_vec()).unwrap());
 panic!("didn't parse"); },
                 },

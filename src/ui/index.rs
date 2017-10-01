@@ -18,9 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use mailbox::email::Envelope;
-use mailbox::*;
-use error::MeliError;
+use super::*;
 
 use super::pager::Pager;
 use std::error::Error;

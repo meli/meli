@@ -24,18 +24,27 @@ pub mod pager;
 
 extern crate ncurses;
 extern crate melib;
-use melib::mailbox::backends::RefreshEvent;
+use melib::*;
 
 /* Color pairs; foreground && background. */
+/// Default color.
 pub static COLOR_PAIR_DEFAULT: i16 = 1;
+/// Highlighted cursor line in index view.
 pub static COLOR_PAIR_CURSOR: i16 = 2;
+/// Header colour in pager view.
 pub static COLOR_PAIR_HEADERS: i16 = 3;
+/// Indentation symbol color in index view.
 pub static COLOR_PAIR_THREAD_INDENT: i16 = 4;
+/// Line color for odd entries in index view.
 pub static COLOR_PAIR_THREAD_ODD: i16 = 5;
+/// Line color for even entries in index view.
 pub static COLOR_PAIR_THREAD_EVEN: i16 = 6;
+/// Line color for unread odd entries in index view.
 pub static COLOR_PAIR_UNREAD_ODD: i16 = 7;
+/// Line color for unread even entries in index view.
 pub static COLOR_PAIR_UNREAD_EVEN: i16 = 8;
 
+/// Dummy object to provide `ncurses` initialization and destruction.
 pub struct TUI;
 
 impl TUI {
@@ -71,8 +80,12 @@ impl Drop for TUI {
     }
 }
 
+/// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads
+/// to the main process.
 pub enum ThreadEvent {
+  /// User input.
   Input(ncurses::WchResult),
+  /// A watched folder has been refreshed.
   RefreshMailbox{ name: String },
   //Decode { _ }, // For gpg2 signature check
 }

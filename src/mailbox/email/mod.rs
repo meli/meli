@@ -36,19 +36,24 @@ use std::ascii::AsciiExt;
 use chrono;
 use chrono::TimeZone;
 
-/* Helper struct to return slices from a struct on demand */
+/// Helper struct to return slices from a struct field on demand.
 #[derive(Clone, Debug)]
 struct StrBuilder {
     offset: usize,
     length: usize,
 }
 
+/// Structs implementing this trait must contain a `StrBuilder` field.
 pub trait StrBuild {
-    fn new(&str, &str) -> Self;
+    /// Create a new `Self` out of a string and a slice
+    fn new(string: &str, slice: &str) -> Self;
+    /// Get the slice part of the string
     fn get_raw(&self) -> &str;
+    /// Get the entire string as a slice
     fn get_val(&self) -> &str;
 }
 
+/// `MessageID` is accessed through the `StrBuild` trait.
 #[derive(Clone)]
 pub struct MessageID(String, StrBuilder);
 
@@ -119,7 +124,13 @@ bitflags! {
     }
 }
 
-/* A very primitive mail object */
+/// `Envelope` represents all the data of an email we need to know.
+///
+///  Attachments (the email's body) is parsed on demand with `get_body`.
+///
+///  Access to the underlying email object in the account's backend (for example the file or the
+///  entry in an IMAP server) is given through `operation_token`. For more information see
+///  `BackendOp`.
 #[derive(Debug, Clone)]
 pub struct Envelope {
     date: String,
@@ -142,7 +153,110 @@ pub struct Envelope {
 
 
 impl Envelope {
-    pub fn get_date(&self) -> i64 {
+    pub fn new(token: Box<BackendOpGenerator>) -> Self {
+        Envelope {
+            date: "".to_string(),
+            from: None,
+            to: None,
+            body: None,
+            subject: None,
+            message_id: None,
+            in_reply_to: None,
+            references: None,
+
+            datetime: None,
+            timestamp: 0,
+
+            thread: 0,
+
+            operation_token: Arc::new(token),
+            flags: Flag::default(),
+        }
+    }
+    pub fn from(operation_token: Box<BackendOpGenerator>) -> Option<Envelope> {
+        let operation = operation_token.generate();
+        let mut e = Envelope::new(operation_token);
+        e.flags = operation.fetch_flags();
+        Some(e)
+    }
+
+    pub fn populate_headers(&mut self) -> () {
+        let mut operation = self.operation_token.generate();
+        let headers = match parser::headers(operation.fetch_headers().unwrap()).to_full_result() {
+            Ok(v) => v,
+            _ => {
+                let operation = self.operation_token.generate();
+                eprintln!("error in parsing mail\n{}", operation.description());
+                return;
+            }
+        };
+
+        let mut in_reply_to = None;
+        let mut datetime = None;
+
+        for (name, value) in headers {
+            if value.len() == 1 && value.is_empty() {
+                continue;
+            }
+            if name.eq_ignore_ascii_case("to") {
+                let parse_result = parser::subject(value.as_bytes());
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    "".to_string()
+                };
+                self.set_to(value);
+            } else if name.eq_ignore_ascii_case("from") {
+                let parse_result = parser::subject(value.as_bytes());
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    "".to_string()
+                };
+                self.set_from(value);
+            } else if name.eq_ignore_ascii_case("subject") {
+                let parse_result = parser::subject(value.trim().as_bytes());
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    "".to_string()
+                };
+                self.set_subject(value);
+            } else if name.eq_ignore_ascii_case("message-id") {
+                self.set_message_id(value);
+            } else if name.eq_ignore_ascii_case("references") {
+                {
+                    let parse_result = parser::references(value.as_bytes());
+                    if parse_result.is_done() {
+                        for v in parse_result.to_full_result().unwrap() {
+                            self.push_references(v);
+                        }
+                    }
+                }
+                self.set_references(value.to_string());
+            } else if name.eq_ignore_ascii_case("in-reply-to") {
+                self.set_in_reply_to(value);
+                in_reply_to = Some(value);
+            } else if name.eq_ignore_ascii_case("date") {
+                self.set_date(value.to_string());
+                datetime = Some(value.to_string());
+            }
+        }
+        /*
+         * https://tools.ietf.org/html/rfc5322#section-3.6.4
+         *
+         * if self.message_id.is_none() { ...
+         */
+if let Some(ref mut x) = in_reply_to {
+    self.push_references(x);
+}
+if let Some(ref mut d) = datetime {
+    if let Some(d) = parser::date(d) {
+        self.set_datetime(d);
+    }
+}
+}
+pub fn get_date(&self) -> i64 {
         self.timestamp
     }
     pub fn get_datetime(&self) -> chrono::DateTime<chrono::FixedOffset> {
@@ -323,118 +437,15 @@ impl Envelope {
     pub fn set_thread(&mut self, new_val: usize) -> () {
         self.thread = new_val;
     }
-    pub fn set_datetime(&mut self, new_val: Option<chrono::DateTime<chrono::FixedOffset>>) -> () {
-        self.datetime = new_val;
-        if let Some(v) = self.datetime {
-            self.timestamp = v.timestamp();
-        }
+    pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) -> () {
+        self.datetime = Some(new_val);
+        self.timestamp = new_val.timestamp();
     }
     pub fn get_flags(&self) -> Flag {
         self.flags
     }
     pub fn is_seen(&self) -> bool {
         !(self.flags & Flag::SEEN).is_empty()
-    }
-    pub fn new(token: Box<BackendOpGenerator>) -> Self {
-        Envelope {
-            date: "".to_string(),
-            from: None,
-            to: None,
-            body: None,
-            subject: None,
-            message_id: None,
-            in_reply_to: None,
-            references: None,
-
-            datetime: None,
-            timestamp: 0,
-
-            thread: 0,
-
-            operation_token: Arc::new(token),
-            flags: Flag::default(),
-        }
-    }
-    pub fn from(operation_token: Box<BackendOpGenerator>) -> Option<Envelope> {
-        let operation = operation_token.generate();
-        let mut e = Envelope::new(operation_token);
-        e.flags = operation.fetch_flags();
-        Some(e)
-    }
-
-    pub fn populate_headers(&mut self) -> () {
-        let mut operation = self.operation_token.generate();
-        let headers = match parser::headers(operation.fetch_headers().unwrap()).to_full_result() {
-            Ok(v) => v,
-            _ => {
-                let operation = self.operation_token.generate();
-                eprintln!("error in parsing mail\n{}", operation.description());
-                return;
-            }
-        };
-
-        let mut in_reply_to = None;
-        let mut datetime = None;
-
-        for (name, value) in headers {
-            if value.len() == 1 && value.is_empty() {
-                continue;
-            }
-            if name.eq_ignore_ascii_case("to") {
-                let parse_result = parser::subject(value.as_bytes());
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    "".to_string()
-                };
-                self.set_to(value);
-            } else if name.eq_ignore_ascii_case("from") {
-                let parse_result = parser::subject(value.as_bytes());
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    "".to_string()
-                };
-                self.set_from(value);
-            } else if name.eq_ignore_ascii_case("subject") {
-                let parse_result = parser::subject(value.trim().as_bytes());
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    "".to_string()
-                };
-                self.set_subject(value);
-            } else if name.eq_ignore_ascii_case("message-id") {
-                self.set_message_id(value);
-            } else if name.eq_ignore_ascii_case("references") {
-                {
-                    let parse_result = parser::references(value.as_bytes());
-                    if parse_result.is_done() {
-                        for v in parse_result.to_full_result().unwrap() {
-                            self.push_references(v);
-                        }
-                    }
-                }
-                self.set_references(value.to_string());
-            } else if name.eq_ignore_ascii_case("in-reply-to") {
-                self.set_in_reply_to(value);
-                in_reply_to = Some(value);
-            } else if name.eq_ignore_ascii_case("date") {
-                self.set_date(value.to_string());
-                datetime = Some(value.to_string());
-            }
-        }
-        /*
-         * https://tools.ietf.org/html/rfc5322#section-3.6.4
-         *
-         * if self.message_id.is_none() { ...
-         */
-        if let Some(ref mut x) = in_reply_to {
-            self.push_references(x);
-        }
-        if let Some(ref mut d) = datetime {
-            self.set_datetime(parser::date(d));
-        }
     }
 }
 
