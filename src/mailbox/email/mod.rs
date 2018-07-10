@@ -30,8 +30,6 @@ use std::sync::Arc;
 use std::cmp::Ordering;
 use std::fmt;
 use std::option::Option;
-//use std::io::prelude::*;
-use std::ascii::AsciiExt;
 
 use chrono;
 use chrono::TimeZone;

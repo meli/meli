@@ -32,8 +32,7 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::thread;
 
 fn main() {
-    let locale_conf = ncurses::LcCategory::all;
-    ncurses::setlocale(locale_conf, "en_US.UTF-8");
+    ncurses::setlocale(ncurses::LcCategory::all, "en_US.UTF-8");
     let set = Settings::new();
     let ui = ui::TUI::initialize();
     let backends = Backends::new();

@@ -21,7 +21,6 @@
 use mailbox::email::parser;
 
 use std::fmt::{Display, Formatter, Result};
-use std::ascii::AsciiExt;
 
 /*
  *

@@ -31,6 +31,7 @@ use self::fnv::FnvHashMap;
 use std;
 
 /// A hashmap containing all available mail backends.
+/// An abstraction over any available backends.
 pub struct Backends {
     map: FnvHashMap<std::string::String, Box<Fn() -> Box<MailBackend>>>,
 }
