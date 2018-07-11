@@ -19,12 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-mod ui;
+pub mod ui;
 use ui::*;
 
 extern crate melib;
+extern crate nom;
 extern crate termion;
-use melib::*;
+pub use melib::*;
 
 use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
@@ -64,12 +65,13 @@ fn main() {
         })));
     }
 
+    eprintln!("account is {:?}", account);
 
 
 
     let mut state = State::new(_stdout);
 
-    let a = Entity {component: Box::new(TextBox::new("a text box".to_string())) };
+    let a = Entity {component: Box::new(AccountMenu::new(&account)) };
     let listing = MailListing::new(Mailbox::new_dummy());
     let b = Entity { component: Box::new(listing) };
     let window  = Entity { component: Box::new(VSplit::new(a,b,90)) };
@@ -77,11 +79,6 @@ fn main() {
     state.render();
     'main: loop {
         let mailbox = &mut account[j];
-        //let mut index: Box<Window> = match *mailbox.as_ref().unwrap() {
-        //    Ok(ref v) => Box::new(Index::new(v)),
-        //    Err(ref v) => Box::new(ErrorWindow::new((*v).clone())),
-        //};
-        ////eprintln!("{:?}", set);
         match *mailbox.as_ref().unwrap() {
             Ok(ref v) => {
                 state.rcv_event(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox(v.clone()) });
@@ -89,8 +86,6 @@ fn main() {
             Err(_) => {},
         };
 
-        //index.draw();
-        //
         state.render();
 
         'inner: loop {
@@ -100,13 +95,12 @@ fn main() {
                         key @ Key::Char('j') | key @ Key::Char('k') => {
                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
                            state.render();
-                        }, 
+                        },
                         key @ Key::Up | key @ Key::Down => {
                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
                            state.render();
                             }
                         Key::Char('\n') => {
-         //                   index.handle_input(k);
                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(Key::Char('\n'))});
                            state.render();
                         }
@@ -115,9 +109,6 @@ fn main() {
                            state.render();
                         }
                         Key::F(_) => {
-          //                  if !index.handle_input(k) {
-           //                     break 'main;
-            //                }
                         },
                         Key::Char('q') | Key::Char('Q') => {
                             break 'main;

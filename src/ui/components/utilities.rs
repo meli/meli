@@ -70,10 +70,11 @@ impl Component for HSplit {
     }
 }
 
-/// A horizontally split in half container.
+/// A vertically split in half container.
 pub struct VSplit {
     left: Entity,
     right: Entity,
+    /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
 }
 
@@ -93,7 +94,7 @@ impl Component for VSplit {
         let total_cols = get_x(bottom_right) - get_x(upper_left);
         let right_entity_width = (self.ratio*total_cols )/100;
         let mid = get_x(bottom_right) - right_entity_width;
-        
+
         if get_y(upper_left)> 1 {
             let c = grid.get(mid, get_y(upper_left)-1).map(|a| a.ch()).unwrap_or_else(|| ' ');
             match c {
@@ -159,6 +160,9 @@ impl Component for TextBox {
     }
 }
 
+/// A pager for text.
+/// `Pager` holds its own content in its own `CellBuffer` and when `draw` is called, it draws the
+/// current view of the text. It is responsible for scrolling etc.
 pub struct Pager {
     cursor_pos: usize,
     rows: usize,
@@ -192,7 +196,7 @@ impl Component for Pager {
     fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
         if !self.dirty {
             return;
-        } 
+        }
         clear_area(grid, (get_x(upper_left), get_y(upper_left)-1), bottom_right);
         self.dirty = false;
         let mut inner_x = 0;

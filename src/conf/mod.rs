@@ -21,6 +21,8 @@
 
 extern crate config;
 extern crate xdg;
+extern crate serde;
+
 use std::collections::HashMap;
 use std::io;
 use std::fs;

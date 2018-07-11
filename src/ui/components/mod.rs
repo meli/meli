@@ -55,12 +55,15 @@ const LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
 
 const LIGHT_UP_AND_HORIZONTAL: char = '┴';
 
+/// `Entity` is a container for Components. Totally useless now so if it is not useful in the
+/// future (ie hold some information, id or state) it should be removed.
 pub struct Entity {
     //queue: VecDeque,
     pub component: Box<Component>, // more than one?
 }
 
 impl Entity {
+    /// Pass events to child component.
     pub fn rcv_event(&mut self, event: &UIEvent, queue: &mut VecDeque<UIEvent>) {
         self.component.process_event(&event, queue);
     }
@@ -72,16 +75,18 @@ impl fmt::Debug for Entity {
     }
 }
 
+/// Types implementing this Trait can draw on the terminal and receive events.
+/// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
+/// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
 pub trait Component {
     fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos);
-    fn process_event(&mut self, &UIEvent, &mut VecDeque<UIEvent>);
+    fn process_event(&mut self, event: &UIEvent, queue: &mut VecDeque<UIEvent>);
 }
 
 
 fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_color: Color,  upper_left: Pos, bottom_right: Pos) -> usize {
     let (mut x, mut y) = upper_left;
     for c in s.chars() {
-        eprintln!(" (x,y) = ({},{})", x,y);
         grid[(x,y)].set_ch(c);
         grid[(x,y)].set_fg(fg_color);
         grid[(x,y)].set_bg(bg_color);

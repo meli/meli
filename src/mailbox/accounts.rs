@@ -23,6 +23,7 @@ use mailbox::*;
 use mailbox::backends::{RefreshEventConsumer, Backends};
 use conf::AccountSettings;
 use std::ops::{Index, IndexMut};
+
 #[derive(Debug)]
 pub struct Account {
     name: String,
@@ -59,6 +60,13 @@ impl Account {
     }
     pub fn watch(&self, r: RefreshEventConsumer) -> () {
         self.backend.watch(r, &self.settings.folders);
+    }
+    /* This doesn't represent the number of correctly parsed mailboxes though */
+    pub fn len(&self) -> usize {
+        self.folders.len()
+    }
+    pub fn list_folders(&self) -> Vec<String> {
+        self.settings.folders.clone()
     }
 }
 

@@ -63,7 +63,7 @@ impl Mailbox {
             threaded_collection: threaded_collection,
         })
     }
-    pub fn get_length(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.collection.len()
     }
     pub fn get_threaded_mail(&self, i: usize) -> usize {
