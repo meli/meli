@@ -21,7 +21,7 @@
 
 use mailbox::*;
 use mailbox::backends::{RefreshEventConsumer, Backends};
-use conf::AccountSettings;
+use conf::{AccountSettings, Folder};
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ impl Account {
         let sent_folder = settings
             .folders
             .iter()
-            .position(|x| *x == settings.sent_folder);
+            .position(|x| *x.get_path() == settings.sent_folder);
         let mut folders = Vec::with_capacity(settings.folders.len());
         for _ in 0..settings.folders.len() {
             folders.push(None);
@@ -59,14 +59,17 @@ impl Account {
         }
     }
     pub fn watch(&self, r: RefreshEventConsumer) -> () {
-        self.backend.watch(r, &self.settings.folders);
+        self.backend.watch(r, &self.settings.folders[..]);
     }
     /* This doesn't represent the number of correctly parsed mailboxes though */
     pub fn len(&self) -> usize {
         self.folders.len()
     }
-    pub fn list_folders(&self) -> Vec<String> {
+    pub fn list_folders(&self) -> Vec<Folder> {
         self.settings.folders.clone()
+    }
+    pub fn get_name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -81,12 +84,13 @@ impl IndexMut<usize> for Account {
     fn index_mut(&mut self, index: usize) -> &mut Option<Result<Mailbox>> {
         if self.folders[index].is_none() {
             eprintln!("building folder {:?}", self.settings.folders[index]);
-            let path = self.settings.folders[index].clone();
+            let folder = &self.settings.folders[index];
+            let path = folder.get_path().clone();
             if self.sent_folder.is_some() {
                 let id = self.sent_folder.unwrap();
                 if id == index {
                     eprintln!("building sent_folder..");
-                    self.folders[index] = Some(Mailbox::new(&path, &None, self.backend.get(&path)));
+                    self.folders[index] = Some(Mailbox::new(folder, &None, self.backend.get(&folder)));
                     eprintln!("Done!");
                 } else {
                     eprintln!(
@@ -103,13 +107,13 @@ impl IndexMut<usize> for Account {
                             )
                         }
                     };
-                    let sent_path = self.settings.folders[id].clone();
+                    let sent_path = &self.settings.folders[id];
                     if sent[0].is_none() {
                         eprintln!("\tbuilding sent_folder..");
-                        sent[0] = Some(Mailbox::new(&sent_path, &None, self.backend.get(&path)));
+                        sent[0] = Some(Mailbox::new(sent_path, &None, self.backend.get(&folder)));
                         eprintln!("\tDone!");
                     }
-                    cur[0] = Some(Mailbox::new(&path, &sent[0],self.backend.get(&path)));
+                    cur[0] = Some(Mailbox::new(folder, &sent[0],self.backend.get(folder)));
                     eprintln!("Done!");
                 }
             } else {
@@ -117,7 +121,7 @@ impl IndexMut<usize> for Account {
                     "Now building folder {:?} without sent_folder",
                     self.settings.folders[index]
                 );
-                self.folders[index] = Some(Mailbox::new(&path, &None,self.backend.get(&path)));
+                self.folders[index] = Some(Mailbox::new(folder, &None,self.backend.get(&folder)));
                 eprintln!("Done!");
             };
         }

@@ -23,6 +23,7 @@ use mailbox::email::{Envelope, Flag};
 use error::{MeliError, Result};
 use mailbox::backends::{BackendOp, BackendOpGenerator, MailBackend, RefreshEvent, RefreshEventConsumer};
 use mailbox::email::parser;
+use conf::Folder;
 
 extern crate notify;
 
@@ -122,8 +123,8 @@ pub struct MaildirType {
 
 
 impl MailBackend for MaildirType {
-    fn get(&self, path: &str) -> Result<Vec<Envelope>> {
-        self.get_multicore(4, path)
+    fn get(&self, folder: &Folder) -> Result<Vec<Envelope>> {
+        self.get_multicore(4, folder)
         /*
 
         MaildirType::is_valid(&self.path)?;
@@ -146,7 +147,7 @@ impl MailBackend for MaildirType {
         Ok(r)
             */
     }
-    fn watch(&self, sender: RefreshEventConsumer, folders: &[String]) -> () {
+    fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> () {
         let folders = folders.to_vec();
 
         thread::Builder::new().name("folder watch".to_string()).spawn(move || {
@@ -156,7 +157,7 @@ impl MailBackend for MaildirType {
                 if MaildirType::is_valid(&f).is_err() {
                     continue;
                 }
-                let mut p = PathBuf::from(&f);
+                let mut p = PathBuf::from(&f.get_path());
                 p.push("cur");
                 watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
                 p.pop();
@@ -182,7 +183,8 @@ impl MaildirType {
             path: path.to_string(),
         }
     }
-    fn is_valid(path: &str) -> Result<()> {
+    fn is_valid(f: &Folder) -> Result<()> {
+        let path = f.get_path();
         let mut p = PathBuf::from(path);
         for d in &["cur", "new", "tmp"] {
             p.push(d);
@@ -195,8 +197,9 @@ impl MaildirType {
         }
         Ok(())
     }
-    pub fn get_multicore(&self, cores: usize, path: &str) -> Result<Vec<Envelope>> {
-        MaildirType::is_valid(path)?;
+    pub fn get_multicore(&self, cores: usize, folder: &Folder) -> Result<Vec<Envelope>> {
+        MaildirType::is_valid(folder)?;
+        let path = folder.get_path();
         let mut path = PathBuf::from(path);
         path.push("cur");
         let iter = path.read_dir()?;

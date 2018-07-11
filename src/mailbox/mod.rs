@@ -30,13 +30,15 @@ pub use mailbox::accounts::Account;
 pub mod thread;
 pub use mailbox::thread::{build_threads, Container};
 
+use conf::Folder;
+
 use std::option::Option;
 
 
 /// `Mailbox` represents a folder of mail.
 #[derive(Debug, Clone)]
 pub struct Mailbox {
-    pub path: String,
+    pub folder: Folder,
     pub collection: Vec<Envelope>,
     pub threaded_collection: Vec<usize>,
     threads: Vec<Container>,
@@ -46,18 +48,18 @@ pub struct Mailbox {
 impl Mailbox {
     pub fn new_dummy() -> Self {
         Mailbox {
-            path: String::default(),
+            folder: Folder::default(),
             collection: Vec::with_capacity(0),
             threaded_collection: Vec::with_capacity(0),
             threads: Vec::with_capacity(0),
         }
     }
-    pub fn new(path: &str, sent_folder: &Option<Result<Mailbox>>, collection: Result<Vec<Envelope>>) -> Result<Mailbox> {
+    pub fn new(folder: &Folder, sent_folder: &Option<Result<Mailbox>>, collection: Result<Vec<Envelope>>) -> Result<Mailbox> {
         let mut collection: Vec<Envelope> = collection?;
         collection.sort_by(|a, b| a.get_date().cmp(&b.get_date()));
         let (threads, threaded_collection) = build_threads(&mut collection, sent_folder);
         Ok(Mailbox {
-            path: path.to_string(),
+            folder: folder.clone(),
             collection: collection,
             threads: threads,
             threaded_collection: threaded_collection,

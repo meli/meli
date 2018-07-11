@@ -20,6 +20,7 @@
  */
 pub mod maildir;
 
+use conf::Folder;
 use mailbox::email::{Envelope, Flag};
 use mailbox::backends::maildir::MaildirType;
 use error::Result;
@@ -79,8 +80,8 @@ impl RefreshEventConsumer {
     }
 }
 pub trait MailBackend: ::std::fmt::Debug {
-    fn get(&self, path: &str) -> Result<Vec<Envelope>>;
-    fn watch(&self, sender:RefreshEventConsumer, folders: &[String]) -> ();
+    fn get(&self, folder: &Folder) -> Result<Vec<Envelope>>;
+    fn watch(&self, sender:RefreshEventConsumer, folders: &[Folder]) -> ();
     //fn new(folders: &Vec<String>) -> Box<Self>;
     //login function
 }

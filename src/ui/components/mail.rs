@@ -48,7 +48,8 @@ impl MailListing {
     /// Draw only the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
         if self.length == 0 {
-            write_string_to_grid(&format!("Folder `{}` is empty.", self.mailbox.path), grid, Color::Default, Color::Default, upper_left, upper_left);
+            clear_area(grid, upper_left, bottom_right);
+            write_string_to_grid(&format!("Folder `{}` is empty.", self.mailbox.folder.get_name()), grid, Color::Default, Color::Default, upper_left, upper_left);
             return;
         }
         /* If cursor position has changed, remove the highlight from the previous position and
@@ -228,8 +229,9 @@ impl Component for MailListing {
 
 #[derive(Debug)]
 pub struct AccountMenu {
-    entries: Vec<(usize, String)>,
+    entries: Vec<(usize, Folder)>,
     dirty: bool,
+    name: String,
 
 }
 
@@ -237,30 +239,79 @@ impl AccountMenu {
     pub fn new(account: &Account) -> Self{
         let mut entries = Vec::with_capacity(account.len());
         for (idx, acc) in account.list_folders().iter().enumerate() {
-            eprintln!("acc[{}] is {:?}", idx, acc);
             entries.push((idx, acc.clone()));
         }
+
         AccountMenu {
             entries: entries,
             dirty: true,
+            name: account.get_name().to_string(),
         }
     }
 }
 
 impl Component for AccountMenu {
     fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
-        eprintln!("reached accountmenu draw {:?}", self);
         if !(self.dirty) {
             return;
         }
         self.dirty = false;
+        let mut parents: Vec<Option<usize>> = vec!(None; self.entries.len());
+
+        for (idx, e) in self.entries.iter().enumerate() {
+            for c in e.1.get_children() {
+                parents[*c] = Some(idx);
+            }
+        }
+        let mut roots = Vec::new();
+        for (idx, c) in parents.iter().enumerate() {
+            if c.is_none() {
+                roots.push(idx);
+            }
+        }
+
+        let mut ind = 0;
+        let mut depth = String::from("");
+        let mut s = String::from(format!("{}\n", self.name));
+        fn pop(depth: &mut String) {
+            depth.pop();
+            depth.pop();
+            depth.pop();
+            depth.pop();
+        }
+
+        fn push(depth: &mut String, c: char) {
+            depth.push(' ');
+            depth.push(c);
+            depth.push(' ');
+            depth.push(' ');
+        }
+
+        fn print(root: usize, parents: &Vec<Option<usize>>, depth: &mut String, entries: &Vec<(usize, Folder)>, mut s: String) -> String {
+            let len = s.len();
+            s.insert_str(len, &format!("{}: {}\n", &entries[root].1.get_name(), entries[root].0));
+            let children_no = entries[root].1.get_children().len();
+            for (idx, child) in entries[root].1.get_children().iter().enumerate() {
+                let len = s.len();
+                s.insert_str(len, &format!("{}├─", depth));
+                push(depth, if idx == children_no - 1 {'│'} else { ' ' });
+                s = print(*child, parents, depth, entries, s);
+                pop(depth);
+            }
+            s
+        }
+        for r in roots {
+            s =print(r, &parents, &mut depth, &self.entries, s);
+
+        }
+
+        let lines: Vec<&str> = s.lines().collect();
         let mut idx = 0;
         for y in get_y(upper_left)..get_y(bottom_right) {
             if idx == self.entries.len() {
                 break;
             }
-            let s = format!("{:?}",self.entries[idx]);
-            eprintln!("wrote {} to menu", s);
+            let s = format!("{}", lines[idx]);
             write_string_to_grid(&s, grid, Color::Red, Color::Default, set_y(upper_left, y), bottom_right);
             idx += 1;
         }

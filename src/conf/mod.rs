@@ -28,6 +28,33 @@ use std::io;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Default, Clone)]
+pub struct Folder {
+    name: String,
+    path: String,
+    children: Vec<usize>,
+}
+
+impl Folder {
+    fn new(path: String, file_name: String, children: Vec<usize>) -> Self {
+        Folder {
+            name: file_name,
+            path: path,
+            children: children,
+        }
+    }
+    pub fn get_path(&self) -> &str {
+        &self.path
+    }
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+    pub fn get_children(&self) -> &Vec<usize> {
+        &self.children
+    }
+}
+
+
 #[derive(Debug, Deserialize)]
 struct FileAccount {
     folders: String,
@@ -43,7 +70,8 @@ struct FileSettings {
 
 #[derive(Debug, Clone)]
 pub struct AccountSettings {
-    pub folders: Vec<String>,
+    name: String,
+    pub folders: Vec<Folder>,
     format: String,
     pub sent_folder: String,
     threaded: bool,
@@ -52,6 +80,9 @@ pub struct AccountSettings {
 impl AccountSettings {
     pub fn get_format(&self) -> &str {
         &self.format
+    }
+    pub fn get_name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -94,7 +125,8 @@ impl Settings {
 
         for (id, x) in fs.accounts {
             let mut folders = Vec::new();
-            fn recurse_folders<P: AsRef<Path>>(folders: &mut Vec<String>, p: P) {
+            fn recurse_folders<P: AsRef<Path>>(folders: &mut Vec<Folder>, p: P) -> Vec<usize> {
+                let mut children = Vec::new();
                 for mut f in fs::read_dir(p).unwrap() {
                     for f in f.iter_mut() {
                         {
@@ -105,21 +137,27 @@ impl Settings {
                                 continue;
                             }
                             if path.is_dir() {
-                                folders.push(path.to_str().unwrap().to_string());
-                                recurse_folders(folders, path);
+                                let path_children = recurse_folders(folders, &path);
+                                folders.push(Folder::new(path.to_str().unwrap().to_string(), path.file_name().unwrap().to_str().unwrap().to_string(), path_children));
+                                children.push(folders.len()-1);
+
                             }
                         }
                     }
                 }
+                children
             };
             let path = PathBuf::from(&x.folders);
+            let path_children = recurse_folders(&mut folders, &path);
             if path.is_dir() {
-                folders.push(path.to_str().unwrap().to_string());
+                folders.push(Folder::new(path.to_str().unwrap().to_string(), path.file_name().unwrap().to_str().unwrap().to_string(), path_children));
             }
-            recurse_folders(&mut folders, &x.folders);
+            //recurse_folders(&mut folders, &x.folders);
+            eprintln!("folders is {:?}", folders);
             s.insert(
                 id.clone(),
                 AccountSettings {
+                    name: id.clone(),
                     folders: folders,
                     format: x.format.to_lowercase(),
                     sent_folder: x.sent_folder.clone(),
