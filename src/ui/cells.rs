@@ -1,5 +1,6 @@
 use std::ops::{Index, IndexMut, Deref, DerefMut};
-use position::*;
+use super::position::*;
+use termion::color::AnsiValue;
 
 pub trait CellAccessor: HasSize {
     fn cellvec(&self) -> &Vec<Cell>;
@@ -401,8 +402,21 @@ impl Color {
             Color::Cyan => 0x06,
             Color::White => 0x07,
             Color::Byte(b) => b,
-            Color::Default => panic!("Attempted to cast default color to u8"),
+            Color::Default => 0x00,
         }
+    }
+
+    pub fn as_termion(&self) -> AnsiValue {
+        match *self {
+            b @ Color::Black | b @ Color::Red | b @ Color::Green | b @ Color::Yellow | b @ Color::Blue | b @ Color::Magenta | b @ Color::Cyan | b @ Color::White | b @ Color::Default =>
+            { 
+                AnsiValue(b.as_byte())
+            },
+            Color::Byte(b) => { 
+                AnsiValue(b as u8)
+            },
+        }
+
     }
 }
 

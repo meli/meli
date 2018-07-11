@@ -2,11 +2,15 @@ extern crate termion;
 
 
 use termion::{clear, cursor};
+use termion::raw::IntoRawMode;
+use termion::event::{Key as TermionKey, Event as TermionEvent, MouseEvent as TermionMouseEvent};
 
 
 
 //use std::env;
 use std::io::{Read, Write};
+use termion::input::TermRead;
+use std::io::{stdout, stdin, stderr};
 //use std::collections::VecDeque;
 //use std::process;
 
@@ -20,23 +24,33 @@ use position::Pos;
 pub use self::components::*;
 pub use self::position::*;
 
-
-pub struct UIEvent {
+#[derive(Debug)]
+pub enum UIEventType {
+    Input(Key),
+    RefreshMailbox(String),
+    //Quit?
+    Resize,
 }
 
-pub struct State<R, W: Write> {
+
+#[derive(Debug)]
+pub struct UIEvent {
+   pub id: u64,
+   pub event_type: UIEventType,
+}
+
+pub struct State<W: Write> {
     width: usize,
     height: usize,
 
     grid: CellBuffer,
-    stdin: R,
-    pub stdout: W,
+    pub stdout: termion::raw::RawTerminal<W>,
     entities: Vec<Entity>,
 
 }
 
-impl<R: Read, W: Write> State<R,W> {
-    pub fn new(stdout: W, stdin: R) -> Self {
+impl<W: Write> State<W> {
+    pub fn new(stdout: W) -> Self {
         let termsize = termion::terminal_size().ok();
         let termwidth = termsize.map(|(w,_)| w);
         let termheight = termsize.map(|(_,h)| h);
@@ -48,8 +62,7 @@ impl<R: Read, W: Write> State<R,W> {
             //queue: VecDeque::new();
 
             grid: CellBuffer::new(width+1, height+1, Cell::with_char(' ')),
-            stdin: stdin,
-            stdout: stdout,
+            stdout: stdout.into_raw_mode().unwrap(),
             entities: Vec::with_capacity(2),
         };
         write!(s.stdout, "{}{}", clear::All, cursor::Goto(1,1)).unwrap();
@@ -98,5 +111,87 @@ impl<R: Read, W: Write> State<R,W> {
     }
     pub fn register_entity(&mut self, entity: Entity) {
         self.entities.push(entity);
+    }
+
+    pub fn rcv_event(&mut self, event: UIEvent) {
+        /* inform each entity */ for i in 0..self.entities.len() {
+            self.entities[i].rcv_event(&event);
+        }
+    }
+}
+
+pub fn convert_key(k: TermionKey ) -> Key {
+    match k {
+        TermionKey::Backspace => Key::Backspace,
+        TermionKey::Left => Key::Left,
+        TermionKey::Right => Key::Right,
+        TermionKey::Up => Key::Up,
+        TermionKey::Down => Key::Down,
+        TermionKey::Home => Key::Home,
+        TermionKey::End => Key::End,
+        TermionKey::PageUp => Key::PageUp,
+        TermionKey::PageDown => Key::PageDown,
+        TermionKey::Delete => Key::Delete,
+        TermionKey::Insert => Key::Insert,
+        TermionKey::F(u) => Key::F(u),
+        TermionKey::Char(c) => Key::Char(c),
+        TermionKey::Alt(c) => Key::Alt(c),
+        TermionKey::Ctrl(c) => Key::Ctrl(c),
+        TermionKey::Null => Key::Null,
+        TermionKey::Esc => Key::Esc,
+        _ => Key::Char(' '),
+    }
+}
+
+#[derive(Debug)]
+pub enum Key {
+    /// Backspace.
+    Backspace,
+    /// Left arrow.
+    Left,
+    /// Right arrow.
+    Right,
+    /// Up arrow.
+    Up,
+    /// Down arrow.
+    Down,
+    /// Home key.
+    Home,
+    /// End key.
+    End,
+    /// Page Up key.
+    PageUp,
+    /// Page Down key.
+    PageDown,
+    /// Delete key.
+    Delete,
+    /// Insert key.
+    Insert,
+    /// Function keys.
+    ///
+    /// Only function keys 1 through 12 are supported.
+    F(u8),
+    /// Normal character.
+    Char(char),
+    /// Alt modified character.
+    Alt(char),
+    /// Ctrl modified character.
+    ///
+    /// Note that certain keys may not be modifiable with `ctrl`, due to limitations of terminals.
+    Ctrl(char),
+    /// Null byte.
+    Null,
+    /// Esc key.
+    Esc,
+}
+
+pub fn get_events<F>(stdin: std::io::Stdin, closure: F) where F: Fn(Key) -> (){
+    let stdin = stdin.lock();
+    for c in stdin.keys() {
+        if let Ok(k) = c {
+            let k = convert_key(k);
+            eprintln!("Received key: {:?}", k);
+            closure(k);
+        }
     }
 }

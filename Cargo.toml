@@ -18,13 +18,14 @@ config = "0.6"
 serde_derive = "^1.0.8"
 serde = "^1.0.8"
 nom = "3.2.0"
-memmap = "*"
+memmap = "0.5.2"
 base64 = "*"
 crossbeam = "^0.3.0"
 fnv = "1.0.3"
 encoding = "0.2.33"
 bitflags = "1.0"
 notify = "4.0.1"
+termion = "1.5.1"
 
 [dependencies.ncurses]
 features = ["wide"]

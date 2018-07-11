@@ -1,5 +1,25 @@
 /// A `(x, y)` position on screen.
 pub type Pos = (usize, usize);
+
+#[inline(always)]
+pub fn get_x(p: Pos) -> usize {
+    p.0
+}
+#[inline(always)]
+pub fn get_y(p: Pos) -> usize {
+    p.1
+}
+#[inline(always)]
+pub fn set_x(p: Pos, new_x: usize) -> Pos {
+    (new_x, p.1)
+}
+#[inline(always)]
+pub fn set_y(p: Pos, new_y: usize) -> Pos {
+    (p.0, new_y)
+}
+
+
+
 /// A `(cols, rows)` size.
 pub type Size = (usize, usize);
 

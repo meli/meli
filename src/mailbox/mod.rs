@@ -44,6 +44,14 @@ pub struct Mailbox {
 
 
 impl Mailbox {
+    pub fn new_dummy() -> Self {
+        Mailbox {
+            path: String::default(),
+            collection: Vec::with_capacity(0),
+            threaded_collection: Vec::with_capacity(0),
+            threads: Vec::with_capacity(0),
+        }
+    }
     pub fn new(path: &str, sent_folder: &Option<Result<Mailbox>>, collection: Result<Vec<Envelope>>) -> Result<Mailbox> {
         let mut collection: Vec<Envelope> = collection?;
         collection.sort_by(|a, b| a.get_date().cmp(&b.get_date()));

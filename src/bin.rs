@@ -20,39 +20,40 @@
  */
 
 mod ui;
-use ui::index::*;
-use ui::ThreadEvent;
+use ui::*;
 
 extern crate melib;
+extern crate termion;
 use melib::*;
 
-extern crate ncurses;
-
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
+use std::io::{stdout, stdin, };
 
 fn main() {
-    ncurses::setlocale(ncurses::LcCategory::all, "en_US.UTF-8");
+    /* Lock all stdios */
+    let _stdout = stdout();
+    let mut _stdout = _stdout.lock();
+    let stdin = stdin();
+    let stdin = stdin;
+    /*
+    let _stderr = stderr();
+    let mut _stderr = _stderr.lock();
+    */
+
+
     let set = Settings::new();
-    let ui = ui::TUI::initialize();
     let backends = Backends::new();
 
-    let (sender, receiver): (SyncSender<ThreadEvent>, Receiver<ThreadEvent>) =
-        sync_channel(::std::mem::size_of::<ThreadEvent>());
+    let (sender, receiver): (SyncSender<ThreadEvent>, Receiver<ThreadEvent>) = sync_channel(::std::mem::size_of::<ThreadEvent>());
     {
         let sender = sender.clone();
-        let mut ch = None;
-        thread::Builder::new()
-            .name("input-thread".to_string())
-            .spawn(move || loop {
-                ch = ncurses::get_wch();
-                if let Some(k) = ch {
-                    sender.send(ThreadEvent::Input(k)).unwrap();
-                }
-            })
-            .unwrap();
+        thread::Builder::new().name("input-thread".to_string()).spawn(move || {
+            get_events(stdin, |k| { sender.send(ThreadEvent::Input(k)).unwrap(); })
+                                }).unwrap();
     }
 
+    //let mailbox = Mailbox::new("/home/epilys/Downloads/rust/nutt/Inbox4");
     let mut j = 0;
     let folder_length = set.accounts["norn"].folders.len();
     let mut account = Account::new("norn".to_string(), set.accounts["norn"].clone(), backends);
@@ -62,63 +63,80 @@ fn main() {
             sender.send(ThreadEvent::from(r)).unwrap();
         })));
     }
-    'main: loop {
-        ncurses::touchwin(ncurses::stdscr());
-        ncurses::mv(0, 0);
-        let mailbox = &mut account[j];
-        let mut index: Box<Window> = match *mailbox.as_ref().unwrap() {
-            Ok(ref v) => Box::new(Index::new(v)),
-            Err(ref v) => Box::new(ErrorWindow::new((*v).clone())),
-        };
-        //eprintln!("{:?}", set);
-        ncurses::refresh();
 
-        index.draw();
+
+
+
+    let mut state = State::new(_stdout);
+
+    let a = Entity {component: Box::new(TextBox::new("a text box".to_string())) };
+    let listing = MailListing::new(Mailbox::new_dummy());
+    let b = Entity { component: Box::new(listing) };
+    let window  = Entity { component: Box::new(VSplit::new(a,b,90)) };
+    state.register_entity(window);
+    state.render();
+    'main: loop {
+        let mailbox = &mut account[j];
+        //let mut index: Box<Window> = match *mailbox.as_ref().unwrap() {
+        //    Ok(ref v) => Box::new(Index::new(v)),
+        //    Err(ref v) => Box::new(ErrorWindow::new((*v).clone())),
+        //};
+        ////eprintln!("{:?}", set);
+        match *mailbox.as_ref().unwrap() {
+            Ok(ref v) => {
+                state.rcv_event(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox(v.clone()) });
+            },
+            Err(_) => {},
+        };
+
+        //index.draw();
+        //
+        state.render();
 
         'inner: loop {
             match receiver.recv().unwrap() {
-                ThreadEvent::Input(k) => match k {
-                    ncurses::WchResult::KeyCode(k @ ncurses::KEY_UP)
-                    | ncurses::WchResult::KeyCode(k @ ncurses::KEY_DOWN) => {
-                        index.handle_input(k);
-                        continue;
-                    }
-                    ncurses::WchResult::Char(k @ 10) => {
-                        index.handle_input(k as i32);
-                        continue;
-                    }
-                    ncurses::WchResult::KeyCode(k @ ncurses::KEY_F1) => {
-                        if !index.handle_input(k) {
-                            break 'main;
+                ThreadEvent::Input(k) => {
+                    match k {
+                        key @ Key::Char('j') | key @ Key::Char('k') => {
+                           state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
+                           state.render();
+                        }, 
+                        key @ Key::Up | key @ Key::Down => {
+                           state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
+                           state.render();
+                            }
+                        Key::Char('\n') => {
+         //                   index.handle_input(k);
+                           state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(Key::Char('\n'))});
+                           state.render();
                         }
-                    }
-                    ncurses::WchResult::Char(113) => {
-                        break 'main;
-                    }
-                    ncurses::WchResult::Char(74) => {
-                        if j < folder_length - 1 {
+                        Key::Char('i') | Key::Esc => {
+                           state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(Key::Esc)});
+                           state.render();
+                        }
+                        Key::F(_) => {
+          //                  if !index.handle_input(k) {
+           //                     break 'main;
+            //                }
+                        },
+                        Key::Char('q') | Key::Char('Q') => {
+                            break 'main;
+                        },
+                        Key::Char('J') => if j < folder_length - 1 {
                             j += 1;
                             break 'inner;
-                        }
-                    }
-                    ncurses::WchResult::Char(75) => {
-                        if j > 0 {
+                        },
+                        Key::Char('K') => if j > 0 {
                             j -= 1;
                             break 'inner;
-                        }
+                        },
+                        _ => {}
                     }
-                    ncurses::WchResult::KeyCode(ncurses::KEY_RESIZE) => {
-                        eprintln!("key_resize");
-                        index.redraw();
-                        continue;
-                    }
-                    _ => {}
                 },
-                ThreadEvent::RefreshMailbox { name: n } => {
+                ThreadEvent::RefreshMailbox { name : n } => {
                     eprintln!("Refresh mailbox {}", n);
-                }
+                },
             }
         }
     }
-    drop(ui);
 }
