@@ -158,6 +158,7 @@ impl MailBackend for MaildirType {
                     continue;
                 }
                 let mut p = PathBuf::from(&f.get_path());
+                eprintln!("watching {:?}", f);
                 p.push("cur");
                 watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
                 p.pop();

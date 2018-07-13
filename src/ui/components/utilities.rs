@@ -49,15 +49,11 @@ impl HSplit {
 
 impl Component for HSplit {
     fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
-        grid[upper_left].set_ch('u');
-        let (a,b) = upper_left;
-        grid[(a+1,b)].set_ch('h');
-
         let total_rows = get_y(bottom_right) - get_y(upper_left);
         let bottom_entity_height = (self.ratio*total_rows )/100;
         let mid = get_y(upper_left) + total_rows - bottom_entity_height;
 
-        for i in get_x(upper_left)..get_x(bottom_right)+1 {
+        for i in get_x(upper_left)..=get_x(bottom_right) {
             grid[(i, mid)].set_ch('─');
         }
         let _ = self.top.component.draw(grid, upper_left, (get_x(bottom_right), get_y(upper_left) + mid-1));

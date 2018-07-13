@@ -54,6 +54,8 @@ pub enum ThreadEvent {
   Input(Key),
   /// A watched folder has been refreshed.
   RefreshMailbox{ name: String },
+  UIEventType(UIEventType),
+  GoCmd(usize),
   //Decode { _ }, // For gpg2 signature check
 }
 
@@ -93,6 +95,7 @@ pub enum UIEventType {
     RefreshMailbox(Mailbox),
     //Quit?
     Resize,
+    ChangeMailbox(usize),
 }
 
 
@@ -103,12 +106,13 @@ pub struct UIEvent {
 }
 
 pub struct State<W: Write> {
-    width: usize,
-    height: usize,
+    cols: usize,
+    rows: usize,
 
     grid: CellBuffer,
-    pub stdout: termion::raw::RawTerminal<W>,
+    stdout: termion::raw::RawTerminal<W>,
     entities: Vec<Entity>,
+    settings: Settings,
 
 }
 
@@ -120,34 +124,37 @@ impl<W: Write> Drop for State<W> {
 }
 
 impl<W: Write> State<W> {
-    pub fn new(stdout: W) -> Self {
+    pub fn new(stdout: W, settings: Settings) -> Self {
         let termsize = termion::terminal_size().ok();
-        let termwidth = termsize.map(|(w,_)| w);
-        let termheight = termsize.map(|(_,h)| h);
-        let width = termwidth.unwrap_or(0) as usize;
-        let height = termheight.unwrap_or(0) as usize;
+        let termcols = termsize.map(|(w,_)| w);
+        let termrows = termsize.map(|(_,h)| h);
+        let cols = termcols.unwrap_or(0) as usize;
+        let rows = termrows.unwrap_or(0) as usize;
         let mut s = State {
-            width: width,
-            height: height,
+            cols: cols,
+            rows: rows,
             //queue: VecDeque::new();
 
-            grid: CellBuffer::new(width+1, height+1, Cell::with_char(' ')),
+            grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
             stdout: stdout.into_raw_mode().unwrap(),
-            entities: Vec::with_capacity(2),
+            entities: Vec::with_capacity(1),
+            settings: settings,
         };
         write!(s.stdout, "{}{}{}", cursor::Hide, clear::All, cursor::Goto(1,1)).unwrap();
         s
     }
-    pub fn hello_w(&mut self) {
-        write!(self.stdout, "Hey there.").unwrap();
-    }
     fn update_size(&mut self) {
         /* update dimensions. TODO: Only do that in size change events. ie SIGWINCH */
         let termsize = termion::terminal_size().ok();
-        let termwidth = termsize.map(|(w,_)| w);
-        let termheight = termsize.map(|(_,h)| h);
-        self.width = termwidth.unwrap_or(72) as usize;
-        self.height = termheight.unwrap_or(120) as usize;
+        let termcols = termsize.map(|(w,_)| w);
+        let termrows = termsize.map(|(_,h)| h);
+        if termcols.unwrap_or(72) as usize  != self.cols || termrows.unwrap_or(120) as usize != self.rows {
+            eprintln!("Size updated, from ({}, {}) -> ({:?}, {:?})", self.cols, self.rows, termcols, termrows);
+
+        }
+        self.cols = termcols.unwrap_or(72) as usize;
+        self.rows = termrows.unwrap_or(120) as usize;
+        self.grid.resize(self.cols, self.rows, Cell::with_char(' '));
     }
 
     pub fn render(&mut self) {
@@ -158,9 +165,9 @@ impl<W: Write> State<W> {
         }
 
         /* Only draw dirty areas */
-        for y in 0..self.height {
-            write!(self.stdout, "{}", cursor::Goto(1,y as u16)).unwrap();
-            for x in 0..self.width {
+        for y in 0..self.rows {
+            write!(self.stdout, "{}", cursor::Goto(1,(y+1) as u16)).unwrap();
+            for x in 0..self.cols {
                 let c = self.grid[(x,y)];
 
                 if c.get_bg() != cells::Color::Default {
@@ -179,13 +186,12 @@ impl<W: Write> State<W> {
 
             }
         }
+        self.stdout.flush().unwrap();
     }
     pub fn draw_entity(&mut self, idx: usize) {
         let ref mut entity = self.entities[idx];
-        eprintln!("Entity is {:?}", entity);
-        let upper_left =  (1,1);
-        let bottom_right = (self.width, self.height);
-        eprintln!("Upper left is {:?} and bottom_right is {:?}", upper_left, bottom_right);
+        let upper_left =  (0,0);
+        let bottom_right = (self.cols-1, self.rows-1);
 
         entity.component.draw(&mut self.grid, upper_left, bottom_right);
     }
@@ -267,12 +273,11 @@ pub enum Key {
     Esc,
 }
 
-pub fn get_events<F>(stdin: std::io::Stdin, closure: F) where F: Fn(Key) -> (){
+pub fn get_events<F>(stdin: std::io::Stdin, mut closure: F) where F: FnMut(Key) -> (){
     let stdin = stdin.lock();
     for c in stdin.keys() {
         if let Ok(k) = c {
             let k = convert_key(k);
-            eprintln!("Received key: {:?}", k);
             closure(k);
         }
     }

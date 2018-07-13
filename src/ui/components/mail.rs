@@ -5,7 +5,7 @@ fn make_entry_string(e: &Envelope, idx: usize) -> String {
     format!("{}    {}    {:.85}",idx,&e.get_datetime().format("%Y-%m-%d %H:%M:%S").to_string(),e.get_subject())
 }
 
-const MAX_WIDTH: usize = 500;
+const MAX_cols: usize = 500;
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `Pager`.
@@ -34,7 +34,7 @@ impl MailListing {
             cursor_pos: 0,
             new_cursor_pos: 0,
             length: length,
-            content: CellBuffer::new(MAX_WIDTH, length+1, Cell::with_char(' ')),
+            content: CellBuffer::new(MAX_cols, length+1, Cell::with_char(' ')),
             dirty: false,
             unfocused: false,
             mailbox: mailbox,
@@ -52,33 +52,51 @@ impl MailListing {
             write_string_to_grid(&format!("Folder `{}` is empty.", self.mailbox.folder.get_name()), grid, Color::Default, Color::Default, upper_left, upper_left);
             return;
         }
+        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+        let prev_page_no = (self.cursor_pos).wrapping_div(rows);
+        let page_no = (self.new_cursor_pos).wrapping_div(rows);
+
+
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
-        if self.cursor_pos != self.new_cursor_pos {
+        if self.cursor_pos != self.new_cursor_pos && prev_page_no == page_no {
             for idx in [self.cursor_pos, self.new_cursor_pos].iter() {
+                if *idx >= self.length {
+                    continue; //bounds check
+                }
                 let color = if self.cursor_pos == *idx { if *idx % 2 == 0 { Color::Byte(236) } else {Color::Default } } else { Color::Byte(246) };
-                let x = write_string_to_grid(&make_entry_string(&self.mailbox.collection[*idx], *idx), grid, Color::Default,  color, set_y(upper_left, get_y(upper_left) + *idx), bottom_right);
-                for x in x..get_x(bottom_right)+1 {
-                    grid[(x,get_y(upper_left)+idx)].set_ch(' ');
-                    grid[(x,get_y(upper_left)+idx)].set_bg(color);
+                let x = write_string_to_grid(&make_entry_string(&self.mailbox.collection[*idx], *idx), grid, Color::Default,  color, set_y(upper_left, get_y(upper_left)+(*idx % rows)), bottom_right);
+                for x in x..=get_x(bottom_right) {
+                    grid[(x,get_y(upper_left)+(*idx % rows))].set_ch(' ');
+                    grid[(x,get_y(upper_left)+(*idx % rows))].set_bg(color);
                 }
             }
             self.cursor_pos = self.new_cursor_pos;
             return;
+        }  else if self.cursor_pos != self.new_cursor_pos {
+            self.cursor_pos = self.new_cursor_pos;
         }
 
-        let mut idx = 0;
-        for y in get_y(upper_left)..get_y(bottom_right) {
-            if idx == self.length {
+        let mut idx = page_no*rows;
+        for y in get_y(upper_left)..=get_y(bottom_right) {
+            if idx >= self.length {
                 clear_area(grid, set_y(upper_left, y), bottom_right);
                 break;
             }
             /* Write an entire line for each envelope entry. */
 
-            let color = if self.cursor_pos == idx { Color::Byte(246) } else { if idx % 2 == 0 { Color::Byte(236) } else {Color::Default } };
+            let color = if self.cursor_pos == idx {
+                Color::Byte(246)
+            } else {
+                if idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                }
+            };
             let x = write_string_to_grid(&make_entry_string(&self.mailbox.collection[idx], idx), grid, Color::Default, color, set_y(upper_left, y), bottom_right);
 
-            for x in x..get_x(bottom_right)+1 {
+            for x in x..=get_x(bottom_right) {
                 grid[(x,y)].set_ch(' ');
                 grid[(x,y)].set_bg(color);
             }
@@ -91,10 +109,10 @@ impl MailListing {
     fn draw_mail_view(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
         let ref mail = self.mailbox.collection[self.cursor_pos];
 
-        let height = get_y(bottom_right) - get_y(upper_left);
-        let width = get_x(bottom_right) - get_x(upper_left);
+        let rows = get_y(bottom_right) - get_y(upper_left);
+        let cols = get_x(bottom_right) - get_x(upper_left);
 
-        self.pager = Some(Pager::new(mail, height, width));
+        self.pager = Some(Pager::new(mail, rows, cols));
         let pager = self.pager.as_mut().unwrap();
         pager.draw(grid, upper_left,bottom_right);
     }
@@ -116,8 +134,8 @@ impl Component for MailListing {
             /* Render the mail body in a pager, basically copy what HSplit does */
             let total_rows = get_y(bottom_right) - get_y(upper_left);
             /* TODO: define ratio in Configuration file */
-            let bottom_entity_height = (80*total_rows )/100;
-            let mid = get_y(upper_left) + total_rows - bottom_entity_height;
+            let bottom_entity_rows = (80*total_rows )/100;
+            let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
 
             if !self.dirty {
                 if let Some(ref mut p) = self.pager {
@@ -126,7 +144,7 @@ impl Component for MailListing {
                 return;
             }
             self.dirty = false;
-            self.draw_list(grid, upper_left, (get_x(bottom_right), get_y(upper_left)+ mid -1));
+            self.draw_list(grid, upper_left, (get_x(bottom_right), get_y(upper_left)+ mid-3));
             if self.length == 0 {
                 return;
             }
@@ -138,42 +156,42 @@ impl Component for MailListing {
                     }
                 }
 
-                for i in get_x(upper_left)..get_x(bottom_right)+1 {
+                for i in get_x(upper_left)..get_x(bottom_right) {
                     grid[(i, mid)].set_ch('─');
                 }
             }
 
-            let headers_height: usize = 6;
+            let headers_rows: usize = 6;
             /* Draw header */
             {
                 let ref mail = self.mailbox.collection[self.cursor_pos];
 
                 let x = write_string_to_grid(&format!("Date: {}", mail.get_date_as_str()), grid, Color::Byte(33), Color::Default, set_y(upper_left, mid+1), set_y(upper_left, mid+1));
-                for x in x..get_x(bottom_right)+1 {
+                for x in x..get_x(bottom_right) {
                     grid[(x, mid+1)].set_ch(' ');
                     grid[(x, mid+1)].set_bg(Color::Default);
                     grid[(x, mid+1)].set_fg(Color::Default);
                 }
                 let x = write_string_to_grid(&format!("From: {}", mail.get_from()), grid, Color::Byte(33), Color::Default, set_y(upper_left, mid+2), set_y(upper_left, mid+2));
-                for x in x..get_x(bottom_right)+1 {
+                for x in x..get_x(bottom_right) {
                     grid[(x, mid+2)].set_ch(' ');
                     grid[(x, mid+2)].set_bg(Color::Default);
                     grid[(x, mid+2)].set_fg(Color::Default);
                 }
                 let x = write_string_to_grid(&format!("To: {}", mail.get_to()), grid, Color::Byte(33), Color::Default, set_y(upper_left, mid+3), set_y(upper_left, mid+3));
-                for x in x..get_x(bottom_right)+1 {
+                for x in x..get_x(bottom_right) {
                     grid[(x, mid+3)].set_ch(' ');
                     grid[(x, mid+3)].set_bg(Color::Default);
                     grid[(x, mid+3)].set_fg(Color::Default);
                 }
                 let x = write_string_to_grid(&format!("Subject: {}", mail.get_subject()), grid, Color::Byte(33), Color::Default, set_y(upper_left, mid+4), set_y(upper_left, mid+4));
-                for x in x..get_x(bottom_right)+1 {
+                for x in x..get_x(bottom_right) {
                     grid[(x, mid+4)].set_ch(' ');
                     grid[(x, mid+4)].set_bg(Color::Default);
                     grid[(x, mid+4)].set_fg(Color::Default);
                 }
                 let x = write_string_to_grid(&format!("Message-ID: {}", mail.get_message_id_raw()), grid, Color::Byte(33), Color::Default, set_y(upper_left, mid+5), set_y(upper_left, mid+5));
-                for x in x..get_x(bottom_right)+1 {
+                for x in x..get_x(bottom_right) {
                     grid[(x, mid+5)].set_ch(' ');
                     grid[(x, mid+5)].set_bg(Color::Default);
                     grid[(x, mid+5)].set_fg(Color::Default);
@@ -181,7 +199,7 @@ impl Component for MailListing {
             }
 
             /* Draw body */
-            self.draw_mail_view(grid, (get_x(upper_left), get_y(upper_left) +  mid + headers_height), bottom_right);
+            self.draw_mail_view(grid, (get_x(upper_left), get_y(upper_left) +  mid + headers_rows), bottom_right);
 
         }
     }
@@ -194,7 +212,7 @@ impl Component for MailListing {
                 }
             },
             UIEventType::Input(Key::Down) => {
-                if self.length > 0 && self.cursor_pos < self.length - 1 {
+                if self.length > 0 && self.new_cursor_pos < self.length - 1 {
                     self.new_cursor_pos += 1;
                     self.dirty = true;
                 }
@@ -232,7 +250,7 @@ pub struct AccountMenu {
     entries: Vec<(usize, Folder)>,
     dirty: bool,
     name: String,
-
+    cursor: Option<String>,
 }
 
 impl AccountMenu {
@@ -246,7 +264,12 @@ impl AccountMenu {
             entries: entries,
             dirty: true,
             name: account.get_name().to_string(),
+            cursor: None,
         }
+    }
+    fn highlight_folder(&mut self, m: &Mailbox) {
+        self.dirty = true;
+        self.cursor = Some(m.folder.get_name().to_string());
     }
 }
 
@@ -271,8 +294,8 @@ impl Component for AccountMenu {
         }
 
         let mut ind = 0;
-        let mut depth = String::from("");
-        let mut s = String::from(format!("{}\n", self.name));
+        let mut depth = String::from("   ");
+        let mut s = String::from(format!("\n\n  {}\n", self.name));
         fn pop(depth: &mut String) {
             depth.pop();
             depth.pop();
@@ -289,7 +312,7 @@ impl Component for AccountMenu {
 
         fn print(root: usize, parents: &Vec<Option<usize>>, depth: &mut String, entries: &Vec<(usize, Folder)>, mut s: String) -> String {
             let len = s.len();
-            s.insert_str(len, &format!("{}: {}\n", &entries[root].1.get_name(), entries[root].0));
+            s.insert_str(len, &format!("{}: {}\n  ", entries[root].0, &entries[root].1.get_name()));
             let children_no = entries[root].1.get_children().len();
             for (idx, child) in entries[root].1.get_children().iter().enumerate() {
                 let len = s.len();
@@ -306,17 +329,28 @@ impl Component for AccountMenu {
         }
 
         let lines: Vec<&str> = s.lines().collect();
+        let lines_len = lines.len();
         let mut idx = 0;
         for y in get_y(upper_left)..get_y(bottom_right) {
-            if idx == self.entries.len() {
+            if idx == lines_len {
                 break;
             }
-            let s = format!("{}", lines[idx]);
-            write_string_to_grid(&s, grid, Color::Red, Color::Default, set_y(upper_left, y), bottom_right);
+            let s = if idx == lines_len - 2 {
+                format!("{}", lines[idx].replace("├", "└"))
+            } else {
+                format!("{}", lines[idx])
+            };
+            write_string_to_grid(&s, grid, Color::Byte(30), Color::Default, set_y(upper_left, y), bottom_right);
             idx += 1;
         }
     }
-    fn process_event(&mut self, _event: &UIEvent, _queue: &mut VecDeque<UIEvent>) {
-        return;
+    fn process_event(&mut self, event: &UIEvent, _queue: &mut VecDeque<UIEvent>) {
+        match event.event_type {
+            UIEventType::RefreshMailbox(ref m) => {
+                self.highlight_folder(m);
+            },
+            _ => {
+            },
+        }
     }
 }

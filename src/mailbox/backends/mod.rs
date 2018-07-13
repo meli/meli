@@ -19,10 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 pub mod maildir;
+pub mod mbox;
+pub mod imap;
 
 use conf::Folder;
 use mailbox::email::{Envelope, Flag};
 use mailbox::backends::maildir::MaildirType;
+use mailbox::backends::mbox::MboxType;
+use mailbox::backends::imap::ImapType;
 use error::Result;
 use std::fmt;
 
@@ -43,6 +47,8 @@ impl Backends {
             map: FnvHashMap::with_capacity_and_hasher(1, Default::default())
         };
         b.register("maildir".to_string(), Box::new(|| Box::new(MaildirType::new(""))));
+        b.register("mbox".to_string(), Box::new(|| Box::new(MboxType::new(""))));
+        b.register("imap".to_string(), Box::new(|| Box::new(ImapType::new(""))));
         b
     }
 

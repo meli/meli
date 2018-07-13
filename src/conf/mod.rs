@@ -22,6 +22,11 @@
 extern crate config;
 extern crate xdg;
 extern crate serde;
+pub mod pager;
+
+
+use pager::PagerSettings;
+
 
 use std::collections::HashMap;
 use std::io;
@@ -63,9 +68,12 @@ struct FileAccount {
     threaded: bool,
 }
 
+
 #[derive(Debug, Deserialize, Default)]
 struct FileSettings {
     accounts: HashMap<String, FileAccount>,
+    #[serde(default)]
+    pager: PagerSettings,
 }
 
 #[derive(Debug, Clone)]
@@ -89,6 +97,8 @@ impl AccountSettings {
 #[derive(Debug)]
 pub struct Settings {
     pub accounts: HashMap<String, AccountSettings>,
+
+    pub pager: PagerSettings,
 }
 
 
@@ -166,6 +176,6 @@ impl Settings {
             );
         }
 
-        Settings { accounts: s }
+        Settings { accounts: s, pager: fs.pager }
     }
 }

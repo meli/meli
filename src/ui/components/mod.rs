@@ -94,7 +94,7 @@ fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_colo
         if x == (get_x(bottom_right)) {
             x = get_x(upper_left);
             y += 1;
-            if y > (get_y(bottom_right)) {
+            if y == (get_y(bottom_right)) {
                 return x;
             }
         }
@@ -103,8 +103,8 @@ fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_colo
 }
 
 fn clear_area(grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
-    for y in get_y(upper_left)..get_y(bottom_right) {
-        for x in get_x(upper_left)..get_x(bottom_right) {
+    for y in get_y(upper_left)..=get_y(bottom_right) {
+        for x in get_x(upper_left)..=get_x(bottom_right) {
             grid[(x,y)].set_ch(' ');
             grid[(x,y)].set_bg(Color::Default);
             grid[(x,y)].set_fg(Color::Default);
