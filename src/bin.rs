@@ -45,8 +45,6 @@ fn main() {
        */
 
 
-    let set = Settings::new();
-    let backends = Backends::new();
 
     let (sender, receiver): (SyncSender<ThreadEvent>, Receiver<ThreadEvent>) = sync_channel(::std::mem::size_of::<ThreadEvent>());
     {
@@ -54,26 +52,26 @@ fn main() {
         let sender = sender.clone();
         thread::Builder::new().name("input-thread".to_string()).spawn(move || {
             get_events(stdin, move | k| {
-                eprintln!("{:?}: queue is {:?}", Instant::now(), cmd_queue);
+                //eprintln!("{:?}: queue is {:?}", Instant::now(), cmd_queue);
                 let front: Option<(Instant, char)> = cmd_queue.front().map(|v: &(Instant, char)| { v.clone() });
                 let back: Option<(Instant, char)> = cmd_queue.back().map(|v: &(Instant, char)| { v.clone() });
                 let mut push: Option<(Instant, char)> = None;
 
                 if let Key::Char(v) = k  {
                     if v == 'g' {
-                        eprintln!("{:?}: got 'g' in thread",Instant::now());
+                        //eprintln!("{:?}: got 'g' in thread",Instant::now());
                         push = Some((Instant::now(), v));
                     } else if v > '/' && v < ':' {
-                        eprintln!("{:?}: got '{}' in thread", Instant::now(), v);
+                        //eprintln!("{:?}: got '{}' in thread", Instant::now(), v);
                         if let Some((_, 'g')) = front {
-                            eprintln!("{:?}: 'g' is front", Instant::now());
+                            //eprintln!("{:?}: 'g' is front", Instant::now());
                             match back {
                                 Some((i, cmd)) if cmd != 'g' => {
                                     let (i, cmd) = back.unwrap();
                                     let n = cmd as u8;
-                                    eprintln!("{:?}: check for num c={}, n={}", Instant::now(),cmd, n);
+                                    //eprintln!("{:?}: check for num c={}, n={}", Instant::now(),cmd, n);
                                     if n > 0x2f && n < 0x3a {
-                                        eprintln!("{:?}: got a num {}", Instant::now(), cmd);
+                                        //eprintln!("{:?}: got a num {}", Instant::now(), cmd);
                                         let now = Instant::now();
                                         if now - i < Duration::from_millis(300) {
                                             push = Some((now,cmd));
@@ -85,9 +83,9 @@ fn main() {
                                 },
                                 Some((i, cmd)) => {
                                     let n = v as u8;
-                                    eprintln!("{:?}: check for num c={}, n={}", Instant::now(),v, n);
+                                    //eprintln!("{:?}: check for num c={}, n={}", Instant::now(),v, n);
                                     if n > 0x2f && n < 0x3a {
-                                        eprintln!("{:?}: got a num {}", Instant::now(), v);
+                                        //eprintln!("{:?}: got a num {}", Instant::now(), v);
                                         let now = Instant::now();
                                         if now - i < Duration::from_millis(300) {
                                             push = Some((now,v));
@@ -99,7 +97,7 @@ fn main() {
                                         }
                                         s.push(v);
                                         let times = s.parse::<usize>();
-                                        eprintln!("{:?}: parsed {:?}", Instant::now(), times);
+                                        //eprintln!("{:?}: parsed {:?}", Instant::now(), times);
                                         if let Ok(g) = times {
                                             sender.send(ThreadEvent::GoCmd(g)).unwrap();
                                             return;
@@ -124,40 +122,32 @@ fn main() {
             })}).unwrap();
     }
 
-    //let mailbox = Mailbox::new("/home/epilys/Downloads/rust/nutt/Inbox4");
-    let mut j = 0;
+    /*
     let folder_length = set.accounts["test_account"].folders.len();
     let mut account = Account::new("test_account".to_string(), set.accounts["test_account"].clone(), backends);
+    
     {
         let sender = sender.clone();
         account.watch(RefreshEventConsumer::new(Box::new(move |r| {
             sender.send(ThreadEvent::from(r)).unwrap();
         })));
     }
+    */
+    let mut state = State::new(_stdout);
 
-    eprintln!("account is {:?}", account);
-
-
-
-    let mut state = State::new(_stdout, set);
-
-    let menu = Entity {component: Box::new(AccountMenu::new(&account)) };
+    let menu = Entity {component: Box::new(AccountMenu::new(&state.context.accounts)) };
     let listing = MailListing::new(Mailbox::new_dummy());
     let b = Entity { component: Box::new(listing) };
     let window  = Entity { component: Box::new(VSplit::new(menu,b,90)) };
     let status_bar = Entity { component: Box::new(StatusBar::new(window)) };
     state.register_entity(status_bar);
 
-    state.render();
+    let mut idxa = 0;
+    let mut idxm = 0;
     'main: loop {
-        let mailbox = &mut account[j];
-        match *mailbox.as_ref().unwrap() {
-            Ok(ref v) => {
-                state.rcv_event(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox(v.clone()) });
-            },
-            Err(_) => {},
-        };
-
+        state.refresh_mailbox(idxa,idxm);
+        let folder_length = state.context.accounts[idxa].len();
+        state.render();
         state.redraw();
 
         'inner: loop {
@@ -185,12 +175,12 @@ fn main() {
                         Key::Char('q') | Key::Char('Q') => {
                             break 'main;
                         },
-                        Key::Char('J') => if j < folder_length - 1 {
-                            j += 1;
+                        Key::Char('J') => if idxm + 1 < folder_length  {
+                            idxm += 1;
                             break 'inner;
                         },
-                        Key::Char('K') => if j > 0 {
-                            j -= 1;
+                        Key::Char('K') => if idxm > 0 {
+                            idxm -= 1;
                             break 'inner;
                         },
                         Key::Char(k @ 'g') => {

@@ -107,10 +107,17 @@ pub struct UIEvent {
 }
 
 pub struct Context {
+    pub accounts: Vec<Account>,
     settings: Settings,
     queue: VecDeque<UIEvent>,
     /// Areas of the screen that must be redrawn in the next render
     dirty_areas: VecDeque<Area>,
+    backends: Backends,
+
+}
+
+impl Context {
+    
 
 }
 
@@ -121,18 +128,22 @@ pub struct State<W: Write> {
     grid: CellBuffer,
     stdout: termion::raw::RawTerminal<W>,
     entities: Vec<Entity>,
-    context: Context,
+    pub context: Context,
 }
 
 impl<W: Write> Drop for State<W> {
     fn drop(&mut self) {
         // When done, restore the defaults to avoid messing with the terminal.
         write!(self.stdout, "{}{}{}{}", clear::All, style::Reset, cursor::Goto(1, 1), cursor::Show).unwrap();
+        self.stdout.flush().unwrap();
     }
 }
 
 impl<W: Write> State<W> {
-    pub fn new(stdout: W, settings: Settings) -> Self {
+    pub fn new(stdout: W) -> Self {
+        let settings = Settings::new();
+        let backends = Backends::new();
+
         let termsize = termion::terminal_size().ok();
         let termcols = termsize.map(|(w,_)| w);
         let termrows = termsize.map(|(_,h)| h);
@@ -146,12 +157,15 @@ impl<W: Write> State<W> {
             entities: Vec::with_capacity(1),
 
             context: Context {
+                accounts: settings.accounts.iter().map(|(n, a_s)| { Account::new(n.to_string(), a_s.clone(), &backends) }).collect(),
+                backends: backends,
                 settings: settings,
                 queue: VecDeque::with_capacity(5),
                 dirty_areas: VecDeque::with_capacity(5),
             },
         };
         write!(s.stdout, "{}{}{}", cursor::Hide, clear::All, cursor::Goto(1,1)).unwrap();
+        s.stdout.flush().unwrap();
         s
     }
     fn update_size(&mut self) {
@@ -173,7 +187,7 @@ impl<W: Write> State<W> {
             self.draw_entity(i);
         }
         let areas: Vec<Area> = self.context.dirty_areas.drain(0..).collect();
-        /* draw each entity */
+        /* draw each dirty area */
         for a in areas {
             self.draw_area(a);
         }
@@ -239,6 +253,18 @@ impl<W: Write> State<W> {
         /* inform each entity */ for i in 0..self.entities.len() {
             self.entities[i].rcv_event(&event, &mut self.context);
         }
+    }
+    /// Tries to load a mailbox's content
+    pub fn refresh_mailbox(&mut self, account_idx: usize, folder_idx: usize) {
+        let mailbox = match &mut self.context.accounts[account_idx][folder_idx] {
+                Some(Ok(v)) => { Some(v.clone()) },
+                Some(Err(e)) => { eprintln!("error {:?}", e); None },
+                None => {  eprintln!("None"); None },
+        };
+        if let Some(m) = mailbox {
+            self.rcv_event(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox(m) });
+        }
+
     }
 }
 

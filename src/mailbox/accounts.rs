@@ -37,7 +37,7 @@ pub struct Account {
 
 
 impl Account {
-    pub fn new(name: String, settings: AccountSettings, backends: Backends) -> Self {
+    pub fn new(name: String, settings: AccountSettings, backends: &Backends) -> Self {
         eprintln!("new acc");
         let sent_folder = settings
             .folders
