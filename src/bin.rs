@@ -144,11 +144,11 @@ fn main() {
 
     let mut idxa = 0;
     let mut idxm = 0;
+    let account_length = state.context.accounts.len();
     'main: loop {
         state.refresh_mailbox(idxa,idxm);
         let folder_length = state.context.accounts[idxa].len();
         state.render();
-        state.redraw();
 
         'inner: loop {
             match receiver.recv().unwrap() {
@@ -183,7 +183,19 @@ fn main() {
                             idxm -= 1;
                             break 'inner;
                         },
-                        Key::Char(k @ 'g') => {
+                        Key::Char('l') => if idxa + 1 < account_length  {
+                            idxa += 1;
+                            idxm = 0;
+                            break 'inner;
+                        },
+                        Key::Char('h') => if idxa > 0 {
+                            idxa -= 1;
+                            idxm = 0;
+                            break 'inner;
+                        },
+                        Key::Char('r') => {
+                            state.update_size();
+                            state.render();
                         },
                         Key::Char(v) if v > '/' && v < ':' => {
                         },

@@ -285,7 +285,11 @@ impl Component for MailListing {
                     grid[(x, mid+5)].set_fg(Color::Default);
                 }
             }
-            context.dirty_areas.push_back((set_y(upper_left, mid), set_y(bottom_right, mid+5)));
+            clear_area(grid,
+                       (set_y(upper_left, mid+headers_rows), set_y(bottom_right, mid+headers_rows)));
+
+
+            context.dirty_areas.push_back((set_y(upper_left, mid), set_y(bottom_right, mid+headers_rows)));
 
             /* Draw body */
             self.draw_mail_view(grid,
@@ -398,37 +402,33 @@ impl AccountMenu {
             }
         }
 
-        let mut ind = 0;
-        let mut depth = String::from("   ");
+        let mut inc = 0;
+        let mut depth = String::from("");
         let mut s = String::from(format!("\n\n  {}\n", a.name));
         fn pop(depth: &mut String) {
-            depth.pop();
-            depth.pop();
             depth.pop();
             depth.pop();
         }
 
         fn push(depth: &mut String, c: char) {
-            depth.push(' ');
             depth.push(c);
-            depth.push(' ');
-            depth.push(' ');
         }
 
-        fn print(root: usize, parents: &Vec<Option<usize>>, depth: &mut String, entries: &Vec<(usize, Folder)>, s: &mut String) -> () {
+        fn print(root: usize, parents: &Vec<Option<usize>>, depth: &mut String, entries: &Vec<(usize, Folder)>, s: &mut String, inc: &mut usize) -> () {
             let len = s.len();
-            s.insert_str(len, &format!("{}: {}\n  ", entries[root].0, &entries[root].1.get_name()));
+            s.insert_str(len, &format!("{} {}\n  ", *inc,  &entries[root].1.get_name()));
+            *inc += 1;
             let children_no = entries[root].1.get_children().len();
             for (idx, child) in entries[root].1.get_children().iter().enumerate() {
                 let len = s.len();
                 s.insert_str(len, &format!("{}├─", depth));
                 push(depth, if idx == children_no - 1 {'│'} else { ' ' });
-                print(*child, parents, depth, entries, s);
+                print(*child, parents, depth, entries, s, inc);
                 pop(depth);
             }
         }
         for r in roots {
-            print(r, &parents, &mut depth, &a.entries, &mut s);
+            print(r, &parents, &mut depth, &a.entries, &mut s, &mut inc);
 
         }
 

@@ -168,7 +168,7 @@ impl<W: Write> State<W> {
         s.stdout.flush().unwrap();
         s
     }
-    fn update_size(&mut self) {
+    pub fn update_size(&mut self) {
         /* update dimensions. TODO: Only do that in size change events. ie SIGWINCH */
         let termsize = termion::terminal_size().ok();
         let termcols = termsize.map(|(w,_)| w);
