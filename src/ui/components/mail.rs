@@ -153,13 +153,7 @@ impl MailListing {
 
     /// Create a pager for the `Envelope` currently under the cursor.
     fn draw_mail_view(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-
         let envelope: &Envelope = &self.mailbox.collection[self.cursor_pos];
-
-        let rows = get_y(bottom_right) - get_y(upper_left);
-        let cols = get_x(bottom_right) - get_x(upper_left);
 
         self.pager = Some(Pager::new(envelope));
         self.pager.as_mut().map(|p| p.draw(grid, area, context));
@@ -169,13 +163,11 @@ impl MailListing {
 impl Component for MailListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.unfocused {
-            if !self.dirty {
+            if !self.is_dirty() {
                 return;
             }
             self.dirty = false;
             /* Draw the entire list */
-            let upper_left = upper_left!(area);
-            let bottom_right = bottom_right!(area);
             self.draw_list(grid,
                            area,
                            context);
@@ -202,7 +194,7 @@ impl Component for MailListing {
             }
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
 
-            if !self.dirty {
+            if !self.is_dirty() {
                 if let Some(ref mut p) = self.pager {
                     p.draw(grid,
                            ((get_x(upper_left), get_y(upper_left) +  mid + headers_rows + 1), bottom_right),
@@ -331,6 +323,9 @@ impl Component for MailListing {
                 self.dirty = true;
                 self.pager = None;
             },
+            UIEventType::ChangeMode(UIMode::Normal) => {
+                self.dirty = true;
+            },
             _ => {
             },
         }
@@ -360,7 +355,7 @@ pub struct AccountMenu {
 
 impl AccountMenu {
     pub fn new(accounts: &Vec<Account>) -> Self {
-        let mut accounts = accounts.iter().enumerate().map(|(i, a)| { 
+        let accounts = accounts.iter().enumerate().map(|(i, a)| { 
             AccountMenuEntry {
                 name: a.get_name().to_string(),
                 index: i,
@@ -458,9 +453,10 @@ impl AccountMenu {
 
 impl Component for AccountMenu {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !(self.dirty) {
+        if !self.is_dirty() {
             return;
         }
+        clear_area(grid, area);
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         self.dirty = false;
@@ -478,6 +474,9 @@ impl Component for AccountMenu {
         match event.event_type {
             UIEventType::RefreshMailbox(ref m) => {
                 self.highlight_folder(m);
+            },
+            UIEventType::ChangeMode(UIMode::Normal) => {
+                self.dirty = true;
             },
             _ => {
             },

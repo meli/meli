@@ -29,6 +29,8 @@ extern crate ncurses;
 extern crate melib;
 
 use std::collections::VecDeque;
+use std::fmt;
+
 pub use self::position::*;
 
 /* Color pairs; foreground && background. */
@@ -57,7 +59,6 @@ pub enum ThreadEvent {
   /// A watched folder has been refreshed.
   RefreshMailbox{ name: String },
   UIEventType(UIEventType),
-  GoCmd(usize),
   //Decode { _ }, // For gpg2 signature check
 }
 
@@ -93,10 +94,12 @@ pub use self::components::*;
 #[derive(Debug)]
 pub enum UIEventType {
     Input(Key),
+    ExInput(Key),
     RefreshMailbox(Mailbox),
     //Quit?
     Resize,
     ChangeMailbox(usize),
+    ChangeMode(UIMode),
 }
 
 
@@ -106,19 +109,27 @@ pub struct UIEvent {
    pub event_type: UIEventType,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum UIMode {
+    Normal,
+    Execute,
+}
+
+impl fmt::Display for UIMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", match *self {
+            UIMode::Normal => { "NORMAL" },
+            UIMode::Execute => { "EX" },
+        })
+    }
+}
+
 pub struct Context {
     pub accounts: Vec<Account>,
     settings: Settings,
-    queue: VecDeque<UIEvent>,
     /// Areas of the screen that must be redrawn in the next render
     dirty_areas: VecDeque<Area>,
     backends: Backends,
-
-}
-
-impl Context {
-    
-
 }
 
 pub struct State<W: Write> {
@@ -160,7 +171,6 @@ impl<W: Write> State<W> {
                 accounts: settings.accounts.iter().map(|(n, a_s)| { Account::new(n.to_string(), a_s.clone(), &backends) }).collect(),
                 backends: backends,
                 settings: settings,
-                queue: VecDeque::with_capacity(5),
                 dirty_areas: VecDeque::with_capacity(5),
             },
         };
@@ -187,6 +197,7 @@ impl<W: Write> State<W> {
             self.draw_entity(i);
         }
         let areas: Vec<Area> = self.context.dirty_areas.drain(0..).collect();
+        eprintln!("redrawing {} areas", areas.len());
         /* draw each dirty area */
         for a in areas {
             self.draw_area(a);
@@ -202,17 +213,17 @@ impl<W: Write> State<W> {
                 let c = self.grid[(x,y)];
 
                 if c.get_bg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Bg(c.get_bg().as_termion()));
+                    write!(self.stdout, "{}", termion::color::Bg(c.get_bg().as_termion())).unwrap();
                 }
                 if c.get_fg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Fg(c.get_fg().as_termion()));
+                    write!(self.stdout, "{}", termion::color::Fg(c.get_fg().as_termion())).unwrap();
                 }
                 write!(self.stdout, "{}",c.ch()).unwrap();
                 if c.get_bg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Bg(termion::color::Reset));
+                    write!(self.stdout, "{}", termion::color::Bg(termion::color::Reset)).unwrap();
                 }
                 if c.get_fg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Fg(termion::color::Reset));
+                    write!(self.stdout, "{}", termion::color::Fg(termion::color::Reset)).unwrap();
                 }
 
             }
@@ -229,9 +240,7 @@ impl<W: Write> State<W> {
         let cols = self.cols;
         let rows = self.rows;
 
-        /* Only draw dirty areas */
         self.draw_area(((0, 0), (cols-1, rows-1)));
-        return;
     }
     pub fn draw_entity(&mut self, idx: usize) {
         let entity = &mut self.entities[idx];
