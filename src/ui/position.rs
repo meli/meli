@@ -18,7 +18,12 @@ pub fn set_y(p: Pos, new_y: usize) -> Pos {
     (p.0, new_y)
 }
 
+pub type Area = (Pos, Pos);
 
+#[macro_export]
+macro_rules! upper_left { ($a:expr) => ( $a.0 ) }
+#[macro_export]
+macro_rules! bottom_right { ($a:expr) => ( $a.1 ) }
 
 /// A `(cols, rows)` size.
 pub type Size = (usize, usize);

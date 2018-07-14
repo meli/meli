@@ -141,11 +141,12 @@ fn main() {
 
     let mut state = State::new(_stdout, set);
 
-    let a = Entity {component: Box::new(AccountMenu::new(&account)) };
+    let menu = Entity {component: Box::new(AccountMenu::new(&account)) };
     let listing = MailListing::new(Mailbox::new_dummy());
     let b = Entity { component: Box::new(listing) };
-    let window  = Entity { component: Box::new(VSplit::new(a,b,90)) };
-    state.register_entity(window);
+    let window  = Entity { component: Box::new(VSplit::new(menu,b,90)) };
+    let status_bar = Entity { component: Box::new(StatusBar::new(window)) };
+    state.register_entity(status_bar);
 
     state.render();
     'main: loop {
@@ -157,7 +158,7 @@ fn main() {
             Err(_) => {},
         };
 
-        state.render();
+        state.redraw();
 
         'inner: loop {
             match receiver.recv().unwrap() {
@@ -165,19 +166,19 @@ fn main() {
                     match k {
                         key @ Key::Char('j') | key @ Key::Char('k') => {
                             state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
-                            state.render();
+                            state.redraw();
                         },
                         key @ Key::Up | key @ Key::Down => {
                             state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
-                            state.render();
+                            state.redraw();
                         }
                         Key::Char('\n') => {
                             state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(Key::Char('\n'))});
-                            state.render();
+                            state.redraw();
                         }
                         Key::Char('i') | Key::Esc => {
                             state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(Key::Esc)});
-                            state.render();
+                            state.redraw();
                         }
                         Key::F(_) => {
                         },
@@ -210,15 +211,6 @@ fn main() {
                     eprintln!("got go cmd with {:?}", v);
                 },
             }
-            /*
-               if let Some((inst, 'g')) = cmd_queue.front() {
-               eprintln!("g at front");
-               if (Instant::now - inst >= Duration::from_millis(300)) {
-
-               }
-
-               }
-               */
         }
     }
 }

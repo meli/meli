@@ -5,7 +5,9 @@ pub struct BoxPanel {
 }
 
 impl Component for BoxPanel {
-    fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
         grid[upper_left].set_ch('u');
         grid[bottom_right].set_ch('b');
         let width = get_x(bottom_right) - get_x(upper_left);
@@ -24,7 +26,7 @@ impl Component for BoxPanel {
             grid[(i, get_y(upper_left) + height)].set_ch('─');
         }
     }
-    fn process_event(&mut self, _event: &UIEvent, _queue: &mut VecDeque<UIEvent>) {
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {
         return;
     }
 }
@@ -48,7 +50,9 @@ impl HSplit {
 
 
 impl Component for HSplit {
-    fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
         let total_rows = get_y(bottom_right) - get_y(upper_left);
         let bottom_entity_height = (self.ratio*total_rows )/100;
         let mid = get_y(upper_left) + total_rows - bottom_entity_height;
@@ -56,13 +60,20 @@ impl Component for HSplit {
         for i in get_x(upper_left)..=get_x(bottom_right) {
             grid[(i, mid)].set_ch('─');
         }
-        let _ = self.top.component.draw(grid, upper_left, (get_x(bottom_right), get_y(upper_left) + mid-1));
-        let _ = self.bottom.component.draw(grid, (get_x(upper_left), get_y(upper_left) + mid), bottom_right);
+        let _ = self.top.component.draw(grid,
+                                       (upper_left, (get_x(bottom_right), get_y(upper_left) + mid-1)),
+                                       context);
+        let _ = self.bottom.component.draw(grid,
+                                           ((get_x(upper_left), get_y(upper_left) + mid), bottom_right),
+                                           context);
         grid[bottom_right].set_ch('b');
     }
-    fn process_event(&mut self, event: &UIEvent, queue: &mut VecDeque<UIEvent>) {
-        self.top.rcv_event(event, queue);
-        self.bottom.rcv_event(event, queue);
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+        self.top.rcv_event(event, context);
+        self.bottom.rcv_event(event, context);
+    }
+    fn is_dirty(&self) -> bool {
+       self.top.component.is_dirty() || self.bottom.component.is_dirty()
     }
 }
 
@@ -86,7 +97,9 @@ impl VSplit {
 
 
 impl Component for VSplit {
-    fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
         let total_cols = get_x(bottom_right) - get_x(upper_left);
         let right_entity_width = (self.ratio*total_cols )/100;
         let mid = get_x(bottom_right) - right_entity_width;
@@ -101,7 +114,7 @@ impl Component for VSplit {
             }
         }
 
-        for i in get_y(upper_left)..get_y(bottom_right) {
+        for i in get_y(upper_left)..=get_y(bottom_right) {
             grid[(mid, i)].set_ch(VERT_BOUNDARY);
         }
         if get_y(bottom_right)> 1 {
@@ -113,12 +126,19 @@ impl Component for VSplit {
                 _ => {},
             }
         }
-        let _ = self.left.component.draw(grid, upper_left, (mid-1, get_y(bottom_right)));
-        let _ = self.right.component.draw(grid, (mid+1, get_y(upper_left)), bottom_right);
+        let _ = self.left.component.draw(grid,
+                                         (upper_left, (mid-1, get_y(bottom_right))),
+                                         context);
+        let _ = self.right.component.draw(grid,
+                                          ((mid+1, get_y(upper_left)), bottom_right),
+                                          context);
     }
-    fn process_event(&mut self, event: &UIEvent, queue: &mut VecDeque<UIEvent>) {
-        self.left.rcv_event(event, queue);
-        self.right.rcv_event(event, queue);
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+        self.left.rcv_event(event, context);
+        self.right.rcv_event(event, context);
+    }
+    fn is_dirty(&self) -> bool {
+       self.left.component.is_dirty() || self.right.component.is_dirty()
     }
 }
 
@@ -136,7 +156,9 @@ impl TextBox {
 }
 
 impl Component for TextBox {
-    fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
         let mut x = get_x(upper_left);
         let y = get_y(upper_left);
         for c in self.content.chars() {
@@ -151,7 +173,7 @@ impl Component for TextBox {
             }
         }
     }
-    fn process_event(&mut self, _event: &UIEvent, _queue: &mut VecDeque<UIEvent>) {
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {
         return;
     }
 }
@@ -161,27 +183,31 @@ impl Component for TextBox {
 /// current view of the text. It is responsible for scrolling etc.
 pub struct Pager {
     cursor_pos: usize,
+    lines_no: usize,
     rows: usize,
     cols: usize,
-    height: usize,
-    pub dirty: bool,
+    dirty: bool,
     content: CellBuffer,
 }
 
 impl Pager {
-    pub fn new(mail: &Envelope, height: usize, width: usize) -> Self {
+    pub fn new(mail: &Envelope, rows: usize, cols: usize) -> Self {
         let text = mail.get_body().get_text();
         let lines: Vec<&str> = text.trim().split('\n').collect();
-        let rows = lines.len();
-        let mut content = CellBuffer::new(width, rows, Cell::with_char(' '));
+        let lines_no = lines.len();
+        let mut content = CellBuffer::new(cols, rows, Cell::with_char(' '));
         for (i, l) in lines.iter().enumerate() {
-            write_string_to_grid(l, &mut content, Color::Default, Color::Default, (0,i), (width-1, rows-1));
+            write_string_to_grid(l,
+                                 &mut content,
+                                 Color::Default,
+                                 Color::Default,
+                                 ((0, i), (cols-1, rows-1)));
         }
         Pager {
             cursor_pos: 0,
+            lines_no: lines_no,
             rows: rows,
-            height: height,
-            cols: width,
+            cols: cols,
             dirty: true,
             content: content,
         }
@@ -189,32 +215,44 @@ impl Pager {
 }
 
 impl Component for Pager {
-    fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.dirty {
             return;
         }
-        clear_area(grid, (get_x(upper_left), get_y(upper_left)-1), bottom_right);
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        clear_area(grid,
+                   ((get_x(upper_left), get_y(upper_left)-1), bottom_right));
+        context.dirty_areas.push_back(((get_x(upper_left), get_y(upper_left)-1), bottom_right));
+
+        if self.lines_no == 0 {
+            return;
+        }
+
+        let pager_context = context.settings.pager.pager_context;
+        let rows = get_y(bottom_right) - get_y(upper_left);
+        let page_length = rows / self.lines_no;
         self.dirty = false;
         let mut inner_x = 0;
         let mut inner_y = self.cursor_pos;
 
-        //if self.cursor_pos < self.rows && self.rows - self.cursor_pos > self.height {
-            for y in get_y(upper_left)..get_y(bottom_right) {
-                'for_x: for x in get_x(upper_left)..get_x(bottom_right) {
-                    if inner_x == self.cols {
-                        break 'for_x;
-                    }
-                    grid[(x,y)] = self.content[(inner_x, inner_y)];
-                    inner_x += 1;
+        for y in get_y(upper_left)..=get_y(bottom_right) {
+            'for_x: for x in get_x(upper_left)..=get_x(bottom_right) {
+                if inner_x == self.cols {
+                    break 'for_x;
                 }
-                inner_y += 1;
-                inner_x = 0;
-                if inner_y == self.rows {
-                    break;
-                }
+                grid[(x,y)] = self.content[(inner_x, inner_y)];
+                inner_x += 1;
             }
+            inner_y += 1;
+            inner_x = 0;
+            if inner_y == self.rows {
+                break;
+            }
+        }
+                context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &UIEvent, _queue: &mut VecDeque<UIEvent>) {
+    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
         match event.event_type {
             UIEventType::Input(Key::Char('k')) => {
                 if self.cursor_pos > 0 {
@@ -232,5 +270,70 @@ impl Component for Pager {
             },
         }
     }
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
 }
 
+/// Status bar.
+pub struct StatusBar {
+    container: Entity,
+    position: usize,
+    status: String,
+    dirty: bool,
+}
+
+impl StatusBar {
+    pub fn new(container: Entity) -> Self {
+        StatusBar {
+            container: container,
+            position: 0,
+            status: String::with_capacity(250),
+            dirty: true,
+        }
+    }
+    fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !self.dirty {
+            return;
+        }
+        self.dirty = false;
+        clear_area(grid, area);
+        let x = write_string_to_grid(&self.status,
+                             grid,
+                             Color::Byte(36),
+                             Color::Default,
+                             area);
+        context.dirty_areas.push_back(area);
+    }
+}
+
+
+impl Component for StatusBar {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        let total_rows = get_y(bottom_right) - get_y(upper_left);
+        if total_rows == 0 {
+            return;
+        }
+
+        let _ = self.container.component.draw(grid,
+                                              (upper_left, (get_x(bottom_right), get_y(bottom_right)-1)),
+                                              context);
+        self.draw_status_bar(grid, (set_y(upper_left, get_y(bottom_right)), bottom_right), context);
+    }
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+        self.container.rcv_event(event, context);
+        match event.event_type {
+            UIEventType::RefreshMailbox(ref m) => {
+                self.status = format!("Mailbox: {}, Messages: {}, New: {}", m.folder.get_name(), m.collection.len(), m.collection.iter().filter(|e| !e.is_seen()).count());
+                self.dirty = true;
+
+            },
+            _ => {},
+        }
+    }
+    fn is_dirty(&self) -> bool {
+        self.dirty || self.container.component.is_dirty()
+    }
+}

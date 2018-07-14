@@ -21,8 +21,8 @@
 
 pub mod utilities;
 pub mod mail;
-use super::*;
 
+use super::*;
 pub use utilities::*;
 pub use mail::*;
 
@@ -30,7 +30,7 @@ use std::fmt;
 
 
 use super::cells::{Color, CellBuffer};
-use super::position::Pos;
+use super::position::{Area, };
 use super::{UIEvent, UIEventType, Key};
 
 /// The upper and lower boundary char.
@@ -58,14 +58,14 @@ const LIGHT_UP_AND_HORIZONTAL: char = '┴';
 /// `Entity` is a container for Components. Totally useless now so if it is not useful in the
 /// future (ie hold some information, id or state) it should be removed.
 pub struct Entity {
-    //queue: VecDeque,
+    //context: VecDeque,
     pub component: Box<Component>, // more than one?
 }
 
 impl Entity {
     /// Pass events to child component.
-    pub fn rcv_event(&mut self, event: &UIEvent, queue: &mut VecDeque<UIEvent>) {
-        self.component.process_event(&event, queue);
+    pub fn rcv_event(&mut self, event: &UIEvent, context: &mut Context) {
+        self.component.process_event(&event, context);
     }
 }
 
@@ -79,22 +79,30 @@ impl fmt::Debug for Entity {
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
 /// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
 pub trait Component {
-    fn draw(&mut self, grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos);
-    fn process_event(&mut self, event: &UIEvent, queue: &mut VecDeque<UIEvent>);
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context);
+    fn is_dirty(&self) -> bool {
+        true
+    }
 }
 
 
-fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_color: Color,  upper_left: Pos, bottom_right: Pos) -> usize {
+fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_color: Color, area: Area) -> usize {
+    let upper_left = upper_left!(area);
+    let bottom_right = bottom_right!(area);
     let (mut x, mut y) = upper_left;
+    if y > (get_y(bottom_right)) || x > get_x(bottom_right) {
+        return 0;
+    }
     for c in s.chars() {
         grid[(x,y)].set_ch(c);
         grid[(x,y)].set_fg(fg_color);
         grid[(x,y)].set_bg(bg_color);
         x += 1;
-        if x == (get_x(bottom_right)) {
+        if x == (get_x(bottom_right))+1 {
             x = get_x(upper_left);
             y += 1;
-            if y == (get_y(bottom_right)) {
+            if y == (get_y(bottom_right))+1 {
                 return x;
             }
         }
@@ -102,7 +110,9 @@ fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_colo
     x
 }
 
-fn clear_area(grid: &mut CellBuffer, upper_left: Pos, bottom_right: Pos) {
+fn clear_area(grid: &mut CellBuffer, area: Area) {
+    let upper_left = upper_left!(area);
+    let bottom_right = bottom_right!(area);
     for y in get_y(upper_left)..=get_y(bottom_right) {
         for x in get_x(upper_left)..=get_x(bottom_right) {
             grid[(x,y)].set_ch(' ');

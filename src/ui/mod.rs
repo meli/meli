@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-pub mod components;
+#[macro_use]
 pub mod position;
+pub mod components;
 pub mod cells;
 
 extern crate termion;
@@ -28,6 +29,7 @@ extern crate ncurses;
 extern crate melib;
 
 use std::collections::VecDeque;
+pub use self::position::*;
 
 /* Color pairs; foreground && background. */
 /// Default color.
@@ -87,7 +89,6 @@ use termion::input::TermRead;
 
 use self::cells::*;
 pub use self::components::*;
-pub use self::position::*;
 
 #[derive(Debug)]
 pub enum UIEventType {
@@ -105,6 +106,14 @@ pub struct UIEvent {
    pub event_type: UIEventType,
 }
 
+pub struct Context {
+    settings: Settings,
+    queue: VecDeque<UIEvent>,
+    /// Areas of the screen that must be redrawn in the next render
+    dirty_areas: VecDeque<Area>,
+
+}
+
 pub struct State<W: Write> {
     cols: usize,
     rows: usize,
@@ -112,8 +121,7 @@ pub struct State<W: Write> {
     grid: CellBuffer,
     stdout: termion::raw::RawTerminal<W>,
     entities: Vec<Entity>,
-    settings: Settings,
-
+    context: Context,
 }
 
 impl<W: Write> Drop for State<W> {
@@ -133,12 +141,15 @@ impl<W: Write> State<W> {
         let mut s = State {
             cols: cols,
             rows: rows,
-            //queue: VecDeque::new();
-
             grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
             stdout: stdout.into_raw_mode().unwrap(),
             entities: Vec::with_capacity(1),
-            settings: settings,
+
+            context: Context {
+                settings: settings,
+                queue: VecDeque::with_capacity(5),
+                dirty_areas: VecDeque::with_capacity(5),
+            },
         };
         write!(s.stdout, "{}{}{}", cursor::Hide, clear::All, cursor::Goto(1,1)).unwrap();
         s
@@ -157,17 +168,23 @@ impl<W: Write> State<W> {
         self.grid.resize(self.cols, self.rows, Cell::with_char(' '));
     }
 
-    pub fn render(&mut self) {
-        self.update_size();
-
-        /* draw each entity */ for i in 0..self.entities.len() {
+    pub fn redraw(&mut self) {
+        for i in 0..self.entities.len() {
             self.draw_entity(i);
         }
+        let areas: Vec<Area> = self.context.dirty_areas.drain(0..).collect();
+        /* draw each entity */
+        for a in areas {
+            self.draw_area(a);
+        }
+    }
+    fn draw_area(&mut self, area: Area) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
 
-        /* Only draw dirty areas */
-        for y in 0..self.rows {
-            write!(self.stdout, "{}", cursor::Goto(1,(y+1) as u16)).unwrap();
-            for x in 0..self.cols {
+        for y in get_y(upper_left)..=get_y(bottom_right) {
+            write!(self.stdout, "{}", cursor::Goto(get_x(upper_left) as u16 + 1,(y+1) as u16)).unwrap();
+            for x in get_x(upper_left)..=get_x(bottom_right) {
                 let c = self.grid[(x,y)];
 
                 if c.get_bg() != cells::Color::Default {
@@ -188,22 +205,39 @@ impl<W: Write> State<W> {
         }
         self.stdout.flush().unwrap();
     }
+    pub fn render(&mut self) {
+        self.update_size();
+
+        /* draw each entity */
+        for i in 0..self.entities.len() {
+            self.draw_entity(i);
+        }
+        let cols = self.cols;
+        let rows = self.rows;
+
+        /* Only draw dirty areas */
+        self.draw_area(((0, 0), (cols-1, rows-1)));
+        return;
+    }
     pub fn draw_entity(&mut self, idx: usize) {
-        let ref mut entity = self.entities[idx];
+        let entity = &mut self.entities[idx];
         let upper_left =  (0,0);
         let bottom_right = (self.cols-1, self.rows-1);
 
-        entity.component.draw(&mut self.grid, upper_left, bottom_right);
+        if entity.component.is_dirty() {
+            entity.component.draw(&mut self.grid,
+                                  (upper_left, bottom_right),
+                                  &mut self.context);
+        }
     }
     pub fn register_entity(&mut self, entity: Entity) {
         self.entities.push(entity);
     }
 
     pub fn rcv_event(&mut self, event: UIEvent) {
-        /* pass a queue for replies */
-            let mut queue : VecDeque<UIEvent> = VecDeque::new(); 
+        /* pass Context */
         /* inform each entity */ for i in 0..self.entities.len() {
-            self.entities[i].rcv_event(&event, &mut queue);
+            self.entities[i].rcv_event(&event, &mut self.context);
         }
     }
 }
