@@ -88,10 +88,12 @@ pub trait Component {
 
 
 fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_color: Color, area: Area) -> usize {
+    let bounds = grid.size();
     let upper_left = upper_left!(area);
     let bottom_right = bottom_right!(area);
     let (mut x, mut y) = upper_left;
-    if y > (get_y(bottom_right)) || x > get_x(bottom_right) {
+    if y > (get_y(bottom_right)) || x > get_x(bottom_right) ||
+       y > get_y(bounds) || x > get_x(bounds) {
         return 0;
     }
     for c in s.chars() {
@@ -99,10 +101,11 @@ fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_colo
         grid[(x,y)].set_fg(fg_color);
         grid[(x,y)].set_bg(bg_color);
         x += 1;
-        if x == (get_x(bottom_right))+1 {
+
+        if x == (get_x(bottom_right))+1 || x > get_x(bounds) {
             x = get_x(upper_left);
             y += 1;
-            if y == (get_y(bottom_right))+1 {
+            if y == (get_y(bottom_right))+1 || y > get_y(bounds) {
                 return x;
             }
         }

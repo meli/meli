@@ -156,12 +156,12 @@ impl MailListing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        let ref mail = self.mailbox.collection[self.cursor_pos];
+        let envelope: &Envelope = &self.mailbox.collection[self.cursor_pos];
 
         let rows = get_y(bottom_right) - get_y(upper_left);
         let cols = get_x(bottom_right) - get_x(upper_left);
 
-        self.pager = Some(Pager::new(mail, rows, cols));
+        self.pager = Some(Pager::new(envelope));
         self.pager.as_mut().map(|p| p.draw(grid, area, context));
     }
 }
@@ -186,16 +186,26 @@ impl Component for MailListing {
                 clear_area(grid, area);
                 context.dirty_areas.push_back(area);
             }
+            let headers_rows: usize = 6;
             /* Render the mail body in a pager, basically copy what HSplit does */
             let total_rows = get_y(bottom_right) - get_y(upper_left);
             /* TODO: define ratio in Configuration file */
-            let bottom_entity_rows = (80*total_rows )/100;
+            let pager_ratio = context.settings.pager.pager_ratio;
+            let mut bottom_entity_rows = (pager_ratio*total_rows )/100;
+            if bottom_entity_rows < headers_rows + 2 {
+                bottom_entity_rows = headers_rows + 2;
+            }
+            if bottom_entity_rows > total_rows {
+                clear_area(grid, area);
+                context.dirty_areas.push_back(area);
+                return;
+            }
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
 
             if !self.dirty {
                 if let Some(ref mut p) = self.pager {
                     p.draw(grid,
-                           ((get_x(upper_left), get_y(upper_left) +  mid+6), bottom_right),
+                           ((get_x(upper_left), get_y(upper_left) +  mid + headers_rows + 1), bottom_right),
                            context);
                 }
                 return;
@@ -215,12 +225,11 @@ impl Component for MailListing {
                     }
                 }
 
-                for i in get_x(upper_left)..get_x(bottom_right) {
+                for i in get_x(upper_left)..=get_x(bottom_right) {
                     grid[(i, mid)].set_ch('─');
                 }
             }
 
-            let headers_rows: usize = 6;
             /* Draw header */
             {
                 let ref mail = self.mailbox.collection[self.cursor_pos];
@@ -231,7 +240,7 @@ impl Component for MailListing {
                                              Color::Byte(33),
                                              Color::Default,
                                              (set_y(upper_left, mid+1), set_y(bottom_right, mid+1)));
-                for x in x..get_x(bottom_right) {
+                for x in x..=get_x(bottom_right) {
                     grid[(x, mid+1)].set_ch(' ');
                     grid[(x, mid+1)].set_bg(Color::Default);
                     grid[(x, mid+1)].set_fg(Color::Default);
@@ -241,7 +250,7 @@ impl Component for MailListing {
                                                       Color::Byte(33),
                                                       Color::Default,
                                                       (set_y(upper_left, mid+2), set_y(bottom_right, mid+2)));
-                for x in x..get_x(bottom_right) {
+                for x in x..=get_x(bottom_right) {
                     grid[(x, mid+2)].set_ch(' ');
                     grid[(x, mid+2)].set_bg(Color::Default);
                     grid[(x, mid+2)].set_fg(Color::Default);
@@ -251,7 +260,7 @@ impl Component for MailListing {
                                                       Color::Byte(33),
                                                       Color::Default,
                                                       (set_y(upper_left, mid+3), set_y(bottom_right, mid+3)));
-                for x in x..get_x(bottom_right) {
+                for x in x..=get_x(bottom_right) {
                     grid[(x, mid+3)].set_ch(' ');
                     grid[(x, mid+3)].set_bg(Color::Default);
                     grid[(x, mid+3)].set_fg(Color::Default);
@@ -261,7 +270,7 @@ impl Component for MailListing {
                                                       Color::Byte(33),
                                                       Color::Default,
                                                       (set_y(upper_left, mid+4), set_y(bottom_right, mid+4)));
-                for x in x..get_x(bottom_right) {
+                for x in x..=get_x(bottom_right) {
                     grid[(x, mid+4)].set_ch(' ');
                     grid[(x, mid+4)].set_bg(Color::Default);
                     grid[(x, mid+4)].set_fg(Color::Default);
@@ -271,7 +280,7 @@ impl Component for MailListing {
                                                       Color::Byte(33),
                                                       Color::Default,
                                                       (set_y(upper_left, mid+5), set_y(bottom_right, mid+5)));
-                for x in x..get_x(bottom_right) {
+                for x in x..=get_x(bottom_right) {
                     grid[(x, mid+5)].set_ch(' ');
                     grid[(x, mid+5)].set_bg(Color::Default);
                     grid[(x, mid+5)].set_fg(Color::Default);
@@ -281,7 +290,7 @@ impl Component for MailListing {
 
             /* Draw body */
             self.draw_mail_view(grid,
-                                ((get_x(upper_left), get_y(upper_left) +  mid + headers_rows), bottom_right),
+                                ((get_x(upper_left), get_y(upper_left) +  mid + headers_rows + 1), bottom_right),
                                 context);
 
         }

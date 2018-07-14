@@ -183,31 +183,30 @@ impl Component for TextBox {
 /// current view of the text. It is responsible for scrolling etc.
 pub struct Pager {
     cursor_pos: usize,
-    lines_no: usize,
-    rows: usize,
-    cols: usize,
+    height: usize,
+    width: usize,
     dirty: bool,
     content: CellBuffer,
 }
 
 impl Pager {
-    pub fn new(mail: &Envelope, rows: usize, cols: usize) -> Self {
+    pub fn new(mail: &Envelope) -> Self {
         let text = mail.get_body().get_text();
         let lines: Vec<&str> = text.trim().split('\n').collect();
-        let lines_no = lines.len();
-        let mut content = CellBuffer::new(cols, rows, Cell::with_char(' '));
+        let height = lines.len();
+        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
         for (i, l) in lines.iter().enumerate() {
             write_string_to_grid(l,
                                  &mut content,
                                  Color::Default,
                                  Color::Default,
-                                 ((0, i), (cols-1, rows-1)));
+                                 ((0, i), (width -1, i)));
         }
         Pager {
             cursor_pos: 0,
-            lines_no: lines_no,
-            rows: rows,
-            cols: cols,
+            height: height,
+            width: width,
             dirty: true,
             content: content,
         }
@@ -222,23 +221,24 @@ impl Component for Pager {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         clear_area(grid,
-                   ((get_x(upper_left), get_y(upper_left)-1), bottom_right));
-        context.dirty_areas.push_back(((get_x(upper_left), get_y(upper_left)-1), bottom_right));
+                   (upper_left, bottom_right));
+        context.dirty_areas.push_back((upper_left, bottom_right));
 
-        if self.lines_no == 0 {
+        if self.height == 0 {
             return;
         }
 
-        let pager_context = context.settings.pager.pager_context;
+        let pager_context: usize = context.settings.pager.pager_context;
+        let pager_stop: bool = context.settings.pager.pager_stop;
         let rows = get_y(bottom_right) - get_y(upper_left);
-        let page_length = rows / self.lines_no;
+        let page_length = rows / self.height;
         self.dirty = false;
         let mut inner_x = 0;
         let mut inner_y = self.cursor_pos;
 
         for y in get_y(upper_left)..=get_y(bottom_right) {
             'for_x: for x in get_x(upper_left)..=get_x(bottom_right) {
-                if inner_x == self.cols {
+                if inner_x == self.width {
                     break 'for_x;
                 }
                 grid[(x,y)] = self.content[(inner_x, inner_y)];
@@ -246,11 +246,11 @@ impl Component for Pager {
             }
             inner_y += 1;
             inner_x = 0;
-            if inner_y == self.rows {
+            if inner_y == self.height {
                 break;
             }
         }
-                context.dirty_areas.push_back(area);
+        context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
         match event.event_type {
@@ -261,8 +261,9 @@ impl Component for Pager {
                 }
             },
             UIEventType::Input(Key::Char('j')) => {
-                if self.rows > 0 && self.cursor_pos < self.rows - 1 {
+                if self.height > 0 && self.cursor_pos < self.height - 1 {
                     self.cursor_pos += 1;
+                    eprintln!("new pager cursor is {}", self.cursor_pos);
                     self.dirty = true;
                 }
             },

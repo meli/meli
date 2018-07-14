@@ -69,10 +69,9 @@ struct FileAccount {
 }
 
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 struct FileSettings {
     accounts: HashMap<String, FileAccount>,
-    #[serde(default)]
     pager: PagerSettings,
 }
 
@@ -113,18 +112,8 @@ impl FileSettings {
         let mut s = Config::new();
         let s = s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml));
 
-        if s.is_ok() {
+        // TODO: Return result
             s.unwrap().deserialize().unwrap()
-        } else {
-            eprintln!("{:?}", s.err().unwrap());
-            let mut buf = String::new();
-            io::stdin()
-                .read_line(&mut buf)
-                .expect("Failed to read line");
-            FileSettings {
-                ..Default::default()
-            }
-        }
     }
 }
 
@@ -175,6 +164,7 @@ impl Settings {
                 },
             );
         }
+        eprintln!("pager settings are {:?}", fs.pager);
 
         Settings { accounts: s, pager: fs.pager }
     }
