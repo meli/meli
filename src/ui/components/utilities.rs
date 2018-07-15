@@ -171,23 +171,7 @@ impl Component for Pager {
         //let pager_stop: bool = context.settings.pager.pager_stop;
         //let rows = get_y(bottom_right) - get_y(upper_left);
         //let page_length = rows / self.height;
-        let mut inner_x = 0;
-        let mut inner_y = self.cursor_pos;
-
-        for y in get_y(upper_left)..=get_y(bottom_right) {
-            'for_x: for x in get_x(upper_left)..=get_x(bottom_right) {
-                if inner_x == self.width {
-                    break 'for_x;
-                }
-                grid[(x,y)] = self.content[(inner_x, inner_y)];
-                inner_x += 1;
-            }
-            inner_y += 1;
-            inner_x = 0;
-            if inner_y == self.height {
-                break;
-            }
-        }
+        copy_area(grid, &self.content, area, ((0, self.cursor_pos), (self.width - 1, self.height - 1))); 
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {

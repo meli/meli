@@ -86,6 +86,45 @@ pub trait Component {
     }
 }
 
+/// Copy Area src to dest 
+pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) {
+    if !is_valid_area!(dest) || !is_valid_area!(src) {
+        eprintln!("BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}", src, dest);
+        return;
+    }
+    let mut src_x = get_x(upper_left!(src));
+    let mut src_y = get_y(upper_left!(src));
+
+    for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
+        'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
+            grid_dest[(x,y)] = grid_src[(src_x, src_y)];
+            if src_x == get_x(bottom_right!(src)) {
+                break 'for_x;
+            }
+            src_x += 1;
+        }
+        src_x = get_x(upper_left!(src));
+        if src_y == get_y(bottom_right!(src)) {
+            clear_area(grid_dest, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
+            break;
+        }
+        src_y += 1;
+    }
+}
+
+pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_color: Color) {
+    if !is_valid_area!(area) {
+        eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+        return;
+    }
+    for y in get_y(upper_left!(area))..=get_y(bottom_right!(area)) {
+        for x in get_x(upper_left!(area))..=get_x(bottom_right!(area)) {
+            grid[(x,y)].set_fg(fg_color);
+            grid[(x,y)].set_bg(bg_color);
+        }
+    }
+}
+
 
 fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_color: Color, area: Area) -> usize {
     let bounds = grid.size();

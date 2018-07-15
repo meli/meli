@@ -28,93 +28,41 @@ pub struct MailListing {
 
 impl MailListing {
     pub fn new(mailbox: Mailbox) -> Self {
-        let length = mailbox.len();
-
-        MailListing {
+        let mut content = CellBuffer::new(0, 0, Cell::with_char(' '));
+        let mut retval = MailListing {
             cursor_pos: 0,
             new_cursor_pos: 0,
-            length: length,
-            content: CellBuffer::new(MAX_COLS, length+1, Cell::with_char(' ')),
+            length: 0,
+            content: content,
             dirty: true,
             unfocused: false,
             mailbox: mailbox,
             pager: None,
-        }
+        };
+        retval.refresh_mailbox();
+        retval
     }
-}
-
-
-impl MailListing {
-    /// Draw only the list of `Envelope`s.
-    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
+    fn refresh_mailbox(&mut self) {
+        self.dirty = true;
+        self.cursor_pos = 0;
+        self.new_cursor_pos = 0;
+        self.length = self.mailbox.len();
+        let mut content = CellBuffer::new(MAX_COLS, self.length+1, Cell::with_char(' '));
         if self.length == 0 {
-            clear_area(grid, area);
-            let new_area = (upper_left, set_x(upper_left, get_x(bottom_right)));
             write_string_to_grid(&format!("Folder `{}` is empty.",
                                           self.mailbox.folder.get_name()),
-                                          grid,
+                                          &mut content,
                                           Color::Default,
                                           Color::Default,
-                                          new_area);
-            context.dirty_areas.push_back(area);
+                                          ((0, 0), (MAX_COLS-1, 0)));
+            self.content = content;
             return;
         }
-        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
-        let prev_page_no = (self.cursor_pos).wrapping_div(rows);
-        let page_no = (self.new_cursor_pos).wrapping_div(rows);
-
-
-        /* If cursor position has changed, remove the highlight from the previous position and
-         * apply it in the new one. */
-        if self.cursor_pos != self.new_cursor_pos && prev_page_no == page_no {
-            for idx in [self.cursor_pos, self.new_cursor_pos].iter() {
-                if *idx >= self.length {
-                    continue; //bounds check
-                }
-                let envelope: &Envelope = &self.mailbox.collection[*idx];
-
-                let fg_color = if !envelope.is_seen() {
-                    Color::Byte(0)
-                } else {
-                    Color::Default
-                };
-                let bg_color = if self.cursor_pos == *idx {
-                    if !envelope.is_seen() {
-                        Color::Byte(252)
-                    } else if *idx % 2 == 0 {
-                        Color::Byte(236)
-                    } else {
-                        Color::Default
-                    }
-                } else {
-                    Color::Byte(246)
-                };
-                let new_area = (set_y(upper_left, get_y(upper_left)+(*idx % rows)), bottom_right);
-                let x = write_string_to_grid(&make_entry_string(envelope, *idx),
-                grid,
-                fg_color,
-                bg_color,
-                new_area);
-                for x in x..=get_x(bottom_right) {
-                    grid[(x,get_y(upper_left)+(*idx % rows))].set_ch(' ');
-                    grid[(x,get_y(upper_left)+(*idx % rows))].set_bg(bg_color);
-                }
-                context.dirty_areas.push_back(new_area);
-            }
-            self.cursor_pos = self.new_cursor_pos;
-            return;
-        }  else if self.cursor_pos != self.new_cursor_pos {
-            self.cursor_pos = self.new_cursor_pos;
-        }
-
-        context.dirty_areas.push_back(area);
-        let mut idx = page_no*rows;
-        for y in get_y(upper_left)..=get_y(bottom_right) {
+        let mut idx = 0;
+        for y in 0..=self.length {
             if idx >= self.length {
-                clear_area(grid,
-                           (set_y(upper_left, y), bottom_right));
+                clear_area(&mut content,
+                           ((0, y), (MAX_COLS-1, self.length)));
                 break;
             }
             /* Write an entire line for each envelope entry. */
@@ -125,30 +73,89 @@ impl MailListing {
             } else {
                 Color::Default
             };
-            let bg_color = if self.cursor_pos == idx {
-                Color::Byte(246)
+            let bg_color = if !envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
             } else {
-                if !envelope.is_seen() {
-                    Color::Byte(251)
-                } else if idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                }
+                Color::Default
             };
             let x = write_string_to_grid(&make_entry_string(envelope, idx),
-            grid,
-            fg_color,
-            bg_color,
-            (set_y(upper_left, y), bottom_right));
+                                        &mut content,
+                                        fg_color,
+                                        bg_color,
+                                        ((0, y) , (MAX_COLS-1, y)));
 
-            for x in x..=get_x(bottom_right) {
-                grid[(x,y)].set_ch(' ');
-                grid[(x,y)].set_bg(bg_color);
+            for x in x..MAX_COLS {
+                content[(x,y)].set_ch(' ');
+                content[(x,y)].set_bg(bg_color);
             }
 
             idx+=1;
         }
+
+        self.content = content;
+    }
+    fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize) {
+                let envelope: &Envelope = &self.mailbox.collection[idx];
+
+                let fg_color = if !envelope.is_seen() {
+                    Color::Byte(0)
+                } else {
+                    Color::Default
+                };
+                let bg_color = if self.cursor_pos != idx {
+                    if !envelope.is_seen() {
+                        Color::Byte(252)
+                    } else if idx % 2 == 0 {
+                        Color::Byte(236)
+                    } else {
+                        Color::Default
+                    }
+                } else {
+                    Color::Byte(246)
+                };
+                change_colors(grid, area, fg_color, bg_color);
+    }
+
+    /// Draw only the list of `Envelope`s.
+    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        if self.length == 0 {
+            clear_area(grid, area);
+            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS-1, 0)));
+            context.dirty_areas.push_back(area);
+            return;
+        }
+        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+        let prev_page_no = (self.cursor_pos).wrapping_div(rows);
+        let page_no = (self.new_cursor_pos).wrapping_div(rows);
+
+        let idx = page_no*rows;
+
+
+        /* If cursor position has changed, remove the highlight from the previous position and
+         * apply it in the new one. */
+        if self.cursor_pos != self.new_cursor_pos && prev_page_no == page_no {
+            let old_cursor_pos = self.cursor_pos;
+            self.cursor_pos = self.new_cursor_pos;
+            for idx in [old_cursor_pos, self.new_cursor_pos].iter() {
+                if *idx >= self.length {
+                    continue; //bounds check
+                }
+                let new_area = (set_y(upper_left, get_y(upper_left)+(*idx % rows)), set_y(bottom_right, get_y(upper_left) + (*idx % rows)));
+                self.highlight_line(grid, new_area, *idx);
+                context.dirty_areas.push_back(new_area);
+            }
+            return;
+        }  else if self.cursor_pos != self.new_cursor_pos {
+            self.cursor_pos = self.new_cursor_pos;
+        }
+
+        copy_area(grid, &self.content, area, ((0, idx), (MAX_COLS - 1, self.length)));
+        self.highlight_line(grid, (set_y(upper_left, get_y(upper_left)+(idx % rows)), set_y(bottom_right, get_y(upper_left) + (idx % rows))), self.cursor_pos);
+        context.dirty_areas.push_back(area);
     }
 
     /// Create a pager for the `Envelope` currently under the cursor.
@@ -316,10 +323,8 @@ impl Component for MailListing {
 
             },
             UIEventType::RefreshMailbox(ref m) => {
-                self.cursor_pos = 0;
-                self.new_cursor_pos = 0;
                 self.mailbox = m.clone();
-                self.length = m.collection.len();
+                self.refresh_mailbox();
                 self.dirty = true;
                 self.pager = None;
             },
