@@ -198,6 +198,8 @@ impl<W: Write> State<W> {
         self.cols = termcols.unwrap_or(72) as usize;
         self.rows = termrows.unwrap_or(120) as usize;
         self.grid.resize(self.cols, self.rows, Cell::with_char(' '));
+
+        self.rcv_event(UIEvent { id: 0, event_type: UIEventType::Resize });
     }
 
     pub fn redraw(&mut self) {

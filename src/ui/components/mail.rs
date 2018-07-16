@@ -373,6 +373,9 @@ impl Component for MailListing {
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             },
+            UIEventType::Resize => {
+                self.dirty = true;
+            },
             _ => {
             },
         }
@@ -522,6 +525,9 @@ impl Component for AccountMenu {
                 self.highlight_folder(m);
             },
             UIEventType::ChangeMode(UIMode::Normal) => {
+                self.dirty = true;
+            },
+            UIEventType::Resize => {
                 self.dirty = true;
             },
             _ => {

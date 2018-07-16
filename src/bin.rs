@@ -31,6 +31,13 @@ use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
 use std::io::{stdout, stdin, };
 
+#[macro_use]
+extern crate chan;
+extern crate chan_signal;
+
+use chan_signal::Signal;
+
+
 fn main() {
     /* Lock all stdios */
     let _stdout = stdout();
@@ -44,11 +51,14 @@ fn main() {
 
 
 
-    let (sender, receiver): (SyncSender<ThreadEvent>, Receiver<ThreadEvent>) = sync_channel(::std::mem::size_of::<ThreadEvent>());
+    let signal = chan_signal::notify(&[Signal::WINCH]);
+
+    let (sender, receiver) = chan::sync(::std::mem::size_of::<ThreadEvent>());
+
     {
         let sender = sender.clone();
         thread::Builder::new().name("input-thread".to_string()).spawn(move || {
-            get_events(stdin, move | k| { sender.send(ThreadEvent::Input(k)).unwrap();
+            get_events(stdin, move | k| { sender.send(ThreadEvent::Input(k));
             })}).unwrap();
     }
 
@@ -73,18 +83,18 @@ fn main() {
     state.register_entity(status_bar);
 
     /*
-    let mut idxa = 0;
-    let mut idxm = 0;
-    let account_length = state.context.accounts.len();
-    */
+       let mut idxa = 0;
+       let mut idxm = 0;
+       let account_length = state.context.accounts.len();
+       */
     let mut mode: UIMode = UIMode::Normal;
     'main: loop {
         /*
-        state.refresh_mailbox(idxa,idxm);
-        */
+           state.refresh_mailbox(idxa,idxm);
+           */
         /*
-        let folder_length = state.context.accounts[idxa].len();
-        */
+           let folder_length = state.context.accounts[idxa].len();
+           */
         state.render();
 
         'inner: loop {
@@ -93,48 +103,59 @@ fn main() {
                 state.rcv_event(e);
             }
             state.redraw();
-            match receiver.recv().unwrap() {
-                ThreadEvent::Input(k) => {
-                    match mode {
-                        UIMode::Normal => {
-                            match k {
-                                Key::Char('q') | Key::Char('Q') => {
-                                    break 'main;
+            chan_select! {
+                receiver.recv() -> r => {
+                    match r.unwrap() {
+                        ThreadEvent::Input(k) => {
+                            match mode {
+                                UIMode::Normal => {
+                                    match k {
+                                        Key::Char('q') | Key::Char('Q') => {
+                                            break 'main;
+                                        },
+                                        Key::Char(';') => {
+                                            mode = UIMode::Execute;
+                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(mode)});
+                                            state.redraw();
+                                        }
+                                        key  => {
+                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
+                                            state.redraw();
+                                        },
+                                        _ => {}
+                                    }
                                 },
-                                Key::Char(';') => {
-                                    mode = UIMode::Execute;
-                                    state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(mode)});
-                                    state.redraw();
-                                }
-                                key  => {
-                                    state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
-                                    state.redraw();
+                                UIMode::Execute => {
+                                    match k {
+                                        Key::Char('\n') | Key::Esc => {
+                                            mode = UIMode::Normal;
+                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(mode)});
+                                            state.redraw();
+                                        },
+                                        k @ Key::Char(_) => {
+                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ExInput(k)});
+                                            state.redraw();
+                                        },
+                                        _ => {},
+                                    }
                                 },
-                                _ => {}
                             }
                         },
-                        UIMode::Execute => {
-                            match k {
-                                Key::Char('\n') | Key::Esc => {
-                                    mode = UIMode::Normal;
-                                    state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(mode)});
-                                    state.redraw();
-                                },
-                                k @ Key::Char(_) => {
-                                    state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ExInput(k)});
-                                    state.redraw();
-                                },
-                                _ => {},
-                            }
+                        ThreadEvent::RefreshMailbox { name : n } => {
+                            eprintln!("Refresh mailbox {}", n);
+                        },
+                        ThreadEvent::UIEventType(e) => {
+                            state.rcv_event(UIEvent { id: 0, event_type: e});
+                            state.render();
                         },
                     }
                 },
-                ThreadEvent::RefreshMailbox { name : n } => {
-                    eprintln!("Refresh mailbox {}", n);
-                },
-                ThreadEvent::UIEventType(e) => {
-                    state.rcv_event(UIEvent { id: 0, event_type: e});
-                    state.render();
+                signal.recv() -> signal => {
+                    if let Some(Signal::WINCH) = signal {
+                        state.update_size();
+                        state.render();
+                        state.redraw();
+                    }
                 },
             }
         }

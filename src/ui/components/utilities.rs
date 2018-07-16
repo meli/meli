@@ -191,6 +191,9 @@ impl Component for Pager {
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             },
+            UIEventType::Resize => {
+                self.dirty = true;
+            },
             _ => {
             },
         }
@@ -300,6 +303,9 @@ impl Component for StatusBar {
             UIEventType::ExInput(Key::Char(c)) => {
                 self.dirty = true;
                 self.ex_buffer.push(c);
+            },
+            UIEventType::Resize => {
+                self.dirty = true;
             },
             _ => {},
         }
