@@ -1,7 +1,7 @@
 /*
  * meli - bin.rs
  *
- * Copyright 2017 Manos Pitsidianakis
+ * Copyright 2017-2018 Manos Pitsidianakis
  *
  * This file is part of meli.
  *
@@ -27,7 +27,6 @@ pub mod ui;
 use ui::*;
 pub use melib::*;
 
-use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
 use std::io::{stdout, stdin, };
 
@@ -49,10 +48,11 @@ fn main() {
        let mut _stderr = _stderr.lock();
        */
 
-
-
+    /* Catch SIGWINCH to handle terminal resizing */
     let signal = chan_signal::notify(&[Signal::WINCH]);
 
+    /* Create a channel to communicate with other threads. The main process is the sole receiver.
+     * */
     let (sender, receiver) = chan::sync(::std::mem::size_of::<ThreadEvent>());
 
     {
@@ -62,47 +62,30 @@ fn main() {
             })}).unwrap();
     }
 
-    /*
-       let folder_length = set.accounts["test_account"].folders.len();
-       let mut account = Account::new("test_account".to_string(), set.accounts["test_account"].clone(), backends);
+    /* Create the application State. This is the 'System' part of an ECS architecture */
+    let mut state = State::new(_stdout, sender);
 
-       {
-       let sender = sender.clone();
-       account.watch(RefreshEventConsumer::new(Box::new(move |r| {
-       sender.send(ThreadEvent::from(r)).unwrap();
-       })));
-       }
-       */
-    let mut state = State::new(_stdout);
-
+    /* Register some reasonably useful interfaces */
     let menu = Entity {component: Box::new(AccountMenu::new(&state.context.accounts)) };
-    let listing = MailListing::new(Mailbox::new_dummy());
+    let listing = MailListing::new();
     let b = Entity { component: Box::new(listing) };
     let window  = Entity { component: Box::new(VSplit::new(menu,b,90)) };
     let status_bar = Entity { component: Box::new(StatusBar::new(window)) };
     state.register_entity(status_bar);
 
-    /*
-       let mut idxa = 0;
-       let mut idxm = 0;
-       let account_length = state.context.accounts.len();
-       */
+    /* Keep track of the input mode. See ui::UIMode for details */
     let mut mode: UIMode = UIMode::Normal;
     'main: loop {
-        /*
-           state.refresh_mailbox(idxa,idxm);
-           */
-        /*
-           let folder_length = state.context.accounts[idxa].len();
-           */
         state.render();
 
         'inner: loop {
+            /* Check if any entities have sent reply events to State. */
             let events: Vec<UIEvent> = state.context.get_replies();
             for e in events {
                 state.rcv_event(e);
             }
             state.redraw();
+            /* Poll on all channels. Currently we have the input channel for stdin, watching events  and the signal watcher. */
             chan_select! {
                 receiver.recv() -> r => {
                     match r.unwrap() {
@@ -122,7 +105,6 @@ fn main() {
                                             state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
                                             state.redraw();
                                         },
-                                        _ => {}
                                     }
                                 },
                                 UIMode::Execute => {
@@ -142,6 +124,7 @@ fn main() {
                             }
                         },
                         ThreadEvent::RefreshMailbox { name : n } => {
+                            /* Don't handle this yet. */
                             eprintln!("Refresh mailbox {}", n);
                         },
                         ThreadEvent::UIEventType(e) => {

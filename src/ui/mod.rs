@@ -44,6 +44,7 @@ use termion::{clear, style, cursor};
 use termion::raw::IntoRawMode;
 use termion::event::{Key as TermionKey, };
 
+use chan::Sender;
 
 
 use std::io::{Write, };
@@ -145,6 +146,7 @@ pub struct State<W: Write> {
 
     grid: CellBuffer,
     stdout: termion::raw::RawTerminal<W>,
+    sender: Sender<ThreadEvent>,
     entities: Vec<Entity>,
     pub context: Context,
 }
@@ -158,7 +160,7 @@ impl<W: Write> Drop for State<W> {
 }
 
 impl<W: Write> State<W> {
-    pub fn new(stdout: W) -> Self {
+    pub fn new(stdout: W, sender: Sender<ThreadEvent>) -> Self {
         let settings = Settings::new();
         let backends = Backends::new();
 
@@ -172,6 +174,7 @@ impl<W: Write> State<W> {
             rows: rows,
             grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
             stdout: stdout.into_raw_mode().unwrap(),
+            sender: sender,
             entities: Vec::with_capacity(1),
 
             context: Context {
@@ -184,6 +187,13 @@ impl<W: Write> State<W> {
         };
         write!(s.stdout, "{}{}{}", cursor::Hide, clear::All, cursor::Goto(1,1)).unwrap();
         s.stdout.flush().unwrap();
+        for account in &mut s.context.accounts {
+            let sender = s.sender.clone();
+            account.watch(RefreshEventConsumer::new(Box::new(move |r| {
+                sender.send(ThreadEvent::from(r));
+            })));
+
+        }
         s
     }
     pub fn update_size(&mut self) {

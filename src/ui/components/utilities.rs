@@ -160,7 +160,7 @@ impl Component for Pager {
         let bottom_right = bottom_right!(area);
 
         self.dirty = false;
-        if self.height == 0 || self.height == self.cursor_pos {
+        if self.height == 0 || self.height == self.cursor_pos || self.width == 0 {
             return;
         }
         clear_area(grid,

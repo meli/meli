@@ -14,6 +14,7 @@ pub struct MailListing {
     // TODO: sorting
     /// Cache current view.
     content: CellBuffer,
+    /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.pager` exists or not.
     unfocused: bool,
@@ -21,6 +22,8 @@ pub struct MailListing {
 }
 
 impl MailListing {
+    /// Helper function to format entry strings for MailListing */
+    /* TODO: Make this configurable */
     fn make_entry_string(e: &Envelope, idx: usize) -> String {
         format!("{}    {}    {:.85}",idx,&e.get_datetime().format("%Y-%m-%d %H:%M:%S").to_string(),e.get_subject())
     }
@@ -28,7 +31,7 @@ impl MailListing {
 
 
 
-    pub fn new(mailbox: Mailbox) -> Self {
+    pub fn new() -> Self {
         let mut content = CellBuffer::new(0, 0, Cell::with_char(' '));
         MailListing {
             cursor_pos: (0, 1, 0),
@@ -40,13 +43,19 @@ impl MailListing {
             pager: None,
         }
     }
+    /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
+    /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context) {
         self.dirty = true;
         self.cursor_pos.2 = 0;
         self.new_cursor_pos.2 = 0;
         self.cursor_pos.1 = self.new_cursor_pos.1;
+
+        // Get mailbox as a reference.
         let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
+        // Inform State that we changed the current folder view.
         context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox(mailbox.clone()) });
+
         self.length = mailbox.len();
         let mut content = CellBuffer::new(MAX_COLS, self.length+1, Cell::with_char(' '));
         if self.length == 0 {
@@ -59,9 +68,13 @@ impl MailListing {
             self.content = content;
             return;
         }
+
+        // Populate `CellBuffer` with every entry. 
+        // TODO: Lazy load? 
         let mut idx = 0;
         for y in 0..=self.length {
             if idx >= self.length {
+                /* No more entries left, so fill the rest of the area with empty space */
                 clear_area(&mut content,
                            ((0, y), (MAX_COLS-1, self.length)));
                 break;
@@ -82,10 +95,10 @@ impl MailListing {
                 Color::Default
             };
             let x = write_string_to_grid(&MailListing::make_entry_string(envelope, idx),
-                                        &mut content,
-                                        fg_color,
-                                        bg_color,
-                                        ((0, y) , (MAX_COLS-1, y)));
+            &mut content,
+            fg_color,
+            bg_color,
+            ((0, y) , (MAX_COLS-1, y)));
 
             for x in x..MAX_COLS {
                 content[(x,y)].set_ch(' ');
@@ -120,7 +133,7 @@ impl MailListing {
         change_colors(grid, area, fg_color, bg_color);
     }
 
-    /// Draw only the list of `Envelope`s.
+    /// Draw the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.cursor_pos.1 != self.new_cursor_pos.1 {
             self.refresh_mailbox(context);
@@ -167,10 +180,10 @@ impl MailListing {
     /// Create a pager for the `Envelope` currently under the cursor.
     fn draw_mail_view(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         {
-        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
-        let envelope: &Envelope = &mailbox.collection[self.cursor_pos.2];
+            let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
+            let envelope: &Envelope = &mailbox.collection[self.cursor_pos.2];
 
-        self.pager = Some(Pager::new(envelope));
+            self.pager = Some(Pager::new(envelope));
         }
         self.pager.as_mut().map(|p| p.draw(grid, area, context));
     }
@@ -194,10 +207,12 @@ impl Component for MailListing {
                 clear_area(grid, area);
                 context.dirty_areas.push_back(area);
             }
+            // TODO: Make this configurable. User should be able to choose what headers to display,
+            // and toggle between full header view and custom header view like in mutt.
             let headers_rows: usize = 6;
+
             /* Render the mail body in a pager, basically copy what HSplit does */
             let total_rows = get_y(bottom_right) - get_y(upper_left);
-            /* TODO: define ratio in Configuration file */
             let pager_ratio = context.settings.pager.pager_ratio;
             let mut bottom_entity_rows = (pager_ratio*total_rows )/100;
             if bottom_entity_rows < headers_rows + 2 {
@@ -215,7 +230,7 @@ impl Component for MailListing {
                     p.draw(grid,
                            ((get_x(upper_left), get_y(upper_left) +  mid + headers_rows + 1), bottom_right),
                            context);
-            }
+                }
                 return;
             }
             self.dirty = false;
@@ -244,50 +259,50 @@ impl Component for MailListing {
                 let envelope: &Envelope = &mailbox.collection[self.cursor_pos.2];
 
                 let x = write_string_to_grid(&format!("Date: {}", envelope.get_date_as_str()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, mid+1), set_y(bottom_right, mid+1)));
+                                             grid,
+                                             Color::Byte(33),
+                                             Color::Default,
+                                             (set_y(upper_left, mid+1), set_y(bottom_right, mid+1)));
                 for x in x..=get_x(bottom_right) {
                     grid[(x, mid+1)].set_ch(' ');
                     grid[(x, mid+1)].set_bg(Color::Default);
                     grid[(x, mid+1)].set_fg(Color::Default);
                 }
                 let x = write_string_to_grid(&format!("From: {}", envelope.get_from()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, mid+2), set_y(bottom_right, mid+2)));
+                                             grid,
+                                             Color::Byte(33),
+                                             Color::Default,
+                                             (set_y(upper_left, mid+2), set_y(bottom_right, mid+2)));
                 for x in x..=get_x(bottom_right) {
                     grid[(x, mid+2)].set_ch(' ');
                     grid[(x, mid+2)].set_bg(Color::Default);
                     grid[(x, mid+2)].set_fg(Color::Default);
                 }
                 let x = write_string_to_grid(&format!("To: {}", envelope.get_to()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, mid+3), set_y(bottom_right, mid+3)));
+                                            grid,
+                                            Color::Byte(33),
+                                            Color::Default,
+                                            (set_y(upper_left, mid+3), set_y(bottom_right, mid+3)));
                 for x in x..=get_x(bottom_right) {
                     grid[(x, mid+3)].set_ch(' ');
                     grid[(x, mid+3)].set_bg(Color::Default);
                     grid[(x, mid+3)].set_fg(Color::Default);
                 }
                 let x = write_string_to_grid(&format!("Subject: {}", envelope.get_subject()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, mid+4), set_y(bottom_right, mid+4)));
+                                            grid,
+                                            Color::Byte(33),
+                                            Color::Default,
+                                            (set_y(upper_left, mid+4), set_y(bottom_right, mid+4)));
                 for x in x..=get_x(bottom_right) {
                     grid[(x, mid+4)].set_ch(' ');
                     grid[(x, mid+4)].set_bg(Color::Default);
                     grid[(x, mid+4)].set_fg(Color::Default);
                 }
                 let x = write_string_to_grid(&format!("Message-ID: {}", envelope.get_message_id_raw()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, mid+5), set_y(bottom_right, mid+5)));
+                                            grid,
+                                            Color::Byte(33),
+                                            Color::Default,
+                                            (set_y(upper_left, mid+5), set_y(bottom_right, mid+5)));
                 for x in x..=get_x(bottom_right) {
                     grid[(x, mid+5)].set_ch(' ');
                     grid[(x, mid+5)].set_bg(Color::Default);
@@ -366,7 +381,7 @@ impl Component for MailListing {
                     },
                 }
             },
-            UIEventType::RefreshMailbox(ref m) => {
+            UIEventType::RefreshMailbox(_) => {
                 self.dirty = true;
                 self.pager = None;
             },

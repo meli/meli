@@ -26,9 +26,6 @@ use super::*;
 pub use utilities::*;
 pub use mail::*;
 
-use std::fmt;
-
-
 use super::cells::{Color, CellBuffer};
 use super::position::{Area, };
 use super::{UIEvent, UIEventType, Key};
@@ -66,12 +63,6 @@ impl Entity {
     /// Pass events to child component.
     pub fn rcv_event(&mut self, event: &UIEvent, context: &mut Context) {
         self.component.process_event(&event, context);
-    }
-}
-
-impl fmt::Debug for Entity {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Entity", )
     }
 }
 
@@ -163,4 +154,3 @@ fn clear_area(grid: &mut CellBuffer, area: Area) {
         }
     }
 }
-

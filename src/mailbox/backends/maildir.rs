@@ -27,7 +27,7 @@ use conf::Folder;
 
 extern crate notify;
 
-use self::notify::{Watcher, RecursiveMode, watcher};
+use self::notify::{Watcher, RecursiveMode, watcher, DebouncedEvent};
 use std::time::Duration;
 
 use std::sync::mpsc::channel;
@@ -164,12 +164,16 @@ impl MailBackend for MaildirType {
                 p.pop();
                 p.push("new");
                 watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
-                eprintln!("watching {:?}", f);
             }
             loop {
                 match rx.recv() {
                     Ok(event) => {
-                        sender.send(RefreshEvent { folder: format!("{:?}", event) });
+                        match event {
+                            DebouncedEvent::Create(pathbuf) => {
+                                sender.send(RefreshEvent { folder: format!("{}", pathbuf.parent().unwrap().to_str().unwrap()) });
+                            },
+                            _ => {},
+                        }
                     }
                     Err(e) => eprintln!("watch error: {:?}", e),
                 }
