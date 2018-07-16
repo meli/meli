@@ -24,14 +24,33 @@ pub mod position;
 pub mod components;
 pub mod cells;
 
+#[macro_use]
+mod execute;
+use self::execute::goto;
+
 extern crate termion;
-extern crate ncurses;
 extern crate melib;
 
 use std::collections::VecDeque;
 use std::fmt;
 
 pub use self::position::*;
+
+use melib::*;
+
+
+use std;
+use termion::{clear, style, cursor};
+use termion::raw::IntoRawMode;
+use termion::event::{Key as TermionKey, };
+
+
+
+use std::io::{Write, };
+use termion::input::TermRead;
+
+use self::cells::*;
+pub use self::components::*;
 
 /* Color pairs; foreground && background. */
 /// Default color.
@@ -54,12 +73,12 @@ pub static COLOR_PAIR_UNREAD_EVEN: i16 = 8;
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads
 /// to the main process.
 pub enum ThreadEvent {
-  /// User input.
-  Input(Key),
-  /// A watched folder has been refreshed.
-  RefreshMailbox{ name: String },
-  UIEventType(UIEventType),
-  //Decode { _ }, // For gpg2 signature check
+    /// User input.
+    Input(Key),
+    /// A watched folder has been refreshed.
+    RefreshMailbox{ name: String },
+    UIEventType(UIEventType),
+    //Decode { _ }, // For gpg2 signature check
 }
 
 impl From<RefreshEvent> for ThreadEvent {
@@ -68,28 +87,6 @@ impl From<RefreshEvent> for ThreadEvent {
     }
 }
 
-
-
-
-
-
-
-
-use melib::*;
-
-
-use std;
-use termion::{clear, style, cursor};
-use termion::raw::IntoRawMode;
-use termion::event::{Key as TermionKey, };
-
-
-
-use std::io::{Write, };
-use termion::input::TermRead;
-
-use self::cells::*;
-pub use self::components::*;
 
 #[derive(Debug)]
 pub enum UIEventType {
@@ -100,13 +97,14 @@ pub enum UIEventType {
     Resize,
     ChangeMailbox(usize),
     ChangeMode(UIMode),
+    Command(String),
 }
 
 
 #[derive(Debug)]
 pub struct UIEvent {
-   pub id: u64,
-   pub event_type: UIEventType,
+    pub id: u64,
+    pub event_type: UIEventType,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -129,7 +127,16 @@ pub struct Context {
     settings: Settings,
     /// Areas of the screen that must be redrawn in the next render
     dirty_areas: VecDeque<Area>,
+
+    /// Events queue that components send back to the state
+    replies: VecDeque<UIEvent>,
     backends: Backends,
+}
+
+impl Context {
+    pub fn get_replies(&mut self) -> Vec<UIEvent> {
+        self.replies.drain(0..).collect()
+    }
 }
 
 pub struct State<W: Write> {
@@ -172,6 +179,7 @@ impl<W: Write> State<W> {
                 backends: backends,
                 settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
+                replies: VecDeque::with_capacity(5),
             },
         };
         write!(s.stdout, "{}{}{}", cursor::Hide, clear::All, cursor::Goto(1,1)).unwrap();
@@ -197,7 +205,6 @@ impl<W: Write> State<W> {
             self.draw_entity(i);
         }
         let areas: Vec<Area> = self.context.dirty_areas.drain(0..).collect();
-        eprintln!("redrawing {} areas", areas.len());
         /* draw each dirty area */
         for a in areas {
             self.draw_area(a);
@@ -256,19 +263,41 @@ impl<W: Write> State<W> {
     pub fn register_entity(&mut self, entity: Entity) {
         self.entities.push(entity);
     }
+    fn parse_command(&mut self, cmd: String) {
+        eprintln!("received command: {}", cmd);
+
+        let result = goto(&cmd.as_bytes()).to_full_result();
+        eprintln!("result is {:?}", result);
+
+        if let Ok(v) = result {
+
+            self.refresh_mailbox(0, v);
+
+
+        }
+
+    }
 
     pub fn rcv_event(&mut self, event: UIEvent) {
-        /* pass Context */
-        /* inform each entity */ for i in 0..self.entities.len() {
+        match event.event_type {
+            // Command type is only for the State itself.
+            UIEventType::Command(cmd) => {
+                self.parse_command(cmd);
+                return;
+            },
+            _ => {},
+        }
+        /* inform each entity */
+        for i in 0..self.entities.len() {
             self.entities[i].rcv_event(&event, &mut self.context);
         }
     }
     /// Tries to load a mailbox's content
     pub fn refresh_mailbox(&mut self, account_idx: usize, folder_idx: usize) {
         let mailbox = match &mut self.context.accounts[account_idx][folder_idx] {
-                Some(Ok(v)) => { Some(v.clone()) },
-                Some(Err(e)) => { eprintln!("error {:?}", e); None },
-                None => {  eprintln!("None"); None },
+            Some(Ok(v)) => { Some(v.clone()) },
+            Some(Err(e)) => { eprintln!("error {:?}", e); None },
+            None => {  eprintln!("None"); None },
         };
         if let Some(m) = mailbox {
             self.rcv_event(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox(m) });

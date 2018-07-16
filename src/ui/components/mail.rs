@@ -1,56 +1,57 @@
 use ui::components::*;
 use ui::cells::*;
 
-fn make_entry_string(e: &Envelope, idx: usize) -> String {
-    format!("{}    {}    {:.85}",idx,&e.get_datetime().format("%Y-%m-%d %H:%M:%S").to_string(),e.get_subject())
-}
 
 const MAX_COLS: usize = 500;
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `Pager`.
 pub struct MailListing {
-    cursor_pos: usize,
-    new_cursor_pos: usize,
+    /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
+    cursor_pos: (usize, usize, usize),
+    new_cursor_pos: (usize, usize, usize),
     length: usize,
-    // sorting
+    // TODO: sorting
+    /// Cache current view.
     content: CellBuffer,
     dirty: bool,
     /// If `self.pager` exists or not.
     unfocused: bool,
-    // content (2-d vec of bytes) or Cells?
-    // current view on top of content
-    // active or not? for key events
-    pub mailbox: Mailbox,
     pager: Option<Pager>,
-
 }
 
 impl MailListing {
+    fn make_entry_string(e: &Envelope, idx: usize) -> String {
+        format!("{}    {}    {:.85}",idx,&e.get_datetime().format("%Y-%m-%d %H:%M:%S").to_string(),e.get_subject())
+    }
+
+
+
+
     pub fn new(mailbox: Mailbox) -> Self {
         let mut content = CellBuffer::new(0, 0, Cell::with_char(' '));
-        let mut retval = MailListing {
-            cursor_pos: 0,
-            new_cursor_pos: 0,
+        MailListing {
+            cursor_pos: (0, 1, 0),
+            new_cursor_pos: (0, 0, 0),
             length: 0,
             content: content,
             dirty: true,
             unfocused: false,
-            mailbox: mailbox,
             pager: None,
-        };
-        retval.refresh_mailbox();
-        retval
+        }
     }
-    fn refresh_mailbox(&mut self) {
+    fn refresh_mailbox(&mut self, context: &mut Context) {
         self.dirty = true;
-        self.cursor_pos = 0;
-        self.new_cursor_pos = 0;
-        self.length = self.mailbox.len();
+        self.cursor_pos.2 = 0;
+        self.new_cursor_pos.2 = 0;
+        self.cursor_pos.1 = self.new_cursor_pos.1;
+        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
+        context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox(mailbox.clone()) });
+        self.length = mailbox.len();
         let mut content = CellBuffer::new(MAX_COLS, self.length+1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(&format!("Folder `{}` is empty.",
-                                          self.mailbox.folder.get_name()),
+                                          mailbox.folder.get_name()),
                                           &mut content,
                                           Color::Default,
                                           Color::Default,
@@ -66,7 +67,7 @@ impl MailListing {
                 break;
             }
             /* Write an entire line for each envelope entry. */
-            let envelope: &Envelope = &self.mailbox.collection[idx];
+            let envelope: &Envelope = &mailbox.collection[idx];
 
             let fg_color = if !envelope.is_seen() {
                 Color::Byte(0)
@@ -80,7 +81,7 @@ impl MailListing {
             } else {
                 Color::Default
             };
-            let x = write_string_to_grid(&make_entry_string(envelope, idx),
+            let x = write_string_to_grid(&MailListing::make_entry_string(envelope, idx),
                                         &mut content,
                                         fg_color,
                                         bg_color,
@@ -96,30 +97,34 @@ impl MailListing {
 
         self.content = content;
     }
-    fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize) {
-                let envelope: &Envelope = &self.mailbox.collection[idx];
+    fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &mut Context) {
+        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
+        let envelope: &Envelope = &mailbox.collection[idx];
 
-                let fg_color = if !envelope.is_seen() {
-                    Color::Byte(0)
-                } else {
-                    Color::Default
-                };
-                let bg_color = if self.cursor_pos != idx {
-                    if !envelope.is_seen() {
-                        Color::Byte(252)
-                    } else if idx % 2 == 0 {
-                        Color::Byte(236)
-                    } else {
-                        Color::Default
-                    }
-                } else {
-                    Color::Byte(246)
-                };
-                change_colors(grid, area, fg_color, bg_color);
+        let fg_color = if !envelope.is_seen() {
+            Color::Byte(0)
+        } else {
+            Color::Default
+        };
+        let bg_color = if self.cursor_pos.2 != idx {
+            if !envelope.is_seen() {
+                Color::Byte(252)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            }
+        } else {
+            Color::Byte(246)
+        };
+        change_colors(grid, area, fg_color, bg_color);
     }
 
     /// Draw only the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.cursor_pos.1 != self.new_cursor_pos.1 {
+            self.refresh_mailbox(context);
+        }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
@@ -129,23 +134,23 @@ impl MailListing {
             return;
         }
         let rows = get_y(bottom_right) - get_y(upper_left) + 1;
-        let prev_page_no = (self.cursor_pos).wrapping_div(rows);
-        let page_no = (self.new_cursor_pos).wrapping_div(rows);
+        let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
+        let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let idx = page_no*rows;
 
 
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
-        if self.cursor_pos != self.new_cursor_pos && prev_page_no == page_no {
+        if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
-            for idx in [old_cursor_pos, self.new_cursor_pos].iter() {
+            for idx in [old_cursor_pos.2, self.new_cursor_pos.2].iter() {
                 if *idx >= self.length {
                     continue; //bounds check
                 }
                 let new_area = (set_y(upper_left, get_y(upper_left)+(*idx % rows)), set_y(bottom_right, get_y(upper_left) + (*idx % rows)));
-                self.highlight_line(grid, new_area, *idx);
+                self.highlight_line(grid, new_area, *idx, context);
                 context.dirty_areas.push_back(new_area);
             }
             return;
@@ -153,16 +158,20 @@ impl MailListing {
             self.cursor_pos = self.new_cursor_pos;
         }
 
+        /* Page_no has changed, so draw new page */
         copy_area(grid, &self.content, area, ((0, idx), (MAX_COLS - 1, self.length)));
-        self.highlight_line(grid, (set_y(upper_left, get_y(upper_left)+(idx % rows)), set_y(bottom_right, get_y(upper_left) + (idx % rows))), self.cursor_pos);
+        self.highlight_line(grid, (set_y(upper_left, get_y(upper_left)+(idx % rows)), set_y(bottom_right, get_y(upper_left) + (idx % rows))), self.cursor_pos.2, context);
         context.dirty_areas.push_back(area);
     }
 
     /// Create a pager for the `Envelope` currently under the cursor.
     fn draw_mail_view(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let envelope: &Envelope = &self.mailbox.collection[self.cursor_pos];
+        {
+        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
+        let envelope: &Envelope = &mailbox.collection[self.cursor_pos.2];
 
         self.pager = Some(Pager::new(envelope));
+        }
         self.pager.as_mut().map(|p| p.draw(grid, area, context));
     }
 }
@@ -201,12 +210,12 @@ impl Component for MailListing {
             }
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
 
-            if !self.is_dirty() {
+            if !self.dirty {
                 if let Some(ref mut p) = self.pager {
                     p.draw(grid,
                            ((get_x(upper_left), get_y(upper_left) +  mid + headers_rows + 1), bottom_right),
                            context);
-                }
+            }
                 return;
             }
             self.dirty = false;
@@ -231,9 +240,10 @@ impl Component for MailListing {
 
             /* Draw header */
             {
-                let ref mail = self.mailbox.collection[self.cursor_pos];
+                let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
+                let envelope: &Envelope = &mailbox.collection[self.cursor_pos.2];
 
-                let x = write_string_to_grid(&format!("Date: {}", mail.get_date_as_str()),
+                let x = write_string_to_grid(&format!("Date: {}", envelope.get_date_as_str()),
                 grid,
                 Color::Byte(33),
                 Color::Default,
@@ -243,7 +253,7 @@ impl Component for MailListing {
                     grid[(x, mid+1)].set_bg(Color::Default);
                     grid[(x, mid+1)].set_fg(Color::Default);
                 }
-                let x = write_string_to_grid(&format!("From: {}", mail.get_from()),
+                let x = write_string_to_grid(&format!("From: {}", envelope.get_from()),
                 grid,
                 Color::Byte(33),
                 Color::Default,
@@ -253,7 +263,7 @@ impl Component for MailListing {
                     grid[(x, mid+2)].set_bg(Color::Default);
                     grid[(x, mid+2)].set_fg(Color::Default);
                 }
-                let x = write_string_to_grid(&format!("To: {}", mail.get_to()),
+                let x = write_string_to_grid(&format!("To: {}", envelope.get_to()),
                 grid,
                 Color::Byte(33),
                 Color::Default,
@@ -263,7 +273,7 @@ impl Component for MailListing {
                     grid[(x, mid+3)].set_bg(Color::Default);
                     grid[(x, mid+3)].set_fg(Color::Default);
                 }
-                let x = write_string_to_grid(&format!("Subject: {}", mail.get_subject()),
+                let x = write_string_to_grid(&format!("Subject: {}", envelope.get_subject()),
                 grid,
                 Color::Byte(33),
                 Color::Default,
@@ -273,7 +283,7 @@ impl Component for MailListing {
                     grid[(x, mid+4)].set_bg(Color::Default);
                     grid[(x, mid+4)].set_fg(Color::Default);
                 }
-                let x = write_string_to_grid(&format!("Message-ID: {}", mail.get_message_id_raw()),
+                let x = write_string_to_grid(&format!("Message-ID: {}", envelope.get_message_id_raw()),
                 grid,
                 Color::Byte(33),
                 Color::Default,
@@ -300,14 +310,14 @@ impl Component for MailListing {
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
         match event.event_type {
             UIEventType::Input(Key::Up) => {
-                if self.cursor_pos > 0 {
-                    self.new_cursor_pos -= 1;
+                if self.cursor_pos.2 > 0 {
+                    self.new_cursor_pos.2 -= 1;
                     self.dirty = true;
                 }
             },
             UIEventType::Input(Key::Down) => {
-                if self.length > 0 && self.new_cursor_pos < self.length - 1 {
-                    self.new_cursor_pos += 1;
+                if self.length > 0 && self.new_cursor_pos.2 < self.length - 1 {
+                    self.new_cursor_pos.2 += 1;
                     self.dirty = true;
                 }
             },
@@ -316,15 +326,47 @@ impl Component for MailListing {
                 self.dirty = true;
 
             },
-            UIEventType::Input(Key::Esc) if self.unfocused == true => {
+            UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Char('i')) if self.unfocused == true => {
                 self.unfocused = false;
                 self.dirty = true;
                 self.pager = None;
 
             },
+            UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
+                let folder_length = context.accounts[self.cursor_pos.0].len();
+                match k {
+                    'J' if folder_length > 0 && self.new_cursor_pos.1 < folder_length - 1 => {
+                        self.new_cursor_pos.1 = self.cursor_pos.1 + 1;
+                        self.dirty = true;
+                        self.refresh_mailbox(context);
+                    },
+                    'K' if self.cursor_pos.1 > 0 => {
+                        self.new_cursor_pos.1 = self.cursor_pos.1 - 1;
+                        self.dirty = true;
+                        self.refresh_mailbox(context);
+                    },
+                    _ => {
+                    },
+                }
+            },
+            UIEventType::Input(Key::Char(k @ 'h')) | UIEventType::Input(Key::Char(k @ 'l')) => {
+                let accounts_length = context.accounts.len();
+                match k {
+                    'h' if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1 => {
+                        self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
+                        self.dirty = true;
+                        self.refresh_mailbox(context);
+                    },
+                    'l' if self.cursor_pos.0 > 0 => {
+                        self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
+                        self.dirty = true;
+                        self.refresh_mailbox(context);
+                    },
+                    _ => {
+                    },
+                }
+            },
             UIEventType::RefreshMailbox(ref m) => {
-                self.mailbox = m.clone();
-                self.refresh_mailbox();
                 self.dirty = true;
                 self.pager = None;
             },
@@ -471,7 +513,6 @@ impl Component for AccountMenu {
                                     (set_y(upper_left, y), bottom_right),
                                     &a);
         }
-
 
         context.dirty_areas.push_back(area);
     }

@@ -27,11 +27,6 @@ bitflags = "1.0"
 notify = "4.0.1"
 termion = "1.5.1"
 
-[dependencies.ncurses]
-features = ["wide"]
-optional = false
-version = "5.86.0"
-
 [profile.release]
 #lto = true
 debug = true

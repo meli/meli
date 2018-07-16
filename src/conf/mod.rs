@@ -29,12 +29,15 @@ use pager::PagerSettings;
 
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 use std::io;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default, Clone)]
 pub struct Folder {
+    hash: u64,
     name: String,
     path: String,
     children: Vec<usize>,
@@ -42,7 +45,10 @@ pub struct Folder {
 
 impl Folder {
     fn new(path: String, file_name: String, children: Vec<usize>) -> Self {
+        let mut h = DefaultHasher::new();
+        h.write(&path.as_bytes());
         Folder {
+            hash: h.finish(),
             name: file_name,
             path: path,
             children: children,

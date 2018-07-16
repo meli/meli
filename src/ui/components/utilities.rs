@@ -185,7 +185,6 @@ impl Component for Pager {
             UIEventType::Input(Key::Char('j')) => {
                 if self.height > 0 && self.cursor_pos < self.height - 1 {
                     self.cursor_pos += 1;
-                    eprintln!("new pager cursor is {}", self.cursor_pos);
                     self.dirty = true;
                 }
             },
@@ -257,7 +256,7 @@ impl Component for StatusBar {
         let _ = self.container.component.draw(grid,
                                               (upper_left, (get_x(bottom_right), get_y(bottom_right) - height)),
                                               context);
-        
+
         if !self.is_dirty() {
             return;
         }
@@ -290,6 +289,7 @@ impl Component for StatusBar {
                 match m {
                     UIMode::Normal => {
                         self.height = 1;
+                        context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::Command(self.ex_buffer.clone())});
                         self.ex_buffer.clear()
                     },
                     UIMode::Execute => {

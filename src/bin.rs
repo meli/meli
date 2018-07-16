@@ -18,13 +18,13 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+extern crate melib;
+#[macro_use]
+extern crate nom;
+extern crate termion;
 
 pub mod ui;
 use ui::*;
-
-extern crate melib;
-extern crate nom;
-extern crate termion;
 pub use melib::*;
 
 use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
@@ -72,69 +72,44 @@ fn main() {
     let status_bar = Entity { component: Box::new(StatusBar::new(window)) };
     state.register_entity(status_bar);
 
+    /*
     let mut idxa = 0;
     let mut idxm = 0;
     let account_length = state.context.accounts.len();
+    */
     let mut mode: UIMode = UIMode::Normal;
     'main: loop {
+        /*
         state.refresh_mailbox(idxa,idxm);
+        */
+        /*
         let folder_length = state.context.accounts[idxa].len();
+        */
         state.render();
 
         'inner: loop {
+            let events: Vec<UIEvent> = state.context.get_replies();
+            for e in events {
+                state.rcv_event(e);
+            }
+            state.redraw();
             match receiver.recv().unwrap() {
                 ThreadEvent::Input(k) => {
                     match mode {
                         UIMode::Normal => {
                             match k {
-                                key @ Key::Char('j') | key @ Key::Char('k') => {
-                                    state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
-                                    state.redraw();
-                                },
-                                key @ Key::Up | key @ Key::Down => {
-                                    state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
-                                    state.redraw();
-                                }
-                                Key::Char('\n') => {
-                                    state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(Key::Char('\n'))});
-                                    state.redraw();
-                                }
-                                Key::Char('i') | Key::Esc => {
-                                    state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(Key::Esc)});
-                                    state.redraw();
-                                }
-                                Key::F(_) => {
-                                },
                                 Key::Char('q') | Key::Char('Q') => {
                                     break 'main;
                                 },
-                                Key::Char('J') => if idxm + 1 < folder_length  {
-                                    idxm += 1;
-                                    break 'inner;
-                                },
-                                Key::Char('K') => if idxm > 0 {
-                                    idxm -= 1;
-                                    break 'inner;
-                                },
-                                Key::Char('l') => if idxa + 1 < account_length  {
-                                    idxa += 1;
-                                    idxm = 0;
-                                    break 'inner;
-                                },
-                                Key::Char('h') => if idxa > 0 {
-                                    idxa -= 1;
-                                    idxm = 0;
-                                    break 'inner;
-                                },
-                                Key::Char('r') => {
-                                    state.update_size();
-                                    state.render();
-                                },
-                                Key::Char(' ') => {
+                                Key::Char(';') => {
                                     mode = UIMode::Execute;
                                     state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(mode)});
                                     state.redraw();
                                 }
+                                key  => {
+                                    state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
+                                    state.redraw();
+                                },
                                 _ => {}
                             }
                         },
@@ -143,7 +118,7 @@ fn main() {
                                 Key::Char('\n') | Key::Esc => {
                                     mode = UIMode::Normal;
                                     state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(mode)});
-                                    state.render();
+                                    state.redraw();
                                 },
                                 k @ Key::Char(_) => {
                                     state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ExInput(k)});
