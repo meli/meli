@@ -31,7 +31,7 @@ pub struct Account {
 
     sent_folder: Option<usize>,
 
-    settings: AccountSettings,
+    pub settings: AccountSettings,
     pub backend: Box<MailBackend>,
 }
 

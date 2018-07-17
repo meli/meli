@@ -31,7 +31,7 @@ pub struct ImapOp {
 }
 
 impl ImapOp {
-    pub fn new(path: String) -> Self {
+    pub fn new(_path: String) -> Self {
         ImapOp {
         }
     }
@@ -63,16 +63,16 @@ pub struct ImapType {
 
 
 impl MailBackend for ImapType {
-    fn get(&self, folder: &Folder) -> Result<Vec<Envelope>> {
+    fn get(&self, _folder: &Folder) -> Result<Vec<Envelope>> {
         unimplemented!();
     }
-    fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> () {
+    fn watch(&self, _sender: RefreshEventConsumer, _folders: &[Folder]) -> () {
         unimplemented!();
     }
 }
 
 impl ImapType {
-    pub fn new(path: &str) -> Self {
+    pub fn new(_path: &str) -> Self {
         ImapType {
         }
     }

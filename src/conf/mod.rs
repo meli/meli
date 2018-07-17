@@ -87,7 +87,7 @@ pub struct AccountSettings {
     pub folders: Vec<Folder>,
     format: String,
     pub sent_folder: String,
-    threaded: bool,
+    pub threaded: bool,
 }
 
 impl AccountSettings {
@@ -157,8 +157,7 @@ impl Settings {
             if path.is_dir() {
                 folders.push(Folder::new(path.to_str().unwrap().to_string(), path.file_name().unwrap().to_str().unwrap().to_string(), path_children));
             }
-            //recurse_folders(&mut folders, &x.folders);
-            eprintln!("folders is {:?}", folders);
+            //folders.sort_by(|a, b| b.name.cmp(&a.name));
             s.insert(
                 id.clone(),
                 AccountSettings {
@@ -170,7 +169,6 @@ impl Settings {
                 },
             );
         }
-        eprintln!("pager settings are {:?}", fs.pager);
 
         Settings { accounts: s, pager: fs.pager }
     }

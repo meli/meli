@@ -93,12 +93,13 @@ impl From<RefreshEvent> for ThreadEvent {
 pub enum UIEventType {
     Input(Key),
     ExInput(Key),
-    RefreshMailbox(Mailbox),
+    RefreshMailbox((usize,usize)),
     //Quit?
     Resize,
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),
+    Notification(String),
 }
 
 
@@ -123,6 +124,13 @@ impl fmt::Display for UIMode {
     }
 }
 
+pub struct Notification {
+    title: String,
+    content: String,
+
+    timestamp: std::time::Instant,
+}
+
 pub struct Context {
     pub accounts: Vec<Account>,
     settings: Settings,
@@ -139,6 +147,7 @@ impl Context {
         self.replies.drain(0..).collect()
     }
 }
+
 
 pub struct State<W: Write> {
     cols: usize,
@@ -169,6 +178,8 @@ impl<W: Write> State<W> {
         let termrows = termsize.map(|(_,h)| h);
         let cols = termcols.unwrap_or(0) as usize;
         let rows = termrows.unwrap_or(0) as usize;
+        let mut accounts: Vec<Account> = settings.accounts.iter().map(|(n, a_s)| { Account::new(n.to_string(), a_s.clone(), &backends) }).collect();
+        accounts.sort_by(|a,b| a.get_name().cmp(&b.get_name()) );
         let mut s = State {
             cols: cols,
             rows: rows,
@@ -178,7 +189,7 @@ impl<W: Write> State<W> {
             entities: Vec::with_capacity(1),
 
             context: Context {
-                accounts: settings.accounts.iter().map(|(n, a_s)| { Account::new(n.to_string(), a_s.clone(), &backends) }).collect(),
+                accounts: accounts,
                 backends: backends,
                 settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
@@ -197,7 +208,6 @@ impl<W: Write> State<W> {
         s
     }
     pub fn update_size(&mut self) {
-        /* update dimensions. TODO: Only do that in size change events. ie SIGWINCH */
         let termsize = termion::terminal_size().ok();
         let termcols = termsize.map(|(w,_)| w);
         let termrows = termsize.map(|(_,h)| h);
@@ -304,17 +314,20 @@ impl<W: Write> State<W> {
             self.entities[i].rcv_event(&event, &mut self.context);
         }
     }
+
     /// Tries to load a mailbox's content
     pub fn refresh_mailbox(&mut self, account_idx: usize, folder_idx: usize) {
-        let mailbox = match &mut self.context.accounts[account_idx][folder_idx] {
-            Some(Ok(v)) => { Some(v.clone()) },
-            Some(Err(e)) => { eprintln!("error {:?}", e); None },
-            None => {  eprintln!("None"); None },
+        let flag = match &mut self.context.accounts[account_idx][folder_idx] {
+            Some(Ok(_)) => {
+                true
+            },
+            Some(Err(e)) => { eprintln!("error {:?}", e); false },
+            None => {  eprintln!("None"); false },
         };
-        if let Some(m) = mailbox {
-            self.rcv_event(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox(m) });
-        }
+        if flag {
 
+            self.rcv_event(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox((account_idx, folder_idx)) });
+        }
     }
 }
 

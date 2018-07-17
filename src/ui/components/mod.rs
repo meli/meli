@@ -21,6 +21,7 @@
 
 pub mod utilities;
 pub mod mail;
+pub mod notifications;
 
 use super::*;
 pub use utilities::*;

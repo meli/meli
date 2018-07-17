@@ -32,7 +32,7 @@ impl MailListing {
 
 
     pub fn new() -> Self {
-        let mut content = CellBuffer::new(0, 0, Cell::with_char(' '));
+        let content = CellBuffer::new(0, 0, Cell::with_char(' '));
         MailListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (0, 0, 0),
@@ -50,11 +50,13 @@ impl MailListing {
         self.cursor_pos.2 = 0;
         self.new_cursor_pos.2 = 0;
         self.cursor_pos.1 = self.new_cursor_pos.1;
+        self.cursor_pos.0 = self.new_cursor_pos.0;
 
+        let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
         // Get mailbox as a reference.
         let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
         // Inform State that we changed the current folder view.
-        context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox(mailbox.clone()) });
+        context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox((self.cursor_pos.0, self.cursor_pos.1)) });
 
         self.length = mailbox.len();
         let mut content = CellBuffer::new(MAX_COLS, self.length+1, Cell::with_char(' '));
@@ -69,43 +71,118 @@ impl MailListing {
             return;
         }
 
-        // Populate `CellBuffer` with every entry. 
-        // TODO: Lazy load? 
-        let mut idx = 0;
-        for y in 0..=self.length {
-            if idx >= self.length {
-                /* No more entries left, so fill the rest of the area with empty space */
-                clear_area(&mut content,
-                           ((0, y), (MAX_COLS-1, self.length)));
-                break;
+
+        // TODO: Fix the threaded hell and refactor stuff into seperate functions and/or modules.
+        if threaded {
+            let mut indentations: Vec<bool> = Vec::with_capacity(6);
+            /* Draw threaded view. */
+            let mut iter = mailbox
+                .threaded_collection
+                .iter()
+                .enumerate()
+                .peekable();
+            /* This is just a desugared for loop so that we can use .peek() */
+            while let Some((idx, i)) = iter.next() {
+                let container = mailbox.get_thread(*i);
+                let indentation = container.get_indentation();
+
+                assert_eq!(container.has_message(), true);
+                match iter.peek() {
+                    Some(&(_, x))
+                        if mailbox.get_thread(*x).get_indentation() == indentation =>
+                    {
+                        indentations.pop();
+                        indentations.push(true);
+                    }
+                    _ => {
+                        indentations.pop();
+                        indentations.push(false);
+                    }
+                }
+                if container.has_sibling() {
+                    indentations.pop();
+                    indentations.push(true);
+                }
+                let envelope : &Envelope = &mailbox.collection[container.get_message().unwrap()];
+                let fg_color = if !envelope.is_seen() {
+                    Color::Byte(0)
+                } else {
+                    Color::Default
+                };
+                let bg_color = if !envelope.is_seen() {
+                    Color::Byte(251)
+                } else if idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                }
+                let x = write_string_to_grid(&MailListing::make_thread_entry(envelope, idx, indentation, container, idx == self.cursor_pos.2, &indentations),
+                &mut content,
+                fg_color,
+                bg_color,
+                ((0, idx) , (MAX_COLS-1, idx)));
+                for x in x..MAX_COLS {
+                    content[(x,idx)].set_ch(' ');
+                    content[(x,idx)].set_bg(bg_color);
+                }
+
+                match iter.peek() {
+                    Some(&(_, x))
+                        if mailbox.get_thread(*x).get_indentation() > indentation =>
+                    {
+                        indentations.push(false);
+                    }
+                    Some(&(_, x))
+                        if mailbox.get_thread(*x).get_indentation() < indentation =>
+                    {
+                        for _ in 0..(indentation - mailbox.get_thread(*x).get_indentation()) {
+                            indentations.pop();
+                        }
+                    }
+                    _ => {}
+                }
             }
-            /* Write an entire line for each envelope entry. */
-            let envelope: &Envelope = &mailbox.collection[idx];
+        } else {
 
-            let fg_color = if !envelope.is_seen() {
-                Color::Byte(0)
-            } else {
-                Color::Default
-            };
-            let bg_color = if !envelope.is_seen() {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(236)
-            } else {
-                Color::Default
-            };
-            let x = write_string_to_grid(&MailListing::make_entry_string(envelope, idx),
-            &mut content,
-            fg_color,
-            bg_color,
-            ((0, y) , (MAX_COLS-1, y)));
+            // Populate `CellBuffer` with every entry. 
+            // TODO: Lazy load? 
+            let mut idx = 0;
+            for y in 0..=self.length {
+                if idx >= self.length {
+                    /* No more entries left, so fill the rest of the area with empty space */
+                    clear_area(&mut content,
+                               ((0, y), (MAX_COLS-1, self.length)));
+                    break;
+                }
+                /* Write an entire line for each envelope entry. */
+                let envelope: &Envelope = &mailbox.collection[idx];
 
-            for x in x..MAX_COLS {
-                content[(x,y)].set_ch(' ');
-                content[(x,y)].set_bg(bg_color);
+                let fg_color = if !envelope.is_seen() {
+                    Color::Byte(0)
+                } else {
+                    Color::Default
+                };
+                let bg_color = if !envelope.is_seen() {
+                    Color::Byte(251)
+                } else if idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                };
+                let x = write_string_to_grid(&MailListing::make_entry_string(envelope, idx),
+                &mut content,
+                fg_color,
+                bg_color,
+                ((0, y) , (MAX_COLS-1, y)));
+
+                for x in x..MAX_COLS {
+                    content[(x,y)].set_ch(' ');
+                    content[(x,y)].set_bg(bg_color);
+                }
+
+                idx+=1;
             }
 
-            idx+=1;
         }
 
         self.content = content;
@@ -180,12 +257,68 @@ impl MailListing {
     /// Create a pager for the `Envelope` currently under the cursor.
     fn draw_mail_view(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         {
+            let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
             let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
-            let envelope: &Envelope = &mailbox.collection[self.cursor_pos.2];
+            let envelope: &Envelope = if threaded {
+                let i = mailbox.get_threaded_mail(self.cursor_pos.2);
+                &mailbox.collection[i]
+            } else {
+                &mailbox.collection[self.cursor_pos.2]
+            };
 
-            self.pager = Some(Pager::new(envelope));
+            let pager_filter = context.settings.pager.filter.clone();
+            self.pager = Some(Pager::new(&envelope, pager_filter));
         }
         self.pager.as_mut().map(|p| p.draw(grid, area, context));
+    }
+    fn make_thread_entry(envelope: &Envelope, idx: usize, indent: usize,
+                         container: &Container, highlight: bool, indentations: &Vec<bool>) -> String {
+        let has_sibling = container.has_sibling();
+        let has_parent = container.has_parent();
+        let show_subject = container.get_show_subject();
+
+        let fg_color = if !envelope.is_seen() {
+            Color::Byte(0)
+        } else {
+            Color::Default
+        };
+        let bg_color = if highlight {
+            if !envelope.is_seen() {
+                Color::Byte(252)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            }
+        } else {
+            Color::Byte(246)
+        };
+        let mut s = format!("{} {} ", idx, &envelope.get_datetime().format("%Y-%m-%d %H:%M:%S").to_string()); //   {}    {:.85}",idx,),e.get_subject())
+        for i in 0..indent {
+            if indentations.len() > i && indentations[i]
+            {
+                s.push('│');
+            } else {
+                s.push(' ');
+            }
+            if i > 0 {
+                s.push(' ');
+            }
+        }
+        if indent > 0 {
+            if has_sibling && has_parent {
+                s.push('├');
+            } else if has_sibling {
+                s.push('┬');
+            } else {
+                s.push('└');
+            }
+            s.push('─'); s.push('>');
+        }
+        if show_subject {
+            s.push_str(&format!("{:.85}", envelope.get_subject()));
+        }
+        s
     }
 }
 
@@ -255,8 +388,14 @@ impl Component for MailListing {
 
             /* Draw header */
             {
+                let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
                 let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
-                let envelope: &Envelope = &mailbox.collection[self.cursor_pos.2];
+                let envelope: &Envelope = if threaded {
+                    let i = mailbox.get_threaded_mail(self.cursor_pos.2);
+                    &mailbox.collection[i]
+                } else {
+                    &mailbox.collection[self.cursor_pos.2]
+                };
 
                 let x = write_string_to_grid(&format!("Date: {}", envelope.get_date_as_str()),
                                              grid,
@@ -369,11 +508,13 @@ impl Component for MailListing {
                 match k {
                     'h' if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1 => {
                         self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
+                        self.new_cursor_pos.1 = 0;
                         self.dirty = true;
                         self.refresh_mailbox(context);
                     },
                     'l' if self.cursor_pos.0 > 0 => {
                         self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
+                        self.new_cursor_pos.1 = 0;
                         self.dirty = true;
                         self.refresh_mailbox(context);
                     },
@@ -438,16 +579,16 @@ impl AccountMenu {
             cursor: None,
         }
     }
-    fn highlight_folder(&mut self, m: &Mailbox) {
-        self.dirty = true;
-        self.cursor = None;
-    }
     fn print_account(&self, grid: &mut CellBuffer, area: Area, a: &AccountMenuEntry) -> usize {
         if !is_valid_area!(area) {
             eprintln!("BUG: invalid area in print_account");
         }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
+
+
+        let highlight = self.cursor.map(|(x,_)| x == a.index).unwrap_or(false);
+            
         let mut parents: Vec<Option<usize>> = vec!(None; a.entries.len());
 
         for (idx, e) in a.entries.iter().enumerate() {
@@ -461,10 +602,11 @@ impl AccountMenu {
                 roots.push(idx);
             }
         }
+        eprintln!("roots is {:?}", roots);
 
         let mut inc = 0;
         let mut depth = String::from("");
-        let mut s = String::from(format!("\n\n  {}\n", a.name));
+        let mut s = String::from(format!("{}\n", a.name));
         fn pop(depth: &mut String) {
             depth.pop();
             depth.pop();
@@ -489,8 +631,8 @@ impl AccountMenu {
         }
         for r in roots {
             print(r, &parents, &mut depth, &a.entries, &mut s, &mut inc);
-
         }
+        eprintln!("s = {}", s);
 
         let lines: Vec<&str> = s.lines().collect();
         let lines_len = lines.len();
@@ -504,14 +646,40 @@ impl AccountMenu {
             } else {
                 format!("{}", lines[idx])
             };
-            write_string_to_grid(&s,
+            let color_fg = if highlight {
+                if idx > 1 && self.cursor.unwrap().1 == idx - 2 {
+                Color::Byte(233)
+                } else {
+                Color::Byte(15)
+                }
+            } else {
+                Color::Default
+            };
+
+            let color_bg = if highlight {
+                if idx > 1 && self.cursor.unwrap().1 == idx - 2 {
+                Color::Byte(15)
+                } else {
+                Color::Byte(233)
+                }
+            } else {
+                Color::Default
+            };
+
+            let x = write_string_to_grid(&s,
                                  grid,
-                                 Color::Byte(30),
-                                 Color::Default,
+                                 color_fg,
+                                 color_bg,
                                  (set_y(upper_left, y), bottom_right));
+
+            if highlight && idx > 1 && self.cursor.unwrap().1 == idx - 2 {
+                change_colors(grid, ((x, y),(get_x(bottom_right)+1, y)), color_fg , color_bg);
+            } else {
+                change_colors(grid, ((x, y),set_y(bottom_right, y)), color_fg , color_bg);
+            }
             idx += 1;
         }
-        idx
+        idx - 1
 
     }
 }
@@ -525,19 +693,22 @@ impl Component for AccountMenu {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         self.dirty = false;
-        let mut y = get_y(upper_left);
+        let mut y = get_y(upper_left) + 1;
         for a in &self.accounts {
+            eprintln!("\n\naccount: {:?}\n\n", a);
             y += self.print_account(grid,
                                     (set_y(upper_left, y), bottom_right),
                                     &a);
         }
 
+        eprintln!("\n\naccountentries: {:?}\n\n", self.accounts);
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
         match event.event_type {
-            UIEventType::RefreshMailbox(ref m) => {
-                self.highlight_folder(m);
+            UIEventType::RefreshMailbox(c) => {
+                self.cursor = Some(c);
+                self.dirty = true;
             },
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;

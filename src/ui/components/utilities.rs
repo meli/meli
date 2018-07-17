@@ -126,27 +126,50 @@ pub struct Pager {
 }
 
 impl Pager {
-    pub fn new(mail: &Envelope) -> Self {
-        let text = mail.get_body().get_text();
+    pub fn new(mail: &Envelope, pager_filter: Option<String>) -> Self {
+        let mut text = mail.get_body().get_text();
+        if let Some(bin) = pager_filter {
+            use std::io::Write;
+            use std::process::{Command, Stdio};
+            eprintln!("{}", bin);
+            let mut filter_child = Command::new(bin)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .expect("Failed to start pager filter process");
+            {
+                let mut stdin =
+                    filter_child.stdin.as_mut().expect("failed to open stdin");
+                stdin.write_all(text.as_bytes()).expect("Failed to write to stdin");
+            }
+
+
+            text = String::from_utf8_lossy(&filter_child.wait_with_output().expect("Failed to wait on filter").stdout).to_string();
+        }
         let lines: Vec<&str> = text.trim().split('\n').collect();
         let height = lines.len();
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        if width > 0 {
-            for (i, l) in lines.iter().enumerate() {
-                write_string_to_grid(l,
-                                     &mut content,
-                                     Color::Default,
-                                     Color::Default,
-                                     ((0, i), (width -1, i)));
-            }
-        }
+        Pager::print_string(&mut content, &text);
         Pager {
             cursor_pos: 0,
             height: height,
             width: width,
             dirty: true,
             content: content,
+        }
+    }
+    pub fn print_string(content: &mut CellBuffer, s: &str) {
+        let lines: Vec<&str> = s.trim().split('\n').collect();
+        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+        if width > 0 {
+            for (i, l) in lines.iter().enumerate() {
+                write_string_to_grid(l,
+                                     content,
+                                     Color::Default,
+                                     Color::Default,
+                                     ((0, i), (width -1, i)));
+            }
         }
     }
 }
@@ -163,6 +186,7 @@ impl Component for Pager {
         if self.height == 0 || self.height == self.cursor_pos || self.width == 0 {
             return;
         }
+
         clear_area(grid,
                    (upper_left, bottom_right));
         context.dirty_areas.push_back((upper_left, bottom_right));
@@ -228,18 +252,20 @@ impl StatusBar {
         clear_area(grid, area);
         write_string_to_grid(&self.status,
                              grid,
-                             Color::Byte(36),
-                             Color::Default,
+                             Color::Byte(123),
+                             Color::Byte(26),
                              area);
+        change_colors(grid, area, Color::Byte(123), Color::Byte(26));
         context.dirty_areas.push_back(area);
     }
     fn draw_execute_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area);
         write_string_to_grid(&self.ex_buffer,
                              grid,
-                             Color::Byte(124),
-                             Color::Default,
+                             Color::Byte(219),
+                             Color::Byte(88),
                              area);
+        change_colors(grid, area, Color::Byte(219), Color::Byte(88));
         context.dirty_areas.push_back(area);
     }
 }
@@ -279,7 +305,8 @@ impl Component for StatusBar {
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
         self.container.rcv_event(event, context);
         match event.event_type {
-            UIEventType::RefreshMailbox(ref m) => {
+            UIEventType::RefreshMailbox((idx_a, idx_f)) => {
+                let m = &context.accounts[idx_a][idx_f].as_ref().unwrap().as_ref().unwrap();
                 self.status = format!("{} |Mailbox: {}, Messages: {}, New: {}", self.mode,  m.folder.get_name(), m.collection.len(), m.collection.iter().filter(|e| !e.is_seen()).count());
                 self.dirty = true;
 

@@ -22,6 +22,7 @@ extern crate melib;
 #[macro_use]
 extern crate nom;
 extern crate termion;
+extern crate notify_rust;
 
 pub mod ui;
 use ui::*;
@@ -69,9 +70,13 @@ fn main() {
     let menu = Entity {component: Box::new(AccountMenu::new(&state.context.accounts)) };
     let listing = MailListing::new();
     let b = Entity { component: Box::new(listing) };
-    let window  = Entity { component: Box::new(VSplit::new(menu,b,90)) };
+    let window  = Entity { component: Box::new(VSplit::new(menu, b, 80)) };
     let status_bar = Entity { component: Box::new(StatusBar::new(window)) };
     state.register_entity(status_bar);
+
+
+    let xdg_notifications = Entity { component: Box::new(ui::components::notifications::XDGNotifications {}) };
+    state.register_entity(xdg_notifications);
 
     /* Keep track of the input mode. See ui::UIMode for details */
     let mut mode: UIMode = UIMode::Normal;
@@ -94,6 +99,7 @@ fn main() {
                                 UIMode::Normal => {
                                     match k {
                                         Key::Char('q') | Key::Char('Q') => {
+                                            drop(state);
                                             break 'main;
                                         },
                                         Key::Char(';') => {
@@ -124,6 +130,8 @@ fn main() {
                             }
                         },
                         ThreadEvent::RefreshMailbox { name : n } => {
+                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Notification(n.clone())});
+                            state.redraw();
                             /* Don't handle this yet. */
                             eprintln!("Refresh mailbox {}", n);
                         },
