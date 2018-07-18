@@ -198,7 +198,9 @@ impl MailListing {
         } else {
             Color::Default
         };
-        let bg_color = if self.cursor_pos.2 != idx {
+        let bg_color = if self.cursor_pos.2 == idx {
+            Color::Byte(246)
+        } else {
             if !envelope.is_seen() {
                 Color::Byte(252)
             } else if idx % 2 == 0 {
@@ -206,8 +208,6 @@ impl MailListing {
             } else {
                 Color::Default
             }
-        } else {
-            Color::Byte(246)
         };
         change_colors(grid, area, fg_color, bg_color);
     }
@@ -229,7 +229,7 @@ impl MailListing {
         let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
-        let idx = page_no*rows;
+        let top_idx = page_no*rows;
 
 
         /* If cursor position has changed, remove the highlight from the previous position and
@@ -251,8 +251,8 @@ impl MailListing {
         }
 
         /* Page_no has changed, so draw new page */
-        copy_area(grid, &self.content, area, ((0, idx), (MAX_COLS - 1, self.length)));
-        self.highlight_line(grid, (set_y(upper_left, get_y(upper_left)+(idx % rows)), set_y(bottom_right, get_y(upper_left) + (idx % rows))), self.cursor_pos.2, context);
+        copy_area(grid, &self.content, area, ((0, top_idx), (MAX_COLS - 1, self.length)));
+        self.highlight_line(grid, (set_y(upper_left, get_y(upper_left)+(self.cursor_pos.2 % rows)), set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows))), self.cursor_pos.2, context);
         context.dirty_areas.push_back(area);
     }
 
@@ -622,7 +622,6 @@ impl AccountMenu {
                 roots.push(idx);
             }
         }
-        eprintln!("roots is {:?}", roots);
 
         let mut inc = 0;
         let mut depth = String::from("");
@@ -652,7 +651,6 @@ impl AccountMenu {
         for r in roots {
             print(r, &parents, &mut depth, &a.entries, &mut s, &mut inc);
         }
-        eprintln!("s = {}", s);
 
         let lines: Vec<&str> = s.lines().collect();
         let lines_len = lines.len();
@@ -715,13 +713,11 @@ impl Component for AccountMenu {
         self.dirty = false;
         let mut y = get_y(upper_left) + 1;
         for a in &self.accounts {
-            eprintln!("\n\naccount: {:?}\n\n", a);
             y += self.print_account(grid,
                                     (set_y(upper_left, y), bottom_right),
                                     &a);
         }
 
-        eprintln!("\n\naccountentries: {:?}\n\n", self.accounts);
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
