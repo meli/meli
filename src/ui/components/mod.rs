@@ -19,6 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*!
+  Components are ways to handle application data. They can draw on the terminal and receive events, but also do other stuff as well. (For example, see the `notifications` module.)
+
+  See the `Component` Trait for more details.
+  */
+
 pub mod utilities;
 pub mod mail;
 pub mod notifications;
@@ -78,7 +84,7 @@ pub trait Component {
     }
 }
 
-/// Copy Area src to dest 
+/// Copy a source `Area` to a destination.
 pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
         eprintln!("BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}", src, dest);
@@ -104,6 +110,7 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
     }
 }
 
+/// Change foreground and background colors in an `Area`
 pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_color: Color) {
     if !is_valid_area!(area) {
         eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
@@ -118,6 +125,7 @@ pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_colo
 }
 
 
+/// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed colors.
 fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_color: Color, area: Area) -> usize {
     let bounds = grid.size();
     let upper_left = upper_left!(area);
@@ -144,6 +152,7 @@ fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_colo
     x
 }
 
+/// Completely clear an `Area` with an empty char and the terminal's default colors.
 fn clear_area(grid: &mut CellBuffer, area: Area) {
     let upper_left = upper_left!(area);
     let bottom_right = bottom_right!(area);

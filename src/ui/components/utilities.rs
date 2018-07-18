@@ -1,3 +1,6 @@
+/*! Various useful components that can be used in a generic fashion.
+  */
+
 use ui::components::*;
 use ui::cells::*;
 
@@ -125,6 +128,7 @@ pub struct Pager {
     content: CellBuffer,
 }
 
+// TODO: Make the `new` method content agnostic.
 impl Pager {
     pub fn new(mail: &Envelope, pager_filter: Option<String>) -> Self {
         let mut text = mail.get_body().get_text();
@@ -151,6 +155,20 @@ impl Pager {
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
         Pager::print_string(&mut content, &text);
+        Pager {
+            cursor_pos: 0,
+            height: height,
+            width: width,
+            dirty: true,
+            content: content,
+        }
+    }
+    pub fn new_from_str(s: &str) -> Self {
+        let lines: Vec<&str> = s.trim().split('\n').collect();
+        let height = lines.len();
+        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        Pager::print_string(&mut content, s);
         Pager {
             cursor_pos: 0,
             height: height,

@@ -18,6 +18,12 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
+/*! This crate contains the frontend stuff of the application. The application entry way on `src/bin.rs` creates an event loop and passes input to the `ui` module.
+
+The mail handling stuff is done in the `melib` crate which includes all backend needs. The split is done to theoretically be able to create different frontends with the same innards.
+ */
+
 extern crate melib;
 #[macro_use]
 extern crate nom;

@@ -19,57 +19,41 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+
+/*!
+  The UI module has an Entity-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
+
+  `State` owns all the Entities of the UI, which are currently plain Containers for `Component`s. In the application's main event loop, input is handed to the state in the form of `UIEvent` objects which traverse the entity graph. Components decide to handle each input or not.
+
+  Input is received in the main loop from threads which listen on the stdin for user input, observe folders for file changes etc. The relevant struct is `ThreadEvent`.
+  */
+
 #[macro_use]
-pub mod position;
+mod position;
 pub mod components;
-pub mod cells;
+mod cells;
 
 #[macro_use]
 mod execute;
 use self::execute::goto;
-
-extern crate termion;
-extern crate melib;
-
-use std::collections::VecDeque;
-use std::fmt;
-
 pub use self::position::*;
-
-use melib::*;
-
-
-use std;
-use termion::{clear, style, cursor};
-use termion::raw::IntoRawMode;
-use termion::event::{Key as TermionKey, };
-
-use chan::Sender;
-
-
-use std::io::{Write, };
-use termion::input::TermRead;
-
 use self::cells::*;
 pub use self::components::*;
 
-/* Color pairs; foreground && background. */
-/// Default color.
-pub static COLOR_PAIR_DEFAULT: i16 = 1;
-/// Highlighted cursor line in index view.
-pub static COLOR_PAIR_CURSOR: i16 = 2;
-/// Header colour in pager view.
-pub static COLOR_PAIR_HEADERS: i16 = 3;
-/// Indentation symbol color in index view.
-pub static COLOR_PAIR_THREAD_INDENT: i16 = 4;
-/// Line color for odd entries in index view.
-pub static COLOR_PAIR_THREAD_ODD: i16 = 5;
-/// Line color for even entries in index view.
-pub static COLOR_PAIR_THREAD_EVEN: i16 = 6;
-/// Line color for unread odd entries in index view.
-pub static COLOR_PAIR_UNREAD_ODD: i16 = 7;
-/// Line color for unread even entries in index view.
-pub static COLOR_PAIR_UNREAD_EVEN: i16 = 8;
+extern crate melib;
+use melib::*;
+
+use std;
+use std::io::{Write, };
+use std::collections::VecDeque;
+use std::fmt;
+extern crate termion;
+use termion::{clear, style, cursor};
+use termion::raw::IntoRawMode;
+use termion::event::{Key as TermionKey, };
+use termion::input::TermRead;
+
+use chan::Sender;
 
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads
 /// to the main process.
@@ -103,6 +87,7 @@ pub enum UIEventType {
 }
 
 
+/// An event passed from `State` to its Entities.
 #[derive(Debug)]
 pub struct UIEvent {
     pub id: u64,
@@ -124,6 +109,7 @@ impl fmt::Display for UIMode {
     }
 }
 
+/// An event notification that is passed to Entities for handling.
 pub struct Notification {
     title: String,
     content: String,
@@ -131,6 +117,7 @@ pub struct Notification {
     timestamp: std::time::Instant,
 }
 
+/// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: Vec<Account>,
     settings: Settings,
@@ -149,6 +136,8 @@ impl Context {
 }
 
 
+/// A State object to manage and own components and entities of the UI. `State` is responsible for
+/// managing the terminal and interfacing with `melib`
 pub struct State<W: Write> {
     cols: usize,
     rows: usize,
@@ -285,24 +274,22 @@ impl<W: Write> State<W> {
     pub fn register_entity(&mut self, entity: Entity) {
         self.entities.push(entity);
     }
+    /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: String) {
+        //TODO: Make ex mode useful
         eprintln!("received command: {}", cmd);
 
         let result = goto(&cmd.as_bytes()).to_full_result();
         eprintln!("result is {:?}", result);
 
         if let Ok(v) = result {
-
             self.refresh_mailbox(0, v);
-
-
         }
-
     }
 
     pub fn rcv_event(&mut self, event: UIEvent) {
         match event.event_type {
-            // Command type is only for the State itself.
+            // Command type is handled only by State.
             UIEventType::Command(cmd) => {
                 self.parse_command(cmd);
                 return;
@@ -331,29 +318,8 @@ impl<W: Write> State<W> {
     }
 }
 
-pub fn convert_key(k: TermionKey ) -> Key {
-    match k {
-        TermionKey::Backspace => Key::Backspace,
-        TermionKey::Left => Key::Left,
-        TermionKey::Right => Key::Right,
-        TermionKey::Up => Key::Up,
-        TermionKey::Down => Key::Down,
-        TermionKey::Home => Key::Home,
-        TermionKey::End => Key::End,
-        TermionKey::PageUp => Key::PageUp,
-        TermionKey::PageDown => Key::PageDown,
-        TermionKey::Delete => Key::Delete,
-        TermionKey::Insert => Key::Insert,
-        TermionKey::F(u) => Key::F(u),
-        TermionKey::Char(c) => Key::Char(c),
-        TermionKey::Alt(c) => Key::Alt(c),
-        TermionKey::Ctrl(c) => Key::Ctrl(c),
-        TermionKey::Null => Key::Null,
-        TermionKey::Esc => Key::Esc,
-        _ => Key::Char(' '),
-    }
-}
 
+// TODO: Pass Ctrl C etc to the terminal.
 #[derive(Debug)]
 pub enum Key {
     /// Backspace.
@@ -396,12 +362,36 @@ pub enum Key {
     Esc,
 }
 
-pub fn get_events<F>(stdin: std::io::Stdin, mut closure: F) where F: FnMut(Key) -> (){
+impl From<TermionKey> for Key {
+    fn from(k: TermionKey ) -> Self {
+        match k {
+            TermionKey::Backspace => Key::Backspace,
+            TermionKey::Left => Key::Left,
+            TermionKey::Right => Key::Right,
+            TermionKey::Up => Key::Up,
+            TermionKey::Down => Key::Down,
+            TermionKey::Home => Key::Home,
+            TermionKey::End => Key::End,
+            TermionKey::PageUp => Key::PageUp,
+            TermionKey::PageDown => Key::PageDown,
+            TermionKey::Delete => Key::Delete,
+            TermionKey::Insert => Key::Insert,
+            TermionKey::F(u) => Key::F(u),
+            TermionKey::Char(c) => Key::Char(c),
+            TermionKey::Alt(c) => Key::Alt(c),
+            TermionKey::Ctrl(c) => Key::Ctrl(c),
+            TermionKey::Null => Key::Null,
+            TermionKey::Esc => Key::Esc,
+            _ => Key::Char(' '),
+        }
+    }
+}
+
+pub fn get_events(stdin: std::io::Stdin, mut closure: impl FnMut(Key)) -> (){
     let stdin = stdin.lock();
     for c in stdin.keys() {
         if let Ok(k) = c {
-            let k = convert_key(k);
-            closure(k);
+            closure(Key::from(k));
         }
     }
 }

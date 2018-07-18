@@ -1,6 +1,13 @@
+/*!
+  Define a (x, y) point in the terminal display as a holder of a character, foreground/background
+  colors and attributes.
+ */
 use std::ops::{Index, IndexMut, Deref, DerefMut};
 use super::position::*;
 use termion::color::AnsiValue;
+
+
+/// Types and implementations taken from rustty for convenience.
 
 pub trait CellAccessor: HasSize {
     fn cellvec(&self) -> &Vec<Cell>;
@@ -409,10 +416,10 @@ impl Color {
     pub fn as_termion(&self) -> AnsiValue {
         match *self {
             b @ Color::Black | b @ Color::Red | b @ Color::Green | b @ Color::Yellow | b @ Color::Blue | b @ Color::Magenta | b @ Color::Cyan | b @ Color::White | b @ Color::Default =>
-            { 
+            {
                 AnsiValue(b.as_byte())
             },
-            Color::Byte(b) => { 
+            Color::Byte(b) => {
                 AnsiValue(b as u8)
             },
         }
