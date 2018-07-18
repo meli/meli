@@ -280,7 +280,6 @@ impl<W: Write> State<W> {
         eprintln!("received command: {}", cmd);
 
         let result = goto(&cmd.as_bytes()).to_full_result();
-        eprintln!("result is {:?}", result);
 
         if let Ok(v) = result {
             self.refresh_mailbox(0, v);

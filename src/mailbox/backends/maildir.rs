@@ -125,27 +125,6 @@ pub struct MaildirType {
 impl MailBackend for MaildirType {
     fn get(&self, folder: &Folder) -> Result<Vec<Envelope>> {
         self.get_multicore(4, folder)
-        /*
-
-        MaildirType::is_valid(&self.path)?;
-        let mut path = PathBuf::from(&self.path);
-        path.push("cur");
-        let iter = path.read_dir()?;
-        let count = path.read_dir()?.count();
-        let mut r = Vec::with_capacity(count);
-        for e in iter {
-            //eprintln!("{:?}", e);
-            let e = e.and_then(|x| {
-                let path = x.path();
-                Ok(path.to_str().unwrap().to_string())
-            })?;
-            match Mail::from(&e) {
-                Some(e) => {r.push(e);},
-                None => {}
-            }
-        }
-        Ok(r)
-            */
     }
     fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> () {
         let folders = folders.to_vec();
@@ -158,7 +137,6 @@ impl MailBackend for MaildirType {
                     continue;
                 }
                 let mut p = PathBuf::from(&f.get_path());
-                eprintln!("watching {:?}", f);
                 p.push("cur");
                 watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
                 p.pop();
@@ -212,28 +190,11 @@ impl MaildirType {
         let mut files: Vec<String> = Vec::with_capacity(count);
         let mut r = Vec::with_capacity(count);
         for e in iter {
-            //eprintln!("{:?}", e);
             let e = e.and_then(|x| {
                 let path = x.path();
                 Ok(path.to_str().unwrap().to_string())
             })?;
             files.push(e);
-            /*
-
-            f.read_to_end(&mut buffer)?;
-            eprintln!("{:?}", String::from_utf8(buffer.clone()).unwrap());
-            let m = match Email::parse(&buffer) {
-                Ok((v, rest)) => match rest.len() {
-                    0 => v,
-                    _ =>
-                    { eprintln!("{:?}", String::from_utf8(rest.to_vec()).unwrap());
-panic!("didn't parse"); },
-                },
-                Err(v) => panic!(v),
-            };
-
-            r.push(m);
-            */
         }
         let mut threads = Vec::with_capacity(cores);
         if !files.is_empty() {

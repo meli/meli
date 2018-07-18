@@ -346,7 +346,6 @@ pub fn get_date(&self) -> i64 {
         let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
             Ok(v) => v,
             Err(v) => {
-                eprintln!("{} {:?}", new_val, v);
                 self.in_reply_to = None;
                 return;
             }
@@ -360,7 +359,6 @@ pub fn get_date(&self) -> i64 {
         let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
             Ok(v) => v,
             Err(v) => {
-                eprintln!("{} {:?}", new_val, v);
                 self.message_id = None;
                 return;
             }
@@ -371,7 +369,6 @@ pub fn get_date(&self) -> i64 {
         let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
             Ok(v) => v,
             Err(v) => {
-                eprintln!("{} {:?}", new_val, v);
                 return;
             }
         };

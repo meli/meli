@@ -38,7 +38,6 @@ pub struct Account {
 
 impl Account {
     pub fn new(name: String, settings: AccountSettings, backends: &Backends) -> Self {
-        eprintln!("new acc");
         let sent_folder = settings
             .folders
             .iter()
@@ -83,20 +82,13 @@ impl Index<usize> for Account {
 impl IndexMut<usize> for Account {
     fn index_mut(&mut self, index: usize) -> &mut Option<Result<Mailbox>> {
         if self.folders[index].is_none() {
-            eprintln!("building folder {:?}", self.settings.folders[index]);
             let folder = &self.settings.folders[index];
             let path = folder.get_path().clone();
             if self.sent_folder.is_some() {
                 let id = self.sent_folder.unwrap();
                 if id == index {
-                    eprintln!("building sent_folder..");
                     self.folders[index] = Some(Mailbox::new(folder, &None, self.backend.get(&folder)));
-                    eprintln!("Done!");
                 } else {
-                    eprintln!(
-                        "Now building folder {:?} with sent_folder",
-                        self.settings.folders[index]
-                    );
                     let (sent, cur) = {
                         let ptr = self.folders.as_mut_ptr();
                         unsafe {
@@ -109,20 +101,12 @@ impl IndexMut<usize> for Account {
                     };
                     let sent_path = &self.settings.folders[id];
                     if sent[0].is_none() {
-                        eprintln!("\tbuilding sent_folder..");
                         sent[0] = Some(Mailbox::new(sent_path, &None, self.backend.get(&folder)));
-                        eprintln!("\tDone!");
                     }
                     cur[0] = Some(Mailbox::new(folder, &sent[0],self.backend.get(folder)));
-                    eprintln!("Done!");
                 }
             } else {
-                eprintln!(
-                    "Now building folder {:?} without sent_folder",
-                    self.settings.folders[index]
-                );
                 self.folders[index] = Some(Mailbox::new(folder, &None,self.backend.get(&folder)));
-                eprintln!("Done!");
             };
         }
         &mut self.folders[index]
