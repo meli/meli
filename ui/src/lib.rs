@@ -52,6 +52,7 @@ use termion::{clear, style, cursor};
 use termion::raw::IntoRawMode;
 use termion::event::{Key as TermionKey, };
 use termion::input::TermRead;
+use termion::screen::AlternateScreen;
 
 extern crate chan;
 #[macro_use]
@@ -146,7 +147,7 @@ pub struct State<W: Write> {
     rows: usize,
 
     grid: CellBuffer,
-    stdout: termion::raw::RawTerminal<W>,
+    stdout: termion::screen::AlternateScreen<termion::raw::RawTerminal<W>>,
     sender: Sender<ThreadEvent>,
     entities: Vec<Entity>,
     pub context: Context,
@@ -164,6 +165,7 @@ impl<W: Write> State<W> {
     pub fn new(stdout: W, sender: Sender<ThreadEvent>) -> Self {
         let settings = Settings::new();
         let backends = Backends::new();
+        let stdout = AlternateScreen::from(stdout.into_raw_mode().unwrap());
 
         let termsize = termion::terminal_size().ok();
         let termcols = termsize.map(|(w,_)| w);
@@ -176,7 +178,7 @@ impl<W: Write> State<W> {
             cols: cols,
             rows: rows,
             grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
-            stdout: stdout.into_raw_mode().unwrap(),
+            stdout: stdout,
             sender: sender,
             entities: Vec::with_capacity(1),
 
