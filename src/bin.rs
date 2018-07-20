@@ -87,7 +87,7 @@ fn main() {
 
         'inner: loop {
             /* Check if any entities have sent reply events to State. */
-            let events: Vec<UIEvent> = state.context.get_replies();
+            let events: Vec<UIEvent> = state.context.replies();
             for e in events {
                 state.rcv_event(e);
             }

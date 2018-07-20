@@ -124,7 +124,7 @@ pub struct MaildirType {
 
 impl MailBackend for MaildirType {
     fn get(&self, folder: &Folder) -> Result<Vec<Envelope>> {
-        self.get_multicore(4, folder)
+        self.multicore(4, folder)
     }
     fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> () {
         let folders = folders.to_vec();
@@ -136,7 +136,7 @@ impl MailBackend for MaildirType {
                 if MaildirType::is_valid(&f).is_err() {
                     continue;
                 }
-                let mut p = PathBuf::from(&f.get_path());
+                let mut p = PathBuf::from(&f.path());
                 p.push("cur");
                 watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
                 p.pop();
@@ -167,7 +167,7 @@ impl MaildirType {
         }
     }
     fn is_valid(f: &Folder) -> Result<()> {
-        let path = f.get_path();
+        let path = f.path();
         let mut p = PathBuf::from(path);
         for d in &["cur", "new", "tmp"] {
             p.push(d);
@@ -180,9 +180,9 @@ impl MaildirType {
         }
         Ok(())
     }
-    pub fn get_multicore(&self, cores: usize, folder: &Folder) -> Result<Vec<Envelope>> {
+    pub fn multicore(&self, cores: usize, folder: &Folder) -> Result<Vec<Envelope>> {
         MaildirType::is_valid(folder)?;
-        let path = folder.get_path();
+        let path = folder.path();
         let mut path = PathBuf::from(path);
         path.push("cur");
         let iter = path.read_dir()?;
@@ -209,7 +209,7 @@ impl MaildirType {
                         let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
                         for e in chunk {
                             let e_copy = e.to_string();
-                            if let Some(mut e) = Envelope::from(Box::new(BackendOpGenerator::new(
+                            if let Some(mut e) = Envelope::from_token(Box::new(BackendOpGenerator::new(
                                 Box::new(move || Box::new(MaildirOp::new(e_copy.clone()))),
                             ))) {
                                 e.populate_headers();

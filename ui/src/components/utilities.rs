@@ -135,7 +135,7 @@ pub struct Pager {
 // TODO: Make the `new` method content agnostic.
 impl Pager {
     pub fn new(mail: &Envelope, pager_filter: Option<String>) -> Self {
-        let mut text = mail.get_body().get_text();
+        let mut text = mail.body().text();
         if let Some(bin) = pager_filter {
             use std::io::Write;
             use std::process::{Command, Stdio};
@@ -219,7 +219,7 @@ impl Component for Pager {
 
         //let pager_context: usize = context.settings.pager.pager_context;
         //let pager_stop: bool = context.settings.pager.pager_stop;
-        //let rows = get_y(bottom_right) - get_y(upper_left);
+        //let rows = y(bottom_right) - y(upper_left);
         //let page_length = rows / self.height;
         copy_area(grid, &self.content, area, ((0, self.cursor_pos), (self.width - 1, self.height - 1))); 
         context.dirty_areas.push_back(area);
@@ -336,7 +336,7 @@ impl Component for StatusBar {
         match event.event_type {
             UIEventType::RefreshMailbox((idx_a, idx_f)) => {
                 let m = &context.accounts[idx_a][idx_f].as_ref().unwrap().as_ref().unwrap();
-                self.status = format!("{} |Mailbox: {}, Messages: {}, New: {}", self.mode,  m.folder.get_name(), m.collection.len(), m.collection.iter().filter(|e| !e.is_seen()).count());
+                self.status = format!("{} |Mailbox: {}, Messages: {}, New: {}", self.mode,  m.folder.name(), m.collection.len(), m.collection.iter().filter(|e| !e.is_seen()).count());
                 self.dirty = true;
 
             },

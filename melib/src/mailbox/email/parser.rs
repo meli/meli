@@ -178,7 +178,7 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
                     Ok(v) => v,
                     Err(_) => encoded.to_vec(),
                 },
-                b'q' | b'Q' => match get_quoted_printed_bytes(encoded) {
+                b'q' | b'Q' => match quoted_printed_bytes(encoded) {
                     IResult::Done(b"", s) => s,
                     _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
                 },
@@ -239,7 +239,7 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 named!(qp_underscore_header<u8>, do_parse!(tag!("_") >> ({ b' ' })));
 
 named!(
-    get_quoted_printed_bytes<Vec<u8>>,
+    quoted_printed_bytes<Vec<u8>>,
     many0!(alt_complete!(
         quoted_printable_byte | qp_underscore_header | le_u8
     ))

@@ -54,13 +54,13 @@ impl Folder {
             children: children,
         }
     }
-    pub fn get_path(&self) -> &str {
+    pub fn path(&self) -> &str {
         &self.path
     }
-    pub fn get_name(&self) -> &str {
+    pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn get_children(&self) -> &Vec<usize> {
+    pub fn children(&self) -> &Vec<usize> {
         &self.children
     }
 }
@@ -91,10 +91,10 @@ pub struct AccountSettings {
 }
 
 impl AccountSettings {
-    pub fn get_format(&self) -> &str {
+    pub fn format(&self) -> &str {
         &self.format
     }
-    pub fn get_name(&self) -> &str {
+    pub fn name(&self) -> &str {
         &self.name
     }
 }

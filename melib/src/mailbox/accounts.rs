@@ -41,12 +41,12 @@ impl Account {
         let sent_folder = settings
             .folders
             .iter()
-            .position(|x| *x.get_path() == settings.sent_folder);
+            .position(|x| *x.path() == settings.sent_folder);
         let mut folders = Vec::with_capacity(settings.folders.len());
         for _ in 0..settings.folders.len() {
             folders.push(None);
         }
-        let backend = backends.get(settings.get_format());
+        let backend = backends.get(settings.format());
         Account {
             name: name,
             folders: folders,
@@ -67,7 +67,7 @@ impl Account {
     pub fn list_folders(&self) -> Vec<Folder> {
         self.settings.folders.clone()
     }
-    pub fn get_name(&self) -> &str {
+    pub fn name(&self) -> &str {
         &self.name
     }
 }
@@ -83,7 +83,7 @@ impl IndexMut<usize> for Account {
     fn index_mut(&mut self, index: usize) -> &mut Option<Result<Mailbox>> {
         if self.folders[index].is_none() {
             let folder = &self.settings.folders[index];
-            let path = folder.get_path().clone();
+            let path = folder.path().clone();
             if self.sent_folder.is_some() {
                 let id = self.sent_folder.unwrap();
                 if id == index {

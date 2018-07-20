@@ -22,7 +22,7 @@ impl MailListing {
     /// Helper function to format entry strings for MailListing */
     /* TODO: Make this configurable */
     fn make_entry_string(e: &Envelope, idx: usize) -> String {
-        format!("{}    {}    {:.85}",idx,&e.get_datetime().format("%Y-%m-%d %H:%M:%S").to_string(),e.get_subject())
+        format!("{}    {}    {:.85}",idx,&e.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),e.subject())
     }
 
     pub fn new() -> Self {
@@ -61,7 +61,7 @@ impl MailListing {
         let mut content = CellBuffer::new(MAX_COLS, self.length+1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(&format!("Folder `{}` is empty.",
-                                          mailbox.folder.get_name()),
+                                          mailbox.folder.name()),
                                           &mut content,
                                           Color::Default,
                                           Color::Default,
@@ -83,13 +83,13 @@ impl MailListing {
                 .peekable();
             /* This is just a desugared for loop so that we can use .peek() */
             while let Some((idx, i)) = iter.next() {
-                let container = mailbox.get_thread(*i);
-                let indentation = container.get_indentation();
+                let container = mailbox.thread(*i);
+                let indentation = container.indentation();
 
                 assert_eq!(container.has_message(), true);
                 match iter.peek() {
                     Some(&(_, x))
-                        if mailbox.get_thread(*x).get_indentation() == indentation =>
+                        if mailbox.thread(*x).indentation() == indentation =>
                         {
                             indentations.pop();
                             indentations.push(true);
@@ -103,7 +103,7 @@ impl MailListing {
                     indentations.pop();
                     indentations.push(true);
                 }
-                let envelope : &Envelope = &mailbox.collection[container.get_message().unwrap()];
+                let envelope : &Envelope = &mailbox.collection[container.message().unwrap()];
                 let fg_color = if !envelope.is_seen() {
                     Color::Byte(0)
                 } else {
@@ -129,14 +129,14 @@ impl MailListing {
 
                 match iter.peek() {
                     Some(&(_, x))
-                        if mailbox.get_thread(*x).get_indentation() > indentation =>
+                        if mailbox.thread(*x).indentation() > indentation =>
                         {
                             indentations.push(false);
                         }
                     Some(&(_, x))
-                        if mailbox.get_thread(*x).get_indentation() < indentation =>
+                        if mailbox.thread(*x).indentation() < indentation =>
                         {
-                            for _ in 0..(indentation - mailbox.get_thread(*x).get_indentation()) {
+                            for _ in 0..(indentation - mailbox.thread(*x).indentation()) {
                                 indentations.pop();
                             }
                         }
@@ -193,7 +193,7 @@ impl MailListing {
         let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
         let envelope: &Envelope = if threaded {
-            let i = mailbox.get_threaded_mail(idx);
+            let i = mailbox.threaded_mail(idx);
             &mailbox.collection[i]
         } else {
             &mailbox.collection[idx]
@@ -268,7 +268,7 @@ impl MailListing {
             let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
             let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
             let envelope: &Envelope = if threaded {
-                let i = mailbox.get_threaded_mail(self.cursor_pos.2);
+                let i = mailbox.threaded_mail(self.cursor_pos.2);
                 &mailbox.collection[i]
             } else {
                 &mailbox.collection[self.cursor_pos.2]
@@ -283,9 +283,9 @@ impl MailListing {
                          container: &Container, indentations: &Vec<bool>) -> String {
         let has_sibling = container.has_sibling();
         let has_parent = container.has_parent();
-        let show_subject = container.get_show_subject();
+        let show_subject = container.show_subject();
 
-        let mut s = format!("{} {} ", idx, &envelope.get_datetime().format("%Y-%m-%d %H:%M:%S").to_string());
+        let mut s = format!("{} {} ", idx, &envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string());
         for i in 0..indent {
             if indentations.len() > i && indentations[i]
             {
@@ -307,10 +307,10 @@ impl MailListing {
             }
             s.push('─'); s.push('>');
         }
-        s.push_str(&format!(" {}∞ ", envelope.get_body().count_attachments()));
+        s.push_str(&format!(" {}∞ ", envelope.body().count_attachments()));
          
         if show_subject {
-            s.push_str(&format!("{:.85}", envelope.get_subject()));
+            s.push_str(&format!("{:.85}", envelope.subject()));
         }
         s
     }
@@ -373,13 +373,13 @@ impl Component for MailListing {
                 let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
                 let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
                 let envelope: &Envelope = if threaded {
-                    let i = mailbox.get_threaded_mail(self.cursor_pos.2);
+                    let i = mailbox.threaded_mail(self.cursor_pos.2);
                     &mailbox.collection[i]
                 } else {
                     &mailbox.collection[self.cursor_pos.2]
                 };
 
-                let (x,y) = write_string_to_grid(&format!("Date: {}", envelope.get_date_as_str()),
+                let (x,y) = write_string_to_grid(&format!("Date: {}", envelope.date_as_str()),
                 grid,
                 Color::Byte(33),
                 Color::Default,
@@ -390,7 +390,7 @@ impl Component for MailListing {
                     grid[(x, y)].set_bg(Color::Default);
                     grid[(x, y)].set_fg(Color::Default);
                 }
-                let (x,y) = write_string_to_grid(&format!("From: {}", envelope.get_from()),
+                let (x,y) = write_string_to_grid(&format!("From: {}", envelope.from()),
                 grid,
                 Color::Byte(33),
                 Color::Default,
@@ -401,7 +401,7 @@ impl Component for MailListing {
                     grid[(x, y)].set_bg(Color::Default);
                     grid[(x, y)].set_fg(Color::Default);
                 }
-                let (x,y) = write_string_to_grid(&format!("To: {}", envelope.get_to()),
+                let (x,y) = write_string_to_grid(&format!("To: {}", envelope.to()),
                 grid,
                 Color::Byte(33),
                 Color::Default,
@@ -412,7 +412,7 @@ impl Component for MailListing {
                     grid[(x, y)].set_bg(Color::Default);
                     grid[(x, y)].set_fg(Color::Default);
                 }
-                let (x,y) = write_string_to_grid(&format!("Subject: {}", envelope.get_subject()),
+                let (x,y) = write_string_to_grid(&format!("Subject: {}", envelope.subject()),
                 grid,
                 Color::Byte(33),
                 Color::Default,
@@ -423,7 +423,7 @@ impl Component for MailListing {
                     grid[(x, y)].set_bg(Color::Default);
                     grid[(x, y)].set_fg(Color::Default);
                 }
-                let (x, y) = write_string_to_grid(&format!("Message-ID: {}", envelope.get_message_id_raw()),
+                let (x, y) = write_string_to_grid(&format!("Message-ID: {}", envelope.message_id_raw()),
                 grid,
                 Color::Byte(33),
                 Color::Default,

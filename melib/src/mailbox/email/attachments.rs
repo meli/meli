@@ -275,7 +275,7 @@ impl Attachment {
     fn get_text_recursive(&self, text: &mut String) {
         match self.attachment_type {
             AttachmentType::Data { .. } => {
-                text.push_str(&format!("Data attachment of type {}", self.get_tag()));
+                text.push_str(&format!("Data attachment of type {}", self.tag()));
             }
             AttachmentType::Text { content: ref t } => {
                 text.push_str(t);
@@ -298,19 +298,19 @@ impl Attachment {
             },
         }
     }
-    pub fn get_text(&self) -> String {
+    pub fn text(&self) -> String {
         let mut text = String::with_capacity(self.raw.len());
         self.get_text_recursive(&mut text);
         text
     }
-    pub fn get_description(&self) -> String {
+    pub fn description(&self) -> String {
         unimplemented!()
     }
-    pub fn get_tag(&self) -> String {
+    pub fn tag(&self) -> String {
         format!("{}/{}", self.content_type.0, self.content_type.1).to_string()
     }
     pub fn count_attachments(&mut self) -> usize {
-        let mut counter = 0; 
+        let mut counter = 0;
 
         fn count_recursive(att: &Attachment, counter: &mut usize) {
             match att.attachment_type {

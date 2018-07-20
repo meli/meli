@@ -56,7 +56,7 @@ impl Mailbox {
     }
     pub fn new(folder: &Folder, sent_folder: &Option<Result<Mailbox>>, collection: Result<Vec<Envelope>>) -> Result<Mailbox> {
         let mut collection: Vec<Envelope> = collection?;
-        collection.sort_by(|a, b| a.get_date().cmp(&b.get_date()));
+        collection.sort_by(|a, b| a.date().cmp(&b.date()));
         let (threads, threaded_collection) = build_threads(&mut collection, sent_folder);
         Ok(Mailbox {
             folder: folder.clone(),
@@ -68,16 +68,16 @@ impl Mailbox {
     pub fn len(&self) -> usize {
         self.collection.len()
     }
-    pub fn get_threaded_mail(&self, i: usize) -> usize {
+    pub fn threaded_mail(&self, i: usize) -> usize {
         let thread = self.threads[self.threaded_collection[i]];
-        thread.get_message().unwrap()
+        thread.message().unwrap()
     }
-    pub fn get_mail_and_thread(&mut self, i: usize) -> (&mut Envelope, Container) {
+    pub fn mail_and_thread(&mut self, i: usize) -> (&mut Envelope, Container) {
         let x = &mut self.collection.as_mut_slice()[i];
-        let thread = self.threads[x.get_thread()];
+        let thread = self.threads[x.thread()];
         (x, thread)
     }
-    pub fn get_thread(&self, i: usize) -> &Container {
+    pub fn thread(&self, i: usize) -> &Container {
         &self.threads[i]
     }
 }

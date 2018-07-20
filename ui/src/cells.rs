@@ -273,7 +273,7 @@ impl Cell {
     /// let mut cell = Cell::with_style(Color::Blue, Color::Default, Attr::Default);
     /// assert_eq!(cell.fg(), Color::Blue);
     /// ```
-    pub fn get_fg(&self) -> Color {
+    pub fn fg(&self) -> Color {
         self.fg
     }
 
@@ -305,7 +305,7 @@ impl Cell {
     /// let mut cell = Cell::with_style(Color::Default, Color::Green, Attr::Default);
     /// assert_eq!(cell.bg(), Color::Green);
     /// ```
-    pub fn get_bg(&self) -> Color {
+    pub fn bg(&self) -> Color {
         self.bg
     }
 

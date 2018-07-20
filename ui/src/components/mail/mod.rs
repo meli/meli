@@ -25,7 +25,7 @@ impl AccountMenu {
     pub fn new(accounts: &Vec<Account>) -> Self {
         let accounts = accounts.iter().enumerate().map(|(i, a)| { 
             AccountMenuEntry {
-                name: a.get_name().to_string(),
+                name: a.name().to_string(),
                 index: i,
                 entries: {
                     let mut entries = Vec::with_capacity(a.len());
@@ -54,7 +54,7 @@ impl AccountMenu {
         let mut parents: Vec<Option<usize>> = vec!(None; a.entries.len());
 
         for (idx, e) in a.entries.iter().enumerate() {
-            for c in e.1.get_children() {
+            for c in e.1.children() {
                 parents[*c] = Some(idx);
             }
         }
@@ -79,10 +79,10 @@ impl AccountMenu {
 
         fn print(root: usize, parents: &Vec<Option<usize>>, depth: &mut String, entries: &Vec<(usize, Folder)>, s: &mut String, inc: &mut usize) -> () {
             let len = s.len();
-            s.insert_str(len, &format!("{} {}\n  ", *inc,  &entries[root].1.get_name()));
+            s.insert_str(len, &format!("{} {}\n  ", *inc,  &entries[root].1.name()));
             *inc += 1;
-            let children_no = entries[root].1.get_children().len();
-            for (idx, child) in entries[root].1.get_children().iter().enumerate() {
+            let children_no = entries[root].1.children().len();
+            for (idx, child) in entries[root].1.children().iter().enumerate() {
                 let len = s.len();
                 s.insert_str(len, &format!("{}├─", depth));
                 push(depth, if idx == children_no - 1 {'│'} else { ' ' });

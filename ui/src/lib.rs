@@ -21,7 +21,7 @@
 
 
 /*!
-  The UI module has an Entity-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
+  The UI crate has an Entity-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
 
   `State` owns all the Entities of the UI, which are currently plain Containers for `Component`s. In the application's main event loop, input is handed to the state in the form of `UIEvent` objects which traverse the entity graph. Components decide to handle each input or not.
 
@@ -133,7 +133,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn get_replies(&mut self) -> Vec<UIEvent> {
+    pub fn replies(&mut self) -> Vec<UIEvent> {
         self.replies.drain(0..).collect()
     }
 }
@@ -171,7 +171,7 @@ impl<W: Write> State<W> {
         let cols = termcols.unwrap_or(0) as usize;
         let rows = termrows.unwrap_or(0) as usize;
         let mut accounts: Vec<Account> = settings.accounts.iter().map(|(n, a_s)| { Account::new(n.to_string(), a_s.clone(), &backends) }).collect();
-        accounts.sort_by(|a,b| a.get_name().cmp(&b.get_name()) );
+        accounts.sort_by(|a,b| a.name().cmp(&b.name()) );
         let mut s = State {
             cols: cols,
             rows: rows,
@@ -233,17 +233,17 @@ impl<W: Write> State<W> {
             for x in get_x(upper_left)..=get_x(bottom_right) {
                 let c = self.grid[(x,y)];
 
-                if c.get_bg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Bg(c.get_bg().as_termion())).unwrap();
+                if c.bg() != cells::Color::Default {
+                    write!(self.stdout, "{}", termion::color::Bg(c.bg().as_termion())).unwrap();
                 }
-                if c.get_fg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Fg(c.get_fg().as_termion())).unwrap();
+                if c.fg() != cells::Color::Default {
+                    write!(self.stdout, "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
                 }
                 write!(self.stdout, "{}",c.ch()).unwrap();
-                if c.get_bg() != cells::Color::Default {
+                if c.bg() != cells::Color::Default {
                     write!(self.stdout, "{}", termion::color::Bg(termion::color::Reset)).unwrap();
                 }
-                if c.get_fg() != cells::Color::Default {
+                if c.fg() != cells::Color::Default {
                     write!(self.stdout, "{}", termion::color::Fg(termion::color::Reset)).unwrap();
                 }
 

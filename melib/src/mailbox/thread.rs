@@ -51,19 +51,19 @@ pub struct Container {
 }
 
 impl Container {
-    pub fn get_message(&self) -> Option<usize> {
+    pub fn message(&self) -> Option<usize> {
         self.message
     }
-    pub fn get_parent(&self) -> Option<usize> {
+    pub fn parent(&self) -> Option<usize> {
         self.parent
     }
     pub fn has_parent(&self) -> bool {
         self.parent.is_some()
     }
-    pub fn get_first_child(&self) -> Option<usize> {
+    pub fn first_child(&self) -> Option<usize> {
         self.first_child
     }
-    pub fn get_next_sibling(&self) -> Option<usize> {
+    pub fn next_sibling(&self) -> Option<usize> {
         self.next_sibling
     }
     pub fn has_children(&self) -> bool {
@@ -78,7 +78,7 @@ impl Container {
     fn set_indentation(&mut self, i: usize) {
         self.indentation = i;
     }
-    pub fn get_indentation(&self) -> usize {
+    pub fn indentation(&self) -> usize {
         self.indentation
     }
     fn is_descendant(&self, threads: &[Container], other: &Container) -> bool {
@@ -101,7 +101,7 @@ impl Container {
     fn set_show_subject(&mut self, set: bool) -> () {
         self.show_subject = set;
     }
-    pub fn get_show_subject(&self) -> bool {
+    pub fn show_subject(&self) -> bool {
         self.show_subject
     }
 }
@@ -122,7 +122,7 @@ fn build_collection(
 ) -> () {
     for (i, x) in collection.iter_mut().enumerate() {
         let x_index; /* x's index in threads */
-        let m_id = x.get_message_id_raw().to_string();
+        let m_id = x.message_id_raw().to_string();
         /* TODO: Check for missing Message-ID.
          * Solutions: generate a hidden one
          */
@@ -136,7 +136,7 @@ fn build_collection(
             }
             x_index = t;
             /* Store this message in the Container's message slot.  */
-            threads[t].date = x.get_date();
+            threads[t].date = x.date();
             x.set_thread(t);
             threads[t].message = Some(i);
         } else {
@@ -148,7 +148,7 @@ fn build_collection(
                 parent: None,
                 first_child: None,
                 next_sibling: None,
-                date: x.get_date(),
+                date: x.date(),
                 indentation: 0,
                 show_subject: true,
             });
@@ -167,13 +167,13 @@ fn build_collection(
          */
         let mut curr_ref = x_index;
         let mut iasf = 0;
-        for &r in x.get_references().iter().rev() {
+        for &r in x.references().iter().rev() {
             if iasf == 1 {
                 continue;
             }
             iasf += 1;
-            let parent_id = if id_table.contains_key(r.get_raw()) {
-                let p = id_table[r.get_raw()];
+            let parent_id = if id_table.contains_key(r.raw()) {
+                let p = id_table[r.raw()];
                 if !(threads[p].is_descendant(threads, &threads[curr_ref]) ||
                     threads[curr_ref].is_descendant(threads, &threads[p]))
                 {
@@ -199,22 +199,22 @@ fn build_collection(
                     parent: None,
                     first_child: Some(curr_ref),
                     next_sibling: None,
-                    date: x.get_date(),
+                    date: x.date(),
                     indentation: 0,
                     show_subject: true,
                 });
                 if threads[curr_ref].parent.is_none() {
                     threads[curr_ref].parent = Some(idx);
                 }
-                id_table.insert(r.get_raw().to_string(), idx);
+                id_table.insert(r.raw().to_string(), idx);
                 idx
             };
             /* update thread date */
             let mut parent_iter = parent_id;
             'date: loop {
                 let p = &mut threads[parent_iter];
-                if p.date < x.get_date() {
-                    p.date = x.get_date();
+                if p.date < x.date() {
+                    p.date = x.date();
                 }
                 match p.parent {
                     Some(p) => {
@@ -264,27 +264,27 @@ pub fn build_threads(
             let sent_mailbox = sent_mailbox.unwrap();
 
             for x in &sent_mailbox.collection {
-                if id_table.contains_key(x.get_message_id_raw()) ||
-                    (!x.get_in_reply_to_raw().is_empty() &&
-                        id_table.contains_key(x.get_in_reply_to_raw()))
+                if id_table.contains_key(x.message_id_raw()) ||
+                    (!x.in_reply_to_raw().is_empty() &&
+                        id_table.contains_key(x.in_reply_to_raw()))
                 {
                     let mut x: Envelope = (*x).clone();
-                    if id_table.contains_key(x.get_message_id_raw()) {
-                        let c = id_table[x.get_message_id_raw()];
+                    if id_table.contains_key(x.message_id_raw()) {
+                        let c = id_table[x.message_id_raw()];
                         if threads[c].message.is_some() {
                             /* skip duplicate message-id, but this should be handled instead */
                             continue;
                         }
                         threads[c].message = Some(idx);
                         assert!(threads[c].has_children());
-                        threads[c].date = x.get_date();
+                        threads[c].date = x.date();
                         x.set_thread(c);
-                    } else if !x.get_in_reply_to_raw().is_empty() &&
-                        id_table.contains_key(x.get_in_reply_to_raw())
+                    } else if !x.in_reply_to_raw().is_empty() &&
+                        id_table.contains_key(x.in_reply_to_raw())
                     {
-                        let p = id_table[x.get_in_reply_to_raw()];
-                        let c = if id_table.contains_key(x.get_message_id_raw()) {
-                            id_table[x.get_message_id_raw()]
+                        let p = id_table[x.in_reply_to_raw()];
+                        let c = if id_table.contains_key(x.message_id_raw()) {
+                            id_table[x.message_id_raw()]
                         } else {
                             threads.push(Container {
                                 message: Some(idx),
@@ -292,11 +292,11 @@ pub fn build_threads(
                                 parent: Some(p),
                                 first_child: None,
                                 next_sibling: None,
-                                date: x.get_date(),
+                                date: x.date(),
                                 indentation: 0,
                                 show_subject: true,
                             });
-                            id_table.insert(x.get_message_id_raw().to_string(), tidx);
+                            id_table.insert(x.message_id_raw().to_string(), tidx);
                             x.set_thread(tidx);
                             tidx += 1;
                             tidx - 1
@@ -322,8 +322,8 @@ pub fn build_threads(
                         let mut parent_iter = p;
                         'date: loop {
                             let p = &mut threads[parent_iter];
-                            if p.date < x.get_date() {
-                                p.date = x.get_date();
+                            if p.date < x.date() {
+                                p.date = x.date();
                             }
                             match p.parent {
                                 Some(p) => {
@@ -372,12 +372,12 @@ pub fn build_threads(
         let thread = threads[i];
         if threads[root_subject_idx].has_message() {
             let root_subject =
-                collection[threads[root_subject_idx].get_message().unwrap()].get_subject();
+                collection[threads[root_subject_idx].message().unwrap()].subject();
             /* If the Container has no Message, but does have children, remove this container but
              * promote its children to this level (that is, splice them in to the current child
              * list.) */
             if indentation > 0 && thread.has_message() {
-                let subject = collection[thread.get_message().unwrap()].get_subject();
+                let subject = collection[thread.message().unwrap()].subject();
                 if subject == root_subject ||
                     subject.starts_with("Re: ") && subject.ends_with(root_subject)
                 {
@@ -385,7 +385,7 @@ pub fn build_threads(
                 }
             }
         }
-        if thread.has_parent() && !threads[thread.get_parent().unwrap()].has_message() {
+        if thread.has_parent() && !threads[thread.parent().unwrap()].has_message() {
             threads[i].parent = None;
         }
         let indentation = if thread.has_message() {
@@ -400,14 +400,14 @@ pub fn build_threads(
             indentation + 1
         };
         if thread.has_children() {
-            let mut fc = thread.get_first_child().unwrap();
+            let mut fc = thread.first_child().unwrap();
             loop {
                 build_threaded(threads, indentation, threaded, fc, i, collection);
                 let thread_ = threads[fc];
                 if !thread_.has_sibling() {
                     break;
                 }
-                fc = thread_.get_next_sibling().unwrap();
+                fc = thread_.next_sibling().unwrap();
             }
         }
     }
