@@ -3,32 +3,16 @@ name = "meli"
 version = "0.1.0"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 
-[lib]
-name = "melib"
-path = "src/lib.rs"
-
 [[bin]]
 name = "meli"
 path = "src/bin.rs"
 
 [dependencies]
-chrono = "0.4"
-xdg = "2.1.0"
-config = "0.6"
-serde_derive = "^1.0.8"
-serde = "^1.0.8"
-nom = "3.2.0"
-memmap = "0.5.2"
-base64 = "*"
-crossbeam = "^0.3.0"
-fnv = "1.0.3"
-encoding = "0.2.33"
-bitflags = "1.0"
-notify = "4.0.1"
-termion = "1.5.1"
 chan = "0.1.21"
 chan-signal = "0.3.1"
-notify-rust = "^3"
+melib = { path = "melib", version = "*" }
+
+ui = { path = "ui", version = "*" }
 
 [profile.release]
 #lto = true

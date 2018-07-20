@@ -25,11 +25,11 @@
   See the `Component` Trait for more details.
   */
 
+use super::*;
 pub mod utilities;
 pub mod mail;
 pub mod notifications;
 
-use super::*;
 pub use utilities::*;
 pub use mail::*;
 
@@ -126,34 +126,43 @@ pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_colo
 
 
 /// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed colors.
-fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_color: Color, area: Area) -> usize {
+fn write_string_to_grid(s: &str, grid: &mut CellBuffer, fg_color: Color, bg_color: Color, area: Area, line_break: bool) -> Pos {
     let bounds = grid.size();
     let upper_left = upper_left!(area);
     let bottom_right = bottom_right!(area);
     let (mut x, mut y) = upper_left;
     if y > (get_y(bottom_right)) || x > get_x(bottom_right) ||
        y > get_y(bounds) || x > get_x(bounds) {
-        return 0;
+           eprintln!(" Invalid area with string {} and area {:?}", s, area);
+        return (x, y);
     }
-    for c in s.chars() {
-        grid[(x,y)].set_ch(c);
-        grid[(x,y)].set_fg(fg_color);
-        grid[(x,y)].set_bg(bg_color);
-        x += 1;
+    for l in s.lines() {
+        'char: for c in l.chars() {
+            grid[(x,y)].set_ch(c);
+            grid[(x,y)].set_fg(fg_color);
+            grid[(x,y)].set_bg(bg_color);
+            x += 1;
 
-        if x == (get_x(bottom_right))+1 || x > get_x(bounds) {
-            x = get_x(upper_left);
-            y += 1;
-            if y == (get_y(bottom_right))+1 || y > get_y(bounds) {
-                return x;
+            if x == (get_x(bottom_right))+1 || x > get_x(bounds) {
+                x = get_x(upper_left);
+                y += 1;
+                if y >= (get_y(bottom_right)) || y > get_y(bounds) {
+                    return (x, y - 1);
+                }
+                if !line_break {
+                    break 'char;
+                }
             }
         }
     }
-    x
+    (x, y)
 }
 
 /// Completely clear an `Area` with an empty char and the terminal's default colors.
 fn clear_area(grid: &mut CellBuffer, area: Area) {
+    if !is_valid_area!(area) {
+        return;
+    }
     let upper_left = upper_left!(area);
     let bottom_right = bottom_right!(area);
     for y in get_y(upper_left)..=get_y(bottom_right) {

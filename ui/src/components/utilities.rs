@@ -1,8 +1,6 @@
 /*! Various useful components that can be used in a generic fashion.
   */
-
-use ui::components::*;
-use ui::cells::*;
+use super::*;
 
 /// A horizontally split in half container.
 pub struct HSplit {
@@ -24,6 +22,9 @@ impl HSplit {
 
 impl Component for HSplit {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !is_valid_area!(area) {
+            return;
+        }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         let total_rows = get_y(bottom_right) - get_y(upper_left);
@@ -71,6 +72,9 @@ impl VSplit {
 
 impl Component for VSplit {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !is_valid_area!(area) {
+            return;
+        }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         let total_cols = get_x(bottom_right) - get_x(upper_left);
@@ -186,7 +190,8 @@ impl Pager {
                                      content,
                                      Color::Default,
                                      Color::Default,
-                                     ((0, i), (width -1, i)));
+                                     ((0, i), (width -1, i)),
+                                     true);
             }
         }
     }
@@ -194,6 +199,9 @@ impl Pager {
 
 impl Component for Pager {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !is_valid_area!(area) {
+            return;
+        }
         if !self.is_dirty() {
             return;
         }
@@ -272,7 +280,7 @@ impl StatusBar {
                              grid,
                              Color::Byte(123),
                              Color::Byte(26),
-                             area);
+                             area, false);
         change_colors(grid, area, Color::Byte(123), Color::Byte(26));
         context.dirty_areas.push_back(area);
     }
@@ -282,7 +290,7 @@ impl StatusBar {
                              grid,
                              Color::Byte(219),
                              Color::Byte(88),
-                             area);
+                             area, false);
         change_colors(grid, area, Color::Byte(219), Color::Byte(88));
         context.dirty_areas.push_back(area);
     }
@@ -291,6 +299,9 @@ impl StatusBar {
 
 impl Component for StatusBar {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !is_valid_area!(area) {
+            return;
+        }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
@@ -357,5 +368,28 @@ impl Component for StatusBar {
     }
     fn is_dirty(&self) -> bool {
         self.dirty || self.container.component.is_dirty()
+    }
+}
+
+
+// A box with a text content.
+pub struct TextBox {
+    content: String,
+}
+
+impl TextBox {
+    pub fn new(s: String) -> Self {
+        TextBox {
+            content: s,
+        }
+    }
+}
+
+impl Component for TextBox {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+
+    }
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+        return;
     }
 }

@@ -25,12 +25,8 @@ The mail handling stuff is done in the `melib` crate which includes all backend 
  */
 
 extern crate melib;
-#[macro_use]
-extern crate nom;
-extern crate termion;
-extern crate notify_rust;
+extern crate ui;
 
-pub mod ui;
 use ui::*;
 pub use melib::*;
 

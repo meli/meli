@@ -3,8 +3,8 @@
   */
 use notify_rust::Notification as notify_Notification;
 
-use ui::*;
-use ui::components::*;
+use super::*;
+use super::components::*;
 
 /// Passes notifications to the OS using the XDG specifications.
 pub struct XDGNotifications {}

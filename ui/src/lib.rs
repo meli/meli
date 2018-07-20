@@ -30,20 +30,20 @@
 
 #[macro_use]
 mod position;
-pub mod components;
 mod cells;
+pub mod components;
 
 #[macro_use]
 mod execute;
-use self::execute::goto;
+use execute::goto;
 pub use self::position::*;
 use self::cells::*;
 pub use self::components::*;
 
 extern crate melib;
+extern crate notify_rust;
 use melib::*;
 
-use std;
 use std::io::{Write, };
 use std::collections::VecDeque;
 use std::fmt;
@@ -53,6 +53,9 @@ use termion::raw::IntoRawMode;
 use termion::event::{Key as TermionKey, };
 use termion::input::TermRead;
 
+extern crate chan;
+#[macro_use]
+extern crate nom;
 use chan::Sender;
 
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads

@@ -204,7 +204,7 @@ impl AttachmentBuilder {
                 };
                 AttachmentType::Multipart {
                     of_type: multipart_type,
-                    subattachments: Attachment::subattachments(&self.raw, b),
+                    subattachments: Self::subattachments(&self.raw, b),
                 }
             }
             ContentType::Unsupported { ref tag } => AttachmentType::Data { tag: tag.clone() },
@@ -214,6 +214,48 @@ impl AttachmentBuilder {
             content_transfer_encoding: self.content_transfer_encoding,
             raw: self.raw,
             attachment_type: attachment_type,
+        }
+    }
+
+    pub fn subattachments(raw: &[u8], boundary: &str) -> Vec<Attachment> {
+        let boundary_length = boundary.len();
+        match parser::attachments(raw, &boundary[0..boundary_length - 2], boundary).to_full_result()
+        {
+            Ok(attachments) => {
+                let mut vec = Vec::with_capacity(attachments.len());
+                for a in attachments {
+                    let (headers, body) = match parser::attachment(a).to_full_result() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            eprintln!("error in parsing attachment");
+                            eprintln!("\n-------------------------------");
+                            eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
+                            eprintln!("-------------------------------\n");
+
+                            continue;
+                        }
+                    };
+                    let mut builder = AttachmentBuilder::new(body);
+                    for (name, value) in headers {
+                        if name.eq_ignore_ascii_case("content-type") {
+                            builder.content_type(value);
+                        } else if name.eq_ignore_ascii_case("content-transfer-encoding") {
+                            builder.content_transfer_encoding(value);
+                        }
+                    }
+                    vec.push(builder.build());
+                }
+                vec
+            }
+            a => {
+                eprintln!(
+                    "error {:?}\n\traw: {:?}\n\tboundary: {:?}",
+                    a,
+                    ::std::str::from_utf8(raw).unwrap(),
+                    boundary
+                );
+                Vec::new()
+            }
         }
     }
 }
@@ -267,45 +309,28 @@ impl Attachment {
     pub fn get_tag(&self) -> String {
         format!("{}/{}", self.content_type.0, self.content_type.1).to_string()
     }
-    pub fn subattachments(raw: &[u8], boundary: &str) -> Vec<Attachment> {
-        let boundary_length = boundary.len();
-        match parser::attachments(raw, &boundary[0..boundary_length - 2], boundary).to_full_result()
-        {
-            Ok(attachments) => {
-                let mut vec = Vec::with_capacity(attachments.len());
-                for a in attachments {
-                    let (headers, body) = match parser::attachment(a).to_full_result() {
-                        Ok(v) => v,
-                        Err(_) => {
-                            eprintln!("error in parsing attachment");
-                            eprintln!("\n-------------------------------");
-                            eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
-                            eprintln!("-------------------------------\n");
+    pub fn count_attachments(&mut self) -> usize {
+        let mut counter = 0; 
 
-                            continue;
-                        }
-                    };
-                    let mut builder = AttachmentBuilder::new(body);
-                    for (name, value) in headers {
-                        if name.eq_ignore_ascii_case("content-type") {
-                            builder.content_type(value);
-                        } else if name.eq_ignore_ascii_case("content-transfer-encoding") {
-                            builder.content_transfer_encoding(value);
-                        }
-                    }
-                    vec.push(builder.build());
+        fn count_recursive(att: &Attachment, counter: &mut usize) {
+            match att.attachment_type {
+                AttachmentType::Data { .. } => {
+                    *counter += 1;
                 }
-                vec
-            }
-            a => {
-                eprintln!(
-                    "error in 469 {:?}\n\traw: {:?}\n\tboundary: {:?}",
-                    a,
-                    ::std::str::from_utf8(raw).unwrap(),
-                    boundary
-                );
-                Vec::new()
+                AttachmentType::Text { .. } => {
+                }
+                AttachmentType::Multipart {
+                    of_type: ref multipart_type,
+                    subattachments: ref sub_att_vec,
+                } => if *multipart_type != MultipartType::Alternative {
+                    for a in sub_att_vec {
+                        count_recursive(a, counter);
+                    }
+                },
             }
         }
+
+        count_recursive(&self, &mut counter);
+        counter
     }
 }

@@ -1,0 +1,13 @@
+[package]
+name = "ui"
+version = "0.0.1"  #:version
+authors = []
+workspace = ".."
+
+[dependencies]
+melib = { path = "../melib", version = "*" }
+termion = "1.5.1"
+chan = "0.1.21"
+notify = "4.0.1"
+notify-rust = "^3"
+nom = "3.2.0"

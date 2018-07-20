@@ -1,0 +1,22 @@
+[package]
+name = "melib"
+version = "0.0.1"  #:version
+authors = []
+workspace = ".."
+
+[dependencies]
+notify = "4.0.1"
+notify-rust = "^3"
+crossbeam = "^0.3.0"
+fnv = "1.0.3"
+config = "0.6"
+xdg = "2.1.0"
+chrono = "0.4"
+serde_derive = "^1.0.8"
+serde = "^1.0.8"
+nom = "3.2.0"
+memmap = "0.5.2"
+base64 = "*"
+encoding = "0.2.33"
+bitflags = "1.0"
+termion = "1.5.1"
