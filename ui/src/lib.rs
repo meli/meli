@@ -79,6 +79,12 @@ impl From<RefreshEvent> for ThreadEvent {
     }
 }
 
+#[derive(Debug)]
+pub enum ForkType {
+    Generic(std::process::Child),
+    NewDraft(std::path::PathBuf, std::process::Child),
+}
+
 
 #[derive(Debug)]
 pub enum UIEventType {
@@ -88,11 +94,12 @@ pub enum UIEventType {
     //Quit?
     Resize,
     /// Force redraw.
-    Fork(std::process::Child),
+    Fork(ForkType),
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),
     Notification(String),
+    EditDraft(std::path::PathBuf),
 }
 
 
@@ -160,7 +167,7 @@ pub struct State<W: Write> {
 
     grid: CellBuffer,
     stdout: termion::screen::AlternateScreen<termion::raw::RawTerminal<W>>,
-    child: Option<std::process::Child>,
+    child: Option<ForkType>,
     pub mode: UIMode,
     sender: Sender<ThreadEvent>,
     entities: Vec<Entity>,
@@ -324,6 +331,28 @@ impl<W: Write> State<W> {
                 self.stdout.flush().unwrap();
                 return;
             },
+            UIEventType::EditDraft(dir) => {
+            use std::process::{Command, Stdio};
+            use std::io::Read;
+                let mut output = Command::new("msmtp")
+                    .arg("-t")
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect("failed to execute process") ;
+                {
+                    let mut in_pipe = output.stdin.as_mut().unwrap();
+                    let mut buf = Vec::new();
+                let mut f = std::fs::File::open(&dir).unwrap();
+
+                    f.read_to_end(&mut buf).unwrap();
+                    in_pipe.write(&buf).unwrap();
+                }
+                let output = output.wait_with_output().expect("Failed to read stdout");
+                eprintln!("{}",String::from_utf8_lossy(&output.stdout));
+
+             return;
+            }
             _ => {},
         }
         /* inform each entity */
@@ -348,19 +377,34 @@ impl<W: Write> State<W> {
     }
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
         if {
-            if let Some(ref mut c) =  self.child {
+            match self.child {
+            Some(ForkType::NewDraft(_,ref mut c)) => { 
                 let mut w = c.try_wait();
                 match w {
                     Ok(Some(_)) => { true },
                     Ok(None) => { false },
                     Err(_) => { return None; },
                 }
-            } else {
+            },
+            Some(ForkType::Generic(ref mut c)) => {
+                let mut w = c.try_wait();
+                match w {
+                    Ok(Some(_)) => { true },
+                    Ok(None) => { false },
+                    Err(_) => { return None; },
+                }
+            },
+                
+            _ => {
                 return None;
             }
         }
+        }
         {
-            self.child = None;
+            if let Some(ForkType::NewDraft(f, _)) = std::mem::replace(&mut self.child, None) {
+                self.rcv_event(UIEvent { id: 0, event_type: UIEventType::EditDraft(f) });
+
+            }
             return Some(true);
         }
         Some(false)

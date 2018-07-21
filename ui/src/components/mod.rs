@@ -173,3 +173,13 @@ fn clear_area(grid: &mut CellBuffer, area: Area) {
         }
     }
 }
+
+fn new_draft(context: &mut Context) -> Vec<u8> {
+    // TODO: Generate proper message-id https://www.jwz.org/doc/mid.html
+    let mut v = String::with_capacity(500);
+    v.push_str("From: \n");
+    v.push_str("To: \n");
+    v.push_str("Subject: \n");
+    v.push_str("Message-Id: \n\n");
+    v.into_bytes()
+}

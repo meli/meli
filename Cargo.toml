@@ -16,5 +16,5 @@ melib = { path = "melib", version = "*" }
 ui = { path = "ui", version = "*" }
 
 [profile.release]
-#lto = true
-debug = true
+lto = true
+#debug = true

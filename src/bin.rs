@@ -193,7 +193,7 @@ fn main() {
                 Some(false) => {
                     use std::{thread, time};
 
-                    let ten_millis = time::Duration::from_millis(500);
+                    let ten_millis = time::Duration::from_millis(1500);
 
                     thread::sleep(ten_millis);
                     continue 'reap;
