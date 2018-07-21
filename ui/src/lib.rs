@@ -42,6 +42,9 @@ pub use self::components::*;
 
 extern crate melib;
 extern crate notify_rust;
+#[macro_use]
+extern crate chan;
+extern crate chan_signal;
 use melib::*;
 
 use std::io::{Write, };
@@ -54,13 +57,13 @@ use termion::event::{Key as TermionKey, };
 use termion::input::TermRead;
 use termion::screen::AlternateScreen;
 
-extern crate chan;
 #[macro_use]
 extern crate nom;
 use chan::Sender;
 
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads
 /// to the main process.
+#[derive(Debug)]
 pub enum ThreadEvent {
     /// User input.
     Input(Key),
@@ -84,6 +87,8 @@ pub enum UIEventType {
     RefreshMailbox((usize,usize)),
     //Quit?
     Resize,
+    /// Force redraw.
+    Fork(std::process::Child),
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),
@@ -98,10 +103,11 @@ pub struct UIEvent {
     pub event_type: UIEventType,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum UIMode {
     Normal,
     Execute,
+    Fork,
 }
 
 impl fmt::Display for UIMode {
@@ -109,6 +115,7 @@ impl fmt::Display for UIMode {
         write!(f, "{}", match *self {
             UIMode::Normal => { "NORMAL" },
             UIMode::Execute => { "EX" },
+            UIMode::Fork => { "FORK" },
         })
     }
 }
@@ -131,11 +138,16 @@ pub struct Context {
     /// Events queue that components send back to the state
     replies: VecDeque<UIEvent>,
     backends: Backends,
+
+    input_thread: chan::Sender<bool>,
 }
 
 impl Context {
     pub fn replies(&mut self) -> Vec<UIEvent> {
         self.replies.drain(0..).collect()
+    }
+    pub fn input_thread(&mut self) -> &mut chan::Sender<bool> {
+        &mut self.input_thread
     }
 }
 
@@ -148,9 +160,12 @@ pub struct State<W: Write> {
 
     grid: CellBuffer,
     stdout: termion::screen::AlternateScreen<termion::raw::RawTerminal<W>>,
+    child: Option<std::process::Child>,
+    pub mode: UIMode,
     sender: Sender<ThreadEvent>,
     entities: Vec<Entity>,
     pub context: Context,
+
 }
 
 impl<W: Write> Drop for State<W> {
@@ -162,7 +177,7 @@ impl<W: Write> Drop for State<W> {
 }
 
 impl<W: Write> State<W> {
-    pub fn new(stdout: W, sender: Sender<ThreadEvent>) -> Self {
+    pub fn new(stdout: W, sender: Sender<ThreadEvent>, input_thread: chan::Sender<bool>) -> Self {
         let settings = Settings::new();
         let backends = Backends::new();
         let stdout = AlternateScreen::from(stdout.into_raw_mode().unwrap());
@@ -179,8 +194,11 @@ impl<W: Write> State<W> {
             rows: rows,
             grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
             stdout: stdout,
+            child: None,
+            mode: UIMode::Normal,
             sender: sender,
             entities: Vec::with_capacity(1),
+
 
             context: Context {
                 accounts: accounts,
@@ -188,6 +206,8 @@ impl<W: Write> State<W> {
                 settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
+
+                input_thread: input_thread,
             },
         };
         write!(s.stdout, "{}{}{}", cursor::Hide, clear::All, cursor::Goto(1,1)).unwrap();
@@ -298,6 +318,12 @@ impl<W: Write> State<W> {
                 self.parse_command(cmd);
                 return;
             },
+            UIEventType::Fork(child) => {
+                self.mode = UIMode::Fork;
+                self.child = Some(child);
+                self.stdout.flush().unwrap();
+                return;
+            },
             _ => {},
         }
         /* inform each entity */
@@ -319,6 +345,25 @@ impl<W: Write> State<W> {
 
             self.rcv_event(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox((account_idx, folder_idx)) });
         }
+    }
+    pub fn try_wait_on_child(&mut self) -> Option<bool> {
+        if {
+            if let Some(ref mut c) =  self.child {
+                let mut w = c.try_wait();
+                match w {
+                    Ok(Some(_)) => { true },
+                    Ok(None) => { false },
+                    Err(_) => { return None; },
+                }
+            } else {
+                return None;
+            }
+        }
+        {
+            self.child = None;
+            return Some(true);
+        }
+        Some(false)
     }
 }
 
@@ -391,11 +436,31 @@ impl From<TermionKey> for Key {
     }
 }
 
-pub fn get_events(stdin: std::io::Stdin, mut closure: impl FnMut(Key)) -> (){
-    let stdin = stdin.lock();
-    for c in stdin.keys() {
-        if let Ok(k) = c {
-            closure(Key::from(k));
+
+/*
+ * If we fork (for example start $EDITOR) we want the input-thread to stop reading from stdin. The
+ * best way I came up with right now is to send a signal to the thread that is read in the first
+ * input in stdin after the fork, and then the thread kills itself. The parent process spawns a new
+ * input-thread when the child returns.
+ *
+ * The main loop uses try_wait_on_child() to check if child has exited.
+ */
+pub fn get_events(stdin: std::io::Stdin, mut closure: impl FnMut(Key), mut exit: impl FnMut(), rx: chan::Receiver<bool>) -> (){
+        for c in stdin.keys() {
+                chan_select! {
+                    default => {},
+                    rx.recv() -> val => {
+                        if let Some(true) = val {
+                            exit();
+                            return;
+                        }
+                    }
+
+
+                };
+            if let Ok(k) = c {
+                eprintln!("rcvd {:?}", k);
+                closure(Key::from(k));
+            }
         }
-    }
 }

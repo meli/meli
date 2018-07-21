@@ -328,14 +328,15 @@ impl Component for StatusBar {
                                       (set_y(upper_left, get_y(bottom_right) - height + 1), set_y(bottom_right, get_y(bottom_right) - height+1)),
                                       context);
             },
+            _ => {},
 
         }
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
         self.container.rcv_event(event, context);
-        match event.event_type {
-            UIEventType::RefreshMailbox((idx_a, idx_f)) => {
-                let m = &context.accounts[idx_a][idx_f].as_ref().unwrap().as_ref().unwrap();
+        match &event.event_type {
+            UIEventType::RefreshMailbox((ref idx_a, ref idx_f)) => {
+                let m = &context.accounts[*idx_a][*idx_f].as_ref().unwrap().as_ref().unwrap();
                 self.status = format!("{} |Mailbox: {}, Messages: {}, New: {}", self.mode,  m.folder.name(), m.collection.len(), m.collection.iter().filter(|e| !e.is_seen()).count());
                 self.dirty = true;
 
@@ -344,7 +345,7 @@ impl Component for StatusBar {
                 let offset = self.status.find('|').unwrap_or(self.status.len());
                 self.status.replace_range(..offset, &format!("{} ", m));
                 self.dirty = true;
-                self.mode = m;
+                self.mode = m.clone();
                 match m {
                     UIMode::Normal => {
                         self.height = 1;
@@ -354,11 +355,12 @@ impl Component for StatusBar {
                     UIMode::Execute => {
                         self.height = 2;
                     },
+                    _ => {},
                 };
             },
             UIEventType::ExInput(Key::Char(c)) => {
                 self.dirty = true;
-                self.ex_buffer.push(c);
+                self.ex_buffer.push(*c);
             },
             UIEventType::Resize => {
                 self.dirty = true;

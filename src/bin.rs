@@ -31,7 +31,7 @@ use ui::*;
 pub use melib::*;
 
 use std::thread;
-use std::io::{stdout, stdin, };
+use std::io::{stdout,};
 
 #[macro_use]
 extern crate chan;
@@ -39,13 +39,24 @@ extern crate chan_signal;
 
 use chan_signal::Signal;
 
+fn make_input_thread(sx: chan::Sender<ThreadEvent>, rx: chan::Receiver<bool>) -> () {
+        let stdin = std::io::stdin();
+        thread::Builder::new().name("input-thread".to_string()).spawn(move || {
 
+            get_events(stdin,
+                       |k| {
+                           sx.send(ThreadEvent::Input(k));
+                       },
+                       || {
+                           sx.send(ThreadEvent::UIEventType(UIEventType::ChangeMode(UIMode::Fork)));
+                       }, rx)}).unwrap();
+
+
+}
 fn main() {
-    /* Lock all stdios */
+    /* Lock all stdio outs */
     let _stdout = stdout();
     let mut _stdout = _stdout.lock();
-    let stdin = stdin();
-    let stdin = stdin;
     /*
        let _stderr = stderr();
        let mut _stderr = _stderr.lock();
@@ -58,15 +69,17 @@ fn main() {
      * */
     let (sender, receiver) = chan::sync(::std::mem::size_of::<ThreadEvent>());
 
-    {
-        let sender = sender.clone();
-        thread::Builder::new().name("input-thread".to_string()).spawn(move || {
-            get_events(stdin, move | k| { sender.send(ThreadEvent::Input(k));
-            })}).unwrap();
-    }
+
+    /*
+     * Create async channel to block the input-thread if we need to fork and stop it from reading
+     * stdin, see get_events() for details
+     * */
+    let (tx, rx) = chan::async();
+    /* Get input thread handle to kill it if we need to */
+    make_input_thread(sender.clone(), rx.clone());
 
     /* Create the application State. This is the 'System' part of an ECS architecture */
-    let mut state = State::new(_stdout, sender);
+    let mut state = State::new(_stdout, sender.clone(), tx );
 
     /* Register some reasonably useful interfaces */
     let menu = Entity {component: Box::new(AccountMenu::new(&state.context.accounts)) };
@@ -81,23 +94,27 @@ fn main() {
     state.register_entity(xdg_notifications);
 
     /* Keep track of the input mode. See ui::UIMode for details */
-    let mut mode: UIMode = UIMode::Normal;
     'main: loop {
         state.render();
+                    eprintln!("entered main loop");
 
         'inner: loop {
+                    eprintln!("entered inner loop");
             /* Check if any entities have sent reply events to State. */
             let events: Vec<UIEvent> = state.context.replies();
             for e in events {
                 state.rcv_event(e);
             }
+
             state.redraw();
-            /* Poll on all channels. Currently we have the input channel for stdin, watching events  and the signal watcher. */
+            /* Poll on all channels. Currently we have the input channel for stdin, watching events and the signal watcher. */
             chan_select! {
                 receiver.recv() -> r => {
+                    eprintln!("received {:?}", r);
                     match r.unwrap() {
                         ThreadEvent::Input(k) => {
-                            match mode {
+                    eprintln!(" match input");
+                            match state.mode {
                                 UIMode::Normal => {
                                     match k {
                                         Key::Char('q') | Key::Char('Q') => {
@@ -105,8 +122,8 @@ fn main() {
                                             break 'main;
                                         },
                                         Key::Char(';') => {
-                                            mode = UIMode::Execute;
-                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(mode)});
+                                            state.mode = UIMode::Execute;
+                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Execute)});
                                             state.redraw();
                                         }
                                         key  => {
@@ -118,8 +135,8 @@ fn main() {
                                 UIMode::Execute => {
                                     match k {
                                         Key::Char('\n') | Key::Esc => {
-                                            mode = UIMode::Normal;
-                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(mode)});
+                                            state.mode = UIMode::Normal;
+                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Normal)});
                                             state.redraw();
                                         },
                                         k @ Key::Char(_) => {
@@ -129,6 +146,10 @@ fn main() {
                                         _ => {},
                                     }
                                 },
+                                UIMode::Fork => {
+                    eprintln!("UIMODE FORK");
+                                    break 'inner; // `goto` 'reap loop, and wait on child.
+                                },
                             }
                         },
                         ThreadEvent::RefreshMailbox { name : n } => {
@@ -137,20 +158,50 @@ fn main() {
                             /* Don't handle this yet. */
                             eprintln!("Refresh mailbox {}", n);
                         },
+                        ThreadEvent::UIEventType(UIEventType::ChangeMode(f)) => {
+                            state.mode = f;
+                            break 'inner; // `goto` 'reap loop, and wait on child.
+                        }
                         ThreadEvent::UIEventType(e) => {
+                    eprintln!(" match event");
                             state.rcv_event(UIEvent { id: 0, event_type: e});
                             state.render();
                         },
                     }
                 },
                 signal.recv() -> signal => {
-                    if let Some(Signal::WINCH) = signal {
-                        state.update_size();
-                        state.render();
-                        state.redraw();
+                    if state.mode != UIMode::Fork  {
+                        if let Some(Signal::WINCH) = signal {
+                            eprintln!("resize, mode is {:?}", state.mode);
+                            state.update_size();
+                            state.render();
+                            state.redraw();
+                        }
                     }
                 },
             }
+        } // end of 'inner
+
+        'reap: loop {
+            eprintln!("reached reap loop");
+            match state.try_wait_on_child() {
+                Some(true) => {
+                    make_input_thread(sender.clone(), rx.clone());
+                    state.mode = UIMode::Normal;
+                    state.render();
+                },
+                Some(false) => {
+                    use std::{thread, time};
+
+                    let ten_millis = time::Duration::from_millis(500);
+
+                    thread::sleep(ten_millis);
+                    continue 'reap;
+                },
+                None => {break 'reap;},
+            }
+
+
         }
     }
 }

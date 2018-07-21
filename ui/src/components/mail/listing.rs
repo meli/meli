@@ -476,7 +476,42 @@ impl Component for MailListing {
             UIEventType::Input(Key::Char('\n')) if self.unfocused == false => {
                 self.unfocused = true;
                 self.dirty = true;
+            },
+            UIEventType::Input(Key::Char('m')) if self.unfocused == false => {
+                use std::process::{Command, Stdio};
+                    /* Kill input thread so that spawned command can be sole receiver of stdin */
+                {
+                    /* I tried thread::park() here but for some reason it never blocked and always
+                     * returned. Spinlocks are also useless because you have to keep the mutex
+                     * guard alive til the child process exits, which requires some effort.
+                     *
+                     * The only problem with this approach is tht the user has to send some input
+                     * in order for the input-thread to wake up and realise it should kill itself.
+                     *
+                     * I tried writing to stdin/tty manually but for some reason rustty didn't
+                     * acknowledge it.
+                     */
 
+                    /*
+                     * tx sends to input-thread and it kills itself.
+                     */
+                    let tx = context.input_thread();
+                    tx.send(true);
+                }
+
+                let mut output = Command::new("vim")
+                    .stdin(Stdio::inherit())
+                    .stdout(Stdio::inherit())
+                    .spawn()
+                    .expect("failed to execute process") ;
+
+                /*
+                 * Main loop will wait on children and when they reap them the loop spawns a new
+                 * input-thread
+                 */
+                context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::Fork(output) });
+                context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Fork) });
+                return;
             },
             UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Char('i')) if self.unfocused == true => {
                 self.unfocused = false;
