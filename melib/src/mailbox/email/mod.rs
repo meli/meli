@@ -141,7 +141,7 @@ pub struct Envelope {
     references: Option<References>,
 
     datetime: Option<chrono::DateTime<chrono::FixedOffset>>,
-    timestamp: i64,
+    timestamp: u64,
     thread: usize,
 
     operation_token: Arc<Box<BackendOpGenerator>>,
@@ -245,203 +245,204 @@ impl Envelope {
          *
          * if self.message_id.is_none()  ...
          */
-if let Some(ref mut x) = in_reply_to {
-    self.push_references(x);
-}
-if let Some(ref mut d) = datetime {
-    if let Some(d) = parser::date(d) {
-        self.set_datetime(d);
-    }
-}
-}
-pub fn date(&self) -> i64 {
-    self.timestamp
-}
-pub fn datetime(&self) -> chrono::DateTime<chrono::FixedOffset> {
-    self.datetime.unwrap_or_else(|| {
-        chrono::FixedOffset::west(0)
-            .ymd(1970, 1, 1)
-            .and_hms(0, 0, 0)
-    })
-}
-pub fn date_as_str(&self) -> &str {
-    &self.date
-}
-pub fn from(&self) -> &str {
-    match self.from {
-        Some(ref s) => s,
-        None => "",
-    }
-}
-pub fn to(&self) -> &str {
-    match self.to {
-        Some(ref s) => s,
-        None => "",
-    }
-}
-pub fn body(&self) -> Attachment {
-    let mut operation = self.operation_token.generate();
-    let file = operation.as_bytes();
-    let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
-        Ok(v) => v,
-        Err(_) => {
-            let operation = self.operation_token.generate();
-            eprintln!("error in parsing mail\n{}", operation.description());
-            panic!()
+        if let Some(ref mut x) = in_reply_to {
+            self.push_references(x);
         }
-    };
-    let mut builder = AttachmentBuilder::new(body);
-    for (name, value) in headers {
-        if value.len() == 1 && value.is_empty() {
-            continue;
-        }
-        if name.eq_ignore_ascii_case("content-transfer-encoding") {
-            builder.content_transfer_encoding(value);
-        } else if name.eq_ignore_ascii_case("content-type") {
-            builder.content_type(value);
-        }
-    }
-    builder.build()
-}
-pub fn subject(&self) -> &str {
-    match self.subject {
-        Some(ref s) => s,
-        _ => "",
-    }
-}
-pub fn in_reply_to(&self) -> &str {
-    match self.in_reply_to {
-        Some(ref s) => s.val(),
-        _ => "",
-    }
-}
-pub fn in_reply_to_raw(&self) -> &str {
-    match self.in_reply_to {
-        Some(ref s) => s.raw(),
-        _ => "",
-    }
-}
-pub fn message_id(&self) -> &str {
-    match self.message_id {
-        Some(ref s) => s.val(),
-        _ => "",
-    }
-}
-pub fn message_id_raw(&self) -> &str {
-    match self.message_id {
-        Some(ref s) => s.raw(),
-        _ => "",
-    }
-}
-fn set_date(&mut self, new_val: String) -> () {
-    self.date = new_val;
-}
-fn set_from(&mut self, new_val: String) -> () {
-    self.from = Some(new_val);
-}
-fn set_to(&mut self, new_val: String) -> () {
-    self.to = Some(new_val);
-}
-fn set_in_reply_to(&mut self, new_val: &str) -> () {
-    let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
-        Ok(v) => v,
-        Err(v) => {
-            self.in_reply_to = None;
-            return;
-        }
-    };
-    self.in_reply_to = Some(MessageID::new(new_val, slice));
-}
-fn set_subject(&mut self, new_val: String) -> () {
-    self.subject = Some(new_val);
-}
-fn set_message_id(&mut self, new_val: &str) -> () {
-    let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
-        Ok(v) => v,
-        Err(v) => {
-            self.message_id = None;
-            return;
-        }
-    };
-    self.message_id = Some(MessageID::new(new_val, slice));
-}
-fn push_references(&mut self, new_val: &str) -> () {
-    let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
-        Ok(v) => v,
-        Err(v) => {
-            return;
-        }
-    };
-    let new_ref = MessageID::new(new_val, slice);
-    match self.references {
-        Some(ref mut s) => {
-            if s.refs.contains(&new_ref) {
-                if s.refs[s.refs.len() - 1] != new_ref {
-                    if let Some(index) = s.refs.iter().position(|x| *x == new_ref) {
-                        s.refs.remove(index);
-                    } else {
-                        panic!();
-                    }
-                } else {
-                    return;
-                }
+        if let Some(ref mut d) = datetime {
+            if let Some(d) = parser::date(d) {
+                self.set_datetime(d);
             }
-            s.refs.push(new_ref);
-        }
-        None => {
-            let mut v = Vec::new();
-            v.push(new_ref);
-            self.references = Some(References {
-                raw: "".to_string(),
-                refs: v,
-            });
         }
     }
-}
-fn set_references(&mut self, new_val: String) -> () {
-    match self.references {
-        Some(ref mut s) => {
-            s.raw = new_val;
-        }
-        None => {
-            let v = Vec::new();
-            self.references = Some(References {
-                raw: new_val,
-                refs: v,
-            });
+    pub fn date(&self) -> u64 {
+        self.timestamp
+    }
+
+    pub fn datetime(&self) -> chrono::DateTime<chrono::FixedOffset> {
+        self.datetime.unwrap_or_else(|| {
+            chrono::FixedOffset::west(0)
+                .ymd(1970, 1, 1)
+                .and_hms(0, 0, 0)
+        })
+    }
+    pub fn date_as_str(&self) -> &str {
+        &self.date
+    }
+    pub fn from(&self) -> &str {
+        match self.from {
+            Some(ref s) => s,
+            None => "",
         }
     }
-}
-pub fn references(&self) -> Vec<&MessageID> {
-    match self.references {
-        Some(ref s) => s.refs
-            .iter()
-            .fold(Vec::with_capacity(s.refs.len()), |mut acc, x| {
-                acc.push(x);
-                acc
-            }),
-        None => Vec::new(),
+    pub fn to(&self) -> &str {
+        match self.to {
+            Some(ref s) => s,
+            None => "",
+        }
     }
-}
-pub fn set_body(&mut self, new_val: Attachment) -> () {
-    self.body = Some(new_val);
-}
-pub fn thread(&self) -> usize {
-    self.thread
-}
-pub fn set_thread(&mut self, new_val: usize) -> () {
-    self.thread = new_val;
-}
-pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) -> () {
-    self.datetime = Some(new_val);
-    self.timestamp = new_val.timestamp();
-}
-pub fn flags(&self) -> Flag {
-    self.flags
-}
-pub fn is_seen(&self) -> bool {
-    !(self.flags & Flag::SEEN).is_empty()
-}
+    pub fn body(&self) -> Attachment {
+        let mut operation = self.operation_token.generate();
+        let file = operation.as_bytes();
+        let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
+            Ok(v) => v,
+            Err(_) => {
+                let operation = self.operation_token.generate();
+                eprintln!("error in parsing mail\n{}", operation.description());
+                panic!()
+            }
+        };
+        let mut builder = AttachmentBuilder::new(body);
+        for (name, value) in headers {
+            if value.len() == 1 && value.is_empty() {
+                continue;
+            }
+            if name.eq_ignore_ascii_case("content-transfer-encoding") {
+                builder.content_transfer_encoding(value);
+            } else if name.eq_ignore_ascii_case("content-type") {
+                builder.content_type(value);
+            }
+        }
+        builder.build()
+    }
+    pub fn subject(&self) -> &str {
+        match self.subject {
+            Some(ref s) => s,
+            _ => "",
+        }
+    }
+    pub fn in_reply_to(&self) -> &str {
+        match self.in_reply_to {
+            Some(ref s) => s.val(),
+            _ => "",
+        }
+    }
+    pub fn in_reply_to_raw(&self) -> &str {
+        match self.in_reply_to {
+            Some(ref s) => s.raw(),
+            _ => "",
+        }
+    }
+    pub fn message_id(&self) -> &str {
+        match self.message_id {
+            Some(ref s) => s.val(),
+            _ => "",
+        }
+    }
+    pub fn message_id_raw(&self) -> &str {
+        match self.message_id {
+            Some(ref s) => s.raw(),
+            _ => "",
+        }
+    }
+    fn set_date(&mut self, new_val: String) -> () {
+        self.date = new_val;
+    }
+    fn set_from(&mut self, new_val: String) -> () {
+        self.from = Some(new_val);
+    }
+    fn set_to(&mut self, new_val: String) -> () {
+        self.to = Some(new_val);
+    }
+    fn set_in_reply_to(&mut self, new_val: &str) -> () {
+        let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
+            Ok(v) => v,
+            Err(_) => {
+                self.in_reply_to = None;
+                return;
+            }
+        };
+        self.in_reply_to = Some(MessageID::new(new_val, slice));
+    }
+    fn set_subject(&mut self, new_val: String) -> () {
+        self.subject = Some(new_val);
+    }
+    fn set_message_id(&mut self, new_val: &str) -> () {
+        let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
+            Ok(v) => v,
+            Err(_) => {
+                self.message_id = None;
+                return;
+            }
+        };
+        self.message_id = Some(MessageID::new(new_val, slice));
+    }
+    fn push_references(&mut self, new_val: &str) -> () {
+        let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
+            Ok(v) => v,
+            Err(_) => {
+                return;
+            }
+        };
+        let new_ref = MessageID::new(new_val, slice);
+        match self.references {
+            Some(ref mut s) => {
+                if s.refs.contains(&new_ref) {
+                    if s.refs[s.refs.len() - 1] != new_ref {
+                        if let Some(index) = s.refs.iter().position(|x| *x == new_ref) {
+                            s.refs.remove(index);
+                        } else {
+                            panic!();
+                        }
+                    } else {
+                        return;
+                    }
+                }
+                s.refs.push(new_ref);
+            }
+            None => {
+                let mut v = Vec::new();
+                v.push(new_ref);
+                self.references = Some(References {
+                    raw: "".to_string(),
+                    refs: v,
+                });
+            }
+        }
+    }
+    fn set_references(&mut self, new_val: String) -> () {
+        match self.references {
+            Some(ref mut s) => {
+                s.raw = new_val;
+            }
+            None => {
+                let v = Vec::new();
+                self.references = Some(References {
+                    raw: new_val,
+                    refs: v,
+                });
+            }
+        }
+    } 
+    pub fn references(&self) -> Vec<&MessageID> {
+        match self.references {
+            Some(ref s) => s.refs
+                .iter()
+                .fold(Vec::with_capacity(s.refs.len()), |mut acc, x| {
+                    acc.push(x);
+                    acc
+                }),
+            None => Vec::new(),
+        }
+    }
+    pub fn set_body(&mut self, new_val: Attachment) -> () {
+        self.body = Some(new_val);
+    }
+    pub fn thread(&self) -> usize {
+        self.thread
+    }
+    pub fn set_thread(&mut self, new_val: usize) -> () {
+        self.thread = new_val;
+    }
+    pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) -> () {
+        self.datetime = Some(new_val);
+        self.timestamp = new_val.timestamp() as u64;
+    }
+    pub fn flags(&self) -> Flag {
+        self.flags
+    }
+    pub fn is_seen(&self) -> bool {
+        !(self.flags & Flag::SEEN).is_empty()
+    }
 }
 
 impl Eq for Envelope {}

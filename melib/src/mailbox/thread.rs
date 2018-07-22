@@ -27,9 +27,7 @@ extern crate fnv;
 use self::fnv::FnvHashMap;
 use std;
 
-
-
-type UnixTimestamp = i64;
+type UnixTimestamp = u64;
 
 /// A `Container` struct is needed to describe the thread tree forest during creation of threads.
 /// Because of Rust's memory model, we store indexes of Envelopes inside a collection instead of

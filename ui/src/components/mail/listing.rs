@@ -54,7 +54,6 @@ impl MailListing {
 
         self.length = if threaded {
             mailbox.threaded_collection.len()
-            
         } else {
             mailbox.len()
         };
@@ -75,16 +74,22 @@ impl MailListing {
         // TODO: Fix the threaded hell and refactor stuff into seperate functions and/or modules.
         if threaded {
             let mut indentations: Vec<bool> = Vec::with_capacity(6);
+            let mut thread_idx = 0; // needed for alternate thread colors
             /* Draw threaded view. */
             let mut iter = mailbox
                 .threaded_collection
                 .iter()
                 .enumerate()
                 .peekable();
+            let len = mailbox.threaded_collection.len().to_string().chars().count();
             /* This is just a desugared for loop so that we can use .peek() */
             while let Some((idx, i)) = iter.next() {
                 let container = mailbox.thread(*i);
                 let indentation = container.indentation();
+
+                if indentation == 0 {
+                    thread_idx += 1;
+                }
 
                 assert_eq!(container.has_message(), true);
                 match iter.peek() {
@@ -111,16 +116,16 @@ impl MailListing {
                 };
                 let bg_color = if !envelope.is_seen() {
                     Color::Byte(251)
-                } else if idx % 2 == 0 {
+                } else if thread_idx % 2 == 0 {
                     Color::Byte(236)
                 } else {
                     Color::Default
                 };
-                let (x, y) = write_string_to_grid(&MailListing::make_thread_entry(envelope, idx, indentation, container, &indentations),
+                let (x, y) = write_string_to_grid(&MailListing::make_thread_entry(envelope, idx, indentation, container, &indentations, len),
                 &mut content,
                 fg_color,
                 bg_color,
-                ((0, idx) , (MAX_COLS-1, idx)), 
+                ((0, idx) , (MAX_COLS-1, idx)),
                 false);
                 for x in x..MAX_COLS {
                     content[(x,idx)].set_ch(' ');
@@ -280,12 +285,12 @@ impl MailListing {
         self.pager.as_mut().map(|p| p.draw(grid, area, context));
     }
     fn make_thread_entry(envelope: &Envelope, idx: usize, indent: usize,
-                         container: &Container, indentations: &Vec<bool>) -> String {
+                         container: &Container, indentations: &Vec<bool>, idx_width: usize) -> String {
         let has_sibling = container.has_sibling();
         let has_parent = container.has_parent();
         let show_subject = container.show_subject();
 
-        let mut s = format!("{} {} ", idx, &envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string());
+        let mut s = format!("{}{}{} ", idx, " ".repeat(idx_width + 2 - (idx.to_string().chars().count())), MailListing::format_date(&envelope));
         for i in 0..indent {
             if indentations.len() > i && indentations[i]
             {
@@ -307,12 +312,36 @@ impl MailListing {
             }
             s.push('─'); s.push('>');
         }
-        s.push_str(&format!(" {}∞ ", envelope.body().count_attachments()));
-         
+
         if show_subject {
             s.push_str(&format!("{:.85}", envelope.subject()));
         }
+        let attach_count = envelope.body().count_attachments();
+        if attach_count > 0 {
+            s.push_str(&format!(" {}∞ ", attach_count));
+        }
         s
+    }
+    fn format_date(envelope: &Envelope) -> String {
+        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
+        let now: std::time::Duration = std::time::SystemTime::now().duration_since(d).unwrap();
+        match now.as_secs() {
+            n if n < 10*60*60 => {
+                format!("{} hours ago{}", n / (60*60), " ".repeat(8))
+            },
+            n if n < 24*60*60 => {
+                format!("{} hours ago{}", n / (60*60), " ".repeat(7))
+            },
+            n if n < 4*24*60*60 => {
+                format!("{} days ago{}", n / (24*60*60), " ".repeat(9))
+            },
+            _ => {
+                let date = envelope.datetime();
+                envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string()
+            },
+
+
+        }
     }
 }
 
