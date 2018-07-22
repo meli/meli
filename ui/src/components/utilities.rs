@@ -8,14 +8,16 @@ use melib::mailbox::email::interpret_format_flowed;
 pub struct HSplit {
     top: Entity,
     bottom: Entity,
+    show_divider: bool,
     ratio: usize, // bottom/whole height * 100
 }
 
 impl HSplit {
-    pub fn new(top: Entity, bottom: Entity, ratio: usize) -> Self {
+    pub fn new(top: Entity, bottom: Entity, ratio: usize, show_divider: bool) -> Self {
         HSplit {
             top: top,
             bottom: bottom,
+            show_divider: show_divider,
             ratio: ratio,
         }
     }
@@ -33,8 +35,10 @@ impl Component for HSplit {
         let bottom_entity_height = (self.ratio*total_rows )/100;
         let mid = get_y(upper_left) + total_rows - bottom_entity_height;
 
-        for i in get_x(upper_left)..=get_x(bottom_right) {
-            grid[(i, mid)].set_ch('─');
+        if self.show_divider {
+            for i in get_x(upper_left)..=get_x(bottom_right) {
+                grid[(i, mid)].set_ch('─');
+            }
         }
         let _ = self.top.component.draw(grid,
                                        (upper_left, (get_x(bottom_right), get_y(upper_left) + mid-1)),
@@ -57,15 +61,17 @@ impl Component for HSplit {
 pub struct VSplit {
     left: Entity,
     right: Entity,
+    show_divider: bool,
     /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
 }
 
 impl VSplit {
-    pub fn new(left: Entity, right: Entity, ratio: usize) -> Self {
+    pub fn new(left: Entity, right: Entity, ratio: usize, show_divider: bool) -> Self {
         VSplit {
             left: left,
             right: right,
+            show_divider: show_divider,
             ratio: ratio,
         }
     }
@@ -93,18 +99,20 @@ impl Component for VSplit {
             }
         }
 
-        for i in get_y(upper_left)..=get_y(bottom_right) {
-            grid[(mid, i)].set_ch(VERT_BOUNDARY);
-            grid[(mid, i)].set_fg(Color::Default);
-            grid[(mid, i)].set_bg(Color::Default);
-        }
-        if get_y(bottom_right)> 1 {
-            let c = grid.get(mid, get_y(bottom_right)-1).map(|a| a.ch()).unwrap_or_else(|| ' ');
-            match c {
-                HORZ_BOUNDARY => {
-                    grid[(mid, get_y(bottom_right)+1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
-                },
-                _ => {},
+        if self.show_divider {
+            for i in get_y(upper_left)..=get_y(bottom_right) {
+                grid[(mid, i)].set_ch(VERT_BOUNDARY);
+                grid[(mid, i)].set_fg(Color::Default);
+                grid[(mid, i)].set_bg(Color::Default);
+            }
+            if get_y(bottom_right)> 1 {
+                let c = grid.get(mid, get_y(bottom_right)-1).map(|a| a.ch()).unwrap_or_else(|| ' ');
+                match c {
+                    HORZ_BOUNDARY => {
+                        grid[(mid, get_y(bottom_right)+1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
+                    },
+                    _ => {},
+                }
             }
         }
         let _ = self.left.component.draw(grid,

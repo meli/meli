@@ -85,7 +85,7 @@ fn main() {
     let menu = Entity {component: Box::new(AccountMenu::new(&state.context.accounts)) };
     let listing = MailListing::new();
     let b = Entity { component: Box::new(listing) };
-    let window  = Entity { component: Box::new(VSplit::new(menu, b, 90)) };
+    let window  = Entity { component: Box::new(VSplit::new(menu, b, 90, true)) };
     let status_bar = Entity { component: Box::new(StatusBar::new(window)) };
     state.register_entity(status_bar);
 
