@@ -21,8 +21,10 @@
 
 pub mod parser;
 mod attachments;
+
 use mailbox::backends::BackendOpGenerator;
 use self::attachments::*;
+pub use self::attachments::interpret_format_flowed;
 
 use std::string::String;
 use std::sync::Arc;

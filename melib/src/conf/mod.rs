@@ -99,10 +99,9 @@ impl AccountSettings {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct Settings {
     pub accounts: HashMap<String, AccountSettings>,
-
     pub pager: PagerSettings,
 }
 

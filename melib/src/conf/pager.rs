@@ -18,7 +18,7 @@ fn none() -> Option<String> {
 }
 
 /// Settings for the pager function.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct PagerSettings {
     /// Number of context lines when going to next page.
     /// Default: 0
@@ -44,4 +44,9 @@ pub struct PagerSettings {
     /// Default: None
     #[serde(default = "none")]
     pub filter: Option<String>,
+    
+    /// Respect "format=flowed"
+    /// Default: true
+    #[serde(default = "true_val")]
+    pub format_flowed: bool,
 }

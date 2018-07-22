@@ -334,3 +334,12 @@ impl Attachment {
         counter
     }
 }
+
+
+pub fn interpret_format_flowed(t: &str) -> String {
+    let mut n = String::with_capacity(t.len());
+    
+
+
+    unimplemented!()
+}

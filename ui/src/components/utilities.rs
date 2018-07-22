@@ -2,6 +2,8 @@
   */
 use super::*;
 
+use melib::mailbox::email::interpret_format_flowed;
+
 /// A horizontally split in half container.
 pub struct HSplit {
     top: Entity,
@@ -132,10 +134,14 @@ pub struct Pager {
     content: CellBuffer,
 }
 
-// TODO: Make the `new` method content agnostic.
+// TODO: Make a `new` method that is content agnostic.
 impl Pager {
-    pub fn new(mail: &Envelope, pager_filter: Option<String>) -> Self {
-        let mut text = mail.body().text();
+    pub fn from_envelope(mailbox_idx: (usize, usize), envelope_idx: usize, context: &mut Context) -> Self {
+        let mailbox = &mut context.accounts[mailbox_idx.0][mailbox_idx.1].as_ref().unwrap().as_ref().unwrap();
+        let envelope : &Envelope = &mailbox.collection[envelope_idx];
+        let pager_filter: Option<&String> = context.settings.pager.filter.as_ref();
+        let format_flowed: bool = context.settings.pager.format_flowed;
+        let mut text = envelope.body().text();
         if let Some(bin) = pager_filter {
             use std::io::Write;
             use std::process::{Command, Stdio};
@@ -158,6 +164,9 @@ impl Pager {
         let height = lines.len();
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        if false {
+            interpret_format_flowed(&text);
+        }
         Pager::print_string(&mut content, &text);
         Pager {
             cursor_pos: 0,
