@@ -20,7 +20,7 @@
  */
 use mailbox::email::parser;
 
-use std::fmt::{Display, Formatter, Result};
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /*
  *
@@ -53,7 +53,7 @@ pub enum ContentType {
 }
 
 impl Display for ContentType {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
             ContentType::Text => write!(f, "text"),
             ContentType::Multipart { .. } => write!(f, "multipart"),
@@ -67,7 +67,7 @@ pub enum ContentSubType {
     Other { tag: String },
 }
 impl Display for ContentSubType {
-    fn fmt(&self, f: &mut Formatter) -> Result {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
             ContentSubType::Plain => write!(f, "plain"),
             ContentSubType::Other { tag: ref t } => write!(f, "{}", t),
@@ -271,11 +271,33 @@ pub struct Attachment {
     attachment_type: AttachmentType,
 }
 
+impl Display for Attachment {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self.attachment_type {
+            AttachmentType::Data { .. } => {
+                write!(f, "Data attachment of type {}", self.tag())
+            }
+            AttachmentType::Text { content: ref t } => {
+                write!(f, "Text attachment")
+            }
+            AttachmentType::Multipart {
+                of_type: ref multipart_type,
+                subattachments: ref sub_att_vec,
+            } => if *multipart_type == MultipartType::Alternative {
+                write!(f, "Multipart/alternative attachment with {} subs", sub_att_vec.len())
+            } else {
+                write!(f, "Multipart attachment with {} subs", sub_att_vec.len())
+            },
+        }
+
+    }
+}
+
 impl Attachment {
     fn get_text_recursive(&self, text: &mut String) {
         match self.attachment_type {
             AttachmentType::Data { .. } => {
-                text.push_str(&format!("Data attachment of type {}", self.tag()));
+                //text.push_str(&format!("Data attachment of type {}", self.tag()));
             }
             AttachmentType::Text { content: ref t } => {
                 text.push_str(t);
@@ -303,41 +325,44 @@ impl Attachment {
         self.get_text_recursive(&mut text);
         text
     }
-    pub fn description(&self) -> String {
-        unimplemented!()
+    pub fn description(&self) -> Vec<String> {
+        self.attachments().iter().map(|a| a.text()).collect()
     }
     pub fn tag(&self) -> String {
         format!("{}/{}", self.content_type.0, self.content_type.1).to_string()
     }
-    pub fn count_attachments(&mut self) -> usize {
-        let mut counter = 0;
-
-        fn count_recursive(att: &Attachment, counter: &mut usize) {
+    pub fn attachments(&self) -> Vec<Attachment> {
+        let mut ret = Vec::new();
+        fn count_recursive(att: &Attachment, ret: &mut Vec<Attachment>) {
             match att.attachment_type {
-                AttachmentType::Data { .. } => {
-                    *counter += 1;
-                }
-                AttachmentType::Text { .. } => {
+                AttachmentType::Data { .. } | AttachmentType::Text { .. } => {
+                    ret.push(att.clone())
                 }
                 AttachmentType::Multipart {
                     of_type: ref multipart_type,
                     subattachments: ref sub_att_vec,
                 } => if *multipart_type != MultipartType::Alternative {
+                    // TODO: Fix this, wrong count
                     for a in sub_att_vec {
-                        count_recursive(a, counter);
+                        count_recursive(a, ret);
                     }
                 },
             }
         }
 
-        count_recursive(&self, &mut counter);
-        counter
+        count_recursive(&self, &mut ret);
+        ret
+
+
+    }
+    pub fn count_attachments(&self) -> usize {
+        self.attachments().len()
     }
 }
 
 
 pub fn interpret_format_flowed(t: &str) -> String {
-    let mut n = String::with_capacity(t.len());
+    //let mut n = String::with_capacity(t.len());
     
 
 

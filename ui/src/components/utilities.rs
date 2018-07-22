@@ -3,6 +3,7 @@
 use super::*;
 
 use melib::mailbox::email::interpret_format_flowed;
+use melib::mailbox::email::Attachment;
 
 /// A horizontally split in half container.
 pub struct HSplit {
@@ -168,13 +169,17 @@ impl Pager {
 
             text = String::from_utf8_lossy(&filter_child.wait_with_output().expect("Failed to wait on filter").stdout).to_string();
         }
-        let lines: Vec<&str> = text.trim().split('\n').collect();
-        let height = lines.len();
+        let mut text = text.to_string();
+        if envelope.body().count_attachments() > 1 {
+            eprintln!("text was {}", text);
+            text = envelope.body().attachments().iter().fold(text, |mut s, a| { s.push_str(&format!("{}\n", a)); s });
+            eprintln!("text is {}", text);
+        }
+        let mut lines: Vec<&str> = text.trim().split('\n').collect();
+        let height = lines.len() + 1;
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        if false {
-            interpret_format_flowed(&text);
-        }
+        //interpret_format_flowed(&text);
         Pager::print_string(&mut content, &text);
         Pager {
             cursor_pos: 0,
@@ -203,6 +208,7 @@ impl Pager {
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
         if width > 0 {
             for (i, l) in lines.iter().enumerate() {
+        eprintln!("line: {:?}", l);
                 write_string_to_grid(l,
                                      content,
                                      Color::Default,

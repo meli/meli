@@ -20,11 +20,11 @@
  */
 
 pub mod parser;
-mod attachments;
+pub mod attachments;
 
 use mailbox::backends::BackendOpGenerator;
 use self::attachments::*;
-pub use self::attachments::interpret_format_flowed;
+pub use self::attachments::*;
 
 use std::string::String;
 use std::sync::Arc;
@@ -414,7 +414,7 @@ impl Envelope {
                 });
             }
         }
-    } 
+    }
     pub fn references(&self) -> Vec<&MessageID> {
         match self.references {
             Some(ref s) => s.refs

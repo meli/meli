@@ -322,8 +322,8 @@ impl MailListing {
             s.push_str(&format!("{:.85}", envelope.subject()));
         }
         let attach_count = envelope.body().count_attachments();
-        if attach_count > 0 {
-            s.push_str(&format!(" {}∞ ", attach_count));
+        if attach_count > 1 {
+            s.push_str(&format!(" {}∞ ", attach_count-1));
         }
         s
     }
