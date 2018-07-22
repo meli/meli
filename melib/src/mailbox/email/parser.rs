@@ -266,8 +266,8 @@ named!(pub subject<String>, ws!(do_parse!(
             let list_len = list.len();
             let mut i = 0;
             list.iter().fold(String::with_capacity(string_len),
-            |acc, x| { 
-                let mut acc = acc + &x.replace("\n", ""); 
+            |acc, x| {
+                let mut acc = acc + &x.replace("\n", "").replace("\t", " ");
                 if i != list_len - 1 {
                     acc.push_str(" ");
                     i+=1;

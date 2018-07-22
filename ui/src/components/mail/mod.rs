@@ -23,7 +23,7 @@ pub struct AccountMenu {
 
 impl AccountMenu {
     pub fn new(accounts: &Vec<Account>) -> Self {
-        let accounts = accounts.iter().enumerate().map(|(i, a)| { 
+        let accounts = accounts.iter().enumerate().map(|(i, a)| {
             AccountMenuEntry {
                 name: a.name().to_string(),
                 index: i,
@@ -158,7 +158,7 @@ impl Component for AccountMenu {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         self.dirty = false;
-        let mut y = get_y(upper_left) + 1;
+        let mut y = get_y(upper_left);
         for a in &self.accounts {
             y += self.print_account(grid,
                                     (set_y(upper_left, y), bottom_right),
