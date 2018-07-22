@@ -1,6 +1,8 @@
 use super::*;
 
 
+/// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
+/// menus
 pub struct MailView {
     coordinates: (usize, usize, usize),
     pager: Option<Pager>,
@@ -98,6 +100,7 @@ impl Component for MailView {
             (envelope_idx, y + 1)
         };
         if self.dirty {
+            // TODO: pass string instead of envelope
             self.pager = Some(Pager::from_envelope((self.coordinates.0, self.coordinates.1), envelope_idx, context));
             self.dirty = false;
         }

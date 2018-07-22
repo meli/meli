@@ -149,12 +149,11 @@ impl Pager {
         let mailbox = &mut context.accounts[mailbox_idx.0][mailbox_idx.1].as_ref().unwrap().as_ref().unwrap();
         let envelope : &Envelope = &mailbox.collection[envelope_idx];
         let pager_filter: Option<&String> = context.settings.pager.filter.as_ref();
-        let format_flowed: bool = context.settings.pager.format_flowed;
+        //let format_flowed: bool = context.settings.pager.format_flowed;
         let mut text = envelope.body().text();
         if let Some(bin) = pager_filter {
             use std::io::Write;
             use std::process::{Command, Stdio};
-            eprintln!("{}", bin);
             let mut filter_child = Command::new(bin)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -171,11 +170,9 @@ impl Pager {
         }
         let mut text = text.to_string();
         if envelope.body().count_attachments() > 1 {
-            eprintln!("text was {}", text);
             text = envelope.body().attachments().iter().enumerate().fold(text, |mut s, (idx, a)| { s.push_str(&format!("[{}] {}\n\n", idx, a)); s });
-            eprintln!("text is {}", text);
         }
-        let mut lines: Vec<&str> = text.trim().split('\n').collect();
+        let lines: Vec<&str> = text.trim().split('\n').collect();
         let height = lines.len() + 1;
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
@@ -234,7 +231,6 @@ impl Component for Pager {
         if self.height == 0 || self.height == self.cursor_pos || self.width == 0 {
             return;
         }
-        eprintln!("drawing");
 
         clear_area(grid,
                    (upper_left, bottom_right));
@@ -246,7 +242,6 @@ impl Component for Pager {
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
-        eprintln!("pager got {:?}", event);
         match event.event_type {
             UIEventType::Input(Key::Char('k')) => {
                 if self.cursor_pos > 0 {

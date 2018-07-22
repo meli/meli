@@ -318,7 +318,6 @@ impl<W: Write> State<W> {
     /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: String) {
         //TODO: Make ex mode useful
-        eprintln!("received command: {}", cmd);
 
         let result = goto(&cmd.as_bytes()).to_full_result();
 
@@ -358,7 +357,6 @@ impl<W: Write> State<W> {
                     in_pipe.write(&buf).unwrap();
                 }
                 let output = output.wait_with_output().expect("Failed to read stdout");
-                eprintln!("{}",String::from_utf8_lossy(&output.stdout));
 
              return;
             },
@@ -392,7 +390,7 @@ impl<W: Write> State<W> {
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
         if {
             match self.child {
-            Some(ForkType::NewDraft(_,ref mut c)) => { 
+            Some(ForkType::NewDraft(_,ref mut c)) => {
                 let mut w = c.try_wait();
                 match w {
                     Ok(Some(_)) => { true },
@@ -408,7 +406,6 @@ impl<W: Write> State<W> {
                     Err(_) => { return None; },
                 }
             },
-                
             _ => {
                 return None;
             }
@@ -517,7 +514,6 @@ pub fn get_events(stdin: std::io::Stdin, mut closure: impl FnMut(Key), mut exit:
 
                 };
             if let Ok(k) = c {
-                eprintln!("rcvd {:?}", k);
                 closure(Key::from(k));
             }
         }

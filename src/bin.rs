@@ -96,10 +96,8 @@ fn main() {
     /* Keep track of the input mode. See ui::UIMode for details */
     'main: loop {
         state.render();
-                    eprintln!("entered main loop");
 
         'inner: loop {
-                    eprintln!("entered inner loop");
             /* Check if any entities have sent reply events to State. */
             let events: Vec<UIEvent> = state.context.replies();
             for e in events {
@@ -110,10 +108,8 @@ fn main() {
             /* Poll on all channels. Currently we have the input channel for stdin, watching events and the signal watcher. */
             chan_select! {
                 receiver.recv() -> r => {
-                    eprintln!("received {:?}", r);
                     match r.unwrap() {
                         ThreadEvent::Input(k) => {
-                    eprintln!(" match input");
                             match state.mode {
                                 UIMode::Normal => {
                                     match k {
@@ -147,7 +143,6 @@ fn main() {
                                     }
                                 },
                                 UIMode::Fork => {
-                    eprintln!("UIMODE FORK");
                                     break 'inner; // `goto` 'reap loop, and wait on child.
                                 },
                             }
@@ -156,14 +151,12 @@ fn main() {
                             state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Notification(n.clone())});
                             state.redraw();
                             /* Don't handle this yet. */
-                            eprintln!("Refresh mailbox {}", n);
                         },
                         ThreadEvent::UIEventType(UIEventType::ChangeMode(f)) => {
                             state.mode = f;
                             break 'inner; // `goto` 'reap loop, and wait on child.
                         }
                         ThreadEvent::UIEventType(e) => {
-                    eprintln!(" match event");
                             state.rcv_event(UIEvent { id: 0, event_type: e});
                             state.render();
                         },
@@ -172,7 +165,6 @@ fn main() {
                 signal.recv() -> signal => {
                     if state.mode != UIMode::Fork  {
                         if let Some(Signal::WINCH) = signal {
-                            eprintln!("resize, mode is {:?}", state.mode);
                             state.update_size();
                             state.render();
                             state.redraw();
@@ -183,7 +175,6 @@ fn main() {
         } // end of 'inner
 
         'reap: loop {
-            eprintln!("reached reap loop");
             match state.try_wait_on_child() {
                 Some(true) => {
                     make_input_thread(sender.clone(), rx.clone());
