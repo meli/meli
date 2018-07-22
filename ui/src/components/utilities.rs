@@ -172,7 +172,7 @@ impl Pager {
         let mut text = text.to_string();
         if envelope.body().count_attachments() > 1 {
             eprintln!("text was {}", text);
-            text = envelope.body().attachments().iter().fold(text, |mut s, a| { s.push_str(&format!("{}\n", a)); s });
+            text = envelope.body().attachments().iter().enumerate().fold(text, |mut s, (idx, a)| { s.push_str(&format!("[{}] {}\n\n", idx, a)); s });
             eprintln!("text is {}", text);
         }
         let mut lines: Vec<&str> = text.trim().split('\n').collect();
@@ -208,7 +208,6 @@ impl Pager {
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
         if width > 0 {
             for (i, l) in lines.iter().enumerate() {
-        eprintln!("line: {:?}", l);
                 write_string_to_grid(l,
                                      content,
                                      Color::Default,
@@ -235,11 +234,10 @@ impl Component for Pager {
         if self.height == 0 || self.height == self.cursor_pos || self.width == 0 {
             return;
         }
+        eprintln!("drawing");
 
         clear_area(grid,
                    (upper_left, bottom_right));
-        context.dirty_areas.push_back((upper_left, bottom_right));
-
         //let pager_context: usize = context.settings.pager.pager_context;
         //let pager_stop: bool = context.settings.pager.pager_stop;
         //let rows = y(bottom_right) - y(upper_left);
@@ -248,6 +246,7 @@ impl Component for Pager {
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
+        eprintln!("pager got {:?}", event);
         match event.event_type {
             UIEventType::Input(Key::Char('k')) => {
                 if self.cursor_pos > 0 {

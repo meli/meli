@@ -18,9 +18,9 @@ pub struct MailListing {
     content: CellBuffer,
     /// If we must redraw on next redraw event
     dirty: bool,
-    /// If `self.pager` exists or not.
+    /// If `self.view` exists or not.
     unfocused: bool,
-    pager: Option<Pager>,
+    view: Option<MailView>,
 }
 
 impl MailListing {
@@ -39,7 +39,7 @@ impl MailListing {
             content: content,
             dirty: true,
             unfocused: false,
-            pager: None,
+            view: None,
         }
     }
     /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
@@ -126,7 +126,7 @@ impl MailListing {
                 } else {
                     Color::Default
                 };
-                let (x, y) = write_string_to_grid(&MailListing::make_thread_entry(envelope, idx, indentation, container, &indentations, len),
+                let (x, _) = write_string_to_grid(&MailListing::make_thread_entry(envelope, idx, indentation, container, &indentations, len),
                 &mut content,
                 fg_color,
                 bg_color,
@@ -272,23 +272,6 @@ impl MailListing {
         context.dirty_areas.push_back(area);
     }
 
-    /// Create a pager for the `Envelope` currently under the cursor.
-    fn draw_mail_view(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        {
-            let envelope_idx: usize = {
-                let threaded = context.accounts[self.cursor_pos.0].runtime_settings.threaded;
-                let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
-                if threaded {
-                    mailbox.threaded_mail(self.cursor_pos.2)
-                } else {
-                    self.cursor_pos.2
-                }
-            };
-
-            self.pager = Some(Pager::from_envelope((self.cursor_pos.0, self.cursor_pos.1), envelope_idx, context));
-        }
-        self.pager.as_mut().map(|p| p.draw(grid, area, context));
-    }
     fn make_thread_entry(envelope: &Envelope, idx: usize, indent: usize,
                          container: &Container, indentations: &Vec<bool>, idx_width: usize) -> String {
         let has_sibling = container.has_sibling();
@@ -341,7 +324,6 @@ impl MailListing {
                 format!("{} days ago{}", n / (24*60*60), " ".repeat(9))
             },
             _ => {
-                let date = envelope.datetime();
                 envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string()
             },
 
@@ -358,9 +340,7 @@ impl Component for MailListing {
             }
             self.dirty = false;
             /* Draw the entire list */
-            self.draw_list(grid,
-                           area,
-                           context);
+            self.draw_list(grid, area, context);
         } else {
             let upper_left = upper_left!(area);
             let bottom_right = bottom_right!(area);
@@ -371,7 +351,7 @@ impl Component for MailListing {
 
             /* Render the mail body in a pager, basically copy what HSplit does */
             let total_rows = get_y(bottom_right) - get_y(upper_left);
-            let pager_ratio = context.settings.pager.pager_ratio;
+            let pager_ratio = context.runtime_settings.pager.pager_ratio;
             let bottom_entity_rows = (pager_ratio*total_rows )/100;
 
             if bottom_entity_rows > total_rows {
@@ -398,99 +378,17 @@ impl Component for MailListing {
                 for i in get_x(upper_left)..=get_x(bottom_right) {
                     grid[(i, mid)].set_ch('─');
                 }
+                context.dirty_areas.push_back((set_y(upper_left, mid), set_y(bottom_right, mid)));
             }
             // TODO: Make headers view configurable
 
-            /* Draw header */
-            let y = 
-            {
-                let threaded = context.accounts[self.cursor_pos.0].runtime_settings.threaded;
-                let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
-                let envelope: &Envelope = if threaded {
-                    let i = mailbox.threaded_mail(self.cursor_pos.2);
-                    &mailbox.collection[i]
-                } else {
-                    &mailbox.collection[self.cursor_pos.2]
-                };
-
-                let (x,y) = write_string_to_grid(&format!("Date: {}", envelope.date_as_str()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, mid+1), bottom_right),
-                true);
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
-                let (x,y) = write_string_to_grid(&format!("From: {}", envelope.from()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, y+1), bottom_right),
-                true);
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
-                let (x,y) = write_string_to_grid(&format!("To: {}", envelope.to()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, y+1), bottom_right),
-                true);
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
-                let (x,y) = write_string_to_grid(&format!("Subject: {}", envelope.subject()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, y+1), bottom_right),
-                true);
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
-                let (x, y) = write_string_to_grid(&format!("Message-ID: {}", envelope.message_id_raw()),
-                grid,
-                Color::Byte(33),
-                Color::Default,
-                (set_y(upper_left, y+1), bottom_right),
-                true);
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
-                clear_area(grid,
-                           (set_y(upper_left, y+1), set_y(bottom_right, y+2)));
-                context.dirty_areas.push_back((set_y(upper_left, mid), set_y(bottom_right, y+1)));
-                y + 2
-            };
-
-
             if !self.dirty {
-                if let Some(ref mut p) = self.pager {
-                    p.draw(grid,
-                           ((get_x(upper_left), y), bottom_right),
-                           context);
-                }
+                self.view.as_mut().map(|v| v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context));
                 return;
             }
-
+            self.view = Some(MailView::new(self.cursor_pos, None, None));
+            self.view.as_mut().map(|v| v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context));
             self.dirty = false;
-
-            /* Draw body */
-            self.draw_mail_view(grid,
-                                ((get_x(upper_left), y), bottom_right),
-                                context);
-
         }
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
@@ -561,7 +459,7 @@ impl Component for MailListing {
             UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Char('i')) if self.unfocused == true => {
                 self.unfocused = false;
                 self.dirty = true;
-                self.pager = None;
+                self.view = None;
 
             },
             UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
@@ -617,7 +515,7 @@ impl Component for MailListing {
             },
             UIEventType::RefreshMailbox(_) => {
                 self.dirty = true;
-                self.pager = None;
+                self.view = None;
             },
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
@@ -640,11 +538,11 @@ impl Component for MailListing {
             _ => {
             },
         }
-        if let Some(ref mut p) = self.pager {
-            p.process_event(event, context);
+        if let Some(ref mut v) = self.view {
+            v.process_event(event, context);
         }
     }
     fn is_dirty(&self) -> bool {
-        self.dirty || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+        self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }
 }

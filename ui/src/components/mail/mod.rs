@@ -3,7 +3,9 @@
 use super::*;
 
 pub mod listing;
+pub mod view;
 pub use listing::*;
+pub use view::*;
 
 
 #[derive(Debug)]
