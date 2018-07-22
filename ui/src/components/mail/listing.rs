@@ -513,7 +513,7 @@ impl Component for MailListing {
             },
             UIEventType::Input(Key::Char('m')) if self.unfocused == false => {
                 use std::process::{Command, Stdio};
-                    /* Kill input thread so that spawned command can be sole receiver of stdin */
+                /* Kill input thread so that spawned command can be sole receiver of stdin */
                 {
                     /* I tried thread::park() here but for some reason it never blocked and always
                      * returned. Spinlocks are also useless because you have to keep the mutex
@@ -566,16 +566,31 @@ impl Component for MailListing {
             },
             UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
                 let folder_length = context.accounts[self.cursor_pos.0].len();
+                let accounts_length = context.accounts.len();
                 match k {
-                    'J' if folder_length > 0 && self.new_cursor_pos.1 < folder_length - 1 => {
-                        self.new_cursor_pos.1 = self.cursor_pos.1 + 1;
-                        self.dirty = true;
-                        self.refresh_mailbox(context);
+                    'J' if folder_length > 0 => {
+                        if self.new_cursor_pos.1 < folder_length - 1 {
+                            self.new_cursor_pos.1 = self.cursor_pos.1 + 1;
+                            self.dirty = true;
+                            self.refresh_mailbox(context);
+                        } else  if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1  {
+                            self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
+                            self.new_cursor_pos.1 = 0;
+                            self.dirty = true;
+                            self.refresh_mailbox(context);
+                        }
                     },
-                    'K' if self.cursor_pos.1 > 0 => {
-                        self.new_cursor_pos.1 = self.cursor_pos.1 - 1;
-                        self.dirty = true;
-                        self.refresh_mailbox(context);
+                    'K' => {
+                        if self.cursor_pos.1 > 0 {
+                            self.new_cursor_pos.1 = self.cursor_pos.1 - 1;
+                            self.dirty = true;
+                            self.refresh_mailbox(context);
+                        } else if self.cursor_pos.0 > 0  {
+                            self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
+                            self.new_cursor_pos.1 = 0;
+                            self.dirty = true;
+                            self.refresh_mailbox(context);
+                        }
                     },
                     _ => {
                     },
@@ -611,21 +626,16 @@ impl Component for MailListing {
                 self.dirty = true;
             },
             UIEventType::Action(ref action) => {
-                        eprintln!("got action");
                 match action {
                     Action::MailListing(MailListingAction::ToggleThreaded) => {
-                        eprintln!("toggled");
                         context.accounts[self.cursor_pos.0].runtime_settings.threaded = !context.accounts[self.cursor_pos.0].runtime_settings.threaded;
                         self.refresh_mailbox(context);
                         self.dirty = true;
-                        
+
 
                     },
                     _ => { unreachable!() },
-
-
                 }
-
             },
             _ => {
             },
