@@ -32,6 +32,7 @@ pub struct Account {
     sent_folder: Option<usize>,
 
     pub settings: AccountSettings,
+    pub runtime_settings: AccountSettings,
     pub backend: Box<MailBackend>,
 }
 
@@ -53,7 +54,8 @@ impl Account {
 
             sent_folder: sent_folder,
 
-            settings: settings,
+            settings: settings.clone(),
+            runtime_settings: settings,
             backend: backend,
         }
     }

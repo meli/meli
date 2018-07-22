@@ -1,6 +1,11 @@
 use super::*;
 const MAX_COLS: usize = 500;
 
+#[derive(Debug)]
+pub enum MailListingAction {
+    ToggleThreaded,
+}
+
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `Pager`.
 pub struct MailListing {
@@ -46,7 +51,7 @@ impl MailListing {
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
-        let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
+        let threaded = context.accounts[self.cursor_pos.0].runtime_settings.threaded;
         // Get mailbox as a reference.
         let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
         // Inform State that we changed the current folder view.
@@ -195,7 +200,7 @@ impl MailListing {
         self.content = content;
     }
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
+        let threaded = context.accounts[self.cursor_pos.0].runtime_settings.threaded;
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
         let envelope: &Envelope = if threaded {
             let i = mailbox.threaded_mail(idx);
@@ -270,17 +275,17 @@ impl MailListing {
     /// Create a pager for the `Envelope` currently under the cursor.
     fn draw_mail_view(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         {
-            let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
-            let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
-            let envelope: &Envelope = if threaded {
-                let i = mailbox.threaded_mail(self.cursor_pos.2);
-                &mailbox.collection[i]
-            } else {
-                &mailbox.collection[self.cursor_pos.2]
+            let envelope_idx: usize = {
+                let threaded = context.accounts[self.cursor_pos.0].runtime_settings.threaded;
+                let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
+                if threaded {
+                    mailbox.threaded_mail(self.cursor_pos.2)
+                } else {
+                    self.cursor_pos.2
+                }
             };
 
-            let pager_filter = context.settings.pager.filter.clone();
-            self.pager = Some(Pager::new(&envelope, pager_filter));
+            self.pager = Some(Pager::from_envelope((self.cursor_pos.0, self.cursor_pos.1), envelope_idx, context));
         }
         self.pager.as_mut().map(|p| p.draw(grid, area, context));
     }
@@ -399,7 +404,7 @@ impl Component for MailListing {
             /* Draw header */
             let y = 
             {
-                let threaded = context.accounts[self.cursor_pos.0].settings.threaded;
+                let threaded = context.accounts[self.cursor_pos.0].runtime_settings.threaded;
                 let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
                 let envelope: &Envelope = if threaded {
                     let i = mailbox.threaded_mail(self.cursor_pos.2);
@@ -604,6 +609,23 @@ impl Component for MailListing {
             },
             UIEventType::Resize => {
                 self.dirty = true;
+            },
+            UIEventType::Action(ref action) => {
+                        eprintln!("got action");
+                match action {
+                    Action::MailListing(MailListingAction::ToggleThreaded) => {
+                        eprintln!("toggled");
+                        context.accounts[self.cursor_pos.0].runtime_settings.threaded = !context.accounts[self.cursor_pos.0].runtime_settings.threaded;
+                        self.refresh_mailbox(context);
+                        self.dirty = true;
+                        
+
+                    },
+                    _ => { unreachable!() },
+
+
+                }
+
             },
             _ => {
             },

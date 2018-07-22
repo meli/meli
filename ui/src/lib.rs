@@ -61,6 +61,11 @@ use termion::screen::AlternateScreen;
 extern crate nom;
 use chan::Sender;
 
+#[derive(Debug)]
+pub enum Action {
+    MailListing(MailListingAction),
+}
+
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads
 /// to the main process.
 #[derive(Debug)]
@@ -100,6 +105,7 @@ pub enum UIEventType {
     Command(String),
     Notification(String),
     EditDraft(std::path::PathBuf),
+    Action(Action),
 }
 
 
@@ -139,6 +145,8 @@ pub struct Notification {
 pub struct Context {
     pub accounts: Vec<Account>,
     settings: Settings,
+
+    runtime_settings: Settings,
     /// Areas of the screen that must be redrawn in the next render
     dirty_areas: VecDeque<Area>,
 
@@ -210,7 +218,8 @@ impl<W: Write> State<W> {
             context: Context {
                 accounts: accounts,
                 backends: backends,
-                settings: settings,
+                settings: settings.clone(),
+                runtime_settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
 
@@ -352,7 +361,12 @@ impl<W: Write> State<W> {
                 eprintln!("{}",String::from_utf8_lossy(&output.stdout));
 
              return;
-            }
+            },
+            UIEventType::Input(Key::Char('t')) =>
+                for i in 0..self.entities.len() {
+                    self.entities[i].rcv_event(&UIEvent{ id: 0, event_type: UIEventType::Action(Action::MailListing(MailListingAction::ToggleThreaded)) }, &mut self.context);
+                }
+
             _ => {},
         }
         /* inform each entity */
