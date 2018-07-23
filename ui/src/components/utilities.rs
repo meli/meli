@@ -47,7 +47,6 @@ impl Component for HSplit {
         let _ = self.bottom.component.draw(grid,
                                            ((get_x(upper_left), get_y(upper_left) + mid), bottom_right),
                                            context);
-        grid[bottom_right].set_ch('b');
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
         self.top.rcv_event(event, context);
@@ -143,14 +142,10 @@ pub struct Pager {
     content: CellBuffer,
 }
 
-// TODO: Make a `new` method that is content agnostic.
 impl Pager {
-    pub fn from_envelope(mailbox_idx: (usize, usize), envelope_idx: usize, context: &mut Context) -> Self {
-        let mailbox = &mut context.accounts[mailbox_idx.0][mailbox_idx.1].as_ref().unwrap().as_ref().unwrap();
-        let envelope : &Envelope = &mailbox.collection[envelope_idx];
+    pub fn from_string(mut text: String, context: &mut Context, cursor_pos: Option<usize>) -> Self {
         let pager_filter: Option<&String> = context.settings.pager.filter.as_ref();
         //let format_flowed: bool = context.settings.pager.format_flowed;
-        let mut text = envelope.body().text();
         if let Some(bin) = pager_filter {
             use std::io::Write;
             use std::process::{Command, Stdio};
@@ -168,10 +163,7 @@ impl Pager {
 
             text = String::from_utf8_lossy(&filter_child.wait_with_output().expect("Failed to wait on filter").stdout).to_string();
         }
-        let mut text = text.to_string();
-        if envelope.body().count_attachments() > 1 {
-            text = envelope.body().attachments().iter().enumerate().fold(text, |mut s, (idx, a)| { s.push_str(&format!("[{}] {}\n\n", idx, a)); s });
-        }
+
         let lines: Vec<&str> = text.trim().split('\n').collect();
         let height = lines.len() + 1;
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
@@ -179,7 +171,7 @@ impl Pager {
         //interpret_format_flowed(&text);
         Pager::print_string(&mut content, &text);
         Pager {
-            cursor_pos: 0,
+            cursor_pos: cursor_pos.unwrap_or(0),
             height: height,
             width: width,
             dirty: true,
@@ -213,6 +205,9 @@ impl Pager {
                                      true);
             }
         }
+    }
+    pub fn cursor_pos(&self) -> usize {
+        self.cursor_pos
     }
 }
 

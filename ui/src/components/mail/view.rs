@@ -1,5 +1,15 @@
 use super::*;
+use linkify::{LinkFinder, Link};
+use std::process::{Command, Stdio};
 
+
+#[derive(PartialEq, Debug)]
+enum ViewMode {
+    Normal,
+    Url,
+    Attachment,
+    Raw,
+}
 
 /// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
 /// menus
@@ -8,6 +18,9 @@ pub struct MailView {
     pager: Option<Pager>,
     subview: Option<Box<MailView>>,
     dirty: bool,
+    mode: ViewMode,
+
+    cmd_buf: String,
 }
 
 impl MailView {
@@ -18,6 +31,9 @@ impl MailView {
             pager: pager,
             subview: subview,
             dirty: true,
+            mode: ViewMode::Normal,
+
+            cmd_buf: String::with_capacity(4),
         }
     }
 }
@@ -40,11 +56,11 @@ impl Component for MailView {
             let envelope: &Envelope = &mailbox.collection[envelope_idx];
 
             let (x,y) = write_string_to_grid(&format!("Date: {}", envelope.date_as_str()),
-                                            grid,
-                                            Color::Byte(33),
-                                            Color::Default,
-                                            area,
-                                            true);
+            grid,
+            Color::Byte(33),
+            Color::Default,
+            area,
+            true);
             for x in x..=get_x(bottom_right) {
                 grid[(x, y)].set_ch(' ');
                 grid[(x, y)].set_bg(Color::Default);
@@ -99,18 +115,88 @@ impl Component for MailView {
             context.dirty_areas.push_back((upper_left, set_y(bottom_right, y+1)));
             (envelope_idx, y + 1)
         };
+
         if self.dirty {
+            let text = {
+                let mailbox_idx = self.coordinates;  // coordinates are mailbox idxs
+                let mailbox = &mut context.accounts[mailbox_idx.0][mailbox_idx.1].as_ref().unwrap().as_ref().unwrap();
+                let envelope : &Envelope = &mailbox.collection[envelope_idx];
+                let mut text = match self.mode {
+                    ViewMode::Url => {
+                        let finder = LinkFinder::new();
+                        let mut t = envelope.body().text().to_string();
+                        for (lidx, l) in finder.links(&envelope.body().text()).enumerate() {
+                            t.insert_str(l.start()+(lidx*3), &format!("[{}]", lidx));
+                        }
+                        t
+                    },
+                    _ => envelope.body().text().to_string(),
+                };
+                if envelope.body().count_attachments() > 1 {
+                    text = envelope.body().attachments().iter().enumerate().fold(text, |mut s, (idx, a)| { s.push_str(&format!("[{}] {}\n\n", idx, a)); s });
+                }
+                text
+            };
+            let cursor_pos = self.pager.as_mut().map(|p| p.cursor_pos());
             // TODO: pass string instead of envelope
-            self.pager = Some(Pager::from_envelope((self.coordinates.0, self.coordinates.1), envelope_idx, context));
+            self.pager = Some(Pager::from_string(text, context, cursor_pos));
             self.dirty = false;
         }
         self.pager.as_mut().map(|p| p.draw(grid, (set_y(upper_left, y + 1),bottom_right), context));
     }
 
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+        match event.event_type {
+            UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => { //TODO:this should be an Action
+                match self.mode {
+                    ViewMode::Url => { self.cmd_buf.push(c); 
+                        eprintln!("buf is {}", self.cmd_buf);
+                        return; },
+                    _ => {},
+                }
+            },
+            UIEventType::Input(Key::Char('g')) if self.cmd_buf.len() > 0 && self.mode == ViewMode::Url => { //TODO:this should be an Action
+
+                let lidx = self.cmd_buf.parse::<usize>().unwrap();
+                self.cmd_buf.clear();
+                let url = {
+                    let threaded = context.accounts[self.coordinates.0].runtime_settings.threaded;
+                    let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1].as_ref().unwrap().as_ref().unwrap();
+                    let envelope_idx: usize = if threaded {
+                        mailbox.threaded_mail(self.coordinates.2)
+                    } else {
+                        self.coordinates.2
+                    };
+
+                    let envelope: &Envelope = &mailbox.collection[envelope_idx];
+                    let finder = LinkFinder::new();
+                    let mut t = envelope.body().text().to_string();
+                    let links: Vec<Link> = finder.links(&t).collect();
+                    links[lidx].as_str().to_string()
+                };
+
+
+                let open_url = Command::new("xdg-open")
+                    .arg(url)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect("Failed to start xdg_open");
+
+            },
+            UIEventType::Input(Key::Char('u')) => { //TODO:this should be an Action
+                match self.mode {
+                    ViewMode::Normal => { self.mode = ViewMode::Url },
+                    ViewMode::Url => { self.mode = ViewMode::Normal },
+                    _ => {},
+                }
+                self.dirty = true;
+            },
+            _ => {},
+        }
         if let Some(ref mut sub) = self.subview {
             sub.process_event(event, context);
-            
+
         } else {
             if let Some(ref mut p) = self.pager {
                 p.process_event(event, context);
@@ -119,6 +205,6 @@ impl Component for MailView {
     }
     fn is_dirty(&self) -> bool {
         self.dirty || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false) ||
-        self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+            self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }
 }

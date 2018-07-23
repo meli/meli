@@ -45,6 +45,7 @@ extern crate notify_rust;
 #[macro_use]
 extern crate chan;
 extern crate chan_signal;
+extern crate linkify;
 use melib::*;
 
 use std::io::{Write, };
