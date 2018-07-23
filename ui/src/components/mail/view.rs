@@ -145,9 +145,6 @@ impl Component for MailView {
                             for c in c_slice[i..i+3].iter_mut() {
                                 c.set_fg(Color::Byte(226));
                             }
-
-
-
                         }
                     },
                     _ => {},

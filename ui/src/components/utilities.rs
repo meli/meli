@@ -195,16 +195,17 @@ impl Pager {
     pub fn from_buf(buf: CellBuffer) -> Self {
         let lines: Vec<&[Cell]> = buf.split(|cell| cell.ch() == '\n').collect();
         let height = lines.len();
-        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0) + 1;
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
         {
-            let mut x = 0;
+            let mut x;
             let mut y = 0;
             let c_slice: &mut [Cell] = &mut content;
             for l in lines {
                 let y_r = y * width;
                 x = l.len() + y_r;
                 c_slice[y_r..x].copy_from_slice(l);
+                c_slice[x].set_ch('\n');
                 y += 1;
             }
         }

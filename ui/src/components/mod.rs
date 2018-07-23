@@ -96,6 +96,15 @@ pub fn copy_area_with_break(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, d
 
     'y_: for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
         'x_: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
+            if grid_src[(src_x, src_y)].ch() == '\n' {
+                src_y += 1;
+                src_x = 0;
+                if src_y == get_y(bottom_right!(src)) {
+                    break 'y_;
+                }
+                continue 'y_;
+            }
+
             grid_dest[(x,y)] = grid_src[(src_x, src_y)];
             if src_x == get_x(bottom_right!(src)) {
                 src_y += 1;
