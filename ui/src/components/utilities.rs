@@ -178,12 +178,36 @@ impl Pager {
             content: content,
         }
     }
-    pub fn new_from_str(s: &str) -> Self {
+    pub fn from_str(s: &str) -> Self {
         let lines: Vec<&str> = s.trim().split('\n').collect();
         let height = lines.len();
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
         Pager::print_string(&mut content, s);
+        Pager {
+            cursor_pos: 0,
+            height: height,
+            width: width,
+            dirty: true,
+            content: content,
+        }
+    }
+    pub fn from_buf(buf: CellBuffer) -> Self {
+        let lines: Vec<&[Cell]> = buf.split(|cell| cell.ch() == '\n').collect();
+        let height = lines.len();
+        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        {
+            let mut x = 0;
+            let mut y = 0;
+            let c_slice: &mut [Cell] = &mut content;
+            for l in lines {
+                let y_r = y * width;
+                x = l.len() + y_r;
+                c_slice[y_r..x].copy_from_slice(l);
+                y += 1;
+            }
+        }
         Pager {
             cursor_pos: 0,
             height: height,

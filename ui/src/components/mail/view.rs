@@ -117,29 +117,46 @@ impl Component for MailView {
         };
 
         if self.dirty {
-            let text = {
+            let buf = {
                 let mailbox_idx = self.coordinates;  // coordinates are mailbox idxs
                 let mailbox = &mut context.accounts[mailbox_idx.0][mailbox_idx.1].as_ref().unwrap().as_ref().unwrap();
                 let envelope : &Envelope = &mailbox.collection[envelope_idx];
+
+                let finder = LinkFinder::new();
+                let mut t = envelope.body().text().to_string();
                 let mut text = match self.mode {
                     ViewMode::Url => {
-                        let finder = LinkFinder::new();
-                        let mut t = envelope.body().text().to_string();
                         for (lidx, l) in finder.links(&envelope.body().text()).enumerate() {
                             t.insert_str(l.start()+(lidx*3), &format!("[{}]", lidx));
                         }
                         t
                     },
-                    _ => envelope.body().text().to_string(),
+                    _ => envelope.body().text().to_string()
                 };
                 if envelope.body().count_attachments() > 1 {
                     text = envelope.body().attachments().iter().enumerate().fold(text, |mut s, (idx, a)| { s.push_str(&format!("[{}] {}\n\n", idx, a)); s });
                 }
-                text
+                let mut buf = CellBuffer::from(&text);
+                match self.mode {
+                    ViewMode::Url => {
+                        let c_slice: &mut [Cell] = &mut buf;
+                        for (lidx, l) in finder.links(&envelope.body().text()).enumerate() {
+                            let i = l.start()+ (lidx * 3);
+                            for c in c_slice[i..i+3].iter_mut() {
+                                c.set_fg(Color::Byte(226));
+                            }
+
+
+
+                        }
+                    },
+                    _ => {},
+                }
+               buf
             };
             let cursor_pos = self.pager.as_mut().map(|p| p.cursor_pos());
             // TODO: pass string instead of envelope
-            self.pager = Some(Pager::from_string(text, context, cursor_pos));
+            self.pager = Some(Pager::from_buf(buf));
             self.dirty = false;
         }
         self.pager.as_mut().map(|p| p.draw(grid, (set_y(upper_left, y + 1),bottom_right), context));

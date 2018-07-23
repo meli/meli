@@ -3,6 +3,7 @@
   colors and attributes.
  */
 use std::ops::{Index, IndexMut, Deref, DerefMut};
+use std::convert::From;
 use super::position::*;
 use termion::color::AnsiValue;
 
@@ -160,6 +161,17 @@ impl Default for CellBuffer {
     /// Constructs a new `CellBuffer` with a size of `(0, 0)`, using the default `Cell` as a blank.
     fn default() -> CellBuffer {
         CellBuffer::new(0, 0, Cell::default())
+    }
+}
+
+impl<'a> From<&'a String> for CellBuffer {
+    fn from(s: &'a String) -> Self {
+        let len = s.len();
+        let mut buf = CellBuffer::new(len, 1, Cell::default());
+        for (idx, c) in s.chars().enumerate() {
+            buf[(idx, 0)].set_ch(c);
+        }
+        buf
     }
 }
 

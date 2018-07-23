@@ -84,6 +84,11 @@ pub trait Component {
     }
 }
 
+pub fn copy_area_with_break(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) {
+
+
+}
+
 /// Copy a source `Area` to a destination.
 pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
@@ -174,7 +179,7 @@ fn clear_area(grid: &mut CellBuffer, area: Area) {
     }
 }
 
-fn new_draft(context: &mut Context) -> Vec<u8> {
+fn new_draft(_context: &mut Context) -> Vec<u8> {
     // TODO: Generate proper message-id https://www.jwz.org/doc/mid.html
     let mut v = String::with_capacity(500);
     v.push_str("From: \n");
