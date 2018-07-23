@@ -257,7 +257,7 @@ impl Component for Pager {
         //let pager_stop: bool = context.settings.pager.pager_stop;
         //let rows = y(bottom_right) - y(upper_left);
         //let page_length = rows / self.height;
-        copy_area(grid, &self.content, area, ((0, self.cursor_pos), (self.width - 1, self.height - 1))); 
+        copy_area_with_break(grid, &self.content, area, ((0, self.cursor_pos), (self.width - 1, self.height - 1))); 
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {

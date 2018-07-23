@@ -84,10 +84,33 @@ pub trait Component {
     }
 }
 
+
+// TODO: word break.
 pub fn copy_area_with_break(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) {
+    if !is_valid_area!(dest) || !is_valid_area!(src) {
+        eprintln!("BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}", src, dest);
+        return;
+    }
+    let mut src_x = get_x(upper_left!(src));
+    let mut src_y = get_y(upper_left!(src));
 
-
+    'y_: for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
+        'x_: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
+            grid_dest[(x,y)] = grid_src[(src_x, src_y)];
+            if src_x == get_x(bottom_right!(src)) {
+                src_y += 1;
+                src_x = 0;
+                if src_y == get_y(bottom_right!(src)) {
+                    //clear_area(grid_dest, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
+                    break 'y_;
+                }
+                break 'x_;
+            }
+            src_x += 1;
+        }
+    }
 }
+
 
 /// Copy a source `Area` to a destination.
 pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) {
