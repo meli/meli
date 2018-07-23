@@ -107,6 +107,7 @@ pub enum UIEventType {
     Notification(String),
     EditDraft(std::path::PathBuf),
     Action(Action),
+    StatusNotification(String),
 }
 
 

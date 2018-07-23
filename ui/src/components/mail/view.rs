@@ -172,7 +172,12 @@ impl Component for MailView {
                     let finder = LinkFinder::new();
                     let mut t = envelope.body().text().to_string();
                     let links: Vec<Link> = finder.links(&t).collect();
-                    links[lidx].as_str().to_string()
+                    if let Some(u) = links.get(lidx) {
+                        u.as_str().to_string()
+                    } else {
+                        context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::StatusNotification(format!("Link `{}` not found.", lidx)) });
+                        return;
+                    }
                 };
 
 

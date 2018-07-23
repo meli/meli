@@ -269,6 +269,7 @@ impl Component for Pager {
 pub struct StatusBar {
     container: Entity,
     status: String,
+    notifications: VecDeque<String>,
     ex_buffer: String,
     mode: UIMode,
     height: usize,
@@ -280,6 +281,7 @@ impl StatusBar {
         StatusBar {
             container: container,
             status: String::with_capacity(256),
+            notifications: VecDeque::new(),
             ex_buffer: String::with_capacity(256),
             dirty: true,
             mode: UIMode::Normal,
@@ -288,11 +290,20 @@ impl StatusBar {
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area);
-        write_string_to_grid(&self.status,
-                             grid,
-                             Color::Byte(123),
-                             Color::Byte(26),
-                             area, false);
+        if let Some(n) = self.notifications.pop_front() {
+            self.dirty = true;
+            write_string_to_grid(&n,
+                                 grid,
+                                 Color::Byte(219),
+                                 Color::Byte(88),
+                                 area, false);
+        } else {
+            write_string_to_grid(&self.status,
+                                 grid,
+                                 Color::Byte(123),
+                                 Color::Byte(26),
+                                 area, false);
+        }
         change_colors(grid, area, Color::Byte(123), Color::Byte(26));
         context.dirty_areas.push_back(area);
     }
@@ -375,6 +386,10 @@ impl Component for StatusBar {
                 self.ex_buffer.push(*c);
             },
             UIEventType::Resize => {
+                self.dirty = true;
+            },
+            UIEventType::StatusNotification(s) => {
+                self.notifications.push_back(s.clone());
                 self.dirty = true;
             },
             _ => {},
