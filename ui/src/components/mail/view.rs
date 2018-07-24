@@ -167,10 +167,18 @@ impl Component for MailView {
 
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
         match event.event_type {
+            UIEventType::Input(Key::Esc) => {
+                match self.mode {
+                    ViewMode::Url => {
+                        self.cmd_buf.clear();
+                        return;
+                    },
+                    _ => {},
+                }
+            },
             UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => { //TODO:this should be an Action
                 match self.mode {
                     ViewMode::Url => { self.cmd_buf.push(c);
-                        eprintln!("buf is {}", self.cmd_buf);
                         return; },
                     _ => {},
                 }

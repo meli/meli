@@ -456,7 +456,7 @@ impl Component for MailListing {
                 context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Fork) });
                 return;
             },
-            UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Char('i')) if self.unfocused == true => {
+            UIEventType::Input(Key::Char('i')) if self.unfocused == true => {
                 self.unfocused = false;
                 self.dirty = true;
                 self.view = None;

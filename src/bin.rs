@@ -39,7 +39,9 @@ extern crate chan_signal;
 
 use chan_signal::Signal;
 
-fn make_input_thread(sx: chan::Sender<ThreadEvent>, rx: chan::Receiver<bool>) -> () {
+extern crate nix;
+
+fn make_input_thread(sx: chan::Sender<ThreadEvent>, rx: chan::Receiver<bool>) -> thread::JoinHandle<()> {
         let stdin = std::io::stdin();
         thread::Builder::new().name("input-thread".to_string()).spawn(move || {
 
@@ -49,14 +51,12 @@ fn make_input_thread(sx: chan::Sender<ThreadEvent>, rx: chan::Receiver<bool>) ->
                        },
                        || {
                            sx.send(ThreadEvent::UIEventType(UIEventType::ChangeMode(UIMode::Fork)));
-                       }, rx)}).unwrap();
-
-
+                       }, rx)}).unwrap()
 }
 fn main() {
     /* Lock all stdio outs */
-    let _stdout = stdout();
-    let mut _stdout = _stdout.lock();
+    //let _stdout = stdout();
+    //let mut _stdout = _stdout.lock();
     /*
        let _stderr = stderr();
        let mut _stderr = _stderr.lock();
@@ -75,11 +75,11 @@ fn main() {
      * stdin, see get_events() for details
      * */
     let (tx, rx) = chan::async();
-    /* Get input thread handle to kill it if we need to */
-    make_input_thread(sender.clone(), rx.clone());
+    /* Get input thread handle to join it if we need to */
+    let mut _thread_handler = make_input_thread(sender.clone(), rx.clone());
 
     /* Create the application State. This is the 'System' part of an ECS architecture */
-    let mut state = State::new(_stdout, sender.clone(), tx );
+    let mut state = State::new(sender.clone(), tx );
 
     /* Register some reasonably useful interfaces */
     let menu = Entity {component: Box::new(AccountMenu::new(&state.context.accounts)) };
@@ -109,6 +109,18 @@ fn main() {
             chan_select! {
                 receiver.recv() -> r => {
                     match r.unwrap() {
+                        ThreadEvent::Input(Key::Ctrl('z')) => {
+                            state.to_main_screen();
+                            //_thread_handler.join().expect("Couldn't join on the associated thread");
+                            let self_pid = nix::unistd::Pid::this();
+                            nix::sys::signal::kill(self_pid, nix::sys::signal::Signal::SIGSTOP).unwrap();
+                            state.to_alternate_screen();
+                            _thread_handler = make_input_thread(sender.clone(), rx.clone());
+                            // BUG: thread sends input event after one received key
+                            state.update_size();
+                            state.render();
+                            state.redraw();
+                        },
                         ThreadEvent::Input(k) => {
                             match state.mode {
                                 UIMode::Normal => {
@@ -183,10 +195,9 @@ fn main() {
                 },
                 Some(false) => {
                     use std::{thread, time};
-
                     let ten_millis = time::Duration::from_millis(1500);
-
                     thread::sleep(ten_millis);
+
                     continue 'reap;
                 },
                 None => {break 'reap;},

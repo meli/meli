@@ -176,7 +176,7 @@ pub struct State<W: Write> {
     rows: usize,
 
     grid: CellBuffer,
-    stdout: termion::screen::AlternateScreen<termion::raw::RawTerminal<W>>,
+    stdout: Option<termion::screen::AlternateScreen<termion::raw::RawTerminal<W>>>,
     child: Option<ForkType>,
     pub mode: UIMode,
     sender: Sender<ThreadEvent>,
@@ -188,16 +188,18 @@ pub struct State<W: Write> {
 impl<W: Write> Drop for State<W> {
     fn drop(&mut self) {
         // When done, restore the defaults to avoid messing with the terminal.
-        write!(self.stdout, "{}{}{}{}", clear::All, style::Reset, cursor::Goto(1, 1), cursor::Show).unwrap();
-        self.stdout.flush().unwrap();
+        write!(self.stdout(), "{}{}{}{}", clear::All, style::Reset, cursor::Goto(1, 1), cursor::Show).unwrap();
+        self.flush();
     }
 }
 
-impl<W: Write> State<W> {
-    pub fn new(stdout: W, sender: Sender<ThreadEvent>, input_thread: chan::Sender<bool>) -> Self {
+impl State<std::io::Stdout> {
+    pub fn new(sender: Sender<ThreadEvent>, input_thread: chan::Sender<bool>) -> Self {
+        let _stdout = std::io::stdout();
+        _stdout.lock();
         let settings = Settings::new();
         let backends = Backends::new();
-        let stdout = AlternateScreen::from(stdout.into_raw_mode().unwrap());
+        let stdout = AlternateScreen::from(_stdout.into_raw_mode().unwrap());
 
         let termsize = termion::terminal_size().ok();
         let termcols = termsize.map(|(w,_)| w);
@@ -210,7 +212,7 @@ impl<W: Write> State<W> {
             cols: cols,
             rows: rows,
             grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
-            stdout: stdout,
+            stdout: Some(stdout),
             child: None,
             mode: UIMode::Normal,
             sender: sender,
@@ -228,8 +230,8 @@ impl<W: Write> State<W> {
                 input_thread: input_thread,
             },
         };
-        write!(s.stdout, "{}{}{}", cursor::Hide, clear::All, cursor::Goto(1,1)).unwrap();
-        s.stdout.flush().unwrap();
+        write!(s.stdout(), "{}{}{}", cursor::Hide, clear::All, cursor::Goto(1,1)).unwrap();
+        s.flush();
         for account in &mut s.context.accounts {
             let sender = s.sender.clone();
             account.watch(RefreshEventConsumer::new(Box::new(move |r| {
@@ -239,6 +241,22 @@ impl<W: Write> State<W> {
         }
         s
     }
+    pub fn to_main_screen(&mut self) {
+        write!(self.stdout(), "{}{}", termion::screen::ToMainScreen, cursor::Show).unwrap();
+        self.flush();
+        self.stdout = None;
+        self.context.input_thread.send(false);
+    }
+    pub fn to_alternate_screen(&mut self) {
+        let s = std::io::stdout();
+        s.lock();
+        self.stdout = Some(AlternateScreen::from(s.into_raw_mode().unwrap()));
+
+        write!(self.stdout(), "{}", termion::screen::ToAlternateScreen).unwrap();
+        self.flush();
+    }
+}
+impl<W: Write> State<W> {
     pub fn update_size(&mut self) {
         let termsize = termion::terminal_size().ok();
         let termcols = termsize.map(|(w,_)| w);
@@ -269,27 +287,27 @@ impl<W: Write> State<W> {
         let bottom_right = bottom_right!(area);
 
         for y in get_y(upper_left)..=get_y(bottom_right) {
-            write!(self.stdout, "{}", cursor::Goto(get_x(upper_left) as u16 + 1,(y+1) as u16)).unwrap();
+            write!(self.stdout(), "{}", cursor::Goto(get_x(upper_left) as u16 + 1,(y+1) as u16)).unwrap();
             for x in get_x(upper_left)..=get_x(bottom_right) {
                 let c = self.grid[(x,y)];
 
                 if c.bg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Bg(c.bg().as_termion())).unwrap();
+                    write!(self.stdout(), "{}", termion::color::Bg(c.bg().as_termion())).unwrap();
                 }
                 if c.fg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
+                    write!(self.stdout(), "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
                 }
-                write!(self.stdout, "{}",c.ch()).unwrap();
+                write!(self.stdout(), "{}",c.ch()).unwrap();
                 if c.bg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Bg(termion::color::Reset)).unwrap();
+                    write!(self.stdout(), "{}", termion::color::Bg(termion::color::Reset)).unwrap();
                 }
                 if c.fg() != cells::Color::Default {
-                    write!(self.stdout, "{}", termion::color::Fg(termion::color::Reset)).unwrap();
+                    write!(self.stdout(), "{}", termion::color::Fg(termion::color::Reset)).unwrap();
                 }
 
             }
         }
-        self.stdout.flush().unwrap();
+        self.flush();
     }
     pub fn render(&mut self) {
         self.update_size();
@@ -338,7 +356,7 @@ impl<W: Write> State<W> {
             UIEventType::Fork(child) => {
                 self.mode = UIMode::Fork;
                 self.child = Some(child);
-                self.stdout.flush().unwrap();
+                self.flush();
                 return;
             },
             UIEventType::EditDraft(dir) => {
@@ -422,10 +440,17 @@ impl<W: Write> State<W> {
         }
         Some(false)
     }
+    fn flush(&mut self) {
+        self.stdout.as_mut().map(|s| s.flush().unwrap());
+
+    }
+    fn stdout(&mut self) -> &mut termion::screen::AlternateScreen<termion::raw::RawTerminal<W>> {
+        self.stdout.as_mut().unwrap()
+
+    }
 }
 
 
-// TODO: Pass Ctrl C etc to the terminal.
 #[derive(Debug)]
 pub enum Key {
     /// Backspace.
@@ -468,6 +493,7 @@ pub enum Key {
     Esc,
 }
 
+
 impl From<TermionKey> for Key {
     fn from(k: TermionKey ) -> Self {
         match k {
@@ -509,6 +535,8 @@ pub fn get_events(stdin: std::io::Stdin, mut closure: impl FnMut(Key), mut exit:
                     rx.recv() -> val => {
                         if let Some(true) = val {
                             exit();
+                            return;
+                        } else if let Some(false) = val {
                             return;
                         }
                     }
