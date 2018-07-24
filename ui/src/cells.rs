@@ -4,6 +4,7 @@
  */
 use std::ops::{Index, IndexMut, Deref, DerefMut};
 use std::convert::From;
+use std::fmt;
 use super::position::*;
 use termion::color::AnsiValue;
 
@@ -175,12 +176,28 @@ impl<'a> From<&'a String> for CellBuffer {
     }
 }
 
+impl fmt::Display for CellBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        '_y: for y in 0..self.rows {
+            '_x: for x in 0..self.cols {
+                let c: &char = &self[(x,y)].ch();
+                write!(f, "{}", *c);
+                if *c == '\n' {
+                    continue '_y;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 /// A single point on a terminal display.
 ///
 /// A `Cell` contains a character and style.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Cell {
     ch: char,
+
     fg: Color,
     bg: Color,
     attrs: Attr,

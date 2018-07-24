@@ -139,12 +139,18 @@ impl Component for MailView {
                 let mut buf = CellBuffer::from(&text);
                 match self.mode {
                     ViewMode::Url => {
-                        let c_slice: &mut [Cell] = &mut buf;
-                        for (lidx, l) in finder.links(&envelope.body().text()).enumerate() {
-                            let i = l.start()+ (lidx * 3);
-                            for c in c_slice[i..i+3].iter_mut() {
-                                c.set_fg(Color::Byte(226));
+                        // URL indexes must be colored (ugh..)
+                        let (cols, _) = buf.size();
+                        let lines: Vec<&str> = text.split('\n').collect();
+                        let mut shift = 0;
+                        for (ridx, r) in lines.iter().enumerate() {
+                            for (lidx, l) in finder.links(&r).enumerate() {
+                                buf[(l.start() + shift - 1, 0)].set_fg(Color::Byte(226));
+                                buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
+                                buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
                             }
+                            // Each Cell represents one char so next line will be:
+                            shift += r.chars().count()+1;
                         }
                     },
                     _ => {},
@@ -153,7 +159,7 @@ impl Component for MailView {
             };
             let cursor_pos = self.pager.as_mut().map(|p| p.cursor_pos());
             // TODO: pass string instead of envelope
-            self.pager = Some(Pager::from_buf(buf));
+            self.pager = Some(Pager::from_buf(buf, cursor_pos));
             self.dirty = false;
         }
         self.pager.as_mut().map(|p| p.draw(grid, (set_y(upper_left, y + 1),bottom_right), context));
@@ -163,7 +169,7 @@ impl Component for MailView {
         match event.event_type {
             UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => { //TODO:this should be an Action
                 match self.mode {
-                    ViewMode::Url => { self.cmd_buf.push(c); 
+                    ViewMode::Url => { self.cmd_buf.push(c);
                         eprintln!("buf is {}", self.cmd_buf);
                         return; },
                     _ => {},

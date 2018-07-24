@@ -99,23 +99,23 @@ pub fn copy_area_with_break(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, d
             if grid_src[(src_x, src_y)].ch() == '\n' {
                 src_y += 1;
                 src_x = 0;
-                if src_y == get_y(bottom_right!(src)) {
+                if src_y >= get_y(bottom_right!(src)) {
                     break 'y_;
                 }
                 continue 'y_;
             }
 
             grid_dest[(x,y)] = grid_src[(src_x, src_y)];
-            if src_x == get_x(bottom_right!(src)) {
+            src_x += 1;
+            if src_x >= get_x(bottom_right!(src)) {
                 src_y += 1;
                 src_x = 0;
-                if src_y == get_y(bottom_right!(src)) {
+                if src_y >= get_y(bottom_right!(src)) {
                     //clear_area(grid_dest, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
                     break 'y_;
                 }
                 break 'x_;
             }
-            src_x += 1;
         }
     }
 }
@@ -133,13 +133,13 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
     for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
         'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
             grid_dest[(x,y)] = grid_src[(src_x, src_y)];
-            if src_x == get_x(bottom_right!(src)) {
+            if src_x >= get_x(bottom_right!(src)) {
                 break 'for_x;
             }
             src_x += 1;
         }
         src_x = get_x(upper_left!(src));
-        if src_y == get_y(bottom_right!(src)) {
+        if src_y >= get_y(bottom_right!(src)) {
             clear_area(grid_dest, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
             break;
         }
