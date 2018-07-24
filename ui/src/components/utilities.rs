@@ -2,9 +2,6 @@
   */
 use super::*;
 
-use melib::mailbox::email::interpret_format_flowed;
-use melib::mailbox::email::Attachment;
-
 /// A horizontally split in half container.
 pub struct HSplit {
     top: Entity,
@@ -428,22 +425,22 @@ impl Component for StatusBar {
 
 // A box with a text content.
 pub struct TextBox {
-    content: String,
+    _content: String,
 }
 
 impl TextBox {
     pub fn new(s: String) -> Self {
         TextBox {
-            content: s,
+            _content: s,
         }
     }
 }
 
 impl Component for TextBox {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {
 
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {
         return;
     }
 }

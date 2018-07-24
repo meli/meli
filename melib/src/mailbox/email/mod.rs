@@ -23,7 +23,6 @@ pub mod parser;
 pub mod attachments;
 
 use mailbox::backends::BackendOpGenerator;
-use self::attachments::*;
 pub use self::attachments::*;
 
 use std::string::String;

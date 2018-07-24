@@ -1,7 +1,7 @@
 /*! A parser module for user commands passed through the Ex mode.
 */
 use std;
-use nom::{digit, alpha};
+use nom::{digit, };
 
 
 named!(usize_c<usize>,
@@ -12,7 +12,9 @@ named!(pub goto<usize>,
        call!(usize_c))
       );
 
+/*
 named!(pub sort<&str>,
        preceded!(tag!("sort "),
        map_res!(call!(alpha), std::str::from_utf8))
       );
+      */

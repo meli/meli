@@ -1,10 +1,7 @@
 use std;
 use std::path::PathBuf;
 use std::io::Write;
-use std::ops::{Deref, DerefMut};
 
-
-use std::fs;
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -37,6 +34,7 @@ pub fn create_temp_file(bytes: &[u8], filename: Option<&PathBuf>) -> File {
     };
 
     let mut f = std::fs::File::create(path).unwrap();
+
     f.write(bytes).unwrap();
     f.flush().unwrap();
     File {

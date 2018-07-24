@@ -43,17 +43,17 @@ const HORZ_BOUNDARY: char = '─';
 const VERT_BOUNDARY: char = '│';
 
 /// The top-left corner
-const TOP_LEFT_CORNER: char = '┌';
+const _TOP_LEFT_CORNER: char = '┌';
 /// The top-right corner
-const TOP_RIGHT_CORNER: char = '┐';
+const _TOP_RIGHT_CORNER: char = '┐';
 /// The bottom-left corner
-const BOTTOM_LEFT_CORNER: char = '└';
+const _BOTTOM_LEFT_CORNER: char = '└';
 /// The bottom-right corner
-const BOTTOM_RIGHT_CORNER: char = '┘';
+const _BOTTOM_RIGHT_CORNER: char = '┘';
 
 const LIGHT_VERTICAL_AND_RIGHT: char = '├';
 
-const LIGHT_VERTICAL_AND_LEFT: char = '┤';
+const _LIGHT_VERTICAL_AND_LEFT: char = '┤';
 
 const LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
 

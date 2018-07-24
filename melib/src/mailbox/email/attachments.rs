@@ -21,6 +21,9 @@
 use mailbox::email::parser;
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::str;
+
+use data_encoding::BASE64_MIME;
 
 /*
  *
@@ -158,14 +161,14 @@ impl AttachmentBuilder {
         // TODO: Use charset for decoding
         match self.content_transfer_encoding {
             ContentTransferEncoding::Base64 => {
-                match ::base64::decode(&::std::str::from_utf8(&self.raw)
+                match BASE64_MIME.decode(str::from_utf8(&self.raw)
                     .unwrap()
                     .trim()
                     .lines()
                     .fold(String::with_capacity(self.raw.len()), |mut acc, x| {
                         acc.push_str(x);
                         acc
-                    })) {
+                    }).as_bytes()) {
                     Ok(ref v) => {
                         let s = String::from_utf8_lossy(v);
                         if s.find("\r\n").is_some() {
@@ -251,7 +254,7 @@ impl AttachmentBuilder {
                 eprintln!(
                     "error {:?}\n\traw: {:?}\n\tboundary: {:?}",
                     a,
-                    ::std::str::from_utf8(raw).unwrap(),
+                    str::from_utf8(raw).unwrap(),
                     boundary
                 );
                 Vec::new()
@@ -277,7 +280,7 @@ impl Display for Attachment {
             AttachmentType::Data { .. } => {
                 write!(f, "Data attachment of type {}", self.tag())
             }
-            AttachmentType::Text { content: ref t } => {
+            AttachmentType::Text { .. } => {
                 write!(f, "Text attachment")
             }
             AttachmentType::Multipart {
@@ -294,6 +297,9 @@ impl Display for Attachment {
 }
 
 impl Attachment {
+    pub fn bytes(&self) -> &[u8] {
+        &self.raw
+    }
     fn get_text_recursive(&self, text: &mut String) {
         match self.attachment_type {
             AttachmentType::Data { .. } => {
@@ -361,10 +367,27 @@ impl Attachment {
 }
 
 
-pub fn interpret_format_flowed(t: &str) -> String {
+pub fn interpret_format_flowed(_t: &str) -> String {
     //let mut n = String::with_capacity(t.len());
-    
-
-
     unimplemented!()
+}
+
+pub fn decode(a: &Attachment) -> Vec<u8> {
+    // TODO: Use charset for decoding
+    match a.content_transfer_encoding {
+        ContentTransferEncoding::Base64 => {
+            match BASE64_MIME.decode(a.bytes()) {
+                Ok(v) => {
+                    v
+                }
+                _ => a.bytes().to_vec(),
+            }
+        }
+        ContentTransferEncoding::QuotedPrintable => parser::quoted_printed_bytes(&a.bytes()).to_full_result() .unwrap(),
+            ContentTransferEncoding::_7Bit |
+                ContentTransferEncoding::_8Bit |
+                ContentTransferEncoding::Other { .. } => {
+                    a.bytes().to_vec()
+                }
+    }
 }

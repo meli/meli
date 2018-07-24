@@ -7,8 +7,8 @@ use std::process::{Command, Stdio};
 enum ViewMode {
     Normal,
     Url,
-    Attachment,
-    Raw,
+   // Attachment,
+   // Raw,
 }
 
 /// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
@@ -140,11 +140,10 @@ impl Component for MailView {
                 match self.mode {
                     ViewMode::Url => {
                         // URL indexes must be colored (ugh..)
-                        let (cols, _) = buf.size();
                         let lines: Vec<&str> = text.split('\n').collect();
                         let mut shift = 0;
-                        for (ridx, r) in lines.iter().enumerate() {
-                            for (lidx, l) in finder.links(&r).enumerate() {
+                        for r in lines.iter() {
+                            for l in finder.links(&r) {
                                 buf[(l.start() + shift - 1, 0)].set_fg(Color::Byte(226));
                                 buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
                                 buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
@@ -184,7 +183,7 @@ impl Component for MailView {
                 self.cmd_buf.clear();
 
 
-                let url = {
+                {
                     let threaded = context.accounts[self.coordinates.0].runtime_settings.threaded;
                     let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1].as_ref().unwrap().as_ref().unwrap();
                     let envelope_idx: usize = if threaded {
@@ -195,7 +194,8 @@ impl Component for MailView {
 
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
                     if let Some(u) = envelope.body().attachments().get(lidx) {
-                        eprintln!("{:?}", u);
+                        let p = create_temp_file(&decode(u), None);
+                        eprintln!("{:?}", p);
 
                     } else {
                         context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::StatusNotification(format!("Attachment `{}` not found.", lidx)) });
@@ -231,7 +231,7 @@ impl Component for MailView {
                 };
 
 
-                let open_url = Command::new("xdg-open")
+                Command::new("xdg-open")
                     .arg(url)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
@@ -243,7 +243,7 @@ impl Component for MailView {
                 match self.mode {
                     ViewMode::Normal => { self.mode = ViewMode::Url },
                     ViewMode::Url => { self.mode = ViewMode::Normal },
-                    _ => {},
+                    //_ => {},
                 }
                 self.dirty = true;
             },

@@ -31,7 +31,6 @@ use ui::*;
 pub use melib::*;
 
 use std::thread;
-use std::io::{stdout,};
 
 #[macro_use]
 extern crate chan;

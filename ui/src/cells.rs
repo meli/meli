@@ -181,7 +181,7 @@ impl fmt::Display for CellBuffer {
         '_y: for y in 0..self.rows {
             '_x: for x in 0..self.cols {
                 let c: &char = &self[(x,y)].ch();
-                write!(f, "{}", *c);
+                write!(f, "{}", *c).unwrap();
                 if *c == '\n' {
                     continue '_y;
                 }

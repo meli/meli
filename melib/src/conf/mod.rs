@@ -31,7 +31,6 @@ use pager::PagerSettings;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
-use std::io;
 use std::fs;
 use std::path::{Path, PathBuf};
 

@@ -85,7 +85,6 @@ impl IndexMut<usize> for Account {
     fn index_mut(&mut self, index: usize) -> &mut Option<Result<Mailbox>> {
         if self.folders[index].is_none() {
             let folder = &self.settings.folders[index];
-            let path = folder.path().clone();
             if self.sent_folder.is_some() {
                 let id = self.sent_folder.unwrap();
                 if id == index {

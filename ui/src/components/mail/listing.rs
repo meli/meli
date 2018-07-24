@@ -526,7 +526,6 @@ impl Component for MailListing {
 
 
                     },
-                    _ => { unreachable!() },
                 }
             },
             _ => {

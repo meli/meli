@@ -29,9 +29,9 @@ extern crate serde_derive;
 #[macro_use]
 extern crate nom;
 extern crate chrono;
-extern crate base64;
 extern crate memmap;
 extern crate encoding;
+extern crate data_encoding;
 
 #[macro_use]
 extern crate bitflags;

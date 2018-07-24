@@ -141,10 +141,10 @@ impl fmt::Display for UIMode {
 
 /// An event notification that is passed to Entities for handling.
 pub struct Notification {
-    title: String,
-    content: String,
+    _title: String,
+    _content: String,
 
-    timestamp: std::time::Instant,
+    _timestamp: std::time::Instant,
 }
 
 /// A context container for loaded settings, accounts, UI changes, etc.
@@ -158,7 +158,7 @@ pub struct Context {
 
     /// Events queue that components send back to the state
     replies: VecDeque<UIEvent>,
-    backends: Backends,
+    _backends: Backends,
 
     input_thread: chan::Sender<bool>,
 }
@@ -225,7 +225,7 @@ impl State<std::io::Stdout> {
 
             context: Context {
                 accounts: accounts,
-                backends: backends,
+                _backends: backends,
                 settings: settings.clone(),
                 runtime_settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
@@ -381,7 +381,7 @@ impl<W: Write> State<W> {
                     in_pipe.write(&buf).unwrap();
                     std::fs::remove_file(file.path()).unwrap();
                 }
-                let output = output.wait_with_output().expect("Failed to read stdout");
+                output.wait_with_output().expect("Failed to read stdout");
 
                 return;
             },

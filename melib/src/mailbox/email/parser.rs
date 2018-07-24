@@ -20,7 +20,7 @@
  */
 use std;
 use std::str::from_utf8;
-use base64;
+use data_encoding::BASE64_MIME;
 use chrono;
 use nom::{is_hex_digit, le_u8};
 use nom::{ErrorKind, IResult, Needed};
@@ -174,7 +174,7 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
             let encoded = &input[5 + tag_len..encoded_idx.unwrap()];
 
             let s: Vec<u8> = match input[2 + tag_len + 1] {
-                b'b' | b'B' => match base64::decode(encoded) {
+                b'b' | b'B' => match BASE64_MIME.decode(encoded) {
                     Ok(v) => v,
                     Err(_) => encoded.to_vec(),
                 },
@@ -239,7 +239,7 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 named!(qp_underscore_header<u8>, do_parse!(tag!("_") >> ({ b' ' })));
 
 named!(
-    quoted_printed_bytes<Vec<u8>>,
+    pub quoted_printed_bytes<Vec<u8>>,
     many0!(alt_complete!(
         quoted_printable_byte | qp_underscore_header | le_u8
     ))
