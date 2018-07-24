@@ -360,8 +360,8 @@ impl<W: Write> State<W> {
                 return;
             },
             UIEventType::EditDraft(dir) => {
-            use std::process::{Command, Stdio};
-            use std::io::Read;
+                use std::process::{Command, Stdio};
+                use std::io::Read;
                 let mut output = Command::new("msmtp")
                     .arg("-t")
                     .stdin(Stdio::piped())
@@ -371,14 +371,14 @@ impl<W: Write> State<W> {
                 {
                     let mut in_pipe = output.stdin.as_mut().unwrap();
                     let mut buf = Vec::new();
-                let mut f = std::fs::File::open(&dir).unwrap();
+                    let mut f = std::fs::File::open(&dir).unwrap();
 
                     f.read_to_end(&mut buf).unwrap();
                     in_pipe.write(&buf).unwrap();
                 }
                 let output = output.wait_with_output().expect("Failed to read stdout");
 
-             return;
+                return;
             },
             UIEventType::Input(Key::Char('t')) =>
                 for i in 0..self.entities.len() {
@@ -410,26 +410,26 @@ impl<W: Write> State<W> {
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
         if {
             match self.child {
-            Some(ForkType::NewDraft(_,ref mut c)) => {
-                let mut w = c.try_wait();
-                match w {
-                    Ok(Some(_)) => { true },
-                    Ok(None) => { false },
-                    Err(_) => { return None; },
+                Some(ForkType::NewDraft(_,ref mut c)) => {
+                    let mut w = c.try_wait();
+                    match w {
+                        Ok(Some(_)) => { true },
+                        Ok(None) => { false },
+                        Err(_) => { return None; },
+                    }
+                },
+                Some(ForkType::Generic(ref mut c)) => {
+                    let mut w = c.try_wait();
+                    match w {
+                        Ok(Some(_)) => { true },
+                        Ok(None) => { false },
+                        Err(_) => { return None; },
+                    }
+                },
+                _ => {
+                    return None;
                 }
-            },
-            Some(ForkType::Generic(ref mut c)) => {
-                let mut w = c.try_wait();
-                match w {
-                    Ok(Some(_)) => { true },
-                    Ok(None) => { false },
-                    Err(_) => { return None; },
-                }
-            },
-            _ => {
-                return None;
             }
-        }
         }
         {
             if let Some(ForkType::NewDraft(f, _)) = std::mem::replace(&mut self.child, None) {
@@ -529,22 +529,22 @@ impl From<TermionKey> for Key {
  * The main loop uses try_wait_on_child() to check if child has exited.
  */
 pub fn get_events(stdin: std::io::Stdin, mut closure: impl FnMut(Key), mut exit: impl FnMut(), rx: chan::Receiver<bool>) -> (){
-        for c in stdin.keys() {
-                chan_select! {
-                    default => {},
-                    rx.recv() -> val => {
-                        if let Some(true) = val {
-                            exit();
-                            return;
-                        } else if let Some(false) = val {
-                            return;
-                        }
-                    }
-
-
-                };
-            if let Ok(k) = c {
-                closure(Key::from(k));
+    for c in stdin.keys() {
+        chan_select! {
+            default => {},
+            rx.recv() -> val => {
+                if let Some(true) = val {
+                    exit();
+                    return;
+                } else if let Some(false) = val {
+                    return;
+                }
             }
+
+
+        };
+        if let Ok(k) = c {
+            closure(Key::from(k));
         }
+    }
 }
