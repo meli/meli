@@ -252,7 +252,7 @@ impl State<std::io::Stdout> {
         s.lock();
         self.stdout = Some(AlternateScreen::from(s.into_raw_mode().unwrap()));
 
-        write!(self.stdout(), "{}", termion::screen::ToAlternateScreen).unwrap();
+        write!(self.stdout(), "{}{}", termion::screen::ToAlternateScreen, cursor::Hide).unwrap();
         self.flush();
     }
 }
