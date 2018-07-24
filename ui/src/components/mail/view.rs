@@ -177,11 +177,33 @@ impl Component for MailView {
                 }
             },
             UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => { //TODO:this should be an Action
-                match self.mode {
-                    ViewMode::Url => { self.cmd_buf.push(c);
-                        return; },
-                    _ => {},
-                }
+                self.cmd_buf.push(c);
+            },
+            UIEventType::Input(Key::Char('a')) if self.cmd_buf.len() > 0 && self.mode == ViewMode::Normal => { //TODO:this should be an Action
+                let lidx = self.cmd_buf.parse::<usize>().unwrap();
+                self.cmd_buf.clear();
+
+
+                let url = {
+                    let threaded = context.accounts[self.coordinates.0].runtime_settings.threaded;
+                    let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1].as_ref().unwrap().as_ref().unwrap();
+                    let envelope_idx: usize = if threaded {
+                        mailbox.threaded_mail(self.coordinates.2)
+                    } else {
+                        self.coordinates.2
+                    };
+
+                    let envelope: &Envelope = &mailbox.collection[envelope_idx];
+                    if let Some(u) = envelope.body().attachments().get(lidx) {
+                        eprintln!("{:?}", u);
+
+                    } else {
+                        context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::StatusNotification(format!("Attachment `{}` not found.", lidx)) });
+                        return;
+                    }
+                };
+
+
             },
             UIEventType::Input(Key::Char('g')) if self.cmd_buf.len() > 0 && self.mode == ViewMode::Url => { //TODO:this should be an Action
 

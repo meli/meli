@@ -430,29 +430,23 @@ impl Component for MailListing {
                     let tx = context.input_thread();
                     tx.send(true);
                 }
-                let mut dir = std::env::temp_dir();
-                dir.push("meli");
-                std::fs::DirBuilder::new().recursive(true).create(&dir).unwrap();
-                dir.push("foo.txt");
-                let mut f = Box::new(std::fs::File::create(&dir).unwrap());
-                f.write(&new_draft(context));
-                f.flush();
-
+                let mut f = create_temp_file(&new_draft(context), None);
+                //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
 
                 // TODO: check exit status
                 let mut output = Command::new("vim")
                     .arg("+/^$")
-                    .arg(&dir)
+                    .arg(&f.path())
                     .stdin(Stdio::inherit())
                     .stdout(Stdio::inherit())
                     .spawn()
-                    .expect("failed to execute process") ;
+                    .expect("failed to execute process");
 
                 /*
                  * Main loop will wait on children and when they reap them the loop spawns a new
                  * input-thread
                  */
-                context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::Fork(ForkType::NewDraft(dir,output)) });
+                context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::Fork(ForkType::NewDraft(f, output)) });
                 context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Fork) });
                 return;
             },

@@ -33,6 +33,9 @@ mod position;
 mod cells;
 pub mod components;
 
+mod helpers;
+pub use helpers::*;
+
 #[macro_use]
 mod execute;
 use execute::goto;
@@ -46,6 +49,7 @@ extern crate notify_rust;
 extern crate chan;
 extern crate chan_signal;
 extern crate linkify;
+extern crate uuid;
 use melib::*;
 
 use std::io::{Write, };
@@ -88,7 +92,7 @@ impl From<RefreshEvent> for ThreadEvent {
 #[derive(Debug)]
 pub enum ForkType {
     Generic(std::process::Child),
-    NewDraft(std::path::PathBuf, std::process::Child),
+    NewDraft(File, std::process::Child),
 }
 
 
@@ -105,7 +109,7 @@ pub enum UIEventType {
     ChangeMode(UIMode),
     Command(String),
     Notification(String),
-    EditDraft(std::path::PathBuf),
+    EditDraft(File),
     Action(Action),
     StatusNotification(String),
 }
@@ -359,7 +363,7 @@ impl<W: Write> State<W> {
                 self.flush();
                 return;
             },
-            UIEventType::EditDraft(dir) => {
+            UIEventType::EditDraft(mut file) => {
                 use std::process::{Command, Stdio};
                 use std::io::Read;
                 let mut output = Command::new("msmtp")
@@ -371,10 +375,11 @@ impl<W: Write> State<W> {
                 {
                     let mut in_pipe = output.stdin.as_mut().unwrap();
                     let mut buf = Vec::new();
-                    let mut f = std::fs::File::open(&dir).unwrap();
+                    let mut f = file.file();
 
                     f.read_to_end(&mut buf).unwrap();
                     in_pipe.write(&buf).unwrap();
+                    std::fs::remove_file(file.path()).unwrap();
                 }
                 let output = output.wait_with_output().expect("Failed to read stdout");
 
