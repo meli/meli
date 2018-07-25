@@ -9,8 +9,17 @@ use mime_apps::query_default_app;
 enum ViewMode {
     Normal,
     Url,
-   // Attachment,
-   // Raw,
+     Attachment(usize),
+    // Raw,
+}
+
+impl ViewMode {
+    fn is_attachment(&self) -> bool {
+        match self {
+            ViewMode::Attachment(_) => true,
+            _ => false,
+        }
+    }
 }
 
 /// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
@@ -125,19 +134,31 @@ impl Component for MailView {
                 let envelope : &Envelope = &mailbox.collection[envelope_idx];
 
                 let finder = LinkFinder::new();
-                let mut t = envelope.body().text().to_string();
                 let mut text = match self.mode {
                     ViewMode::Url => {
+                        let mut t = envelope.body().text().to_string();
                         for (lidx, l) in finder.links(&envelope.body().text()).enumerate() {
                             t.insert_str(l.start()+(lidx*3), &format!("[{}]", lidx));
                         }
+                        if envelope.body().count_attachments() > 1 {
+                            t = envelope.body().attachments().iter().enumerate().fold(t, |mut s, (idx, a)| { s.push_str(&format!("[{}] {}\n\n", idx, a)); s });
+                        }
                         t
                     },
-                    _ => envelope.body().text().to_string()
+                    ViewMode::Attachment(aidx) => {
+                        let attachments = envelope.body().attachments();
+                        let mut ret = format!("Viewing attachment. Press `r` to return \n");
+                        ret.push_str(&attachments[aidx].text());
+                        ret
+                    },
+                    _ => {
+                        let mut t = envelope.body().text().to_string();
+                        if envelope.body().count_attachments() > 1 {
+                            t = envelope.body().attachments().iter().enumerate().fold(t, |mut s, (idx, a)| { s.push_str(&format!("[{}] {}\n\n", idx, a)); s });
+                        }
+                        t
+                    },
                 };
-                if envelope.body().count_attachments() > 1 {
-                    text = envelope.body().attachments().iter().enumerate().fold(text, |mut s, (idx, a)| { s.push_str(&format!("[{}] {}\n\n", idx, a)); s });
-                }
                 let mut buf = CellBuffer::from(&text);
                 match self.mode {
                     ViewMode::Url => {
@@ -156,9 +177,13 @@ impl Component for MailView {
                     },
                     _ => {},
                 }
-               buf
+                buf
             };
-            let cursor_pos = self.pager.as_mut().map(|p| p.cursor_pos());
+            let cursor_pos = if self.mode.is_attachment() {
+                Some(0)
+            } else {
+                self.pager.as_mut().map(|p| p.cursor_pos())
+            };
             // TODO: pass string instead of envelope
             self.pager = Some(Pager::from_buf(buf, cursor_pos));
             self.dirty = false;
@@ -166,24 +191,22 @@ impl Component for MailView {
         self.pager.as_mut().map(|p| p.draw(grid, (set_y(upper_left, y + 1),bottom_right), context));
     }
 
+
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
         match event.event_type {
             UIEventType::Input(Key::Esc) => {
-                match self.mode {
-                    ViewMode::Url => {
-                        self.cmd_buf.clear();
-                        return;
-                    },
-                    _ => {},
-                }
+                self.cmd_buf.clear();
             },
             UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => { //TODO:this should be an Action
                 self.cmd_buf.push(c);
             },
+            UIEventType::Input(Key::Char('r')) if self.mode.is_attachment() => { //TODO:one quit shortcut?
+                self.mode = ViewMode::Normal;
+                self.dirty = true;
+            },
             UIEventType::Input(Key::Char('a')) if self.cmd_buf.len() > 0 && self.mode == ViewMode::Normal => { //TODO:this should be an Action
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
-
 
                 {
                     let threaded = context.accounts[self.coordinates.0].runtime_settings.threaded;
@@ -197,16 +220,27 @@ impl Component for MailView {
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
                     if let Some(u) = envelope.body().attachments().get(lidx) {
                         let mut p = create_temp_file(&decode(u), None);
-                        let attachment_type = u.mime_type();
-                        eprintln!("attachment type {}", attachment_type);
-                        let binary = query_default_app(attachment_type);
-                        eprintln!("{:?}, binary = {:?}", p, binary);
-                Command::new(binary.unwrap())
-                    .arg(p.path())
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                    .expect("Failed to start xdg_open");
+                        match u.content_type().0 {
+                            ContentType::Text => {
+                                self.mode = ViewMode::Attachment(lidx);
+                                self.dirty = true;
+                            },
+                            ContentType::Multipart { .. } => {
+                                unimplemented!()
+                            },
+                            ContentType::Unsupported { .. } => {
+                                let attachment_type = u.mime_type();
+                                eprintln!("attachment type {}", attachment_type);
+                                let binary = query_default_app(attachment_type);
+                                eprintln!("{:?}, binary = {:?}", p, binary);
+                                Command::new(binary.unwrap())
+                                    .arg(p.path())
+                                    .stdin(Stdio::piped())
+                                    .stdout(Stdio::piped())
+                                    .spawn()
+                                    .expect("Failed to start xdg_open");
+                            },
+                        }
 
                     } else {
                         context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::StatusNotification(format!("Attachment `{}` not found.", lidx)) });
@@ -254,7 +288,7 @@ impl Component for MailView {
                 match self.mode {
                     ViewMode::Normal => { self.mode = ViewMode::Url },
                     ViewMode::Url => { self.mode = ViewMode::Normal },
-                    //_ => {},
+                    _ => {},
                 }
                 self.dirty = true;
             },
