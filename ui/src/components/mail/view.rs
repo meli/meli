@@ -2,6 +2,8 @@ use super::*;
 use linkify::{LinkFinder, Link};
 use std::process::{Command, Stdio};
 
+use mime_apps::query_default_app;
+
 
 #[derive(PartialEq, Debug)]
 enum ViewMode {
@@ -194,8 +196,17 @@ impl Component for MailView {
 
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
                     if let Some(u) = envelope.body().attachments().get(lidx) {
-                        let p = create_temp_file(&decode(u), None);
-                        eprintln!("{:?}", p);
+                        let mut p = create_temp_file(&decode(u), None);
+                        let attachment_type = u.mime_type();
+                        eprintln!("attachment type {}", attachment_type);
+                        let binary = query_default_app(attachment_type);
+                        eprintln!("{:?}, binary = {:?}", p, binary);
+                Command::new(binary.unwrap())
+                    .arg(p.path())
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect("Failed to start xdg_open");
 
                     } else {
                         context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::StatusNotification(format!("Attachment `{}` not found.", lidx)) });

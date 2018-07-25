@@ -39,6 +39,28 @@ pub enum MultipartType {
     Digest,
     Unsupported { tag: String },
 }
+
+
+impl Display for MultipartType {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            MultipartType::Mixed => {
+                write!(f, "multipart/mixed")
+            },
+            MultipartType::Alternative => {
+                write!(f, "multipart/alternative")
+            },
+            MultipartType::Digest => {
+                write!(f, "multipart/digest")
+            },
+            MultipartType::Unsupported { tag: ref t } => {
+                write!(f, "multipart/{}", t)
+            },
+        }
+    }
+}
+
+
 #[derive(Clone, Debug)]
 pub enum AttachmentType {
     Data { tag: String },
@@ -47,6 +69,31 @@ pub enum AttachmentType {
         of_type: MultipartType,
         subattachments: Vec<Attachment>,
     },
+}
+
+
+impl Display for AttachmentType {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            AttachmentType::Data { tag: ref t } => {
+                write!(f, "{}", t)
+            },
+            AttachmentType::Text { content: ref c } => {
+                write!(f, "{}", c)
+            },
+            AttachmentType::Multipart { of_type: ref t, .. } => {
+                write!(f, "{}", t)
+
+            },
+
+
+        }
+
+
+    }
+
+
+
 }
 #[derive(Clone, Debug)]
 pub enum ContentType {
@@ -278,7 +325,7 @@ impl Display for Attachment {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self.attachment_type {
             AttachmentType::Data { .. } => {
-                write!(f, "Data attachment of type {}", self.tag())
+                write!(f, "Data attachment of type {}", self.mime_type())
             }
             AttachmentType::Text { .. } => {
                 write!(f, "Text attachment")
@@ -303,7 +350,7 @@ impl Attachment {
     fn get_text_recursive(&self, text: &mut String) {
         match self.attachment_type {
             AttachmentType::Data { .. } => {
-                //text.push_str(&format!("Data attachment of type {}", self.tag()));
+                //text.push_str(&format!("Data attachment of type {}", self.mime_type()));
             }
             AttachmentType::Text { content: ref t } => {
                 text.push_str(t);
@@ -334,7 +381,7 @@ impl Attachment {
     pub fn description(&self) -> Vec<String> {
         self.attachments().iter().map(|a| a.text()).collect()
     }
-    pub fn tag(&self) -> String {
+    pub fn mime_type(&self) -> String {
         format!("{}/{}", self.content_type.0, self.content_type.1).to_string()
     }
     pub fn attachments(&self) -> Vec<Attachment> {
@@ -363,6 +410,15 @@ impl Attachment {
     }
     pub fn count_attachments(&self) -> usize {
         self.attachments().len()
+    }
+    pub fn attachment_type(&self) -> &AttachmentType {
+        &self.attachment_type
+    }
+    pub fn content_type(&self) -> &(ContentType, ContentSubType) {
+        &self.content_type
+    }
+    pub fn content_transfer_encoding(&self) -> &ContentTransferEncoding {
+        &self.content_transfer_encoding
     }
 }
 

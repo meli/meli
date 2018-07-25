@@ -12,6 +12,7 @@ notify = "4.0.1"
 notify-rust = "^3"
 nom = "3.2.0"
 chan-signal = "0.3.1"
+mime_apps = { path = "../../mime_apps", version = "*" }
 
 uuid = { version = "0.6", features = ["serde", "v4"] }
 linkify = "0.3.1"

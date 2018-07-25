@@ -44,6 +44,7 @@ use self::cells::*;
 pub use self::components::*;
 
 extern crate melib;
+extern crate mime_apps;
 extern crate notify_rust;
 #[macro_use]
 extern crate chan;

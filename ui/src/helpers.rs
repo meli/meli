@@ -20,6 +20,7 @@ impl File {
 }
 
 
+//TODO: add temp files to a list to reap them when dropped
 pub fn create_temp_file(bytes: &[u8], filename: Option<&PathBuf>) -> File {
     let mut dir = std::env::temp_dir();
 
