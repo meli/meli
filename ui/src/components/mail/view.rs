@@ -9,7 +9,7 @@ use mime_apps::query_default_app;
 enum ViewMode {
     Normal,
     Url,
-     Attachment(usize),
+    Attachment(usize),
     // Raw,
 }
 
@@ -219,26 +219,31 @@ impl Component for MailView {
 
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
                     if let Some(u) = envelope.body().attachments().get(lidx) {
-                        let mut p = create_temp_file(&decode(u), None);
                         match u.content_type().0 {
                             ContentType::Text => {
                                 self.mode = ViewMode::Attachment(lidx);
                                 self.dirty = true;
                             },
                             ContentType::Multipart { .. } => {
-                                unimplemented!()
+                                context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::StatusNotification(format!("Multipart attachments are not supported yet.")) });
+                                return;
                             },
                             ContentType::Unsupported { .. } => {
                                 let attachment_type = u.mime_type();
-                                eprintln!("attachment type {}", attachment_type);
-                                let binary = query_default_app(attachment_type);
-                                eprintln!("{:?}, binary = {:?}", p, binary);
-                                Command::new(binary.unwrap())
-                                    .arg(p.path())
-                                    .stdin(Stdio::piped())
-                                    .stdout(Stdio::piped())
-                                    .spawn()
-                                    .expect("Failed to start xdg_open");
+                                let binary = query_default_app(&attachment_type);
+                                if let Ok(binary) = binary {
+                                    let mut p = create_temp_file(&decode(u), None);
+                                    Command::new(&binary)
+                                        .arg(p.path())
+                                        .stdin(Stdio::piped())
+                                        .stdout(Stdio::piped())
+                                        .spawn()
+                                        .expect(&format!("Failed to start {}", binary.display()));
+                                } else {
+                                    context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::StatusNotification(format!("Couldn't find a default application for type {}", attachment_type)) });
+                                    return;
+                                }
+
                             },
                         }
 
