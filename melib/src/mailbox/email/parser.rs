@@ -259,6 +259,25 @@ named!(ascii_token<String>, do_parse!(
             String::from_utf8_lossy(word).into_owned()
         } )));
 
+named!(pub address_list<String>, ws!(do_parse!(
+        list: alt_complete!( encoded_word_list | ascii_token) >>
+        ( {
+            let list: Vec<&str> = list.split(',').collect();
+            let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.trim().len(); acc }) + list.len() - 1;
+            let list_len = list.len();
+            let mut i = 0;
+            list.iter().fold(String::with_capacity(string_len),
+            |acc, x| {
+                let mut acc = acc + &x.replace("\n", "").replace("\t", " ").trim();
+                if i != list_len - 1 {
+                    acc.push_str(" ");
+                    i+=1;
+                }
+                acc
+            })
+        } )
+
+       )));
 named!(pub subject<String>, ws!(do_parse!(
         list: many0!(alt_complete!( encoded_word_list | ascii_token)) >>
         ( {

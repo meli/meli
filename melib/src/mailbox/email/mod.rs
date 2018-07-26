@@ -198,7 +198,7 @@ impl Envelope {
                 continue;
             }
             if name.eq_ignore_ascii_case("to") {
-                let parse_result = parser::subject(value.as_bytes());
+                let parse_result = parser::address_list(value.as_bytes());
                 let value = if parse_result.is_done() {
                     parse_result.to_full_result().unwrap()
                 } else {
@@ -206,7 +206,7 @@ impl Envelope {
                 };
                 self.set_to(value);
             } else if name.eq_ignore_ascii_case("from") {
-                let parse_result = parser::subject(value.as_bytes());
+                let parse_result = parser::address_list(value.as_bytes());
                 let value = if parse_result.is_done() {
                     parse_result.to_full_result().unwrap()
                 } else {
