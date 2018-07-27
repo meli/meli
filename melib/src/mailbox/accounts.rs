@@ -19,9 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use mailbox::*;
-use mailbox::backends::{RefreshEventConsumer, Backends};
 use conf::{AccountSettings, Folder};
+use mailbox::backends::{Backends, RefreshEventConsumer};
+use mailbox::*;
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug)]
@@ -35,7 +35,6 @@ pub struct Account {
     pub runtime_settings: AccountSettings,
     pub backend: Box<MailBackend>,
 }
-
 
 impl Account {
     pub fn new(name: String, settings: AccountSettings, backends: &Backends) -> Self {
@@ -88,7 +87,8 @@ impl IndexMut<usize> for Account {
             if self.sent_folder.is_some() {
                 let id = self.sent_folder.unwrap();
                 if id == index {
-                    self.folders[index] = Some(Mailbox::new(folder, &None, self.backend.get(&folder)));
+                    self.folders[index] =
+                        Some(Mailbox::new(folder, &None, self.backend.get(&folder)));
                 } else {
                     let (sent, cur) = {
                         let ptr = self.folders.as_mut_ptr();
@@ -104,10 +104,10 @@ impl IndexMut<usize> for Account {
                     if sent[0].is_none() {
                         sent[0] = Some(Mailbox::new(sent_path, &None, self.backend.get(&folder)));
                     }
-                    cur[0] = Some(Mailbox::new(folder, &sent[0],self.backend.get(folder)));
+                    cur[0] = Some(Mailbox::new(folder, &sent[0], self.backend.get(folder)));
                 }
             } else {
-                self.folders[index] = Some(Mailbox::new(folder, &None,self.backend.get(&folder)));
+                self.folders[index] = Some(Mailbox::new(folder, &None, self.backend.get(&folder)));
             };
         }
         &mut self.folders[index]

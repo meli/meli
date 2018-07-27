@@ -19,38 +19,36 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-pub mod parser;
 pub mod attachments;
+pub mod parser;
 
-use mailbox::backends::BackendOpGenerator;
 pub use self::attachments::*;
+use mailbox::backends::BackendOpGenerator;
 
-use std::string::String;
-use std::sync::Arc;
 use std::cmp::Ordering;
 use std::fmt;
 use std::option::Option;
+use std::string::String;
+use std::sync::Arc;
 
 use chrono;
 use chrono::TimeZone;
 
-
-
-#[derive(Clone, Debug, )]
+#[derive(Clone, Debug)]
 pub struct GroupAddress {
     raw: String,
     display_name: StrBuilder,
     mailbox_list: Vec<Address>,
 }
 
-#[derive(Clone, Debug, )]
+#[derive(Clone, Debug)]
 pub struct MailboxAddress {
     raw: String,
     display_name: StrBuilder,
     address_spec: StrBuilder,
 }
 
-#[derive(Clone, Debug, )]
+#[derive(Clone, Debug)]
 pub enum Address {
     Mailbox(MailboxAddress),
     Group(GroupAddress),
@@ -60,17 +58,19 @@ impl Eq for Address {}
 impl PartialEq for Address {
     fn eq(&self, other: &Address) -> bool {
         match (self, other) {
-            (Address::Mailbox(_), Address::Group(_)) |
-            (Address::Group(_), Address::Mailbox(_)) => {
+            (Address::Mailbox(_), Address::Group(_)) | (Address::Group(_), Address::Mailbox(_)) => {
                 false
-            },
+            }
             (Address::Mailbox(s), Address::Mailbox(o)) => {
                 s.address_spec.display(&s.raw) == o.address_spec.display(&o.raw)
-            },
+            }
             (Address::Group(s), Address::Group(o)) => {
-                s.display_name.display(&s.raw) == o.display_name.display(&o.raw) &&
-                    s.mailbox_list.iter().zip(o.mailbox_list.iter()).fold(true, |b, (s, o)| b && (s == o))
-            },
+                s.display_name.display(&s.raw) == o.display_name.display(&o.raw)
+                    && s.mailbox_list
+                        .iter()
+                        .zip(o.mailbox_list.iter())
+                        .fold(true, |b, (s, o)| b && (s == o))
+            }
         }
     }
 }
@@ -78,24 +78,26 @@ impl PartialEq for Address {
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Address::Mailbox(m) if m.display_name.length > 0  => {
-                write!(f, "{} <{}>", m.display_name.display(&m.raw), m.address_spec.display(&m.raw))
-            },
-            Address::Group(g) =>  {
-                let attachment_strings: Vec<String> = g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
-                write!(f, "{}: {}", g.display_name.display(&g.raw), attachment_strings.join(", "))
-            },
-            Address::Mailbox(m)  => {
-                write!(f, "{}", m.address_spec.display(&m.raw))
-            },
+            Address::Mailbox(m) if m.display_name.length > 0 => write!(
+                f,
+                "{} <{}>",
+                m.display_name.display(&m.raw),
+                m.address_spec.display(&m.raw)
+            ),
+            Address::Group(g) => {
+                let attachment_strings: Vec<String> =
+                    g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
+                write!(
+                    f,
+                    "{}: {}",
+                    g.display_name.display(&g.raw),
+                    attachment_strings.join(", ")
+                )
+            }
+            Address::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
         }
-
     }
-
-
 }
-
-
 
 /// Helper struct to return slices from a struct field on demand.
 #[derive(Clone, Debug)]
@@ -118,7 +120,7 @@ impl StrBuilder {
     fn display<'a>(&self, s: &'a str) -> &'a str {
         let offset = self.offset;
         let length = self.length;
-        &s[offset..offset+length]
+        &s[offset..offset + length]
     }
 }
 
@@ -133,14 +135,14 @@ impl StrBuild for MessageID {
             string.to_string(),
             StrBuilder {
                 offset: offset,
-                length: slice.len()+ 1,
+                length: slice.len() + 1,
             },
-            )
+        )
     }
     fn raw(&self) -> &str {
         let offset = self.1.offset;
         let length = self.1.length;
-        &self.0[offset..offset+length-1]
+        &self.0[offset..offset + length - 1]
     }
     fn val(&self) -> &str {
         &self.0
@@ -159,8 +161,8 @@ fn test_strbuilder() {
                 offset: 1,
                 length: 43,
             }
-            )
-        );
+        )
+    );
 }
 
 impl PartialEq for MessageID {
@@ -179,7 +181,6 @@ struct References {
     raw: String,
     refs: Vec<MessageID>,
 }
-
 
 bitflags! {
     #[derive(Default)]
@@ -219,7 +220,6 @@ pub struct Envelope {
 
     flags: Flag,
 }
-
 
 impl Envelope {
     pub fn new(token: Box<BackendOpGenerator>) -> Self {
@@ -349,7 +349,7 @@ impl Envelope {
     }
     pub fn to(&self) -> &Vec<Address> {
         &self.to
-    }   
+    }
     pub fn to_to_string(&self) -> String {
         let _strings: Vec<String> = self.to.iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
@@ -510,6 +510,10 @@ impl Envelope {
     pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) -> () {
         self.datetime = Some(new_val);
         self.timestamp = new_val.timestamp() as u64;
+    }
+    pub fn set_flag(&mut self, f: Flag) -> () {
+        self.flags |= f;
+
     }
     pub fn flags(&self) -> Flag {
         self.flags

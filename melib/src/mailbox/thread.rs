@@ -19,9 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use error::Result;
 use mailbox::email::*;
 use mailbox::Mailbox;
-use error::Result;
 
 extern crate fnv;
 use self::fnv::FnvHashMap;
@@ -172,8 +172,8 @@ fn build_collection(
             iasf += 1;
             let parent_id = if id_table.contains_key(r.raw()) {
                 let p = id_table[r.raw()];
-                if !(threads[p].is_descendant(threads, &threads[curr_ref]) ||
-                    threads[curr_ref].is_descendant(threads, &threads[p]))
+                if !(threads[p].is_descendant(threads, &threads[curr_ref])
+                    || threads[curr_ref].is_descendant(threads, &threads[p]))
                 {
                     threads[curr_ref].parent = Some(p);
                     if threads[p].first_child.is_none() {
@@ -228,7 +228,6 @@ fn build_collection(
     }
 }
 
-
 /// Builds threads from a collection.
 pub fn build_threads(
     collection: &mut Vec<Envelope>,
@@ -262,9 +261,9 @@ pub fn build_threads(
             let sent_mailbox = sent_mailbox.unwrap();
 
             for x in &sent_mailbox.collection {
-                if id_table.contains_key(x.message_id_raw()) ||
-                    (!x.in_reply_to_raw().is_empty() &&
-                        id_table.contains_key(x.in_reply_to_raw()))
+                if id_table.contains_key(x.message_id_raw())
+                    || (!x.in_reply_to_raw().is_empty()
+                        && id_table.contains_key(x.in_reply_to_raw()))
                 {
                     let mut x: Envelope = (*x).clone();
                     if id_table.contains_key(x.message_id_raw()) {
@@ -277,8 +276,8 @@ pub fn build_threads(
                         assert!(threads[c].has_children());
                         threads[c].date = x.date();
                         x.set_thread(c);
-                    } else if !x.in_reply_to_raw().is_empty() &&
-                        id_table.contains_key(x.in_reply_to_raw())
+                    } else if !x.in_reply_to_raw().is_empty()
+                        && id_table.contains_key(x.in_reply_to_raw())
                     {
                         let p = id_table[x.in_reply_to_raw()];
                         let c = if id_table.contains_key(x.message_id_raw()) {
@@ -300,8 +299,8 @@ pub fn build_threads(
                             tidx - 1
                         };
                         threads[c].parent = Some(p);
-                        if threads[p].is_descendant(&threads, &threads[c]) ||
-                            threads[c].is_descendant(&threads, &threads[p])
+                        if threads[p].is_descendant(&threads, &threads[c])
+                            || threads[c].is_descendant(&threads, &threads[p])
                         {
                             continue;
                         }
@@ -344,8 +343,9 @@ pub fn build_threads(
     let mut root_set = Vec::with_capacity(collection.len());
     'root_set: for v in id_table.values() {
         if threads[*v].parent.is_none() {
-            if !threads[*v].has_message() && threads[*v].has_children() &&
-                !threads[threads[*v].first_child.unwrap()].has_sibling()
+            if !threads[*v].has_message()
+                && threads[*v].has_children()
+                && !threads[threads[*v].first_child.unwrap()].has_sibling()
             {
                 /* Do not promote the children if doing so would promote them to the root set
                  * -- unless there is only one child, in which case, do. */
@@ -369,15 +369,14 @@ pub fn build_threads(
     ) {
         let thread = threads[i];
         if threads[root_subject_idx].has_message() {
-            let root_subject =
-                collection[threads[root_subject_idx].message().unwrap()].subject();
+            let root_subject = collection[threads[root_subject_idx].message().unwrap()].subject();
             /* If the Container has no Message, but does have children, remove this container but
              * promote its children to this level (that is, splice them in to the current child
              * list.) */
             if indentation > 0 && thread.has_message() {
                 let subject = collection[thread.message().unwrap()].subject();
-                if subject == root_subject ||
-                    subject.starts_with("Re: ") && subject.ends_with(root_subject)
+                if subject == root_subject
+                    || subject.starts_with("Re: ") && subject.ends_with(root_subject)
                 {
                     threads[i].set_show_subject(false);
                 }
@@ -419,7 +418,6 @@ pub fn build_threads(
             collection,
         );
     }
-
 
     (threads, threaded_collection)
 }

@@ -18,18 +18,17 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+pub mod imap;
 pub mod maildir;
 pub mod mbox;
-pub mod imap;
 
 use conf::Folder;
-use mailbox::email::{Envelope, Flag};
+use error::Result;
+use mailbox::backends::imap::ImapType;
 use mailbox::backends::maildir::MaildirType;
 use mailbox::backends::mbox::MboxType;
-use mailbox::backends::imap::ImapType;
-use error::Result;
+use mailbox::email::{Envelope, Flag};
 use std::fmt;
-
 
 extern crate fnv;
 use self::fnv::FnvHashMap;
@@ -44,9 +43,12 @@ pub struct Backends {
 impl Backends {
     pub fn new() -> Self {
         let mut b = Backends {
-            map: FnvHashMap::with_capacity_and_hasher(1, Default::default())
+            map: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
         };
-        b.register("maildir".to_string(), Box::new(|| Box::new(MaildirType::new(""))));
+        b.register(
+            "maildir".to_string(),
+            Box::new(|| Box::new(MaildirType::new(""))),
+        );
         b.register("mbox".to_string(), Box::new(|| Box::new(MboxType::new(""))));
         b.register("imap".to_string(), Box::new(|| Box::new(ImapType::new(""))));
         b
@@ -65,7 +67,6 @@ impl Backends {
         self.map.insert(key, backend);
     }
 }
-
 
 pub struct RefreshEvent {
     pub folder: String,
@@ -87,7 +88,7 @@ impl RefreshEventConsumer {
 }
 pub trait MailBackend: ::std::fmt::Debug {
     fn get(&self, folder: &Folder) -> Result<Vec<Envelope>>;
-    fn watch(&self, sender:RefreshEventConsumer, folders: &[Folder]) -> ();
+    fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> ();
     //fn new(folders: &Vec<String>) -> Box<Self>;
     //login function
 }

@@ -18,10 +18,9 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-pub mod mailbox;
 pub mod conf;
 pub mod error;
-
+pub mod mailbox;
 
 #[macro_use]
 extern crate serde_derive;
@@ -29,16 +28,16 @@ extern crate serde_derive;
 #[macro_use]
 extern crate nom;
 extern crate chrono;
-extern crate memmap;
-extern crate encoding;
 extern crate data_encoding;
+extern crate encoding;
+extern crate memmap;
 
 #[macro_use]
 extern crate bitflags;
 
-pub use mailbox::*;
 pub use conf::*;
+pub use mailbox::*;
 
-pub use mailbox::backends::{RefreshEventConsumer, RefreshEvent, Backends};
+pub use error::{MeliError, Result};
+pub use mailbox::backends::{Backends, RefreshEvent, RefreshEventConsumer};
 pub use mailbox::email::{Envelope, Flag};
-pub use error::{Result, MeliError};

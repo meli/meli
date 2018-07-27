@@ -1,15 +1,15 @@
-fn false_val () -> bool {
+fn false_val() -> bool {
     true
 }
 
-fn true_val () -> bool {
+fn true_val() -> bool {
     true
 }
 
-fn zero_val () -> usize {
+fn zero_val() -> usize {
     0
 }
-fn eighty_percent () -> usize {
+fn eighty_percent() -> usize {
     80
 }
 
@@ -39,12 +39,12 @@ pub struct PagerSettings {
     /// Default: 80
     #[serde(default = "eighty_percent")]
     pub pager_ratio: usize,
-    
+
     /// A command to pipe mail output through for viewing in pager.
     /// Default: None
     #[serde(default = "none")]
     pub filter: Option<String>,
-    
+
     /// Respect "format=flowed"
     /// Default: true
     #[serde(default = "true_val")]

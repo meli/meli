@@ -27,8 +27,8 @@ The mail handling stuff is done in the `melib` crate which includes all backend 
 extern crate melib;
 extern crate ui;
 
-use ui::*;
 pub use melib::*;
+use ui::*;
 
 use std::thread;
 
@@ -40,17 +40,28 @@ use chan_signal::Signal;
 
 extern crate nix;
 
-fn make_input_thread(sx: chan::Sender<ThreadEvent>, rx: chan::Receiver<bool>) -> thread::JoinHandle<()> {
-        let stdin = std::io::stdin();
-        thread::Builder::new().name("input-thread".to_string()).spawn(move || {
-
-            get_events(stdin,
-                       |k| {
-                           sx.send(ThreadEvent::Input(k));
-                       },
-                       || {
-                           sx.send(ThreadEvent::UIEventType(UIEventType::ChangeMode(UIMode::Fork)));
-                       }, rx)}).unwrap()
+fn make_input_thread(
+    sx: chan::Sender<ThreadEvent>,
+    rx: chan::Receiver<bool>,
+) -> thread::JoinHandle<()> {
+    let stdin = std::io::stdin();
+    thread::Builder::new()
+        .name("input-thread".to_string())
+        .spawn(move || {
+            get_events(
+                stdin,
+                |k| {
+                    sx.send(ThreadEvent::Input(k));
+                },
+                || {
+                    sx.send(ThreadEvent::UIEventType(UIEventType::ChangeMode(
+                        UIMode::Fork,
+                    )));
+                },
+                rx,
+            )
+        })
+        .unwrap()
 }
 fn main() {
     /* Lock all stdio outs */
@@ -68,7 +79,6 @@ fn main() {
      * */
     let (sender, receiver) = chan::sync(::std::mem::size_of::<ThreadEvent>());
 
-
     /*
      * Create async channel to block the input-thread if we need to fork and stop it from reading
      * stdin, see get_events() for details
@@ -78,18 +88,27 @@ fn main() {
     let mut _thread_handler = make_input_thread(sender.clone(), rx.clone());
 
     /* Create the application State. This is the 'System' part of an ECS architecture */
-    let mut state = State::new(sender.clone(), tx );
+    let mut state = State::new(sender.clone(), tx);
 
     /* Register some reasonably useful interfaces */
-    let menu = Entity {component: Box::new(AccountMenu::new(&state.context.accounts)) };
+    let menu = Entity {
+        component: Box::new(AccountMenu::new(&state.context.accounts)),
+    };
     let listing = MailListing::new();
-    let b = Entity { component: Box::new(listing) };
-    let window  = Entity { component: Box::new(VSplit::new(menu, b, 90, true)) };
-    let status_bar = Entity { component: Box::new(StatusBar::new(window)) };
+    let b = Entity {
+        component: Box::new(listing),
+    };
+    let window = Entity {
+        component: Box::new(VSplit::new(menu, b, 90, true)),
+    };
+    let status_bar = Entity {
+        component: Box::new(StatusBar::new(window)),
+    };
     state.register_entity(status_bar);
 
-
-    let xdg_notifications = Entity { component: Box::new(ui::components::notifications::XDGNotifications {}) };
+    let xdg_notifications = Entity {
+        component: Box::new(ui::components::notifications::XDGNotifications {}),
+    };
     state.register_entity(xdg_notifications);
 
     /* Keep track of the input mode. See ui::UIMode for details */
@@ -191,18 +210,18 @@ fn main() {
                     make_input_thread(sender.clone(), rx.clone());
                     state.mode = UIMode::Normal;
                     state.render();
-                },
+                }
                 Some(false) => {
                     use std::{thread, time};
                     let ten_millis = time::Duration::from_millis(1500);
                     thread::sleep(ten_millis);
 
                     continue 'reap;
-                },
-                None => {break 'reap;},
+                }
+                None => {
+                    break 'reap;
+                }
             }
-
-
         }
     }
 }

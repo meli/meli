@@ -19,15 +19,17 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use mailbox::email::{Envelope, Flag};
-use error::{MeliError, Result};
-use mailbox::backends::{BackendOp, BackendOpGenerator, MailBackend, RefreshEvent, RefreshEventConsumer};
-use mailbox::email::parser;
 use conf::Folder;
+use error::{MeliError, Result};
+use mailbox::backends::{
+    BackendOp, BackendOpGenerator, MailBackend, RefreshEvent, RefreshEventConsumer,
+};
+use mailbox::email::parser;
+use mailbox::email::{Envelope, Flag};
 
 extern crate notify;
 
-use self::notify::{Watcher, RecursiveMode, watcher, DebouncedEvent};
+use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::time::Duration;
 
 use std::sync::mpsc::channel;
@@ -36,8 +38,8 @@ use std::sync::mpsc::channel;
 //use std::time::Duration;
 use std::thread;
 extern crate crossbeam;
-use std::path::PathBuf;
 use memmap::{Mmap, Protection};
+use std::path::PathBuf;
 
 /// `BackendOp` implementor for Maildir
 #[derive(Debug, Default)]
@@ -70,9 +72,7 @@ impl BackendOp for MaildirOp {
     }
     fn as_bytes(&mut self) -> Result<&[u8]> {
         if self.slice.is_none() {
-            self.slice = Some(
-                Mmap::open_path(self.path.to_string(), Protection::Read)?,
-            );
+            self.slice = Some(Mmap::open_path(self.path.to_string(), Protection::Read)?);
         }
         /* Unwrap is safe since we use ? above. */
         Ok(unsafe { self.slice.as_ref().unwrap().as_slice() })
@@ -104,23 +104,19 @@ impl BackendOp for MaildirOp {
                 'T' => flag |= Flag::TRASHED,
                 'D' => flag |= Flag::DRAFT,
                 'F' => flag |= Flag::FLAGGED,
-                 _  => panic!(),
+                _ => panic!(),
             }
-
         }
-
 
         flag
     }
 }
-
 
 /// Maildir backend https://cr.yp.to/proto/maildir.html
 #[derive(Debug)]
 pub struct MaildirType {
     path: String,
 }
-
 
 impl MailBackend for MaildirType {
     fn get(&self, folder: &Folder) -> Result<Vec<Envelope>> {
@@ -129,34 +125,40 @@ impl MailBackend for MaildirType {
     fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> () {
         let folders = folders.to_vec();
 
-        thread::Builder::new().name("folder watch".to_string()).spawn(move || {
-            let (tx, rx) = channel();
-            let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
-            for f in folders {
-                if MaildirType::is_valid(&f).is_err() {
-                    continue;
-                }
-                let mut p = PathBuf::from(&f.path());
-                p.push("cur");
-                watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
-                p.pop();
-                p.push("new");
-                watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
-            }
-            loop {
-                match rx.recv() {
-                    Ok(event) => {
-                        match event {
-                            DebouncedEvent::Create(pathbuf) => {
-                                sender.send(RefreshEvent { folder: format!("{}", pathbuf.parent().unwrap().to_str().unwrap()) });
-                            },
-                            _ => {},
-                        }
+        thread::Builder::new()
+            .name("folder watch".to_string())
+            .spawn(move || {
+                let (tx, rx) = channel();
+                let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
+                for f in folders {
+                    if MaildirType::is_valid(&f).is_err() {
+                        continue;
                     }
-                    Err(e) => eprintln!("watch error: {:?}", e),
+                    let mut p = PathBuf::from(&f.path());
+                    p.push("cur");
+                    watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
+                    p.pop();
+                    p.push("new");
+                    watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
                 }
-            }
-        }).unwrap();
+                loop {
+                    match rx.recv() {
+                        Ok(event) => match event {
+                            DebouncedEvent::Create(pathbuf) => {
+                                sender.send(RefreshEvent {
+                                    folder: format!(
+                                        "{}",
+                                        pathbuf.parent().unwrap().to_str().unwrap()
+                                    ),
+                                });
+                            }
+                            _ => {}
+                        },
+                        Err(e) => eprintln!("watch error: {:?}", e),
+                    }
+                }
+            })
+            .unwrap();
     }
 }
 
@@ -172,9 +174,10 @@ impl MaildirType {
         for d in &["cur", "new", "tmp"] {
             p.push(d);
             if !p.is_dir() {
-                return Err(MeliError::new(
-                    format!("{} is not a valid maildir folder", path),
-                ));
+                return Err(MeliError::new(format!(
+                    "{} is not a valid maildir folder",
+                    path
+                )));
             }
             p.pop();
         }
@@ -209,9 +212,10 @@ impl MaildirType {
                         let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
                         for e in chunk {
                             let e_copy = e.to_string();
-                            if let Some(mut e) = Envelope::from_token(Box::new(BackendOpGenerator::new(
-                                Box::new(move || Box::new(MaildirOp::new(e_copy.clone()))),
-                            ))) {
+                            if let Some(mut e) =
+                                Envelope::from_token(Box::new(BackendOpGenerator::new(Box::new(
+                                    move || Box::new(MaildirOp::new(e_copy.clone())),
+                                )))) {
                                 e.populate_headers();
                                 local_r.push(e);
                             }

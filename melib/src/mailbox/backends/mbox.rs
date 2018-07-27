@@ -19,23 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use mailbox::email::{Envelope, Flag};
-use error::{Result};
-use mailbox::backends::{BackendOp, MailBackend, RefreshEventConsumer};
 use conf::Folder;
-
-
-
+use error::Result;
+use mailbox::backends::{BackendOp, MailBackend, RefreshEventConsumer};
+use mailbox::email::{Envelope, Flag};
 
 /// `BackendOp` implementor for Mbox
 #[derive(Debug, Default, Clone)]
-pub struct MboxOp {
-}
+pub struct MboxOp {}
 
 impl MboxOp {
     pub fn new(_path: String) -> Self {
-        MboxOp {
-        }
+        MboxOp {}
     }
 }
 
@@ -57,12 +52,9 @@ impl BackendOp for MboxOp {
     }
 }
 
-
-/// Mbox backend 
+/// Mbox backend
 #[derive(Debug)]
-pub struct MboxType {
-}
-
+pub struct MboxType {}
 
 impl MailBackend for MboxType {
     fn get(&self, _folder: &Folder) -> Result<Vec<Envelope>> {
@@ -75,7 +67,6 @@ impl MailBackend for MboxType {
 
 impl MboxType {
     pub fn new(_path: &str) -> Self {
-        MboxType {
-        }
+        MboxType {}
     }
 }

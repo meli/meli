@@ -18,23 +18,23 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+use super::*;
+use chrono;
+use data_encoding::BASE64_MIME;
+use encoding::{DecoderTrap, Encoding};
+use nom::{is_hex_digit, le_u8};
+use nom::{Compare, CompareResult};
+use nom::{ErrorKind, IResult, Needed};
 use std;
 use std::str::from_utf8;
-use data_encoding::BASE64_MIME;
-use chrono;
-use nom::{is_hex_digit, le_u8};
-use nom::{ErrorKind, IResult, Needed};
-use nom::{Compare, CompareResult};
-use encoding::{DecoderTrap, Encoding};
-use super::*;
 
 macro_rules! is_whitespace {
-    ($var:ident) => (
+    ($var:ident) => {
         $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
-        );
-    ($var:expr) => (
+    };
+    ($var:expr) => {
         $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
-        );
+    };
 }
 
 fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
@@ -71,7 +71,6 @@ fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
  * 	Tue,  5 Jan 2016 21:30:44 +0100 (CET)
  */
 
-
 fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
     if input.is_empty() || input[0] == b'\n' {
         IResult::Incomplete(Needed::Unknown)
@@ -79,8 +78,7 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
         let input_len = input.len();
         for (i, x) in input.iter().enumerate() {
             if *x == b'\n' {
-                if (i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t'
-                {
+                if (i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t' {
                     return match from_utf8(&input[0..i]) {
                         Ok(v) => IResult::Done(&input[(i + 1)..], v),
                         Err(_) => IResult::Error(error_code!(ErrorKind::Custom(43))),
@@ -97,7 +95,6 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
     }
 }
 
-
 /* Parse the name part of the header -> &str */
 named!(name<&str>, map_res!(is_not!(":\n"), from_utf8));
 
@@ -111,15 +108,15 @@ named!(pub headers<std::vec::Vec<(&str, &str)>>,
        many1!(complete!(header)));
 
 //named!(pub headers_raw<&[u8]>,
-       //take_until1!("\n\n"));
+//take_until1!("\n\n"));
 
 pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
     if input.is_empty() {
-        return IResult::Incomplete(Needed::Unknown)
+        return IResult::Incomplete(Needed::Unknown);
     }
     for (i, x) in input.iter().enumerate() {
-        if *x == b'\n' && i + 1 < input.len() && input[i+1] == b'\n' {
-            return IResult::Done(&input[(i + 1)..], &input[0..i+1]);
+        if *x == b'\n' && i + 1 < input.len() && input[i + 1] == b'\n' {
+            return IResult::Done(&input[(i + 1)..], &input[0..i + 1]);
         }
     }
     return IResult::Error(error_code!(ErrorKind::Custom(43)));
@@ -130,7 +127,6 @@ named!(pub body_raw<&[u8]>,
            take_until1!("\n\n") >>
            body: take_while!(call!(|_| true)) >>
            ( { body } )));
-
 
 named!(pub mail<(std::vec::Vec<(&str, &str)>, &[u8])>,
        separated_pair!(headers, tag!("\n"), take_while!(call!(|_| true))));
@@ -255,19 +251,32 @@ named!(
     ))
 );
 
-named!(encoded_word_list<String>, ws!(do_parse!(
-        list: separated_nonempty_list!(complete!(is_a!(" \n\r\t")), encoded_word) >>
-        ( {
-            let list_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc });
-            let bytes = list.iter().fold(Vec::with_capacity(list_len), |mut acc, x| { acc.append(&mut x.clone()); acc});
+named!(
+    encoded_word_list<String>,
+    ws!(do_parse!(
+        list: separated_nonempty_list!(complete!(is_a!(" \n\r\t")), encoded_word) >> ({
+            let list_len = list.iter().fold(0, |mut acc, x| {
+                acc += x.len();
+                acc
+            });
+            let bytes = list.iter()
+                .fold(Vec::with_capacity(list_len), |mut acc, x| {
+                    acc.append(&mut x.clone());
+                    acc
+                });
             String::from_utf8_lossy(&bytes).into_owned()
-        } )
-       )));
-named!(ascii_token<String>, do_parse!(
-        word: alt!(terminated!(take_until1!("=?"), peek!(tag_no_case!("=?UTF-8?"))) | take_while!(call!(|_| { true }))) >>
-        ( {
-            String::from_utf8_lossy(word).into_owned()
-        } )));
+        })
+    ))
+);
+named!(
+    ascii_token<String>,
+    do_parse!(
+        word: alt!(
+            terminated!(take_until1!("=?"), peek!(tag_no_case!("=?UTF-8?")))
+                | take_while!(call!(|_| true))
+        ) >> ({ String::from_utf8_lossy(word).into_owned() })
+    )
+);
 
 fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
     if input.is_empty() || input.len() < 3 {
@@ -280,8 +289,7 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
         let mut flag = false;
         for (i, b) in input[0..].iter().enumerate() {
             if *b == b'<' {
-                
-                display_name.length = if i != 0 { i-1 } else { 0 };
+                display_name.length = if i != 0 { i - 1 } else { 0 };
                 flag = true;
                 break;
             }
@@ -291,7 +299,7 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
         }
         let mut end = input.len();
         let mut flag = false;
-        for (i, b) in input[display_name.length+2..].iter().enumerate() {
+        for (i, b) in input[display_name.length + 2..].iter().enumerate() {
             if *b == b'@' {
                 flag = true;
             }
@@ -305,19 +313,22 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
                 offset: display_name.length + 2,
                 length: end,
             };
-            match phrase(&input[0..end+display_name.length+3]) {
+            match phrase(&input[0..end + display_name.length + 3]) {
                 IResult::Error(e) => IResult::Error(e),
                 IResult::Incomplete(i) => IResult::Incomplete(i),
                 IResult::Done(rest, raw) => {
                     display_name.length = raw.find('<').unwrap();
                     address_spec.offset = display_name.length + 1;
                     address_spec.length = raw.len() - display_name.length - 2;
-                    IResult::Done(rest, Address::Mailbox(MailboxAddress {
-                        raw: raw,
-                        display_name: display_name,
-                        address_spec: address_spec,
-                    }))
-                },
+                    IResult::Done(
+                        rest,
+                        Address::Mailbox(MailboxAddress {
+                            raw: raw,
+                            display_name: display_name,
+                            address_spec: address_spec,
+                        }),
+                    )
+                }
             }
         } else {
             IResult::Error(error_code!(ErrorKind::Custom(43)))
@@ -325,10 +336,7 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
     } else {
         IResult::Error(error_code!(ErrorKind::Custom(43)))
     }
-
 }
-
-
 
 fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
     if input.is_empty() || input.len() < 3 {
@@ -346,17 +354,20 @@ fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
             }
         }
         if flag {
-            IResult::Done(&input[end..], Address::Mailbox(MailboxAddress {
-                        raw: String::from_utf8_lossy(&input[0..end+1]).to_string(),
-                        display_name: StrBuilder {
-                            offset: 0,
-                            length: 0,
-                        },
-                        address_spec: StrBuilder {
-                            offset: 0,
-                            length: input[0..end+1].len(),
-                        },
-                    }))
+            IResult::Done(
+                &input[end..],
+                Address::Mailbox(MailboxAddress {
+                    raw: String::from_utf8_lossy(&input[0..end + 1]).to_string(),
+                    display_name: StrBuilder {
+                        offset: 0,
+                        length: 0,
+                    },
+                    address_spec: StrBuilder {
+                        offset: 0,
+                        length: input[0..end + 1].len(),
+                    },
+                }),
+            )
         } else {
             IResult::Error(error_code!(ErrorKind::Custom(43)))
         }
@@ -365,38 +376,42 @@ fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
     }
 }
 
-
-named!(mailbox<Address>, ws!(alt_complete!(
-            display_addr |
-            addr_spec
-            )));
+named!(
+    mailbox<Address>,
+    ws!(alt_complete!(display_addr | addr_spec))
+);
 named!(mailbox_list<Vec<Address>>, many0!(mailbox));
-
 
 #[test]
 fn test_mailbox() {
     {
-    let s = b"epilys@postretch";
-    let r = mailbox(s).unwrap().1;
-    match r {
-        Address::Mailbox(ref m) => {
-    println!("----\n`{}`, `{}`\n----", m.display_name.display(&m.raw), m.address_spec.display(&m.raw));
-        },
-        _ => {},
-    }
+        let s = b"epilys@postretch";
+        let r = mailbox(s).unwrap().1;
+        match r {
+            Address::Mailbox(ref m) => {
+                println!(
+                    "----\n`{}`, `{}`\n----",
+                    m.display_name.display(&m.raw),
+                    m.address_spec.display(&m.raw)
+                );
+            }
+            _ => {}
+        }
     }
     let s = b"Manos <epilys@postretch>";
     eprintln!("{:?}", display_addr(s).unwrap());
     let r = display_addr(s).unwrap().1;
     match r {
         Address::Mailbox(ref m) => {
-            println!("----\n`{}`, `{}`\n----", m.display_name.display(&m.raw), m.address_spec.display(&m.raw));
-        },
-        _ => {},
+            println!(
+                "----\n`{}`, `{}`\n----",
+                m.display_name.display(&m.raw),
+                m.address_spec.display(&m.raw)
+            );
+        }
+        _ => {}
     }
-
 }
-
 
 //named!(group_t<GroupAddress>, ws!( do_parse!(
 //            display_name: take_until1!(":") >>
@@ -427,28 +442,26 @@ fn group(input: &[u8]) -> IResult<&[u8], Address> {
             return IResult::Error(e);
         }
         IResult::Done(rest, vec) => {
-            let size: usize = (rest.as_ptr() as usize) -  ((&input[0..] as &[u8]).as_ptr() as usize);
-            return IResult::Done(rest, Address::Group(GroupAddress {
-                raw: String::from_utf8(input[0..size].to_vec()).unwrap(),
-                display_name: StrBuilder {
-                    offset: 0,
-                    length: dlength,
-                },
-                mailbox_list: vec,
-            }));
-        },
+            let size: usize = (rest.as_ptr() as usize) - ((&input[0..] as &[u8]).as_ptr() as usize);
+            return IResult::Done(
+                rest,
+                Address::Group(GroupAddress {
+                    raw: String::from_utf8(input[0..size].to_vec()).unwrap(),
+                    display_name: StrBuilder {
+                        offset: 0,
+                        length: dlength,
+                    },
+                    mailbox_list: vec,
+                }),
+            );
+        }
         IResult::Incomplete(i) => {
             return IResult::Incomplete(i);
-        },
+        }
     }
 }
 
-
-
-
-
-named!(address<Address>, ws!(
-            alt_complete!(mailbox | group)));
+named!(address<Address>, ws!(alt_complete!(mailbox | group)));
 
 #[test]
 fn test_address() {
@@ -456,17 +469,13 @@ fn test_address() {
             qemu-devel <qemu-devel@nongnu.org>, qemu-block <qemu-block@nongnu.org>,
             Alberto Garcia <berto@igalia.com>, Stefan Hajnoczi <stefanha@redhat.com>";
     println!("{:?}", rfc2822address_list(s).unwrap());
-
 }
-
-
 
 named!(pub rfc2822address_list<Vec<Address>>, ws!(
             separated_list!(is_a!(","), address)
 
 
             ));
-
 
 named!(pub address_list<String>, ws!(do_parse!(
         list: alt_complete!( encoded_word_list | ascii_token) >>
@@ -677,17 +686,16 @@ fn test_attachments() {
 named!(
     content_type_parameter<(&str, &str)>,
     do_parse!(
-           tag!(";") >>
-           name: terminated!(map_res!(ws!(take_until!("=")), from_utf8), tag!("=")) >>
-           value: map_res!(ws!(
-               alt_complete!(delimited!(tag!("\""), take_until!("\""), tag!("\"")) | is_not!(";"))),
-               from_utf8) >>
-           ( {
-               (name, value)
-           } )
-           )
+        tag!(";") >> name: terminated!(map_res!(ws!(take_until!("=")), from_utf8), tag!("="))
+            >> value:
+                map_res!(
+                    ws!(alt_complete!(
+                        delimited!(tag!("\""), take_until!("\""), tag!("\"")) | is_not!(";")
+                    )),
+                    from_utf8
+                ) >> ({ (name, value) })
+    )
 );
-
 
 named!(pub content_type< (&str, &str, Vec<(&str, &str)>) >,
        do_parse!(
@@ -699,7 +707,6 @@ named!(pub content_type< (&str, &str, Vec<(&str, &str)>) >,
                (_type, _subtype, parameters)
            } )
            ));
-
 
 named!(pub quoted_printable_text<String>,
    do_parse!(

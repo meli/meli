@@ -1,5 +1,5 @@
 /*! Entities that handle Mail specific functions.
-  */
+ */
 use super::*;
 
 pub mod listing;
@@ -7,14 +7,12 @@ pub mod view;
 pub use listing::*;
 pub use view::*;
 
-
 #[derive(Debug)]
 struct AccountMenuEntry {
     name: String,
     index: usize,
     entries: Vec<(usize, Folder)>,
 }
-
 
 #[derive(Debug)]
 pub struct AccountMenu {
@@ -25,8 +23,10 @@ pub struct AccountMenu {
 
 impl AccountMenu {
     pub fn new(accounts: &Vec<Account>) -> Self {
-        let accounts = accounts.iter().enumerate().map(|(i, a)| {
-            AccountMenuEntry {
+        let accounts = accounts
+            .iter()
+            .enumerate()
+            .map(|(i, a)| AccountMenuEntry {
                 name: a.name().to_string(),
                 index: i,
                 entries: {
@@ -34,9 +34,10 @@ impl AccountMenu {
                     for (idx, acc) in a.list_folders().iter().enumerate() {
                         entries.push((idx, acc.clone()));
                     }
-                    entries}
-            }
-        }).collect();
+                    entries
+                },
+            })
+            .collect();
         AccountMenu {
             accounts: accounts,
             dirty: true,
@@ -50,10 +51,9 @@ impl AccountMenu {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
+        let highlight = self.cursor.map(|(x, _)| x == a.index).unwrap_or(false);
 
-        let highlight = self.cursor.map(|(x,_)| x == a.index).unwrap_or(false);
-
-        let mut parents: Vec<Option<usize>> = vec!(None; a.entries.len());
+        let mut parents: Vec<Option<usize>> = vec![None; a.entries.len()];
 
         for (idx, e) in a.entries.iter().enumerate() {
             for c in e.1.children() {
@@ -79,15 +79,22 @@ impl AccountMenu {
             depth.push(c);
         }
 
-        fn print(root: usize, parents: &Vec<Option<usize>>, depth: &mut String, entries: &Vec<(usize, Folder)>, s: &mut String, inc: &mut usize) -> () {
+        fn print(
+            root: usize,
+            parents: &Vec<Option<usize>>,
+            depth: &mut String,
+            entries: &Vec<(usize, Folder)>,
+            s: &mut String,
+            inc: &mut usize,
+        ) -> () {
             let len = s.len();
-            s.insert_str(len, &format!("{} {}\n  ", *inc,  &entries[root].1.name()));
+            s.insert_str(len, &format!("{} {}\n  ", *inc, &entries[root].1.name()));
             *inc += 1;
             let children_no = entries[root].1.children().len();
             for (idx, child) in entries[root].1.children().iter().enumerate() {
                 let len = s.len();
                 s.insert_str(len, &format!("{}├─", depth));
-                push(depth, if idx == children_no - 1 {'│'} else { ' ' });
+                push(depth, if idx == children_no - 1 { '│' } else { ' ' });
                 print(*child, parents, depth, entries, s, inc);
                 pop(depth);
             }
@@ -128,17 +135,24 @@ impl AccountMenu {
                 Color::Default
             };
 
-            let (x, _) = write_string_to_grid(&s,
-                                         grid,
-                                         color_fg,
-                                         color_bg,
-                                         (set_y(upper_left, y), bottom_right),
-                                         false);
+            let (x, _) = write_string_to_grid(
+                &s,
+                grid,
+                color_fg,
+                color_bg,
+                (set_y(upper_left, y), bottom_right),
+                false,
+            );
 
             if highlight && idx > 1 && self.cursor.unwrap().1 == idx - 2 {
-                change_colors(grid, ((x, y),(get_x(bottom_right)+1, y)), color_fg , color_bg);
+                change_colors(
+                    grid,
+                    ((x, y), (get_x(bottom_right) + 1, y)),
+                    color_fg,
+                    color_bg,
+                );
             } else {
-                change_colors(grid, ((x, y),set_y(bottom_right, y)), color_fg , color_bg);
+                change_colors(grid, ((x, y), set_y(bottom_right, y)), color_fg, color_bg);
             }
             idx += 1;
         }
@@ -147,7 +161,6 @@ impl AccountMenu {
         } else {
             idx - 1
         }
-
     }
 }
 
@@ -162,9 +175,7 @@ impl Component for AccountMenu {
         self.dirty = false;
         let mut y = get_y(upper_left);
         for a in &self.accounts {
-            y += self.print_account(grid,
-                                    (set_y(upper_left, y), bottom_right),
-                                    &a);
+            y += self.print_account(grid, (set_y(upper_left, y), bottom_right), &a);
         }
 
         context.dirty_areas.push_back(area);
@@ -174,15 +185,14 @@ impl Component for AccountMenu {
             UIEventType::RefreshMailbox(c) => {
                 self.cursor = Some(c);
                 self.dirty = true;
-            },
+            }
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
-            },
+            }
             UIEventType::Resize => {
                 self.dirty = true;
-            },
-            _ => {
-            },
+            }
+            _ => {}
         }
     }
     fn is_dirty(&self) -> bool {

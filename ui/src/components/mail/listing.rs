@@ -27,7 +27,12 @@ impl MailListing {
     /// Helper function to format entry strings for MailListing */
     /* TODO: Make this configurable */
     fn make_entry_string(e: &Envelope, idx: usize) -> String {
-        format!("{}    {}    {:.85}",idx,&e.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),e.subject())
+        format!(
+            "{}    {}    {:.85}",
+            idx,
+            &e.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),
+            e.subject()
+        )
     }
 
     pub fn new() -> Self {
@@ -51,42 +56,52 @@ impl MailListing {
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
-        let threaded = context.accounts[self.cursor_pos.0].runtime_settings.threaded;
+        let threaded = context.accounts[self.cursor_pos.0]
+            .runtime_settings
+            .threaded;
         // Get mailbox as a reference.
-        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
+        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap();
         // Inform State that we changed the current folder view.
-        context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox((self.cursor_pos.0, self.cursor_pos.1)) });
+        context.replies.push_back(UIEvent {
+            id: 0,
+            event_type: UIEventType::RefreshMailbox((self.cursor_pos.0, self.cursor_pos.1)),
+        });
 
         self.length = if threaded {
             mailbox.threaded_collection.len()
         } else {
             mailbox.len()
         };
-        let mut content = CellBuffer::new(MAX_COLS, self.length+1, Cell::with_char(' '));
+        let mut content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         if self.length == 0 {
-            write_string_to_grid(&format!("Folder `{}` is empty.",
-                                          mailbox.folder.name()),
-                                          &mut content,
-                                          Color::Default,
-                                          Color::Default,
-                                          ((0, 0), (MAX_COLS-1, 0)),
-                                          true);
+            write_string_to_grid(
+                &format!("Folder `{}` is empty.", mailbox.folder.name()),
+                &mut content,
+                Color::Default,
+                Color::Default,
+                ((0, 0), (MAX_COLS - 1, 0)),
+                true,
+            );
             self.content = content;
             return;
         }
-
 
         // TODO: Fix the threaded hell and refactor stuff into seperate functions and/or modules.
         if threaded {
             let mut indentations: Vec<bool> = Vec::with_capacity(6);
             let mut thread_idx = 0; // needed for alternate thread colors
-            /* Draw threaded view. */
-            let mut iter = mailbox
+                                    /* Draw threaded view. */
+            let mut iter = mailbox.threaded_collection.iter().enumerate().peekable();
+            let len = mailbox
                 .threaded_collection
-                .iter()
-                .enumerate()
-                .peekable();
-            let len = mailbox.threaded_collection.len().to_string().chars().count();
+                .len()
+                .to_string()
+                .chars()
+                .count();
             /* This is just a desugared for loop so that we can use .peek() */
             while let Some((idx, i)) = iter.next() {
                 let container = mailbox.thread(*i);
@@ -98,12 +113,10 @@ impl MailListing {
 
                 assert_eq!(container.has_message(), true);
                 match iter.peek() {
-                    Some(&(_, x))
-                        if mailbox.thread(*x).indentation() == indentation =>
-                        {
-                            indentations.pop();
-                            indentations.push(true);
-                        }
+                    Some(&(_, x)) if mailbox.thread(*x).indentation() == indentation => {
+                        indentations.pop();
+                        indentations.push(true);
+                    }
                     _ => {
                         indentations.pop();
                         indentations.push(false);
@@ -113,7 +126,7 @@ impl MailListing {
                     indentations.pop();
                     indentations.push(true);
                 }
-                let envelope : &Envelope = &mailbox.collection[container.message().unwrap()];
+                let envelope: &Envelope = &mailbox.collection[container.message().unwrap()];
                 let fg_color = if !envelope.is_seen() {
                     Color::Byte(0)
                 } else {
@@ -126,43 +139,46 @@ impl MailListing {
                 } else {
                     Color::Default
                 };
-                let (x, _) = write_string_to_grid(&MailListing::make_thread_entry(envelope, idx, indentation, container, &indentations, len),
-                &mut content,
-                fg_color,
-                bg_color,
-                ((0, idx) , (MAX_COLS-1, idx)),
-                false);
+                let (x, _) = write_string_to_grid(
+                    &MailListing::make_thread_entry(
+                        envelope,
+                        idx,
+                        indentation,
+                        container,
+                        &indentations,
+                        len,
+                    ),
+                    &mut content,
+                    fg_color,
+                    bg_color,
+                    ((0, idx), (MAX_COLS - 1, idx)),
+                    false,
+                );
                 for x in x..MAX_COLS {
-                    content[(x,idx)].set_ch(' ');
-                    content[(x,idx)].set_bg(bg_color);
+                    content[(x, idx)].set_ch(' ');
+                    content[(x, idx)].set_bg(bg_color);
                 }
 
                 match iter.peek() {
-                    Some(&(_, x))
-                        if mailbox.thread(*x).indentation() > indentation =>
-                        {
-                            indentations.push(false);
+                    Some(&(_, x)) if mailbox.thread(*x).indentation() > indentation => {
+                        indentations.push(false);
+                    }
+                    Some(&(_, x)) if mailbox.thread(*x).indentation() < indentation => {
+                        for _ in 0..(indentation - mailbox.thread(*x).indentation()) {
+                            indentations.pop();
                         }
-                    Some(&(_, x))
-                        if mailbox.thread(*x).indentation() < indentation =>
-                        {
-                            for _ in 0..(indentation - mailbox.thread(*x).indentation()) {
-                                indentations.pop();
-                            }
-                        }
+                    }
                     _ => {}
                 }
             }
         } else {
-
             // Populate `CellBuffer` with every entry.
             // TODO: Lazy load?
             let mut idx = 0;
             for y in 0..=self.length {
                 if idx >= self.length {
                     /* No more entries left, so fill the rest of the area with empty space */
-                    clear_area(&mut content,
-                               ((0, y), (MAX_COLS-1, self.length)));
+                    clear_area(&mut content, ((0, y), (MAX_COLS - 1, self.length)));
                     break;
                 }
                 /* Write an entire line for each envelope entry. */
@@ -180,28 +196,35 @@ impl MailListing {
                 } else {
                     Color::Default
                 };
-                let (x, y)= write_string_to_grid(&MailListing::make_entry_string(envelope, idx),
-                &mut content,
-                fg_color,
-                bg_color,
-                ((0, y) , (MAX_COLS-1, y)), 
-                false);
+                let (x, y) = write_string_to_grid(
+                    &MailListing::make_entry_string(envelope, idx),
+                    &mut content,
+                    fg_color,
+                    bg_color,
+                    ((0, y), (MAX_COLS - 1, y)),
+                    false,
+                );
 
                 for x in x..MAX_COLS {
-                    content[(x,y)].set_ch(' ');
-                    content[(x,y)].set_bg(bg_color);
+                    content[(x, y)].set_ch(' ');
+                    content[(x, y)].set_bg(bg_color);
                 }
 
-                idx+=1;
+                idx += 1;
             }
-
         }
 
         self.content = content;
     }
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        let threaded = context.accounts[self.cursor_pos.0].runtime_settings.threaded;
-        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1].as_ref().unwrap().as_ref().unwrap();
+        let threaded = context.accounts[self.cursor_pos.0]
+            .runtime_settings
+            .threaded;
+        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .unwrap();
         let envelope: &Envelope = if threaded {
             let i = mailbox.threaded_mail(idx);
             &mailbox.collection[i]
@@ -237,7 +260,7 @@ impl MailListing {
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
             clear_area(grid, area);
-            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS-1, 0)));
+            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, 0)));
             context.dirty_areas.push_back(area);
             return;
         }
@@ -245,8 +268,7 @@ impl MailListing {
         let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
-        let top_idx = page_no*rows;
-
+        let top_idx = page_no * rows;
 
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
@@ -257,31 +279,57 @@ impl MailListing {
                 if *idx >= self.length {
                     continue; //bounds check
                 }
-                let new_area = (set_y(upper_left, get_y(upper_left)+(*idx % rows)), set_y(bottom_right, get_y(upper_left) + (*idx % rows)));
+                let new_area = (
+                    set_y(upper_left, get_y(upper_left) + (*idx % rows)),
+                    set_y(bottom_right, get_y(upper_left) + (*idx % rows)),
+                );
                 self.highlight_line(grid, new_area, *idx, context);
                 context.dirty_areas.push_back(new_area);
             }
             return;
-        }  else if self.cursor_pos != self.new_cursor_pos {
+        } else if self.cursor_pos != self.new_cursor_pos {
             self.cursor_pos = self.new_cursor_pos;
         }
 
         /* Page_no has changed, so draw new page */
-        copy_area(grid, &self.content, area, ((0, top_idx), (MAX_COLS - 1, self.length)));
-        self.highlight_line(grid, (set_y(upper_left, get_y(upper_left)+(self.cursor_pos.2 % rows)), set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows))), self.cursor_pos.2, context);
+        copy_area(
+            grid,
+            &self.content,
+            area,
+            ((0, top_idx), (MAX_COLS - 1, self.length)),
+        );
+        self.highlight_line(
+            grid,
+            (
+                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+            ),
+            self.cursor_pos.2,
+            context,
+        );
         context.dirty_areas.push_back(area);
     }
 
-    fn make_thread_entry(envelope: &Envelope, idx: usize, indent: usize,
-                         container: &Container, indentations: &Vec<bool>, idx_width: usize) -> String {
+    fn make_thread_entry(
+        envelope: &Envelope,
+        idx: usize,
+        indent: usize,
+        container: &Container,
+        indentations: &Vec<bool>,
+        idx_width: usize,
+    ) -> String {
         let has_sibling = container.has_sibling();
         let has_parent = container.has_parent();
         let show_subject = container.show_subject();
 
-        let mut s = format!("{}{}{} ", idx, " ".repeat(idx_width + 2 - (idx.to_string().chars().count())), MailListing::format_date(&envelope));
+        let mut s = format!(
+            "{}{}{} ",
+            idx,
+            " ".repeat(idx_width + 2 - (idx.to_string().chars().count())),
+            MailListing::format_date(&envelope)
+        );
         for i in 0..indent {
-            if indentations.len() > i && indentations[i]
-            {
+            if indentations.len() > i && indentations[i] {
                 s.push('│');
             } else {
                 s.push(' ');
@@ -298,7 +346,8 @@ impl MailListing {
             } else {
                 s.push('└');
             }
-            s.push('─'); s.push('>');
+            s.push('─');
+            s.push('>');
         }
 
         if show_subject {
@@ -306,7 +355,7 @@ impl MailListing {
         }
         let attach_count = envelope.body().count_attachments();
         if attach_count > 1 {
-            s.push_str(&format!(" {}∞ ", attach_count-1));
+            s.push_str(&format!(" {}∞ ", attach_count - 1));
         }
         s
     }
@@ -314,20 +363,12 @@ impl MailListing {
         let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
         let now: std::time::Duration = std::time::SystemTime::now().duration_since(d).unwrap();
         match now.as_secs() {
-            n if n < 10*60*60 => {
-                format!("{} hours ago{}", n / (60*60), " ".repeat(8))
-            },
-            n if n < 24*60*60 => {
-                format!("{} hours ago{}", n / (60*60), " ".repeat(7))
-            },
-            n if n < 4*24*60*60 => {
-                format!("{} days ago{}", n / (24*60*60), " ".repeat(9))
-            },
-            _ => {
-                envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string()
-            },
-
-
+            n if n < 10 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(8)),
+            n if n < 24 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(7)),
+            n if n < 4 * 24 * 60 * 60 => {
+                format!("{} days ago{}", n / (24 * 60 * 60), " ".repeat(9))
+            }
+            _ => envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),
         }
     }
 }
@@ -352,7 +393,7 @@ impl Component for MailListing {
             /* Render the mail body in a pager, basically copy what HSplit does */
             let total_rows = get_y(bottom_right) - get_y(upper_left);
             let pager_ratio = context.runtime_settings.pager.pager_ratio;
-            let bottom_entity_rows = (pager_ratio*total_rows )/100;
+            let bottom_entity_rows = (pager_ratio * total_rows) / 100;
 
             if bottom_entity_rows > total_rows {
                 clear_area(grid, area);
@@ -360,9 +401,14 @@ impl Component for MailListing {
                 return;
             }
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
-            self.draw_list(grid,
-                           (upper_left, (get_x(bottom_right), get_y(upper_left)+ mid-1)),
-                           context);
+            self.draw_list(
+                grid,
+                (
+                    upper_left,
+                    (get_x(bottom_right), get_y(upper_left) + mid - 1),
+                ),
+                context,
+            );
             if self.length == 0 {
                 self.dirty = false;
                 return;
@@ -378,16 +424,22 @@ impl Component for MailListing {
                 for i in get_x(upper_left)..=get_x(bottom_right) {
                     grid[(i, mid)].set_ch('─');
                 }
-                context.dirty_areas.push_back((set_y(upper_left, mid), set_y(bottom_right, mid)));
+                context
+                    .dirty_areas
+                    .push_back((set_y(upper_left, mid), set_y(bottom_right, mid)));
             }
             // TODO: Make headers view configurable
 
             if !self.dirty {
-                self.view.as_mut().map(|v| v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context));
+                self.view
+                    .as_mut()
+                    .map(|v| v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context));
                 return;
             }
             self.view = Some(MailView::new(self.cursor_pos, None, None));
-            self.view.as_mut().map(|v| v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context));
+            self.view
+                .as_mut()
+                .map(|v| v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context));
             self.dirty = false;
         }
     }
@@ -398,17 +450,17 @@ impl Component for MailListing {
                     self.new_cursor_pos.2 -= 1;
                     self.dirty = true;
                 }
-            },
+            }
             UIEventType::Input(Key::Down) => {
                 if self.length > 0 && self.new_cursor_pos.2 < self.length - 1 {
                     self.new_cursor_pos.2 += 1;
                     self.dirty = true;
                 }
-            },
+            }
             UIEventType::Input(Key::Char('\n')) if self.unfocused == false => {
                 self.unfocused = true;
                 self.dirty = true;
-            },
+            }
             UIEventType::Input(Key::Char('m')) if self.unfocused == false => {
                 use std::process::{Command, Stdio};
                 /* Kill input thread so that spawned command can be sole receiver of stdin */
@@ -446,16 +498,21 @@ impl Component for MailListing {
                  * Main loop will wait on children and when they reap them the loop spawns a new
                  * input-thread
                  */
-                context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::Fork(ForkType::NewDraft(f, output)) });
-                context.replies.push_back(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Fork) });
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::Fork(ForkType::NewDraft(f, output)),
+                });
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::ChangeMode(UIMode::Fork),
+                });
                 return;
-            },
+            }
             UIEventType::Input(Key::Char('i')) if self.unfocused == true => {
                 self.unfocused = false;
                 self.dirty = true;
                 self.view = None;
-
-            },
+            }
             UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
                 let folder_length = context.accounts[self.cursor_pos.0].len();
                 let accounts_length = context.accounts.len();
@@ -465,29 +522,29 @@ impl Component for MailListing {
                             self.new_cursor_pos.1 = self.cursor_pos.1 + 1;
                             self.dirty = true;
                             self.refresh_mailbox(context);
-                        } else  if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1  {
+                        } else if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1
+                        {
                             self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
                             self.new_cursor_pos.1 = 0;
                             self.dirty = true;
                             self.refresh_mailbox(context);
                         }
-                    },
+                    }
                     'K' => {
                         if self.cursor_pos.1 > 0 {
                             self.new_cursor_pos.1 = self.cursor_pos.1 - 1;
                             self.dirty = true;
                             self.refresh_mailbox(context);
-                        } else if self.cursor_pos.0 > 0  {
+                        } else if self.cursor_pos.0 > 0 {
                             self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
                             self.new_cursor_pos.1 = 0;
                             self.dirty = true;
                             self.refresh_mailbox(context);
                         }
-                    },
-                    _ => {
-                    },
+                    }
+                    _ => {}
                 }
-            },
+            }
             UIEventType::Input(Key::Char(k @ 'h')) | UIEventType::Input(Key::Char(k @ 'l')) => {
                 let accounts_length = context.accounts.len();
                 match k {
@@ -496,40 +553,38 @@ impl Component for MailListing {
                         self.new_cursor_pos.1 = 0;
                         self.dirty = true;
                         self.refresh_mailbox(context);
-                    },
+                    }
                     'l' if self.cursor_pos.0 > 0 => {
                         self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
                         self.new_cursor_pos.1 = 0;
                         self.dirty = true;
                         self.refresh_mailbox(context);
-                    },
-                    _ => {
-                    },
+                    }
+                    _ => {}
                 }
-            },
+            }
             UIEventType::RefreshMailbox(_) => {
                 self.dirty = true;
                 self.view = None;
-            },
+            }
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
-            },
+            }
             UIEventType::Resize => {
                 self.dirty = true;
-            },
-            UIEventType::Action(ref action) => {
-                match action {
-                    Action::MailListing(MailListingAction::ToggleThreaded) => {
-                        context.accounts[self.cursor_pos.0].runtime_settings.threaded = !context.accounts[self.cursor_pos.0].runtime_settings.threaded;
-                        self.refresh_mailbox(context);
-                        self.dirty = true;
-
-
-                    },
+            }
+            UIEventType::Action(ref action) => match action {
+                Action::MailListing(MailListingAction::ToggleThreaded) => {
+                    context.accounts[self.cursor_pos.0]
+                        .runtime_settings
+                        .threaded = !context.accounts[self.cursor_pos.0]
+                        .runtime_settings
+                        .threaded;
+                    self.refresh_mailbox(context);
+                    self.dirty = true;
                 }
             },
-            _ => {
-            },
+            _ => {}
         }
         if let Some(ref mut v) = self.view {
             v.process_event(event, context);

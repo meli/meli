@@ -19,7 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 /*!
   The UI crate has an Entity-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
 
@@ -38,10 +37,10 @@ pub use helpers::*;
 
 #[macro_use]
 mod execute;
-use execute::goto;
-pub use self::position::*;
 use self::cells::*;
 pub use self::components::*;
+pub use self::position::*;
+use execute::goto;
 
 extern crate melib;
 extern crate mime_apps;
@@ -53,15 +52,15 @@ extern crate linkify;
 extern crate uuid;
 use melib::*;
 
-use std::io::{Write, };
 use std::collections::VecDeque;
 use std::fmt;
+use std::io::Write;
 extern crate termion;
-use termion::{clear, style, cursor};
-use termion::raw::IntoRawMode;
-use termion::event::{Key as TermionKey, };
+use termion::event::Key as TermionKey;
 use termion::input::TermRead;
+use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
+use termion::{clear, cursor, style};
 
 #[macro_use]
 extern crate nom;
@@ -79,7 +78,9 @@ pub enum ThreadEvent {
     /// User input.
     Input(Key),
     /// A watched folder has been refreshed.
-    RefreshMailbox{ name: String },
+    RefreshMailbox {
+        name: String,
+    },
     UIEventType(UIEventType),
     //Decode { _ }, // For gpg2 signature check
 }
@@ -96,12 +97,11 @@ pub enum ForkType {
     NewDraft(File, std::process::Child),
 }
 
-
 #[derive(Debug)]
 pub enum UIEventType {
     Input(Key),
     ExInput(Key),
-    RefreshMailbox((usize,usize)),
+    RefreshMailbox((usize, usize)),
     //Quit?
     Resize,
     /// Force redraw.
@@ -114,7 +114,6 @@ pub enum UIEventType {
     Action(Action),
     StatusNotification(String),
 }
-
 
 /// An event passed from `State` to its Entities.
 #[derive(Debug)]
@@ -132,11 +131,15 @@ pub enum UIMode {
 
 impl fmt::Display for UIMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match *self {
-            UIMode::Normal => { "NORMAL" },
-            UIMode::Execute => { "EX" },
-            UIMode::Fork => { "FORK" },
-        })
+        write!(
+            f,
+            "{}",
+            match *self {
+                UIMode::Normal => "NORMAL",
+                UIMode::Execute => "EX",
+                UIMode::Fork => "FORK",
+            }
+        )
     }
 }
 
@@ -173,7 +176,6 @@ impl Context {
     }
 }
 
-
 /// A State object to manage and own components and entities of the UI. `State` is responsible for
 /// managing the terminal and interfacing with `melib`
 pub struct State<W: Write> {
@@ -187,13 +189,19 @@ pub struct State<W: Write> {
     sender: Sender<ThreadEvent>,
     entities: Vec<Entity>,
     pub context: Context,
-
 }
 
 impl<W: Write> Drop for State<W> {
     fn drop(&mut self) {
         // When done, restore the defaults to avoid messing with the terminal.
-        write!(self.stdout(), "{}{}{}{}", clear::All, style::Reset, cursor::Goto(1, 1), cursor::Show).unwrap();
+        write!(
+            self.stdout(),
+            "{}{}{}{}",
+            clear::All,
+            style::Reset,
+            cursor::Goto(1, 1),
+            cursor::Show
+        ).unwrap();
         self.flush();
     }
 }
@@ -207,12 +215,16 @@ impl State<std::io::Stdout> {
         let stdout = AlternateScreen::from(_stdout.into_raw_mode().unwrap());
 
         let termsize = termion::terminal_size().ok();
-        let termcols = termsize.map(|(w,_)| w);
-        let termrows = termsize.map(|(_,h)| h);
+        let termcols = termsize.map(|(w, _)| w);
+        let termrows = termsize.map(|(_, h)| h);
         let cols = termcols.unwrap_or(0) as usize;
         let rows = termrows.unwrap_or(0) as usize;
-        let mut accounts: Vec<Account> = settings.accounts.iter().map(|(n, a_s)| { Account::new(n.to_string(), a_s.clone(), &backends) }).collect();
-        accounts.sort_by(|a,b| a.name().cmp(&b.name()) );
+        let mut accounts: Vec<Account> = settings
+            .accounts
+            .iter()
+            .map(|(n, a_s)| Account::new(n.to_string(), a_s.clone(), &backends))
+            .collect();
+        accounts.sort_by(|a, b| a.name().cmp(&b.name()));
         let mut s = State {
             cols: cols,
             rows: rows,
@@ -222,7 +234,6 @@ impl State<std::io::Stdout> {
             mode: UIMode::Normal,
             sender: sender,
             entities: Vec::with_capacity(1),
-
 
             context: Context {
                 accounts: accounts,
@@ -235,19 +246,29 @@ impl State<std::io::Stdout> {
                 input_thread: input_thread,
             },
         };
-        write!(s.stdout(), "{}{}{}", cursor::Hide, clear::All, cursor::Goto(1,1)).unwrap();
+        write!(
+            s.stdout(),
+            "{}{}{}",
+            cursor::Hide,
+            clear::All,
+            cursor::Goto(1, 1)
+        ).unwrap();
         s.flush();
         for account in &mut s.context.accounts {
             let sender = s.sender.clone();
             account.watch(RefreshEventConsumer::new(Box::new(move |r| {
                 sender.send(ThreadEvent::from(r));
             })));
-
         }
         s
     }
     pub fn to_main_screen(&mut self) {
-        write!(self.stdout(), "{}{}", termion::screen::ToMainScreen, cursor::Show).unwrap();
+        write!(
+            self.stdout(),
+            "{}{}",
+            termion::screen::ToMainScreen,
+            cursor::Show
+        ).unwrap();
         self.flush();
         self.stdout = None;
         self.context.input_thread.send(false);
@@ -257,24 +278,36 @@ impl State<std::io::Stdout> {
         s.lock();
         self.stdout = Some(AlternateScreen::from(s.into_raw_mode().unwrap()));
 
-        write!(self.stdout(), "{}{}", termion::screen::ToAlternateScreen, cursor::Hide).unwrap();
+        write!(
+            self.stdout(),
+            "{}{}",
+            termion::screen::ToAlternateScreen,
+            cursor::Hide
+        ).unwrap();
         self.flush();
     }
 }
 impl<W: Write> State<W> {
     pub fn update_size(&mut self) {
         let termsize = termion::terminal_size().ok();
-        let termcols = termsize.map(|(w,_)| w);
-        let termrows = termsize.map(|(_,h)| h);
-        if termcols.unwrap_or(72) as usize  != self.cols || termrows.unwrap_or(120) as usize != self.rows {
-            eprintln!("Size updated, from ({}, {}) -> ({:?}, {:?})", self.cols, self.rows, termcols, termrows);
-
+        let termcols = termsize.map(|(w, _)| w);
+        let termrows = termsize.map(|(_, h)| h);
+        if termcols.unwrap_or(72) as usize != self.cols
+            || termrows.unwrap_or(120) as usize != self.rows
+        {
+            eprintln!(
+                "Size updated, from ({}, {}) -> ({:?}, {:?})",
+                self.cols, self.rows, termcols, termrows
+            );
         }
         self.cols = termcols.unwrap_or(72) as usize;
         self.rows = termrows.unwrap_or(120) as usize;
         self.grid.resize(self.cols, self.rows, Cell::with_char(' '));
 
-        self.rcv_event(UIEvent { id: 0, event_type: UIEventType::Resize });
+        self.rcv_event(UIEvent {
+            id: 0,
+            event_type: UIEventType::Resize,
+        });
     }
 
     pub fn redraw(&mut self) {
@@ -292,9 +325,13 @@ impl<W: Write> State<W> {
         let bottom_right = bottom_right!(area);
 
         for y in get_y(upper_left)..=get_y(bottom_right) {
-            write!(self.stdout(), "{}", cursor::Goto(get_x(upper_left) as u16 + 1,(y+1) as u16)).unwrap();
+            write!(
+                self.stdout(),
+                "{}",
+                cursor::Goto(get_x(upper_left) as u16 + 1, (y + 1) as u16)
+            ).unwrap();
             for x in get_x(upper_left)..=get_x(bottom_right) {
-                let c = self.grid[(x,y)];
+                let c = self.grid[(x, y)];
 
                 if c.bg() != cells::Color::Default {
                     write!(self.stdout(), "{}", termion::color::Bg(c.bg().as_termion())).unwrap();
@@ -302,14 +339,21 @@ impl<W: Write> State<W> {
                 if c.fg() != cells::Color::Default {
                     write!(self.stdout(), "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
                 }
-                write!(self.stdout(), "{}",c.ch()).unwrap();
+                write!(self.stdout(), "{}", c.ch()).unwrap();
                 if c.bg() != cells::Color::Default {
-                    write!(self.stdout(), "{}", termion::color::Bg(termion::color::Reset)).unwrap();
+                    write!(
+                        self.stdout(),
+                        "{}",
+                        termion::color::Bg(termion::color::Reset)
+                    ).unwrap();
                 }
                 if c.fg() != cells::Color::Default {
-                    write!(self.stdout(), "{}", termion::color::Fg(termion::color::Reset)).unwrap();
+                    write!(
+                        self.stdout(),
+                        "{}",
+                        termion::color::Fg(termion::color::Reset)
+                    ).unwrap();
                 }
-
             }
         }
         self.flush();
@@ -324,17 +368,19 @@ impl<W: Write> State<W> {
         let cols = self.cols;
         let rows = self.rows;
 
-        self.draw_area(((0, 0), (cols-1, rows-1)));
+        self.draw_area(((0, 0), (cols - 1, rows - 1)));
     }
     pub fn draw_entity(&mut self, idx: usize) {
         let entity = &mut self.entities[idx];
-        let upper_left =  (0,0);
-        let bottom_right = (self.cols-1, self.rows-1);
+        let upper_left = (0, 0);
+        let bottom_right = (self.cols - 1, self.rows - 1);
 
         if entity.component.is_dirty() {
-            entity.component.draw(&mut self.grid,
-                                  (upper_left, bottom_right),
-                                  &mut self.context);
+            entity.component.draw(
+                &mut self.grid,
+                (upper_left, bottom_right),
+                &mut self.context,
+            );
         }
     }
     pub fn register_entity(&mut self, entity: Entity) {
@@ -357,22 +403,22 @@ impl<W: Write> State<W> {
             UIEventType::Command(cmd) => {
                 self.parse_command(cmd);
                 return;
-            },
+            }
             UIEventType::Fork(child) => {
                 self.mode = UIMode::Fork;
                 self.child = Some(child);
                 self.flush();
                 return;
-            },
+            }
             UIEventType::EditDraft(mut file) => {
-                use std::process::{Command, Stdio};
                 use std::io::Read;
+                use std::process::{Command, Stdio};
                 let mut output = Command::new("msmtp")
                     .arg("-t")
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
-                    .expect("failed to execute process") ;
+                    .expect("failed to execute process");
                 {
                     let mut in_pipe = output.stdin.as_mut().unwrap();
                     let mut buf = Vec::new();
@@ -385,13 +431,20 @@ impl<W: Write> State<W> {
                 output.wait_with_output().expect("Failed to read stdout");
 
                 return;
+            }
+            UIEventType::Input(Key::Char('t')) => for i in 0..self.entities.len() {
+                self.entities[i].rcv_event(
+                    &UIEvent {
+                        id: 0,
+                        event_type: UIEventType::Action(Action::MailListing(
+                            MailListingAction::ToggleThreaded,
+                        )),
+                    },
+                    &mut self.context,
+                );
             },
-            UIEventType::Input(Key::Char('t')) =>
-                for i in 0..self.entities.len() {
-                    self.entities[i].rcv_event(&UIEvent{ id: 0, event_type: UIEventType::Action(Action::MailListing(MailListingAction::ToggleThreaded)) }, &mut self.context);
-                }
 
-            _ => {},
+            _ => {}
         }
         /* inform each entity */
         for i in 0..self.entities.len() {
@@ -402,45 +455,56 @@ impl<W: Write> State<W> {
     /// Tries to load a mailbox's content
     pub fn refresh_mailbox(&mut self, account_idx: usize, folder_idx: usize) {
         let flag = match &mut self.context.accounts[account_idx][folder_idx] {
-            Some(Ok(_)) => {
-                true
-            },
-            Some(Err(e)) => { eprintln!("error {:?}", e); false },
-            None => {  eprintln!("None"); false },
+            Some(Ok(_)) => true,
+            Some(Err(e)) => {
+                eprintln!("error {:?}", e);
+                false
+            }
+            None => {
+                eprintln!("None");
+                false
+            }
         };
         if flag {
-
-            self.rcv_event(UIEvent { id: 0, event_type: UIEventType::RefreshMailbox((account_idx, folder_idx)) });
+            self.rcv_event(UIEvent {
+                id: 0,
+                event_type: UIEventType::RefreshMailbox((account_idx, folder_idx)),
+            });
         }
     }
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
         if {
             match self.child {
-                Some(ForkType::NewDraft(_,ref mut c)) => {
+                Some(ForkType::NewDraft(_, ref mut c)) => {
                     let mut w = c.try_wait();
                     match w {
-                        Ok(Some(_)) => { true },
-                        Ok(None) => { false },
-                        Err(_) => { return None; },
+                        Ok(Some(_)) => true,
+                        Ok(None) => false,
+                        Err(_) => {
+                            return None;
+                        }
                     }
-                },
+                }
                 Some(ForkType::Generic(ref mut c)) => {
                     let mut w = c.try_wait();
                     match w {
-                        Ok(Some(_)) => { true },
-                        Ok(None) => { false },
-                        Err(_) => { return None; },
+                        Ok(Some(_)) => true,
+                        Ok(None) => false,
+                        Err(_) => {
+                            return None;
+                        }
                     }
-                },
+                }
                 _ => {
                     return None;
                 }
             }
-        }
-        {
+        } {
             if let Some(ForkType::NewDraft(f, _)) = std::mem::replace(&mut self.child, None) {
-                self.rcv_event(UIEvent { id: 0, event_type: UIEventType::EditDraft(f) });
-
+                self.rcv_event(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::EditDraft(f),
+                });
             }
             return Some(true);
         }
@@ -448,14 +512,11 @@ impl<W: Write> State<W> {
     }
     fn flush(&mut self) {
         self.stdout.as_mut().map(|s| s.flush().unwrap());
-
     }
     fn stdout(&mut self) -> &mut termion::screen::AlternateScreen<termion::raw::RawTerminal<W>> {
         self.stdout.as_mut().unwrap()
-
     }
 }
-
 
 #[derive(Debug)]
 pub enum Key {
@@ -499,9 +560,8 @@ pub enum Key {
     Esc,
 }
 
-
 impl From<TermionKey> for Key {
-    fn from(k: TermionKey ) -> Self {
+    fn from(k: TermionKey) -> Self {
         match k {
             TermionKey::Backspace => Key::Backspace,
             TermionKey::Left => Key::Left,
@@ -525,7 +585,6 @@ impl From<TermionKey> for Key {
     }
 }
 
-
 /*
  * If we fork (for example start $EDITOR) we want the input-thread to stop reading from stdin. The
  * best way I came up with right now is to send a signal to the thread that is read in the first
@@ -534,7 +593,12 @@ impl From<TermionKey> for Key {
  *
  * The main loop uses try_wait_on_child() to check if child has exited.
  */
-pub fn get_events(stdin: std::io::Stdin, mut closure: impl FnMut(Key), mut exit: impl FnMut(), rx: chan::Receiver<bool>) -> (){
+pub fn get_events(
+    stdin: std::io::Stdin,
+    mut closure: impl FnMut(Key),
+    mut exit: impl FnMut(),
+    rx: chan::Receiver<bool>,
+) -> () {
     for c in stdin.keys() {
         chan_select! {
             default => {},

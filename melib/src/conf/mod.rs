@@ -20,18 +20,16 @@
  */
 
 extern crate config;
-extern crate xdg;
 extern crate serde;
+extern crate xdg;
 pub mod pager;
-
 
 use pager::PagerSettings;
 
-
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
+use std::collections::HashMap;
 use std::fs;
+use std::hash::Hasher;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default, Clone)]
@@ -64,7 +62,6 @@ impl Folder {
     }
 }
 
-
 #[derive(Debug, Deserialize)]
 struct FileAccount {
     folders: String,
@@ -72,7 +69,6 @@ struct FileAccount {
     sent_folder: String,
     threaded: bool,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct FileSettings {
@@ -104,7 +100,6 @@ pub struct Settings {
     pub pager: PagerSettings,
 }
 
-
 use self::config::{Config, File, FileFormat};
 impl FileSettings {
     pub fn new() -> FileSettings {
@@ -117,7 +112,7 @@ impl FileSettings {
         let s = s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml));
 
         // TODO: Return result
-            s.unwrap().deserialize().unwrap()
+        s.unwrap().deserialize().unwrap()
     }
 }
 
@@ -134,16 +129,20 @@ impl Settings {
                     for f in f.iter_mut() {
                         {
                             let path = f.path();
-                            if path.ends_with("cur") || path.ends_with("new") ||
-                                path.ends_with("tmp")
+                            if path.ends_with("cur")
+                                || path.ends_with("new")
+                                || path.ends_with("tmp")
                             {
                                 continue;
                             }
                             if path.is_dir() {
                                 let path_children = recurse_folders(folders, &path);
-                                folders.push(Folder::new(path.to_str().unwrap().to_string(), path.file_name().unwrap().to_str().unwrap().to_string(), path_children));
-                                children.push(folders.len()-1);
-
+                                folders.push(Folder::new(
+                                    path.to_str().unwrap().to_string(),
+                                    path.file_name().unwrap().to_str().unwrap().to_string(),
+                                    path_children,
+                                ));
+                                children.push(folders.len() - 1);
                             }
                         }
                     }
@@ -153,7 +152,11 @@ impl Settings {
             let path = PathBuf::from(&x.folders);
             let path_children = recurse_folders(&mut folders, &path);
             if path.is_dir() {
-                folders.push(Folder::new(path.to_str().unwrap().to_string(), path.file_name().unwrap().to_str().unwrap().to_string(), path_children));
+                folders.push(Folder::new(
+                    path.to_str().unwrap().to_string(),
+                    path.file_name().unwrap().to_str().unwrap().to_string(),
+                    path_children,
+                ));
             }
             //folders.sort_by(|a, b| b.name.cmp(&a.name));
             s.insert(
@@ -168,6 +171,9 @@ impl Settings {
             );
         }
 
-        Settings { accounts: s, pager: fs.pager }
+        Settings {
+            accounts: s,
+            pager: fs.pager,
+        }
     }
 }

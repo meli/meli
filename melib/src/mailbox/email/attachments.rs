@@ -40,60 +40,39 @@ pub enum MultipartType {
     Unsupported { tag: String },
 }
 
-
 impl Display for MultipartType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            MultipartType::Mixed => {
-                write!(f, "multipart/mixed")
-            },
-            MultipartType::Alternative => {
-                write!(f, "multipart/alternative")
-            },
-            MultipartType::Digest => {
-                write!(f, "multipart/digest")
-            },
-            MultipartType::Unsupported { tag: ref t } => {
-                write!(f, "multipart/{}", t)
-            },
+            MultipartType::Mixed => write!(f, "multipart/mixed"),
+            MultipartType::Alternative => write!(f, "multipart/alternative"),
+            MultipartType::Digest => write!(f, "multipart/digest"),
+            MultipartType::Unsupported { tag: ref t } => write!(f, "multipart/{}", t),
         }
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub enum AttachmentType {
-    Data { tag: String },
-    Text { content: String },
+    Data {
+        tag: String,
+    },
+    Text {
+        content: String,
+    },
     Multipart {
         of_type: MultipartType,
         subattachments: Vec<Attachment>,
     },
 }
 
-
 impl Display for AttachmentType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            AttachmentType::Data { tag: ref t } => {
-                write!(f, "{}", t)
-            },
-            AttachmentType::Text { content: ref c } => {
-                write!(f, "{}", c)
-            },
-            AttachmentType::Multipart { of_type: ref t, .. } => {
-                write!(f, "{}", t)
-
-            },
-
-
+            AttachmentType::Data { tag: ref t } => write!(f, "{}", t),
+            AttachmentType::Text { content: ref c } => write!(f, "{}", c),
+            AttachmentType::Multipart { of_type: ref t, .. } => write!(f, "{}", t),
         }
-
-
     }
-
-
-
 }
 #[derive(Clone, Debug)]
 pub enum ContentType {
@@ -207,32 +186,33 @@ impl AttachmentBuilder {
     fn decode(&self) -> String {
         // TODO: Use charset for decoding
         match self.content_transfer_encoding {
-            ContentTransferEncoding::Base64 => {
-                match BASE64_MIME.decode(str::from_utf8(&self.raw)
+            ContentTransferEncoding::Base64 => match BASE64_MIME.decode(
+                str::from_utf8(&self.raw)
                     .unwrap()
                     .trim()
                     .lines()
                     .fold(String::with_capacity(self.raw.len()), |mut acc, x| {
                         acc.push_str(x);
                         acc
-                    }).as_bytes()) {
-                    Ok(ref v) => {
-                        let s = String::from_utf8_lossy(v);
-                        if s.find("\r\n").is_some() {
-                            s.replace("\r\n", "\n")
-                        } else {
-                            s.into_owned()
-                        }
+                    })
+                    .as_bytes(),
+            ) {
+                Ok(ref v) => {
+                    let s = String::from_utf8_lossy(v);
+                    if s.find("\r\n").is_some() {
+                        s.replace("\r\n", "\n")
+                    } else {
+                        s.into_owned()
                     }
-                    _ => String::from_utf8_lossy(&self.raw).into_owned(),
                 }
-            }
+                _ => String::from_utf8_lossy(&self.raw).into_owned(),
+            },
             ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_text(&self.raw)
-                                                        .to_full_result()
-                                                        .unwrap(),
-            ContentTransferEncoding::_7Bit |
-            ContentTransferEncoding::_8Bit |
-            ContentTransferEncoding::Other { .. } => {
+                .to_full_result()
+                .unwrap(),
+            ContentTransferEncoding::_7Bit
+            | ContentTransferEncoding::_8Bit
+            | ContentTransferEncoding::Other { .. } => {
                 String::from_utf8_lossy(&self.raw).into_owned()
             }
         }
@@ -310,7 +290,6 @@ impl AttachmentBuilder {
     }
 }
 
-
 #[derive(Clone, Debug)]
 pub struct Attachment {
     content_type: (ContentType, ContentSubType),
@@ -327,19 +306,20 @@ impl Display for Attachment {
             AttachmentType::Data { .. } => {
                 write!(f, "Data attachment of type {}", self.mime_type())
             }
-            AttachmentType::Text { .. } => {
-                write!(f, "Text attachment")
-            }
+            AttachmentType::Text { .. } => write!(f, "Text attachment"),
             AttachmentType::Multipart {
                 of_type: ref multipart_type,
                 subattachments: ref sub_att_vec,
             } => if *multipart_type == MultipartType::Alternative {
-                write!(f, "Multipart/alternative attachment with {} subs", sub_att_vec.len())
+                write!(
+                    f,
+                    "Multipart/alternative attachment with {} subs",
+                    sub_att_vec.len()
+                )
             } else {
                 write!(f, "Multipart attachment with {} subs", sub_att_vec.len())
             },
         }
-
     }
 }
 
@@ -388,9 +368,7 @@ impl Attachment {
         let mut ret = Vec::new();
         fn count_recursive(att: &Attachment, ret: &mut Vec<Attachment>) {
             match att.attachment_type {
-                AttachmentType::Data { .. } | AttachmentType::Text { .. } => {
-                    ret.push(att.clone())
-                }
+                AttachmentType::Data { .. } | AttachmentType::Text { .. } => ret.push(att.clone()),
                 AttachmentType::Multipart {
                     of_type: ref multipart_type,
                     subattachments: ref sub_att_vec,
@@ -405,8 +383,6 @@ impl Attachment {
 
         count_recursive(&self, &mut ret);
         ret
-
-
     }
     pub fn count_attachments(&self) -> usize {
         self.attachments().len()
@@ -422,7 +398,6 @@ impl Attachment {
     }
 }
 
-
 pub fn interpret_format_flowed(_t: &str) -> String {
     //let mut n = String::with_capacity(t.len());
     unimplemented!()
@@ -431,19 +406,15 @@ pub fn interpret_format_flowed(_t: &str) -> String {
 pub fn decode(a: &Attachment) -> Vec<u8> {
     // TODO: Use charset for decoding
     match a.content_transfer_encoding {
-        ContentTransferEncoding::Base64 => {
-            match BASE64_MIME.decode(a.bytes()) {
-                Ok(v) => {
-                    v
-                }
-                _ => a.bytes().to_vec(),
-            }
-        }
-        ContentTransferEncoding::QuotedPrintable => parser::quoted_printed_bytes(&a.bytes()).to_full_result() .unwrap(),
-            ContentTransferEncoding::_7Bit |
-                ContentTransferEncoding::_8Bit |
-                ContentTransferEncoding::Other { .. } => {
-                    a.bytes().to_vec()
-                }
+        ContentTransferEncoding::Base64 => match BASE64_MIME.decode(a.bytes()) {
+            Ok(v) => v,
+            _ => a.bytes().to_vec(),
+        },
+        ContentTransferEncoding::QuotedPrintable => parser::quoted_printed_bytes(&a.bytes())
+            .to_full_result()
+            .unwrap(),
+        ContentTransferEncoding::_7Bit
+        | ContentTransferEncoding::_8Bit
+        | ContentTransferEncoding::Other { .. } => a.bytes().to_vec(),
     }
 }

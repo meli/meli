@@ -2,12 +2,11 @@
   Define a (x, y) point in the terminal display as a holder of a character, foreground/background
   colors and attributes.
  */
-use std::ops::{Index, IndexMut, Deref, DerefMut};
+use super::position::*;
 use std::convert::From;
 use std::fmt;
-use super::position::*;
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 use termion::color::AnsiValue;
-
 
 /// Types and implementations taken from rustty for convenience.
 
@@ -180,7 +179,7 @@ impl fmt::Display for CellBuffer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         '_y: for y in 0..self.rows {
             '_x: for x in 0..self.cols {
-                let c: &char = &self[(x,y)].ch();
+                let c: &char = &self[(x, y)].ch();
                 write!(f, "{}", *c).unwrap();
                 if *c == '\n' {
                     continue '_y;
@@ -444,15 +443,17 @@ impl Color {
 
     pub fn as_termion(&self) -> AnsiValue {
         match *self {
-            b @ Color::Black | b @ Color::Red | b @ Color::Green | b @ Color::Yellow | b @ Color::Blue | b @ Color::Magenta | b @ Color::Cyan | b @ Color::White | b @ Color::Default =>
-            {
-                AnsiValue(b.as_byte())
-            },
-            Color::Byte(b) => {
-                AnsiValue(b as u8)
-            },
+            b @ Color::Black
+            | b @ Color::Red
+            | b @ Color::Green
+            | b @ Color::Yellow
+            | b @ Color::Blue
+            | b @ Color::Magenta
+            | b @ Color::Cyan
+            | b @ Color::White
+            | b @ Color::Default => AnsiValue(b.as_byte()),
+            Color::Byte(b) => AnsiValue(b as u8),
         }
-
     }
 }
 

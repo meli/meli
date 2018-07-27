@@ -20,8 +20,8 @@
  */
 use std::error::Error;
 use std::fmt;
-use std::result;
 use std::io;
+use std::result;
 
 use nom;
 

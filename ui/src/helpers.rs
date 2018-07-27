@@ -1,6 +1,6 @@
 use std;
-use std::path::PathBuf;
 use std::io::Write;
+use std::path::PathBuf;
 
 use uuid::Uuid;
 
@@ -8,7 +8,6 @@ use uuid::Uuid;
 pub struct File {
     path: PathBuf,
 }
-
 
 impl File {
     pub fn file(&mut self) -> std::fs::File {
@@ -19,7 +18,6 @@ impl File {
     }
 }
 
-
 //TODO: add temp files to a list to reap them when dropped
 pub fn create_temp_file(bytes: &[u8], filename: Option<&PathBuf>) -> File {
     let mut dir = std::env::temp_dir();
@@ -28,7 +26,10 @@ pub fn create_temp_file(bytes: &[u8], filename: Option<&PathBuf>) -> File {
         p
     } else {
         dir.push("meli");
-        std::fs::DirBuilder::new().recursive(true).create(&dir).unwrap();
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .create(&dir)
+            .unwrap();
         let u = Uuid::new_v4();
         dir.push(u.hyphenated().to_string());
         &dir
@@ -38,8 +39,5 @@ pub fn create_temp_file(bytes: &[u8], filename: Option<&PathBuf>) -> File {
 
     f.write(bytes).unwrap();
     f.flush().unwrap();
-    File {
-        path: path.clone(),
-    }
+    File { path: path.clone() }
 }
-

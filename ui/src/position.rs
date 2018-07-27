@@ -28,22 +28,28 @@ pub fn set_y(p: Pos, new_y: usize) -> Pos {
 pub type Area = (Pos, Pos);
 
 #[macro_export]
-macro_rules! upper_left { ($a:expr) => ( $a.0 ) }
+macro_rules! upper_left {
+    ($a:expr) => {
+        $a.0
+    };
+}
 #[macro_export]
-macro_rules! bottom_right { ($a:expr) => ( $a.1 ) }
+macro_rules! bottom_right {
+    ($a:expr) => {
+        $a.1
+    };
+}
 #[macro_export]
-macro_rules! is_valid_area { ($a:expr) =>
-    {
-        {
-            let upper_left = upper_left!($a);
-            let bottom_right = bottom_right!($a);
-            if get_y(upper_left) > get_y(bottom_right) || get_x(upper_left) > get_x(bottom_right) {
-                false
-            } else {
-                true
-            }
+macro_rules! is_valid_area {
+    ($a:expr) => {{
+        let upper_left = upper_left!($a);
+        let bottom_right = bottom_right!($a);
+        if get_y(upper_left) > get_y(bottom_right) || get_x(upper_left) > get_x(bottom_right) {
+            false
+        } else {
+            true
         }
-    }
+    }};
 }
 
 /// A `(cols, rows)` size.
