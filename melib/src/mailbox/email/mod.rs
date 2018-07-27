@@ -27,13 +27,75 @@ pub use self::attachments::*;
 
 use std::string::String;
 use std::sync::Arc;
-//use std;
 use std::cmp::Ordering;
 use std::fmt;
 use std::option::Option;
 
 use chrono;
 use chrono::TimeZone;
+
+
+
+#[derive(Clone, Debug, )]
+pub struct GroupAddress {
+    raw: String,
+    display_name: StrBuilder,
+    mailbox_list: Vec<Address>,
+}
+
+#[derive(Clone, Debug, )]
+pub struct MailboxAddress {
+    raw: String,
+    display_name: StrBuilder,
+    address_spec: StrBuilder,
+}
+
+#[derive(Clone, Debug, )]
+pub enum Address {
+    Mailbox(MailboxAddress),
+    Group(GroupAddress),
+}
+
+impl Eq for Address {}
+impl PartialEq for Address {
+    fn eq(&self, other: &Address) -> bool {
+        match (self, other) {
+            (Address::Mailbox(_), Address::Group(_)) |
+            (Address::Group(_), Address::Mailbox(_)) => {
+                false
+            },
+            (Address::Mailbox(s), Address::Mailbox(o)) => {
+                s.address_spec.display(&s.raw) == o.address_spec.display(&o.raw)
+            },
+            (Address::Group(s), Address::Group(o)) => {
+                s.display_name.display(&s.raw) == o.display_name.display(&o.raw) &&
+                    s.mailbox_list.iter().zip(o.mailbox_list.iter()).fold(true, |b, (s, o)| b && (s == o))
+            },
+        }
+    }
+}
+
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Address::Mailbox(m) if m.display_name.length > 0  => {
+                write!(f, "{} <{}>", m.display_name.display(&m.raw), m.address_spec.display(&m.raw))
+            },
+            Address::Group(g) =>  {
+                let attachment_strings: Vec<String> = g.mailbox_list.iter().map(|a| format!("{}", a)).collect();
+                write!(f, "{}: {}", g.display_name.display(&g.raw), attachment_strings.join(", "))
+            },
+            Address::Mailbox(m)  => {
+                write!(f, "{}", m.address_spec.display(&m.raw))
+            },
+        }
+
+    }
+
+
+}
+
+
 
 /// Helper struct to return slices from a struct field on demand.
 #[derive(Clone, Debug)]
@@ -52,6 +114,14 @@ pub trait StrBuild {
     fn val(&self) -> &str;
 }
 
+impl StrBuilder {
+    fn display<'a>(&self, s: &'a str) -> &'a str {
+        let offset = self.offset;
+        let length = self.length;
+        &s[offset..offset+length]
+    }
+}
+
 /// `MessageID` is accessed through the `StrBuild` trait.
 #[derive(Clone)]
 pub struct MessageID(String, StrBuilder);
@@ -63,14 +133,14 @@ impl StrBuild for MessageID {
             string.to_string(),
             StrBuilder {
                 offset: offset,
-                length: slice.len() + 1,
+                length: slice.len()+ 1,
             },
             )
     }
     fn raw(&self) -> &str {
         let offset = self.1.offset;
         let length = self.1.length;
-        &self.0[offset..length]
+        &self.0[offset..offset+length-1]
     }
     fn val(&self) -> &str {
         &self.0
@@ -133,8 +203,8 @@ bitflags! {
 #[derive(Debug, Clone)]
 pub struct Envelope {
     date: String,
-    from: Option<String>,
-    to: Option<String>,
+    from: Vec<Address>,
+    to: Vec<Address>,
     body: Option<Attachment>,
     subject: Option<String>,
     message_id: Option<MessageID>,
@@ -155,8 +225,8 @@ impl Envelope {
     pub fn new(token: Box<BackendOpGenerator>) -> Self {
         Envelope {
             date: "".to_string(),
-            from: None,
-            to: None,
+            from: Vec::new(),
+            to: Vec::new(),
             body: None,
             subject: None,
             message_id: None,
@@ -198,23 +268,23 @@ impl Envelope {
                 continue;
             }
             if name.eq_ignore_ascii_case("to") {
-                let parse_result = parser::address_list(value.as_bytes());
+                let parse_result = parser::rfc2822address_list(value.as_bytes());
                 let value = if parse_result.is_done() {
                     parse_result.to_full_result().unwrap()
                 } else {
-                    "".to_string()
+                    Vec::new()
                 };
                 self.set_to(value);
             } else if name.eq_ignore_ascii_case("from") {
-                let parse_result = parser::address_list(value.as_bytes());
+                let parse_result = parser::rfc2822address_list(value.as_bytes());
                 let value = if parse_result.is_done() {
                     parse_result.to_full_result().unwrap()
                 } else {
-                    "".to_string()
+                    Vec::new()
                 };
                 self.set_from(value);
             } else if name.eq_ignore_ascii_case("subject") {
-                let parse_result = parser::subject(value.trim().as_bytes());
+                let parse_result = parser::phrase(value.trim().as_bytes());
                 let value = if parse_result.is_done() {
                     parse_result.to_full_result().unwrap()
                 } else {
@@ -269,17 +339,20 @@ impl Envelope {
     pub fn date_as_str(&self) -> &str {
         &self.date
     }
-    pub fn from(&self) -> &str {
-        match self.from {
-            Some(ref s) => s,
-            None => "",
-        }
+    pub fn from(&self) -> &Vec<Address> {
+        &self.from
     }
-    pub fn to(&self) -> &str {
-        match self.to {
-            Some(ref s) => s,
-            None => "",
-        }
+
+    pub fn from_to_string(&self) -> String {
+        let _strings: Vec<String> = self.from.iter().map(|a| format!("{}", a)).collect();
+        _strings.join(", ")
+    }
+    pub fn to(&self) -> &Vec<Address> {
+        &self.to
+    }   
+    pub fn to_to_string(&self) -> String {
+        let _strings: Vec<String> = self.to.iter().map(|a| format!("{}", a)).collect();
+        _strings.join(", ")
     }
     pub fn body(&self) -> Attachment {
         let mut operation = self.operation_token.generate();
@@ -338,11 +411,11 @@ impl Envelope {
     fn set_date(&mut self, new_val: String) -> () {
         self.date = new_val;
     }
-    fn set_from(&mut self, new_val: String) -> () {
-        self.from = Some(new_val);
+    fn set_from(&mut self, new_val: Vec<Address>) -> () {
+        self.from = new_val;
     }
-    fn set_to(&mut self, new_val: String) -> () {
-        self.to = Some(new_val);
+    fn set_to(&mut self, new_val: Vec<Address>) -> () {
+        self.to = new_val;
     }
     fn set_in_reply_to(&mut self, new_val: &str) -> () {
         let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {

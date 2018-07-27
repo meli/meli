@@ -26,6 +26,16 @@ use nom::{is_hex_digit, le_u8};
 use nom::{ErrorKind, IResult, Needed};
 use nom::{Compare, CompareResult};
 use encoding::{DecoderTrap, Encoding};
+use super::*;
+
+macro_rules! is_whitespace {
+    ($var:ident) => (
+        $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
+        );
+    ($var:expr) => (
+        $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
+        );
+}
 
 fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
     if input.is_empty() || input.len() < 3 {
@@ -259,6 +269,205 @@ named!(ascii_token<String>, do_parse!(
             String::from_utf8_lossy(word).into_owned()
         } )));
 
+fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
+    if input.is_empty() || input.len() < 3 {
+        IResult::Incomplete(Needed::Size(1))
+    } else if !is_whitespace!(input[0]) {
+        let mut display_name = StrBuilder {
+            offset: 0,
+            length: 0,
+        };
+        let mut flag = false;
+        for (i, b) in input[0..].iter().enumerate() {
+            if *b == b'<' {
+                
+                display_name.length = if i != 0 { i-1 } else { 0 };
+                flag = true;
+                break;
+            }
+        }
+        if !flag {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        }
+        let mut end = input.len();
+        let mut flag = false;
+        for (i, b) in input[display_name.length+2..].iter().enumerate() {
+            if *b == b'@' {
+                flag = true;
+            }
+            if *b == b'>' {
+                end = i;
+                break;
+            }
+        }
+        if flag {
+            let mut address_spec = StrBuilder {
+                offset: display_name.length + 2,
+                length: end,
+            };
+            match phrase(&input[0..end+display_name.length+3]) {
+                IResult::Error(e) => IResult::Error(e),
+                IResult::Incomplete(i) => IResult::Incomplete(i),
+                IResult::Done(rest, raw) => {
+                    display_name.length = raw.find('<').unwrap();
+                    address_spec.offset = display_name.length + 1;
+                    address_spec.length = raw.len() - display_name.length - 2;
+                    IResult::Done(rest, Address::Mailbox(MailboxAddress {
+                        raw: raw,
+                        display_name: display_name,
+                        address_spec: address_spec,
+                    }))
+                },
+            }
+        } else {
+            IResult::Error(error_code!(ErrorKind::Custom(43)))
+        }
+    } else {
+        IResult::Error(error_code!(ErrorKind::Custom(43)))
+    }
+
+}
+
+
+
+fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
+    if input.is_empty() || input.len() < 3 {
+        IResult::Incomplete(Needed::Size(1))
+    } else if !is_whitespace!(input[0]) {
+        let mut end = input[1..].len();
+        let mut flag = false;
+        for (i, b) in input[1..].iter().enumerate() {
+            if *b == b'@' {
+                flag = true;
+            }
+            if is_whitespace!(*b) {
+                end = i;
+                break;
+            }
+        }
+        if flag {
+            IResult::Done(&input[end..], Address::Mailbox(MailboxAddress {
+                        raw: String::from_utf8_lossy(&input[0..end+1]).to_string(),
+                        display_name: StrBuilder {
+                            offset: 0,
+                            length: 0,
+                        },
+                        address_spec: StrBuilder {
+                            offset: 0,
+                            length: input[0..end+1].len(),
+                        },
+                    }))
+        } else {
+            IResult::Error(error_code!(ErrorKind::Custom(43)))
+        }
+    } else {
+        IResult::Error(error_code!(ErrorKind::Custom(42)))
+    }
+}
+
+
+named!(mailbox<Address>, ws!(alt_complete!(
+            display_addr |
+            addr_spec
+            )));
+named!(mailbox_list<Vec<Address>>, many0!(mailbox));
+
+
+#[test]
+fn test_mailbox() {
+    {
+    let s = b"epilys@postretch";
+    let r = mailbox(s).unwrap().1;
+    match r {
+        Address::Mailbox(ref m) => {
+    println!("----\n`{}`, `{}`\n----", m.display_name.display(&m.raw), m.address_spec.display(&m.raw));
+        },
+        _ => {},
+    }
+    }
+    let s = b"Manos <epilys@postretch>";
+    eprintln!("{:?}", display_addr(s).unwrap());
+    let r = display_addr(s).unwrap().1;
+    match r {
+        Address::Mailbox(ref m) => {
+            println!("----\n`{}`, `{}`\n----", m.display_name.display(&m.raw), m.address_spec.display(&m.raw));
+        },
+        _ => {},
+    }
+
+}
+
+
+//named!(group_t<GroupAddress>, ws!( do_parse!(
+//            display_name: take_until1!(":") >>
+//            mailbox_list: many0!(mailbox) >>
+//            end: is_a!(";") >>
+//            ({
+//
+//            })
+//            )));
+//
+
+fn group(input: &[u8]) -> IResult<&[u8], Address> {
+    let mut flag = false;
+    let mut dlength = 0;
+    for (i, b) in input.iter().enumerate() {
+        if *b == b':' {
+            flag = true;
+            dlength = i;
+            break;
+        }
+    }
+    if !flag {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+
+    match mailbox_list(&input[dlength..]) {
+        IResult::Error(e) => {
+            return IResult::Error(e);
+        }
+        IResult::Done(rest, vec) => {
+            let size: usize = (rest.as_ptr() as usize) -  ((&input[0..] as &[u8]).as_ptr() as usize);
+            return IResult::Done(rest, Address::Group(GroupAddress {
+                raw: String::from_utf8(input[0..size].to_vec()).unwrap(),
+                display_name: StrBuilder {
+                    offset: 0,
+                    length: dlength,
+                },
+                mailbox_list: vec,
+            }));
+        },
+        IResult::Incomplete(i) => {
+            return IResult::Incomplete(i);
+        },
+    }
+}
+
+
+
+
+
+named!(address<Address>, ws!(
+            alt_complete!(mailbox | group)));
+
+#[test]
+fn test_address() {
+    let s = b"Manos Pitsidianakis <el13635@mail.ntua.gr>,
+            qemu-devel <qemu-devel@nongnu.org>, qemu-block <qemu-block@nongnu.org>,
+            Alberto Garcia <berto@igalia.com>, Stefan Hajnoczi <stefanha@redhat.com>";
+    println!("{:?}", rfc2822address_list(s).unwrap());
+
+}
+
+
+
+named!(pub rfc2822address_list<Vec<Address>>, ws!(
+            separated_list!(is_a!(","), address)
+
+
+            ));
+
+
 named!(pub address_list<String>, ws!(do_parse!(
         list: alt_complete!( encoded_word_list | ascii_token) >>
         ( {
@@ -278,7 +487,8 @@ named!(pub address_list<String>, ws!(do_parse!(
         } )
 
        )));
-named!(pub subject<String>, ws!(do_parse!(
+
+named!(pub phrase<String>, ws!(do_parse!(
         list: many0!(alt_complete!( encoded_word_list | ascii_token)) >>
         ( {
             let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc }) + list.len() - 1;
@@ -298,52 +508,52 @@ named!(pub subject<String>, ws!(do_parse!(
        )));
 
 #[test]
-fn test_subject() {
-    let subject_s = "list.free.de mailing list memberships reminder".as_bytes();
+fn test_phrase() {
+    let phrase_s = "list.free.de mailing list memberships reminder".as_bytes();
     assert_eq!(
         (
             &b""[..],
             "list.free.de mailing list memberships reminder".to_string()
         ),
-        subject(subject_s).unwrap()
+        phrase(phrase_s).unwrap()
     );
 
-    let subject_s = "=?UTF-8?B?zp3Orc6/IM+Az4HOv8+Dz4nPgM65zrrPjCDOvM6uzr3Phc68zrEgzrHPhs6v?= =?UTF-8?B?z4fOuM63?=".as_bytes();
+    let phrase_s = "=?UTF-8?B?zp3Orc6/IM+Az4HOv8+Dz4nPgM65zrrPjCDOvM6uzr3Phc68zrEgzrHPhs6v?= =?UTF-8?B?z4fOuM63?=".as_bytes();
     assert_eq!(
         (
             &b""[..],
             "Νέο προσωπικό μήνυμα αφίχθη".to_string()
         ),
-        subject(subject_s).unwrap()
+        phrase(phrase_s).unwrap()
     );
 
-    let subject_s = "=?utf-8?B?bW9vZGxlOiDOsc69zrHPg866z4zPgM63z4POtyDOv868zqzOtM6xz4Igz4M=?=  =?utf-8?B?z4XOts63z4TOrs+DzrXPic69?=".as_bytes();
+    let phrase_s = "=?utf-8?B?bW9vZGxlOiDOsc69zrHPg866z4zPgM63z4POtyDOv868zqzOtM6xz4Igz4M=?=  =?utf-8?B?z4XOts63z4TOrs+DzrXPic69?=".as_bytes();
     assert_eq!(
         (
             &b""[..],
             "moodle: ανασκόπηση ομάδας συζητήσεων".to_string()
         ),
-        subject(subject_s).unwrap()
+        phrase(phrase_s).unwrap()
     );
 
-    let subject_s =
+    let phrase_s =
         "=?UTF-8?B?zp3Orc6/IM+Az4HOv8+Dz4nPgM65zrrPjCDOvM6uzr3Phc68zrEgzrHPhs6v?=".as_bytes();
     assert_eq!(
         "Νέο προσωπικό μήνυμα αφί".to_string(),
-        from_utf8(&encoded_word(subject_s).to_full_result().unwrap()).unwrap()
+        from_utf8(&encoded_word(phrase_s).to_full_result().unwrap()).unwrap()
     );
-    let subject_s = "=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?=".as_bytes();
+    let phrase_s = "=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?=".as_bytes();
     assert_eq!(
         "Πρόσθε".to_string(),
-        from_utf8(&encoded_word(subject_s).to_full_result().unwrap()).unwrap()
+        from_utf8(&encoded_word(phrase_s).to_full_result().unwrap()).unwrap()
     );
-    let subject_s = "=?iso-8859-7?B?UmU6INDx/OLr5+zhIOzlIPTn7SDh9fHp4e3eIOLh8eTp4Q==?=".as_bytes();
+    let phrase_s = "=?iso-8859-7?B?UmU6INDx/OLr5+zhIOzlIPTn7SDh9fHp4e3eIOLh8eTp4Q==?=".as_bytes();
     assert_eq!(
         "Re: Πρόβλημα με την αυριανή βαρδια".to_string(),
-        from_utf8(&encoded_word(subject_s).to_full_result().unwrap()).unwrap()
+        from_utf8(&encoded_word(phrase_s).to_full_result().unwrap()).unwrap()
     );
 
-    let subject_s = "=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?=
+    let phrase_s = "=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?=
  =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?=
  =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?="
         .as_bytes();
@@ -352,7 +562,7 @@ fn test_subject() {
             &b""[..],
             "Πρόσθετη εξεταστική".to_string()
         ),
-        subject(subject_s).unwrap()
+        phrase(phrase_s).unwrap()
     );
 }
 fn eat_comments(input: &str) -> String {
@@ -388,7 +598,7 @@ fn test_eat_comments() {
  *
  * We should use a custom parser here*/
 pub fn date(input: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
-    let parsed_result = subject(eat_comments(input).as_bytes())
+    let parsed_result = phrase(eat_comments(input).as_bytes())
         .to_full_result()
         .unwrap()
         .replace("-", "+");
