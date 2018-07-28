@@ -500,6 +500,9 @@ named!(pub address_list<String>, ws!(do_parse!(
 named!(pub phrase<String>, ws!(do_parse!(
         list: many0!(alt_complete!( encoded_word_list | ascii_token)) >>
         ( {
+            if list.len() == 0 {
+               String::new()
+            } else {
             let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc }) + list.len() - 1;
             let list_len = list.len();
             let mut i = 0;
@@ -512,6 +515,7 @@ named!(pub phrase<String>, ws!(do_parse!(
                 }
                 acc
             })
+            }
         } )
 
        )));

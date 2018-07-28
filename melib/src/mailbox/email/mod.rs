@@ -23,6 +23,7 @@ pub mod attachments;
 pub mod parser;
 
 pub use self::attachments::*;
+use error::{MeliError, Result};
 use mailbox::backends::BackendOpGenerator;
 
 use std::cmp::Ordering;
@@ -249,14 +250,14 @@ impl Envelope {
         Some(e)
     }
 
-    pub fn populate_headers(&mut self) -> () {
+    pub fn populate_headers(&mut self) -> Result<()> {
         let mut operation = self.operation_token.generate();
-        let headers = match parser::headers(operation.fetch_headers().unwrap()).to_full_result() {
+        let headers = match parser::headers(operation.fetch_headers()?).to_full_result() {
             Ok(v) => v,
-            _ => {
+            Err(e) => {
                 let operation = self.operation_token.generate();
                 eprintln!("error in parsing mail\n{}", operation.description());
-                return;
+                return Err(MeliError::from(e));
             }
         };
 
@@ -324,6 +325,7 @@ impl Envelope {
                 self.set_datetime(d);
             }
         }
+        Ok(())
     }
     pub fn date(&self) -> u64 {
         self.timestamp
@@ -362,7 +364,9 @@ impl Envelope {
             Err(_) => {
                 let operation = self.operation_token.generate();
                 eprintln!("error in parsing mail\n{}", operation.description());
-                panic!()
+                let error_msg = b"Mail cannot be shown because of errors.";
+                let mut builder = AttachmentBuilder::new(error_msg);
+                return builder.build()
             }
         };
         let mut builder = AttachmentBuilder::new(body);

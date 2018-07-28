@@ -216,7 +216,9 @@ impl MaildirType {
                                 Envelope::from_token(Box::new(BackendOpGenerator::new(Box::new(
                                     move || Box::new(MaildirOp::new(e_copy.clone())),
                                 )))) {
-                                e.populate_headers();
+                                if e.populate_headers().is_err() {
+                                    continue;
+                                }
                                 local_r.push(e);
                             }
                         }
