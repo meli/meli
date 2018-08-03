@@ -21,6 +21,8 @@
 pub mod conf;
 pub mod error;
 pub mod mailbox;
+pub mod utilities;
+pub mod async;
 
 #[macro_use]
 extern crate serde_derive;
@@ -31,6 +33,8 @@ extern crate chrono;
 extern crate data_encoding;
 extern crate encoding;
 extern crate memmap;
+#[macro_use]
+extern crate chan;
 
 #[macro_use]
 extern crate bitflags;
@@ -41,3 +45,4 @@ pub use mailbox::*;
 pub use error::{MeliError, Result};
 pub use mailbox::backends::{Backends, RefreshEvent, RefreshEventConsumer};
 pub use mailbox::email::{Envelope, Flag};
+pub use utilities::*;

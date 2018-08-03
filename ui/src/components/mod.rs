@@ -31,7 +31,7 @@ pub mod notifications;
 pub mod utilities;
 
 pub use mail::*;
-pub use utilities::*;
+pub use self::utilities::*;
 
 use super::cells::{CellBuffer, Color};
 use super::position::Area;
@@ -138,6 +138,14 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
     }
     let mut src_x = get_x(upper_left!(src));
     let mut src_y = get_y(upper_left!(src));
+    let (cols, rows) = grid_src.size();
+    if src_x >= cols || src_y >= rows {
+        eprintln!(
+            "DEBUG: src area outside of grid_src in copy_area",
+        );
+        return;
+
+    }
 
     for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
         'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {

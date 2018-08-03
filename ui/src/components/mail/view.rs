@@ -62,8 +62,6 @@ impl Component for MailView {
                 .threaded;
             let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
-                .unwrap()
-                .as_ref()
                 .unwrap();
             let envelope_idx: usize = if threaded {
                 mailbox.threaded_mail(self.coordinates.2)
@@ -157,8 +155,6 @@ impl Component for MailView {
             let buf = {
                 let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
                 let mailbox = &mut context.accounts[mailbox_idx.0][mailbox_idx.1]
-                    .as_ref()
-                    .unwrap()
                     .as_ref()
                     .unwrap();
                 let envelope: &Envelope = &mailbox.collection[envelope_idx];
@@ -269,8 +265,6 @@ impl Component for MailView {
                         .threaded;
                     let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
-                        .unwrap()
-                        .as_ref()
                         .unwrap();
                     let envelope_idx: usize = if threaded {
                         mailbox.threaded_mail(self.coordinates.2)
@@ -339,8 +333,6 @@ impl Component for MailView {
                         .runtime_settings
                         .threaded;
                     let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
-                        .as_ref()
-                        .unwrap()
                         .as_ref()
                         .unwrap();
                     let envelope_idx: usize = if threaded {

@@ -22,12 +22,18 @@
 use conf::{AccountSettings, Folder};
 use mailbox::backends::{Backends, RefreshEventConsumer};
 use mailbox::*;
+use async::*;
 use std::ops::{Index, IndexMut};
+use std::result;
+
+pub type Worker = Option<Async<Result<Vec<Envelope>>>>;
 
 #[derive(Debug)]
 pub struct Account {
     name: String,
     folders: Vec<Option<Result<Mailbox>>>,
+
+    workers: Vec<Worker>,
 
     sent_folder: Option<usize>,
 
@@ -43,13 +49,17 @@ impl Account {
             .iter()
             .position(|x| *x.path() == settings.sent_folder);
         let mut folders = Vec::with_capacity(settings.folders.len());
-        for _ in 0..settings.folders.len() {
-            folders.push(None);
-        }
+        let mut workers = Vec::new();
         let backend = backends.get(settings.format());
+        for f in &settings.folders {
+            folders.push(None);
+            let mut handle = backend.get(&f);
+            workers.push(Some(handle));
+        }
         Account {
             name: name,
             folders: folders,
+            workers: workers,
 
             sent_folder: sent_folder,
 
@@ -71,24 +81,16 @@ impl Account {
     pub fn name(&self) -> &str {
         &self.name
     }
-}
-
-impl Index<usize> for Account {
-    type Output = Option<Result<Mailbox>>;
-    fn index(&self, index: usize) -> &Option<Result<Mailbox>> {
-        &self.folders[index]
+    pub fn workers(&mut self) -> &mut Vec<Worker> {
+        &mut self.workers
     }
-}
-
-impl IndexMut<usize> for Account {
-    fn index_mut(&mut self, index: usize) -> &mut Option<Result<Mailbox>> {
-        if self.folders[index].is_none() {
+    fn load_mailbox(&mut self, index: usize, envelopes: Result<Vec<Envelope>>) -> () {
             let folder = &self.settings.folders[index];
             if self.sent_folder.is_some() {
                 let id = self.sent_folder.unwrap();
                 if id == index {
                     self.folders[index] =
-                        Some(Mailbox::new(folder, &None, self.backend.get(&folder)));
+                        Some(Mailbox::new(folder, &None, envelopes));
                 } else {
                     let (sent, cur) = {
                         let ptr = self.folders.as_mut_ptr();
@@ -102,14 +104,54 @@ impl IndexMut<usize> for Account {
                     };
                     let sent_path = &self.settings.folders[id];
                     if sent[0].is_none() {
-                        sent[0] = Some(Mailbox::new(sent_path, &None, self.backend.get(&folder)));
+                        sent[0] = Some(Mailbox::new(sent_path, &None, envelopes.clone()));
                     }
-                    cur[0] = Some(Mailbox::new(folder, &sent[0], self.backend.get(folder)));
+                    cur[0] = Some(Mailbox::new(folder, &sent[0], envelopes));
                 }
             } else {
-                self.folders[index] = Some(Mailbox::new(folder, &None, self.backend.get(&folder)));
+                self.folders[index] = Some(Mailbox::new(folder, &None, envelopes));
             };
-        }
-        &mut self.folders[index]
+    }
+
+    pub fn status(&mut self, index: usize) -> result::Result<(), usize> {
+        match self.workers[index].as_mut() {
+            None => { return Ok(()); },
+            Some(ref mut w) => {
+                match w.poll() {
+                    Ok(AsyncStatus::NoUpdate) => {
+                       return Err(0);
+                    },
+                    Ok(AsyncStatus::Finished) => {
+                    },
+                    Ok(AsyncStatus::ProgressReport(n)) => {
+                        return Err(n);
+                    },
+                    a => {
+                        eprintln!("{:?}", a);
+                        return Err(0);
+                    }
+                }
+            },
+        };
+        let  m = self.workers[index].take().unwrap().extract();
+        self.load_mailbox(index, m);
+        self.workers[index] = None;
+        Ok(())
+    }
+
+}
+
+impl Index<usize> for Account {
+    type Output = Result<Mailbox>;
+    fn index(&self, index: usize) -> &Result<Mailbox> {
+        &self.folders[index].as_ref().expect("BUG: Requested mailbox that is not yet available.")
+
+    }
+}
+
+/// Will panic if mailbox hasn't loaded, ask `status()` first.
+impl IndexMut<usize> for Account {
+    fn index_mut(&mut self, index: usize) -> &mut Result<Mailbox> {
+        self.folders[index].as_mut().expect("BUG: Requested mailbox that is not yet available.")
     }
 }

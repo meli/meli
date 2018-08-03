@@ -111,7 +111,8 @@ impl FileSettings {
         let mut s = Config::new();
         let s = s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml));
 
-        // TODO: Return result
+        // No point in returning without a config file.
+        // TODO: Error and exit instead of panic.
         s.unwrap().deserialize().unwrap()
     }
 }

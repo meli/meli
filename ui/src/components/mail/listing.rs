@@ -1,9 +1,10 @@
 use super::*;
+
 const MAX_COLS: usize = 500;
 
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
-/// `Pager`.
+/// `MailView`.
 pub struct MailListing {
     /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
     cursor_pos: (usize, usize, usize),
@@ -24,7 +25,7 @@ impl MailListing {
     /* TODO: Make this configurable */
     fn make_entry_string(e: &Envelope, idx: usize) -> String {
         format!(
-            "{}    {}    {:.85}",
+            "{}    {}    {}",
             idx,
             &e.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),
             e.subject()
@@ -55,17 +56,25 @@ impl MailListing {
         let threaded = context.accounts[self.cursor_pos.0]
             .runtime_settings
             .threaded;
-        // Get mailbox as a reference.
-        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap()
-            .as_ref()
-            .unwrap();
         // Inform State that we changed the current folder view.
         context.replies.push_back(UIEvent {
             id: 0,
             event_type: UIEventType::RefreshMailbox((self.cursor_pos.0, self.cursor_pos.1)),
         });
+        // Get mailbox as a reference.
+        //
+        loop {
+            eprintln!("loop round");
+        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+            Ok(()) => { break; },
+            Err(a) => {
+                eprintln!("status returned {:?}", a);
+            }
+        }
+        }
+        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+            .as_ref()
+            .unwrap();
 
         self.length = if threaded {
             mailbox.threaded_collection.len()
@@ -81,7 +90,7 @@ impl MailListing {
                 Color::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
                 true,
-            );
+                );
             self.content = content;
             return;
         }
@@ -90,7 +99,7 @@ impl MailListing {
         if threaded {
             let mut indentations: Vec<bool> = Vec::with_capacity(6);
             let mut thread_idx = 0; // needed for alternate thread colors
-                                    /* Draw threaded view. */
+            /* Draw threaded view. */
             let mut iter = mailbox.threaded_collection.iter().enumerate().peekable();
             let len = mailbox
                 .threaded_collection
@@ -143,13 +152,13 @@ impl MailListing {
                         container,
                         &indentations,
                         len,
-                    ),
-                    &mut content,
-                    fg_color,
-                    bg_color,
-                    ((0, idx), (MAX_COLS - 1, idx)),
-                    false,
-                );
+                        ),
+                        &mut content,
+                        fg_color,
+                        bg_color,
+                        ((0, idx), (MAX_COLS - 1, idx)),
+                        false,
+                        );
                 for x in x..MAX_COLS {
                     content[(x, idx)].set_ch(' ');
                     content[(x, idx)].set_bg(bg_color);
@@ -199,7 +208,7 @@ impl MailListing {
                     bg_color,
                     ((0, y), (MAX_COLS - 1, y)),
                     false,
-                );
+                    );
 
                 for x in x..MAX_COLS {
                     content[(x, y)].set_ch(' ');
@@ -217,8 +226,6 @@ impl MailListing {
             .runtime_settings
             .threaded;
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap()
             .as_ref()
             .unwrap();
         let envelope: &Envelope = if threaded {
@@ -562,6 +569,12 @@ impl Component for MailListing {
             UIEventType::RefreshMailbox(_) => {
                 self.dirty = true;
                 self.view = None;
+            }
+            UIEventType::MailboxUpdate((ref idxa, ref idxf)) => {
+                if *idxa == self.new_cursor_pos.1 && *idxf == self.new_cursor_pos.0 {
+                    self.refresh_mailbox(context);
+                    self.dirty = true;
+                }
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;

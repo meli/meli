@@ -21,6 +21,7 @@
 
 use conf::Folder;
 use error::Result;
+use async::*;
 use mailbox::backends::{BackendOp, MailBackend, RefreshEventConsumer};
 use mailbox::email::{Envelope, Flag};
 
@@ -57,7 +58,7 @@ impl BackendOp for ImapOp {
 pub struct ImapType {}
 
 impl MailBackend for ImapType {
-    fn get(&self, _folder: &Folder) -> Result<Vec<Envelope>> {
+    fn get(&self, _folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         unimplemented!();
     }
     fn watch(&self, _sender: RefreshEventConsumer, _folders: &[Folder]) -> () {

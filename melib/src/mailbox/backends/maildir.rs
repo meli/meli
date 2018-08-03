@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use async::*;
 use conf::Folder;
 use error::{MeliError, Result};
 use mailbox::backends::{
@@ -40,6 +41,8 @@ use std::thread;
 extern crate crossbeam;
 use memmap::{Mmap, Protection};
 use std::path::PathBuf;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 
 /// `BackendOp` implementor for Maildir
 #[derive(Debug, Default)]
@@ -116,10 +119,11 @@ impl BackendOp for MaildirOp {
 #[derive(Debug)]
 pub struct MaildirType {
     path: String,
+    idx: (usize, usize),
 }
 
 impl MailBackend for MaildirType {
-    fn get(&self, folder: &Folder) -> Result<Vec<Envelope>> {
+    fn get(&self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         self.multicore(4, folder)
     }
     fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> () {
@@ -145,11 +149,15 @@ impl MailBackend for MaildirType {
                     match rx.recv() {
                         Ok(event) => match event {
                             DebouncedEvent::Create(pathbuf) => {
+                                let path = pathbuf.parent().unwrap().to_str().unwrap();
+
+                                let mut hasher = DefaultHasher::new();
+                                hasher.write(path.as_bytes());
                                 sender.send(RefreshEvent {
                                     folder: format!(
-                                        "{}",
-                                        pathbuf.parent().unwrap().to_str().unwrap()
+                                        "{}", path
                                     ),
+                                    hash: hasher.finish(),
                                 });
                             }
                             _ => {}
@@ -163,9 +171,10 @@ impl MailBackend for MaildirType {
 }
 
 impl MaildirType {
-    pub fn new(path: &str) -> Self {
+    pub fn new(path: &str, idx: (usize, usize)) -> Self {
         MaildirType {
             path: path.to_string(),
+            idx: idx,
         }
     }
     fn is_valid(f: &Folder) -> Result<()> {
@@ -183,8 +192,19 @@ impl MaildirType {
         }
         Ok(())
     }
-    pub fn multicore(&self, cores: usize, folder: &Folder) -> Result<Vec<Envelope>> {
-        MaildirType::is_valid(folder)?;
+    pub fn multicore(&self, cores: usize, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
+        
+        let mut w = AsyncBuilder::new();
+        let handle = {
+            let tx = w.tx();
+            // TODO: Avoid clone
+            let folder = folder.clone();
+
+            
+        thread::Builder::new()
+            .name(format!("parsing {:?}", folder))
+                  .spawn(move ||  {
+        MaildirType::is_valid(&folder)?;
         let path = folder.path();
         let mut path = PathBuf::from(path);
         path.push("cur");
@@ -208,19 +228,26 @@ impl MaildirType {
                     count
                 };
                 for chunk in files.chunks(chunk_size) {
+                    let mut tx = tx.clone();
                     let s = scope.spawn(move || {
+                        let len = chunk.len();
+                        let size = if len <= 100 { 100 } else { (len / 100) * 100};
                         let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
-                        for e in chunk {
-                            let e_copy = e.to_string();
-                            if let Some(mut e) =
-                                Envelope::from_token(Box::new(BackendOpGenerator::new(Box::new(
-                                    move || Box::new(MaildirOp::new(e_copy.clone())),
-                                )))) {
-                                if e.populate_headers().is_err() {
-                                    continue;
-                                }
-                                local_r.push(e);
+                        for c in chunk.chunks(size) {
+                            let len = c.len();
+                            for e in c {
+                                let e_copy = e.to_string();
+                                if let Some(mut e) =
+                                    Envelope::from_token(Box::new(BackendOpGenerator::new(Box::new(
+                                                    move || Box::new(MaildirOp::new(e_copy.clone())),
+                                                    )))) {
+                                        if e.populate_headers().is_err() {
+                                            continue;
+                                        }
+                                        local_r.push(e);
+                                    }
                             }
+                            tx.send(AsyncStatus::ProgressReport(len));
                         }
                         local_r
                     });
@@ -232,6 +259,10 @@ impl MaildirType {
             let mut result = t.join();
             r.append(&mut result);
         }
+        tx.send(AsyncStatus::Finished);
         Ok(r)
+        }).unwrap()
+        }; 
+        w.build(handle)
     }
 }

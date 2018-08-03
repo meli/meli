@@ -75,7 +75,7 @@ pub enum ThreadEvent {
     Input(Key),
     /// A watched folder has been refreshed.
     RefreshMailbox {
-        name: String,
+        hash: u64,
     },
     UIEventType(UIEventType),
     //Decode { _ }, // For gpg2 signature check
@@ -83,7 +83,7 @@ pub enum ThreadEvent {
 
 impl From<RefreshEvent> for ThreadEvent {
     fn from(event: RefreshEvent) -> Self {
-        ThreadEvent::RefreshMailbox { name: event.folder }
+        ThreadEvent::RefreshMailbox { hash: event.hash }
     }
 }
 
@@ -109,6 +109,7 @@ pub enum UIEventType {
     EditDraft(File),
     Action(Action),
     StatusNotification(String),
+    MailboxUpdate((usize, usize)),
 }
 
 /// An event passed from `State` to its Entities.
@@ -248,7 +249,7 @@ impl State<std::io::Stdout> {
             cursor::Hide,
             clear::All,
             cursor::Goto(1, 1)
-        ).unwrap();
+            ).unwrap();
         s.flush();
         for account in &mut s.context.accounts {
             let sender = s.sender.clone();
@@ -455,13 +456,9 @@ impl<W: Write> State<W> {
     /// Tries to load a mailbox's content
     pub fn refresh_mailbox(&mut self, account_idx: usize, folder_idx: usize) {
         let flag = match &mut self.context.accounts[account_idx][folder_idx] {
-            Some(Ok(_)) => true,
-            Some(Err(e)) => {
+            Ok(_) => true,
+            Err(e) => {
                 eprintln!("error {:?}", e);
-                false
-            }
-            None => {
-                eprintln!("None");
                 false
             }
         };

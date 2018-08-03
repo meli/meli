@@ -413,9 +413,13 @@ impl Component for StatusBar {
         self.container.rcv_event(event, context);
         match &event.event_type {
             UIEventType::RefreshMailbox((ref idx_a, ref idx_f)) => {
+                match context.accounts[*idx_a].status(*idx_f) {
+                    Ok(()) => {},
+                    Err(_) => {
+                        return;
+                    }
+                }
                 let m = &context.accounts[*idx_a][*idx_f]
-                    .as_ref()
-                    .unwrap()
                     .as_ref()
                     .unwrap();
                 self.status = format!(
@@ -479,6 +483,50 @@ impl TextBox {
 
 impl Component for TextBox {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {
+        return;
+    }
+}
+
+pub struct Progress {
+    description: String,
+    total_work: usize,
+    finished: usize,
+}
+
+impl Progress {
+    pub fn new(s: String, total_work: usize) -> Self {
+        Progress {
+            description: s,
+            total_work: total_work,
+            finished: 0,
+        }
+    }
+
+    pub fn add_work(&mut self, n: usize) -> () {
+        if self.finished >= self.total_work {
+            return;
+        }
+        self.finished += n;
+    }
+
+    pub fn percentage(&self) -> usize {
+        if self.total_work > 0 {
+            100 * self.finished / self.total_work
+        } else {
+            0
+        }
+    }
+
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+}
+
+impl Component for Progress {
+    fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {
+        unimplemented!()
+    }
     fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {
         return;
     }

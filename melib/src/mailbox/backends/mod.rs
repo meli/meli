@@ -24,6 +24,7 @@ pub mod mbox;
 
 use conf::Folder;
 use error::Result;
+use async::*;
 use mailbox::backends::imap::ImapType;
 use mailbox::backends::maildir::MaildirType;
 use mailbox::backends::mbox::MboxType;
@@ -47,7 +48,7 @@ impl Backends {
         };
         b.register(
             "maildir".to_string(),
-            Box::new(|| Box::new(MaildirType::new(""))),
+            Box::new(|| Box::new(MaildirType::new("", (0, 0)))),
         );
         b.register("mbox".to_string(), Box::new(|| Box::new(MboxType::new(""))));
         b.register("imap".to_string(), Box::new(|| Box::new(ImapType::new(""))));
@@ -69,6 +70,7 @@ impl Backends {
 }
 
 pub struct RefreshEvent {
+    pub hash: u64,
     pub folder: String,
 }
 
@@ -87,7 +89,7 @@ impl RefreshEventConsumer {
     }
 }
 pub trait MailBackend: ::std::fmt::Debug {
-    fn get(&self, folder: &Folder) -> Result<Vec<Envelope>>;
+    fn get(&self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> ();
     //fn new(folders: &Vec<String>) -> Box<Self>;
     //login function
