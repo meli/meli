@@ -8,6 +8,7 @@ use melib::mailbox::email::Envelope;
 extern crate test;
 use self::test::Bencher;
 
+/*
 #[bench]
 fn mail_parse(b: &mut Bencher) {
     b.iter(|| {
@@ -16,3 +17,4 @@ fn mail_parse(b: &mut Bencher) {
         }))))
     });
 }
+*/

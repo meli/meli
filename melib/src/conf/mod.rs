@@ -41,7 +41,7 @@ pub struct Folder {
 }
 
 impl Folder {
-    fn new(path: String, file_name: String, children: Vec<usize>) -> Self {
+    pub fn new(path: String, file_name: String, children: Vec<usize>) -> Self {
         let mut h = DefaultHasher::new();
         h.write(&path.as_bytes());
         Folder {

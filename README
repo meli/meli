@@ -9,6 +9,18 @@
 
         terminal mail user agent
 
+
+config
+======
+
+# $XDG_CONFIG_HOME/meli/config
+
+profiling:
+==========
+
+# perf record -g target/debug/bin
+# perf script | stackcollapse-perf | rust-unmangle | flamegraph > perf.svg
+
                   / /
                  /_/ |
                 /  \/
