@@ -22,6 +22,7 @@
 pub mod attachments;
 pub mod parser;
 
+use parser::BytesExt;
 pub use self::attachments::*;
 use error::{MeliError, Result};
 use mailbox::backends::BackendOpGenerator;
@@ -31,20 +32,21 @@ use std::fmt;
 use std::option::Option;
 use std::string::String;
 use std::sync::Arc;
+use std::borrow::Cow;
 
 use chrono;
 use chrono::TimeZone;
 
 #[derive(Clone, Debug)]
 pub struct GroupAddress {
-    raw: String,
+    raw: Vec<u8>,
     display_name: StrBuilder,
     mailbox_list: Vec<Address>,
 }
 
 #[derive(Clone, Debug)]
 pub struct MailboxAddress {
-    raw: String,
+    raw: Vec<u8>,
     display_name: StrBuilder,
     address_spec: StrBuilder,
 }
@@ -110,42 +112,42 @@ struct StrBuilder {
 /// Structs implementing this trait must contain a `StrBuilder` field.
 pub trait StrBuild {
     /// Create a new `Self` out of a string and a slice
-    fn new(string: &str, slice: &str) -> Self;
+    fn new(string: &[u8], slice: &[u8]) -> Self;
     /// Get the slice part of the string
-    fn raw(&self) -> &str;
+    fn raw(&self) -> &[u8];
     /// Get the entire string as a slice
-    fn val(&self) -> &str;
+    fn val(&self) -> &[u8];
 }
 
 impl StrBuilder {
-    fn display<'a>(&self, s: &'a str) -> &'a str {
+    fn display<'a>(&self, s: &'a [u8]) -> String {
         let offset = self.offset;
         let length = self.length;
-        &s[offset..offset + length]
+        String::from_utf8(s[offset..offset + length].to_vec()).unwrap()
     }
 }
 
 /// `MessageID` is accessed through the `StrBuild` trait.
 #[derive(Clone)]
-pub struct MessageID(String, StrBuilder);
+pub struct MessageID(Vec<u8>, StrBuilder);
 
 impl StrBuild for MessageID {
-    fn new(string: &str, slice: &str) -> Self {
+    fn new(string: &[u8], slice: &[u8]) -> Self {
         let offset = string.find(slice).unwrap();
         MessageID(
-            string.to_string(),
+            string.to_owned(),
             StrBuilder {
                 offset: offset,
                 length: slice.len() + 1,
             },
         )
     }
-    fn raw(&self) -> &str {
+    fn raw(&self) -> &[u8] {
         let offset = self.1.offset;
         let length = self.1.length;
         &self.0[offset..offset + length - 1]
     }
-    fn val(&self) -> &str {
+    fn val(&self) -> &[u8] {
         &self.0
     }
 }
@@ -173,13 +175,13 @@ impl PartialEq for MessageID {
 }
 impl fmt::Debug for MessageID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.raw())
+        write!(f, "{}", String::from_utf8(self.raw().to_vec()).unwrap())
     }
 }
 
 #[derive(Clone, Debug)]
 struct References {
-    raw: String,
+    raw: Vec<u8>,
     refs: Vec<MessageID>,
 }
 
@@ -208,7 +210,7 @@ pub struct Envelope {
     from: Vec<Address>,
     to: Vec<Address>,
     body: Option<Attachment>,
-    subject: Option<String>,
+    subject: Option<Vec<u8>>,
     message_id: Option<MessageID>,
     in_reply_to: Option<MessageID>,
     references: Option<References>,
@@ -268,48 +270,48 @@ impl Envelope {
             if value.len() == 1 && value.is_empty() {
                 continue;
             }
-            if name.eq_ignore_ascii_case("to") {
-                let parse_result = parser::rfc2822address_list(value.as_bytes());
+            if name.eq_ignore_ascii_case(b"to") {
+                let parse_result = parser::rfc2822address_list(value);
                 let value = if parse_result.is_done() {
                     parse_result.to_full_result().unwrap()
                 } else {
                     Vec::new()
                 };
                 self.set_to(value);
-            } else if name.eq_ignore_ascii_case("from") {
-                let parse_result = parser::rfc2822address_list(value.as_bytes());
+            } else if name.eq_ignore_ascii_case(b"from") {
+                let parse_result = parser::rfc2822address_list(value);
                 let value = if parse_result.is_done() {
                     parse_result.to_full_result().unwrap()
                 } else {
                     Vec::new()
                 };
                 self.set_from(value);
-            } else if name.eq_ignore_ascii_case("subject") {
-                let parse_result = parser::phrase(value.trim().as_bytes());
+            } else if name.eq_ignore_ascii_case(b"subject") {
+                let parse_result = parser::phrase(value.trim());
                 let value = if parse_result.is_done() {
                     parse_result.to_full_result().unwrap()
                 } else {
-                    "".to_string()
+                    "".into()
                 };
                 self.set_subject(value);
-            } else if name.eq_ignore_ascii_case("message-id") {
+            } else if name.eq_ignore_ascii_case(b"message-id") {
                 self.set_message_id(value);
-            } else if name.eq_ignore_ascii_case("references") {
+            } else if name.eq_ignore_ascii_case(b"references") {
                 {
-                    let parse_result = parser::references(value.as_bytes());
+                    let parse_result = parser::references(value);
                     if parse_result.is_done() {
                         for v in parse_result.to_full_result().unwrap() {
                             self.push_references(v);
                         }
                     }
                 }
-                self.set_references(value.to_string());
-            } else if name.eq_ignore_ascii_case("in-reply-to") {
+                self.set_references(value);
+            } else if name.eq_ignore_ascii_case(b"in-reply-to") {
                 self.set_in_reply_to(value);
                 in_reply_to = Some(value);
-            } else if name.eq_ignore_ascii_case("date") {
-                self.set_date(value.to_string());
-                datetime = Some(value.to_string());
+            } else if name.eq_ignore_ascii_case(b"date") {
+                self.set_date(value);
+                datetime = Some(value);
             }
         }
         /*
@@ -374,46 +376,46 @@ impl Envelope {
             if value.len() == 1 && value.is_empty() {
                 continue;
             }
-            if name.eq_ignore_ascii_case("content-transfer-encoding") {
+            if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
                 builder.content_transfer_encoding(value);
-            } else if name.eq_ignore_ascii_case("content-type") {
+            } else if name.eq_ignore_ascii_case(b"content-type") {
                 builder.content_type(value);
             }
         }
         builder.build()
     }
-    pub fn subject(&self) -> &str {
+    pub fn subject(&self) -> Cow<str> {
         match self.subject {
-            Some(ref s) => s,
-            _ => "",
+            Some(ref s) => String::from_utf8_lossy(s),
+            _ => Cow::from(String::new()),
         }
     }
-    pub fn in_reply_to(&self) -> &str {
+    pub fn in_reply_to(&self) -> Cow<str> {
         match self.in_reply_to {
-            Some(ref s) => s.val(),
-            _ => "",
+            Some(ref s) => String::from_utf8_lossy(s.val()),
+            _ => Cow::from(String::new()),
         }
     }
-    pub fn in_reply_to_raw(&self) -> &str {
+    pub fn in_reply_to_raw(&self) -> Cow<str> {
         match self.in_reply_to {
-            Some(ref s) => s.raw(),
-            _ => "",
+            Some(ref s) => String::from_utf8_lossy(s.raw()).into(),
+            _ => Cow::from(String::new()),
         }
     }
-    pub fn message_id(&self) -> &str {
+    pub fn message_id(&self) -> Cow<str> {
         match self.message_id {
-            Some(ref s) => s.val(),
-            _ => "",
+            Some(ref s) => String::from_utf8_lossy(s.val()),
+            _ => Cow::from(String::new()),
         }
     }
-    pub fn message_id_raw(&self) -> &str {
+    pub fn message_id_raw(&self) -> Cow<str> {
         match self.message_id {
-            Some(ref s) => s.raw(),
-            _ => "",
+            Some(ref s) => String::from_utf8_lossy(s.raw()),
+            _ => Cow::from(String::new()),
         }
     }
-    fn set_date(&mut self, new_val: String) -> () {
-        self.date = new_val;
+    fn set_date(&mut self, new_val: &[u8]) -> () {
+        self.date = String::from_utf8_lossy(new_val).into_owned();
     }
     fn set_from(&mut self, new_val: Vec<Address>) -> () {
         self.from = new_val;
@@ -421,8 +423,8 @@ impl Envelope {
     fn set_to(&mut self, new_val: Vec<Address>) -> () {
         self.to = new_val;
     }
-    fn set_in_reply_to(&mut self, new_val: &str) -> () {
-        let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
+    fn set_in_reply_to(&mut self, new_val: &[u8]) -> () {
+        let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
             Err(_) => {
                 self.in_reply_to = None;
@@ -431,11 +433,11 @@ impl Envelope {
         };
         self.in_reply_to = Some(MessageID::new(new_val, slice));
     }
-    fn set_subject(&mut self, new_val: String) -> () {
+    fn set_subject(&mut self, new_val: Vec<u8>) -> () {
         self.subject = Some(new_val);
     }
-    fn set_message_id(&mut self, new_val: &str) -> () {
-        let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
+    fn set_message_id(&mut self, new_val: &[u8]) -> () {
+        let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
             Err(_) => {
                 self.message_id = None;
@@ -444,8 +446,8 @@ impl Envelope {
         };
         self.message_id = Some(MessageID::new(new_val, slice));
     }
-    fn push_references(&mut self, new_val: &str) -> () {
-        let slice = match parser::message_id(new_val.as_bytes()).to_full_result() {
+    fn push_references(&mut self, new_val: &[u8]) -> () {
+        let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
             Err(_) => {
                 return;
@@ -471,21 +473,22 @@ impl Envelope {
                 let mut v = Vec::new();
                 v.push(new_ref);
                 self.references = Some(References {
-                    raw: "".to_string(),
+                    raw: "".into(),
                     refs: v,
                 });
             }
         }
     }
-    fn set_references(&mut self, new_val: String) -> () {
+    // TODO: Check what references should be like again.
+    fn set_references(&mut self, new_val: &[u8]) -> () {
         match self.references {
             Some(ref mut s) => {
-                s.raw = new_val;
+                s.raw = new_val.into();
             }
             None => {
                 let v = Vec::new();
                 self.references = Some(References {
-                    raw: new_val,
+                    raw: new_val.into(),
                     refs: v,
                 });
             }

@@ -25,7 +25,7 @@ use mailbox::Mailbox;
 
 extern crate fnv;
 use self::fnv::FnvHashMap;
-use std;
+use std::borrow::Cow;
 
 type UnixTimestamp = u64;
 
@@ -115,12 +115,13 @@ impl PartialEq for Container {
 
 fn build_collection(
     threads: &mut Vec<Container>,
-    id_table: &mut FnvHashMap<std::string::String, usize>,
+    id_table: &mut FnvHashMap<Cow<str>, usize>,
     collection: &mut [Envelope],
 ) -> () {
     for (i, x) in collection.iter_mut().enumerate() {
         let x_index; /* x's index in threads */
-        let m_id = x.message_id_raw().to_string();
+        let m_id = x.message_id_raw().into_owned();
+        let m_id = Cow::from(m_id);
         /* TODO: Check for missing Message-ID.
          * Solutions: generate a hidden one
          */
@@ -170,8 +171,9 @@ fn build_collection(
                 continue;
             }
             iasf += 1;
-            let parent_id = if id_table.contains_key(r.raw()) {
-                let p = id_table[r.raw()];
+            let r = String::from_utf8_lossy(r.raw());
+            let parent_id = if id_table.contains_key(&r) {
+                let p = id_table[r.as_ref()];
                 if !(threads[p].is_descendant(threads, &threads[curr_ref])
                     || threads[curr_ref].is_descendant(threads, &threads[p]))
                 {
@@ -204,7 +206,8 @@ fn build_collection(
                 if threads[curr_ref].parent.is_none() {
                     threads[curr_ref].parent = Some(idx);
                 }
-                id_table.insert(r.raw().to_string(), idx);
+                /* Can't avoid copy here since we have different lifetimes */
+                id_table.insert(Cow::from(r.into_owned()), idx);
                 idx
             };
             /* update thread date */
@@ -238,7 +241,7 @@ pub fn build_threads(
     /* a vector to hold thread members */
     let mut threads: Vec<Container> = Vec::with_capacity((collection.len() as f64 * 1.2) as usize);
     /* A hash table of Message IDs */
-    let mut id_table: FnvHashMap<std::string::String, usize> =
+    let mut id_table: FnvHashMap<Cow<str>, usize> =
         FnvHashMap::with_capacity_and_hasher(collection.len(), Default::default());
 
     /* Add each message to id_table and threads, and link them together according to the
@@ -261,13 +264,14 @@ pub fn build_threads(
             let sent_mailbox = sent_mailbox.unwrap();
 
             for x in &sent_mailbox.collection {
-                if id_table.contains_key(x.message_id_raw())
+                let m_id = x.message_id_raw();
+                if id_table.contains_key(&m_id)
                     || (!x.in_reply_to_raw().is_empty()
-                        && id_table.contains_key(x.in_reply_to_raw()))
+                        && id_table.contains_key(&x.in_reply_to_raw()))
                 {
                     let mut x: Envelope = (*x).clone();
-                    if id_table.contains_key(x.message_id_raw()) {
-                        let c = id_table[x.message_id_raw()];
+                    if id_table.contains_key(&m_id) {
+                        let c = id_table[&m_id];
                         if threads[c].message.is_some() {
                             /* skip duplicate message-id, but this should be handled instead */
                             continue;
@@ -277,11 +281,11 @@ pub fn build_threads(
                         threads[c].date = x.date();
                         x.set_thread(c);
                     } else if !x.in_reply_to_raw().is_empty()
-                        && id_table.contains_key(x.in_reply_to_raw())
+                        && id_table.contains_key(&x.in_reply_to_raw())
                     {
-                        let p = id_table[x.in_reply_to_raw()];
-                        let c = if id_table.contains_key(x.message_id_raw()) {
-                            id_table[x.message_id_raw()]
+                        let p = id_table[&m_id];
+                        let c = if id_table.contains_key(&m_id) {
+                            id_table[&m_id]
                         } else {
                             threads.push(Container {
                                 message: Some(idx),
@@ -293,7 +297,7 @@ pub fn build_threads(
                                 indentation: 0,
                                 show_subject: true,
                             });
-                            id_table.insert(x.message_id_raw().to_string(), tidx);
+                            id_table.insert(Cow::from(m_id.into_owned()), tidx);
                             x.set_thread(tidx);
                             tidx += 1;
                             tidx - 1
@@ -376,7 +380,7 @@ pub fn build_threads(
             if indentation > 0 && thread.has_message() {
                 let subject = collection[thread.message().unwrap()].subject();
                 if subject == root_subject
-                    || subject.starts_with("Re: ") && subject.ends_with(root_subject)
+                    || subject.starts_with("Re: ") && subject.as_ref().ends_with(root_subject.as_ref())
                 {
                     threads[i].set_show_subject(false);
                 }

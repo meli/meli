@@ -28,6 +28,45 @@ use nom::{ErrorKind, IResult, Needed};
 use std;
 use std::str::from_utf8;
 
+pub trait BytesExt {
+    fn trim(&self) -> &Self;
+    fn find(&self, needle: &[u8]) -> Option<usize>;
+    fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8>;
+}
+
+impl BytesExt for [u8] {
+    fn trim(&self) -> &[u8] {
+        fn is_whitespace(c: &u8) -> bool {
+            *c == b'\t' || *c == b' '
+        }
+
+        fn is_not_whitespace(c: &u8) -> bool {
+            !is_whitespace(c)
+        }
+
+        if let Some(first) = self.iter().position(is_not_whitespace) {
+            if let Some(last) = self.iter().rposition(is_not_whitespace) {
+                &self[first..last + 1]
+            } else {
+                unreachable!();
+            }
+        } else {
+            &[]
+        }
+    }
+    // https://stackoverflow.com/a/35907071
+    fn find(&self, needle: &[u8]) -> Option<usize> {
+        self.windows(needle.len()).position(|window| window == needle)
+    }
+    fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8> {
+        let mut ret = self.to_vec();
+        if let Some(idx) = self.find(from) {
+            ret.splice(idx..(idx + from.len()), to.iter().cloned());
+        }
+        ret
+    }
+}
+
 macro_rules! is_whitespace {
     ($var:ident) => {
         $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
@@ -71,7 +110,7 @@ fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
  * 	Tue,  5 Jan 2016 21:30:44 +0100 (CET)
  */
 
-fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
+fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
     if input.is_empty() || input[0] == b'\n' {
         IResult::Incomplete(Needed::Unknown)
     } else {
@@ -79,15 +118,9 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
         for (i, x) in input.iter().enumerate() {
             if *x == b'\n' {
                 if (i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t' {
-                    return match from_utf8(&input[0..i]) {
-                        Ok(v) => IResult::Done(&input[(i + 1)..], v),
-                        Err(_) => IResult::Error(error_code!(ErrorKind::Custom(43))),
-                    };
+                    return IResult::Done(&input[(i + 1)..], &input[0..i]);
                 } else if i + 1 == input_len {
-                    return match from_utf8(input) {
-                        Ok(v) => IResult::Done(&input[(i + 1)..], v),
-                        Err(_) => IResult::Error(error_code!(ErrorKind::Custom(43))),
-                    };
+                    return IResult::Done(&input[(i + 1)..], &input[0..i]);
                 }
             }
         }
@@ -96,15 +129,15 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &str> {
 }
 
 /* Parse the name part of the header -> &str */
-named!(name<&str>, map_res!(is_not!(":\n"), from_utf8));
+named!(name<&[u8]>, is_not!(":\n"));
 
 /* Parse a single header as a tuple -> (&str, Vec<&str>) */
 named!(
-    header<(&str, &str)>,
-    separated_pair!(complete!(name), ws!(tag!(":")), complete!(header_value))
+    header<(&[u8], &[u8])>,
+    separated_pair!(complete!(name), ws!(tag!(b":")), complete!(header_value))
 );
 /* Parse all headers -> Vec<(&str, Vec<&str>)> */
-named!(pub headers<std::vec::Vec<(&str, &str)>>,
+named!(pub headers<std::vec::Vec<(&[u8], &[u8])>>,
        many1!(complete!(header)));
 
 //named!(pub headers_raw<&[u8]>,
@@ -128,9 +161,9 @@ named!(pub body_raw<&[u8]>,
            body: take_while!(call!(|_| true)) >>
            ( { body } )));
 
-named!(pub mail<(std::vec::Vec<(&str, &str)>, &[u8])>,
-       separated_pair!(headers, tag!("\n"), take_while!(call!(|_| true))));
-named!(pub attachment<(std::vec::Vec<(&str, &str)>, &[u8])>,
+named!(pub mail<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
+       separated_pair!(headers, tag!(b"\n"), take_while!(call!(|_| true))));
+named!(pub attachment<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
        do_parse!(
             opt!(is_a!(" \n\t\r")) >>
        pair: pair!(many0!(complete!(header)), take_while!(call!(|_| true))) >>
@@ -252,7 +285,7 @@ named!(
 );
 
 named!(
-    encoded_word_list<String>,
+    encoded_word_list<Vec<u8>>,
     ws!(do_parse!(
         list: separated_nonempty_list!(complete!(is_a!(" \n\r\t")), encoded_word) >> ({
             let list_len = list.iter().fold(0, |mut acc, x| {
@@ -264,17 +297,17 @@ named!(
                     acc.append(&mut x.clone());
                     acc
                 });
-            String::from_utf8_lossy(&bytes).into_owned()
+            bytes
         })
     ))
 );
 named!(
-    ascii_token<String>,
+    ascii_token<Vec<u8>>,
     do_parse!(
         word: alt!(
             terminated!(take_until1!("=?"), peek!(tag_no_case!("=?UTF-8?")))
                 | take_while!(call!(|_| true))
-        ) >> ({ String::from_utf8_lossy(word).into_owned() })
+        ) >> ({ word.into() })
     )
 );
 
@@ -317,7 +350,7 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
                 IResult::Error(e) => IResult::Error(e),
                 IResult::Incomplete(i) => IResult::Incomplete(i),
                 IResult::Done(rest, raw) => {
-                    display_name.length = raw.find('<').unwrap();
+                    display_name.length = raw.find(b"<").unwrap();
                     address_spec.offset = display_name.length + 1;
                     address_spec.length = raw.len() - display_name.length - 2;
                     IResult::Done(
@@ -357,7 +390,7 @@ fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
             IResult::Done(
                 &input[end..],
                 Address::Mailbox(MailboxAddress {
-                    raw: String::from_utf8_lossy(&input[0..end + 1]).to_string(),
+                    raw: input[0..end + 1].into(),
                     display_name: StrBuilder {
                         offset: 0,
                         length: 0,
@@ -446,7 +479,7 @@ fn group(input: &[u8]) -> IResult<&[u8], Address> {
             return IResult::Done(
                 rest,
                 Address::Group(GroupAddress {
-                    raw: String::from_utf8(input[0..size].to_vec()).unwrap(),
+                    raw: input[0..size].into(),
                     display_name: StrBuilder {
                         offset: 0,
                         length: dlength,
@@ -480,13 +513,13 @@ named!(pub rfc2822address_list<Vec<Address>>, ws!(
 named!(pub address_list<String>, ws!(do_parse!(
         list: alt_complete!( encoded_word_list | ascii_token) >>
         ( {
-            let list: Vec<&str> = list.split(',').collect();
+            let list: Vec<&[u8]> = list.split(|c| *c == b',').collect();
             let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.trim().len(); acc }) + list.len() - 1;
             let list_len = list.len();
             let mut i = 0;
             list.iter().fold(String::with_capacity(string_len),
             |acc, x| {
-                let mut acc = acc + &x.replace("\n", "").replace("\t", " ").trim();
+                let mut acc = acc + &String::from_utf8_lossy(x.replace(b"\n", b"").replace(b"\t", b" ").trim());
                 if i != list_len - 1 {
                     acc.push_str(" ");
                     i+=1;
@@ -497,20 +530,20 @@ named!(pub address_list<String>, ws!(do_parse!(
 
        )));
 
-named!(pub phrase<String>, ws!(do_parse!(
+named!(pub phrase<Vec<u8>>, ws!(do_parse!(
         list: many0!(alt_complete!( encoded_word_list | ascii_token)) >>
         ( {
             if list.len() == 0 {
-               String::new()
+               Vec::new()
             } else {
             let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc }) + list.len() - 1;
             let list_len = list.len();
             let mut i = 0;
-            list.iter().fold(String::with_capacity(string_len),
-            |acc, x| {
-                let mut acc = acc + &x.replace("\n", "").replace("\t", " ");
+            list.iter().fold(Vec::with_capacity(string_len),
+            |mut acc, x| {
+                acc.extend(x.replace(b"\n", b"").replace(b"\t", b" "));
                 if i != list_len - 1 {
-                    acc.push_str(" ");
+                    acc.push(b' ');
                     i+=1;
                 }
                 acc
@@ -578,21 +611,21 @@ fn test_phrase() {
         phrase(phrase_s).unwrap()
     );
 }
-fn eat_comments(input: &str) -> String {
+fn eat_comments(input: &[u8]) -> Vec<u8> {
     let mut in_comment = false;
     input
-        .chars()
-        .fold(String::with_capacity(input.len()), |mut acc, x| {
-            if x == '(' && !in_comment {
+        .iter()
+        .fold(Vec::with_capacity(input.len()), |mut acc, x| {
+            if *x == b'(' && !in_comment {
                 in_comment = true;
                 acc
-            } else if x == ')' && in_comment {
+            } else if *x == b')' && in_comment {
                 in_comment = false;
                 acc
             } else if in_comment {
                 acc
             } else {
-                acc.push(x);
+                acc.push(*x);
                 acc
             }
         })
@@ -610,12 +643,12 @@ fn test_eat_comments() {
  * right now we expect input will have no extra spaces in between tokens
  *
  * We should use a custom parser here*/
-pub fn date(input: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
-    let parsed_result = phrase(eat_comments(input).as_bytes())
+pub fn date(input: &[u8]) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    let parsed_result = phrase(&eat_comments(input))
         .to_full_result()
         .unwrap()
-        .replace("-", "+");
-    chrono::DateTime::parse_from_rfc2822(parsed_result.trim()).ok()
+        .replace(b"-",b"+");
+    chrono::DateTime::parse_from_rfc2822(String::from_utf8_lossy(parsed_result.trim()).as_ref()).ok()
 }
 
 #[test]
@@ -627,11 +660,11 @@ fn test_date() {
     assert_eq!(date(_s).unwrap(), date(__s).unwrap());
 }
 
-named!(pub message_id<&str>,
-        map_res!(complete!(delimited!(tag!("<"), take_until1!(">"), tag!(">"))), from_utf8)
+named!(pub message_id<&[u8]>,
+        complete!(delimited!(tag!("<"), take_until1!(">"), tag!(">")))
  );
 
-fn message_id_peek(input: &[u8]) -> IResult<&[u8], &str> {
+fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
     let input_length = input.len();
     if input.is_empty() {
         IResult::Incomplete(Needed::Size(1))
@@ -640,16 +673,16 @@ fn message_id_peek(input: &[u8]) -> IResult<&[u8], &str> {
     } else {
         for (i, &x) in input.iter().take(input_length).enumerate().skip(1) {
             if x == b'>' {
-                return IResult::Done(&input[i + 1..], from_utf8(&input[0..i + 1]).unwrap());
+                return IResult::Done(&input[i + 1..], &input[0..i + 1]);
             }
         }
         IResult::Incomplete(Needed::Unknown)
     }
 }
 
-named!(pub references<Vec<&str>>, separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
+named!(pub references<Vec<&[u8]>>, separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
 
-named_args!(pub attachments<'a>(boundary: &'a str, boundary_end: &'a str) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
+named_args!(pub attachments<'a>(boundary: &'a [u8], boundary_end: &'a [u8]) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
             alt_complete!(do_parse!(
                 take_until!(boundary) >>
                 vecs: many0!(complete!(do_parse!(
@@ -688,31 +721,27 @@ fn test_attachments() {
 }
 
 named!(
-    content_type_parameter<(&str, &str)>,
+    content_type_parameter<(&[u8], &[u8])>,
     do_parse!(
-        tag!(";") >> name: terminated!(map_res!(ws!(take_until!("=")), from_utf8), tag!("="))
-            >> value:
-                map_res!(
-                    ws!(alt_complete!(
-                        delimited!(tag!("\""), take_until!("\""), tag!("\"")) | is_not!(";")
-                    )),
-                    from_utf8
-                ) >> ({ (name, value) })
+        tag!(";") >>
+        name: terminated!(ws!(take_until!("=")) , tag!("=")) >>
+        value: ws!(alt_complete!( delimited!(tag!("\""), take_until!("\""), tag!("\"")) | is_not!(";"))) >>
+        ({ (name, value) })
     )
 );
 
-named!(pub content_type< (&str, &str, Vec<(&str, &str)>) >,
+named!(pub content_type< (&[u8], &[u8], Vec<(&[u8], &[u8])>) >,
        do_parse!(
-           _type: map_res!(take_until!("/"), from_utf8) >>
+           _type: take_until!("/") >>
            tag!("/") >>
-           _subtype: map_res!(is_not!(";"), from_utf8) >>
+           _subtype: is_not!(";") >>
            parameters: many0!(complete!(content_type_parameter)) >>
            ( {
                (_type, _subtype, parameters)
            } )
            ));
 
-named!(pub quoted_printable_text<String>,
+named!(pub quoted_printable_text<Vec<u8>>,
    do_parse!(
        bytes: many0!(alt_complete!(
                preceded!(tag!("=\n"), quoted_printable_byte) |
@@ -720,7 +749,7 @@ named!(pub quoted_printable_text<String>,
                quoted_printable_byte |
                le_u8)) >>
        ( {
-           String::from_utf8_lossy(&bytes).into_owned()
+           bytes
        } )
    )
 );

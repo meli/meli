@@ -421,7 +421,7 @@ impl Component for StatusBar {
                     .as_ref()
                     .unwrap();
                 self.status = format!(
-                    "{} |Mailbox: {}, Messages: {}, New: {}",
+                    "{} | Mailbox: {}, Messages: {}, New: {}",
                     self.mode,
                     m.folder.name(),
                     m.collection.len(),

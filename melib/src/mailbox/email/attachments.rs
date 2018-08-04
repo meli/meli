@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use mailbox::email::parser;
+use mailbox::email::parser::BytesExt;
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
@@ -28,7 +29,7 @@ use data_encoding::BASE64_MIME;
 /*
  *
  * Data
- * Text { content: String }
+ * Text { content: Vec<u8> }
  * Multipart
  */
 
@@ -37,7 +38,7 @@ pub enum MultipartType {
     Mixed,
     Alternative,
     Digest,
-    Unsupported { tag: String },
+    Unsupported { tag: Vec<u8> },
 }
 
 impl Display for MultipartType {
@@ -46,7 +47,7 @@ impl Display for MultipartType {
             MultipartType::Mixed => write!(f, "multipart/mixed"),
             MultipartType::Alternative => write!(f, "multipart/alternative"),
             MultipartType::Digest => write!(f, "multipart/digest"),
-            MultipartType::Unsupported { tag: ref t } => write!(f, "multipart/{}", t),
+            MultipartType::Unsupported { tag: ref t } => write!(f, "multipart/{}", String::from_utf8_lossy(t)),
         }
     }
 }
@@ -54,10 +55,10 @@ impl Display for MultipartType {
 #[derive(Clone, Debug)]
 pub enum AttachmentType {
     Data {
-        tag: String,
+        tag: Vec<u8>,
     },
     Text {
-        content: String,
+        content: Vec<u8>,
     },
     Multipart {
         of_type: MultipartType,
@@ -68,8 +69,8 @@ pub enum AttachmentType {
 impl Display for AttachmentType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            AttachmentType::Data { tag: ref t } => write!(f, "{}", t),
-            AttachmentType::Text { content: ref c } => write!(f, "{}", c),
+            AttachmentType::Data { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
+            AttachmentType::Text { content: ref c } => write!(f, "{}", String::from_utf8_lossy(c)),
             AttachmentType::Multipart { of_type: ref t, .. } => write!(f, "{}", t),
         }
     }
@@ -77,8 +78,8 @@ impl Display for AttachmentType {
 #[derive(Clone, Debug)]
 pub enum ContentType {
     Text,
-    Multipart { boundary: String },
-    Unsupported { tag: String },
+    Multipart { boundary: Vec<u8> },
+    Unsupported { tag: Vec<u8> },
 }
 
 impl Display for ContentType {
@@ -86,20 +87,20 @@ impl Display for ContentType {
         match *self {
             ContentType::Text => write!(f, "text"),
             ContentType::Multipart { .. } => write!(f, "multipart"),
-            ContentType::Unsupported { tag: ref t } => write!(f, "{}", t),
+            ContentType::Unsupported { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
         }
     }
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum ContentSubType {
     Plain,
-    Other { tag: String },
+    Other { tag: Vec<u8> },
 }
 impl Display for ContentSubType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
             ContentSubType::Plain => write!(f, "plain"),
-            ContentSubType::Other { tag: ref t } => write!(f, "{}", t),
+            ContentSubType::Other { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
         }
     }
 }
@@ -109,7 +110,7 @@ pub enum ContentTransferEncoding {
     _7Bit,
     Base64,
     QuotedPrintable,
-    Other { tag: String },
+    Other { tag: Vec<u8> },
 }
 
 /// TODO: Add example.
@@ -129,13 +130,17 @@ impl AttachmentBuilder {
             raw: content.to_vec(),
         }
     }
-    pub fn content_type(&mut self, value: &str) -> &Self {
-        match parser::content_type(value.as_bytes()).to_full_result() {
-            Ok((ct, cst, params)) => if ct.eq_ignore_ascii_case("multipart") {
+    pub fn content_type(&mut self, value: &[u8]) -> &Self {
+        match parser::content_type(value).to_full_result() {
+            Ok((ct, cst, params)) => if ct.eq_ignore_ascii_case(b"multipart") {
                 let mut boundary = None;
                 for (n, v) in params {
-                    if n.eq_ignore_ascii_case("boundary") {
-                        boundary = Some(format!("--{}--", v).to_string());
+                    if n.eq_ignore_ascii_case(b"boundary") {
+                        let mut vec: Vec<u8> = Vec::with_capacity(v.len()+4);
+                        vec.extend_from_slice(b"--");
+                        vec.extend(v);
+                        vec.extend_from_slice(b"--");
+                        boundary = Some(vec);
                         break;
                     }
                 }
@@ -144,11 +149,11 @@ impl AttachmentBuilder {
                     boundary: boundary.unwrap(),
                 };
                 self.content_type.1 = ContentSubType::Other {
-                    tag: cst.to_string(),
+                    tag: cst.into(),
                 };
-            } else if ct.eq_ignore_ascii_case("text") {
+            } else if ct.eq_ignore_ascii_case(b"text") {
                 self.content_type.0 = ContentType::Text;
-                if !cst.eq_ignore_ascii_case("plain") {
+                if !cst.eq_ignore_ascii_case(b"plain") {
                     self.content_type.1 = ContentSubType::Other {
                         tag: cst.to_ascii_lowercase(),
                     };
@@ -167,14 +172,14 @@ impl AttachmentBuilder {
         }
         self
     }
-    pub fn content_transfer_encoding(&mut self, value: &str) -> &Self {
-        self.content_transfer_encoding = if value.eq_ignore_ascii_case("base64") {
+    pub fn content_transfer_encoding(&mut self, value: &[u8]) -> &Self {
+        self.content_transfer_encoding = if value.eq_ignore_ascii_case(b"base64") {
             ContentTransferEncoding::Base64
-        } else if value.eq_ignore_ascii_case("7bit") {
+        } else if value.eq_ignore_ascii_case(b"7bit") {
             ContentTransferEncoding::_7Bit
-        } else if value.eq_ignore_ascii_case("8bit") {
+        } else if value.eq_ignore_ascii_case(b"8bit") {
             ContentTransferEncoding::_8Bit
-        } else if value.eq_ignore_ascii_case("quoted-printable") {
+        } else if value.eq_ignore_ascii_case(b"quoted-printable") {
             ContentTransferEncoding::QuotedPrintable
         } else {
             ContentTransferEncoding::Other {
@@ -183,7 +188,7 @@ impl AttachmentBuilder {
         };
         self
     }
-    fn decode(&self) -> String {
+    fn decode(&self) -> Vec<u8> {
         // TODO: Use charset for decoding
         match self.content_transfer_encoding {
             ContentTransferEncoding::Base64 => match BASE64_MIME.decode(
@@ -197,15 +202,17 @@ impl AttachmentBuilder {
                     })
                     .as_bytes(),
             ) {
-                Ok(ref v) => {
-                    let s = String::from_utf8_lossy(v);
-                    if s.find("\r\n").is_some() {
-                        s.replace("\r\n", "\n")
-                    } else {
-                        s.into_owned()
+                Ok(ref s) => {
+                  let s:Vec<u8> = s.clone();
+                  {
+                    let slice = &s[..];
+                    if slice.find(b"\r\n").is_some() {
+                      s.replace(b"\r\n", b"\n");
                     }
+                  }
+                  s
                 }
-                _ => String::from_utf8_lossy(&self.raw).into_owned(),
+                _ => self.raw.clone()
             },
             ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_text(&self.raw)
                 .to_full_result()
@@ -213,7 +220,7 @@ impl AttachmentBuilder {
             ContentTransferEncoding::_7Bit
             | ContentTransferEncoding::_8Bit
             | ContentTransferEncoding::Other { .. } => {
-                String::from_utf8_lossy(&self.raw).into_owned()
+                self.raw.clone()
             }
         }
     }
@@ -224,11 +231,11 @@ impl AttachmentBuilder {
             },
             ContentType::Multipart { boundary: ref b } => {
                 let multipart_type = match self.content_type.1 {
-                    ContentSubType::Other { ref tag } => match tag.as_ref() {
-                        "mixed" => MultipartType::Mixed,
-                        "alternative" => MultipartType::Alternative,
-                        "digest" => MultipartType::Digest,
-                        t => MultipartType::Unsupported { tag: t.to_string() },
+                    ContentSubType::Other { ref tag } => match &tag[..] {
+                        b"mixed" => MultipartType::Mixed,
+                        b"alternative" => MultipartType::Alternative,
+                        b"digest" => MultipartType::Digest,
+                        _ => MultipartType::Unsupported { tag:tag.clone() },
                     },
                     _ => panic!(),
                 };
@@ -247,7 +254,7 @@ impl AttachmentBuilder {
         }
     }
 
-    pub fn subattachments(raw: &[u8], boundary: &str) -> Vec<Attachment> {
+    pub fn subattachments(raw: &[u8], boundary: &[u8]) -> Vec<Attachment> {
         let boundary_length = boundary.len();
         match parser::attachments(raw, &boundary[0..boundary_length - 2], boundary).to_full_result()
         {
@@ -267,9 +274,9 @@ impl AttachmentBuilder {
                     };
                     let mut builder = AttachmentBuilder::new(body);
                     for (name, value) in headers {
-                        if name.eq_ignore_ascii_case("content-type") {
+                        if name.eq_ignore_ascii_case(b"content-type") {
                             builder.content_type(value);
-                        } else if name.eq_ignore_ascii_case("content-transfer-encoding") {
+                        } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
                             builder.content_transfer_encoding(value);
                         }
                     }
@@ -333,7 +340,7 @@ impl Attachment {
                 //text.push_str(&format!("Data attachment of type {}", self.mime_type()));
             }
             AttachmentType::Text { content: ref t } => {
-                text.push_str(t);
+                text.push_str(&String::from_utf8_lossy(t));
             }
             AttachmentType::Multipart {
                 of_type: ref multipart_type,
