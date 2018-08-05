@@ -229,7 +229,6 @@ impl Component for MailView {
             } else {
                 self.pager.as_mut().map(|p| p.cursor_pos())
             };
-            // TODO: pass string instead of envelope
             self.pager = Some(Pager::from_buf(buf, cursor_pos));
             self.dirty = false;
         }
@@ -244,7 +243,6 @@ impl Component for MailView {
                 self.cmd_buf.clear();
             }
             UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
-                //TODO:this should be an Action
                 self.cmd_buf.push(c);
             }
             UIEventType::Input(Key::Char('r')) if self.mode == ViewMode::Normal || self.mode == ViewMode::Raw => {
@@ -256,14 +254,12 @@ impl Component for MailView {
                 self.dirty = true;
             }
             UIEventType::Input(Key::Char('r')) if self.mode.is_attachment() => {
-                //TODO:one quit shortcut?
                 self.mode = ViewMode::Normal;
                 self.dirty = true;
             }
             UIEventType::Input(Key::Char('a'))
                 if self.cmd_buf.len() > 0 && self.mode == ViewMode::Normal =>
             {
-                //TODO:this should be an Action
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
 
@@ -336,8 +332,6 @@ impl Component for MailView {
             UIEventType::Input(Key::Char('g'))
                 if self.cmd_buf.len() > 0 && self.mode == ViewMode::Url =>
             {
-                //TODO:this should be an Action
-
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
                 let url = {
@@ -381,7 +375,6 @@ impl Component for MailView {
                     .expect("Failed to start xdg_open");
             }
             UIEventType::Input(Key::Char('u')) => {
-                //TODO:this should be an Action
                 match self.mode {
                     ViewMode::Normal => self.mode = ViewMode::Url,
                     ViewMode::Url => self.mode = ViewMode::Normal,

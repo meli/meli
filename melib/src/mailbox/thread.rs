@@ -122,9 +122,6 @@ fn build_collection(
         let x_index; /* x's index in threads */
         let m_id = x.message_id_raw().into_owned();
         let m_id = Cow::from(m_id);
-        /* TODO: Check for missing Message-ID.
-         * Solutions: generate a hidden one
-         */
         if id_table.contains_key(&m_id) {
             let t = id_table[&m_id];
             /* the already existing Container should be empty, since we're

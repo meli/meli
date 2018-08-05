@@ -384,15 +384,10 @@ impl<W: Write> State<W> {
     }
     /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: String) {
-        //TODO: Make ex mode useful
-
         let result = parse_command(&cmd.as_bytes()).to_full_result();
 
         if let Ok(v) = result {
-            eprintln!("result is {:?}", v);
             self.rcv_event(UIEvent { id: 0, event_type: UIEventType::Action(v) });
-;
-            //self.refresh_mailbox(0, v);
         }
     }
 

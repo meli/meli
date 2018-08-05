@@ -33,6 +33,8 @@ use std::option::Option;
 use std::string::String;
 use std::sync::Arc;
 use std::borrow::Cow;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 
 use chrono;
 use chrono::TimeZone;
@@ -326,6 +328,11 @@ impl Envelope {
             if let Some(d) = parser::date(d) {
                 self.set_datetime(d);
             }
+        }
+        if self.message_id.is_none() {
+            let mut h = DefaultHasher::new();
+            h.write(&self.bytes());
+            self.set_message_id(format!("<{:x}>", h.finish()).as_bytes());
         }
         Ok(())
     }
