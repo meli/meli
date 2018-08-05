@@ -358,6 +358,10 @@ impl Envelope {
         let _strings: Vec<String> = self.to.iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
     }
+    pub fn bytes(&self) -> Vec<u8> {
+        let mut operation = self.operation_token.generate();
+        operation.as_bytes().map(|v| v.into()).unwrap_or_else(|_| Vec::new())
+    }
     pub fn body(&self) -> Attachment {
         let mut operation = self.operation_token.generate();
         let file = operation.as_bytes();

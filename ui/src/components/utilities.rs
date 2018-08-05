@@ -259,15 +259,13 @@ impl Component for Pager {
         if !self.is_dirty() {
             return;
         }
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
 
         self.dirty = false;
         if self.height == 0 || self.height == self.cursor_pos || self.width == 0 {
             return;
         }
 
-        clear_area(grid, (upper_left, bottom_right));
+        clear_area(grid, area);
         //let pager_context: usize = context.settings.pager.pager_context;
         //let pager_stop: bool = context.settings.pager.pager_stop;
         //let rows = y(bottom_right) - y(upper_left);
