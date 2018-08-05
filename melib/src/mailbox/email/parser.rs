@@ -28,6 +28,15 @@ use nom::{ErrorKind, IResult, Needed};
 use std;
 use std::str::from_utf8;
 
+macro_rules! is_whitespace {
+    ($var:ident) => {
+        $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
+    };
+    ($var:expr) => {
+        $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
+    };
+}
+
 pub trait BytesExt {
     fn trim(&self) -> &Self;
     fn find(&self, needle: &[u8]) -> Option<usize>;
@@ -36,16 +45,8 @@ pub trait BytesExt {
 
 impl BytesExt for [u8] {
     fn trim(&self) -> &[u8] {
-        fn is_whitespace(c: &u8) -> bool {
-            *c == b'\t' || *c == b' '
-        }
-
-        fn is_not_whitespace(c: &u8) -> bool {
-            !is_whitespace(c)
-        }
-
-        if let Some(first) = self.iter().position(is_not_whitespace) {
-            if let Some(last) = self.iter().rposition(is_not_whitespace) {
+        if let Some(first) = self.iter().position(|b| !is_whitespace!(*b)) {
+            if let Some(last) = self.iter().rposition(|b| !is_whitespace!(*b)) {
                 &self[first..last + 1]
             } else {
                 unreachable!();
@@ -67,17 +68,9 @@ impl BytesExt for [u8] {
     }
 }
 
-macro_rules! is_whitespace {
-    ($var:ident) => {
-        $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
-    };
-    ($var:expr) => {
-        $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
-    };
-}
 
 fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
-    if input.is_empty() || input.len() < 3 {
+    if input.len() < 3 {
         IResult::Incomplete(Needed::Size(1))
     } else if input[0] == b'=' && is_hex_digit(input[1]) && is_hex_digit(input[2]) {
         let a = if input[1] < b':' {
@@ -111,21 +104,17 @@ fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
  */
 
 fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    if input.is_empty() || input[0] == b'\n' {
-        IResult::Incomplete(Needed::Unknown)
-    } else {
-        let input_len = input.len();
-        for (i, x) in input.iter().enumerate() {
-            if *x == b'\n' {
-                if (i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t' {
-                    return IResult::Done(&input[(i + 1)..], &input[0..i]);
-                } else if i + 1 == input_len {
-                    return IResult::Done(&input[(i + 1)..], &input[0..i]);
-                }
+    let input_len = input.len();
+    for (i, x) in input.iter().enumerate() {
+        if *x == b'\n' {
+            if (i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t' {
+                return IResult::Done(&input[(i + 1)..], &input[0..i]);
+            } else if i + 1 == input_len {
+                return IResult::Done(&input[(i + 1)..], &input[0..i]);
             }
         }
-        IResult::Error(error_code!(ErrorKind::Custom(43)))
     }
+    IResult::Incomplete(Needed::Unknown)
 }
 
 /* Parse the name part of the header -> &str */

@@ -372,8 +372,8 @@ pub fn build_threads(
         collection: &[Envelope],
     ) {
         let thread = threads[i];
-        if threads[root_subject_idx].has_message() {
-            let root_subject = collection[threads[root_subject_idx].message().unwrap()].subject();
+        if let Some(msg_idx) = threads[root_subject_idx].message() {
+            let root_subject = collection[msg_idx].subject();
             /* If the Container has no Message, but does have children, remove this container but
              * promote its children to this level (that is, splice them in to the current child
              * list.) */

@@ -24,6 +24,11 @@
 The mail handling stuff is done in the `melib` crate which includes all backend needs. The split is done to theoretically be able to create different frontends with the same innards.
  */
 
+use std::alloc::System;
+
+#[global_allocator]
+static GLOBAL: System = System;
+
 extern crate melib;
 extern crate ui;
 
