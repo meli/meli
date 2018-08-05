@@ -428,7 +428,7 @@ impl Component for StatusBar {
                 self.dirty = true;
             }
             UIEventType::ChangeMode(m) => {
-                let offset = self.status.find('|').unwrap_or(self.status.len());
+                let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
                 self.status.replace_range(..offset, &format!("{} ", m));
                 self.dirty = true;
                 self.mode = m.clone();

@@ -1,10 +1,6 @@
 use super::*;
 const MAX_COLS: usize = 500;
 
-#[derive(Debug)]
-pub enum MailListingAction {
-    ToggleThreaded,
-}
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `Pager`.
@@ -582,7 +578,16 @@ impl Component for MailListing {
                         .threaded;
                     self.refresh_mailbox(context);
                     self.dirty = true;
+                    return;
+                },
+                Action::ViewMailbox(idx) => {
+                    eprintln!("listing got viewmailbox({})", idx);
+                    self.new_cursor_pos.1 = *idx;
+                    self.dirty = true;
+                    self.refresh_mailbox(context);
+                    return;
                 }
+                _ => {},
             },
             _ => {}
         }

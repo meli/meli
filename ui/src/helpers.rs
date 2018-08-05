@@ -9,6 +9,12 @@ pub struct File {
     path: PathBuf,
 }
 
+impl Drop for File {
+    fn drop(&mut self) {
+        std::fs::remove_file(self.path()).unwrap_or_else(|_| {});
+    }
+}
+
 impl File {
     pub fn file(&mut self) -> std::fs::File {
         std::fs::File::create(&self.path).unwrap()
@@ -18,7 +24,6 @@ impl File {
     }
 }
 
-//TODO: add temp files to a list to reap them when dropped
 pub fn create_temp_file(bytes: &[u8], filename: Option<&PathBuf>) -> File {
     let mut dir = std::env::temp_dir();
 

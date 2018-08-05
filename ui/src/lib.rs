@@ -37,10 +37,10 @@ pub use helpers::*;
 
 #[macro_use]
 mod execute;
+use execute::*;
 use self::cells::*;
 pub use self::components::*;
 pub use self::position::*;
-use execute::goto;
 
 extern crate melib;
 extern crate mime_apps;
@@ -66,10 +66,6 @@ use termion::{clear, cursor, style};
 extern crate nom;
 use chan::Sender;
 
-#[derive(Debug)]
-pub enum Action {
-    MailListing(MailListingAction),
-}
 
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads
 /// to the main process.
@@ -390,10 +386,13 @@ impl<W: Write> State<W> {
     fn parse_command(&mut self, cmd: String) {
         //TODO: Make ex mode useful
 
-        let result = goto(&cmd.as_bytes()).to_full_result();
+        let result = parse_command(&cmd.as_bytes()).to_full_result();
 
         if let Ok(v) = result {
-            self.refresh_mailbox(0, v);
+            eprintln!("result is {:?}", v);
+            self.rcv_event(UIEvent { id: 0, event_type: UIEventType::Action(v) });
+;
+            //self.refresh_mailbox(0, v);
         }
     }
 
@@ -449,6 +448,12 @@ impl<W: Write> State<W> {
         /* inform each entity */
         for i in 0..self.entities.len() {
             self.entities[i].rcv_event(&event, &mut self.context);
+        }
+
+        if !self.context.replies.is_empty() {
+            let replies: Vec<UIEvent>= self.context.replies.drain(0..).collect();
+            // Pass replies to self and call count on the map iterator to force evaluation
+            replies.into_iter().map(|r| self.rcv_event(r)).count();
         }
     }
 
