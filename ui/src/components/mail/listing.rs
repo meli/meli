@@ -64,13 +64,12 @@ impl MailListing {
         // Get mailbox as a reference.
         //
         loop {
-            eprintln!("loop round");
-        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
-            Ok(()) => { break; },
-            Err(a) => {
-                eprintln!("status returned {:?}", a);
+            match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+                Ok(()) => { break; },
+                Err(_) => {
+                    // TODO: Show progress visually
+                }
             }
-        }
         }
         let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
@@ -455,8 +454,7 @@ impl Component for MailListing {
                         &mut mailbox.collection[idx]
                     };
                     if !envelope.is_seen() {
-                        eprintln!("setting seen");
-                        envelope.set_seen();
+                        envelope.set_seen().unwrap();
                         true
                     } else {
                         false
@@ -464,7 +462,6 @@ impl Component for MailListing {
                 }
             };
             if must_highlight {
-                eprintln!("must highlight");
                 self.highlight_line_self(idx, context);
             }
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
@@ -659,13 +656,12 @@ impl Component for MailListing {
                     return;
                 },
                 Action::ViewMailbox(idx) => {
-                    eprintln!("listing got viewmailbox({})", idx);
                     self.new_cursor_pos.1 = *idx;
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return;
-                }
-                _ => {},
+                },
+                //_ => {},
             },
             _ => {}
         }

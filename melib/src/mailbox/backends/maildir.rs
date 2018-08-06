@@ -137,7 +137,6 @@ impl BackendOp for MaildirOp {
         if !(flags & Flag::TRASHED).is_empty() {
             new_name.push('T');
         }
-        eprintln!("new name is {}", new_name);
 
         fs::rename(&self.path, &new_name)?;
         envelope.set_operation_token(
@@ -191,9 +190,9 @@ impl MailBackend for MaildirType {
                                 hasher.write(path.as_bytes());
                                 sender.send(RefreshEvent {
                                     folder: format!(
-                                        "{}", path
-                                    ),
-                                    hash: hasher.finish(),
+                                                "{}", path
+                                                ),
+                                                hash: hasher.finish(),
                                 });
                             }
                             _ => {}
@@ -202,7 +201,7 @@ impl MailBackend for MaildirType {
                     }
                 }
             })
-            .unwrap();
+        .unwrap();
     }
 }
 
@@ -220,9 +219,9 @@ impl MaildirType {
             p.push(d);
             if !p.is_dir() {
                 return Err(MeliError::new(format!(
-                    "{} is not a valid maildir folder",
-                    path
-                )));
+                            "{} is not a valid maildir folder",
+                            path
+                            )));
             }
             p.pop();
         }
@@ -235,67 +234,67 @@ impl MaildirType {
             // TODO: Avoid clone
             let folder = folder.clone();
 
-        thread::Builder::new()
-            .name(format!("parsing {:?}", folder))
-                  .spawn(move ||  {
-        MaildirType::is_valid(&folder)?;
-        let path = folder.path();
-        let mut path = PathBuf::from(path);
-        path.push("cur");
-        let iter = path.read_dir()?;
-        let count = path.read_dir()?.count();
-        let mut files: Vec<String> = Vec::with_capacity(count);
-        let mut r = Vec::with_capacity(count);
-        for e in iter {
-            let e = e.and_then(|x| {
-                let path = x.path();
-                Ok(path.to_str().unwrap().to_string())
-            })?;
-            files.push(e);
-        }
-        let mut threads = Vec::with_capacity(cores);
-        if !files.is_empty() {
-            crossbeam::scope(|scope| {
-                let chunk_size = if count / cores > 0 {
-                    count / cores
-                } else {
-                    count
-                };
-                for chunk in files.chunks(chunk_size) {
-                    let mut tx = tx.clone();
-                    let s = scope.spawn(move || {
-                        let len = chunk.len();
-                        let size = if len <= 100 { 100 } else { (len / 100) * 100};
-                        let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
-                        for c in chunk.chunks(size) {
-                            let len = c.len();
-                            for e in c {
-                                let e_copy = e.to_string();
-                                if let Some(mut e) =
-                                    Envelope::from_token(Box::new(BackendOpGenerator::new(Box::new(
-                                                    move || Box::new(MaildirOp::new(e_copy.clone())),
-                                                    )))) {
-                                        if e.populate_headers().is_err() {
-                                            continue;
+            thread::Builder::new()
+                .name(format!("parsing {:?}", folder))
+                .spawn(move ||  {
+                    MaildirType::is_valid(&folder)?;
+                    let path = folder.path();
+                    let mut path = PathBuf::from(path);
+                    path.push("cur");
+                    let iter = path.read_dir()?;
+                    let count = path.read_dir()?.count();
+                    let mut files: Vec<String> = Vec::with_capacity(count);
+                    let mut r = Vec::with_capacity(count);
+                    for e in iter {
+                        let e = e.and_then(|x| {
+                            let path = x.path();
+                            Ok(path.to_str().unwrap().to_string())
+                        })?;
+                        files.push(e);
+                    }
+                    let mut threads = Vec::with_capacity(cores);
+                    if !files.is_empty() {
+                        crossbeam::scope(|scope| {
+                            let chunk_size = if count / cores > 0 {
+                                count / cores
+                            } else {
+                                count
+                            };
+                            for chunk in files.chunks(chunk_size) {
+                                let mut tx = tx.clone();
+                                let s = scope.spawn(move || {
+                                    let len = chunk.len();
+                                    let size = if len <= 100 { 100 } else { (len / 100) * 100};
+                                    let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
+                                    for c in chunk.chunks(size) {
+                                        let len = c.len();
+                                        for e in c {
+                                            let e_copy = e.to_string();
+                                            if let Some(mut e) =
+                                                Envelope::from_token(Box::new(BackendOpGenerator::new(Box::new(
+                                                                move || Box::new(MaildirOp::new(e_copy.clone())),
+                                                                )))) {
+                                                    if e.populate_headers().is_err() {
+                                                        continue;
+                                                    }
+                                                    local_r.push(e);
+                                                }
                                         }
-                                        local_r.push(e);
+                                        tx.send(AsyncStatus::ProgressReport(len));
                                     }
+                                    local_r
+                                });
+                                threads.push(s);
                             }
-                            tx.send(AsyncStatus::ProgressReport(len));
-                        }
-                        local_r
-                    });
-                    threads.push(s);
-                }
-            });
-        }
-        for t in threads {
-            let mut result = t.join();
-            r.append(&mut result);
-        }
-        tx.send(AsyncStatus::Finished);
-        Ok(r)
-        }).unwrap()
+                        });
+                    }
+                    for t in threads {
+                        let mut result = t.join();
+                        r.append(&mut result);
+                    }
+                    tx.send(AsyncStatus::Finished);
+                    Ok(r)
+                }).unwrap()
         }; 
         w.build(handle)
     }

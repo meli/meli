@@ -55,6 +55,8 @@ use melib::*;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::Write;
+use std::thread;
+use std::time;
 extern crate termion;
 use termion::event::Key as TermionKey;
 use termion::input::TermRead;
@@ -77,7 +79,7 @@ pub enum ThreadEvent {
     RefreshMailbox {
         hash: u64,
     },
-    UIEventType(UIEventType),
+    UIEvent(UIEventType),
     //Decode { _ }, // For gpg2 signature check
 }
 
@@ -110,6 +112,8 @@ pub enum UIEventType {
     Action(Action),
     StatusNotification(String),
     MailboxUpdate((usize, usize)),
+
+    StartupCheck,
 }
 
 /// An event passed from `State` to its Entities.
@@ -186,6 +190,8 @@ pub struct State<W: Write> {
     sender: Sender<ThreadEvent>,
     entities: Vec<Entity>,
     pub context: Context,
+
+    startup_thread: Option<(chan::Sender<bool>, thread::JoinHandle<()>)>,
 }
 
 impl<W: Write> Drop for State<W> {
@@ -222,6 +228,25 @@ impl State<std::io::Stdout> {
             .map(|(n, a_s)| Account::new(n.to_string(), a_s.clone(), &backends))
             .collect();
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
+        let (startup_tx, startup_rx) = chan::async();
+        let startup_thread = {
+            let sender = sender.clone();
+            thread::Builder::new()
+                .name("startup-thread".to_string())
+                .spawn(move || {
+                    let dur = time::Duration::from_millis(100);
+                    loop {
+                        chan_select! {
+                            default => {},
+                            startup_rx.recv() -> _ => {
+                                return;
+                            }
+                        }
+                        sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
+                        thread::sleep(dur);
+                    }
+                }).unwrap()
+        };
         let mut s = State {
             cols: cols,
             rows: rows,
@@ -242,6 +267,7 @@ impl State<std::io::Stdout> {
 
                 input_thread: input_thread,
             },
+            startup_thread: Some((startup_tx, startup_thread)),
         };
         write!(
             s.stdout(),
@@ -258,6 +284,17 @@ impl State<std::io::Stdout> {
             })));
         }
         s
+    }
+    pub fn finish_startup(&mut self) {
+        // TODO: Encode startup process with the type system if possible
+        if self.startup_thread.is_none() {
+            return;
+        }
+        {
+            let (tx, handle) =  self.startup_thread.take().unwrap();
+            tx.send(true);
+            handle.join().unwrap();
+        }
     }
     pub fn to_main_screen(&mut self) {
         write!(

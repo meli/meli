@@ -59,7 +59,7 @@ fn make_input_thread(
                     sx.send(ThreadEvent::Input(k));
                 },
                 || {
-                    sx.send(ThreadEvent::UIEventType(UIEventType::ChangeMode(
+                    sx.send(ThreadEvent::UIEvent(UIEventType::ChangeMode(
                         UIMode::Fork,
                     )));
                 },
@@ -189,11 +189,29 @@ fn main() {
                             state.redraw();
                             /* Don't handle this yet. */
                         },
-                        ThreadEvent::UIEventType(UIEventType::ChangeMode(f)) => {
+                        ThreadEvent::UIEvent(UIEventType::ChangeMode(f)) => {
                             state.mode = f;
                             break 'inner; // `goto` 'reap loop, and wait on child.
                         }
-                        ThreadEvent::UIEventType(e) => {
+                        ThreadEvent::UIEvent(UIEventType::StartupCheck) => {
+                            let mut flag = false;
+                            for account in &mut state.context.accounts {
+                                let len = account.len();
+                                for i in 0..len {
+                                    match account.status(i) {
+                                        Ok(()) => { },
+                                        Err(_) => {
+                                            flag |= true;
+                                        }
+                                    }
+                                }
+                            }
+                           if !flag {
+                               state.finish_startup();
+                           }
+                               
+                        }
+                        ThreadEvent::UIEvent(e) => {
                             state.rcv_event(UIEvent { id: 0, event_type: e});
                             state.render();
                         },

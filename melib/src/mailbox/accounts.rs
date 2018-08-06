@@ -33,7 +33,7 @@ pub struct Account {
     name: String,
     folders: Vec<Option<Result<Mailbox>>>,
 
-    workers: Vec<Worker>,
+    pub workers: Vec<Worker>,
 
     sent_folder: Option<usize>,
 

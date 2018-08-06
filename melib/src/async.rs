@@ -67,7 +67,6 @@ impl<T> Async<T> {
                     Some(AsyncStatus::Finished) => {
                     },
                     Some(a) => {
-                        eprintln!("async got {:?}", a);
                         return Ok(a);
                     }
                     _ => {
@@ -79,7 +78,6 @@ impl<T> Async<T> {
         }
         let v = self.worker.take().unwrap().join().unwrap();
         self.value = Some(v);
-        eprintln!("worker joined");
         return Ok(AsyncStatus::Finished);
     }
 }
