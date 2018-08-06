@@ -19,6 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*!
+ * Threading algorithm
+ */
+
 use error::Result;
 use mailbox::email::*;
 use mailbox::Mailbox;
@@ -262,6 +266,7 @@ pub fn build_threads(
 
             for x in &sent_mailbox.collection {
                 let m_id = x.message_id_raw();
+                let x_r_id = x.in_reply_to_raw();
                 if id_table.contains_key(&m_id)
                     || (!x.in_reply_to_raw().is_empty()
                         && id_table.contains_key(&x.in_reply_to_raw()))
@@ -280,7 +285,7 @@ pub fn build_threads(
                     } else if !x.in_reply_to_raw().is_empty()
                         && id_table.contains_key(&x.in_reply_to_raw())
                     {
-                        let p = id_table[&m_id];
+                        let p = id_table[&x_r_id];
                         let c = if id_table.contains_key(&m_id) {
                             id_table[&m_id]
                         } else {

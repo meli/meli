@@ -1,3 +1,7 @@
+/*!
+ * User actions that need to be handled by the UI
+ */
+
 #[derive(Debug)]
 pub enum MailListingAction {
     ToggleThreaded,

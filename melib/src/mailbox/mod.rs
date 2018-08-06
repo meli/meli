@@ -19,6 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*!
+ * Mail related code.
+ *
+ * This module handles reading emails from various backends, handling account data etc
+ */
+
 pub mod email;
 pub use self::email::*;
 /* Mail backends. Currently only maildir is supported */

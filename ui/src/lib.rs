@@ -19,6 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*!
+ * This library exports the public types and methods of its modules
+ */
+
 extern crate melib;
 extern crate mime_apps;
 extern crate notify_rust;

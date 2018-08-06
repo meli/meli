@@ -1,13 +1,28 @@
+/*!
+ * Primitive Async/Wait implementation.
+ *
+ * To create an Async promise, create an AsyncBuilder. Ask for its channel receiver/sender with
+ * `tx` and `rx` methods to pass them in your worker's closure. Build an `Async<T>` with your
+ * `JoinHandle<T>`. The thread must communicate with the `Async<T>` object via `AsyncStatus`
+ * messages.
+ *
+ * When `Async<T>` receives `AsyncStatus::Finished` it joins the thread and takes its value which
+ * can be extracted with `extract`.
+ */
+
 use chan;
 use std::thread;
 
+/// Messages to pass between `Async<T>` owner and its worker thread.
 #[derive(Debug)]
 pub enum AsyncStatus {
     NoUpdate,
     Finished,
+    ///The number may hold whatever meaning the user chooses.
     ProgressReport(usize),
 }
 
+/// A builder object for `Async<T>`
 #[derive(Debug)]
 pub struct AsyncBuilder {
     tx: chan::Sender<AsyncStatus>,
@@ -22,8 +37,6 @@ pub struct Async<T> {
     rx: chan::Receiver<AsyncStatus>,
 }
 
-
-
 impl AsyncBuilder {
     pub fn new() -> Self {
         let (sender, receiver) = chan::sync(::std::mem::size_of::<AsyncStatus>());
@@ -32,12 +45,15 @@ impl AsyncBuilder {
             rx: receiver,
         }
     }
+    /// Returns the sender object of the promise's channel.
     pub fn tx(&mut self) -> chan::Sender<AsyncStatus> {
         self.tx.clone()
     }
+    /// Returns the receiver object of the promise's channel.
     pub fn rx(&mut self) -> chan::Receiver<AsyncStatus> {
         self.rx.clone()
     }
+    /// Returns an `Async<T>` object that contains a `Thread` join handle that returns a `T`
     pub fn build<T: Clone>(self, worker: thread::JoinHandle<T>) -> Async<T> {
         Async {
             worker: Some(worker),
@@ -49,9 +65,11 @@ impl AsyncBuilder {
 }
 
 impl<T> Async<T> {
+    /// Consumes `self` and returns the computed value. Will panic if computation hasn't finished.
     pub fn extract(self) -> T {
         self.value.unwrap()
     }
+    /// Polls worker thread and returns result. 
     pub fn poll(&mut self) -> Result<AsyncStatus, ()> {
         if self.value.is_some() {
             return Ok(AsyncStatus::Finished);

@@ -19,6 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*!
+ * Email parsing, handling, sending etc.
+ */
 pub mod attachments;
 pub mod parser;
 

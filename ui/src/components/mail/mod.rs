@@ -14,6 +14,7 @@ struct AccountMenuEntry {
     entries: Vec<(usize, Folder)>,
 }
 
+/// The account sidebar.
 #[derive(Debug)]
 pub struct AccountMenu {
     accounts: Vec<AccountMenuEntry>,

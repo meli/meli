@@ -33,7 +33,7 @@ extern crate melib;
 extern crate ui;
 
 pub use melib::*;
-use ui::*;
+pub use ui::*;
 
 use std::thread;
 
@@ -206,10 +206,10 @@ fn main() {
                                     }
                                 }
                             }
-                           if !flag {
-                               state.finish_startup();
-                           }
-                               
+                            if !flag {
+                                state.finish_startup();
+                            }
+                            state.render();
                         }
                         ThreadEvent::UIEvent(e) => {
                             state.rcv_event(UIEvent { id: 0, event_type: e});

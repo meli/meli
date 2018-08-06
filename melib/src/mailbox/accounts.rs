@@ -19,6 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*!
+ * Account management from user configuration.
+ */
+
 use conf::{AccountSettings, Folder};
 use mailbox::backends::{Backends, RefreshEventConsumer};
 use mailbox::*;

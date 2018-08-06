@@ -18,6 +18,11 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
+/*!
+ * An error object for `melib`
+ */
+
 use std::error::Error;
 use std::fmt;
 use std::io;

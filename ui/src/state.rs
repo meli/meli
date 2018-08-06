@@ -1,4 +1,5 @@
-/*!
+/*! The application's state.
+
   The UI crate has an Entity-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
 
   `State` owns all the Entities of the UI, which are currently plain Containers for `Component`s. In the application's main event loop, input is handed to the state in the form of `UIEvent` objects which traverse the entity graph. Components decide to handle each input or not.
@@ -158,11 +159,15 @@ impl State<std::io::Stdout> {
         s
     }
 
+    /// If an owned thread returns a `ThreadEvent::ThreadJoin` event to `State` then it must remove
+    /// the thread from its list and `join` it.
     pub fn join(&mut self, id: thread::ThreadId) {
         let handle = self.threads.remove(&id).unwrap();
         handle.join().unwrap();
     }
 
+    /// If startup has finished, inform startup thread that it doesn't need to tick us with startup
+    /// check reminders and let it die.
     pub fn finish_startup(&mut self) {
         // TODO: Encode startup process with the type system if possible
         if self.startup_thread.is_none() {
@@ -173,6 +178,9 @@ impl State<std::io::Stdout> {
             tx.send(true);
         }
     }
+
+    /// Switch back to the terminal's main screen (The command line the user sees before opening
+    /// the application)
     pub fn to_main_screen(&mut self) {
         write!(
             self.stdout(),
@@ -199,6 +207,7 @@ impl State<std::io::Stdout> {
     }
 }
 impl<W: Write> State<W> {
+    /// On `SIGWNICH` the `State` redraws itself according to the new terminal size.
     pub fn update_size(&mut self) {
         let termsize = termion::terminal_size().ok();
         let termcols = termsize.map(|(w, _)| w);
@@ -221,6 +230,7 @@ impl<W: Write> State<W> {
         });
     }
 
+    /// Force a redraw for all dirty components.
     pub fn redraw(&mut self) {
         for i in 0..self.entities.len() {
             self.draw_entity(i);
@@ -231,6 +241,8 @@ impl<W: Write> State<W> {
             self.draw_area(a);
         }
     }
+
+    /// Draw only a specific `area` on the screen.
     fn draw_area(&mut self, area: Area) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -269,6 +281,8 @@ impl<W: Write> State<W> {
         }
         self.flush();
     }
+
+    /// Draw the entire screen from scratch.
     pub fn render(&mut self) {
         self.update_size();
 
@@ -306,6 +320,7 @@ impl<W: Write> State<W> {
         }
     }
 
+    /// The application's main loop sends `UIEvents` to state via this method.
     pub fn rcv_event(&mut self, event: UIEvent) {
         match event.event_type {
             // Command type is handled only by State.
@@ -383,6 +398,8 @@ impl<W: Write> State<W> {
             });
         }
     }
+
+    
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
         if {
             match self.child {
