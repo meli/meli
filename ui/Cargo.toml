@@ -5,14 +5,14 @@ authors = []
 workspace = ".."
 
 [dependencies]
-melib = { path = "../melib", version = "*" }
-termion = "1.5.1"
 chan = "0.1.21"
+chan-signal = "0.3.1"
+fnv = "1.0.3"
+linkify = "0.3.1"
+melib = { path = "../melib", version = "*" }
+mime_apps = { path = "../../mime_apps", version = "*" }
+nom = "3.2.0"
 notify = "4.0.1"
 notify-rust = "^3"
-nom = "3.2.0"
-chan-signal = "0.3.1"
-mime_apps = { path = "../../mime_apps", version = "*" }
-
+termion = "1.5.1"
 uuid = { version = "0.6", features = ["serde", "v4"] }
-linkify = "0.3.1"

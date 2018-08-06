@@ -57,6 +57,8 @@ use std::fmt;
 use std::io::Write;
 use std::thread;
 use std::time;
+extern crate fnv;
+use self::fnv::FnvHashMap;
 extern crate termion;
 use termion::event::Key as TermionKey;
 use termion::input::TermRead;
@@ -73,6 +75,7 @@ use chan::Sender;
 /// to the main process.
 #[derive(Debug)]
 pub enum ThreadEvent {
+    ThreadJoin(thread::ThreadId),
     /// User input.
     Input(Key),
     /// A watched folder has been refreshed.
@@ -191,7 +194,9 @@ pub struct State<W: Write> {
     entities: Vec<Entity>,
     pub context: Context,
 
-    startup_thread: Option<(chan::Sender<bool>, thread::JoinHandle<()>)>,
+    startup_thread: Option<chan::Sender<bool>>,
+
+    threads: FnvHashMap<thread::ThreadId, thread::JoinHandle<()>>,
 }
 
 impl<W: Write> Drop for State<W> {
@@ -231,6 +236,8 @@ impl State<std::io::Stdout> {
         let (startup_tx, startup_rx) = chan::async();
         let startup_thread = {
             let sender = sender.clone();
+            let startup_rx = startup_rx.clone();
+
             thread::Builder::new()
                 .name("startup-thread".to_string())
                 .spawn(move || {
@@ -239,6 +246,7 @@ impl State<std::io::Stdout> {
                         chan_select! {
                             default => {},
                             startup_rx.recv() -> _ => {
+                                sender.send(ThreadEvent::ThreadJoin(thread::current().id()));
                                 return;
                             }
                         }
@@ -267,8 +275,10 @@ impl State<std::io::Stdout> {
 
                 input_thread: input_thread,
             },
-            startup_thread: Some((startup_tx, startup_thread)),
+            startup_thread: Some(startup_tx),
+            threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
         };
+        s.threads.insert(startup_thread.thread().id(), startup_thread);
         write!(
             s.stdout(),
             "{}{}{}",
@@ -285,15 +295,20 @@ impl State<std::io::Stdout> {
         }
         s
     }
+    pub fn join(&mut self, id: thread::ThreadId) {
+        let handle = self.threads.remove(&id).unwrap();
+        handle.join().unwrap();
+
+
+    }
     pub fn finish_startup(&mut self) {
         // TODO: Encode startup process with the type system if possible
         if self.startup_thread.is_none() {
             return;
         }
         {
-            let (tx, handle) =  self.startup_thread.take().unwrap();
+            let tx =  self.startup_thread.take().unwrap();
             tx.send(true);
-            handle.join().unwrap();
         }
     }
     pub fn to_main_screen(&mut self) {

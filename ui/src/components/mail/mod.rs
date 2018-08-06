@@ -44,7 +44,7 @@ impl AccountMenu {
             cursor: None,
         }
     }
-    fn print_account(&self, grid: &mut CellBuffer, area: Area, a: &AccountMenuEntry) -> usize {
+    fn print_account(&self, grid: &mut CellBuffer, area: Area, a: &AccountMenuEntry, context: &mut Context) -> usize {
         if !is_valid_area!(area) {
             eprintln!("BUG: invalid area in print_account");
         }
@@ -86,25 +86,38 @@ impl AccountMenu {
             entries: &Vec<(usize, Folder)>,
             s: &mut String,
             inc: &mut usize,
-        ) -> () {
+            index: usize, //account index
+            context: &mut Context,
+            ) -> () {
             let len = s.len();
-            s.insert_str(len, &format!("{} {}\n  ", *inc, &entries[root].1.name()));
+            match context.accounts[index].status(root) {
+                Ok(()) => {},
+                Err(_) => {
+                    return;
+                    // TODO: Show progress visually
+                }
+            }
+            let count = context.accounts[index][root].as_ref().unwrap().collection.iter().filter(|e| !e.is_seen()).count();
+            s.insert_str(len, &format!("{} {}   {}\n  ", *inc, &entries[root].1.name(), count));
             *inc += 1;
             let children_no = entries[root].1.children().len();
             for (idx, child) in entries[root].1.children().iter().enumerate() {
                 let len = s.len();
                 s.insert_str(len, &format!("{}├─", depth));
                 push(depth, if idx == children_no - 1 { '│' } else { ' ' });
-                print(*child, parents, depth, entries, s, inc);
+                print(*child, parents, depth, entries, s, inc, index, context);
                 pop(depth);
             }
         }
         for r in roots {
-            print(r, &parents, &mut depth, &a.entries, &mut s, &mut inc);
+            print(r, &parents, &mut depth, &a.entries, &mut s, &mut inc, a.index, context);
         }
 
         let lines: Vec<&str> = s.lines().collect();
         let lines_len = lines.len();
+        if lines_len < 2 {
+            return 0;
+        }
         let mut idx = 0;
         for y in get_y(upper_left)..get_y(bottom_right) {
             if idx == lines_len {
@@ -115,24 +128,14 @@ impl AccountMenu {
             } else {
                 format!("{}", lines[idx])
             };
-            let color_fg = if highlight {
+            let (color_fg, color_bg) = if highlight {
                 if idx > 1 && self.cursor.unwrap().1 == idx - 2 {
-                    Color::Byte(233)
+                    (Color::Byte(233), Color::Byte(15))
                 } else {
-                    Color::Byte(15)
+                    (Color::Byte(15), Color::Byte(233))
                 }
             } else {
-                Color::Default
-            };
-
-            let color_bg = if highlight {
-                if idx > 1 && self.cursor.unwrap().1 == idx - 2 {
-                    Color::Byte(15)
-                } else {
-                    Color::Byte(233)
-                }
-            } else {
-                Color::Default
+                (Color::Default, Color::Default)
             };
 
             let (x, _) = write_string_to_grid(
@@ -175,7 +178,7 @@ impl Component for AccountMenu {
         self.dirty = false;
         let mut y = get_y(upper_left);
         for a in &self.accounts {
-            y += self.print_account(grid, (set_y(upper_left, y), bottom_right), &a);
+            y += self.print_account(grid, (set_y(upper_left, y), bottom_right), &a, context);
         }
 
         context.dirty_areas.push_back(area);

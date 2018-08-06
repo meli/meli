@@ -215,6 +215,9 @@ fn main() {
                             state.rcv_event(UIEvent { id: 0, event_type: e});
                             state.render();
                         },
+                        ThreadEvent::ThreadJoin(id) => {
+                            state.join(id);
+                        },
                     }
                 },
                 signal.recv() -> signal => {
