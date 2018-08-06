@@ -253,6 +253,9 @@ impl Envelope {
         e.flags = operation.fetch_flags();
         Some(e)
     }
+    pub fn set_operation_token(&mut self, operation_token: Box<BackendOpGenerator>) {
+            self.operation_token= Arc::new(operation_token);
+    }
 
     pub fn populate_headers(&mut self) -> Result<()> {
         let mut operation = self.operation_token.generate();
@@ -529,12 +532,17 @@ impl Envelope {
         self.datetime = Some(new_val);
         self.timestamp = new_val.timestamp() as u64;
     }
-    pub fn set_flag(&mut self, f: Flag) -> () {
+    pub fn set_flag(&mut self, f: Flag) -> Result<()> {
+        let mut operation = self.operation_token.generate();
+        operation.set_flag(self, &f)?;
         self.flags |= f;
-
+        Ok(())
     }
     pub fn flags(&self) -> Flag {
         self.flags
+    }
+    pub fn set_seen(&mut self) -> Result<()> {
+        self.set_flag(Flag::SEEN)
     }
     pub fn is_seen(&self) -> bool {
         !(self.flags & Flag::SEEN).is_empty()

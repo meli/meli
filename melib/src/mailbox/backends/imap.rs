@@ -22,8 +22,8 @@
 use conf::Folder;
 use error::Result;
 use async::*;
-use mailbox::backends::{BackendOp, MailBackend, RefreshEventConsumer};
-use mailbox::email::{Envelope, Flag};
+use mailbox::backends::{MailBackend, RefreshEventConsumer};
+use mailbox::email::{Envelope, };
 
 /// `BackendOp` implementor for Imap
 #[derive(Debug, Default, Clone)]
@@ -34,6 +34,9 @@ impl ImapOp {
         ImapOp {}
     }
 }
+
+
+/*
 
 impl BackendOp for ImapOp {
     fn description(&self) -> String {
@@ -51,7 +54,7 @@ impl BackendOp for ImapOp {
     fn fetch_flags(&self) -> Flag {
         unimplemented!();
     }
-}
+}*/
 
 /// Imap backend
 #[derive(Debug)]

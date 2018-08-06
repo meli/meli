@@ -143,6 +143,7 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn fetch_headers(&mut self) -> Result<&[u8]>;
     fn fetch_body(&mut self) -> Result<&[u8]>;
     fn fetch_flags(&self) -> Flag;
+    fn set_flag(&mut self, &mut Envelope, &Flag) -> Result<()>;
 }
 
 /// `BackendOpGenerator` is a wrapper for a closure that returns a `BackendOp` object

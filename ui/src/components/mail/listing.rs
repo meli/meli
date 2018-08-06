@@ -221,6 +221,37 @@ impl MailListing {
 
         self.content = content;
     }
+
+    fn highlight_line_self(&mut self, idx: usize, context: &Context) {
+        let threaded = context.accounts[self.cursor_pos.0]
+            .runtime_settings
+            .threaded;
+        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+            .as_ref()
+            .unwrap();
+        let envelope: &Envelope = if threaded {
+            let i = mailbox.threaded_mail(idx);
+            &mailbox.collection[i]
+        } else {
+            &mailbox.collection[idx]
+        };
+
+        let fg_color = if !envelope.is_seen() {
+            Color::Byte(0)
+        } else {
+            Color::Default
+        };
+        let bg_color = 
+            if !envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            };
+        change_colors(&mut self.content, ((0, idx), (MAX_COLS-1, idx)), fg_color, bg_color);
+    }
+
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
         let threaded = context.accounts[self.cursor_pos.0]
             .runtime_settings
@@ -311,6 +342,8 @@ impl MailListing {
             context,
         );
         context.dirty_areas.push_back(area);
+
+
     }
 
     fn make_thread_entry(
@@ -403,6 +436,37 @@ impl Component for MailListing {
                 context.dirty_areas.push_back(area);
                 return;
             }
+            /* Mark message as read */
+            let idx = self.cursor_pos.2;
+            let must_highlight = {
+                if self.length == 0 {
+                    false
+                } else {
+                    let threaded = context.accounts[self.cursor_pos.0]
+                        .runtime_settings
+                        .threaded;
+                    let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+                        .as_mut()
+                        .unwrap();
+                    let envelope: &mut Envelope = if threaded {
+                        let i = mailbox.threaded_mail(idx);
+                        &mut mailbox.collection[i]
+                    } else {
+                        &mut mailbox.collection[idx]
+                    };
+                    if !envelope.is_seen() {
+                        eprintln!("setting seen");
+                        envelope.set_seen();
+                        true
+                    } else {
+                        false
+                    }
+                }
+            };
+            if must_highlight {
+                eprintln!("must highlight");
+                self.highlight_line_self(idx, context);
+            }
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
             self.draw_list(
                 grid,
@@ -444,6 +508,7 @@ impl Component for MailListing {
                 .as_mut()
                 .map(|v| v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context));
             self.dirty = false;
+
         }
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {

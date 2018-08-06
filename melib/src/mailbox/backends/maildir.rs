@@ -43,6 +43,7 @@ use memmap::{Mmap, Protection};
 use std::path::PathBuf;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
+use std::fs;
 
 /// `BackendOp` implementor for Maildir
 #[derive(Debug, Default)]
@@ -101,17 +102,52 @@ impl BackendOp for MaildirOp {
         for f in filename.chars().rev() {
             match f {
                 ',' => break,
+                'D' => flag |= Flag::DRAFT,
+                'F' => flag |= Flag::FLAGGED,
                 'P' => flag |= Flag::PASSED,
                 'R' => flag |= Flag::REPLIED,
                 'S' => flag |= Flag::SEEN,
                 'T' => flag |= Flag::TRASHED,
-                'D' => flag |= Flag::DRAFT,
-                'F' => flag |= Flag::FLAGGED,
                 _ => panic!(),
             }
         }
 
         flag
+    }
+    fn set_flag(&mut self, envelope: &mut Envelope, f: &Flag) -> Result<()> {
+        let idx: usize = self.path.rfind(":2,").ok_or(MeliError::new(format!("Invalid email filename: {:?}", self)))? + 3;
+        let mut new_name: String = self.path[..idx].to_string();
+        let mut flags = self.fetch_flags();
+        flags.toggle(*f);
+        if !(flags & Flag::DRAFT).is_empty() {
+            new_name.push('D');
+        }
+        if !(flags & Flag::FLAGGED).is_empty() {
+            new_name.push('F');
+        }
+        if !(flags & Flag::PASSED).is_empty() {
+            new_name.push('P');
+        }
+        if !(flags & Flag::REPLIED).is_empty() {
+            new_name.push('R');
+        }
+        if !(flags & Flag::SEEN).is_empty() {
+            new_name.push('S');
+        }
+        if !(flags & Flag::TRASHED).is_empty() {
+            new_name.push('T');
+        }
+        eprintln!("new name is {}", new_name);
+
+        fs::rename(&self.path, &new_name)?;
+        envelope.set_operation_token(
+            Box::new(
+                BackendOpGenerator::new(
+                    Box::new( move || Box::new(MaildirOp::new(new_name.clone())))
+                    )
+                )
+            );
+        Ok(())
     }
 }
 
@@ -193,14 +229,12 @@ impl MaildirType {
         Ok(())
     }
     pub fn multicore(&self, cores: usize, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
-        
         let mut w = AsyncBuilder::new();
         let handle = {
             let tx = w.tx();
             // TODO: Avoid clone
             let folder = folder.clone();
 
-            
         thread::Builder::new()
             .name(format!("parsing {:?}", folder))
                   .spawn(move ||  {

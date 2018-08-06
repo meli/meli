@@ -22,8 +22,8 @@
 use conf::Folder;
 use error::Result;
 use async::*;
-use mailbox::backends::{BackendOp, MailBackend, RefreshEventConsumer};
-use mailbox::email::{Envelope, Flag};
+use mailbox::backends::{MailBackend, RefreshEventConsumer};
+use mailbox::email::{Envelope, };
 
 /// `BackendOp` implementor for Mbox
 #[derive(Debug, Default, Clone)]
@@ -35,6 +35,7 @@ impl MboxOp {
     }
 }
 
+/*
 impl BackendOp for MboxOp {
     fn description(&self) -> String {
         unimplemented!();
@@ -51,7 +52,11 @@ impl BackendOp for MboxOp {
     fn fetch_flags(&self) -> Flag {
         unimplemented!();
     }
+    fn set_flags(&self, f: Flag) -> Result<()> {
+        unimplemented!()
+    }
 }
+*/
 
 /// Mbox backend
 #[derive(Debug)]

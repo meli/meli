@@ -68,3 +68,11 @@ impl From<nom::IError> for MeliError {
         MeliError::new(format!("{:?}", kind))
     }
 }
+
+//use std::option;
+//impl From<option::NoneError> for MeliError {
+//    #[inline]
+//    fn from(kind: option::NoneError) -> MeliError {
+//        MeliError::new(format!("{:?}", kind))
+//    }
+//}
