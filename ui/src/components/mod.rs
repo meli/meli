@@ -26,17 +26,17 @@
   */
 
 use super::*;
-pub mod mail;
-pub mod notifications;
-pub mod utilities;
 
+pub mod mail;
 pub use mail::*;
+
+pub mod notifications;
+
+pub mod utilities;
 pub use self::utilities::*;
 
-use super::cells::{CellBuffer, Color};
-use super::position::Area;
-use super::{Key, UIEvent, UIEventType};
 
+use super::{Key, UIEvent, UIEventType};
 /// The upper and lower boundary char.
 const HORZ_BOUNDARY: char = '─';
 /// The left and right boundary char.
