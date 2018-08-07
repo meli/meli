@@ -22,9 +22,9 @@ pub mod imap;
 pub mod maildir;
 pub mod mbox;
 
+use async::*;
 use conf::Folder;
 use error::Result;
-use async::*;
 use mailbox::backends::imap::ImapType;
 use mailbox::backends::maildir::MaildirType;
 use mailbox::backends::mbox::MboxType;

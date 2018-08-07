@@ -63,7 +63,7 @@ fn make_input_thread(
                         UIMode::Fork,
                     )));
                 },
-                rx,
+                &rx,
             )
         })
         .unwrap()
@@ -134,11 +134,11 @@ fn main() {
                 receiver.recv() -> r => {
                     match r.unwrap() {
                         ThreadEvent::Input(Key::Ctrl('z')) => {
-                            state.to_main_screen();
+                            state.switch_to_main_screen();
                             //_thread_handler.join().expect("Couldn't join on the associated thread");
                             let self_pid = nix::unistd::Pid::this();
                             nix::sys::signal::kill(self_pid, nix::sys::signal::Signal::SIGSTOP).unwrap();
-                            state.to_alternate_screen();
+                            state.switch_to_alternate_screen();
                             _thread_handler = make_input_thread(sender.clone(), rx.clone());
                             // BUG: thread sends input event after one received key
                             state.update_size();

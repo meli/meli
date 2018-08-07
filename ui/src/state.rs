@@ -1,3 +1,24 @@
+/*
+ * meli - ui crate.
+ *
+ * Copyright 2017-2018 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /*! The application's state.
 
   The UI crate has an Entity-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
@@ -10,13 +31,12 @@
 use super::*;
 use chan::Sender;
 use fnv::FnvHashMap;
-use termion::raw::IntoRawMode;
-use termion::screen::AlternateScreen;
-use termion::{clear, cursor, style};
 use std::io::Write;
 use std::thread;
 use std::time;
-
+use termion::raw::IntoRawMode;
+use termion::screen::AlternateScreen;
+use termion::{clear, cursor, style};
 
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
@@ -116,39 +136,41 @@ impl State<std::io::Stdout> {
                         sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
                         thread::sleep(dur);
                     }
-                }).unwrap()
+                })
+                .unwrap()
         };
         let mut s = State {
-            cols: cols,
-            rows: rows,
+            cols,
+            rows,
             grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
             stdout: Some(stdout),
             child: None,
             mode: UIMode::Normal,
-            sender: sender,
+            sender,
             entities: Vec::with_capacity(1),
 
             context: Context {
-                accounts: accounts,
+                accounts,
                 _backends: backends,
                 settings: settings.clone(),
                 runtime_settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
 
-                input_thread: input_thread,
+                input_thread,
             },
             startup_thread: Some(startup_tx),
             threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
         };
-        s.threads.insert(startup_thread.thread().id(), startup_thread);
+        s.threads
+            .insert(startup_thread.thread().id(), startup_thread);
         write!(
             s.stdout(),
             "{}{}{}",
             cursor::Hide,
             clear::All,
             cursor::Goto(1, 1)
-            ).unwrap();
+        ).unwrap();
         s.flush();
         for account in &mut s.context.accounts {
             let sender = s.sender.clone();
@@ -174,14 +196,14 @@ impl State<std::io::Stdout> {
             return;
         }
         {
-            let tx =  self.startup_thread.take().unwrap();
+            let tx = self.startup_thread.take().unwrap();
             tx.send(true);
         }
     }
 
     /// Switch back to the terminal's main screen (The command line the user sees before opening
     /// the application)
-    pub fn to_main_screen(&mut self) {
+    pub fn switch_to_main_screen(&mut self) {
         write!(
             self.stdout(),
             "{}{}",
@@ -192,7 +214,7 @@ impl State<std::io::Stdout> {
         self.stdout = None;
         self.context.input_thread.send(false);
     }
-    pub fn to_alternate_screen(&mut self) {
+    pub fn switch_to_alternate_screen(&mut self) {
         let s = std::io::stdout();
         s.lock();
         self.stdout = Some(AlternateScreen::from(s.into_raw_mode().unwrap()));
@@ -312,13 +334,16 @@ impl<W: Write> State<W> {
         self.entities.push(entity);
     }
     /// Convert user commands to actions/method calls.
-    fn parse_command(&mut self, cmd: String) {
+    fn parse_command(&mut self, cmd: &str) {
         eprintln!("cmd is {}", cmd);
         let result = parse_command(&cmd.as_bytes()).to_full_result();
         eprintln!("rseult is {:?}", result);
 
         if let Ok(v) = result {
-            self.rcv_event(UIEvent { id: 0, event_type: UIEventType::Action(v) });
+            self.rcv_event(UIEvent {
+                id: 0,
+                event_type: UIEventType::Action(v),
+            });
         }
     }
 
@@ -327,7 +352,7 @@ impl<W: Write> State<W> {
         match event.event_type {
             // Command type is handled only by State.
             UIEventType::Command(cmd) => {
-                self.parse_command(cmd);
+                self.parse_command(&cmd);
                 return;
             }
             UIEventType::Fork(child) => {
@@ -351,7 +376,7 @@ impl<W: Write> State<W> {
                     let mut f = file.file();
 
                     f.read_to_end(&mut buf).unwrap();
-                    in_pipe.write(&buf).unwrap();
+                    in_pipe.write_all(&buf).unwrap();
                     std::fs::remove_file(file.path()).unwrap();
                 }
                 output.wait_with_output().expect("Failed to read stdout");
@@ -378,7 +403,7 @@ impl<W: Write> State<W> {
         }
 
         if !self.context.replies.is_empty() {
-            let replies: Vec<UIEvent>= self.context.replies.drain(0..).collect();
+            let replies: Vec<UIEvent> = self.context.replies.drain(0..).collect();
             // Pass replies to self and call count on the map iterator to force evaluation
             replies.into_iter().map(|r| self.rcv_event(r)).count();
         }
@@ -402,33 +427,32 @@ impl<W: Write> State<W> {
     }
 
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
-        if {
-            match self.child {
-                Some(ForkType::NewDraft(_, ref mut c)) => {
-                    let mut w = c.try_wait();
-                    match w {
-                        Ok(Some(_)) => true,
-                        Ok(None) => false,
-                        Err(_) => {
-                            return None;
-                        }
+        if match self.child {
+            Some(ForkType::NewDraft(_, ref mut c)) => {
+                let mut w = c.try_wait();
+                match w {
+                    Ok(Some(_)) => true,
+                    Ok(None) => false,
+                    Err(_) => {
+                        return None;
                     }
-                }
-                Some(ForkType::Generic(ref mut c)) => {
-                    let mut w = c.try_wait();
-                    match w {
-                        Ok(Some(_)) => true,
-                        Ok(None) => false,
-                        Err(_) => {
-                            return None;
-                        }
-                    }
-                }
-                _ => {
-                    return None;
                 }
             }
-        } {
+            Some(ForkType::Generic(ref mut c)) => {
+                let mut w = c.try_wait();
+                match w {
+                    Ok(Some(_)) => true,
+                    Ok(None) => false,
+                    Err(_) => {
+                        return None;
+                    }
+                }
+            }
+            _ => {
+                return None;
+            }
+        }
+        {
             if let Some(ForkType::NewDraft(f, _)) = std::mem::replace(&mut self.child, None) {
                 self.rcv_event(UIEvent {
                     id: 0,
@@ -440,7 +464,7 @@ impl<W: Write> State<W> {
         Some(false)
     }
     fn flush(&mut self) {
-        self.stdout.as_mut().map(|s| s.flush().unwrap());
+        if let Some(s) = self.stdout.as_mut() { s.flush().unwrap(); }
     }
     fn stdout(&mut self) -> &mut termion::screen::AlternateScreen<termion::raw::RawTerminal<W>> {
         self.stdout.as_mut().unwrap()

@@ -1,7 +1,7 @@
 /*
- * meli - ui module.
+ * meli - ui crate.
  *
- * Copyright 2017 Manos Pitsidianakis
+ * Copyright 2017-2018 Manos Pitsidianakis
  *
  * This file is part of meli.
  *

@@ -1,3 +1,24 @@
+/*
+ * meli - ui crate.
+ *
+ * Copyright 2017-2018 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /*! Entities that handle Mail specific functions.
  */
 use super::*;
@@ -23,7 +44,7 @@ pub struct AccountMenu {
 }
 
 impl AccountMenu {
-    pub fn new(accounts: &Vec<Account>) -> Self {
+    pub fn new(accounts: &[Account]) -> Self {
         let accounts = accounts
             .iter()
             .enumerate()
@@ -40,12 +61,18 @@ impl AccountMenu {
             })
             .collect();
         AccountMenu {
-            accounts: accounts,
+            accounts,
             dirty: true,
             cursor: None,
         }
     }
-    fn print_account(&self, grid: &mut CellBuffer, area: Area, a: &AccountMenuEntry, context: &mut Context) -> usize {
+    fn print_account(
+        &self,
+        grid: &mut CellBuffer,
+        area: Area,
+        a: &AccountMenuEntry,
+        context: &mut Context,
+    ) -> usize {
         if !is_valid_area!(area) {
             eprintln!("BUG: invalid area in print_account");
         }
@@ -70,7 +97,7 @@ impl AccountMenu {
 
         let mut inc = 0;
         let mut depth = String::from("");
-        let mut s = String::from(format!("{}\n", a.name));
+        let mut s = format!("{}\n", a.name);
         fn pop(depth: &mut String) {
             depth.pop();
             depth.pop();
@@ -82,24 +109,33 @@ impl AccountMenu {
 
         fn print(
             root: usize,
-            parents: &Vec<Option<usize>>,
+            parents: &[Option<usize>],
             depth: &mut String,
-            entries: &Vec<(usize, Folder)>,
+            entries: &[(usize, Folder)],
             s: &mut String,
             inc: &mut usize,
             index: usize, //account index
             context: &mut Context,
-            ) -> () {
+        ) -> () {
             let len = s.len();
             match context.accounts[index].status(root) {
-                Ok(()) => {},
+                Ok(()) => {}
                 Err(_) => {
                     return;
                     // TODO: Show progress visually
                 }
             }
-            let count = context.accounts[index][root].as_ref().unwrap().collection.iter().filter(|e| !e.is_seen()).count();
-            s.insert_str(len, &format!("{} {}   {}\n  ", *inc, &entries[root].1.name(), count));
+            let count = context.accounts[index][root]
+                .as_ref()
+                .unwrap()
+                .collection
+                .iter()
+                .filter(|e| !e.is_seen())
+                .count();
+            s.insert_str(
+                len,
+                &format!("{} {}   {}\n  ", *inc, &entries[root].1.name(), count),
+            );
             *inc += 1;
             let children_no = entries[root].1.children().len();
             for (idx, child) in entries[root].1.children().iter().enumerate() {
@@ -111,7 +147,9 @@ impl AccountMenu {
             }
         }
         for r in roots {
-            print(r, &parents, &mut depth, &a.entries, &mut s, &mut inc, a.index, context);
+            print(
+                r, &parents, &mut depth, &a.entries, &mut s, &mut inc, a.index, context,
+            );
         }
 
         let lines: Vec<&str> = s.lines().collect();
@@ -125,9 +163,9 @@ impl AccountMenu {
                 break;
             }
             let s = if idx == lines_len - 2 {
-                format!("{}", lines[idx].replace("├", "└"))
+                lines[idx].replace("├", "└")
             } else {
-                format!("{}", lines[idx])
+                lines[idx].to_string()
             };
             let (color_fg, color_bg) = if highlight {
                 if idx > 1 && self.cursor.unwrap().1 == idx - 2 {

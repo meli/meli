@@ -1,3 +1,24 @@
+/*
+ * meli - ui crate.
+ *
+ * Copyright 2017-2018 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /*! Various useful components that can be used in a generic fashion.
  */
 use super::*;
@@ -13,10 +34,10 @@ pub struct HSplit {
 impl HSplit {
     pub fn new(top: Entity, bottom: Entity, ratio: usize, show_divider: bool) -> Self {
         HSplit {
-            top: top,
-            bottom: bottom,
-            show_divider: show_divider,
-            ratio: ratio,
+            top,
+            bottom,
+            show_divider,
+            ratio,
         }
     }
 }
@@ -37,7 +58,7 @@ impl Component for HSplit {
                 grid[(i, mid)].set_ch('─');
             }
         }
-        let _ = self.top.component.draw(
+        self.top.component.draw(
             grid,
             (
                 upper_left,
@@ -45,7 +66,7 @@ impl Component for HSplit {
             ),
             context,
         );
-        let _ = self.bottom.component.draw(
+        self.bottom.component.draw(
             grid,
             ((get_x(upper_left), get_y(upper_left) + mid), bottom_right),
             context,
@@ -72,10 +93,10 @@ pub struct VSplit {
 impl VSplit {
     pub fn new(left: Entity, right: Entity, ratio: usize, show_divider: bool) -> Self {
         VSplit {
-            left: left,
-            right: right,
-            show_divider: show_divider,
-            ratio: ratio,
+            left,
+            right,
+            show_divider,
+            ratio,
         }
     }
 }
@@ -92,14 +113,12 @@ impl Component for VSplit {
         let mid = get_x(bottom_right) - right_entity_width;
 
         if get_y(upper_left) > 1 {
-            let c = grid.get(mid, get_y(upper_left) - 1)
+            let c = grid
+                .get(mid, get_y(upper_left) - 1)
                 .map(|a| a.ch())
                 .unwrap_or_else(|| ' ');
-            match c {
-                HORZ_BOUNDARY => {
-                    grid[(mid, get_y(upper_left) - 1)].set_ch(LIGHT_DOWN_AND_HORIZONTAL);
-                }
-                _ => {}
+            if let HORZ_BOUNDARY = c {
+                grid[(mid, get_y(upper_left) - 1)].set_ch(LIGHT_DOWN_AND_HORIZONTAL);
             }
         }
 
@@ -110,7 +129,8 @@ impl Component for VSplit {
                 grid[(mid, i)].set_bg(Color::Default);
             }
             if get_y(bottom_right) > 1 {
-                let c = grid.get(mid, get_y(bottom_right) - 1)
+                let c = grid
+                    .get(mid, get_y(bottom_right) - 1)
                     .map(|a| a.ch())
                     .unwrap_or_else(|| ' ');
                 match c {
@@ -121,14 +141,12 @@ impl Component for VSplit {
                 }
             }
         }
-        let _ =
-            self.left
-                .component
-                .draw(grid, (upper_left, (mid - 1, get_y(bottom_right))), context);
-        let _ =
-            self.right
-                .component
-                .draw(grid, ((mid + 1, get_y(upper_left)), bottom_right), context);
+        self.left
+            .component
+            .draw(grid, (upper_left, (mid - 1, get_y(bottom_right))), context);
+        self.right
+            .component
+            .draw(grid, ((mid + 1, get_y(upper_left)), bottom_right), context);
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
         self.left.rcv_event(event, context);
@@ -199,35 +217,33 @@ impl Pager {
         Pager::print_string(&mut content, s);
         Pager {
             cursor_pos: cursor_pos.unwrap_or(0),
-            height: height,
-            width: width,
+            height,
+            width,
             dirty: true,
-            content: content,
+            content,
         }
     }
-    pub fn from_buf(buf: CellBuffer, cursor_pos: Option<usize>) -> Self {
+    pub fn from_buf(buf: &CellBuffer, cursor_pos: Option<usize>) -> Self {
         let lines: Vec<&[Cell]> = buf.split(|cell| cell.ch() == '\n').collect();
         let height = lines.len();
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0) + 1;
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
         {
             let mut x;
-            let mut y = 0;
             let c_slice: &mut [Cell] = &mut content;
-            for l in lines {
+            for (y, l) in lines.iter().enumerate() {
                 let y_r = y * width;
                 x = l.len() + y_r;
                 c_slice[y_r..x].copy_from_slice(l);
                 c_slice[x].set_ch('\n');
-                y += 1;
             }
         }
         Pager {
             cursor_pos: cursor_pos.unwrap_or(0),
-            height: height,
-            width: width,
+            height,
+            width,
             dirty: true,
-            content: content,
+            content,
         }
     }
     pub fn print_string(content: &mut CellBuffer, s: &str) {
@@ -320,7 +336,7 @@ pub struct StatusBar {
 impl StatusBar {
     pub fn new(container: Entity) -> Self {
         StatusBar {
-            container: container,
+            container,
             status: String::with_capacity(256),
             notifications: VecDeque::new(),
             ex_buffer: String::with_capacity(256),
@@ -376,7 +392,7 @@ impl Component for StatusBar {
         }
         let height = self.height;
 
-        let _ = self.container.component.draw(
+        self.container.component.draw(
             grid,
             (
                 upper_left,
@@ -414,14 +430,12 @@ impl Component for StatusBar {
         match &event.event_type {
             UIEventType::RefreshMailbox((ref idx_a, ref idx_f)) => {
                 match context.accounts[*idx_a].status(*idx_f) {
-                    Ok(()) => {},
+                    Ok(()) => {}
                     Err(_) => {
                         return;
                     }
                 }
-                let m = &context.accounts[*idx_a][*idx_f]
-                    .as_ref()
-                    .unwrap();
+                let m = &context.accounts[*idx_a][*idx_f].as_ref().unwrap();
                 self.status = format!(
                     "{} | Mailbox: {}, Messages: {}, New: {}",
                     self.mode,
@@ -435,7 +449,7 @@ impl Component for StatusBar {
                 let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
                 self.status.replace_range(..offset, &format!("{} ", m));
                 self.dirty = true;
-                self.mode = m.clone();
+                self.mode = *m;
                 match m {
                     UIMode::Normal => {
                         self.height = 1;
@@ -498,7 +512,7 @@ impl Progress {
     pub fn new(s: String, total_work: usize) -> Self {
         Progress {
             description: s,
-            total_work: total_work,
+            total_work,
             finished: 0,
         }
     }

@@ -1,3 +1,24 @@
+/*
+ * meli - ui crate.
+ *
+ * Copyright 2017-2018 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /*!
   Define a (x, y) point in the terminal display as a holder of a character, foreground/background
   colors and attributes.
@@ -88,8 +109,8 @@ impl CellBuffer {
     /// `cell` as a blank.
     pub fn new(cols: usize, rows: usize, cell: Cell) -> CellBuffer {
         CellBuffer {
-            cols: cols,
-            rows: rows,
+            cols,
+            rows,
             buf: vec![cell; cols * rows],
         }
     }
@@ -130,13 +151,13 @@ impl CellAccessor for CellBuffer {
 impl Deref for CellBuffer {
     type Target = [Cell];
 
-    fn deref<'a>(&'a self) -> &'a [Cell] {
+    fn deref(&self) -> &[Cell] {
         &self.buf
     }
 }
 
 impl DerefMut for CellBuffer {
-    fn deref_mut<'a>(&'a mut self) -> &'a mut [Cell] {
+    fn deref_mut(&mut self) -> &mut [Cell] {
         &mut self.buf
     }
 }
@@ -144,14 +165,14 @@ impl DerefMut for CellBuffer {
 impl Index<Pos> for CellBuffer {
     type Output = Cell;
 
-    fn index<'a>(&'a self, index: Pos) -> &'a Cell {
+    fn index(&self, index: Pos) -> &Cell {
         let (x, y) = index;
         self.get(x, y).expect("index out of bounds")
     }
 }
 
 impl IndexMut<Pos> for CellBuffer {
-    fn index_mut<'a>(&'a mut self, index: Pos) -> &'a mut Cell {
+    fn index_mut(&mut self, index: Pos) -> &mut Cell {
         let (x, y) = index;
         self.get_mut(x, y).expect("index out of bounds")
     }
@@ -178,7 +199,7 @@ impl<'a> From<&'a String> for CellBuffer {
 impl fmt::Display for CellBuffer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         '_y: for y in 0..self.rows {
-            '_x: for x in 0..self.cols {
+            for x in 0..self.cols {
                 let c: &char = &self[(x, y)].ch();
                 write!(f, "{}", *c).unwrap();
                 if *c == '\n' {
@@ -217,12 +238,7 @@ impl Cell {
     /// assert_eq!(cell.attrs(), Attr::Default);
     /// ```
     pub fn new(ch: char, fg: Color, bg: Color, attrs: Attr) -> Cell {
-        Cell {
-            ch: ch,
-            fg: fg,
-            bg: bg,
-            attrs: attrs,
-        }
+        Cell { ch, fg, bg, attrs }
     }
 
     /// Creates a new `Cell` with the given `char` and default style.
@@ -426,8 +442,8 @@ pub enum Color {
 
 impl Color {
     /// Returns the `u8` representation of the `Color`.
-    pub fn as_byte(&self) -> u8 {
-        match *self {
+    pub fn as_byte(self) -> u8 {
+        match self {
             Color::Black => 0x00,
             Color::Red => 0x01,
             Color::Green => 0x02,
@@ -441,8 +457,8 @@ impl Color {
         }
     }
 
-    pub fn as_termion(&self) -> AnsiValue {
-        match *self {
+    pub fn as_termion(self) -> AnsiValue {
+        match self {
             b @ Color::Black
             | b @ Color::Red
             | b @ Color::Green

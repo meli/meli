@@ -25,19 +25,19 @@
 pub mod attachments;
 pub mod parser;
 
-use parser::BytesExt;
 pub use self::attachments::*;
 use error::{MeliError, Result};
 use mailbox::backends::BackendOpGenerator;
+use parser::BytesExt;
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::hash_map::DefaultHasher;
 use std::fmt;
+use std::hash::Hasher;
 use std::option::Option;
 use std::string::String;
 use std::sync::Arc;
-use std::borrow::Cow;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
 
 use chrono;
 use chrono::TimeZone;
@@ -257,7 +257,7 @@ impl Envelope {
         Some(e)
     }
     pub fn set_operation_token(&mut self, operation_token: Box<BackendOpGenerator>) {
-            self.operation_token= Arc::new(operation_token);
+        self.operation_token = Arc::new(operation_token);
     }
 
     pub fn populate_headers(&mut self) -> Result<()> {
@@ -373,7 +373,10 @@ impl Envelope {
     }
     pub fn bytes(&self) -> Vec<u8> {
         let mut operation = self.operation_token.generate();
-        operation.as_bytes().map(|v| v.into()).unwrap_or_else(|_| Vec::new())
+        operation
+            .as_bytes()
+            .map(|v| v.into())
+            .unwrap_or_else(|_| Vec::new())
     }
     pub fn body(&self) -> Attachment {
         let mut operation = self.operation_token.generate();
@@ -385,7 +388,7 @@ impl Envelope {
                 eprintln!("error in parsing mail\n{}", operation.description());
                 let error_msg = b"Mail cannot be shown because of errors.";
                 let mut builder = AttachmentBuilder::new(error_msg);
-                return builder.build()
+                return builder.build();
             }
         };
         let mut builder = AttachmentBuilder::new(body);
@@ -513,7 +516,8 @@ impl Envelope {
     }
     pub fn references(&self) -> Vec<&MessageID> {
         match self.references {
-            Some(ref s) => s.refs
+            Some(ref s) => s
+                .refs
                 .iter()
                 .fold(Vec::with_capacity(s.refs.len()), |mut acc, x| {
                     acc.push(x);

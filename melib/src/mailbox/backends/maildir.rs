@@ -40,10 +40,10 @@ use std::sync::mpsc::channel;
 use std::thread;
 extern crate crossbeam;
 use memmap::{Mmap, Protection};
-use std::path::PathBuf;
 use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
 use std::fs;
+use std::hash::Hasher;
+use std::path::PathBuf;
 
 /// `BackendOp` implementor for Maildir
 #[derive(Debug, Default)]
@@ -115,7 +115,10 @@ impl BackendOp for MaildirOp {
         flag
     }
     fn set_flag(&mut self, envelope: &mut Envelope, f: &Flag) -> Result<()> {
-        let idx: usize = self.path.rfind(":2,").ok_or(MeliError::new(format!("Invalid email filename: {:?}", self)))? + 3;
+        let idx: usize = self.path.rfind(":2,").ok_or(MeliError::new(format!(
+            "Invalid email filename: {:?}",
+            self
+        )))? + 3;
         let mut new_name: String = self.path[..idx].to_string();
         let mut flags = self.fetch_flags();
         flags.toggle(*f);
@@ -139,13 +142,9 @@ impl BackendOp for MaildirOp {
         }
 
         fs::rename(&self.path, &new_name)?;
-        envelope.set_operation_token(
-            Box::new(
-                BackendOpGenerator::new(
-                    Box::new( move || Box::new(MaildirOp::new(new_name.clone())))
-                    )
-                )
-            );
+        envelope.set_operation_token(Box::new(BackendOpGenerator::new(Box::new(move || {
+            Box::new(MaildirOp::new(new_name.clone()))
+        }))));
         Ok(())
     }
 }
@@ -189,10 +188,8 @@ impl MailBackend for MaildirType {
                                 let mut hasher = DefaultHasher::new();
                                 hasher.write(path.as_bytes());
                                 sender.send(RefreshEvent {
-                                    folder: format!(
-                                                "{}", path
-                                                ),
-                                                hash: hasher.finish(),
+                                    folder: format!("{}", path),
+                                    hash: hasher.finish(),
                                 });
                             }
                             _ => {}
@@ -201,7 +198,7 @@ impl MailBackend for MaildirType {
                     }
                 }
             })
-        .unwrap();
+            .unwrap();
     }
 }
 
@@ -219,9 +216,9 @@ impl MaildirType {
             p.push(d);
             if !p.is_dir() {
                 return Err(MeliError::new(format!(
-                            "{} is not a valid maildir folder",
-                            path
-                            )));
+                    "{} is not a valid maildir folder",
+                    path
+                )));
             }
             p.pop();
         }
@@ -236,7 +233,7 @@ impl MaildirType {
 
             thread::Builder::new()
                 .name(format!("parsing {:?}", folder))
-                .spawn(move ||  {
+                .spawn(move || {
                     MaildirType::is_valid(&folder)?;
                     let path = folder.path();
                     let mut path = PathBuf::from(path);
@@ -264,21 +261,24 @@ impl MaildirType {
                                 let mut tx = tx.clone();
                                 let s = scope.spawn(move || {
                                     let len = chunk.len();
-                                    let size = if len <= 100 { 100 } else { (len / 100) * 100};
-                                    let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
+                                    let size = if len <= 100 { 100 } else { (len / 100) * 100 };
+                                    let mut local_r: Vec<
+                                        Envelope,
+                                    > = Vec::with_capacity(chunk.len());
                                     for c in chunk.chunks(size) {
                                         let len = c.len();
                                         for e in c {
                                             let e_copy = e.to_string();
-                                            if let Some(mut e) =
-                                                Envelope::from_token(Box::new(BackendOpGenerator::new(Box::new(
-                                                                move || Box::new(MaildirOp::new(e_copy.clone())),
-                                                                )))) {
-                                                    if e.populate_headers().is_err() {
-                                                        continue;
-                                                    }
-                                                    local_r.push(e);
+                                            if let Some(mut e) = Envelope::from_token(Box::new(
+                                                BackendOpGenerator::new(Box::new(move || {
+                                                    Box::new(MaildirOp::new(e_copy.clone()))
+                                                })),
+                                            )) {
+                                                if e.populate_headers().is_err() {
+                                                    continue;
                                                 }
+                                                local_r.push(e);
+                                            }
                                         }
                                         tx.send(AsyncStatus::ProgressReport(len));
                                     }
@@ -294,8 +294,9 @@ impl MaildirType {
                     }
                     tx.send(AsyncStatus::Finished);
                     Ok(r)
-                }).unwrap()
-        }; 
+                })
+                .unwrap()
+        };
         w.build(handle)
     }
 }

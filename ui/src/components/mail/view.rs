@@ -1,3 +1,24 @@
+/*
+ * meli - ui crate.
+ *
+ * Copyright 2017-2018 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 use super::*;
 use linkify::{Link, LinkFinder};
 use std::process::{Command, Stdio};
@@ -40,9 +61,9 @@ impl MailView {
         subview: Option<Box<MailView>>,
     ) -> Self {
         MailView {
-            coordinates: coordinates,
-            pager: pager,
-            subview: subview,
+            coordinates,
+            pager,
+            subview,
             dirty: true,
             mode: ViewMode::Normal,
 
@@ -73,9 +94,7 @@ impl Component for MailView {
 
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area);
-                context
-                    .dirty_areas
-                    .push_back(area);
+                context.dirty_areas.push_back(area);
                 (envelope_idx, get_y(upper_left) - 1)
             } else {
                 let (x, y) = write_string_to_grid(
@@ -85,7 +104,7 @@ impl Component for MailView {
                     Color::Default,
                     area,
                     true,
-                    );
+                );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
                     grid[(x, y)].set_bg(Color::Default);
@@ -98,7 +117,7 @@ impl Component for MailView {
                     Color::Default,
                     (set_y(upper_left, y + 1), bottom_right),
                     true,
-                    );
+                );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
                     grid[(x, y)].set_bg(Color::Default);
@@ -111,7 +130,7 @@ impl Component for MailView {
                     Color::Default,
                     (set_y(upper_left, y + 1), bottom_right),
                     true,
-                    );
+                );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
                     grid[(x, y)].set_bg(Color::Default);
@@ -124,7 +143,7 @@ impl Component for MailView {
                     Color::Default,
                     (set_y(upper_left, y + 1), bottom_right),
                     true,
-                    );
+                );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
                     grid[(x, y)].set_bg(Color::Default);
@@ -137,7 +156,7 @@ impl Component for MailView {
                     Color::Default,
                     (set_y(upper_left, y + 1), bottom_right),
                     true,
-                    );
+                );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
                     grid[(x, y)].set_bg(Color::Default);
@@ -174,9 +193,7 @@ impl Component for MailView {
                         }
                         t
                     }
-                    ViewMode::Raw => {
-                        String::from_utf8_lossy(&envelope.bytes()).into_owned()
-                    },
+                    ViewMode::Raw => String::from_utf8_lossy(&envelope.bytes()).into_owned(),
                     ViewMode::Url => {
                         let mut t = envelope.body().text().to_string();
                         for (lidx, l) in finder.links(&envelope.body().text()).enumerate() {
@@ -195,28 +212,25 @@ impl Component for MailView {
                     }
                     ViewMode::Attachment(aidx) => {
                         let attachments = envelope.body().attachments();
-                        let mut ret = format!("Viewing attachment. Press `r` to return \n");
+                        let mut ret = "Viewing attachment. Press `r` to return \n".to_string();
                         ret.push_str(&attachments[aidx].text());
                         ret
                     }
                 };
                 let mut buf = CellBuffer::from(&text);
-                match self.mode {
-                    ViewMode::Url => {
-                        // URL indexes must be colored (ugh..)
-                        let lines: Vec<&str> = text.split('\n').collect();
-                        let mut shift = 0;
-                        for r in lines.iter() {
-                            for l in finder.links(&r) {
-                                buf[(l.start() + shift - 1, 0)].set_fg(Color::Byte(226));
-                                buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
-                                buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
-                            }
-                            // Each Cell represents one char so next line will be:
-                            shift += r.chars().count() + 1;
+                if self.mode == ViewMode::Url {
+                    // URL indexes must be colored (ugh..)
+                    let lines: Vec<&str> = text.split('\n').collect();
+                    let mut shift = 0;
+                    for r in &lines {
+                        for l in finder.links(&r) {
+                            buf[(l.start() + shift - 1, 0)].set_fg(Color::Byte(226));
+                            buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
+                            buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
                         }
+                        // Each Cell represents one char so next line will be:
+                        shift += r.chars().count() + 1;
                     }
-                    _ => {}
                 }
                 buf
             };
@@ -225,12 +239,13 @@ impl Component for MailView {
             } else {
                 self.pager.as_mut().map(|p| p.cursor_pos())
             };
-            self.pager = Some(Pager::from_buf(buf, cursor_pos));
+            self.pager = Some(Pager::from_buf(&buf, cursor_pos));
             self.dirty = false;
         }
-        self.pager
-            .as_mut()
-            .map(|p| p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context));
+
+        if let Some(p) = self.pager.as_mut() {
+            p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+        }
     }
 
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
@@ -241,7 +256,9 @@ impl Component for MailView {
             UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
                 self.cmd_buf.push(c);
             }
-            UIEventType::Input(Key::Char('r')) if self.mode == ViewMode::Normal || self.mode == ViewMode::Raw => {
+            UIEventType::Input(Key::Char('r'))
+                if self.mode == ViewMode::Normal || self.mode == ViewMode::Raw =>
+            {
                 self.mode = if self.mode == ViewMode::Raw {
                     ViewMode::Normal
                 } else {
@@ -254,7 +271,7 @@ impl Component for MailView {
                 self.dirty = true;
             }
             UIEventType::Input(Key::Char('a'))
-                if self.cmd_buf.len() > 0 && self.mode == ViewMode::Normal =>
+                if !self.cmd_buf.is_empty() && self.mode == ViewMode::Normal =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -282,9 +299,9 @@ impl Component for MailView {
                             ContentType::Multipart { .. } => {
                                 context.replies.push_back(UIEvent {
                                     id: 0,
-                                    event_type: UIEventType::StatusNotification(format!(
-                                        "Multipart attachments are not supported yet."
-                                    )),
+                                    event_type: UIEventType::StatusNotification(
+                                        "Multipart attachments are not supported yet.".to_string(),
+                                    ),
                                 });
                                 return;
                             }
@@ -298,7 +315,9 @@ impl Component for MailView {
                                         .stdin(Stdio::piped())
                                         .stdout(Stdio::piped())
                                         .spawn()
-                                        .expect(&format!("Failed to start {}", binary.display()));
+                                        .unwrap_or_else(|_| {
+                                            panic!("Failed to start {}", binary.display())
+                                        });
                                 } else {
                                     context.replies.push_back(UIEvent {
                                         id: 0,
@@ -324,7 +343,7 @@ impl Component for MailView {
                 };
             }
             UIEventType::Input(Key::Char('g'))
-                if self.cmd_buf.len() > 0 && self.mode == ViewMode::Url =>
+                if !self.cmd_buf.is_empty() && self.mode == ViewMode::Url =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -378,10 +397,8 @@ impl Component for MailView {
         }
         if let Some(ref mut sub) = self.subview {
             sub.process_event(event, context);
-        } else {
-            if let Some(ref mut p) = self.pager {
-                p.process_event(event, context);
-            }
+        } else if let Some(ref mut p) = self.pager {
+            p.process_event(event, context);
         }
     }
     fn is_dirty(&self) -> bool {

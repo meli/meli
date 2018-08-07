@@ -385,7 +385,8 @@ pub fn build_threads(
             if indentation > 0 && thread.has_message() {
                 let subject = collection[thread.message().unwrap()].subject();
                 if subject == root_subject
-                    || subject.starts_with("Re: ") && subject.as_ref().ends_with(root_subject.as_ref())
+                    || subject.starts_with("Re: ")
+                        && subject.as_ref().ends_with(root_subject.as_ref())
                 {
                     threads[i].set_show_subject(false);
                 }

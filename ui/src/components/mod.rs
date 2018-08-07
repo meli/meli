@@ -1,5 +1,5 @@
 /*
- * meli - ui module.
+ * meli - ui crate.
  *
  * Copyright 2017-2018 Manos Pitsidianakis
  *
@@ -34,7 +34,6 @@ pub mod notifications;
 
 pub mod utilities;
 pub use self::utilities::*;
-
 
 use super::{Key, UIEvent, UIEventType};
 /// The upper and lower boundary char.
@@ -140,11 +139,8 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
     let mut src_y = get_y(upper_left!(src));
     let (cols, rows) = grid_src.size();
     if src_x >= cols || src_y >= rows {
-        eprintln!(
-            "DEBUG: src area outside of grid_src in copy_area",
-        );
+        eprintln!("DEBUG: src area outside of grid_src in copy_area",);
         return;
-
     }
 
     for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {

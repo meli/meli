@@ -18,10 +18,10 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+pub mod async;
 pub mod conf;
 pub mod error;
 pub mod mailbox;
-pub mod async;
 
 #[macro_use]
 extern crate serde_derive;

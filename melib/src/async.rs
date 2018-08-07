@@ -1,3 +1,24 @@
+/*
+ * meli - async module
+ *
+ * Copyright 2017 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /*!
  * Primitive Async/Wait implementation.
  *
@@ -69,7 +90,7 @@ impl<T> Async<T> {
     pub fn extract(self) -> T {
         self.value.unwrap()
     }
-    /// Polls worker thread and returns result. 
+    /// Polls worker thread and returns result.
     pub fn poll(&mut self) -> Result<AsyncStatus, ()> {
         if self.value.is_some() {
             return Ok(AsyncStatus::Finished);
@@ -99,4 +120,3 @@ impl<T> Async<T> {
         return Ok(AsyncStatus::Finished);
     }
 }
-

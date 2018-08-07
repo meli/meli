@@ -27,9 +27,9 @@ pub mod pager;
 use pager::PagerSettings;
 
 use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
 use std::collections::HashMap;
 use std::fs;
+use std::hash::Hasher;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Default, Clone)]

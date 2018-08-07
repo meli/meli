@@ -57,7 +57,8 @@ impl BytesExt for [u8] {
     }
     // https://stackoverflow.com/a/35907071
     fn find(&self, needle: &[u8]) -> Option<usize> {
-        self.windows(needle.len()).position(|window| window == needle)
+        self.windows(needle.len())
+            .position(|window| window == needle)
     }
     fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8> {
         let mut ret = self.to_vec();
@@ -67,7 +68,6 @@ impl BytesExt for [u8] {
         ret
     }
 }
-
 
 fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
     if input.len() < 3 {
@@ -107,9 +107,9 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
     let input_len = input.len();
     for (i, x) in input.iter().enumerate() {
         if *x == b'\n' {
-            if (i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t' {
-                return IResult::Done(&input[(i + 1)..], &input[0..i]);
-            } else if i + 1 == input_len {
+            if ((i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t')
+                || i + 1 == input_len
+            {
                 return IResult::Done(&input[(i + 1)..], &input[0..i]);
             }
         }
@@ -281,7 +281,8 @@ named!(
                 acc += x.len();
                 acc
             });
-            let bytes = list.iter()
+            let bytes = list
+                .iter()
                 .fold(Vec::with_capacity(list_len), |mut acc, x| {
                     acc.append(&mut x.clone());
                     acc
@@ -636,8 +637,9 @@ pub fn date(input: &[u8]) -> Option<chrono::DateTime<chrono::FixedOffset>> {
     let parsed_result = phrase(&eat_comments(input))
         .to_full_result()
         .unwrap()
-        .replace(b"-",b"+");
-    chrono::DateTime::parse_from_rfc2822(String::from_utf8_lossy(parsed_result.trim()).as_ref()).ok()
+        .replace(b"-", b"+");
+    chrono::DateTime::parse_from_rfc2822(String::from_utf8_lossy(parsed_result.trim()).as_ref())
+        .ok()
 }
 
 #[test]
@@ -712,10 +714,11 @@ fn test_attachments() {
 named!(
     content_type_parameter<(&[u8], &[u8])>,
     do_parse!(
-        tag!(";") >>
-        name: terminated!(ws!(take_until!("=")) , tag!("=")) >>
-        value: ws!(alt_complete!( delimited!(tag!("\""), take_until!("\""), tag!("\"")) | is_not!(";"))) >>
-        ({ (name, value) })
+        tag!(";") >> name: terminated!(ws!(take_until!("=")), tag!("="))
+            >> value:
+                ws!(alt_complete!(
+                    delimited!(tag!("\""), take_until!("\""), tag!("\"")) | is_not!(";")
+                )) >> ({ (name, value) })
     )
 );
 

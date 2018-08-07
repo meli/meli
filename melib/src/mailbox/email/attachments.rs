@@ -47,7 +47,9 @@ impl Display for MultipartType {
             MultipartType::Mixed => write!(f, "multipart/mixed"),
             MultipartType::Alternative => write!(f, "multipart/alternative"),
             MultipartType::Digest => write!(f, "multipart/digest"),
-            MultipartType::Unsupported { tag: ref t } => write!(f, "multipart/{}", String::from_utf8_lossy(t)),
+            MultipartType::Unsupported { tag: ref t } => {
+                write!(f, "multipart/{}", String::from_utf8_lossy(t))
+            }
         }
     }
 }
@@ -136,7 +138,7 @@ impl AttachmentBuilder {
                 let mut boundary = None;
                 for (n, v) in params {
                     if n.eq_ignore_ascii_case(b"boundary") {
-                        let mut vec: Vec<u8> = Vec::with_capacity(v.len()+4);
+                        let mut vec: Vec<u8> = Vec::with_capacity(v.len() + 4);
                         vec.extend_from_slice(b"--");
                         vec.extend(v);
                         vec.extend_from_slice(b"--");
@@ -148,9 +150,7 @@ impl AttachmentBuilder {
                 self.content_type.0 = ContentType::Multipart {
                     boundary: boundary.unwrap(),
                 };
-                self.content_type.1 = ContentSubType::Other {
-                    tag: cst.into(),
-                };
+                self.content_type.1 = ContentSubType::Other { tag: cst.into() };
             } else if ct.eq_ignore_ascii_case(b"text") {
                 self.content_type.0 = ContentType::Text;
                 if !cst.eq_ignore_ascii_case(b"plain") {
@@ -203,25 +203,23 @@ impl AttachmentBuilder {
                     .as_bytes(),
             ) {
                 Ok(ref s) => {
-                  let s:Vec<u8> = s.clone();
-                  {
-                    let slice = &s[..];
-                    if slice.find(b"\r\n").is_some() {
-                      s.replace(b"\r\n", b"\n");
+                    let s: Vec<u8> = s.clone();
+                    {
+                        let slice = &s[..];
+                        if slice.find(b"\r\n").is_some() {
+                            s.replace(b"\r\n", b"\n");
+                        }
                     }
-                  }
-                  s
+                    s
                 }
-                _ => self.raw.clone()
+                _ => self.raw.clone(),
             },
             ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_text(&self.raw)
                 .to_full_result()
                 .unwrap(),
             ContentTransferEncoding::_7Bit
             | ContentTransferEncoding::_8Bit
-            | ContentTransferEncoding::Other { .. } => {
-                self.raw.clone()
-            }
+            | ContentTransferEncoding::Other { .. } => self.raw.clone(),
         }
     }
     pub fn build(self) -> Attachment {
@@ -235,7 +233,7 @@ impl AttachmentBuilder {
                         b"mixed" => MultipartType::Mixed,
                         b"alternative" => MultipartType::Alternative,
                         b"digest" => MultipartType::Digest,
-                        _ => MultipartType::Unsupported { tag:tag.clone() },
+                        _ => MultipartType::Unsupported { tag: tag.clone() },
                     },
                     _ => panic!(),
                 };

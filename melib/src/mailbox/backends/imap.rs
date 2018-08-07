@@ -19,11 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use async::*;
 use conf::Folder;
 use error::Result;
-use async::*;
 use mailbox::backends::{MailBackend, RefreshEventConsumer};
-use mailbox::email::{Envelope, };
+use mailbox::email::Envelope;
 
 /// `BackendOp` implementor for Imap
 #[derive(Debug, Default, Clone)]
@@ -34,7 +34,6 @@ impl ImapOp {
         ImapOp {}
     }
 }
-
 
 /*
 
