@@ -46,7 +46,7 @@ pub struct Mailbox {
     pub folder: Folder,
     pub collection: Vec<Envelope>,
     pub threaded_collection: Vec<usize>,
-    threads: Vec<Container>,
+    pub threads: Vec<Container>,
 }
 
 impl Mailbox {

@@ -10,7 +10,8 @@ pub struct MailListing {
     cursor_pos: (usize, usize, usize),
     new_cursor_pos: (usize, usize, usize),
     length: usize,
-    // TODO: sorting
+    sort: (SortField, SortOrder),
+    subsort: (SortField, SortOrder),
     /// Cache current view.
     content: CellBuffer,
     /// If we must redraw on next redraw event
@@ -38,6 +39,8 @@ impl MailListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (0, 0, 0),
             length: 0,
+            sort: (SortField::Date, SortOrder::Desc),
+            subsort: (SortField::Date, SortOrder::Asc),
             content: content,
             dirty: true,
             unfocused: false,
@@ -99,7 +102,33 @@ impl MailListing {
             let mut indentations: Vec<bool> = Vec::with_capacity(6);
             let mut thread_idx = 0; // needed for alternate thread colors
             /* Draw threaded view. */
-            let mut iter = mailbox.threaded_collection.iter().enumerate().peekable();
+            let mut local_collection: Vec<usize> = mailbox.threaded_collection.clone();
+            let mut threads: Vec<&Container> = mailbox.threads.iter().map(|v| v).collect();
+            local_collection.sort_by(|a, b| {
+                match self.sort {
+                    (SortField::Date, SortOrder::Desc) => {
+                        mailbox.thread(*b).date().cmp(&mailbox.thread(*a).date())
+                    },
+                    (SortField::Date, SortOrder::Asc) => {
+                        mailbox.thread(*a).date().cmp(&mailbox.thread(*b).date())
+                    },
+                    (SortField::Subject, SortOrder::Desc) => {
+                        let a = mailbox.thread(*a);
+                        let b = mailbox.thread(*b);
+                        let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
+                        let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
+                        ma.subject().cmp(&mb.subject())
+                    },
+                    (SortField::Subject, SortOrder::Asc) => {
+                        let a = mailbox.thread(*a);
+                        let b = mailbox.thread(*b);
+                        let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
+                        let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
+                        mb.subject().cmp(&ma.subject())
+                    },
+                }
+            });
+            let mut iter = local_collection.iter().enumerate().peekable();
             let len = mailbox
                 .threaded_collection
                 .len()
@@ -108,16 +137,16 @@ impl MailListing {
                 .count();
             /* This is just a desugared for loop so that we can use .peek() */
             while let Some((idx, i)) = iter.next() {
-                let container = mailbox.thread(*i);
+                let container = threads[*i];
                 let indentation = container.indentation();
 
                 if indentation == 0 {
                     thread_idx += 1;
                 }
 
-                assert_eq!(container.has_message(), true);
+                assert!(container.has_message() == true);
                 match iter.peek() {
-                    Some(&(_, x)) if mailbox.thread(*x).indentation() == indentation => {
+                    Some(&(_, x)) if threads[*x].indentation() == indentation => {
                         indentations.pop();
                         indentations.push(true);
                     }
@@ -164,11 +193,11 @@ impl MailListing {
                 }
 
                 match iter.peek() {
-                    Some(&(_, x)) if mailbox.thread(*x).indentation() > indentation => {
+                    Some(&(_, x)) if threads[*x].indentation() > indentation => {
                         indentations.push(false);
                     }
-                    Some(&(_, x)) if mailbox.thread(*x).indentation() < indentation => {
-                        for _ in 0..(indentation - mailbox.thread(*x).indentation()) {
+                    Some(&(_, x)) if threads[*x].indentation() < indentation => {
+                        for _ in 0..(indentation - threads[*x].indentation()) {
                             indentations.pop();
                         }
                     }
@@ -661,7 +690,13 @@ impl Component for MailListing {
                     self.refresh_mailbox(context);
                     return;
                 },
-                //_ => {},
+                Action::Sort(field, order) => {
+                    self.sort = (field.clone(), order.clone());
+                    self.dirty = true;
+                    self.refresh_mailbox(context);
+                    return;
+                },
+                _ => {},
             },
             _ => {}
         }

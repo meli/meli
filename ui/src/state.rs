@@ -313,7 +313,9 @@ impl<W: Write> State<W> {
     }
     /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: String) {
+        eprintln!("cmd is {}", cmd);
         let result = parse_command(&cmd.as_bytes()).to_full_result();
+        eprintln!("rseult is {:?}", result);
 
         if let Ok(v) = result {
             self.rcv_event(UIEvent { id: 0, event_type: UIEventType::Action(v) });
@@ -399,7 +401,6 @@ impl<W: Write> State<W> {
         }
     }
 
-    
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
         if {
             match self.child {

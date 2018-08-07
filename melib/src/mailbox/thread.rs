@@ -53,6 +53,9 @@ pub struct Container {
 }
 
 impl Container {
+    pub fn date(&self) -> UnixTimestamp {
+        self.date
+    }
     pub fn message(&self) -> Option<usize> {
         self.message
     }
