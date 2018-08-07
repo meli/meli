@@ -171,11 +171,10 @@ fn main() {
                                             state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Normal)});
                                             state.redraw();
                                         },
-                                        k @ Key::Char(_) => {
+                                        k => {
                                             state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ExInput(k)});
                                             state.redraw();
                                         },
-                                        _ => {},
                                     }
                                 },
                                 UIMode::Fork => {

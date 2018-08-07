@@ -453,10 +453,12 @@ impl Component for StatusBar {
                 match m {
                     UIMode::Normal => {
                         self.height = 1;
-                        context.replies.push_back(UIEvent {
-                            id: 0,
-                            event_type: UIEventType::Command(self.ex_buffer.clone()),
-                        });
+                        if !self.ex_buffer.is_empty() {
+                            context.replies.push_back(UIEvent {
+                                id: 0,
+                                event_type: UIEventType::Command(self.ex_buffer.clone()),
+                            });
+                        }
                         self.ex_buffer.clear()
                     }
                     UIMode::Execute => {
@@ -468,6 +470,14 @@ impl Component for StatusBar {
             UIEventType::ExInput(Key::Char(c)) => {
                 self.dirty = true;
                 self.ex_buffer.push(*c);
+            }
+            UIEventType::ExInput(Key::Ctrl('u')) => {
+                self.dirty = true;
+                self.ex_buffer.clear();
+            }
+            UIEventType::ExInput(Key::Backspace) | UIEventType::ExInput(Key::Ctrl('h')) => {
+                self.dirty = true;
+                self.ex_buffer.pop();
             }
             UIEventType::Resize => {
                 self.dirty = true;
