@@ -128,7 +128,6 @@ fn main() {
                 state.rcv_event(e);
             }
 
-            state.redraw();
             /* Poll on all channels. Currently we have the input channel for stdin, watching events and the signal watcher. */
             chan_select! {
                 receiver.recv() -> r => {
