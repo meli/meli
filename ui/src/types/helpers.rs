@@ -45,6 +45,8 @@ impl File {
     }
 }
 
+/// Returned `File` will be deleted when dropped, so make sure to add it on `context.temp_files`
+/// to reap it later.
 pub fn create_temp_file(bytes: &[u8], filename: Option<&PathBuf>) -> File {
     let mut dir = std::env::temp_dir();
 

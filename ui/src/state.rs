@@ -53,6 +53,7 @@ pub struct Context {
     _backends: Backends,
 
     input_thread: chan::Sender<bool>,
+    pub temp_files: Vec<File>,
 }
 
 impl Context {
@@ -61,6 +62,9 @@ impl Context {
     }
     pub fn input_thread(&mut self) -> &mut chan::Sender<bool> {
         &mut self.input_thread
+    }
+    pub fn add_temp(&mut self, f: File) -> () {
+        self.temp_files.push(f);
     }
 }
 
@@ -159,6 +163,7 @@ impl State<std::io::Stdout> {
                 runtime_settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
+                temp_files: Vec::new(),
 
                 input_thread,
             },

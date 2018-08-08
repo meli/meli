@@ -150,10 +150,11 @@ impl Component for MailView {
         let bottom_right = bottom_right!(area);
 
         let (envelope_idx, y): (usize, usize) = {
-            let threaded = context.accounts[self.coordinates.0]
+            let accounts = &mut context.accounts;
+            let threaded = accounts[self.coordinates.0]
                 .runtime_settings
                 .threaded;
-            let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
+            let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
                 .unwrap();
             let envelope_idx: usize = if threaded {
@@ -325,10 +326,11 @@ impl Component for MailView {
                 self.cmd_buf.clear();
 
                 {
-                    let threaded = context.accounts[self.coordinates.0]
+                    let accounts = &mut context.accounts;
+                    let threaded = accounts[self.coordinates.0]
                         .runtime_settings
                         .threaded;
-                    let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
+                    let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();
                     let envelope_idx: usize = if threaded {
@@ -366,6 +368,7 @@ impl Component for MailView {
                                         .unwrap_or_else(|_| {
                                             panic!("Failed to start {}", binary.display())
                                         });
+                                    context.temp_files.push(p);
                                 } else {
                                     context.replies.push_back(UIEvent {
                                         id: 0,
@@ -396,10 +399,11 @@ impl Component for MailView {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
                 let url = {
-                    let threaded = context.accounts[self.coordinates.0]
+                    let accounts = &mut context.accounts;
+                    let threaded = accounts[self.coordinates.0]
                         .runtime_settings
                         .threaded;
-                    let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
+                    let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();
                     let envelope_idx: usize = if threaded {
