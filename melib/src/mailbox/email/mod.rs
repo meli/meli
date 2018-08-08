@@ -22,13 +22,14 @@
 /*!
  * Email parsing, handling, sending etc.
  */
+mod attachment_types;
 pub mod attachments;
-pub mod parser;
-
 pub use self::attachments::*;
+pub mod parser;
+use parser::BytesExt;
+
 use error::{MeliError, Result};
 use mailbox::backends::BackendOpGenerator;
-use parser::BytesExt;
 
 use std::borrow::Cow;
 use std::cmp::Ordering;

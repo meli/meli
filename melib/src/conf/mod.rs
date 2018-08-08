@@ -51,6 +51,9 @@ impl Folder {
             children: children,
         }
     }
+    pub fn hash(&self) -> u64 {
+        self.hash
+    }
     pub fn path(&self) -> &str {
         &self.path
     }

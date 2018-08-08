@@ -41,6 +41,7 @@ use termion::{clear, cursor, style};
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: Vec<Account>,
+    mailbox_hashes: FnvHashMap<u64, (usize, usize)>,
     pub settings: Settings,
 
     pub runtime_settings: Settings,
@@ -151,6 +152,8 @@ impl State<std::io::Stdout> {
 
             context: Context {
                 accounts,
+                mailbox_hashes: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
+
                 _backends: backends,
                 settings: settings.clone(),
                 runtime_settings: settings,
@@ -172,13 +175,23 @@ impl State<std::io::Stdout> {
             cursor::Goto(1, 1)
         ).unwrap();
         s.flush();
-        for account in &mut s.context.accounts {
+        for (x, account) in s.context.accounts.iter_mut().enumerate() {
+            for (y, folder) in account.settings.folders.iter().enumerate() {
+                s.context.mailbox_hashes.insert(folder.hash(), (x, y));
+            }
             let sender = s.sender.clone();
             account.watch(RefreshEventConsumer::new(Box::new(move |r| {
                 sender.send(ThreadEvent::from(r));
             })));
         }
+        for (k, v) in &s.context.mailbox_hashes {
+        eprintln!("{:x} -> {:?}", k, v);
+
+        }
         s
+    }
+    pub fn hash_to_folder(&self, hash: u64) {
+        eprintln!("got refresh {:?}", self.context.mailbox_hashes[&hash]);
     }
 
     /// If an owned thread returns a `ThreadEvent::ThreadJoin` event to `State` then it must remove

@@ -18,41 +18,12 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use mailbox::email::parser;
-use mailbox::email::parser::BytesExt;
-
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
-
 use data_encoding::BASE64_MIME;
+use mailbox::email::parser;
 
-/*
- *
- * Data
- * Text { content: Vec<u8> }
- * Multipart
- */
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum MultipartType {
-    Mixed,
-    Alternative,
-    Digest,
-    Unsupported { tag: Vec<u8> },
-}
-
-impl Display for MultipartType {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match self {
-            MultipartType::Mixed => write!(f, "multipart/mixed"),
-            MultipartType::Alternative => write!(f, "multipart/alternative"),
-            MultipartType::Digest => write!(f, "multipart/digest"),
-            MultipartType::Unsupported { tag: ref t } => {
-                write!(f, "multipart/{}", String::from_utf8_lossy(t))
-            }
-        }
-    }
-}
+pub use mailbox::email::attachment_types::*;
 
 #[derive(Clone, Debug)]
 pub enum AttachmentType {
@@ -68,6 +39,30 @@ pub enum AttachmentType {
     },
 }
 
+/*
+ *
+ * Data
+ * Text { content: Vec<u8> }
+ * Multipart
+ */
+// TODO: Add example.
+//
+pub struct AttachmentBuilder {
+    content_type: (ContentType, ContentSubType),
+    content_transfer_encoding: ContentTransferEncoding,
+
+    raw: Vec<u8>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Attachment {
+    content_type: (ContentType, ContentSubType),
+    content_transfer_encoding: ContentTransferEncoding,
+
+    raw: Vec<u8>,
+
+    attachment_type: AttachmentType,
+}
 impl Display for AttachmentType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
@@ -77,57 +72,11 @@ impl Display for AttachmentType {
         }
     }
 }
-#[derive(Clone, Debug)]
-pub enum ContentType {
-    Text,
-    Multipart { boundary: Vec<u8> },
-    Unsupported { tag: Vec<u8> },
-}
-
-impl Display for ContentType {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match *self {
-            ContentType::Text => write!(f, "text"),
-            ContentType::Multipart { .. } => write!(f, "multipart"),
-            ContentType::Unsupported { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
-        }
-    }
-}
-#[derive(Clone, Debug, PartialEq)]
-pub enum ContentSubType {
-    Plain,
-    Other { tag: Vec<u8> },
-}
-impl Display for ContentSubType {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match *self {
-            ContentSubType::Plain => write!(f, "plain"),
-            ContentSubType::Other { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
-        }
-    }
-}
-#[derive(Clone, Debug)]
-pub enum ContentTransferEncoding {
-    _8Bit,
-    _7Bit,
-    Base64,
-    QuotedPrintable,
-    Other { tag: Vec<u8> },
-}
-
-/// TODO: Add example.
-///
-pub struct AttachmentBuilder {
-    content_type: (ContentType, ContentSubType),
-    content_transfer_encoding: ContentTransferEncoding,
-
-    raw: Vec<u8>,
-}
 
 impl AttachmentBuilder {
     pub fn new(content: &[u8]) -> Self {
         AttachmentBuilder {
-            content_type: (ContentType::Text, ContentSubType::Plain),
+            content_type: (Default::default() , ContentSubType::Plain),
             content_transfer_encoding: ContentTransferEncoding::_7Bit,
             raw: content.to_vec(),
         }
@@ -152,7 +101,13 @@ impl AttachmentBuilder {
                 };
                 self.content_type.1 = ContentSubType::Other { tag: cst.into() };
             } else if ct.eq_ignore_ascii_case(b"text") {
-                self.content_type.0 = ContentType::Text;
+                self.content_type.0 = Default::default();
+                for (n, v) in params {
+                    if n.eq_ignore_ascii_case(b"charset") {
+                        self.content_type.0 = ContentType::Text { charset: Charset::from(v) };
+                        break;
+                    }
+                }
                 if !cst.eq_ignore_ascii_case(b"plain") {
                     self.content_type.1 = ContentSubType::Other {
                         tag: cst.to_ascii_lowercase(),
@@ -189,42 +144,29 @@ impl AttachmentBuilder {
         self
     }
     fn decode(&self) -> Vec<u8> {
-        // TODO: Use charset for decoding
+        let charset = match self.content_type.0 {
+            ContentType::Text{ charset: c } => c,
+            _ => Default::default(),
+        };
+        let decoded_result = parser::decode_charset(&self.raw, charset);
+        let b: &[u8] = decoded_result.as_ref().map(|v| v.as_bytes()).unwrap_or_else(|_| &self.raw);
+
         match self.content_transfer_encoding {
-            ContentTransferEncoding::Base64 => match BASE64_MIME.decode(
-                str::from_utf8(&self.raw)
-                    .unwrap()
-                    .trim()
-                    .lines()
-                    .fold(String::with_capacity(self.raw.len()), |mut acc, x| {
-                        acc.push_str(x);
-                        acc
-                    })
-                    .as_bytes(),
-            ) {
-                Ok(ref s) => {
-                    let s: Vec<u8> = s.clone();
-                    {
-                        let slice = &s[..];
-                        if slice.find(b"\r\n").is_some() {
-                            s.replace(b"\r\n", b"\n");
-                        }
-                    }
-                    s
-                }
-                _ => self.raw.clone(),
+            ContentTransferEncoding::Base64 => match BASE64_MIME.decode(b) {
+                Ok(v) => v,
+                _ => b.to_vec(),
             },
-            ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_text(&self.raw)
+            ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_text(b)
                 .to_full_result()
                 .unwrap(),
-            ContentTransferEncoding::_7Bit
-            | ContentTransferEncoding::_8Bit
-            | ContentTransferEncoding::Other { .. } => self.raw.clone(),
+                ContentTransferEncoding::_7Bit
+                    | ContentTransferEncoding::_8Bit
+                    | ContentTransferEncoding::Other { .. } => b.to_vec(),
         }
     }
     pub fn build(self) -> Attachment {
         let attachment_type = match self.content_type.0 {
-            ContentType::Text => AttachmentType::Text {
+            ContentType::Text { .. } => AttachmentType::Text {
                 content: self.decode(),
             },
             ContentType::Multipart { boundary: ref b } => {
@@ -295,15 +237,6 @@ impl AttachmentBuilder {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Attachment {
-    content_type: (ContentType, ContentSubType),
-    content_transfer_encoding: ContentTransferEncoding,
-
-    raw: Vec<u8>,
-
-    attachment_type: AttachmentType,
-}
 
 impl Display for Attachment {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
@@ -409,17 +342,23 @@ pub fn interpret_format_flowed(_t: &str) -> String {
 }
 
 pub fn decode(a: &Attachment) -> Vec<u8> {
-    // TODO: Use charset for decoding
+    let charset = match a.content_type.0 {
+        ContentType::Text{ charset: c } => c,
+        _ => Default::default(),
+    };
+    let decoded_result = parser::decode_charset(a.bytes(), charset);
+    let b: &[u8] = decoded_result.as_ref().map(|v| v.as_bytes()).unwrap_or_else(|_| a.bytes());
+    
     match a.content_transfer_encoding {
-        ContentTransferEncoding::Base64 => match BASE64_MIME.decode(a.bytes()) {
+        ContentTransferEncoding::Base64 => match BASE64_MIME.decode(b) {
             Ok(v) => v,
-            _ => a.bytes().to_vec(),
+            _ => b.to_vec(),
         },
-        ContentTransferEncoding::QuotedPrintable => parser::quoted_printed_bytes(&a.bytes())
+        ContentTransferEncoding::QuotedPrintable => parser::quoted_printed_bytes(b)
             .to_full_result()
             .unwrap(),
         ContentTransferEncoding::_7Bit
         | ContentTransferEncoding::_8Bit
-        | ContentTransferEncoding::Other { .. } => a.bytes().to_vec(),
+        | ContentTransferEncoding::Other { .. } => b.to_vec(),
     }
 }

@@ -172,6 +172,7 @@ impl MailBackend for MaildirType {
                     if MaildirType::is_valid(&f).is_err() {
                         continue;
                     }
+                    eprintln!("watching {}", f.path());
                     let mut p = PathBuf::from(&f.path());
                     p.push("cur");
                     watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
@@ -182,8 +183,17 @@ impl MailBackend for MaildirType {
                 loop {
                     match rx.recv() {
                         Ok(event) => match event {
-                            DebouncedEvent::Create(pathbuf) => {
-                                let path = pathbuf.parent().unwrap().to_str().unwrap();
+                            DebouncedEvent::Create(mut pathbuf) | DebouncedEvent::Remove(mut pathbuf) => {
+                                let path = if pathbuf.is_dir() {
+                                    if pathbuf.ends_with("cur") | pathbuf.ends_with("new") {
+                                        pathbuf.pop();
+                                    }
+                                    pathbuf.to_str().unwrap()
+                                } else {
+                                    pathbuf.pop();
+                                    pathbuf.parent().unwrap().to_str().unwrap()
+                                };
+                                eprintln!(" got event in {}", path);
 
                                 let mut hasher = DefaultHasher::new();
                                 hasher.write(path.as_bytes());

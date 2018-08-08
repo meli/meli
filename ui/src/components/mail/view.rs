@@ -292,7 +292,7 @@ impl Component for MailView {
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
                     if let Some(u) = envelope.body().attachments().get(lidx) {
                         match u.content_type().0 {
-                            ContentType::Text => {
+                            ContentType::Text { .. } => {
                                 self.mode = ViewMode::Attachment(lidx);
                                 self.dirty = true;
                             }

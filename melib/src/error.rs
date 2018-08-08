@@ -27,6 +27,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::result;
+use std::borrow::Cow;
 
 use nom;
 
@@ -70,6 +71,13 @@ impl From<io::Error> for MeliError {
 impl From<nom::IError> for MeliError {
     #[inline]
     fn from(kind: nom::IError) -> MeliError {
+        MeliError::new(format!("{:?}", kind))
+    }
+}
+
+impl<'a> From<Cow<'a, str>> for MeliError {
+    #[inline]
+    fn from(kind: Cow<'_, str>) -> MeliError {
         MeliError::new(format!("{:?}", kind))
     }
 }
