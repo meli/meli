@@ -18,14 +18,14 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::fmt;
 use std::str;
 use data_encoding::BASE64_MIME;
 use mailbox::email::parser;
 
 pub use mailbox::email::attachment_types::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum AttachmentType {
     Data {
         tag: Vec<u8>,
@@ -37,6 +37,16 @@ pub enum AttachmentType {
         of_type: MultipartType,
         subattachments: Vec<Attachment>,
     },
+}
+
+impl fmt::Debug for AttachmentType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            AttachmentType::Data { .. } => write!(f, "AttachmentType::Data {{ .. }}"),
+            AttachmentType::Text { .. } => write!(f, "AttachmentType::Text {{ .. }}"),
+            AttachmentType::Multipart { of_type, subattachments } => write!(f, "AttachmentType::Multipart {{ of_type: {:?},\nsubattachments: {:?} }}", of_type, subattachments),
+        }
+    }
 }
 
 /*
@@ -54,17 +64,27 @@ pub struct AttachmentBuilder {
     raw: Vec<u8>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Attachment {
     content_type: (ContentType, ContentSubType),
     content_transfer_encoding: ContentTransferEncoding,
 
     raw: Vec<u8>,
-
     attachment_type: AttachmentType,
 }
-impl Display for AttachmentType {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+
+impl fmt::Debug for Attachment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n attachment_type: {:?}\n }}",
+        self.content_type,
+        self.content_transfer_encoding,
+        self.raw.len(),
+        self.attachment_type)
+    }
+}
+
+impl fmt::Display for AttachmentType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             AttachmentType::Data { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
             AttachmentType::Text { content: ref c } => write!(f, "{}", String::from_utf8_lossy(c)),
@@ -108,7 +128,9 @@ impl AttachmentBuilder {
                         break;
                     }
                 }
-                if !cst.eq_ignore_ascii_case(b"plain") {
+                if cst.eq_ignore_ascii_case(b"html") {
+                    self.content_type.1 = ContentSubType::Html;
+                } else if !cst.eq_ignore_ascii_case(b"plain") {
                     self.content_type.1 = ContentSubType::Other {
                         tag: cst.to_ascii_lowercase(),
                     };
@@ -144,25 +166,27 @@ impl AttachmentBuilder {
         self
     }
     fn decode(&self) -> Vec<u8> {
+        // TODO merge this and standalone decode() function
         let charset = match self.content_type.0 {
             ContentType::Text{ charset: c } => c,
             _ => Default::default(),
         };
-        let decoded_result = parser::decode_charset(&self.raw, charset);
-        let b: &[u8] = decoded_result.as_ref().map(|v| v.as_bytes()).unwrap_or_else(|_| &self.raw);
 
-        match self.content_transfer_encoding {
-            ContentTransferEncoding::Base64 => match BASE64_MIME.decode(b) {
+        let bytes = match self.content_transfer_encoding {
+            ContentTransferEncoding::Base64 => match BASE64_MIME.decode(&self.raw) {
                 Ok(v) => v,
-                _ => b.to_vec(),
+                _ => self.raw.to_vec(),
             },
-            ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_text(b)
+            ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_bytes(&self.raw)
                 .to_full_result()
                 .unwrap(),
                 ContentTransferEncoding::_7Bit
                     | ContentTransferEncoding::_8Bit
-                    | ContentTransferEncoding::Other { .. } => b.to_vec(),
-        }
+                    | ContentTransferEncoding::Other { .. } => self.raw.to_vec(),
+        };
+
+        let decoded_result = parser::decode_charset(&bytes, charset);
+        decoded_result.as_ref().map(|v| v.as_bytes()).unwrap_or_else(|_| &self.raw).to_vec()
     }
     pub fn build(self) -> Attachment {
         let attachment_type = match self.content_type.0 {
@@ -172,9 +196,9 @@ impl AttachmentBuilder {
             ContentType::Multipart { boundary: ref b } => {
                 let multipart_type = match self.content_type.1 {
                     ContentSubType::Other { ref tag } => match &tag[..] {
-                        b"mixed" => MultipartType::Mixed,
-                        b"alternative" => MultipartType::Alternative,
-                        b"digest" => MultipartType::Digest,
+                        b"mixed" | b"Mixed" | b"MIXED" => MultipartType::Mixed,
+                        b"alternative" | b"Alternative" | b"ALTERNATIVE" => MultipartType::Alternative,
+                        b"digest" | b"Digest" | b"DIGEST" => MultipartType::Digest,
                         _ => MultipartType::Unsupported { tag: tag.clone() },
                     },
                     _ => panic!(),
@@ -238,8 +262,8 @@ impl AttachmentBuilder {
 }
 
 
-impl Display for Attachment {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+impl fmt::Display for Attachment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.attachment_type {
             AttachmentType::Data { .. } => {
                 write!(f, "Data attachment of type {}", self.mime_type())
@@ -265,13 +289,13 @@ impl Attachment {
     pub fn bytes(&self) -> &[u8] {
         &self.raw
     }
-    fn get_text_recursive(&self, text: &mut String) {
+    fn get_text_recursive(&self, text: &mut Vec<u8>) {
         match self.attachment_type {
             AttachmentType::Data { .. } => {
                 //text.push_str(&format!("Data attachment of type {}", self.mime_type()));
             }
-            AttachmentType::Text { content: ref t } => {
-                text.push_str(&String::from_utf8_lossy(t));
+            AttachmentType::Text { .. } => {
+                text.extend(decode(self, None));
             }
             AttachmentType::Multipart {
                 of_type: ref multipart_type,
@@ -286,15 +310,15 @@ impl Attachment {
             } else {
                 for a in sub_att_vec {
                     a.get_text_recursive(text);
-                    text.push_str("\n\n");
+                    text.extend_from_slice(b"\n\n");
                 }
             },
         }
     }
     pub fn text(&self) -> String {
-        let mut text = String::with_capacity(self.raw.len());
+        let mut text = Vec::with_capacity(self.raw.len());
         self.get_text_recursive(&mut text);
-        text
+        String::from_utf8_lossy(&text).into()
     }
     pub fn description(&self) -> Vec<String> {
         self.attachments().iter().map(|a| a.text()).collect()
@@ -341,24 +365,66 @@ pub fn interpret_format_flowed(_t: &str) -> String {
     unimplemented!()
 }
 
-pub fn decode(a: &Attachment) -> Vec<u8> {
+fn decode_rec_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment) -> Vec<u8>>>) -> Vec<u8> {
+    if let Some(filter) = filter {
+        return filter(a);
+    }
+    match a.attachment_type {
+        AttachmentType::Data { .. } => { Vec::new()},
+        AttachmentType::Text { .. } => decode_helper(a, filter),
+        AttachmentType::Multipart {
+            of_type: ref multipart_type,
+            subattachments: ref sub_att_vec,
+        } => if *multipart_type == MultipartType::Alternative {
+            for a in sub_att_vec {
+                if a.content_type.1 == ContentSubType::Plain {
+                    return decode_helper(a, filter);
+                }
+            }
+            decode_helper(a, filter)
+        } else {
+            let mut vec = Vec::new();
+            for a in sub_att_vec {
+                vec.extend(decode_rec_helper(a, filter));
+                vec.extend_from_slice(b"\n\n");
+            }
+            vec
+        },
+    }
+}
+pub fn decode_rec(a: &Attachment, filter: Option<Box<Fn(&Attachment) -> Vec<u8>>>) -> Vec<u8> {
+    decode_rec_helper(a, &filter)
+}
+fn decode_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment) -> Vec<u8>>>) -> Vec<u8> {
+    if let Some(filter) = filter {
+        return filter(a);
+    }
+
     let charset = match a.content_type.0 {
         ContentType::Text{ charset: c } => c,
         _ => Default::default(),
     };
-    let decoded_result = parser::decode_charset(a.bytes(), charset);
-    let b: &[u8] = decoded_result.as_ref().map(|v| v.as_bytes()).unwrap_or_else(|_| a.bytes());
-    
-    match a.content_transfer_encoding {
-        ContentTransferEncoding::Base64 => match BASE64_MIME.decode(b) {
+
+    let bytes = match a.content_transfer_encoding {
+        ContentTransferEncoding::Base64 => match BASE64_MIME.decode(a.bytes()) {
             Ok(v) => v,
-            _ => b.to_vec(),
+            _ => a.bytes().to_vec(),
         },
-        ContentTransferEncoding::QuotedPrintable => parser::quoted_printed_bytes(b)
+        ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_bytes(a.bytes())
             .to_full_result()
             .unwrap(),
         ContentTransferEncoding::_7Bit
         | ContentTransferEncoding::_8Bit
-        | ContentTransferEncoding::Other { .. } => b.to_vec(),
+        | ContentTransferEncoding::Other { .. } => a.bytes().to_vec(),
+    };
+
+    if a.content_type().0.is_text() {
+        let decoded_result = parser::decode_charset(&bytes, charset);
+        decoded_result.as_ref().map(|v| v.as_bytes()).unwrap_or_else(|_| a.bytes()).to_vec()
+    } else {
+        bytes.to_vec()
     }
+}
+pub fn decode(a: &Attachment, filter: Option<Box<Fn(&Attachment) -> Vec<u8>>>) -> Vec<u8> {
+    decode_helper(a, &filter)
 }

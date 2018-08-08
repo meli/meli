@@ -184,10 +184,6 @@ impl State<std::io::Stdout> {
                 sender.send(ThreadEvent::from(r));
             })));
         }
-        for (k, v) in &s.context.mailbox_hashes {
-        eprintln!("{:x} -> {:?}", k, v);
-
-        }
         s
     }
     pub fn hash_to_folder(&self, hash: u64) {
@@ -348,9 +344,7 @@ impl<W: Write> State<W> {
     }
     /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: &str) {
-        eprintln!("cmd is {}", cmd);
         let result = parse_command(&cmd.as_bytes()).to_full_result();
-        eprintln!("rseult is {:?}", result);
 
         if let Ok(v) = result {
             self.rcv_event(UIEvent {

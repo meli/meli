@@ -83,15 +83,39 @@ impl Display for ContentType {
         }
     }
 }
+
+impl ContentType {
+    pub fn is_text(&self) -> bool {
+        if let ContentType::Text { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ContentSubType {
     Plain,
+    Html,
     Other { tag: Vec<u8> },
 }
+
+impl ContentSubType {
+    pub fn is_html(&self) -> bool {
+        if let ContentSubType::Html = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
 impl Display for ContentSubType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
             ContentSubType::Plain => write!(f, "plain"),
+            ContentSubType::Html => write!(f, "html"),
             ContentSubType::Other { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
         }
     }

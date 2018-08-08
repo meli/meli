@@ -40,8 +40,8 @@ impl File {
     pub fn file(&mut self) -> std::fs::File {
         std::fs::File::create(&self.path).unwrap()
     }
-    pub fn path(&mut self) -> &mut PathBuf {
-        &mut self.path
+    pub fn path(&self) -> &PathBuf {
+        &self.path
     }
 }
 

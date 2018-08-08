@@ -206,7 +206,7 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
                     Ok(v) => v,
                     Err(_) => encoded.to_vec(),
                 },
-                b'q' | b'Q' => match quoted_printed_bytes(encoded) {
+                b'q' | b'Q' => match quoted_printable_bytes_header(encoded) {
                     IResult::Done(b"", s) => s,
                     _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
                 },
@@ -296,15 +296,37 @@ pub fn decode_charset(s: &[u8], charset: Charset) -> Result<String> {
     }
 }
 
+fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    if input.len() < 2 {
+        IResult::Incomplete(Needed::Size(1))
+    } else if input[0] == b'=' && input[1] == b'\n' {
+        IResult::Done(&input[2..], &input[0..2]) // `=\n` is an escaped space character.
+    } else {
+        IResult::Error(error_code!(ErrorKind::Custom(43)))
+    }
+}
+
 named!(qp_underscore_header<u8>, do_parse!(tag!("_") >> ({ b' ' })));
 
-/// For atoms in Header values.
+// With MIME, headers in quoted printable format can contain underscores that represent spaces.
+// In non-header context, an underscore is just a plain underscore.
 named!(
-    pub quoted_printed_bytes<Vec<u8>>,
+    pub quoted_printable_bytes_header<Vec<u8>>,
     many0!(alt_complete!(
         quoted_printable_byte | qp_underscore_header | le_u8
     ))
 );
+
+/// For atoms in Header values.
+named!(
+    pub quoted_printable_bytes<Vec<u8>>,
+    many0!(alt_complete!(
+        preceded!(quoted_printable_soft_break, quoted_printable_byte) |
+        preceded!(quoted_printable_soft_break, le_u8) 
+        | quoted_printable_byte | le_u8
+    ))
+);
+
 
 named!(
     encoded_word_list<Vec<u8>>,
@@ -527,11 +549,7 @@ fn test_address() {
     println!("{:?}", rfc2822address_list(s).unwrap());
 }
 
-named!(pub rfc2822address_list<Vec<Address>>, ws!(
-            separated_list!(is_a!(","), address)
-
-
-            ));
+named!(pub rfc2822address_list<Vec<Address>>, ws!( separated_list!(is_a!(","), address)));
 
 named!(pub address_list<String>, ws!(do_parse!(
         list: alt_complete!( encoded_word_list | ascii_token) >>
@@ -766,15 +784,15 @@ named!(pub content_type< (&[u8], &[u8], Vec<(&[u8], &[u8])>) >,
            } )
            ));
 
-named!(pub quoted_printable_text<Vec<u8>>,
-   do_parse!(
-       bytes: many0!(alt_complete!(
-               preceded!(tag!("=\n"), quoted_printable_byte) |
-               preceded!(tag!("=\n"), le_u8) |
-               quoted_printable_byte |
-               le_u8)) >>
-       ( {
-           bytes
-       } )
-   )
-);
+//named!(pub quoted_printable_text<Vec<u8>>,
+//   do_parse!(
+//       bytes: many0!(alt_complete!(
+//               preceded!(tag!("=\n"), quoted_printable_byte) |
+//               preceded!(tag!("=\n"), le_u8) |
+//               quoted_printable_byte |
+//               le_u8)) >>
+//       ( {
+//           bytes
+//       } )
+//   )
+//);

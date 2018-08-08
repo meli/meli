@@ -70,6 +70,78 @@ impl MailView {
             cmd_buf: String::with_capacity(4),
         }
     }
+
+    /// Returns the string to be displayed in the Viewer
+    fn attachment_to_text(&self, envelope: &Envelope) -> String {
+        let finder = LinkFinder::new();
+        let body = envelope.body();
+        let body_text = if body.content_type().0.is_text() && body.content_type().1.is_html() {
+            String::from_utf8_lossy(&decode(&body, Some(Box::new(|a: &Attachment| {
+                use std::io::Write;
+                use std::process::{Command, Stdio};
+
+                let raw = decode(a, None);
+                let mut html_filter = Command::new("w3m")
+                    .args(&["-I",  "utf-8", "-T", "text/html"])
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect("Failed to start html filter process");
+
+                html_filter.stdin.as_mut().unwrap().write_all(&raw).expect("Failed to write to w3m stdin");
+                html_filter.wait_with_output().unwrap().stdout
+            })))).into_owned()
+        } else {
+            String::from_utf8_lossy(&decode_rec(&body, None)).into()
+        };
+        match self.mode {
+            ViewMode::Normal => {
+                let mut t = body_text.to_string();
+                if body.count_attachments() > 1 {
+                    t = body.attachments().iter().enumerate().fold(
+                        t,
+                        |mut s, (idx, a)| {
+                            s.push_str(&format!("[{}] {}\n\n", idx, a));
+                            s
+                        },
+                        );
+                }
+                t
+            }
+            ViewMode::Raw => String::from_utf8_lossy(&envelope.bytes()).into_owned(),
+            ViewMode::Url => {
+                let mut t = body_text.to_string();
+                for (lidx, l) in finder.links(&body.text()).enumerate() {
+                    let offset = if lidx < 10 {
+                        lidx * 3
+                    } else if lidx < 100 {
+                        26 + (lidx - 9) * 4
+                    } else if lidx < 1000 {
+                        385 + (lidx - 99) * 5
+                    } else {
+                        panic!("BUG: Message body with more than 100 urls");
+                    };
+                    t.insert_str(l.start() + offset, &format!("[{}]", lidx));
+                }
+                if body.count_attachments() > 1 {
+                    t = body.attachments().iter().enumerate().fold(
+                        t,
+                        |mut s, (idx, a)| {
+                            s.push_str(&format!("[{}] {}\n\n", idx, a));
+                            s
+                        },
+                        );
+                }
+                t
+            }
+            ViewMode::Attachment(aidx) => {
+                let attachments = body.attachments();
+                let mut ret = "Viewing attachment. Press `r` to return \n".to_string();
+                ret.push_str(&attachments[aidx].text());
+                ret
+            }
+        }
+    }
 }
 
 impl Component for MailView {
@@ -177,61 +249,15 @@ impl Component for MailView {
                     .as_ref()
                     .unwrap();
                 let envelope: &Envelope = &mailbox.collection[envelope_idx];
+                let text = self.attachment_to_text(envelope);
 
-                let finder = LinkFinder::new();
-                let mut text = match self.mode {
-                    ViewMode::Normal => {
-                        let mut t = envelope.body().text().to_string();
-                        if envelope.body().count_attachments() > 1 {
-                            t = envelope.body().attachments().iter().enumerate().fold(
-                                t,
-                                |mut s, (idx, a)| {
-                                    s.push_str(&format!("[{}] {}\n\n", idx, a));
-                                    s
-                                },
-                            );
-                        }
-                        t
-                    }
-                    ViewMode::Raw => String::from_utf8_lossy(&envelope.bytes()).into_owned(),
-                    ViewMode::Url => {
-                        let mut t = envelope.body().text().to_string();
-                        for (lidx, l) in finder.links(&envelope.body().text()).enumerate() {
-                            let offset = if lidx < 10 {
-                                lidx * 3
-                            } else if lidx < 100 {
-                                26 + (lidx - 9) * 4
-                            } else if lidx < 1000 {
-                                385 + (lidx - 99) * 5
-                            } else {
-                                panic!("BUG: Message body with more than 100 urls");
-                            };
-                            t.insert_str(l.start() + offset, &format!("[{}]", lidx));
-                        }
-                        if envelope.body().count_attachments() > 1 {
-                            t = envelope.body().attachments().iter().enumerate().fold(
-                                t,
-                                |mut s, (idx, a)| {
-                                    s.push_str(&format!("[{}] {}\n\n", idx, a));
-                                    s
-                                },
-                            );
-                        }
-                        t
-                    }
-                    ViewMode::Attachment(aidx) => {
-                        let attachments = envelope.body().attachments();
-                        let mut ret = "Viewing attachment. Press `r` to return \n".to_string();
-                        ret.push_str(&attachments[aidx].text());
-                        ret
-                    }
-                };
                 let mut buf = CellBuffer::from(&text);
                 if self.mode == ViewMode::Url {
                     // URL indexes must be colored (ugh..)
                     let lines: Vec<&str> = text.split('\n').map(|l| l.trim_right()).collect();
                     let mut shift = 0;
                     let mut lidx_total = 0;
+                    let finder = LinkFinder::new();
                     for r in &lines {
                         for l in finder.links(&r) {
                             let offset = if lidx_total < 10 {
@@ -331,7 +357,7 @@ impl Component for MailView {
                                 let attachment_type = u.mime_type();
                                 let binary = query_default_app(&attachment_type);
                                 if let Ok(binary) = binary {
-                                    let mut p = create_temp_file(&decode(u), None);
+                                    let mut p = create_temp_file(&decode(u, None), None);
                                     Command::new(&binary)
                                         .arg(p.path())
                                         .stdin(Stdio::piped())

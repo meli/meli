@@ -45,18 +45,6 @@ pub enum SortField {
 impl FromStr for SortField {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        eprintln!("sortfield from_str {}", s);
-        match s.trim() {
-            "subject" | "s" | "sub" | "sbj" | "subj" => {
-                eprintln!("parsed: subject");
-            }
-            "date" | "d" => {
-                eprintln!("parsed date");
-            }
-            _ => {
-                eprintln!("error in parse");
-            }
-        }
         match s.trim() {
             "subject" | "s" | "sub" | "sbj" | "subj" => Ok(SortField::Subject),
             "date" | "d" => Ok(SortField::Date),
@@ -68,7 +56,6 @@ impl FromStr for SortField {
 impl FromStr for SortOrder {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        eprintln!("sortoder from_str {}", s);
         match s.trim() {
             "asc" => Ok(SortOrder::Asc),
             "desc" => Ok(SortOrder::Desc),
