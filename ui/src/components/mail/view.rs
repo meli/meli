@@ -197,7 +197,16 @@ impl Component for MailView {
                     ViewMode::Url => {
                         let mut t = envelope.body().text().to_string();
                         for (lidx, l) in finder.links(&envelope.body().text()).enumerate() {
-                            t.insert_str(l.start() + (lidx * 3), &format!("[{}]", lidx));
+                            let offset = if lidx < 10 {
+                                lidx * 3
+                            } else if lidx < 100 {
+                                26 + (lidx - 9) * 4
+                            } else if lidx < 1000 {
+                                385 + (lidx - 99) * 5
+                            } else {
+                                panic!("BUG: Message body with more than 100 urls");
+                            };
+                            t.insert_str(l.start() + offset, &format!("[{}]", lidx));
                         }
                         if envelope.body().count_attachments() > 1 {
                             t = envelope.body().attachments().iter().enumerate().fold(
@@ -220,13 +229,26 @@ impl Component for MailView {
                 let mut buf = CellBuffer::from(&text);
                 if self.mode == ViewMode::Url {
                     // URL indexes must be colored (ugh..)
-                    let lines: Vec<&str> = text.split('\n').collect();
+                    let lines: Vec<&str> = text.split('\n').map(|l| l.trim_right()).collect();
                     let mut shift = 0;
+                    let mut lidx_total = 0;
                     for r in &lines {
                         for l in finder.links(&r) {
-                            buf[(l.start() + shift - 1, 0)].set_fg(Color::Byte(226));
-                            buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
-                            buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
+                            let offset = if lidx_total < 10 {
+                                3
+                            } else if lidx_total < 100 {
+                                4
+                            } else if lidx_total < 1000 {
+                                5
+                            } else {
+                                panic!("BUG: Message body with more than 100 urls");
+                            };
+                            for i in 1..=offset {
+                                buf[(l.start() + shift - i, 0)].set_fg(Color::Byte(226));
+                                //buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
+                                //buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
+                            }
+                            lidx_total += 1;
                         }
                         // Each Cell represents one char so next line will be:
                         shift += r.chars().count() + 1;
