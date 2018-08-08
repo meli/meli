@@ -20,13 +20,13 @@
  */
 
 #[macro_use]
+mod position;
+#[macro_use]
 mod cells;
 #[macro_use]
 mod helpers;
 #[macro_use]
 mod keys;
-#[macro_use]
-mod position;
 pub use self::cells::*;
 pub use self::helpers::*;
 pub use self::keys::*;

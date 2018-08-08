@@ -189,7 +189,7 @@ impl AccountMenu {
             if highlight && idx > 1 && self.cursor.unwrap().1 == idx - 2 {
                 change_colors(
                     grid,
-                    ((x, y), (get_x(bottom_right) + 1, y)),
+                    ((x, y), (get_x(bottom_right), y)),
                     color_fg,
                     color_bg,
                 );

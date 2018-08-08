@@ -187,10 +187,17 @@ impl Default for CellBuffer {
 
 impl<'a> From<&'a String> for CellBuffer {
     fn from(s: &'a String) -> Self {
+        let lines: Vec<&str> = s.lines().map(|l| l.trim_right()).collect();
         let len = s.len();
         let mut buf = CellBuffer::new(len, 1, Cell::default());
-        for (idx, c) in s.chars().enumerate() {
-            buf[(idx, 0)].set_ch(c);
+        let mut x = 0;
+        for l in lines.iter() {
+            for (idx, c) in l.chars().enumerate() {
+                buf[(x + idx, 0)].set_ch(c);
+            }
+            x += l.chars().count();
+            buf[(x, 0)].set_ch('\n');
+            x += 1;
         }
         buf
     }
