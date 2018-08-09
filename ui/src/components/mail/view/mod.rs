@@ -23,6 +23,10 @@ use super::*;
 use linkify::{Link, LinkFinder};
 use std::process::{Command, Stdio};
 
+mod html;
+
+pub use self::html::*;
+
 use mime_apps::query_default_app;
 
 #[derive(PartialEq, Debug)]
@@ -31,6 +35,7 @@ enum ViewMode {
     Url,
     Attachment(usize),
     Raw,
+    Subview,
 }
 
 impl ViewMode {
@@ -47,7 +52,7 @@ impl ViewMode {
 pub struct MailView {
     coordinates: (usize, usize, usize),
     pager: Option<Pager>,
-    subview: Option<Box<MailView>>,
+    subview: Option<Box<Component>>,
     dirty: bool,
     mode: ViewMode,
 
@@ -58,7 +63,7 @@ impl MailView {
     pub fn new(
         coordinates: (usize, usize, usize),
         pager: Option<Pager>,
-        subview: Option<Box<MailView>>,
+        subview: Option<Box<Component>>,
     ) -> Self {
         MailView {
             coordinates,
@@ -72,10 +77,11 @@ impl MailView {
     }
 
     /// Returns the string to be displayed in the Viewer
-    fn attachment_to_text(&self, envelope: &Envelope) -> String {
+    fn attachment_to_text(&self, body: Attachment) -> String {
         let finder = LinkFinder::new();
-        let body = envelope.body();
         let body_text = if body.content_type().0.is_text() && body.content_type().1.is_html() {
+            let mut s = String::from("Text piped through `w3m`. Press `v` to open in web browser. \n\n");
+            s.extend(
             String::from_utf8_lossy(&decode(&body, Some(Box::new(|a: &Attachment| {
                 use std::io::Write;
                 use std::process::{Command, Stdio};
@@ -90,12 +96,13 @@ impl MailView {
 
                 html_filter.stdin.as_mut().unwrap().write_all(&raw).expect("Failed to write to w3m stdin");
                 html_filter.wait_with_output().unwrap().stdout
-            })))).into_owned()
+            })))).into_owned().chars());
+            s
         } else {
             String::from_utf8_lossy(&decode_rec(&body, None)).into()
         };
         match self.mode {
-            ViewMode::Normal => {
+            ViewMode::Normal | ViewMode::Subview => {
                 let mut t = body_text.to_string();
                 if body.count_attachments() > 1 {
                     t = body.attachments().iter().enumerate().fold(
@@ -108,7 +115,7 @@ impl MailView {
                 }
                 t
             }
-            ViewMode::Raw => String::from_utf8_lossy(&envelope.bytes()).into_owned(),
+            ViewMode::Raw => String::from_utf8_lossy(body.bytes()).into_owned(),
             ViewMode::Url => {
                 let mut t = body_text.to_string();
                 for (lidx, l) in finder.links(&body.text()).enumerate() {
@@ -119,7 +126,7 @@ impl MailView {
                     } else if lidx < 1000 {
                         385 + (lidx - 99) * 5
                     } else {
-                        panic!("BUG: Message body with more than 100 urls");
+                        panic!("BUG: Message body with more than 100 urls, fix this");
                     };
                     t.insert_str(l.start() + offset, &format!("[{}]", lidx));
                 }
@@ -141,6 +148,38 @@ impl MailView {
                 ret
             }
         }
+    }
+    pub fn plain_text_to_buf(s: &String, highlight_urls: bool) -> CellBuffer {
+        let mut buf = CellBuffer::from(s);
+
+        if highlight_urls {
+            let lines: Vec<&str> = s.split('\n').map(|l| l.trim_right()).collect();
+            let mut shift = 0;
+            let mut lidx_total = 0;
+            let finder = LinkFinder::new();
+            for r in &lines {
+                for l in finder.links(&r) {
+                    let offset = if lidx_total < 10 {
+                        3
+                    } else if lidx_total < 100 {
+                        4
+                    } else if lidx_total < 1000 {
+                        5
+                    } else {
+                        panic!("BUG: Message body with more than 100 urls");
+                    };
+                    for i in 1..=offset {
+                        buf[(l.start() + shift - i, 0)].set_fg(Color::Byte(226));
+                        //buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
+                        //buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
+                    }
+                    lidx_total += 1;
+                }
+                // Each Cell represents one char so next line will be:
+                shift += r.chars().count() + 1;
+            }
+        }
+        buf
     }
 }
 
@@ -244,55 +283,39 @@ impl Component for MailView {
         };
 
         if self.dirty {
-            let buf = {
-                let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
-                let mailbox = &mut context.accounts[mailbox_idx.0][mailbox_idx.1]
-                    .as_ref()
-                    .unwrap();
-                let envelope: &Envelope = &mailbox.collection[envelope_idx];
-                let text = self.attachment_to_text(envelope);
-
-                let mut buf = CellBuffer::from(&text);
-                if self.mode == ViewMode::Url {
-                    // URL indexes must be colored (ugh..)
-                    let lines: Vec<&str> = text.split('\n').map(|l| l.trim_right()).collect();
-                    let mut shift = 0;
-                    let mut lidx_total = 0;
-                    let finder = LinkFinder::new();
-                    for r in &lines {
-                        for l in finder.links(&r) {
-                            let offset = if lidx_total < 10 {
-                                3
-                            } else if lidx_total < 100 {
-                                4
-                            } else if lidx_total < 1000 {
-                                5
-                            } else {
-                                panic!("BUG: Message body with more than 100 urls");
-                            };
-                            for i in 1..=offset {
-                                buf[(l.start() + shift - i, 0)].set_fg(Color::Byte(226));
-                                //buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
-                                //buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
-                            }
-                            lidx_total += 1;
-                        }
-                        // Each Cell represents one char so next line will be:
-                        shift += r.chars().count() + 1;
-                    }
-                }
-                buf
+            let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
+            let mailbox = &mut context.accounts[mailbox_idx.0][mailbox_idx.1]
+                .as_ref()
+                .unwrap();
+            let envelope: &Envelope = &mailbox.collection[envelope_idx];
+            let body = envelope.body();
+            match self.mode {
+                ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
+                    self.subview = Some(Box::new(HtmlView::new(decode(&body.attachments()[aidx], None))));
+                },
+                ViewMode::Normal if body.is_html() => {
+                    self.subview = Some(Box::new(HtmlView::new(decode(&body, None))));
+                    self.mode = ViewMode::Subview;
+                },
+                _ => {
+                    let buf = {
+                        let text = self.attachment_to_text(body);
+                        // URL indexes must be colored (ugh..)
+                        MailView::plain_text_to_buf(&text, self.mode == ViewMode::Url)
+                    };
+                    let cursor_pos = if self.mode.is_attachment() {
+                        Some(0)
+                    } else {
+                        self.pager.as_mut().map(|p| p.cursor_pos())
+                    };
+                    self.pager = Some(Pager::from_buf(&buf, cursor_pos));
+                },
             };
-            let cursor_pos = if self.mode.is_attachment() {
-                Some(0)
-            } else {
-                self.pager.as_mut().map(|p| p.cursor_pos())
-            };
-            self.pager = Some(Pager::from_buf(&buf, cursor_pos));
             self.dirty = false;
         }
-
-        if let Some(p) = self.pager.as_mut() {
+        if let Some(s) = self.subview.as_mut() {
+            s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+        } else if let Some(p) = self.pager.as_mut() {
             p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
         }
     }

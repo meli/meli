@@ -63,9 +63,6 @@ impl Context {
     pub fn input_thread(&mut self) -> &mut chan::Sender<bool> {
         &mut self.input_thread
     }
-    pub fn add_temp(&mut self, f: File) -> () {
-        self.temp_files.push(f);
-    }
 }
 
 /// A State object to manage and own components and entities of the UI. `State` is responsible for

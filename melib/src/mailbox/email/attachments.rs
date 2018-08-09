@@ -268,18 +268,18 @@ impl fmt::Display for Attachment {
             AttachmentType::Data { .. } => {
                 write!(f, "Data attachment of type {}", self.mime_type())
             }
-            AttachmentType::Text { .. } => write!(f, "Text attachment"),
+            AttachmentType::Text { .. } => write!(f, "Text attachment of type {}", self.mime_type()),
             AttachmentType::Multipart {
                 of_type: ref multipart_type,
                 subattachments: ref sub_att_vec,
             } => if *multipart_type == MultipartType::Alternative {
                 write!(
                     f,
-                    "Multipart/alternative attachment with {} subs",
-                    sub_att_vec.len()
+                    "{} attachment with {} subs",
+                    self.mime_type(), sub_att_vec.len()
                 )
             } else {
-                write!(f, "Multipart attachment with {} subs", sub_att_vec.len())
+                write!(f, "{} attachment with {} subs", self.mime_type(), sub_att_vec.len())
             },
         }
     }
@@ -332,9 +332,10 @@ impl Attachment {
             match att.attachment_type {
                 AttachmentType::Data { .. } | AttachmentType::Text { .. } => ret.push(att.clone()),
                 AttachmentType::Multipart {
-                    of_type: ref multipart_type,
+                    of_type: _,
                     subattachments: ref sub_att_vec,
-                } => if *multipart_type != MultipartType::Alternative {
+                } => {
+                    ret.push(att.clone());
                     // TODO: Fix this, wrong count
                     for a in sub_att_vec {
                         count_recursive(a, ret);
@@ -357,6 +358,9 @@ impl Attachment {
     }
     pub fn content_transfer_encoding(&self) -> &ContentTransferEncoding {
         &self.content_transfer_encoding
+    }
+    pub fn is_html(&self) -> bool {
+        self.content_type().0.is_text() && self.content_type().1.is_html()
     }
 }
 
