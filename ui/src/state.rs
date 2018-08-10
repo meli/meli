@@ -261,6 +261,9 @@ impl<W: Write> State<W> {
             id: 0,
             event_type: UIEventType::Resize,
         });
+
+        // Invalidate dirty areas.
+        self.context.dirty_areas.clear();
     }
 
     /// Force a redraw for all dirty components.
