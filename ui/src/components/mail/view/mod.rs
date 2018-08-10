@@ -262,7 +262,7 @@ impl Component for MailView {
                     grid[(x, y)].set_fg(Color::Default);
                 }
                 let (x, y) = write_string_to_grid(
-                    &format!("Message-ID: {}", envelope.message_id_raw()),
+                    &format!("Message-ID: <{}>", envelope.message_id_raw()),
                     grid,
                     Color::Byte(33),
                     Color::Default,
@@ -313,8 +313,10 @@ impl Component for MailView {
             };
             self.dirty = false;
         }
-        if let Some(s) = self.subview.as_mut() {
-            s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+        if self.mode == ViewMode::Subview {
+            if let Some(s) = self.subview.as_mut() {
+                s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+            }
         } else if let Some(p) = self.pager.as_mut() {
             p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
         }

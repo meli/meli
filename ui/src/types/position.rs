@@ -55,6 +55,22 @@ pub fn set_y(p: Pos, new_y: usize) -> Pos {
 /// ```
 pub type Area = (Pos, Pos);
 
+/// Get an area's height
+///
+/// Example:
+/// ```
+/// use ui::position;
+///
+/// let new_area = ((0, 0), (1, 1));
+/// assert_eq!(height!(new_area), 1);
+/// ```
+#[macro_export]
+macro_rules! height {
+    ($a:expr) => {
+        (get_y(bottom_right!($a))).saturating_sub(get_y(upper_left!($a)))
+    };
+}
+
 /// Get the upper left Position of an area
 ///
 /// Example:

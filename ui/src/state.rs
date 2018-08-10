@@ -371,6 +371,7 @@ impl<W: Write> State<W> {
                 return;
             }
             UIEventType::EditDraft(mut file) => {
+                eprintln!("edit draft event");
                 use std::io::Read;
                 use std::process::{Command, Stdio};
                 let mut output = Command::new("msmtp")
@@ -386,7 +387,6 @@ impl<W: Write> State<W> {
 
                     f.read_to_end(&mut buf).unwrap();
                     in_pipe.write_all(&buf).unwrap();
-                    std::fs::remove_file(file.path()).unwrap();
                 }
                 output.wait_with_output().expect("Failed to read stdout");
 

@@ -228,7 +228,6 @@ impl MailListing {
             }
         } else {
             // Populate `CellBuffer` with every entry.
-            // TODO: Lazy load?
             let mut idx = 0;
             for y in 0..=self.length {
                 if idx >= self.length {

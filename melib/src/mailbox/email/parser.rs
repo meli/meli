@@ -367,7 +367,7 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
         let mut flag = false;
         for (i, b) in input[0..].iter().enumerate() {
             if *b == b'<' {
-                display_name.length = if i != 0 { i - 1 } else { 0 };
+                display_name.length = i.saturating_sub(1); // if i != 0 { i - 1 } else { 0 };
                 flag = true;
                 break;
             }
@@ -395,9 +395,9 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
                 IResult::Error(e) => IResult::Error(e),
                 IResult::Incomplete(i) => IResult::Incomplete(i),
                 IResult::Done(rest, raw) => {
-                    display_name.length = raw.find(b"<").unwrap();
-                    address_spec.offset = display_name.length + 1;
-                    address_spec.length = raw.len() - display_name.length - 2;
+                    display_name.length = raw.find(b"<").unwrap().saturating_sub(1);
+                    address_spec.offset = display_name.length + 2;
+                    address_spec.length = raw.len().saturating_sub(display_name.length).saturating_sub(3);
                     IResult::Done(
                         rest,
                         Address::Mailbox(MailboxAddress {

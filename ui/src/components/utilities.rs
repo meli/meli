@@ -277,6 +277,11 @@ impl Component for Pager {
         }
 
         self.dirty = false;
+        if self.cursor_pos > 0 && self.cursor_pos + 1 + height!(area) > self.height {
+            self.cursor_pos = self.cursor_pos.saturating_sub(1);
+            return;
+        }
+
         if self.height == 0 || self.height == self.cursor_pos || self.width == 0 {
             return;
         }
@@ -303,7 +308,7 @@ impl Component for Pager {
                 }
             }
             UIEventType::Input(Key::Char('j')) => {
-                if self.height > 0 && self.cursor_pos < self.height - 1 {
+                if self.height > 0 && self.cursor_pos + 1 < self.height {
                     self.cursor_pos += 1;
                     self.dirty = true;
                 }
