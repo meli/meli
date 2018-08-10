@@ -313,10 +313,8 @@ impl Component for MailView {
             };
             self.dirty = false;
         }
-        if self.mode == ViewMode::Subview {
-            if let Some(s) = self.subview.as_mut() {
-                s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-            }
+        if let Some(s) = self.subview.as_mut() {
+            s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
         } else if let Some(p) = self.pager.as_mut() {
             p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
         }
@@ -342,6 +340,7 @@ impl Component for MailView {
             }
             UIEventType::Input(Key::Char('r')) if self.mode.is_attachment() => {
                 self.mode = ViewMode::Normal;
+                self.subview.take();
                 self.dirty = true;
             }
             UIEventType::Input(Key::Char('a'))
