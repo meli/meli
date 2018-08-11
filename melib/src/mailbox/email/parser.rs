@@ -166,7 +166,7 @@ named!(pub attachment<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
 
 /* TODO: make a map of encodings and decoding functions so that they can be reused and easily
  * extended */
-use encoding::all::{ISO_8859_1, ISO_8859_2, ISO_8859_7, WINDOWS_1253, WINDOWS_1252, GBK};
+use encoding::all::{ISO_8859_1, ISO_8859_2, ISO_8859_7, WINDOWS_1252, WINDOWS_1253, GBK};
 
 fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     if input.len() < 5 {
@@ -266,33 +266,15 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 
 pub fn decode_charset(s: &[u8], charset: Charset) -> Result<String> {
     match charset {
-        Charset::UTF8 | Charset::Ascii => {
-            Ok(String::from_utf8(s.to_vec()).unwrap())
-        }
-        Charset::ISO8859_7 => {
-            Ok(ISO_8859_7.decode(s, DecoderTrap::Strict)?)
-        }
-        Charset::ISO8859_1 => {
-            Ok(ISO_8859_1.decode(s, DecoderTrap::Strict)?)
-        }
-        Charset::ISO8859_2 => {
-            Ok(ISO_8859_2.decode(s, DecoderTrap::Strict)?)
-        }
-        Charset::GBK => {
-            Ok(GBK.decode(s, DecoderTrap::Strict)?)
-        }
-        Charset::Windows1252 => {
-            Ok(WINDOWS_1252.decode(s, DecoderTrap::Strict)?)
-        },
-        Charset::Windows1253 => {
-            Ok(WINDOWS_1253.decode(s, DecoderTrap::Strict)?)
-        },
-        Charset::GB2312 => {
-            unimplemented!()
-        },
-        Charset::UTF16 => {
-            unimplemented!()
-        },
+        Charset::UTF8 | Charset::Ascii => Ok(String::from_utf8(s.to_vec()).unwrap()),
+        Charset::ISO8859_7 => Ok(ISO_8859_7.decode(s, DecoderTrap::Strict)?),
+        Charset::ISO8859_1 => Ok(ISO_8859_1.decode(s, DecoderTrap::Strict)?),
+        Charset::ISO8859_2 => Ok(ISO_8859_2.decode(s, DecoderTrap::Strict)?),
+        Charset::GBK => Ok(GBK.decode(s, DecoderTrap::Strict)?),
+        Charset::Windows1252 => Ok(WINDOWS_1252.decode(s, DecoderTrap::Strict)?),
+        Charset::Windows1253 => Ok(WINDOWS_1253.decode(s, DecoderTrap::Strict)?),
+        Charset::GB2312 => unimplemented!(),
+        Charset::UTF16 => unimplemented!(),
     }
 }
 
@@ -322,11 +304,9 @@ named!(
     pub quoted_printable_bytes<Vec<u8>>,
     many0!(alt_complete!(
         preceded!(quoted_printable_soft_break, quoted_printable_byte) |
-        preceded!(quoted_printable_soft_break, le_u8) 
-        | quoted_printable_byte | le_u8
+        preceded!(quoted_printable_soft_break, le_u8) | quoted_printable_byte | le_u8
     ))
 );
-
 
 named!(
     encoded_word_list<Vec<u8>>,
@@ -397,7 +377,10 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
                 IResult::Done(rest, raw) => {
                     display_name.length = raw.find(b"<").unwrap().saturating_sub(1);
                     address_spec.offset = display_name.length + 2;
-                    address_spec.length = raw.len().saturating_sub(display_name.length).saturating_sub(3);
+                    address_spec.length = raw
+                        .len()
+                        .saturating_sub(display_name.length)
+                        .saturating_sub(3);
                     IResult::Done(
                         rest,
                         Address::Mailbox(MailboxAddress {

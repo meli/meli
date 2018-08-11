@@ -35,6 +35,10 @@ pub mod notifications;
 pub mod utilities;
 pub use self::utilities::*;
 
+use std::fmt;
+use std::fmt::Display;
+use std::ops::Deref;
+
 use super::{Key, UIEvent, UIEventType};
 /// The upper and lower boundary char.
 const HORZ_BOUNDARY: char = '─';
@@ -65,6 +69,14 @@ pub struct Entity {
     pub component: Box<Component>, // more than one?
 }
 
+impl Deref for Entity {
+    type Target = Box<Component>;
+
+    fn deref(&self) -> &Box<Component> {
+        &self.component
+    }
+}
+
 impl Entity {
     /// Pass events to child component.
     pub fn rcv_event(&mut self, event: &UIEvent, context: &mut Context) {
@@ -75,12 +87,13 @@ impl Entity {
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
 /// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
-pub trait Component {
+pub trait Component: Display {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn process_event(&mut self, event: &UIEvent, context: &mut Context);
     fn is_dirty(&self) -> bool {
         true
     }
+    fn set_dirty(&mut self);
 }
 
 // TODO: word break.

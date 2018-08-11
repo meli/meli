@@ -59,9 +59,7 @@ fn make_input_thread(
                     sx.send(ThreadEvent::Input(k));
                 },
                 || {
-                    sx.send(ThreadEvent::UIEvent(UIEventType::ChangeMode(
-                        UIMode::Fork,
-                    )));
+                    sx.send(ThreadEvent::UIEvent(UIEventType::ChangeMode(UIMode::Fork)));
                 },
                 &rx,
             )
@@ -104,9 +102,10 @@ fn main() {
     let b = Entity {
         component: Box::new(listing),
     };
-    let window = Entity {
-        component: Box::new(VSplit::new(menu, b, 90, true)),
-    };
+    let mut tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true))]));
+    tabs.add_component(Box::new(Composer {}));
+    let window = Entity { component: tabs };
+
     let status_bar = Entity {
         component: Box::new(StatusBar::new(window)),
     };

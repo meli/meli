@@ -20,7 +20,7 @@ impl Default for Charset {
     }
 }
 
-impl<'a> From<&'a[u8]> for Charset {
+impl<'a> From<&'a [u8]> for Charset {
     fn from(b: &'a [u8]) -> Self {
         // TODO: Case insensitivity
         match b {
@@ -69,9 +69,10 @@ pub enum ContentType {
 
 impl Default for ContentType {
     fn default() -> Self {
-        ContentType::Text{ charset: Charset::UTF8 }
+        ContentType::Text {
+            charset: Charset::UTF8,
+        }
     }
-
 }
 
 impl Display for ContentType {
@@ -128,4 +129,3 @@ pub enum ContentTransferEncoding {
     QuotedPrintable,
     Other { tag: Vec<u8> },
 }
-

@@ -23,10 +23,10 @@
  * https://wiki2.dovecot.org/MailboxFormat/mbox
  */
 
+/*
 use async::*;
-use conf::Folder;
 use error::Result;
-use mailbox::backends::{MailBackend, RefreshEventConsumer};
+use mailbox::backends::{MailBackend, RefreshEventConsumer, Folder};
 use mailbox::email::Envelope;
 
 /// `BackendOp` implementor for Mbox
@@ -39,7 +39,6 @@ impl MboxOp {
     }
 }
 
-/*
 impl BackendOp for MboxOp {
     fn description(&self) -> String {
         unimplemented!();
@@ -60,7 +59,6 @@ impl BackendOp for MboxOp {
         unimplemented!()
     }
 }
-*/
 
 /// Mbox backend
 #[derive(Debug)]
@@ -80,3 +78,4 @@ impl MboxType {
         MboxType {}
     }
 }
+*/

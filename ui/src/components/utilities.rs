@@ -31,6 +31,13 @@ pub struct HSplit {
     ratio: usize, // bottom/whole height * 100
 }
 
+impl fmt::Display for HSplit {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display subject/info
+        self.top.fmt(f)
+    }
+}
+
 impl HSplit {
     pub fn new(top: Entity, bottom: Entity, ratio: usize, show_divider: bool) -> Self {
         HSplit {
@@ -79,6 +86,10 @@ impl Component for HSplit {
     fn is_dirty(&self) -> bool {
         self.top.component.is_dirty() || self.bottom.component.is_dirty()
     }
+    fn set_dirty(&mut self) {
+        self.top.component.set_dirty();
+        self.bottom.component.set_dirty();
+    }
 }
 
 /// A vertically split in half container.
@@ -88,6 +99,13 @@ pub struct VSplit {
     show_divider: bool,
     /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
+}
+
+impl fmt::Display for VSplit {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display focused entity
+        self.right.fmt(f)
+    }
 }
 
 impl VSplit {
@@ -155,6 +173,10 @@ impl Component for VSplit {
     fn is_dirty(&self) -> bool {
         self.left.component.is_dirty() || self.right.component.is_dirty()
     }
+    fn set_dirty(&mut self) {
+        self.left.component.set_dirty();
+        self.right.component.set_dirty();
+    }
 }
 
 /// A pager for text.
@@ -166,6 +188,13 @@ pub struct Pager {
     width: usize,
     dirty: bool,
     content: CellBuffer,
+}
+
+impl fmt::Display for Pager {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display info
+        write!(f, "pager")
+    }
 }
 
 impl Pager {
@@ -325,6 +354,9 @@ impl Component for Pager {
     fn is_dirty(&self) -> bool {
         self.dirty
     }
+    fn set_dirty(&mut self) {
+        self.dirty = true;
+    }
 }
 
 /// Status bar.
@@ -336,6 +368,13 @@ pub struct StatusBar {
     mode: UIMode,
     height: usize,
     dirty: bool,
+}
+
+impl fmt::Display for StatusBar {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display info
+        write!(f, "status bar")
+    }
 }
 
 impl StatusBar {
@@ -497,6 +536,9 @@ impl Component for StatusBar {
     fn is_dirty(&self) -> bool {
         self.dirty || self.container.component.is_dirty()
     }
+    fn set_dirty(&mut self) {
+        self.dirty = true;
+    }
 }
 
 // A box with a text content.
@@ -510,11 +552,17 @@ impl TextBox {
     }
 }
 
+impl fmt::Display for TextBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display info
+        write!(f, "text box")
+    }
+}
+
 impl Component for TextBox {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {
-        return;
-    }
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {}
+    fn set_dirty(&mut self) {}
 }
 
 pub struct Progress {
@@ -552,6 +600,13 @@ impl Progress {
     }
 }
 
+impl fmt::Display for Progress {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display info
+        write!(f, "progress bar")
+    }
+}
+
 impl Component for Progress {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {
         unimplemented!()
@@ -559,4 +614,97 @@ impl Component for Progress {
     fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {
         return;
     }
+    fn set_dirty(&mut self) {}
+}
+
+pub struct Tabbed {
+    children: Vec<Box<Component>>,
+    cursor_pos: usize,
+}
+
+impl Tabbed {
+    pub fn new(children: Vec<Box<Component>>) -> Self {
+        Tabbed {
+            children,
+            cursor_pos: 0,
+        }
+    }
+    fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let mut x = get_x(upper_left!(area));
+        let mut y: usize = get_y(upper_left!(area));
+        for (idx, c) in self.children.iter().enumerate() {
+            let (fg, bg) = if idx == self.cursor_pos {
+                (Color::Default, Color::Default)
+            } else {
+                (Color::Byte(15), Color::Byte(8))
+            };
+            let (x_, _y_) = write_string_to_grid(
+                &format!(" {} ", c),
+                grid,
+                fg,
+                bg,
+                (set_x(upper_left!(area), x), bottom_right!(area)),
+                false,
+            );
+            x = x_ + 1;
+            if y != _y_ {
+                break;
+            }
+            y = _y_;
+        }
+        let (cols, _) = grid.size();
+        let cslice: &mut [Cell] = grid;
+        for c in cslice[(y * cols) + x..(y * cols) + cols].iter_mut() {
+            c.set_bg(Color::Byte(7));
+        }
+        context.dirty_areas.push_back(area);
+    }
+    pub fn add_component(&mut self, new: Box<Component>) {
+        self.children.push(new);
+    }
+}
+
+impl fmt::Display for Tabbed {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display info
+        write!(f, "tabs")
+    }
+}
+
+impl Component for Tabbed {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.children.len() > 1 {
+            self.draw_tabs(
+                grid,
+                (
+                    upper_left!(area),
+                    set_x(upper_left!(area), get_x(bottom_right!(area))),
+                ),
+                context,
+            );
+            let y = get_y(upper_left!(area));
+            self.children[self.cursor_pos].draw(
+                grid,
+                (set_y(upper_left!(area), y + 1), bottom_right!(area)),
+                context,
+            );
+        } else {
+            self.children[self.cursor_pos].draw(grid, area, context);
+        }
+    }
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+        match &event.event_type {
+            UIEventType::Input(Key::Char('T')) => {
+                self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
+                self.children[self.cursor_pos].set_dirty();
+                return;
+            }
+            _ => {}
+        }
+        self.children[self.cursor_pos].process_event(event, context);
+    }
+    fn is_dirty(&self) -> bool {
+        self.children[self.cursor_pos].is_dirty()
+    }
+    fn set_dirty(&mut self) {}
 }

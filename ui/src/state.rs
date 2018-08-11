@@ -50,7 +50,7 @@ pub struct Context {
 
     /// Events queue that components send back to the state
     pub replies: VecDeque<UIEvent>,
-    _backends: Backends,
+    backends: Backends,
 
     input_thread: chan::Sender<bool>,
     pub temp_files: Vec<File>,
@@ -103,8 +103,8 @@ impl State<std::io::Stdout> {
     pub fn new(sender: Sender<ThreadEvent>, input_thread: chan::Sender<bool>) -> Self {
         let _stdout = std::io::stdout();
         _stdout.lock();
-        let settings = Settings::new();
         let backends = Backends::new();
+        let settings = Settings::new();
         let stdout = AlternateScreen::from(_stdout.into_raw_mode().unwrap());
 
         let termsize = termion::terminal_size().ok();
@@ -155,7 +155,7 @@ impl State<std::io::Stdout> {
                 accounts,
                 mailbox_hashes: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
 
-                _backends: backends,
+                backends,
                 settings: settings.clone(),
                 runtime_settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
@@ -178,7 +178,7 @@ impl State<std::io::Stdout> {
         ).unwrap();
         s.flush();
         for (x, account) in s.context.accounts.iter_mut().enumerate() {
-            for (y, folder) in account.settings.folders.iter().enumerate() {
+            for (y, folder) in account.backend.folders().iter().enumerate() {
                 s.context.mailbox_hashes.insert(folder.hash(), (x, y));
             }
             let sender = s.sender.clone();
@@ -463,8 +463,7 @@ impl<W: Write> State<W> {
             _ => {
                 return None;
             }
-        }
-        {
+        } {
             if let Some(ForkType::NewDraft(f, _)) = std::mem::replace(&mut self.child, None) {
                 self.rcv_event(UIEvent {
                     id: 0,
@@ -476,7 +475,9 @@ impl<W: Write> State<W> {
         Some(false)
     }
     fn flush(&mut self) {
-        if let Some(s) = self.stdout.as_mut() { s.flush().unwrap(); }
+        if let Some(s) = self.stdout.as_mut() {
+            s.flush().unwrap();
+        }
     }
     fn stdout(&mut self) -> &mut termion::screen::AlternateScreen<termion::raw::RawTerminal<W>> {
         self.stdout.as_mut().unwrap()

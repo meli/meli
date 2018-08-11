@@ -20,10 +20,11 @@
  */
 
 use async::*;
-use conf::Folder;
+use conf::AccountSettings;
 use error::{MeliError, Result};
 use mailbox::backends::{
-    BackendOp, BackendOpGenerator, MailBackend, RefreshEvent, RefreshEventConsumer,
+    BackendFolder, BackendOp, BackendOpGenerator, Folder, MailBackend, RefreshEvent,
+    RefreshEventConsumer,
 };
 use mailbox::email::parser;
 use mailbox::email::{Envelope, Flag};
@@ -43,7 +44,7 @@ use memmap::{Mmap, Protection};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::Hasher;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// `BackendOp` implementor for Maildir
 #[derive(Debug, Default)]
@@ -152,38 +153,42 @@ impl BackendOp for MaildirOp {
 /// Maildir backend https://cr.yp.to/proto/maildir.html
 #[derive(Debug)]
 pub struct MaildirType {
+    folders: Vec<MaildirFolder>,
     path: String,
-    idx: (usize, usize),
 }
 
 impl MailBackend for MaildirType {
+    fn folders(&self) -> Vec<Folder> {
+        self.folders.iter().map(|f| f.clone()).collect()
+    }
     fn get(&self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         self.multicore(4, folder)
     }
-    fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> () {
-        let folders = folders.to_vec();
-
+    fn watch(&self, sender: RefreshEventConsumer) -> Result<()> {
+        let (tx, rx) = channel();
+        let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
+        for f in &self.folders {
+            if f.is_valid().is_err() {
+                continue;
+            }
+            eprintln!("watching {:?}", f);
+            let mut p = PathBuf::from(&f.path);
+            p.push("cur");
+            watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
+            p.pop();
+            p.push("new");
+            watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
+        }
         thread::Builder::new()
             .name("folder watch".to_string())
             .spawn(move || {
-                let (tx, rx) = channel();
-                let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
-                for f in folders {
-                    if MaildirType::is_valid(&f).is_err() {
-                        continue;
-                    }
-                    eprintln!("watching {}", f.path());
-                    let mut p = PathBuf::from(&f.path());
-                    p.push("cur");
-                    watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
-                    p.pop();
-                    p.push("new");
-                    watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
-                }
+                // Move `watcher` in the closure's scope so that it doesn't get dropped.
+                let _watcher = watcher;
                 loop {
                     match rx.recv() {
                         Ok(event) => match event {
-                            DebouncedEvent::Create(mut pathbuf) | DebouncedEvent::Remove(mut pathbuf) => {
+                            DebouncedEvent::Create(mut pathbuf)
+                            | DebouncedEvent::Remove(mut pathbuf) => {
                                 let path = if pathbuf.is_dir() {
                                     if pathbuf.ends_with("cur") | pathbuf.ends_with("new") {
                                         pathbuf.pop();
@@ -207,45 +212,76 @@ impl MailBackend for MaildirType {
                         Err(e) => eprintln!("watch error: {:?}", e),
                     }
                 }
-            })
-            .unwrap();
+            })?;
+        Ok(())
     }
 }
 
 impl MaildirType {
-    pub fn new(path: &str, idx: (usize, usize)) -> Self {
-        MaildirType {
-            path: path.to_string(),
-            idx: idx,
-        }
-    }
-    fn is_valid(f: &Folder) -> Result<()> {
-        let path = f.path();
-        let mut p = PathBuf::from(path);
-        for d in &["cur", "new", "tmp"] {
-            p.push(d);
-            if !p.is_dir() {
-                return Err(MeliError::new(format!(
-                    "{} is not a valid maildir folder",
-                    path
-                )));
+    pub fn new(f: &AccountSettings) -> Self {
+        let mut folders: Vec<MaildirFolder> = Vec::new();
+        fn recurse_folders<P: AsRef<Path>>(folders: &mut Vec<MaildirFolder>, p: P) -> Vec<usize> {
+            let mut children = Vec::new();
+            for mut f in fs::read_dir(p).unwrap() {
+                for f in f.iter_mut() {
+                    {
+                        let path = f.path();
+                        if path.ends_with("cur") || path.ends_with("new") || path.ends_with("tmp") {
+                            continue;
+                        }
+                        if path.is_dir() {
+                            let path_children = recurse_folders(folders, &path);
+                            if let Ok(f) = MaildirFolder::new(
+                                path.to_str().unwrap().to_string(),
+                                path.file_name().unwrap().to_str().unwrap().to_string(),
+                                path_children,
+                            ) {
+                                folders.push(f);
+                                children.push(folders.len() - 1);
+                            }
+                        }
+                    }
+                }
             }
-            p.pop();
+            children
+        };
+        let path = PathBuf::from(f.root_folder());
+        let path_children = recurse_folders(&mut folders, &path);
+        if path.is_dir() {
+            if let Ok(f) = MaildirFolder::new(
+                path.to_str().unwrap().to_string(),
+                path.file_name().unwrap().to_str().unwrap().to_string(),
+                path_children,
+            ) {
+                folders.push(f);
+            }
         }
-        Ok(())
+        MaildirType {
+            folders,
+            path: f.root_folder().to_string(),
+        }
     }
+    fn owned_folder_idx(&self, folder: &Folder) -> usize {
+        for (idx, f) in self.folders.iter().enumerate() {
+            if f.hash() == folder.hash() {
+                return idx;
+            }
+        }
+        unreachable!()
+    }
+
     pub fn multicore(&self, cores: usize, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let handle = {
             let tx = w.tx();
             // TODO: Avoid clone
-            let folder = folder.clone();
+            let folder: &MaildirFolder = &self.folders[self.owned_folder_idx(folder)];
+            let path = folder.path().to_string();
+            let name = format!("parsing {:?}", folder.name());
 
             thread::Builder::new()
-                .name(format!("parsing {:?}", folder))
+                .name(name)
                 .spawn(move || {
-                    MaildirType::is_valid(&folder)?;
-                    let path = folder.path();
                     let mut path = PathBuf::from(path);
                     path.push("cur");
                     let iter = path.read_dir()?;
@@ -308,5 +344,66 @@ impl MaildirType {
                 .unwrap()
         };
         w.build(handle)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct MaildirFolder {
+    hash: u64,
+    name: String,
+    path: String,
+    children: Vec<usize>,
+}
+
+impl MaildirFolder {
+    pub fn new(path: String, file_name: String, children: Vec<usize>) -> Result<Self> {
+        let mut h = DefaultHasher::new();
+        h.write(&path.as_bytes());
+
+        let ret = MaildirFolder {
+            hash: h.finish(),
+            name: file_name,
+            path: path,
+            children: children,
+        };
+        ret.is_valid()?;
+        Ok(ret)
+    }
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+    fn is_valid(&self) -> Result<()> {
+        let path = self.path();
+        let mut p = PathBuf::from(path);
+        for d in &["cur", "new", "tmp"] {
+            p.push(d);
+            if !p.is_dir() {
+                return Err(MeliError::new(format!(
+                    "{} is not a valid maildir folder",
+                    path
+                )));
+            }
+            p.pop();
+        }
+        Ok(())
+    }
+}
+impl BackendFolder for MaildirFolder {
+    fn hash(&self) -> u64 {
+        self.hash
+    }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn children(&self) -> &Vec<usize> {
+        &self.children
+    }
+    fn clone(&self) -> Folder {
+        Box::new(MaildirFolder {
+            hash: self.hash,
+            name: self.name.clone(),
+            path: self.path.clone(),
+            children: self.children.clone(),
+        })
     }
 }

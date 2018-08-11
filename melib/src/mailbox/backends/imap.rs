@@ -19,10 +19,10 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
 use async::*;
-use conf::Folder;
 use error::Result;
-use mailbox::backends::{MailBackend, RefreshEventConsumer};
+use mailbox::backends::{MailBackend, RefreshEventConsumer, Folder};
 use mailbox::email::Envelope;
 
 /// `BackendOp` implementor for Imap
@@ -35,7 +35,6 @@ impl ImapOp {
     }
 }
 
-/*
 
 impl BackendOp for ImapOp {
     fn description(&self) -> String {
@@ -53,7 +52,7 @@ impl BackendOp for ImapOp {
     fn fetch_flags(&self) -> Flag {
         unimplemented!();
     }
-}*/
+}
 
 /// Imap backend
 #[derive(Debug)]
@@ -72,4 +71,4 @@ impl ImapType {
     pub fn new(_path: &str) -> Self {
         ImapType {}
     }
-}
+}*/

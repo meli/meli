@@ -1,5 +1,5 @@
 /*
- * meli - ui crate.
+ * meli - ui crate
  *
  * Copyright 2017-2018 Manos Pitsidianakis
  *
@@ -19,34 +19,27 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
-  Notification handling components.
-  */
-use notify_rust::Notification as notify_Notification;
-
 use super::*;
 
-/// Passes notifications to the OS using the XDG specifications.
-pub struct XDGNotifications {}
+pub struct Composer {}
 
-impl fmt::Display for XDGNotifications {
+impl fmt::Display for Composer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display subject/info
-        write!(f, "")
+        write!(f, "compose")
     }
 }
 
-impl Component for XDGNotifications {
-    fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
-        if let UIEventType::Notification(ref t) = event.event_type {
-            notify_Notification::new()
-                .summary("Refresh Event")
-                .body(t)
-                .icon("dialog-information")
-                .show()
-                .unwrap();
-        }
+impl Component for Composer {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        clear_area(grid, area);
+        context.dirty_areas.push_back(area);
+    }
+
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {}
+
+    fn is_dirty(&self) -> bool {
+        true
     }
     fn set_dirty(&mut self) {}
 }

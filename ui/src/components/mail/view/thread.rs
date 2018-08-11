@@ -23,12 +23,12 @@ use super::*;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-pub struct HtmlView {
+pub struct ThreadView {
     pager: Pager,
     bytes: Vec<u8>,
 }
 
-impl HtmlView {
+impl ThreadView {
     pub fn new(bytes: Vec<u8>) -> Self {
         let mut html_filter = Command::new("w3m")
             .args(&["-I", "utf-8", "-T", "text/html"])
@@ -50,18 +50,18 @@ impl HtmlView {
 
         let buf = MailView::plain_text_to_buf(&display_text, true);
         let pager = Pager::from_buf(&buf, None);
-        HtmlView { pager, bytes }
+        ThreadView { pager, bytes }
     }
 }
 
-impl fmt::Display for HtmlView {
+impl fmt::Display for ThreadView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display subject/info
-        write!(f, "view")
+        write!(f, "view thread")
     }
 }
 
-impl Component for HtmlView {
+impl Component for ThreadView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         self.pager.draw(grid, area, context);
     }

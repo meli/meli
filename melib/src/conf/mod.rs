@@ -26,51 +26,20 @@ pub mod pager;
 
 use pager::PagerSettings;
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::fs;
-use std::hash::Hasher;
-use std::path::{Path, PathBuf};
-
-#[derive(Debug, Default, Clone)]
-pub struct Folder {
-    hash: u64,
-    name: String,
-    path: String,
-    children: Vec<usize>,
-}
-
-impl Folder {
-    pub fn new(path: String, file_name: String, children: Vec<usize>) -> Self {
-        let mut h = DefaultHasher::new();
-        h.write(&path.as_bytes());
-        Folder {
-            hash: h.finish(),
-            name: file_name,
-            path: path,
-            children: children,
-        }
-    }
-    pub fn hash(&self) -> u64 {
-        self.hash
-    }
-    pub fn path(&self) -> &str {
-        &self.path
-    }
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    pub fn children(&self) -> &Vec<usize> {
-        &self.children
-    }
-}
 
 #[derive(Debug, Deserialize)]
-struct FileAccount {
-    folders: String,
+pub struct FileAccount {
+    root_folder: String,
     format: String,
     sent_folder: String,
     threaded: bool,
+}
+
+impl FileAccount {
+    pub fn folder(&self) -> &str {
+        &self.root_folder
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,7 +51,7 @@ struct FileSettings {
 #[derive(Debug, Clone)]
 pub struct AccountSettings {
     name: String,
-    pub folders: Vec<Folder>,
+    root_folder: String,
     format: String,
     pub sent_folder: String,
     pub threaded: bool,
@@ -94,6 +63,9 @@ impl AccountSettings {
     }
     pub fn name(&self) -> &str {
         &self.name
+    }
+    pub fn root_folder(&self) -> &str {
+        &self.root_folder
     }
 }
 
@@ -126,53 +98,20 @@ impl Settings {
         let mut s: HashMap<String, AccountSettings> = HashMap::new();
 
         for (id, x) in fs.accounts {
-            let mut folders = Vec::new();
-            fn recurse_folders<P: AsRef<Path>>(folders: &mut Vec<Folder>, p: P) -> Vec<usize> {
-                let mut children = Vec::new();
-                for mut f in fs::read_dir(p).unwrap() {
-                    for f in f.iter_mut() {
-                        {
-                            let path = f.path();
-                            if path.ends_with("cur")
-                                || path.ends_with("new")
-                                || path.ends_with("tmp")
-                            {
-                                continue;
-                            }
-                            if path.is_dir() {
-                                let path_children = recurse_folders(folders, &path);
-                                folders.push(Folder::new(
-                                    path.to_str().unwrap().to_string(),
-                                    path.file_name().unwrap().to_str().unwrap().to_string(),
-                                    path_children,
-                                ));
-                                children.push(folders.len() - 1);
-                            }
-                        }
-                    }
-                }
-                children
+            let format = x.format.to_lowercase();
+            let sent_folder = x.sent_folder;
+            let threaded = x.threaded;
+            let root_folder = x.root_folder;
+
+            let acc = AccountSettings {
+                name: id.clone(),
+                root_folder,
+                format,
+                sent_folder,
+                threaded,
             };
-            let path = PathBuf::from(&x.folders);
-            let path_children = recurse_folders(&mut folders, &path);
-            if path.is_dir() {
-                folders.push(Folder::new(
-                    path.to_str().unwrap().to_string(),
-                    path.file_name().unwrap().to_str().unwrap().to_string(),
-                    path_children,
-                ));
-            }
-            //folders.sort_by(|a, b| b.name.cmp(&a.name));
-            s.insert(
-                id.clone(),
-                AccountSettings {
-                    name: id.clone(),
-                    folders: folders,
-                    format: x.format.to_lowercase(),
-                    sent_folder: x.sent_folder.clone(),
-                    threaded: x.threaded,
-                },
-            );
+
+            s.insert(id, acc);
         }
 
         Settings {

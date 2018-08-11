@@ -24,8 +24,9 @@ use linkify::{Link, LinkFinder};
 use std::process::{Command, Stdio};
 
 mod html;
-
 pub use self::html::*;
+mod thread;
+pub use self::thread::*;
 
 use mime_apps::query_default_app;
 
@@ -59,6 +60,13 @@ pub struct MailView {
     cmd_buf: String,
 }
 
+impl fmt::Display for MailView {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display subject/info
+        write!(f, "view mail")
+    }
+}
+
 impl MailView {
     pub fn new(
         coordinates: (usize, usize, usize),
@@ -80,23 +88,34 @@ impl MailView {
     fn attachment_to_text(&self, body: Attachment) -> String {
         let finder = LinkFinder::new();
         let body_text = if body.content_type().0.is_text() && body.content_type().1.is_html() {
-            let mut s = String::from("Text piped through `w3m`. Press `v` to open in web browser. \n\n");
+            let mut s =
+                String::from("Text piped through `w3m`. Press `v` to open in web browser. \n\n");
             s.extend(
-            String::from_utf8_lossy(&decode(&body, Some(Box::new(|a: &Attachment| {
-                use std::io::Write;
-                use std::process::{Command, Stdio};
+                String::from_utf8_lossy(&decode(
+                    &body,
+                    Some(Box::new(|a: &Attachment| {
+                        use std::io::Write;
+                        use std::process::{Command, Stdio};
 
-                let raw = decode(a, None);
-                let mut html_filter = Command::new("w3m")
-                    .args(&["-I",  "utf-8", "-T", "text/html"])
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                    .expect("Failed to start html filter process");
+                        let raw = decode(a, None);
+                        let mut html_filter = Command::new("w3m")
+                            .args(&["-I", "utf-8", "-T", "text/html"])
+                            .stdin(Stdio::piped())
+                            .stdout(Stdio::piped())
+                            .spawn()
+                            .expect("Failed to start html filter process");
 
-                html_filter.stdin.as_mut().unwrap().write_all(&raw).expect("Failed to write to w3m stdin");
-                html_filter.wait_with_output().unwrap().stdout
-            })))).into_owned().chars());
+                        html_filter
+                            .stdin
+                            .as_mut()
+                            .unwrap()
+                            .write_all(&raw)
+                            .expect("Failed to write to w3m stdin");
+                        html_filter.wait_with_output().unwrap().stdout
+                    })),
+                )).into_owned()
+                    .chars(),
+            );
             s
         } else {
             String::from_utf8_lossy(&decode_rec(&body, None)).into()
@@ -105,13 +124,14 @@ impl MailView {
             ViewMode::Normal | ViewMode::Subview => {
                 let mut t = body_text.to_string();
                 if body.count_attachments() > 1 {
-                    t = body.attachments().iter().enumerate().fold(
-                        t,
-                        |mut s, (idx, a)| {
+                    t = body
+                        .attachments()
+                        .iter()
+                        .enumerate()
+                        .fold(t, |mut s, (idx, a)| {
                             s.push_str(&format!("[{}] {}\n\n", idx, a));
                             s
-                        },
-                        );
+                        });
                 }
                 t
             }
@@ -131,13 +151,14 @@ impl MailView {
                     t.insert_str(l.start() + offset, &format!("[{}]", lidx));
                 }
                 if body.count_attachments() > 1 {
-                    t = body.attachments().iter().enumerate().fold(
-                        t,
-                        |mut s, (idx, a)| {
+                    t = body
+                        .attachments()
+                        .iter()
+                        .enumerate()
+                        .fold(t, |mut s, (idx, a)| {
                             s.push_str(&format!("[{}] {}\n\n", idx, a));
                             s
-                        },
-                        );
+                        });
                 }
                 t
             }
@@ -190,9 +211,7 @@ impl Component for MailView {
 
         let (envelope_idx, y): (usize, usize) = {
             let accounts = &mut context.accounts;
-            let threaded = accounts[self.coordinates.0]
-                .runtime_settings
-                .threaded;
+            let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
             let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
                 .unwrap();
@@ -291,12 +310,15 @@ impl Component for MailView {
             let body = envelope.body();
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(decode(&body.attachments()[aidx], None))));
-                },
+                    self.subview = Some(Box::new(HtmlView::new(decode(
+                        &body.attachments()[aidx],
+                        None,
+                    ))));
+                }
                 ViewMode::Normal if body.is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(decode(&body, None))));
                     self.mode = ViewMode::Subview;
-                },
+                }
                 _ => {
                     let buf = {
                         let text = self.attachment_to_text(body);
@@ -309,7 +331,7 @@ impl Component for MailView {
                         self.pager.as_mut().map(|p| p.cursor_pos())
                     };
                     self.pager = Some(Pager::from_buf(&buf, cursor_pos));
-                },
+                }
             };
             self.dirty = false;
         }
@@ -351,9 +373,7 @@ impl Component for MailView {
 
                 {
                     let accounts = &mut context.accounts;
-                    let threaded = accounts[self.coordinates.0]
-                        .runtime_settings
-                        .threaded;
+                    let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
                     let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();
@@ -424,9 +444,7 @@ impl Component for MailView {
                 self.cmd_buf.clear();
                 let url = {
                     let accounts = &mut context.accounts;
-                    let threaded = accounts[self.coordinates.0]
-                        .runtime_settings
-                        .threaded;
+                    let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
                     let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();
@@ -481,5 +499,8 @@ impl Component for MailView {
         self.dirty
             || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+    }
+    fn set_dirty(&mut self) {
+        self.dirty = true;
     }
 }

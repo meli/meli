@@ -18,10 +18,10 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use std::fmt;
-use std::str;
 use data_encoding::BASE64_MIME;
 use mailbox::email::parser;
+use std::fmt;
+use std::str;
 
 pub use mailbox::email::attachment_types::*;
 
@@ -44,7 +44,14 @@ impl fmt::Debug for AttachmentType {
         match self {
             AttachmentType::Data { .. } => write!(f, "AttachmentType::Data {{ .. }}"),
             AttachmentType::Text { .. } => write!(f, "AttachmentType::Text {{ .. }}"),
-            AttachmentType::Multipart { of_type, subattachments } => write!(f, "AttachmentType::Multipart {{ of_type: {:?},\nsubattachments: {:?} }}", of_type, subattachments),
+            AttachmentType::Multipart {
+                of_type,
+                subattachments,
+            } => write!(
+                f,
+                "AttachmentType::Multipart {{ of_type: {:?},\nsubattachments: {:?} }}",
+                of_type, subattachments
+            ),
         }
     }
 }
@@ -96,7 +103,7 @@ impl fmt::Display for AttachmentType {
 impl AttachmentBuilder {
     pub fn new(content: &[u8]) -> Self {
         AttachmentBuilder {
-            content_type: (Default::default() , ContentSubType::Plain),
+            content_type: (Default::default(), ContentSubType::Plain),
             content_transfer_encoding: ContentTransferEncoding::_7Bit,
             raw: content.to_vec(),
         }
@@ -124,7 +131,9 @@ impl AttachmentBuilder {
                 self.content_type.0 = Default::default();
                 for (n, v) in params {
                     if n.eq_ignore_ascii_case(b"charset") {
-                        self.content_type.0 = ContentType::Text { charset: Charset::from(v) };
+                        self.content_type.0 = ContentType::Text {
+                            charset: Charset::from(v),
+                        };
                         break;
                     }
                 }
@@ -168,7 +177,7 @@ impl AttachmentBuilder {
     fn decode(&self) -> Vec<u8> {
         // TODO merge this and standalone decode() function
         let charset = match self.content_type.0 {
-            ContentType::Text{ charset: c } => c,
+            ContentType::Text { charset: c } => c,
             _ => Default::default(),
         };
 
@@ -180,13 +189,17 @@ impl AttachmentBuilder {
             ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_bytes(&self.raw)
                 .to_full_result()
                 .unwrap(),
-                ContentTransferEncoding::_7Bit
-                    | ContentTransferEncoding::_8Bit
-                    | ContentTransferEncoding::Other { .. } => self.raw.to_vec(),
+            ContentTransferEncoding::_7Bit
+            | ContentTransferEncoding::_8Bit
+            | ContentTransferEncoding::Other { .. } => self.raw.to_vec(),
         };
 
         let decoded_result = parser::decode_charset(&bytes, charset);
-        decoded_result.as_ref().map(|v| v.as_bytes()).unwrap_or_else(|_| &self.raw).to_vec()
+        decoded_result
+            .as_ref()
+            .map(|v| v.as_bytes())
+            .unwrap_or_else(|_| &self.raw)
+            .to_vec()
     }
     pub fn build(self) -> Attachment {
         let attachment_type = match self.content_type.0 {
@@ -197,7 +210,9 @@ impl AttachmentBuilder {
                 let multipart_type = match self.content_type.1 {
                     ContentSubType::Other { ref tag } => match &tag[..] {
                         b"mixed" | b"Mixed" | b"MIXED" => MultipartType::Mixed,
-                        b"alternative" | b"Alternative" | b"ALTERNATIVE" => MultipartType::Alternative,
+                        b"alternative" | b"Alternative" | b"ALTERNATIVE" => {
+                            MultipartType::Alternative
+                        }
                         b"digest" | b"Digest" | b"DIGEST" => MultipartType::Digest,
                         _ => MultipartType::Unsupported { tag: tag.clone() },
                     },
@@ -261,14 +276,15 @@ impl AttachmentBuilder {
     }
 }
 
-
 impl fmt::Display for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.attachment_type {
             AttachmentType::Data { .. } => {
                 write!(f, "Data attachment of type {}", self.mime_type())
             }
-            AttachmentType::Text { .. } => write!(f, "Text attachment of type {}", self.mime_type()),
+            AttachmentType::Text { .. } => {
+                write!(f, "Text attachment of type {}", self.mime_type())
+            }
             AttachmentType::Multipart {
                 of_type: ref multipart_type,
                 subattachments: ref sub_att_vec,
@@ -276,10 +292,16 @@ impl fmt::Display for Attachment {
                 write!(
                     f,
                     "{} attachment with {} subs",
-                    self.mime_type(), sub_att_vec.len()
+                    self.mime_type(),
+                    sub_att_vec.len()
                 )
             } else {
-                write!(f, "{} attachment with {} subs", self.mime_type(), sub_att_vec.len())
+                write!(
+                    f,
+                    "{} attachment with {} subs",
+                    self.mime_type(),
+                    sub_att_vec.len()
+                )
             },
         }
     }
@@ -340,7 +362,7 @@ impl Attachment {
                     for a in sub_att_vec {
                         count_recursive(a, ret);
                     }
-                },
+                }
             }
         }
 
@@ -374,7 +396,7 @@ fn decode_rec_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment) -> Vec<
         return filter(a);
     }
     match a.attachment_type {
-        AttachmentType::Data { .. } => { Vec::new()},
+        AttachmentType::Data { .. } => Vec::new(),
         AttachmentType::Text { .. } => decode_helper(a, filter),
         AttachmentType::Multipart {
             of_type: ref multipart_type,
@@ -405,7 +427,7 @@ fn decode_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment) -> Vec<u8>>
     }
 
     let charset = match a.content_type.0 {
-        ContentType::Text{ charset: c } => c,
+        ContentType::Text { charset: c } => c,
         _ => Default::default(),
     };
 
@@ -424,7 +446,11 @@ fn decode_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment) -> Vec<u8>>
 
     if a.content_type().0.is_text() {
         let decoded_result = parser::decode_charset(&bytes, charset);
-        decoded_result.as_ref().map(|v| v.as_bytes()).unwrap_or_else(|_| a.bytes()).to_vec()
+        decoded_result
+            .as_ref()
+            .map(|v| v.as_bytes())
+            .unwrap_or_else(|_| a.bytes())
+            .to_vec()
     } else {
         bytes.to_vec()
     }

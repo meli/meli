@@ -24,7 +24,7 @@
  */
 
 use async::*;
-use conf::{AccountSettings, Folder};
+use conf::AccountSettings;
 use mailbox::backends::{Backends, RefreshEventConsumer};
 use mailbox::*;
 use std::ops::{Index, IndexMut};
@@ -47,15 +47,15 @@ pub struct Account {
 }
 
 impl Account {
-    pub fn new(name: String, settings: AccountSettings, backends: &Backends) -> Self {
-        let sent_folder = settings
-            .folders
+    pub fn new(name: String, settings: AccountSettings, map: &Backends) -> Self {
+        let backend = map.get(settings.format())(&settings);
+        let ref_folders: Vec<Folder> = backend.folders();
+        let mut folders: Vec<Option<Result<Mailbox>>> = Vec::with_capacity(ref_folders.len());
+        let mut workers: Vec<Worker> = Vec::new();
+        let sent_folder = ref_folders
             .iter()
-            .position(|x| *x.path() == settings.sent_folder);
-        let mut folders = Vec::with_capacity(settings.folders.len());
-        let mut workers = Vec::new();
-        let backend = backends.get(settings.format());
-        for f in &settings.folders {
+            .position(|x: &Folder| x.name() == settings.sent_folder);
+        for f in ref_folders {
             folders.push(None);
             let mut handle = backend.get(&f);
             workers.push(Some(handle));
@@ -73,14 +73,14 @@ impl Account {
         }
     }
     pub fn watch(&self, r: RefreshEventConsumer) -> () {
-        self.backend.watch(r, &self.settings.folders[..]);
+        self.backend.watch(r).unwrap();
     }
     /* This doesn't represent the number of correctly parsed mailboxes though */
     pub fn len(&self) -> usize {
         self.folders.len()
     }
     pub fn list_folders(&self) -> Vec<Folder> {
-        self.settings.folders.clone()
+        self.backend.folders()
     }
     pub fn name(&self) -> &str {
         &self.name
@@ -89,7 +89,8 @@ impl Account {
         &mut self.workers
     }
     fn load_mailbox(&mut self, index: usize, envelopes: Result<Vec<Envelope>>) -> () {
-        let folder = &self.settings.folders[index];
+        let folders = self.backend.folders();
+        let folder = &folders[index];
         if self.sent_folder.is_some() {
             let id = self.sent_folder.unwrap();
             if id == index {
@@ -105,7 +106,7 @@ impl Account {
                         )
                     }
                 };
-                let sent_path = &self.settings.folders[id];
+                let sent_path = &folders[id];
                 if sent[0].is_none() {
                     sent[0] = Some(Mailbox::new(sent_path, &None, envelopes.clone()));
                 }

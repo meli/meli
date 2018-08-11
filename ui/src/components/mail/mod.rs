@@ -22,11 +22,14 @@
 /*! Entities that handle Mail specific functions.
  */
 use super::*;
+use melib::backends::Folder;
 
 pub mod listing;
-pub mod view;
 pub use listing::*;
+pub mod view;
 pub use view::*;
+mod compose;
+pub use self::compose::*;
 
 #[derive(Debug)]
 struct AccountMenuEntry {
@@ -43,6 +46,13 @@ pub struct AccountMenu {
     cursor: Option<(usize, usize)>,
 }
 
+impl fmt::Display for AccountMenu {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display subject/info
+        write!(f, "menu")
+    }
+}
+
 impl AccountMenu {
     pub fn new(accounts: &[Account]) -> Self {
         let accounts = accounts
@@ -53,8 +63,10 @@ impl AccountMenu {
                 index: i,
                 entries: {
                     let mut entries = Vec::with_capacity(a.len());
-                    for (idx, acc) in a.list_folders().iter().enumerate() {
-                        entries.push((idx, acc.clone()));
+                    let mut idx = 0;
+                    for acc in a.list_folders() {
+                        entries.push((idx, acc));
+                        idx += 1;
                     }
                     entries
                 },
@@ -187,12 +199,7 @@ impl AccountMenu {
             );
 
             if highlight && idx > 1 && self.cursor.unwrap().1 == idx - 2 {
-                change_colors(
-                    grid,
-                    ((x, y), (get_x(bottom_right), y)),
-                    color_fg,
-                    color_bg,
-                );
+                change_colors(grid, ((x, y), (get_x(bottom_right), y)), color_fg, color_bg);
             } else {
                 change_colors(grid, ((x, y), set_y(bottom_right, y)), color_fg, color_bg);
             }
@@ -239,5 +246,8 @@ impl Component for AccountMenu {
     }
     fn is_dirty(&self) -> bool {
         self.dirty
+    }
+    fn set_dirty(&mut self) {
+        self.dirty = true;
     }
 }

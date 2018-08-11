@@ -203,6 +203,33 @@ bitflags! {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct EnvelopeBuilder {
+    from: Option<Vec<Address>>,
+    to: Vec<Address>,
+    body: Option<Attachment>,
+    in_reply_to: Option<MessageID>,
+    flags: Flag,
+}
+
+impl EnvelopeBuilder {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn build(self) -> Envelope {
+        unimplemented!();
+
+        /*
+         * 1. Check for date. Default is now
+         * 2. 
+        Envelope {
+
+
+        */
+    }
+}
+
 /// `Envelope` represents all the data of an email we need to know.
 ///
 ///  Attachments (the email's body) is parsed on demand with `body`.

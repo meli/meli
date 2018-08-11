@@ -23,22 +23,25 @@ pub mod maildir;
 pub mod mbox;
 
 use async::*;
-use conf::Folder;
+use conf::AccountSettings;
 use error::Result;
-use mailbox::backends::imap::ImapType;
+//use mailbox::backends::imap::ImapType;
+//use mailbox::backends::mbox::MboxType;
 use mailbox::backends::maildir::MaildirType;
-use mailbox::backends::mbox::MboxType;
 use mailbox::email::{Envelope, Flag};
 use std::fmt;
+use std::fmt::Debug;
 
 extern crate fnv;
 use self::fnv::FnvHashMap;
 use std;
 
+pub type BackendCreator = Box<Fn(&AccountSettings) -> Box<MailBackend>>;
+
 /// A hashmap containing all available mail backends.
 /// An abstraction over any available backends.
 pub struct Backends {
-    map: FnvHashMap<std::string::String, Box<Fn() -> Box<MailBackend>>>,
+    map: FnvHashMap<std::string::String, Box<Fn() -> BackendCreator>>,
 }
 
 impl Backends {
@@ -48,20 +51,20 @@ impl Backends {
         };
         b.register(
             "maildir".to_string(),
-            Box::new(|| Box::new(MaildirType::new("", (0, 0)))),
+            Box::new(|| Box::new(|f| Box::new(MaildirType::new(f)))),
         );
-        b.register("mbox".to_string(), Box::new(|| Box::new(MboxType::new(""))));
-        b.register("imap".to_string(), Box::new(|| Box::new(ImapType::new(""))));
+        //b.register("mbox".to_string(), Box::new(|| Box::new(MboxType::new(""))));
+        //b.register("imap".to_string(), Box::new(|| Box::new(ImapType::new(""))));
         b
     }
 
-    pub fn get(&self, key: &str) -> Box<MailBackend> {
+    pub fn get(&self, key: &str) -> BackendCreator {
         if !self.map.contains_key(key) {
             panic!("{} is not a valid mail backend", key);
         }
         self.map[key]()
     }
-    pub fn register(&mut self, key: String, backend: Box<Fn() -> Box<MailBackend>>) -> () {
+    pub fn register(&mut self, key: String, backend: Box<Fn() -> BackendCreator>) -> () {
         if self.map.contains_key(&key) {
             panic!("{} is an already registered backend", key);
         }
@@ -90,8 +93,8 @@ impl RefreshEventConsumer {
 }
 pub trait MailBackend: ::std::fmt::Debug {
     fn get(&self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
-    fn watch(&self, sender: RefreshEventConsumer, folders: &[Folder]) -> ();
-    //fn new(folders: &Vec<String>) -> Box<Self>;
+    fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
+    fn folders(&self) -> Vec<Folder>;
     //login function
 }
 
@@ -168,3 +171,37 @@ impl fmt::Debug for BackendOpGenerator {
         write!(f, "BackendOpGenerator: {}", op.description())
     }
 }
+
+pub trait BackendFolder: Debug {
+    fn hash(&self) -> u64;
+    fn name(&self) -> &str;
+    fn clone(&self) -> Folder;
+    fn children(&self) -> &Vec<usize>;
+}
+
+#[derive(Debug)]
+struct DummyFolder {
+    v: Vec<usize>,
+}
+
+impl BackendFolder for DummyFolder {
+    fn hash(&self) -> u64 {
+        0
+    }
+    fn name(&self) -> &str {
+        ""
+    }
+    fn clone(&self) -> Folder {
+        folder_default()
+    }
+    fn children(&self) -> &Vec<usize> {
+        &self.v
+    }
+}
+pub fn folder_default() -> Folder {
+    Box::new(DummyFolder {
+        v: Vec::with_capacity(0),
+    })
+}
+
+pub type Folder = Box<BackendFolder>;

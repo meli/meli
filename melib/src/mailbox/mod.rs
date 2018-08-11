@@ -30,18 +30,16 @@ pub use self::email::*;
 /* Mail backends. Currently only maildir is supported */
 pub mod backends;
 use error::Result;
-use mailbox::backends::MailBackend;
+use mailbox::backends::{folder_default, Folder, MailBackend};
 pub mod accounts;
 pub use mailbox::accounts::Account;
 pub mod thread;
 pub use mailbox::thread::{build_threads, Container};
 
-use conf::Folder;
-
 use std::option::Option;
 
 /// `Mailbox` represents a folder of mail.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Mailbox {
     pub folder: Folder,
     pub collection: Vec<Envelope>,
@@ -49,10 +47,21 @@ pub struct Mailbox {
     pub threads: Vec<Container>,
 }
 
+impl Clone for Mailbox {
+    fn clone(&self) -> Self {
+        Mailbox {
+            folder: self.folder.clone(),
+            collection: self.collection.clone(),
+            threaded_collection: self.threaded_collection.clone(),
+            threads: self.threads.clone(),
+        }
+    }
+}
+
 impl Mailbox {
     pub fn new_dummy() -> Self {
         Mailbox {
-            folder: Folder::default(),
+            folder: folder_default(),
             collection: Vec::with_capacity(0),
             threaded_collection: Vec::with_capacity(0),
             threads: Vec::with_capacity(0),
@@ -67,7 +76,7 @@ impl Mailbox {
         collection.sort_by(|a, b| a.date().cmp(&b.date()));
         let (threads, threaded_collection) = build_threads(&mut collection, sent_folder);
         Ok(Mailbox {
-            folder: folder.clone(),
+            folder: (*folder).clone(),
             collection: collection,
             threads: threads,
             threaded_collection: threaded_collection,

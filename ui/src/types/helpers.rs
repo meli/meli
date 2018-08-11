@@ -20,9 +20,9 @@
  */
 
 use std;
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
-use std::fs::OpenOptions;
 
 use uuid::Uuid;
 
@@ -39,7 +39,12 @@ impl Drop for File {
 
 impl File {
     pub fn file(&mut self) -> std::fs::File {
-        OpenOptions::new().read(true).write(true).create(true).open(&self.path).unwrap()
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&self.path)
+            .unwrap()
     }
 
     pub fn path(&self) -> &PathBuf {
