@@ -28,6 +28,7 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::result;
+use std::string;
 
 use nom;
 
@@ -78,6 +79,13 @@ impl From<nom::IError> for MeliError {
 impl<'a> From<Cow<'a, str>> for MeliError {
     #[inline]
     fn from(kind: Cow<'_, str>) -> MeliError {
+        MeliError::new(format!("{:?}", kind))
+    }
+}
+
+impl From<string::FromUtf8Error> for MeliError {
+    #[inline]
+    fn from(kind: string::FromUtf8Error) -> MeliError {
         MeliError::new(format!("{:?}", kind))
     }
 }

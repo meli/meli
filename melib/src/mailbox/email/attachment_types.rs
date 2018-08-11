@@ -1,4 +1,6 @@
+use mailbox::email::parser::BytesExt;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::str;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Charset {
@@ -8,10 +10,14 @@ pub enum Charset {
     ISO8859_1,
     ISO8859_2,
     ISO8859_7,
+    ISO8859_15,
+    Windows1251,
     Windows1252,
     Windows1253,
     GBK,
     GB2312,
+    BIG5,
+    ISO2022JP,
 }
 
 impl Default for Charset {
@@ -23,18 +29,25 @@ impl Default for Charset {
 impl<'a> From<&'a [u8]> for Charset {
     fn from(b: &'a [u8]) -> Self {
         // TODO: Case insensitivity
-        match b {
+        match b.trim() {
             b"us-ascii" | b"ascii" | b"US-ASCII" => Charset::Ascii,
             b"utf-8" | b"UTF-8" => Charset::UTF8,
             b"utf-16" | b"UTF-16" => Charset::UTF16,
             b"iso-8859-1" | b"ISO-8859-1" => Charset::ISO8859_1,
             b"iso-8859-2" | b"ISO-8859-2" => Charset::ISO8859_2,
             b"iso-8859-7" | b"ISO-8859-7" => Charset::ISO8859_7,
+            b"iso-8859-15" | b"ISO-8859-15" => Charset::ISO8859_15,
+            b"windows-1251" | b"Windows-1251" => Charset::Windows1251,
             b"windows-1252" | b"Windows-1252" => Charset::Windows1252,
             b"windows-1253" | b"Windows-1253" => Charset::Windows1253,
             b"GBK" | b"gbk" => Charset::GBK,
             b"gb2312" | b"GB2312" => Charset::GB2312,
-            _ => Charset::Ascii,
+            b"BIG5" | b"big5" => Charset::BIG5,
+            b"ISO-2022-JP" | b"iso-2022-JP" => Charset::ISO2022JP,
+            _ => {
+                eprintln!("unknown tag is {:?}", str::from_utf8(b));
+                Charset::Ascii
+            },
         }
     }
 }

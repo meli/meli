@@ -23,10 +23,8 @@ use chrono;
 use data_encoding::BASE64_MIME;
 use encoding::{DecoderTrap, Encoding};
 use nom::{is_hex_digit, le_u8};
-use nom::{Compare, CompareResult};
 use nom::{ErrorKind, IResult, Needed};
 use std;
-use std::str::from_utf8;
 
 macro_rules! is_whitespace {
     ($var:ident) => {
@@ -166,7 +164,7 @@ named!(pub attachment<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
 
 /* TODO: make a map of encodings and decoding functions so that they can be reused and easily
  * extended */
-use encoding::all::{ISO_8859_1, ISO_8859_2, ISO_8859_7, WINDOWS_1252, WINDOWS_1253, GBK};
+use encoding::all::*;
 
 fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     if input.len() < 5 {
@@ -174,107 +172,86 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     } else if input[0] != b'=' || input[1] != b'?' {
         return IResult::Error(error_code!(ErrorKind::Custom(43)));
     }
-    for tag in &[
-        "UTF-8",
-        "iso-8859-7",
-        "windows-1253",
-        "iso-8859-1",
-        "iso-8859-2",
-        "gbk",
-    ] {
-        if let CompareResult::Ok = (&input[2..]).compare_no_case(*tag) {
-            let tag_len = tag.len();
-            /* tag must end with ?_? where _ is either Q or B, eg: =?UTF-8?B? */
-            if input[2 + tag_len] != b'?' || input[2 + tag_len + 2] != b'?' {
-                return IResult::Error(error_code!(ErrorKind::Custom(43)));
-            }
-            /* See if input ends with "?=" and get ending index */
-            let mut encoded_idx = None;
-            for i in (5 + tag_len)..input.len() {
-                if input[i] == b'?' && i < input.len() && input[i + 1] == b'=' {
-                    encoded_idx = Some(i);
-                    break;
-                }
-            }
-            if encoded_idx.is_none() {
-                return IResult::Error(error_code!(ErrorKind::Custom(43)));
-            }
-            let encoded = &input[5 + tag_len..encoded_idx.unwrap()];
-
-            let s: Vec<u8> = match input[2 + tag_len + 1] {
-                b'b' | b'B' => match BASE64_MIME.decode(encoded) {
-                    Ok(v) => v,
-                    Err(_) => encoded.to_vec(),
-                },
-                b'q' | b'Q' => match quoted_printable_bytes_header(encoded) {
-                    IResult::Done(b"", s) => s,
-                    _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
-                },
-                _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
-            };
-
-            match *tag {
-                "UTF-8" => {
-                    return IResult::Done(&input[encoded_idx.unwrap() + 2..], s);
-                }
-                "iso-8859-7" => {
-                    return if let Ok(v) = ISO_8859_7.decode(&s, DecoderTrap::Strict) {
-                        IResult::Done(&input[encoded_idx.unwrap() + 2..], v.into_bytes())
-                    } else {
-                        IResult::Error(error_code!(ErrorKind::Custom(43)))
-                    }
-                }
-                "windows-1253" => {
-                    return if let Ok(v) = WINDOWS_1253.decode(&s, DecoderTrap::Strict) {
-                        IResult::Done(&input[encoded_idx.unwrap() + 2..], v.into_bytes())
-                    } else {
-                        IResult::Error(error_code!(ErrorKind::Custom(43)))
-                    }
-                }
-                "iso-8859-1" => {
-                    return if let Ok(v) = ISO_8859_1.decode(&s, DecoderTrap::Strict) {
-                        IResult::Done(&input[encoded_idx.unwrap() + 2..], v.into_bytes())
-                    } else {
-                        IResult::Error(error_code!(ErrorKind::Custom(43)))
-                    }
-                }
-                "iso-8859-2" => {
-                    return if let Ok(v) = ISO_8859_2.decode(&s, DecoderTrap::Strict) {
-                        IResult::Done(&input[encoded_idx.unwrap() + 2..], v.into_bytes())
-                    } else {
-                        IResult::Error(error_code!(ErrorKind::Custom(43)))
-                    }
-                }
-                "gbk" => {
-                    return if let Ok(v) = GBK.decode(&s, DecoderTrap::Strict) {
-                        IResult::Done(&input[encoded_idx.unwrap() + 2..], v.into_bytes())
-                    } else {
-                        IResult::Error(error_code!(ErrorKind::Custom(43)))
-                    }
-                }
-                _ => {
-                    panic!();
-                }
-            }
-        } else {
-            continue;
+    /* find end of Charset tag:
+     * =?charset?encoding?encoded text?=
+     * ---------^
+     */
+    let mut tag_end_idx = None;
+    for (idx, b) in input[2..].iter().enumerate() {
+        if *b == b'?' {
+            tag_end_idx = Some(idx + 2);
+            break;
         }
     }
-    eprintln!("unknown tag is {:?}", from_utf8(&input[2..20]));
-    IResult::Error(error_code!(ErrorKind::Custom(43)))
+    if tag_end_idx.is_none() {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+    let tag_end_idx = tag_end_idx.unwrap();
+
+
+    if input[2 + tag_end_idx] != b'?' {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+    /* See if input ends with "?=" and get ending index
+     * =?charset?encoding?encoded text?=
+     * -------------------------------^
+     */
+    let mut encoded_end_idx = None;
+    for i in (3 + tag_end_idx)..input.len() {
+        if input[i] == b'?' && i < input.len() && input[i + 1] == b'=' {
+            encoded_end_idx = Some(i);
+            break;
+        }
+    }
+    if encoded_end_idx.is_none() {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+    let encoded_end_idx = encoded_end_idx.unwrap();
+    let encoded_text = &input[3 + tag_end_idx..encoded_end_idx];
+
+    let s: Vec<u8> = match input[tag_end_idx + 1] {
+        b'b' | b'B' => match BASE64_MIME.decode(encoded_text) {
+            Ok(v) => v,
+            Err(_) => encoded_text.to_vec(),
+        },
+        b'q' | b'Q' => match quoted_printable_bytes_header(encoded_text) {
+            IResult::Done(b"", s) => s,
+            _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
+        },
+        _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
+    };
+
+
+    let charset = Charset::from(&input[2..tag_end_idx]);
+
+    if let Charset::UTF8 = charset {
+        IResult::Done(&input[encoded_end_idx + 2..], s)
+    } else {
+        match decode_charset(&s, charset) {
+            Ok(v) => {
+                IResult::Done(&input[encoded_end_idx + 2..], v.into_bytes())
+            },
+            _ =>   IResult::Error(error_code!(ErrorKind::Custom(43))),
+        }
+    }
 }
 
 pub fn decode_charset(s: &[u8], charset: Charset) -> Result<String> {
     match charset {
-        Charset::UTF8 | Charset::Ascii => Ok(String::from_utf8(s.to_vec()).unwrap()),
-        Charset::ISO8859_7 => Ok(ISO_8859_7.decode(s, DecoderTrap::Strict)?),
+        Charset::UTF8 | Charset::Ascii => Ok(String::from_utf8_lossy(s).to_string()),
         Charset::ISO8859_1 => Ok(ISO_8859_1.decode(s, DecoderTrap::Strict)?),
         Charset::ISO8859_2 => Ok(ISO_8859_2.decode(s, DecoderTrap::Strict)?),
+        Charset::ISO8859_7 => Ok(ISO_8859_7.decode(s, DecoderTrap::Strict)?),
+        Charset::ISO8859_15 => Ok(ISO_8859_15.decode(s, DecoderTrap::Strict)?),
         Charset::GBK => Ok(GBK.decode(s, DecoderTrap::Strict)?),
+        Charset::Windows1251 => Ok(WINDOWS_1251.decode(s, DecoderTrap::Strict)?),
         Charset::Windows1252 => Ok(WINDOWS_1252.decode(s, DecoderTrap::Strict)?),
         Charset::Windows1253 => Ok(WINDOWS_1253.decode(s, DecoderTrap::Strict)?),
-        Charset::GB2312 => unimplemented!(),
-        Charset::UTF16 => unimplemented!(),
+        // Unimplemented:
+        Charset::GB2312 => Ok(String::from_utf8_lossy(s).to_string()),
+        Charset::UTF16 => Ok(String::from_utf8_lossy(s).to_string()),
+        Charset::BIG5 => Ok(String::from_utf8_lossy(s).to_string()),
+        Charset::ISO2022JP => Ok(String::from_utf8_lossy(s).to_string()),
     }
 }
 
