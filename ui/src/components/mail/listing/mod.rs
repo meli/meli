@@ -692,9 +692,10 @@ impl Component for MailListing {
                 self.view = None;
             }
             UIEventType::MailboxUpdate((ref idxa, ref idxf)) => {
-                if *idxa == self.new_cursor_pos.1 && *idxf == self.new_cursor_pos.0 {
-                    self.refresh_mailbox(context);
+                if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 {
                     self.dirty = true;
+                    self.refresh_mailbox(context);
+                    return;
                 }
             }
             UIEventType::ChangeMode(UIMode::Normal) => {

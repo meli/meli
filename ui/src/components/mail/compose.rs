@@ -36,7 +36,7 @@ impl Component for Composer {
         context.dirty_areas.push_back(area);
     }
 
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {}
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {}
 
     fn is_dirty(&self) -> bool {
         true

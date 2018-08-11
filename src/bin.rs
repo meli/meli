@@ -181,11 +181,9 @@ fn main() {
                             }
                         },
                         ThreadEvent::RefreshMailbox { hash : h } => {
-                            eprintln!("got refresh mailbox hash {:x}", h);
                             state.hash_to_folder(h);
                             //state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Notification(n.clone())});
                             state.redraw();
-                            /* Don't handle this yet. */
                         },
                         ThreadEvent::UIEvent(UIEventType::ChangeMode(f)) => {
                             state.mode = f;

@@ -50,7 +50,6 @@ pub struct Context {
 
     /// Events queue that components send back to the state
     pub replies: VecDeque<UIEvent>,
-    backends: Backends,
 
     input_thread: chan::Sender<bool>,
     pub temp_files: Vec<File>,
@@ -155,7 +154,6 @@ impl State<std::io::Stdout> {
                 accounts,
                 mailbox_hashes: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
 
-                backends,
                 settings: settings.clone(),
                 runtime_settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
@@ -188,8 +186,41 @@ impl State<std::io::Stdout> {
         }
         s
     }
-    pub fn hash_to_folder(&self, hash: u64) {
-        eprintln!("got refresh {:?}", self.context.mailbox_hashes[&hash]);
+    /*
+     * When we receive a folder hash from a watcher thread,
+     * we match the hash to the index of the mailbox, request a reload
+     * and startup a thread to remind us to poll it every now and then till it's finished.
+     */
+    pub fn hash_to_folder(&mut self, hash: u64) {
+        let (idxa, idxm) = self.context.mailbox_hashes[&hash];
+        self.context.accounts[idxa].reload(idxm);
+        let (startup_tx, startup_rx) = chan::async();
+        let startup_thread = {
+            let sender = self.sender.clone();
+            let startup_rx = startup_rx.clone();
+
+            thread::Builder::new()
+                .name("startup-thread".to_string())
+                .spawn(move || {
+                    let dur = time::Duration::from_millis(100);
+                    loop {
+                        chan_select! {
+                            default => {},
+                            startup_rx.recv() -> _ => {
+                                sender.send(ThreadEvent::UIEvent(UIEventType::MailboxUpdate((idxa,idxm))));
+                                sender.send(ThreadEvent::ThreadJoin(thread::current().id()));
+                                return;
+                            }
+                        }
+                        sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
+                        thread::sleep(dur);
+                    }
+                })
+                .unwrap()
+        };
+        self.startup_thread = Some(startup_tx);
+        self.threads
+            .insert(startup_thread.thread().id(), startup_thread);
     }
 
     /// If an owned thread returns a `ThreadEvent::ThreadJoin` event to `State` then it must remove

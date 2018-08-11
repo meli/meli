@@ -57,7 +57,7 @@ impl Account {
             .position(|x: &Folder| x.name() == settings.sent_folder);
         for f in ref_folders {
             folders.push(None);
-            let mut handle = backend.get(&f);
+            let handle = backend.get(&f);
             workers.push(Some(handle));
         }
         Account {
@@ -71,6 +71,11 @@ impl Account {
             runtime_settings: settings,
             backend: backend,
         }
+    }
+    pub fn reload(&mut self, idx: usize) {
+        let ref_folders: Vec<Folder> = self.backend.folders();
+        let handle = self.backend.get(&ref_folders[idx]);
+        self.workers[idx] = Some(handle);
     }
     pub fn watch(&self, r: RefreshEventConsumer) -> () {
         self.backend.watch(r).unwrap();
