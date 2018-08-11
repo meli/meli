@@ -34,7 +34,9 @@ pub use self::compose::*;
 #[derive(Debug)]
 struct AccountMenuEntry {
     name: String,
+    // Index in the config account vector.
     index: usize,
+    // Each entry and its index in the account
     entries: Vec<(usize, Folder)>,
 }
 
@@ -78,6 +80,9 @@ impl AccountMenu {
             cursor: None,
         }
     }
+    /*
+     * Print a single account in the menu area.
+     */
     fn print_account(
         &self,
         grid: &mut CellBuffer,
@@ -180,7 +185,7 @@ impl AccountMenu {
                 lines[idx].to_string()
             };
             let (color_fg, color_bg) = if highlight {
-                if idx > 1 && self.cursor.unwrap().1 == idx - 2 {
+                if self.cursor.unwrap().1 + 1 == idx {
                     (Color::Byte(233), Color::Byte(15))
                 } else {
                     (Color::Byte(15), Color::Byte(233))
@@ -198,7 +203,7 @@ impl AccountMenu {
                 false,
             );
 
-            if highlight && idx > 1 && self.cursor.unwrap().1 == idx - 2 {
+            if highlight && idx > 1 && self.cursor.unwrap().1 == idx - 1 {
                 change_colors(grid, ((x, y), (get_x(bottom_right), y)), color_fg, color_bg);
             } else {
                 change_colors(grid, ((x, y), set_y(bottom_right, y)), color_fg, color_bg);

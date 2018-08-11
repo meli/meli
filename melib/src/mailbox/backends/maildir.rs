@@ -246,16 +246,16 @@ impl MaildirType {
             children
         };
         let path = PathBuf::from(f.root_folder());
-        let path_children = recurse_folders(&mut folders, &path);
         if path.is_dir() {
             if let Ok(f) = MaildirFolder::new(
                 path.to_str().unwrap().to_string(),
                 path.file_name().unwrap().to_str().unwrap().to_string(),
-                path_children,
+                Vec::with_capacity(0),
             ) {
                 folders.push(f);
             }
         }
+        folders[0].children = recurse_folders(&mut folders, &path);
         MaildirType {
             folders,
             path: f.root_folder().to_string(),
