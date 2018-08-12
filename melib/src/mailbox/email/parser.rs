@@ -24,6 +24,7 @@ use data_encoding::BASE64_MIME;
 use encoding::{DecoderTrap, Encoding};
 use nom::{is_hex_digit, le_u8};
 use nom::{ErrorKind, IResult, Needed};
+use encoding::all::*;
 use std;
 
 macro_rules! is_whitespace {
@@ -161,11 +162,6 @@ named!(pub attachment<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
 /* Encoded words
  *"=?charset?encoding?encoded text?=".
  */
-
-/* TODO: make a map of encodings and decoding functions so that they can be reused and easily
- * extended */
-use encoding::all::*;
-
 fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     if input.len() < 5 {
         return IResult::Incomplete(Needed::Unknown);
