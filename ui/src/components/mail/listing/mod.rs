@@ -21,6 +21,7 @@
 
 use super::*;
 
+use melib::mailbox::backends::BackendOp;
 mod compact;
 pub use self::compact::*;
 
@@ -107,7 +108,7 @@ impl MailListing {
                 break;
             }
         }
-        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
 
@@ -139,10 +140,18 @@ impl MailListing {
             let threads: &Vec<Container> = &mailbox.threads;
             local_collection.sort_by(|a, b| match self.sort {
                 (SortField::Date, SortOrder::Desc) => {
-                    mailbox.thread(*b).date().cmp(&mailbox.thread(*a).date())
+                    let a = mailbox.thread(*a);
+                    let b = mailbox.thread(*b);
+                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
+                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
+                    mb.date().cmp(&ma.date())
                 }
                 (SortField::Date, SortOrder::Asc) => {
-                    mailbox.thread(*a).date().cmp(&mailbox.thread(*b).date())
+                    let a = mailbox.thread(*a);
+                    let b = mailbox.thread(*b);
+                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
+                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
+                    ma.date().cmp(&mb.date())
                 }
                 (SortField::Subject, SortOrder::Desc) => {
                     let a = mailbox.thread(*a);
@@ -211,6 +220,7 @@ impl MailListing {
                         container,
                         &indentations,
                         len,
+                        context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
                     ),
                     &mut content,
                     fg_color,
@@ -411,6 +421,7 @@ impl MailListing {
         container: &Container,
         indentations: &[bool],
         idx_width: usize,
+        op: Box<BackendOp>,
     ) -> String {
         let has_sibling = container.has_sibling();
         let has_parent = container.has_parent();
@@ -447,7 +458,7 @@ impl MailListing {
         if show_subject {
             s.push_str(&format!("{:.85}", envelope.subject()));
         }
-        let attach_count = envelope.body().count_attachments();
+        let attach_count = envelope.body(op).count_attachments();
         if attach_count > 1 {
             s.push_str(&format!(" {}∞ ", attach_count - 1));
         }
@@ -503,17 +514,34 @@ impl Component for MailListing {
                     let threaded = context.accounts[self.cursor_pos.0]
                         .runtime_settings
                         .threaded;
-                    let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-                        .as_mut()
-                        .unwrap();
-                    let envelope: &mut Envelope = if threaded {
-                        let i = mailbox.threaded_mail(idx);
-                        &mut mailbox.collection[i]
-                    } else {
-                        &mut mailbox.collection[idx]
+                    let account = &mut context.accounts[self.cursor_pos.0];
+                    let (hash, is_seen) = {
+                        let mailbox = &mut account[self.cursor_pos.1]
+                            .as_mut()
+                            .unwrap();
+                        let envelope: &mut Envelope = if threaded {
+                            let i = mailbox.threaded_mail(idx);
+                            &mut mailbox.collection[i]
+                        } else {
+                            &mut mailbox.collection[idx]
+                        };
+                        (envelope.hash(), envelope.is_seen())
                     };
-                    if !envelope.is_seen() {
-                        envelope.set_seen().unwrap();
+                    if !is_seen {
+                        let op = {
+                            let backend = &account.backend;
+                            backend.operation(hash)
+                        };
+                        let mailbox = &mut account[self.cursor_pos.1]
+                            .as_mut()
+                            .unwrap();
+                        let envelope: &mut Envelope = if threaded {
+                            let i = mailbox.threaded_mail(idx);
+                            &mut mailbox.collection[i]
+                        } else {
+                            &mut mailbox.collection[idx]
+                        };
+                        envelope.set_seen(op).unwrap();
                         true
                     } else {
                         false

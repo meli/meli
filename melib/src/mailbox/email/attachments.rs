@@ -25,7 +25,7 @@ use std::str;
 
 pub use mailbox::email::attachment_types::*;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub enum AttachmentType {
     Data {
         tag: Vec<u8>,
@@ -71,7 +71,7 @@ pub struct AttachmentBuilder {
     raw: Vec<u8>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct Attachment {
     content_type: (ContentType, ContentSubType),
     content_transfer_encoding: ContentTransferEncoding,

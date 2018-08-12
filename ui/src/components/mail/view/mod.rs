@@ -303,11 +303,12 @@ impl Component for MailView {
 
         if self.dirty {
             let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
-            let mailbox = &mut context.accounts[mailbox_idx.0][mailbox_idx.1]
+            let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
                 .as_ref()
                 .unwrap();
             let envelope: &Envelope = &mailbox.collection[envelope_idx];
-            let body = envelope.body();
+            let op = context.accounts[mailbox_idx.0].backend.operation(envelope.hash());
+            let body = envelope.body(op);
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(decode(
@@ -372,9 +373,9 @@ impl Component for MailView {
                 self.cmd_buf.clear();
 
                 {
-                    let accounts = &mut context.accounts;
+                    let accounts = &context.accounts;
                     let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
-                    let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
+                    let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();
                     let envelope_idx: usize = if threaded {
@@ -384,7 +385,8 @@ impl Component for MailView {
                     };
 
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
-                    if let Some(u) = envelope.body().attachments().get(lidx) {
+                    let op = context.accounts[self.coordinates.0].backend.operation(envelope.hash());
+                    if let Some(u) = envelope.body(op).attachments().get(lidx) {
                         match u.content_type().0 {
                             ContentType::Text { .. } => {
                                 self.mode = ViewMode::Attachment(lidx);
@@ -443,9 +445,9 @@ impl Component for MailView {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
                 let url = {
-                    let accounts = &mut context.accounts;
+                    let accounts = &context.accounts;
                     let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
-                    let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
+                    let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();
                     let envelope_idx: usize = if threaded {
@@ -456,7 +458,8 @@ impl Component for MailView {
 
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
                     let finder = LinkFinder::new();
-                    let mut t = envelope.body().text().to_string();
+                    let op = context.accounts[self.coordinates.0].backend.operation(envelope.hash());
+                    let mut t = envelope.body(op).text().to_string();
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {
                         u.as_str().to_string()

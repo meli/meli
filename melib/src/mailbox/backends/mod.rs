@@ -92,9 +92,10 @@ impl RefreshEventConsumer {
     }
 }
 pub trait MailBackend: ::std::fmt::Debug {
-    fn get(&self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
+    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
     fn folders(&self) -> Vec<Folder>;
+    fn operation(&self, hash: u64) -> Box<BackendOp>;
     //login function
 }
 

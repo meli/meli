@@ -2,7 +2,7 @@ use mailbox::email::parser::BytesExt;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub enum Charset {
     Ascii,
     UTF8,
@@ -52,7 +52,7 @@ impl<'a> From<&'a [u8]> for Charset {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum MultipartType {
     Mixed,
     Alternative,
@@ -73,7 +73,7 @@ impl Display for MultipartType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum ContentType {
     Text { charset: Charset },
     Multipart { boundary: Vec<u8> },
@@ -108,7 +108,7 @@ impl ContentType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ContentSubType {
     Plain,
     Html,
@@ -134,7 +134,7 @@ impl Display for ContentSubType {
         }
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum ContentTransferEncoding {
     _8Bit,
     _7Bit,

@@ -128,9 +128,6 @@ named!(
 named!(pub headers<std::vec::Vec<(&[u8], &[u8])>>,
        many1!(complete!(header)));
 
-//named!(pub headers_raw<&[u8]>,
-//take_until1!("\n\n"));
-
 pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
     if input.is_empty() {
         return IResult::Incomplete(Needed::Unknown);
@@ -417,22 +414,19 @@ named!(
 named!(mailbox_list<Vec<Address>>, many0!(mailbox));
 
 #[test]
-fn test_mailbox() {
+fn test_addresses() {
     {
-        let s = b"epilys@postretch";
+        let s = b"user@domain";
         let r = mailbox(s).unwrap().1;
         match r {
             Address::Mailbox(ref m) => {
-                println!(
-                    "----\n`{}`, `{}`\n----",
-                    m.display_name.display(&m.raw),
-                    m.address_spec.display(&m.raw)
-                );
-            }
-            _ => {}
+                assert!(m.display_name == b"" && m.address_spec == b"user@domain");
+            },
+            _ => assert!(false),
         }
     }
-    let s = b"Manos <epilys@postretch>";
+    {
+    let s = b"Name <user@domain>";
     eprintln!("{:?}", display_addr(s).unwrap());
     let r = display_addr(s).unwrap().1;
     match r {
@@ -446,17 +440,25 @@ fn test_mailbox() {
         _ => {}
     }
 }
+    {
+        let s = b"user@domain";
+        let r = mailbox(s).unwrap().1;
+        match r {
+            Address::Mailbox(ref m) => {
+                println!(
+                    "----\n`{}`, `{}`\n----",
+                    m.display_name.display(&m.raw),
+                    m.address_spec.display(&m.raw)
+                );
+            }
+            _ => {}
+        }
+    }
+}
 
-//named!(group_t<GroupAddress>, ws!( do_parse!(
-//            display_name: take_until1!(":") >>
-//            mailbox_list: many0!(mailbox) >>
-//            end: is_a!(";") >>
-//            ({
-//
-//            })
-//            )));
-//
-
+/*
+ * group of recipients eg. undisclosed-recipients;
+ */
 fn group(input: &[u8]) -> IResult<&[u8], Address> {
     let mut flag = false;
     let mut dlength = 0;
@@ -499,9 +501,9 @@ named!(address<Address>, ws!(alt_complete!(mailbox | group)));
 
 #[test]
 fn test_address() {
-    let s = b"Manos Pitsidianakis <el13635@mail.ntua.gr>,
-            qemu-devel <qemu-devel@nongnu.org>, qemu-block <qemu-block@nongnu.org>,
-            Alberto Garcia <berto@igalia.com>, Stefan Hajnoczi <stefanha@redhat.com>";
+    let s = b"Obit Oppidum <user@domain>,
+            list <list@domain.tld>, list2 <list2@domain.tld>,
+            Bobit Boppidum <user@otherdomain.com>, Cobit Coppidum <user2@otherdomain.com>";
     println!("{:?}", rfc2822address_list(s).unwrap());
 }
 
@@ -552,11 +554,11 @@ named!(pub phrase<Vec<u8>>, ws!(do_parse!(
 
 #[test]
 fn test_phrase() {
-    let phrase_s = "list.free.de mailing list memberships reminder".as_bytes();
+    let phrase_s = "mailing list memberships reminder".as_bytes();
     assert_eq!(
         (
             &b""[..],
-            "list.free.de mailing list memberships reminder".to_string()
+            "mailing list memberships reminder".to_string()
         ),
         phrase(phrase_s).unwrap()
     );
@@ -739,16 +741,3 @@ named!(pub content_type< (&[u8], &[u8], Vec<(&[u8], &[u8])>) >,
                (_type, _subtype, parameters)
            } )
            ));
-
-//named!(pub quoted_printable_text<Vec<u8>>,
-//   do_parse!(
-//       bytes: many0!(alt_complete!(
-//               preceded!(tag!("=\n"), quoted_printable_byte) |
-//               preceded!(tag!("=\n"), le_u8) |
-//               quoted_printable_byte |
-//               le_u8)) >>
-//       ( {
-//           bytes
-//       } )
-//   )
-//);

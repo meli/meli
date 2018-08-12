@@ -182,7 +182,7 @@ fn main() {
                         },
                         ThreadEvent::RefreshMailbox { hash : h } => {
                             state.hash_to_folder(h);
-                            //state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Notification(n.clone())});
+                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Notification(String::from("Update in mailbox"))});
                             state.redraw();
                         },
                         ThreadEvent::UIEvent(UIEventType::ChangeMode(f)) => {

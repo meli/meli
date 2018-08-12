@@ -29,7 +29,7 @@ pub mod parser;
 use parser::BytesExt;
 
 use error::{MeliError, Result};
-use mailbox::backends::BackendOpGenerator;
+use mailbox::backends::BackendOp;
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -38,26 +38,25 @@ use std::fmt;
 use std::hash::Hasher;
 use std::option::Option;
 use std::string::String;
-use std::sync::Arc;
 
 use chrono;
 use chrono::TimeZone;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct GroupAddress {
     raw: Vec<u8>,
     display_name: StrBuilder,
     mailbox_list: Vec<Address>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct MailboxAddress {
     raw: Vec<u8>,
     display_name: StrBuilder,
     address_spec: StrBuilder,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum Address {
     Mailbox(MailboxAddress),
     Group(GroupAddress),
@@ -109,7 +108,7 @@ impl fmt::Display for Address {
 }
 
 /// Helper struct to return slices from a struct field on demand.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct StrBuilder {
     offset: usize,
     length: usize,
@@ -134,7 +133,7 @@ impl StrBuilder {
 }
 
 /// `MessageID` is accessed through the `StrBuild` trait.
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct MessageID(Vec<u8>, StrBuilder);
 
 impl StrBuild for MessageID {
@@ -185,14 +184,14 @@ impl fmt::Debug for MessageID {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct References {
     raw: Vec<u8>,
     refs: Vec<MessageID>,
 }
 
 bitflags! {
-    #[derive(Default)]
+    #[derive(Default, Serialize)]
     pub struct Flag: u8 {
         const PASSED  =  0b00000001;
         const REPLIED =  0b00000010;
@@ -222,7 +221,7 @@ impl EnvelopeBuilder {
 
         /*
          * 1. Check for date. Default is now
-         * 2. 
+         * 2.
         Envelope {
 
 
@@ -237,7 +236,7 @@ impl EnvelopeBuilder {
 ///  Access to the underlying email object in the account's backend (for example the file or the
 ///  entry in an IMAP server) is given through `operation_token`. For more information see
 ///  `BackendOp`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Envelope {
     date: String,
     from: Vec<Address>,
@@ -248,19 +247,18 @@ pub struct Envelope {
     in_reply_to: Option<MessageID>,
     references: Option<References>,
 
-    datetime: Option<chrono::DateTime<chrono::FixedOffset>>,
     timestamp: u64,
     thread: usize,
 
-    operation_token: Arc<Box<BackendOpGenerator>>,
+    hash: u64,
 
     flags: Flag,
 }
 
 impl Envelope {
-    pub fn new(token: Box<BackendOpGenerator>) -> Self {
+    pub fn new(hash: u64) -> Self {
         Envelope {
-            date: "".to_string(),
+            date: String::new(),
             from: Vec::new(),
             to: Vec::new(),
             body: None,
@@ -269,103 +267,105 @@ impl Envelope {
             in_reply_to: None,
             references: None,
 
-            datetime: None,
             timestamp: 0,
 
             thread: 0,
 
-            operation_token: Arc::new(token),
+            hash,
             flags: Flag::default(),
         }
     }
-    pub fn from_token(operation_token: Box<BackendOpGenerator>) -> Option<Envelope> {
-        let operation = operation_token.generate();
-        let mut e = Envelope::new(operation_token);
+    pub fn from_token(operation: Box<BackendOp>, hash: u64) -> Option<Envelope> {
+        let mut e = Envelope::new(hash);
         e.flags = operation.fetch_flags();
-        Some(e)
+        let res = e.populate_headers(operation).ok();
+        if res.is_some() {
+            Some(e)
+        } else {
+            None
+        }
     }
-    pub fn set_operation_token(&mut self, operation_token: Box<BackendOpGenerator>) {
-        self.operation_token = Arc::new(operation_token);
+    pub fn hash(&self) -> u64 {
+        self.hash
     }
+    pub fn populate_headers(&mut self, mut operation: Box<BackendOp>) -> Result<()> {
+        {
+            let headers = match parser::headers(operation.fetch_headers()?).to_full_result() {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("error in parsing mail\n");
+                    return Err(MeliError::from(e));
+                }
+            };
 
-    pub fn populate_headers(&mut self) -> Result<()> {
-        let mut operation = self.operation_token.generate();
-        let headers = match parser::headers(operation.fetch_headers()?).to_full_result() {
-            Ok(v) => v,
-            Err(e) => {
-                let operation = self.operation_token.generate();
-                eprintln!("error in parsing mail\n{}", operation.description());
-                return Err(MeliError::from(e));
-            }
-        };
+            let mut in_reply_to = None;
+            let mut datetime = None;
 
-        let mut in_reply_to = None;
-        let mut datetime = None;
-
-        for (name, value) in headers {
-            if value.len() == 1 && value.is_empty() {
-                continue;
-            }
-            if name.eq_ignore_ascii_case(b"to") {
-                let parse_result = parser::rfc2822address_list(value);
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    Vec::new()
-                };
-                self.set_to(value);
-            } else if name.eq_ignore_ascii_case(b"from") {
-                let parse_result = parser::rfc2822address_list(value);
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    Vec::new()
-                };
-                self.set_from(value);
-            } else if name.eq_ignore_ascii_case(b"subject") {
-                let parse_result = parser::phrase(value.trim());
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    "".into()
-                };
-                self.set_subject(value);
-            } else if name.eq_ignore_ascii_case(b"message-id") {
-                self.set_message_id(value);
-            } else if name.eq_ignore_ascii_case(b"references") {
-                {
-                    let parse_result = parser::references(value);
-                    if parse_result.is_done() {
-                        for v in parse_result.to_full_result().unwrap() {
-                            self.push_references(v);
+            for (name, value) in headers {
+                if value.len() == 1 && value.is_empty() {
+                    continue;
+                }
+                if name.eq_ignore_ascii_case(b"to") {
+                    let parse_result = parser::rfc2822address_list(value);
+                    let value = if parse_result.is_done() {
+                        parse_result.to_full_result().unwrap()
+                    } else {
+                        Vec::new()
+                    };
+                    self.set_to(value);
+                } else if name.eq_ignore_ascii_case(b"from") {
+                    let parse_result = parser::rfc2822address_list(value);
+                    let value = if parse_result.is_done() {
+                        parse_result.to_full_result().unwrap()
+                    } else {
+                        Vec::new()
+                    };
+                    self.set_from(value);
+                } else if name.eq_ignore_ascii_case(b"subject") {
+                    let parse_result = parser::phrase(value.trim());
+                    let value = if parse_result.is_done() {
+                        parse_result.to_full_result().unwrap()
+                    } else {
+                        "".into()
+                    };
+                    self.set_subject(value);
+                } else if name.eq_ignore_ascii_case(b"message-id") {
+                    self.set_message_id(value);
+                } else if name.eq_ignore_ascii_case(b"references") {
+                    {
+                        let parse_result = parser::references(value);
+                        if parse_result.is_done() {
+                            for v in parse_result.to_full_result().unwrap() {
+                                self.push_references(v);
+                            }
                         }
                     }
+                    self.set_references(value);
+                } else if name.eq_ignore_ascii_case(b"in-reply-to") {
+                    self.set_in_reply_to(value);
+                    in_reply_to = Some(value);
+                } else if name.eq_ignore_ascii_case(b"date") {
+                    self.set_date(value);
+                    datetime = Some(value);
                 }
-                self.set_references(value);
-            } else if name.eq_ignore_ascii_case(b"in-reply-to") {
-                self.set_in_reply_to(value);
-                in_reply_to = Some(value);
-            } else if name.eq_ignore_ascii_case(b"date") {
-                self.set_date(value);
-                datetime = Some(value);
             }
-        }
-        /*
-         * https://tools.ietf.org/html/rfc5322#section-3.6.4
-         *
-         * if self.message_id.is_none()  ...
-         */
-        if let Some(ref mut x) = in_reply_to {
-            self.push_references(x);
-        }
-        if let Some(ref mut d) = datetime {
-            if let Some(d) = parser::date(d) {
-                self.set_datetime(d);
+            /*
+             * https://tools.ietf.org/html/rfc5322#section-3.6.4
+             *
+             * if self.message_id.is_none()  ...
+             */
+            if let Some(ref mut x) = in_reply_to {
+                self.push_references(x);
             }
-        }
+            if let Some(ref mut d) = datetime {
+                if let Some(d) = parser::date(d) {
+                    self.set_datetime(d);
+                }
+            }
+    }
         if self.message_id.is_none() {
             let mut h = DefaultHasher::new();
-            h.write(&self.bytes());
+            h.write(&self.bytes(operation));
             self.set_message_id(format!("<{:x}>", h.finish()).as_bytes());
         }
         Ok(())
@@ -375,11 +375,12 @@ impl Envelope {
     }
 
     pub fn datetime(&self) -> chrono::DateTime<chrono::FixedOffset> {
-        self.datetime.unwrap_or_else(|| {
+            if let Some(d) = parser::date(&self.date.as_bytes()) {
+                return d;
+            }
             chrono::FixedOffset::west(0)
                 .ymd(1970, 1, 1)
                 .and_hms(0, 0, 0)
-        })
     }
     pub fn date_as_str(&self) -> &str {
         &self.date
@@ -399,21 +400,18 @@ impl Envelope {
         let _strings: Vec<String> = self.to.iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
     }
-    pub fn bytes(&self) -> Vec<u8> {
-        let mut operation = self.operation_token.generate();
+    pub fn bytes(&self, mut operation: Box<BackendOp>) -> Vec<u8> {
         operation
             .as_bytes()
             .map(|v| v.into())
             .unwrap_or_else(|_| Vec::new())
     }
-    pub fn body(&self) -> Attachment {
-        let mut operation = self.operation_token.generate();
+    pub fn body(&self, mut operation: Box<BackendOp>) -> Attachment {
         let file = operation.as_bytes();
         let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
             Ok(v) => v,
             Err(_) => {
-                let operation = self.operation_token.generate();
-                eprintln!("error in parsing mail\n{}", operation.description());
+                eprintln!("error in parsing mail\n");
                 let error_msg = b"Mail cannot be shown because of errors.";
                 let mut builder = AttachmentBuilder::new(error_msg);
                 return builder.build();
@@ -564,11 +562,9 @@ impl Envelope {
         self.thread = new_val;
     }
     pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) -> () {
-        self.datetime = Some(new_val);
         self.timestamp = new_val.timestamp() as u64;
     }
-    pub fn set_flag(&mut self, f: Flag) -> Result<()> {
-        let mut operation = self.operation_token.generate();
+    pub fn set_flag(&mut self, f: Flag, mut operation: Box<BackendOp>) -> Result<()> {
         operation.set_flag(self, &f)?;
         self.flags |= f;
         Ok(())
@@ -576,11 +572,11 @@ impl Envelope {
     pub fn flags(&self) -> Flag {
         self.flags
     }
-    pub fn set_seen(&mut self) -> Result<()> {
-        self.set_flag(Flag::SEEN)
+    pub fn set_seen(&mut self, operation: Box<BackendOp>) -> Result<()> {
+        self.set_flag(Flag::SEEN, operation)
     }
     pub fn is_seen(&self) -> bool {
-        !(self.flags & Flag::SEEN).is_empty()
+        self.flags.contains(Flag::SEEN)
     }
 }
 

@@ -48,7 +48,7 @@ pub struct Account {
 
 impl Account {
     pub fn new(name: String, settings: AccountSettings, map: &Backends) -> Self {
-        let backend = map.get(settings.format())(&settings);
+        let mut backend = map.get(settings.format())(&settings);
         let ref_folders: Vec<Folder> = backend.folders();
         let mut folders: Vec<Option<Result<Mailbox>>> = Vec::with_capacity(ref_folders.len());
         let mut workers: Vec<Worker> = Vec::new();
