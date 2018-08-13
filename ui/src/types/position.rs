@@ -49,9 +49,11 @@ pub fn set_y(p: Pos, new_y: usize) -> Pos {
 ///
 /// Example:
 /// ```
-/// use ui::position;
+/// # #[macro_use] extern crate ui; fn main() {
+/// use ui::*;
 ///
 /// let new_area = ((0, 0), (1, 1));
+/// # }
 /// ```
 pub type Area = (Pos, Pos);
 
@@ -59,10 +61,12 @@ pub type Area = (Pos, Pos);
 ///
 /// Example:
 /// ```
-/// use ui::position;
+/// # #[macro_use] extern crate ui; fn main() {
+/// use ui::*;
 ///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(height!(new_area), 1);
+/// # }
 /// ```
 #[macro_export]
 macro_rules! height {
@@ -75,10 +79,12 @@ macro_rules! height {
 ///
 /// Example:
 /// ```
-/// use ui::position;
+/// # #[macro_use] extern crate ui; fn main() {
+/// use ui::*;
 ///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(upper_left!(new_area), (0, 0));
+/// # }
 /// ```
 #[macro_export]
 macro_rules! upper_left {
@@ -91,10 +97,12 @@ macro_rules! upper_left {
 ///
 /// Example:
 /// ```
-/// use ui::position;
+/// # #[macro_use] extern crate ui; fn main() {
+/// use ui::*;
 ///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(bottom_right!(new_area), (1, 1));
+/// # }
 /// ```
 #[macro_export]
 macro_rules! bottom_right {
@@ -107,13 +115,15 @@ macro_rules! bottom_right {
 ///
 /// Example:
 /// ```
-/// use ui::position;
+/// # #[macro_use] extern crate ui; fn main() {
+/// use ui::*;
 ///
 /// let valid_area = ((0, 0), (1, 1));
 /// assert!(is_valid_area!(valid_area));
 ///
 /// let invalid_area = ((2, 2), (1, 1));
 /// assert!(!is_valid_area!(invalid_area));
+/// # }
 ///
 #[macro_export]
 macro_rules! is_valid_area {

@@ -22,7 +22,7 @@ use super::*;
 use chrono;
 use data_encoding::BASE64_MIME;
 use encoding::{DecoderTrap, Encoding};
-use nom::{is_hex_digit, le_u8};
+use nom::{is_hex_digit, le_u8, };
 use nom::{ErrorKind, IResult, Needed};
 use encoding::all::*;
 use std;
@@ -258,7 +258,7 @@ fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
     }
 }
 
-named!(qp_underscore_header<u8>, do_parse!(tag!("_") >> ({ b' ' })));
+named!(qp_underscore_header<u8>, do_parse!(tag!(b"_") >> ({ 0x20 })));
 
 // With MIME, headers in quoted printable format can contain underscores that represent spaces.
 // In non-header context, an underscore is just a plain underscore.
@@ -278,33 +278,6 @@ named!(
     ))
 );
 
-named!(
-    encoded_word_list<Vec<u8>>,
-    ws!(do_parse!(
-        list: separated_nonempty_list!(complete!(is_a!(" \n\r\t")), encoded_word) >> ({
-            let list_len = list.iter().fold(0, |mut acc, x| {
-                acc += x.len();
-                acc
-            });
-            let bytes = list
-                .iter()
-                .fold(Vec::with_capacity(list_len), |mut acc, x| {
-                    acc.append(&mut x.clone());
-                    acc
-                });
-            bytes
-        })
-    ))
-);
-named!(
-    ascii_token<Vec<u8>>,
-    do_parse!(
-        word: alt!(
-            terminated!(take_until1!("=?"), peek!(tag_no_case!("=?UTF-8?")))
-                | take_while!(call!(|_| true))
-        ) >> ({ word.into() })
-    )
-);
 
 fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
     if input.is_empty() || input.len() < 3 {
@@ -413,49 +386,6 @@ named!(
 );
 named!(mailbox_list<Vec<Address>>, many0!(mailbox));
 
-#[test]
-fn test_addresses() {
-    {
-        let s = b"user@domain";
-        let r = mailbox(s).unwrap().1;
-        match r {
-            Address::Mailbox(ref m) => {
-                assert!(m.display_name == b"" && m.address_spec == b"user@domain");
-            },
-            _ => assert!(false),
-        }
-    }
-    {
-    let s = b"Name <user@domain>";
-    eprintln!("{:?}", display_addr(s).unwrap());
-    let r = display_addr(s).unwrap().1;
-    match r {
-        Address::Mailbox(ref m) => {
-            println!(
-                "----\n`{}`, `{}`\n----",
-                m.display_name.display(&m.raw),
-                m.address_spec.display(&m.raw)
-            );
-        }
-        _ => {}
-    }
-}
-    {
-        let s = b"user@domain";
-        let r = mailbox(s).unwrap().1;
-        match r {
-            Address::Mailbox(ref m) => {
-                println!(
-                    "----\n`{}`, `{}`\n----",
-                    m.display_name.display(&m.raw),
-                    m.address_spec.display(&m.raw)
-                );
-            }
-            _ => {}
-        }
-    }
-}
-
 /*
  * group of recipients eg. undisclosed-recipients;
  */
@@ -499,13 +429,6 @@ fn group(input: &[u8]) -> IResult<&[u8], Address> {
 
 named!(address<Address>, ws!(alt_complete!(mailbox | group)));
 
-#[test]
-fn test_address() {
-    let s = b"Obit Oppidum <user@domain>,
-            list <list@domain.tld>, list2 <list2@domain.tld>,
-            Bobit Boppidum <user@otherdomain.com>, Cobit Coppidum <user2@otherdomain.com>";
-    println!("{:?}", rfc2822address_list(s).unwrap());
-}
 
 named!(pub rfc2822address_list<Vec<Address>>, ws!( separated_list!(is_a!(","), address)));
 
@@ -529,87 +452,6 @@ named!(pub address_list<String>, ws!(do_parse!(
 
        )));
 
-named!(pub phrase<Vec<u8>>, ws!(do_parse!(
-        list: many0!(alt_complete!( encoded_word_list | ascii_token)) >>
-        ( {
-            if list.len() == 0 {
-               Vec::new()
-            } else {
-            let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc }) + list.len() - 1;
-            let list_len = list.len();
-            let mut i = 0;
-            list.iter().fold(Vec::with_capacity(string_len),
-            |mut acc, x| {
-                acc.extend(x.replace(b"\n", b"").replace(b"\t", b" "));
-                if i != list_len - 1 {
-                    acc.push(b' ');
-                    i+=1;
-                }
-                acc
-            })
-            }
-        } )
-
-       )));
-
-#[test]
-fn test_phrase() {
-    let phrase_s = "mailing list memberships reminder".as_bytes();
-    assert_eq!(
-        (
-            &b""[..],
-            "mailing list memberships reminder".to_string()
-        ),
-        phrase(phrase_s).unwrap()
-    );
-
-    let phrase_s = "=?UTF-8?B?zp3Orc6/IM+Az4HOv8+Dz4nPgM65zrrPjCDOvM6uzr3Phc68zrEgzrHPhs6v?= =?UTF-8?B?z4fOuM63?=".as_bytes();
-    assert_eq!(
-        (
-            &b""[..],
-            "Νέο προσωπικό μήνυμα αφίχθη".to_string()
-        ),
-        phrase(phrase_s).unwrap()
-    );
-
-    let phrase_s = "=?utf-8?B?bW9vZGxlOiDOsc69zrHPg866z4zPgM63z4POtyDOv868zqzOtM6xz4Igz4M=?=  =?utf-8?B?z4XOts63z4TOrs+DzrXPic69?=".as_bytes();
-    assert_eq!(
-        (
-            &b""[..],
-            "moodle: ανασκόπηση ομάδας συζητήσεων".to_string()
-        ),
-        phrase(phrase_s).unwrap()
-    );
-
-    let phrase_s =
-        "=?UTF-8?B?zp3Orc6/IM+Az4HOv8+Dz4nPgM65zrrPjCDOvM6uzr3Phc68zrEgzrHPhs6v?=".as_bytes();
-    assert_eq!(
-        "Νέο προσωπικό μήνυμα αφί".to_string(),
-        from_utf8(&encoded_word(phrase_s).to_full_result().unwrap()).unwrap()
-    );
-    let phrase_s = "=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?=".as_bytes();
-    assert_eq!(
-        "Πρόσθε".to_string(),
-        from_utf8(&encoded_word(phrase_s).to_full_result().unwrap()).unwrap()
-    );
-    let phrase_s = "=?iso-8859-7?B?UmU6INDx/OLr5+zhIOzlIPTn7SDh9fHp4e3eIOLh8eTp4Q==?=".as_bytes();
-    assert_eq!(
-        "Re: Πρόβλημα με την αυριανή βαρδια".to_string(),
-        from_utf8(&encoded_word(phrase_s).to_full_result().unwrap()).unwrap()
-    );
-
-    let phrase_s = "=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?=
- =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?=
- =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?="
-        .as_bytes();
-    assert_eq!(
-        (
-            &b""[..],
-            "Πρόσθετη εξεταστική".to_string()
-        ),
-        phrase(phrase_s).unwrap()
-    );
-}
 fn eat_comments(input: &[u8]) -> Vec<u8> {
     let mut in_comment = false;
     input
@@ -630,13 +472,6 @@ fn eat_comments(input: &[u8]) -> Vec<u8> {
         })
 }
 
-#[test]
-fn test_eat_comments() {
-    let s = "Mon (Lundi), 4(quatre)May (Mai) 1998(1998-05-04)03 : 04 : 12 +0000";
-    assert_eq!(eat_comments(s), "Mon , 4May  199803 : 04 : 12 +0000");
-    let s = "Thu, 31 Aug 2017 13:43:37 +0000 (UTC)";
-    assert_eq!(eat_comments(s), "Thu, 31 Aug 2017 13:43:37 +0000 ");
-}
 /*
  * Date should tokenize input and convert the tokens,
  * right now we expect input will have no extra spaces in between tokens
@@ -649,15 +484,6 @@ pub fn date(input: &[u8]) -> Option<chrono::DateTime<chrono::FixedOffset>> {
         .replace(b"-", b"+");
     chrono::DateTime::parse_from_rfc2822(String::from_utf8_lossy(parsed_result.trim()).as_ref())
         .ok()
-}
-
-#[test]
-fn test_date() {
-    let s = "Thu, 31 Aug 2017 13:43:37 +0000 (UTC)";
-    let _s = "Thu, 31 Aug 2017 13:43:37 +0000";
-    let __s = "=?utf-8?q?Thu=2C_31_Aug_2017_13=3A43=3A37_-0000?=";
-    assert_eq!(date(s).unwrap(), date(_s).unwrap());
-    assert_eq!(date(_s).unwrap(), date(__s).unwrap());
 }
 
 named!(pub message_id<&[u8]>,
@@ -701,24 +527,6 @@ named_args!(pub attachments<'a>(boundary: &'a [u8], boundary_end: &'a [u8]) < Ve
                         tag!(boundary_end) >>
                         ( { Vec::<&[u8]>::new() } ))
                     ));
-#[test]
-fn test_attachments() {
-    use std::io::Read;
-    let mut buffer: Vec<u8> = Vec::new();
-    let _ = std::fs::File::open("test/attachment_test")
-        .unwrap()
-        .read_to_end(&mut buffer);
-    let boundary = "--b1_4382d284f0c601a737bb32aaeda53160--";
-    let boundary_len = boundary.len();
-    let (_, body) = match mail(&buffer).to_full_result() {
-        Ok(v) => v,
-        Err(_) => panic!(),
-    };
-    let attachments = attachments(body, &boundary[0..boundary_len - 2], &boundary)
-        .to_full_result()
-        .unwrap();
-    assert_eq!(attachments.len(), 4);
-}
 
 named!(
     content_type_parameter<(&[u8], &[u8])>,
@@ -741,3 +549,158 @@ named!(pub content_type< (&[u8], &[u8], Vec<(&[u8], &[u8])>) >,
                (_type, _subtype, parameters)
            } )
            ));
+
+named!(pub space, eat_separator!(&b" \t\r\n"[..]));
+named!(
+    encoded_word_list<Vec<u8>>,
+    ws!(do_parse!(
+        list: separated_nonempty_list!(call!(space), encoded_word) >> ({
+            let list_len = list.iter().fold(0, |mut acc, x| {
+                acc += x.len();
+                acc
+            });
+            let bytes = list
+                .iter()
+                .fold(Vec::with_capacity(list_len), |mut acc, x| {
+                    acc.append(&mut x.clone());
+                    acc
+                });
+            bytes
+        })
+    ))
+);
+named!(
+    ascii_token<Vec<u8>>,
+    do_parse!(
+        word: alt_complete!(
+            terminated!(take_until1!(" =?"), peek!(preceded!(tag!(b" "), call!(encoded_word))))
+                | take_while!(call!(|_| true))
+        ) >> ({ word.into() })
+    )
+);
+
+named!(pub phrase<Vec<u8>>, ws!(do_parse!(
+        //list: separated_list_complete!(complete!(call!(space)), alt_complete!(ascii_token | encoded_word_list)) >>
+        list: many0!(alt_complete!( encoded_word_list | ws!(ascii_token))) >>
+        ( {
+            if list.len() == 0 {
+               Vec::new()
+            } else {
+            let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc }) + list.len() - 1;
+            let list_len = list.len();
+            let mut i = 0;
+            list.iter().fold(Vec::with_capacity(string_len),
+            |mut acc, x| {
+                acc.extend(x.replace(b"\n", b"").replace(b"\t", b" "));
+                if i != list_len - 1 {
+                    acc.push(b' ');
+                    i+=1;
+                }
+                acc
+            })
+            }
+        } )
+
+       )));
+
+
+#[cfg(test)]
+mod tests {
+
+use super::*;
+
+#[test]
+fn test_subject() {
+    let words = b"sdf";
+    assert!("sdf" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
+    //TODO Fix this
+    let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
+    assert!("Seg fault στην εκτέλεση του example run_sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
+    let words = b"Re: [Advcomparch]
+ =?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?=
+ =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
+
+    assert!("Re: [Advcomparch] Seg fault στην εκτέλεση του example run_sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
+}
+
+#[test]
+fn test_address() {
+    let s = b"Obit Oppidum <user@domain>,
+            list <list@domain.tld>, list2 <list2@domain.tld>,
+            Bobit Boppidum <user@otherdomain.com>, Cobit Coppidum <user2@otherdomain.com>";
+    println!("{:?}", rfc2822address_list(s).unwrap());
+}
+
+#[test]
+fn test_date() {
+    let s = b"Thu, 31 Aug 2017 13:43:37 +0000 (UTC)";
+    let _s = b"Thu, 31 Aug 2017 13:43:37 +0000";
+    let __s = b"=?utf-8?q?Thu=2C_31_Aug_2017_13=3A43=3A37_-0000?=";
+    eprintln!("{:?}, {:?}", date(s), date(_s));
+    eprintln!("{:?}", date(__s));
+    assert_eq!(date(s).unwrap(), date(_s).unwrap());
+    assert_eq!(date(_s).unwrap(), date(__s).unwrap());
+}
+#[test]
+fn test_attachments() {
+    use std::io::Read;
+    let mut buffer: Vec<u8> = Vec::new();
+    let _ = std::fs::File::open("test/attachment_test")
+        .unwrap()
+        .read_to_end(&mut buffer);
+    let boundary = b"--b1_4382d284f0c601a737bb32aaeda53160--";
+    let boundary_len = boundary.len();
+    let (_, body) = match mail(&buffer).to_full_result() {
+        Ok(v) => v,
+        Err(_) => panic!(),
+    };
+    let attachments = attachments(body, &boundary[0..boundary_len - 2], boundary)
+        .to_full_result()
+        .unwrap();
+    assert_eq!(attachments.len(), 4);
+}
+#[test]
+fn test_addresses() {
+    {
+        let s = b"user@domain";
+        let r = mailbox(s).unwrap().1;
+        match r {
+            Address::Mailbox(ref m) => {
+                assert!(m.display_name.display_bytes(s) == b"" && m.address_spec.display_bytes(s) == b"user@domain");
+            },
+            _ => assert!(false),
+        }
+    }
+    {
+    let s = b"Name <user@domain>";
+    eprintln!("{:?}", display_addr(s).unwrap());
+    let r = display_addr(s).unwrap().1;
+    match r {
+        Address::Mailbox(ref m) => {
+            println!(
+                "----\n`{}`, `{}`\n----",
+                m.display_name.display(&m.raw),
+                m.address_spec.display(&m.raw)
+            );
+        }
+        _ => {}
+    }
+}
+    {
+        let s = b"user@domain";
+        let r = mailbox(s).unwrap().1;
+        match r {
+            Address::Mailbox(ref m) => {
+                println!(
+                    "----\n`{}`, `{}`\n----",
+                    m.display_name.display(&m.raw),
+                    m.address_spec.display(&m.raw)
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+
+}

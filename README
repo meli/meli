@@ -15,6 +15,11 @@ config
 
 # $XDG_CONFIG_HOME/meli/config
 
+testing
+=======
+
+# cargo test -p {melib, ui, meli} (-- --nocapture) (--test test_name)
+
 profiling:
 ==========
 

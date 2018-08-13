@@ -56,7 +56,7 @@ pub trait CellAccessor: HasSize {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```norun
     /// use rustty::{Terminal, CellAccessor};
     ///
     /// let mut term = Terminal::new().unwrap();
@@ -75,7 +75,7 @@ pub trait CellAccessor: HasSize {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```norun
     /// use rustty::{Terminal, CellAccessor};
     ///
     /// let mut term = Terminal::new().unwrap();
@@ -235,7 +235,7 @@ impl Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::{Cell, Color, Attr};
     ///
     /// let cell = Cell::new('x', Color::Default, Color::Green, Attr::Default);
@@ -252,7 +252,7 @@ impl Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::with_char('x');
@@ -269,7 +269,7 @@ impl Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::with_style(Color::Default, Color::Red, Attr::Bold);
@@ -286,7 +286,7 @@ impl Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::Cell;
     ///
     /// let mut cell = Cell::with_char('x');
@@ -300,7 +300,7 @@ impl Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::Cell;
     ///
     /// let mut cell = Cell::with_char('x');
@@ -318,7 +318,7 @@ impl Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::with_style(Color::Blue, Color::Default, Attr::Default);
@@ -332,7 +332,7 @@ impl Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::default();
@@ -350,7 +350,7 @@ impl Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::with_style(Color::Default, Color::Green, Attr::Default);
@@ -364,7 +364,7 @@ impl Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::default();
@@ -393,7 +393,7 @@ impl Default for Cell {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```norun
     /// use rustty::{Cell, Color};
     ///
     /// let mut cell = Cell::default();
@@ -418,7 +418,7 @@ impl Default for Cell {
 ///
 /// # Examples
 ///
-/// ```
+/// ```norun
 /// use rustty::Color;
 ///
 /// // The default color.
@@ -488,7 +488,7 @@ impl Color {
 ///
 /// # Examples
 ///
-/// ```
+/// ```norun
 /// use rustty::Attr;
 ///
 /// // Default attribute.

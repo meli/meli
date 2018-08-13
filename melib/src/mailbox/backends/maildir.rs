@@ -20,7 +20,6 @@
  */
 
 extern crate xdg;
-extern crate serde_derive;
 extern crate bincode;
 
 use async::*;
@@ -381,8 +380,8 @@ impl MaildirType {
                                                 let mut hasher = DefaultHasher::new();
                                                     let hash = {
                                                         let mut buf = Vec::new();
-                                                        let mut f = fs::File::open(&e_copy).unwrap();
-                                                        f.read_to_end(&mut buf);
+                                                        let mut f = fs::File::open(&e_copy).expect(&format!("Can't open {}", e_copy));
+                                                        f.read_to_end(&mut buf).expect(&format!("Can't read {}", e_copy));
                                                         /* Unwrap is safe since we use ? above. */
                                                         hasher.write(&buf);
                                                         hasher.finish()
