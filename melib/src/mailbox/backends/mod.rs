@@ -64,6 +64,7 @@ impl Backends {
         }
         self.map[key]()
     }
+
     pub fn register(&mut self, key: String, backend: Box<Fn() -> BackendCreator>) -> () {
         if self.map.contains_key(&key) {
             panic!("{} is an already registered backend", key);

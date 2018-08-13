@@ -21,7 +21,7 @@
 
 use super::*;
 
-use melib::mailbox::backends::BackendOp;
+//use melib::mailbox::backends::BackendOp;
 mod compact;
 pub use self::compact::*;
 
@@ -220,7 +220,7 @@ impl MailListing {
                         container,
                         &indentations,
                         len,
-                        context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
+                    //    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
                     ),
                     &mut content,
                     fg_color,
@@ -421,7 +421,7 @@ impl MailListing {
         container: &Container,
         indentations: &[bool],
         idx_width: usize,
-        op: Box<BackendOp>,
+        //op: Box<BackendOp>,
     ) -> String {
         let has_sibling = container.has_sibling();
         let has_parent = container.has_parent();
@@ -458,10 +458,13 @@ impl MailListing {
         if show_subject {
             s.push_str(&format!("{:.85}", envelope.subject()));
         }
+        /*
+         * Very slow since we have to build all attachments
         let attach_count = envelope.body(op).count_attachments();
         if attach_count > 1 {
             s.push_str(&format!(" {}∞ ", attach_count - 1));
         }
+         */
         s
     }
     fn format_date(envelope: &Envelope) -> String {

@@ -42,21 +42,21 @@ use std::string::String;
 use chrono;
 use chrono::TimeZone;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GroupAddress {
     raw: Vec<u8>,
     display_name: StrBuilder,
     mailbox_list: Vec<Address>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MailboxAddress {
     raw: Vec<u8>,
     display_name: StrBuilder,
     address_spec: StrBuilder,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Address {
     Mailbox(MailboxAddress),
     Group(GroupAddress),
@@ -108,7 +108,7 @@ impl fmt::Display for Address {
 }
 
 /// Helper struct to return slices from a struct field on demand.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct StrBuilder {
     offset: usize,
     length: usize,
@@ -133,7 +133,7 @@ impl StrBuilder {
 }
 
 /// `MessageID` is accessed through the `StrBuild` trait.
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct MessageID(Vec<u8>, StrBuilder);
 
 impl StrBuild for MessageID {
@@ -184,14 +184,14 @@ impl fmt::Debug for MessageID {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct References {
     raw: Vec<u8>,
     refs: Vec<MessageID>,
 }
 
 bitflags! {
-    #[derive(Default, Serialize)]
+    #[derive(Default, Serialize, Deserialize)]
     pub struct Flag: u8 {
         const PASSED  =  0b00000001;
         const REPLIED =  0b00000010;
@@ -236,7 +236,7 @@ impl EnvelopeBuilder {
 ///  Access to the underlying email object in the account's backend (for example the file or the
 ///  entry in an IMAP server) is given through `operation_token`. For more information see
 ///  `BackendOp`.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Envelope {
     date: String,
     from: Vec<Address>,

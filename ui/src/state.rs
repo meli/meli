@@ -80,7 +80,7 @@ pub struct State<W: Write> {
 
     startup_thread: Option<chan::Sender<bool>>,
 
-    threads: FnvHashMap<thread::ThreadId, thread::JoinHandle<()>>,
+    threads: FnvHashMap<thread::ThreadId, (chan::Sender<bool>, thread::JoinHandle<()>)>,
 }
 
 impl<W: Write> Drop for State<W> {
@@ -131,12 +131,14 @@ impl State<std::io::Stdout> {
                             default => {},
                             startup_rx.recv() -> _ => {
                                 sender.send(ThreadEvent::ThreadJoin(thread::current().id()));
-                                return;
+                                break;
                             }
                         }
                         sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
                         thread::sleep(dur);
                     }
+                    startup_rx.recv();
+                    return;
                 })
                 .unwrap()
         };
@@ -162,11 +164,11 @@ impl State<std::io::Stdout> {
 
                 input_thread,
             },
-            startup_thread: Some(startup_tx),
+            startup_thread: Some(startup_tx.clone()),
             threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
         };
         s.threads
-            .insert(startup_thread.thread().id(), startup_thread);
+            .insert(startup_thread.thread().id(), (startup_tx.clone(), startup_thread));
         write!(
             s.stdout(),
             "{}{}{}",
@@ -218,15 +220,16 @@ impl State<std::io::Stdout> {
                 })
                 .unwrap()
         };
-        self.startup_thread = Some(startup_tx);
+        self.startup_thread = Some(startup_tx.clone());
         self.threads
-            .insert(startup_thread.thread().id(), startup_thread);
+            .insert(startup_thread.thread().id(), (startup_tx, startup_thread));
     }
 
     /// If an owned thread returns a `ThreadEvent::ThreadJoin` event to `State` then it must remove
     /// the thread from its list and `join` it.
     pub fn join(&mut self, id: thread::ThreadId) {
-        let handle = self.threads.remove(&id).unwrap();
+        let (tx, handle) = self.threads.remove(&id).unwrap();
+        tx.send(true);
         handle.join().unwrap();
     }
 
