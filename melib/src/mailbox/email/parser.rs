@@ -37,22 +37,30 @@ macro_rules! is_whitespace {
 }
 
 pub trait BytesExt {
+    fn rtrim(&self) -> &Self;
+    fn ltrim(&self) -> &Self;
     fn trim(&self) -> &Self;
     fn find(&self, needle: &[u8]) -> Option<usize>;
     fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8>;
 }
 
 impl BytesExt for [u8] {
-    fn trim(&self) -> &[u8] {
-        if let Some(first) = self.iter().position(|b| !is_whitespace!(*b)) {
-            if let Some(last) = self.iter().rposition(|b| !is_whitespace!(*b)) {
-                &self[first..last + 1]
-            } else {
-                unreachable!();
-            }
+    fn rtrim(&self) -> &Self {
+        if let Some(last) = self.iter().rposition(|b| !is_whitespace!(*b)) {
+            &self[..last+1]
         } else {
             &[]
         }
+    }
+    fn ltrim(&self) -> &Self {
+        if let Some(first) = self.iter().position(|b| !is_whitespace!(*b)) {
+            &self[first..]
+        } else {
+            &[]
+        }
+    }
+    fn trim(&self) -> &[u8] {
+        self.rtrim().ltrim()
     }
     // https://stackoverflow.com/a/35907071
     fn find(&self, needle: &[u8]) -> Option<usize> {
@@ -160,6 +168,9 @@ named!(pub attachment<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
  *"=?charset?encoding?encoded text?=".
  */
 fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+    if input.is_empty() {
+        return IResult::Done(&[], Vec::with_capacity(0));
+    }
     if input.len() < 5 {
         return IResult::Incomplete(Needed::Unknown);
     } else if input[0] != b'=' || input[1] != b'?' {
@@ -177,7 +188,7 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         }
     }
     if tag_end_idx.is_none() {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        return IResult::Error(error_code!(ErrorKind::Custom(42)));
     }
     let tag_end_idx = tag_end_idx.unwrap();
 
@@ -197,7 +208,7 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         }
     }
     if encoded_end_idx.is_none() {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        return IResult::Error(error_code!(ErrorKind::Custom(44)));
     }
     let encoded_end_idx = encoded_end_idx.unwrap();
     let encoded_text = &input[3 + tag_end_idx..encoded_end_idx];
@@ -209,9 +220,9 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         },
         b'q' | b'Q' => match quoted_printable_bytes_header(encoded_text) {
             IResult::Done(b"", s) => s,
-            _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
+            _ => return IResult::Error(error_code!(ErrorKind::Custom(45))),
         },
-        _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
+        _ => return IResult::Error(error_code!(ErrorKind::Custom(46))),
     };
 
 
@@ -611,8 +622,12 @@ use super::*;
 
 #[test]
 fn test_subject() {
+    let words = b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
+	=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=
+	=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?= ";
+    assert!("Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store" ==  std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
     let words = b"sdf";
-    assert!("sdf" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
+    assert!("sdf" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
     //TODO Fix this
     let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
     assert!("Seg fault στην εκτέλεση του example run_sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
