@@ -29,10 +29,10 @@ use std;
 
 macro_rules! is_whitespace {
     ($var:ident) => {
-        $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
+        $var == b' ' || $var == b'\t' || $var == b'\n' || $var == b'\r'
     };
     ($var:expr) => {
-        $var == b' ' && $var == b'\t' && $var == b'\n' && $var == b'\r'
+        $var == b' ' || $var == b'\t' || $var == b'\n' || $var == b'\r'
     };
 }
 
@@ -590,30 +590,50 @@ named!(
     )
 );
 
-named!(pub phrase<Vec<u8>>, ws!(do_parse!(
-        //list: separated_list_complete!(complete!(call!(space)), alt_complete!(ascii_token | encoded_word_list)) >>
-        list: many0!(alt_complete!( encoded_word_list | ws!(ascii_token))) >>
-        ( {
-            if list.len() == 0 {
-               Vec::new()
-            } else {
-            let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.len(); acc }) + list.len() - 1;
-            let list_len = list.len();
-            let mut i = 0;
-            list.iter().fold(Vec::with_capacity(string_len),
-            |mut acc, x| {
-                acc.extend(x.replace(b"\n", b"").replace(b"\t", b" "));
-                if i != list_len - 1 {
-                    acc.push(b' ');
-                    i+=1;
-                }
-                acc
-            })
+
+pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+    if input.is_empty() {
+        return IResult::Done(&[], Vec::with_capacity(0));
+    }
+
+    let mut input = input.ltrim();
+    let mut acc: Vec<u8> = Vec::new();
+    let mut ptr = 0;
+
+    while ptr < input.len() {
+        // Check if word is encoded.
+        while let IResult::Done(rest, v) = encoded_word(&input[ptr..]) {
+            input = rest;
+            ptr = 0;
+            acc.extend(v);
+
+            // consume whitespace
+            while ptr < input.len() && (is_whitespace!(input[ptr])) {
+                ptr += 1;
             }
-        } )
 
-       )));
+            if ptr >= input.len() {
+                break;
+            }
+        }
+        let end = input[ptr..].find(b"=?");
 
+        let end = end.unwrap_or_else(|| input.len() - ptr) + ptr;
+        let prev_ptr = ptr;
+        while ptr < end && !(is_whitespace!(input[ptr])) {
+            ptr += 1;
+        }
+        acc.extend(ascii_token(&input[prev_ptr..ptr]).to_full_result().unwrap());
+        while ptr < input.len() && (is_whitespace!(input[ptr])) {
+            ptr += 1;
+        }
+        if ptr >= input.len() {
+            break;
+        }
+        acc.push(b' ');
+    } 
+    return IResult::Done(&[], acc);
+}
 
 #[cfg(test)]
 mod tests {
@@ -622,19 +642,23 @@ use super::*;
 
 #[test]
 fn test_subject() {
+    let words = b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=";
+    assert!("Πρόσθετη εξεταστική" == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
+    let words = b"[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
+    assert!("[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store" ==  std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
     let words = b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
 	=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=
-	=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?= ";
+	=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
     assert!("Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store" ==  std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
     let words = b"sdf";
     assert!("sdf" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
-    //TODO Fix this
     let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
-    assert!("Seg fault στην εκτέλεση του example run_sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
+    assert!("Seg fault στην εκτέλεση του example ru n _sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
     let words = b"Re: [Advcomparch]
  =?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?=
  =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
 
+    //TODO Fix this
     assert!("Re: [Advcomparch] Seg fault στην εκτέλεση του example run_sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
 }
 
