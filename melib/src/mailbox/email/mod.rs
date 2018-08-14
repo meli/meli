@@ -129,7 +129,8 @@ impl StrBuilder {
         let offset = self.offset;
         let length = self.length;
         String::from_utf8(s[offset..offset + length].to_vec()).unwrap()
-    }
+    } 
+    #[cfg(test)]
     fn display_bytes<'a>(&self, b: &'a [u8]) -> &'a [u8] {
         &b[self.offset..(self.offset+self.length)]
     }

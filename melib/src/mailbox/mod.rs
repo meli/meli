@@ -34,7 +34,7 @@ use mailbox::backends::{folder_default, Folder, MailBackend};
 pub mod accounts;
 pub use mailbox::accounts::Account;
 pub mod thread;
-pub use mailbox::thread::{build_threads, Container};
+pub use mailbox::thread::{build_threads, Container, Threads, SortOrder, SortField};
 
 use std::option::Option;
 
@@ -43,8 +43,7 @@ use std::option::Option;
 pub struct Mailbox {
     pub folder: Folder,
     pub collection: Vec<Envelope>,
-    pub threaded_collection: Vec<usize>,
-    pub threads: Vec<Container>,
+    pub threads: Threads,
 }
 
 impl Clone for Mailbox {
@@ -52,21 +51,21 @@ impl Clone for Mailbox {
         Mailbox {
             folder: self.folder.clone(),
             collection: self.collection.clone(),
-            threaded_collection: self.threaded_collection.clone(),
             threads: self.threads.clone(),
+        }
+    }
+}
+impl Default for Mailbox {
+    fn default() -> Self {
+        Mailbox {
+            folder: folder_default(),
+            collection: Vec::default(),
+            threads: Threads::default(),
         }
     }
 }
 
 impl Mailbox {
-    pub fn new_dummy() -> Self {
-        Mailbox {
-            folder: folder_default(),
-            collection: Vec::with_capacity(0),
-            threaded_collection: Vec::with_capacity(0),
-            threads: Vec::with_capacity(0),
-        }
-    }
     pub fn new(
         folder: &Folder,
         sent_folder: &Option<Result<Mailbox>>,
@@ -74,20 +73,18 @@ impl Mailbox {
     ) -> Result<Mailbox> {
         let mut collection: Vec<Envelope> = collection?;
         collection.sort_by(|a, b| a.date().cmp(&b.date()));
-        let (threads, threaded_collection) = build_threads(&mut collection, sent_folder);
+        let threads = build_threads(&mut collection, sent_folder);
         Ok(Mailbox {
             folder: (*folder).clone(),
             collection: collection,
             threads: threads,
-            threaded_collection: threaded_collection,
         })
     }
     pub fn len(&self) -> usize {
         self.collection.len()
     }
     pub fn threaded_mail(&self, i: usize) -> usize {
-        let thread = self.threads[self.threaded_collection[i]];
-        thread.message().unwrap()
+        self.threads.thread_to_mail(i)
     }
     pub fn mail_and_thread(&mut self, i: usize) -> (&mut Envelope, Container) {
         let x = &mut self.collection.as_mut_slice()[i];

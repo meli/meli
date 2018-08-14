@@ -34,8 +34,9 @@ pub struct MailListing {
     cursor_pos: (usize, usize, usize),
     new_cursor_pos: (usize, usize, usize),
     length: usize,
+    local_collection: Vec<usize>,
     sort: (SortField, SortOrder),
-    //subsort: (SortField, SortOrder),
+    subsort: (SortField, SortOrder),
     /// Cache current view.
     content: CellBuffer,
     /// If we must redraw on next redraw event
@@ -75,8 +76,9 @@ impl MailListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (0, 0, 0),
             length: 0,
-            sort: (SortField::Date, SortOrder::Desc),
-            //subsort: (SortField::Date, SortOrder::Asc),
+            local_collection: Vec::new(),
+            sort: (Default::default(), Default::default()),
+            subsort: (Default::default(), Default::default()),
             content: content,
             dirty: true,
             unfocused: false,
@@ -113,7 +115,7 @@ impl MailListing {
             .unwrap();
 
         self.length = if threaded {
-            mailbox.threaded_collection.len()
+            mailbox.threads.threaded_collection().len()
         } else {
             mailbox.len()
         };
@@ -136,57 +138,33 @@ impl MailListing {
             let mut indentations: Vec<bool> = Vec::with_capacity(6);
             let mut thread_idx = 0; // needed for alternate thread colors
                                     /* Draw threaded view. */
-            let mut local_collection: Vec<usize> = mailbox.threaded_collection.clone();
-            let threads: &Vec<Container> = &mailbox.threads;
-            local_collection.sort_by(|a, b| match self.sort {
-                (SortField::Date, SortOrder::Desc) => {
-                    let a = mailbox.thread(*a);
-                    let b = mailbox.thread(*b);
-                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                    mb.date().cmp(&ma.date())
-                }
-                (SortField::Date, SortOrder::Asc) => {
-                    let a = mailbox.thread(*a);
-                    let b = mailbox.thread(*b);
-                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                    ma.date().cmp(&mb.date())
-                }
-                (SortField::Subject, SortOrder::Desc) => {
-                    let a = mailbox.thread(*a);
-                    let b = mailbox.thread(*b);
-                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                    ma.subject().cmp(&mb.subject())
-                }
-                (SortField::Subject, SortOrder::Asc) => {
-                    let a = mailbox.thread(*a);
-                    let b = mailbox.thread(*b);
-                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                    mb.subject().cmp(&ma.subject())
-                }
-            });
-            let mut iter = local_collection.iter().enumerate().peekable();
-            let len = mailbox
-                .threaded_collection
+            let threads = &mailbox.threads;
+            threads.sort_by(self.sort, self.subsort, &mailbox.collection);
+            let containers: &Vec<Container> = &threads.containers();
+            let mut iter = threads.into_iter().peekable();
+            let len = threads
+                .threaded_collection()
                 .len()
                 .to_string()
                 .chars()
                 .count();
             /* This is just a desugared for loop so that we can use .peek() */
-            while let Some((idx, i)) = iter.next() {
-                let container = &threads[*i];
+            let mut idx = 0;
+            while let Some(i) = iter.next() {
+                let container = &containers[i];
                 let indentation = container.indentation();
 
                 if indentation == 0 {
                     thread_idx += 1;
                 }
 
-                assert!(container.has_message());
+                if !container.has_message() {
+                    continue;
+                }
+
+
                 match iter.peek() {
-                    Some(&(_, x)) if threads[*x].indentation() == indentation => {
+                    Some(&x) if threads[x].indentation() == indentation => {
                         indentations.pop();
                         indentations.push(true);
                     }
@@ -234,16 +212,17 @@ impl MailListing {
                 }
 
                 match iter.peek() {
-                    Some(&(_, x)) if threads[*x].indentation() > indentation => {
+                    Some(&x) if containers[x].indentation() > indentation => {
                         indentations.push(false);
                     }
-                    Some(&(_, x)) if threads[*x].indentation() < indentation => {
-                        for _ in 0..(indentation - threads[*x].indentation()) {
+                    Some(&x) if containers[x].indentation() < indentation => {
+                        for _ in 0..(indentation - containers[x].indentation()) {
                             indentations.pop();
                         }
                     }
                     _ => {}
                 }
+                idx += 1;
             }
         } else {
             // Populate `CellBuffer` with every entry.
@@ -255,6 +234,40 @@ impl MailListing {
                     break;
                 }
                 /* Write an entire line for each envelope entry. */
+                /*
+                self.local_collection = (0..mailbox.collection.len()).collect();
+                let sort = self.sort;
+                self.local_collection.sort_by(|a, b| match sort {
+                (SortField::Date, SortOrder::Desc) => {
+                    let a = mailbox.thread(*a);
+                    let b = mailbox.thread(*b);
+                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
+                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
+                    mb.date().cmp(&ma.date())
+                }
+                (SortField::Date, SortOrder::Asc) => {
+                    let a = mailbox.thread(*a);
+                    let b = mailbox.thread(*b);
+                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
+                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
+                    ma.date().cmp(&mb.date())
+                }
+                (SortField::Subject, SortOrder::Desc) => {
+                    let a = mailbox.thread(*a);
+                    let b = mailbox.thread(*b);
+                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
+                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
+                    ma.subject().cmp(&mb.subject())
+                }
+                (SortField::Subject, SortOrder::Asc) => {
+                    let a = mailbox.thread(*a);
+                    let b = mailbox.thread(*b);
+                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
+                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
+                    mb.subject().cmp(&ma.subject())
+                }
+            });
+            */
                 let envelope: &Envelope = &mailbox.collection[idx];
 
                 let fg_color = if !envelope.is_seen() {
@@ -752,13 +765,21 @@ impl Component for MailListing {
                     self.refresh_mailbox(context);
                     return;
                 }
-                Action::Sort(field, order) => {
-                    self.sort = (field.clone(), order.clone());
+                Action::SubSort(field, order) => {
+                    eprintln!("SubSort {:?} , {:?}", field, order);
+                    self.subsort = (*field, *order);
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return;
                 }
-                _ => {}
+                Action::Sort(field, order) => {
+                    eprintln!("Sort {:?} , {:?}", field, order);
+                    self.sort = (*field, *order);
+                    self.dirty = true;
+                    self.refresh_mailbox(context);
+                    return;
+                }
+                // _ => {}
             },
             _ => {}
         }

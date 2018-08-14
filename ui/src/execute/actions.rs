@@ -23,46 +23,13 @@
  * User actions that need to be handled by the UI
  */
 
-use std::str::FromStr;
+pub use melib::mailbox::{SortOrder, SortField};
 
 #[derive(Debug, Clone)]
 pub enum MailListingAction {
     ToggleThreaded,
 }
 
-#[derive(Debug, Clone)]
-pub enum SortOrder {
-    Asc,
-    Desc,
-}
-
-#[derive(Debug, Clone)]
-pub enum SortField {
-    Subject,
-    Date,
-}
-
-impl FromStr for SortField {
-    type Err = ();
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim() {
-            "subject" | "s" | "sub" | "sbj" | "subj" => Ok(SortField::Subject),
-            "date" | "d" => Ok(SortField::Date),
-            _ => Err(()),
-        }
-    }
-}
-
-impl FromStr for SortOrder {
-    type Err = ();
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim() {
-            "asc" => Ok(SortOrder::Asc),
-            "desc" => Ok(SortOrder::Desc),
-            _ => Err(()),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum Action {

@@ -94,7 +94,7 @@ impl CompactMailListing {
             .as_ref()
             .unwrap();
 
-        self.length = mailbox.threads.len();
+        self.length = mailbox.threads.containers().len();
         let mut content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(
@@ -113,8 +113,8 @@ impl CompactMailListing {
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let mut thread_idx = 0; // needed for alternate thread colors
                                 /* Draw threaded view. */
-        let mut local_collection: Vec<usize> = mailbox.threaded_collection.clone();
-        let threads: &Vec<Container> = &mailbox.threads;
+        let mut local_collection: Vec<usize> = mailbox.threads.threaded_collection().clone();
+        let threads: &Vec<Container> = &mailbox.threads.containers();
         local_collection.sort_by(|a, b| match self.sort {
             (SortField::Date, SortOrder::Desc) => {
                 mailbox.thread(*b).date().cmp(&mailbox.thread(*a).date())
@@ -139,7 +139,8 @@ impl CompactMailListing {
         });
         let mut iter = local_collection.iter().enumerate().peekable();
         let len = mailbox
-            .threaded_collection
+            .threads
+            .threaded_collection()
             .len()
             .to_string()
             .chars()
