@@ -234,41 +234,31 @@ impl MailListing {
                     break;
                 }
                 /* Write an entire line for each envelope entry. */
-                /*
                 self.local_collection = (0..mailbox.collection.len()).collect();
                 let sort = self.sort;
                 self.local_collection.sort_by(|a, b| match sort {
-                (SortField::Date, SortOrder::Desc) => {
-                    let a = mailbox.thread(*a);
-                    let b = mailbox.thread(*b);
-                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                    mb.date().cmp(&ma.date())
-                }
-                (SortField::Date, SortOrder::Asc) => {
-                    let a = mailbox.thread(*a);
-                    let b = mailbox.thread(*b);
-                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                    ma.date().cmp(&mb.date())
-                }
-                (SortField::Subject, SortOrder::Desc) => {
-                    let a = mailbox.thread(*a);
-                    let b = mailbox.thread(*b);
-                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                    ma.subject().cmp(&mb.subject())
-                }
-                (SortField::Subject, SortOrder::Asc) => {
-                    let a = mailbox.thread(*a);
-                    let b = mailbox.thread(*b);
-                    let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                    let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                    mb.subject().cmp(&ma.subject())
-                }
-            });
-            */
-                let envelope: &Envelope = &mailbox.collection[idx];
+                    (SortField::Date, SortOrder::Desc) => {
+                        let ma = &mailbox.collection[*a];
+                        let mb = &mailbox.collection[*b];
+                        mb.date().cmp(&ma.date())
+                    }
+                    (SortField::Date, SortOrder::Asc) => {
+                        let ma = &mailbox.collection[*a];
+                        let mb = &mailbox.collection[*b];
+                        ma.date().cmp(&mb.date())
+                    }
+                    (SortField::Subject, SortOrder::Desc) => {
+                        let ma = &mailbox.collection[*a];
+                        let mb = &mailbox.collection[*b];
+                        ma.subject().cmp(&mb.subject())
+                    }
+                    (SortField::Subject, SortOrder::Asc) => {
+                        let ma = &mailbox.collection[*a];
+                        let mb = &mailbox.collection[*b];
+                        mb.subject().cmp(&ma.subject())
+                    }
+                });
+                let envelope: &Envelope = &mailbox.collection[self.local_collection[idx]];
 
                 let fg_color = if !envelope.is_seen() {
                     Color::Byte(0)
@@ -471,8 +461,7 @@ impl MailListing {
         if show_subject {
             s.push_str(&format!("{:.85}", envelope.subject()));
         }
-        /*
-         * Very slow since we have to build all attachments
+        /* TODO Very slow since we have to build all attachments
         let attach_count = envelope.body(op).count_attachments();
         if attach_count > 1 {
             s.push_str(&format!(" {}∞ ", attach_count - 1));
@@ -539,7 +528,7 @@ impl Component for MailListing {
                             let i = mailbox.threaded_mail(idx);
                             &mut mailbox.collection[i]
                         } else {
-                            &mut mailbox.collection[idx]
+                            &mut mailbox.collection[self.local_collection[idx]]
                         };
                         (envelope.hash(), envelope.is_seen())
                     };
@@ -555,7 +544,7 @@ impl Component for MailListing {
                             let i = mailbox.threaded_mail(idx);
                             &mut mailbox.collection[i]
                         } else {
-                            &mut mailbox.collection[idx]
+                            &mut mailbox.collection[self.local_collection[idx]]
                         };
                         envelope.set_seen(op).unwrap();
                         true
@@ -602,7 +591,7 @@ impl Component for MailListing {
                 }
                 return;
             }
-            self.view = Some(MailView::new(self.cursor_pos, None, None));
+            self.view = Some(MailView::new(self.cursor_pos, self.local_collection.clone(), None, None));
             self.view.as_mut().unwrap().draw(
                 grid,
                 (set_y(upper_left, mid + 1), bottom_right),
