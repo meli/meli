@@ -601,8 +601,10 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     let mut ptr = 0;
 
     while ptr < input.len() {
+        let mut flag = false;
         // Check if word is encoded.
         while let IResult::Done(rest, v) = encoded_word(&input[ptr..]) {
+            flag = true;
             input = rest;
             ptr = 0;
             acc.extend(v);
@@ -616,22 +618,31 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
                 break;
             }
         }
+        if flag && ptr < input.len() && ptr != 0 {
+            acc.push(b' ');
+        }
         let end = input[ptr..].find(b"=?");
 
         let end = end.unwrap_or_else(|| input.len() - ptr) + ptr;
-        let prev_ptr = ptr;
+        let ascii_s = ptr;
+        let ascii_e;
+
         while ptr < end && !(is_whitespace!(input[ptr])) {
             ptr += 1;
         }
-        acc.extend(ascii_token(&input[prev_ptr..ptr]).to_full_result().unwrap());
+        ascii_e = ptr;
         while ptr < input.len() && (is_whitespace!(input[ptr])) {
             ptr += 1;
         }
         if ptr >= input.len() {
+            acc.extend(ascii_token(&input[ascii_s..ascii_e]).to_full_result().unwrap());
             break;
         }
-        acc.push(b' ');
-    } 
+        acc.extend(ascii_token(&input[ascii_s..ascii_e]).to_full_result().unwrap());
+        if ptr != ascii_e {
+            acc.push(b' ');
+        }
+    }
     return IResult::Done(&[], acc);
 }
 
@@ -642,10 +653,14 @@ use super::*;
 
 #[test]
 fn test_subject() {
+    let words = b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
+     =?iso-8859-7?B?INb18+nq3l0gzd3hIMHt4erv3+358+c6IMzF0c/TIMHQz9TFy8XTzMHU?=
+      =?iso-8859-7?B?2c0gwiDUzC4gysHNLiDFzsXUwdPH0yAyMDE3LTE4OiDTx8zFydnTxw==?=";
+    assert!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
     let words = b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=";
     assert!("Πρόσθετη εξεταστική" == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
     let words = b"[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
-    assert!("[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store" ==  std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
+    assert!("[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store" == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
     let words = b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
 	=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=
 	=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
@@ -653,13 +668,13 @@ fn test_subject() {
     let words = b"sdf";
     assert!("sdf" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
     let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
-    assert!("Seg fault στην εκτέλεση του example ru n _sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
+    assert!("Seg fault στην εκτέλεση του example ru n _sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
     let words = b"Re: [Advcomparch]
  =?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?=
  =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
 
     //TODO Fix this
-    assert!("Re: [Advcomparch] Seg fault στην εκτέλεση του example run_sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());   
+    assert!("Re: [Advcomparch] Seg fault στην εκτέλεση του example run_sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
 }
 
 #[test]
@@ -701,42 +716,38 @@ fn test_attachments() {
 #[test]
 fn test_addresses() {
     {
+    let s = b"=?iso-8859-7?B?0/Th/fHv8iDM4ev03ebv8g==?= <maltezos@central.ntua.gr>";
+        let r = mailbox(s).unwrap().1;
+        match r {
+            Address::Mailbox(ref m) => assert!("Σταύρος Μαλτέζος" == std::str::from_utf8(&m.display_name.display_bytes(&m.raw)).unwrap() && std::str::from_utf8(&m.address_spec.display_bytes(&m.raw)).unwrap() == "maltezos@central.ntua.gr"),
+            _ => assert!(false),
+        }
+    }
+    {
         let s = b"user@domain";
         let r = mailbox(s).unwrap().1;
         match r {
-            Address::Mailbox(ref m) => {
-                assert!(m.display_name.display_bytes(s) == b"" && m.address_spec.display_bytes(s) == b"user@domain");
-            },
+            Address::Mailbox(ref m) => assert!(m.display_name.display_bytes(&m.raw) == b"" 
+                                               && m.address_spec.display_bytes(&m.raw) == b"user@domain"),
             _ => assert!(false),
         }
     }
     {
     let s = b"Name <user@domain>";
-    eprintln!("{:?}", display_addr(s).unwrap());
     let r = display_addr(s).unwrap().1;
     match r {
-        Address::Mailbox(ref m) => {
-            println!(
-                "----\n`{}`, `{}`\n----",
-                m.display_name.display(&m.raw),
-                m.address_spec.display(&m.raw)
-            );
-        }
-        _ => {}
+        Address::Mailbox(ref m) => assert!(b"Name" == m.display_name.display_bytes(&m.raw) &&
+                b"user@domain" == m.address_spec.display_bytes(&m.raw)),
+        _ => {},
     }
 }
     {
         let s = b"user@domain";
         let r = mailbox(s).unwrap().1;
         match r {
-            Address::Mailbox(ref m) => {
-                println!(
-                    "----\n`{}`, `{}`\n----",
-                    m.display_name.display(&m.raw),
-                    m.address_spec.display(&m.raw)
-                );
-            }
-            _ => {}
+            Address::Mailbox(ref m) => assert!(b"" == m.display_name.display_bytes(&m.raw) &&
+                    b"user@domain" ==m.address_spec.display_bytes(&m.raw)),
+            _ => {},
         }
     }
 }
