@@ -474,7 +474,7 @@ impl Component for StatusBar {
         match &event.event_type {
             UIEventType::RefreshMailbox((ref idx_a, ref idx_f)) => {
                 match context.accounts[*idx_a].status(*idx_f) {
-                    Ok(()) => {}
+                    Ok(_) => {}
                     Err(_) => {
                         return;
                     }

@@ -136,7 +136,7 @@ impl AccountMenu {
         ) -> () {
             let len = s.len();
             match context.accounts[index].status(root) {
-                Ok(()) => {}
+                Ok(_) => {}
                 Err(_) => {
                     return;
                     // TODO: Show progress visually

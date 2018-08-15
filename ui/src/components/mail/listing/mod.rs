@@ -106,7 +106,7 @@ impl MailListing {
         //
         loop {
             // TODO: Show progress visually
-            if let Ok(()) = context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+            if let Ok(_) = context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
                 break;
             }
         }

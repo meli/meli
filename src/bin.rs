@@ -191,11 +191,15 @@ fn main() {
                         }
                         ThreadEvent::UIEvent(UIEventType::StartupCheck) => {
                             let mut flag = false;
+                            let mut render_flag = false;
                             for account in &mut state.context.accounts {
                                 let len = account.len();
                                 for i in 0..len {
                                     match account.status(i) {
-                                        Ok(()) => { },
+                                        Ok(true) => {
+                                            render_flag = true;
+                                        },
+                                        Ok(false) => {},
                                         Err(_) => {
                                             flag |= true;
                                         }
@@ -205,7 +209,9 @@ fn main() {
                             if !flag {
                                 state.finish_startup();
                             }
-                            state.render();
+                            if render_flag {
+                                state.render();
+                            }
                         }
                         ThreadEvent::UIEvent(e) => {
                             state.rcv_event(UIEvent { id: 0, event_type: e});

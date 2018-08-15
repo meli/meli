@@ -122,10 +122,10 @@ impl Account {
         };
     }
 
-    pub fn status(&mut self, index: usize) -> result::Result<(), usize> {
+    pub fn status(&mut self, index: usize) -> result::Result<bool, usize> {
         match self.workers[index].as_mut() {
             None => {
-                return Ok(());
+                return Ok(false);
             }
             Some(ref mut w) => match w.poll() {
                 Ok(AsyncStatus::NoUpdate) => {
@@ -144,7 +144,7 @@ impl Account {
         let m = self.workers[index].take().unwrap().extract();
         self.load_mailbox(index, m);
         self.workers[index] = None;
-        Ok(())
+        Ok(true)
     }
 }
 
