@@ -64,7 +64,9 @@ impl Component for HSplit {
             for i in get_x(upper_left)..=get_x(bottom_right) {
                 grid[(i, mid)].set_ch('─');
             }
+            context.dirty_areas.push_back(((get_x(upper_left), mid), (get_x(bottom_right), mid)));
         }
+
         self.top.component.draw(
             grid,
             (
@@ -158,6 +160,7 @@ impl Component for VSplit {
                     _ => {}
                 }
             }
+            context.dirty_areas.push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
         }
         self.left
             .component
