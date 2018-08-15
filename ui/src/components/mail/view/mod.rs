@@ -52,6 +52,7 @@ impl ViewMode {
 /// menus
 pub struct MailView {
     coordinates: (usize, usize, usize),
+    local_collection: Vec<usize>,
     pager: Option<Pager>,
     subview: Option<Box<Component>>,
     dirty: bool,
@@ -70,11 +71,13 @@ impl fmt::Display for MailView {
 impl MailView {
     pub fn new(
         coordinates: (usize, usize, usize),
+        local_collection: Vec<usize>,
         pager: Option<Pager>,
         subview: Option<Box<Component>>,
     ) -> Self {
         MailView {
             coordinates,
+            local_collection,
             pager,
             subview,
             dirty: true,
@@ -218,7 +221,7 @@ impl Component for MailView {
             let envelope_idx: usize = if threaded {
                 mailbox.threaded_mail(self.coordinates.2)
             } else {
-                self.coordinates.2
+                self.local_collection[self.coordinates.2]
             };
 
             let envelope: &Envelope = &mailbox.collection[envelope_idx];
@@ -381,7 +384,7 @@ impl Component for MailView {
                     let envelope_idx: usize = if threaded {
                         mailbox.threaded_mail(self.coordinates.2)
                     } else {
-                        self.coordinates.2
+                        self.local_collection[self.coordinates.2]
                     };
 
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
@@ -453,7 +456,7 @@ impl Component for MailView {
                     let envelope_idx: usize = if threaded {
                         mailbox.threaded_mail(self.coordinates.2)
                     } else {
-                        self.coordinates.2
+                        self.local_collection[self.coordinates.2]
                     };
 
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
