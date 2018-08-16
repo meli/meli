@@ -193,6 +193,12 @@ pub struct Pager {
     content: CellBuffer,
 }
 
+impl Default for Pager {
+    fn default() -> Self {
+        Pager::from_str("", None)
+    }
+}
+
 impl fmt::Display for Pager {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display info
@@ -201,6 +207,19 @@ impl fmt::Display for Pager {
 }
 
 impl Pager {
+    pub fn update_from_string(&mut self, text: String) -> () {
+        let lines: Vec<&str> = text.trim().split('\n').collect();
+        let height = lines.len() + 1;
+        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        //interpret_format_flowed(&text);
+        Pager::print_string(&mut content, &text);
+        self.content = content;
+        self.height = height;
+        self.width = width;
+        self.dirty = true;
+        self.cursor_pos = 0;
+    }
     pub fn from_string(mut text: String, context: &mut Context, cursor_pos: Option<usize>) -> Self {
         let pager_filter: Option<&String> = context.settings.pager.filter.as_ref();
         //let format_flowed: bool = context.settings.pager.format_flowed;

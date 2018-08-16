@@ -20,37 +20,20 @@
  */
 
 use super::*;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 pub struct ThreadView {
-    pager: Pager,
-    bytes: Vec<u8>,
+    dirty: bool,
+    coordinates: (usize, usize, usize),
+
 }
 
 impl ThreadView {
-    pub fn new(bytes: Vec<u8>) -> Self {
-        let mut html_filter = Command::new("w3m")
-            .args(&["-I", "utf-8", "-T", "text/html"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .expect("Failed to start html filter process");
-        html_filter
-            .stdin
-            .as_mut()
-            .unwrap()
-            .write_all(&bytes)
-            .expect("Failed to write to w3m stdin");
-        let mut display_text =
-            String::from("Text piped through `w3m`. Press `v` to open in web browser. \n\n");
-        display_text.push_str(&String::from_utf8_lossy(
-            &html_filter.wait_with_output().unwrap().stdout,
-        ));
-
-        let buf = MailView::plain_text_to_buf(&display_text, true);
-        let pager = Pager::from_buf(&buf, None);
-        ThreadView { pager, bytes }
+    pub fn new(coordinates: (usize, usize, usize),
+    ) -> Self {
+        ThreadView {
+            dirty: true,
+            coordinates,
+        }
     }
 }
 
@@ -63,39 +46,95 @@ impl fmt::Display for ThreadView {
 
 impl Component for ThreadView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        self.pager.draw(grid, area, context);
-    }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
-        match event.event_type {
-            UIEventType::Input(Key::Char('v')) => {
-                // TODO: Optional filter that removes outgoing resource requests (images and
-                // scripts)
-                let binary = query_default_app("text/html");
-                if let Ok(binary) = binary {
-                    let mut p = create_temp_file(&self.bytes, None);
-                    Command::new(&binary)
-                        .arg(p.path())
-                        .stdin(Stdio::piped())
-                        .stdout(Stdio::piped())
-                        .spawn()
-                        .unwrap_or_else(|_| panic!("Failed to start {}", binary.display()));
-                    context.temp_files.push(p);
-                } else {
-                    context.replies.push_back(UIEvent {
-                        id: 0,
-                        event_type: UIEventType::StatusNotification(format!(
-                            "Couldn't find a default application for html files."
-                        )),
-                    });
-                }
-                return;
-            }
-            _ => {}
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1].as_ref().unwrap();
+        let threads = &mailbox.threads;
+        let container = &threads.containers()[threads.root_set()[self.coordinates.2]];
+        let i = if let Some(i) = container.message() {
+            i
+        } else {
+            threads.containers()[
+                container.first_child().unwrap()
+            ].message().unwrap()
+        };
+        let envelope: &Envelope = &mailbox.collection[i];
+        let (x, y) = write_string_to_grid(
+            &format!("Date: {}", envelope.date_as_str()),
+            grid,
+            Color::Byte(33),
+            Color::Default,
+            area,
+            true,
+            );
+        for x in x..=get_x(bottom_right) {
+            grid[(x, y)].set_ch(' ');
+            grid[(x, y)].set_bg(Color::Default);
+            grid[(x, y)].set_fg(Color::Default);
         }
-        self.pager.process_event(event, context);
+        let (x, y) = write_string_to_grid(
+            &format!("From: {}", envelope.from_to_string()),
+            grid,
+            Color::Byte(33),
+            Color::Default,
+            (set_y(upper_left, y + 1), bottom_right),
+            true,
+            );
+        for x in x..=get_x(bottom_right) {
+            grid[(x, y)].set_ch(' ');
+            grid[(x, y)].set_bg(Color::Default);
+            grid[(x, y)].set_fg(Color::Default);
+        }
+        let (x, y) = write_string_to_grid(
+            &format!("To: {}", envelope.to_to_string()),
+            grid,
+            Color::Byte(33),
+            Color::Default,
+            (set_y(upper_left, y + 1), bottom_right),
+            true,
+            );
+        for x in x..=get_x(bottom_right) {
+            grid[(x, y)].set_ch(' ');
+            grid[(x, y)].set_bg(Color::Default);
+            grid[(x, y)].set_fg(Color::Default);
+        }
+        let (x, y) = write_string_to_grid(
+            &format!("Subject: {}", envelope.subject()),
+            grid,
+            Color::Byte(33),
+            Color::Default,
+            (set_y(upper_left, y + 1), bottom_right),
+            true,
+            );
+        for x in x..=get_x(bottom_right) {
+            grid[(x, y)].set_ch(' ');
+            grid[(x, y)].set_bg(Color::Default);
+            grid[(x, y)].set_fg(Color::Default);
+        }
+        let (x, y) = write_string_to_grid(
+            &format!("Message-ID: <{}>", envelope.message_id_raw()),
+            grid,
+            Color::Byte(33),
+            Color::Default,
+            (set_y(upper_left, y + 1), bottom_right),
+            true,
+            );
+        for x in x..=get_x(bottom_right) {
+            grid[(x, y)].set_ch(' ');
+            grid[(x, y)].set_bg(Color::Default);
+            grid[(x, y)].set_fg(Color::Default);
+        }
+        clear_area(grid, (set_y(upper_left, y + 1), set_y(bottom_right, y + 2)));
+        context
+            .dirty_areas
+            .push_back((upper_left, set_y(bottom_right, y + 1)));
+    }
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {
     }
     fn is_dirty(&self) -> bool {
-        self.pager.is_dirty()
+        self.dirty
     }
-    fn set_dirty(&mut self) {}
+    fn set_dirty(&mut self) {
+        self.dirty = true;
+    }
 }

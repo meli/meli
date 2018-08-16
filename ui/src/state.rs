@@ -29,7 +29,7 @@
   */
 
 use super::*;
-use chan::Sender;
+use chan::{Receiver, Sender};
 use fnv::FnvHashMap;
 use std::io::Write;
 use std::thread;
@@ -37,6 +37,36 @@ use std::time;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use termion::{clear, cursor, style};
+
+struct InputHandler {
+    rx: Receiver<bool>,
+    tx: Sender<bool>,
+}
+
+impl InputHandler {
+    fn restore(&self, tx: Sender<ThreadEvent>) {
+        let stdin = std::io::stdin();
+        let rx = self.rx.clone();
+        thread::Builder::new()
+            .name("input-thread".to_string())
+            .spawn(move || {
+                get_events(
+                    stdin,
+                    |k| {
+                        tx.send(ThreadEvent::Input(k));
+                    },
+                    || {
+                        tx.send(ThreadEvent::UIEvent(UIEventType::ChangeMode(UIMode::Fork)));
+                    },
+                    &rx,
+                    )
+            })
+        .unwrap();
+    }
+    fn kill(&self) {
+        self.tx.send(false);
+    }
+}
 
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
@@ -50,8 +80,10 @@ pub struct Context {
 
     /// Events queue that components send back to the state
     pub replies: VecDeque<UIEvent>,
+    sender: Sender<ThreadEvent>,
+    receiver: Receiver<ThreadEvent>,
+    input: InputHandler,
 
-    input_thread: chan::Sender<bool>,
     pub temp_files: Vec<File>,
 }
 
@@ -59,8 +91,11 @@ impl Context {
     pub fn replies(&mut self) -> Vec<UIEvent> {
         self.replies.drain(0..).collect()
     }
-    pub fn input_thread(&mut self) -> &mut chan::Sender<bool> {
-        &mut self.input_thread
+    pub fn input_kill(&self) {
+        self.input.kill();
+    }
+    pub fn restore_input(&self) {
+        self.input.restore(self.sender.clone());
     }
 }
 
@@ -74,7 +109,6 @@ pub struct State<W: Write> {
     stdout: Option<termion::screen::AlternateScreen<termion::raw::RawTerminal<W>>>,
     child: Option<ForkType>,
     pub mode: UIMode,
-    sender: Sender<ThreadEvent>,
     entities: Vec<Entity>,
     pub context: Context,
 
@@ -99,7 +133,16 @@ impl<W: Write> Drop for State<W> {
 }
 
 impl State<std::io::Stdout> {
-    pub fn new(sender: Sender<ThreadEvent>, input_thread: chan::Sender<bool>) -> Self {
+    pub fn new() -> Self {
+        /* Create a channel to communicate with other threads. The main process is the sole receiver.
+         * */
+        let (sender, receiver) = chan::sync(::std::mem::size_of::<ThreadEvent>());
+
+        /*
+         * Create async channel to block the input-thread if we need to fork and stop it from reading
+         * stdin, see get_events() for details
+         * */
+        let input_thread = chan::async();
         let _stdout = std::io::stdout();
         _stdout.lock();
         let backends = Backends::new();
@@ -149,7 +192,6 @@ impl State<std::io::Stdout> {
             stdout: Some(stdout),
             child: None,
             mode: UIMode::Normal,
-            sender,
             entities: Vec::with_capacity(1),
 
             context: Context {
@@ -162,7 +204,12 @@ impl State<std::io::Stdout> {
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),
 
-                input_thread,
+                sender,
+                receiver,
+                input: InputHandler {
+                    rx: input_thread.1,
+                    tx: input_thread.0,
+                },
             },
             startup_thread: Some(startup_tx.clone()),
             threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
@@ -181,11 +228,12 @@ impl State<std::io::Stdout> {
             for (y, folder) in account.backend.folders().iter().enumerate() {
                 s.context.mailbox_hashes.insert(folder.hash(), (x, y));
             }
-            let sender = s.sender.clone();
+            let sender = s.context.sender.clone();
             account.watch(RefreshEventConsumer::new(Box::new(move |r| {
                 sender.send(ThreadEvent::from(r));
             })));
         }
+        s.restore_input();
         s
     }
     /*
@@ -198,7 +246,7 @@ impl State<std::io::Stdout> {
         self.context.accounts[idxa].reload(idxm);
         let (startup_tx, startup_rx) = chan::async();
         let startup_thread = {
-            let sender = self.sender.clone();
+            let sender = self.context.sender.clone();
             let startup_rx = startup_rx.clone();
 
             thread::Builder::new()
@@ -257,7 +305,7 @@ impl State<std::io::Stdout> {
         ).unwrap();
         self.flush();
         self.stdout = None;
-        self.context.input_thread.send(false);
+        self.context.input.kill();
     }
     pub fn switch_to_alternate_screen(&mut self) {
         let s = std::io::stdout();
@@ -274,6 +322,13 @@ impl State<std::io::Stdout> {
     }
 }
 impl<W: Write> State<W> {
+    pub fn receiver(&self) -> Receiver<ThreadEvent> {
+        self.context.receiver.clone()
+    }
+    pub fn restore_input(&mut self) {
+        self.context.restore_input();
+    }
+
     /// On `SIGWNICH` the `State` redraws itself according to the new terminal size.
     pub fn update_size(&mut self) {
         let termsize = termion::terminal_size().ok();

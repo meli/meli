@@ -119,17 +119,16 @@ impl MailListing {
         } else {
             mailbox.len()
         };
-        let mut content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
+        self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(
                 &format!("Folder `{}` is empty.", mailbox.folder.name()),
-                &mut content,
+                &mut self.content,
                 Color::Default,
                 Color::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
                 true,
             );
-            self.content = content;
             return;
         }
 
@@ -200,15 +199,15 @@ impl MailListing {
                         len,
                     //    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
                     ),
-                    &mut content,
+                    &mut self.content,
                     fg_color,
                     bg_color,
                     ((0, idx), (MAX_COLS - 1, idx)),
                     false,
                 );
                 for x in x..MAX_COLS {
-                    content[(x, idx)].set_ch(' ');
-                    content[(x, idx)].set_bg(bg_color);
+                    self.content[(x, idx)].set_ch(' ');
+                    self.content[(x, idx)].set_bg(bg_color);
                 }
 
                 match iter.peek() {
@@ -230,7 +229,7 @@ impl MailListing {
             for y in 0..=self.length {
                 if idx >= self.length {
                     /* No more entries left, so fill the rest of the area with empty space */
-                    clear_area(&mut content, ((0, y), (MAX_COLS - 1, self.length)));
+                    clear_area(&mut self.content, ((0, y), (MAX_COLS - 1, self.length)));
                     break;
                 }
                 /* Write an entire line for each envelope entry. */
@@ -274,7 +273,7 @@ impl MailListing {
                 };
                 let (x, y) = write_string_to_grid(
                     &MailListing::make_entry_string(envelope, idx),
-                    &mut content,
+                    &mut self.content,
                     fg_color,
                     bg_color,
                     ((0, y), (MAX_COLS - 1, y)),
@@ -282,15 +281,13 @@ impl MailListing {
                 );
 
                 for x in x..MAX_COLS {
-                    content[(x, y)].set_ch(' ');
-                    content[(x, y)].set_bg(bg_color);
+                    self.content[(x, y)].set_ch(' ');
+                    self.content[(x, y)].set_bg(bg_color);
                 }
 
                 idx += 1;
             }
         }
-
-        self.content = content;
     }
 
     fn highlight_line_self(&mut self, idx: usize, context: &Context) {
@@ -636,8 +633,7 @@ impl Component for MailListing {
                     /*
                      * tx sends to input-thread and it kills itself.
                      */
-                    let tx = context.input_thread();
-                    tx.send(true);
+                    context.input_kill();
                 }
                 let mut f = create_temp_file(&new_draft(context), None);
                 //let mut f = Box::new(std::fs::File::create(&dir).unwrap());

@@ -75,6 +75,24 @@ macro_rules! height {
     };
 }
 
+/// Get an area's width
+///
+/// Example:
+/// ```
+/// # #[macro_use] extern crate ui; fn main() {
+/// use ui::*;
+///
+/// let new_area = ((0, 0), (1, 1));
+/// assert_eq!(width!(new_area), 1);
+/// # }
+/// ```
+#[macro_export]
+macro_rules! width{
+    ($a:expr) => {
+        (get_x(bottom_right!($a))).saturating_sub(get_x(upper_left!($a)))
+    };
+}
+
 /// Get the upper left Position of an area
 ///
 /// Example:

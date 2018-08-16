@@ -20,8 +20,9 @@
  */
 
 use std;
+use std::fs;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Write, Read};
 use std::path::PathBuf;
 
 use uuid::Uuid;
@@ -49,6 +50,13 @@ impl File {
 
     pub fn path(&self) -> &PathBuf {
         &self.path
+    }
+    pub fn read_to_string(&self) -> String {
+
+        let mut buf = Vec::new();
+        let mut f = fs::File::open(&self.path).expect(&format!("Can't open {}", &self.path.display()));
+        f.read_to_end(&mut buf).expect(&format!("Can't read {}", &self.path.display()));
+        String::from_utf8(buf).unwrap()
     }
 }
 

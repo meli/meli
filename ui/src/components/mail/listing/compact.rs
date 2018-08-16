@@ -20,18 +20,20 @@
  */
 
 use super::*;
-use melib::mailbox::backends::BackendOp;
+
+//use melib::mailbox::backends::BackendOp;
+
 const MAX_COLS: usize = 500;
 
-/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the thread's content in a
+/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `ThreadView`.
-pub struct CompactMailListing {
+pub struct CompactListing {
     /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
     cursor_pos: (usize, usize, usize),
     new_cursor_pos: (usize, usize, usize),
     length: usize,
     sort: (SortField, SortOrder),
-    //subsort: (SortField, SortOrder),
+    subsort: (SortField, SortOrder),
     /// Cache current view.
     content: CellBuffer,
     /// If we must redraw on next redraw event
@@ -41,27 +43,48 @@ pub struct CompactMailListing {
     view: Option<ThreadView>,
 }
 
-impl Default for CompactMailListing {
+impl Default for CompactListing {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl fmt::Display for CompactMailListing {
+impl fmt::Display for CompactListing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "mail")
     }
 }
 
-impl CompactMailListing {
+impl CompactListing {
+    /// Helper function to format entry strings for CompactListing */
+    /* TODO: Make this configurable */
+    fn make_entry_string(e: &Envelope, len: usize, idx: usize) -> String {
+        if len > 1 {
+            format!(
+                "{}    {}    {:.85} ({})",
+                idx,
+                &CompactListing::format_date(e),
+                e.subject(),
+                len
+                )
+        } else {
+            format!(
+                "{}    {}    {:.85}",
+                idx,
+                &CompactListing::format_date(e),
+                e.subject(),
+                )
+        }
+    }
+
     pub fn new() -> Self {
         let content = CellBuffer::new(0, 0, Cell::with_char(' '));
-        CompactMailListing {
+        CompactListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (0, 0, 0),
             length: 0,
-            sort: (SortField::Date, SortOrder::Desc),
-            //subsort: (SortField::Date, SortOrder::Asc),
+            sort: (Default::default(), Default::default()),
+            subsort: (Default::default(), Default::default()),
             content: content,
             dirty: true,
             unfocused: false,
@@ -94,187 +117,86 @@ impl CompactMailListing {
             .as_ref()
             .unwrap();
 
-        self.length = mailbox.threads.containers().len();
-        let mut content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
+
+        self.length = mailbox.threads.root_len();
+        self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(
                 &format!("Folder `{}` is empty.", mailbox.folder.name()),
-                &mut content,
+                &mut self.content,
                 Color::Default,
                 Color::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
                 true,
             );
-            self.content = content;
             return;
         }
-
-        // TODO: Fix the threaded hell and refactor stuff into seperate functions and/or modules.
-        let mut indentations: Vec<bool> = Vec::with_capacity(6);
-        let mut thread_idx = 0; // needed for alternate thread colors
-                                /* Draw threaded view. */
-        let mut local_collection: Vec<usize> = mailbox.threads.threaded_collection().clone();
-        let threads: &Vec<Container> = &mailbox.threads.containers();
-        local_collection.sort_by(|a, b| match self.sort {
-            (SortField::Date, SortOrder::Desc) => {
-                mailbox.thread(*b).date().cmp(&mailbox.thread(*a).date())
-            }
-            (SortField::Date, SortOrder::Asc) => {
-                mailbox.thread(*a).date().cmp(&mailbox.thread(*b).date())
-            }
-            (SortField::Subject, SortOrder::Desc) => {
-                let a = mailbox.thread(*a);
-                let b = mailbox.thread(*b);
-                let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                ma.subject().cmp(&mb.subject())
-            }
-            (SortField::Subject, SortOrder::Asc) => {
-                let a = mailbox.thread(*a);
-                let b = mailbox.thread(*b);
-                let ma = &mailbox.collection[*a.message().as_ref().unwrap()];
-                let mb = &mailbox.collection[*b.message().as_ref().unwrap()];
-                mb.subject().cmp(&ma.subject())
-            }
-        });
-        let mut iter = local_collection.iter().enumerate().peekable();
-        let len = mailbox
-            .threads
-            .threaded_collection()
-            .len()
-            .to_string()
-            .chars()
-            .count();
-        /* This is just a desugared for loop so that we can use .peek() */
-        while let Some((idx, i)) = iter.next() {
-            let container = &threads[*i];
-            let indentation = container.indentation();
-
-            if indentation == 0 {
-                thread_idx += 1;
-            }
-
-            assert!(container.has_message());
-            match iter.peek() {
-                Some(&(_, x)) if threads[*x].indentation() == indentation => {
-                    indentations.pop();
-                    indentations.push(true);
-                }
-                _ => {
-                    indentations.pop();
-                    indentations.push(false);
-                }
-            }
-            if container.has_sibling() {
-                indentations.pop();
-                indentations.push(true);
-            }
-            let envelope: &Envelope = &mailbox.collection[container.message().unwrap()];
-            let fg_color = if !envelope.is_seen() {
+        let threads = &mailbox.threads;
+        threads.sort_by(self.sort, self.subsort, &mailbox.collection);
+        for (idx, (t, len, has_unseen)) in threads.root_set_iter().enumerate() {
+            let container = &threads.containers()[t];
+            let i = if let Some(i) = container.message() {
+                i
+            } else {
+                threads.containers()[
+                    container.first_child().unwrap()
+                ].message().unwrap()
+            };
+            let root_envelope: &Envelope = &mailbox.collection[i];
+            let fg_color = if has_unseen {
                 Color::Byte(0)
             } else {
                 Color::Default
             };
-            let bg_color = if !envelope.is_seen() {
+            let bg_color = if has_unseen {
                 Color::Byte(251)
-            } else if thread_idx % 2 == 0 {
+            } else if idx % 2 == 0 {
                 Color::Byte(236)
             } else {
                 Color::Default
             };
             let (x, _) = write_string_to_grid(
-                &CompactMailListing::make_thread_entry(
-                    envelope,
-                    idx,
-                    indentation,
-                    container,
-                    &indentations,
-                    len,
-                    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash()),
-                ),
-                &mut content,
+                &CompactListing::make_entry_string(root_envelope, len, idx),
+                &mut self.content,
                 fg_color,
                 bg_color,
                 ((0, idx), (MAX_COLS - 1, idx)),
                 false,
-            );
+                );
+
             for x in x..MAX_COLS {
-                content[(x, idx)].set_ch(' ');
-                content[(x, idx)].set_bg(bg_color);
+                self.content[(x, idx)].set_ch(' ');
+                self.content[(x, idx)].set_bg(bg_color);
             }
 
-            match iter.peek() {
-                Some(&(_, x)) if threads[*x].indentation() > indentation => {
-                    indentations.push(false);
-                }
-                Some(&(_, x)) if threads[*x].indentation() < indentation => {
-                    for _ in 0..(indentation - threads[*x].indentation()) {
-                        indentations.pop();
-                    }
-                }
-                _ => {}
-            }
+
         }
 
-        self.content = content;
-    }
-
-    fn highlight_line_self(&mut self, idx: usize, context: &Context) {
-        let threaded = context.accounts[self.cursor_pos.0]
-            .runtime_settings
-            .threaded;
-        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap();
-        let envelope: &Envelope = if threaded {
-            let i = mailbox.threaded_mail(idx);
-            &mailbox.collection[i]
-        } else {
-            &mailbox.collection[idx]
-        };
-
-        let fg_color = if !envelope.is_seen() {
-            Color::Byte(0)
-        } else {
-            Color::Default
-        };
-        let bg_color = if !envelope.is_seen() {
-            Color::Byte(251)
-        } else if idx % 2 == 0 {
-            Color::Byte(236)
-        } else {
-            Color::Default
-        };
-        change_colors(
-            &mut self.content,
-            ((0, idx), (MAX_COLS - 1, idx)),
-            fg_color,
-            bg_color,
-        );
     }
 
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        let threaded = context.accounts[self.cursor_pos.0]
-            .runtime_settings
-            .threaded;
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
-        let envelope: &Envelope = if threaded {
-            let i = mailbox.threaded_mail(idx);
-            &mailbox.collection[i]
+        let threads = &mailbox.threads;
+        let container = threads.root_set()[idx];
+        let container = &threads.containers()[container];
+        let i = if let Some(i) = container.message() {
+            i
         } else {
-            &mailbox.collection[idx]
+            threads.containers()[
+                container.first_child().unwrap()
+            ].message().unwrap()
         };
-
-        let fg_color = if !envelope.is_seen() {
+        let root_envelope: &Envelope = &mailbox.collection[i];
+        let fg_color = if !root_envelope.is_seen() {
             Color::Byte(0)
         } else {
             Color::Default
         };
         let bg_color = if self.cursor_pos.2 == idx {
             Color::Byte(246)
-        } else if !envelope.is_seen() {
+        } else if !root_envelope.is_seen() {
             Color::Byte(251)
         } else if idx % 2 == 0 {
             Color::Byte(236)
@@ -343,56 +265,6 @@ impl CompactMailListing {
         context.dirty_areas.push_back(area);
     }
 
-    fn make_thread_entry(
-        envelope: &Envelope,
-        idx: usize,
-        indent: usize,
-        container: &Container,
-        indentations: &[bool],
-        idx_width: usize,
-        op: Box<BackendOp>,
-    ) -> String {
-        let has_sibling = container.has_sibling();
-        let has_parent = container.has_parent();
-        let show_subject = container.show_subject();
-
-        let mut s = format!(
-            "{}{}{} ",
-            idx,
-            " ".repeat(idx_width + 2 - (idx.to_string().chars().count())),
-            CompactMailListing::format_date(&envelope)
-        );
-        for i in 0..indent {
-            if indentations.len() > i && indentations[i] {
-                s.push('│');
-            } else {
-                s.push(' ');
-            }
-            if i > 0 {
-                s.push(' ');
-            }
-        }
-        if indent > 0 {
-            if has_sibling && has_parent {
-                s.push('├');
-            } else if has_sibling {
-                s.push('┬');
-            } else {
-                s.push('└');
-            }
-            s.push('─');
-            s.push('>');
-        }
-
-        if show_subject {
-            s.push_str(&format!("{:.85}", envelope.subject()));
-        }
-        let attach_count = envelope.body(op).count_attachments();
-        if attach_count > 1 {
-            s.push_str(&format!(" {}∞ ", attach_count - 1));
-        }
-        s
-    }
     fn format_date(envelope: &Envelope) -> String {
         let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
         let now: std::time::Duration = std::time::SystemTime::now().duration_since(d).unwrap();
@@ -407,7 +279,7 @@ impl CompactMailListing {
     }
 }
 
-impl Component for CompactMailListing {
+impl Component for CompactListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.unfocused {
             if !self.is_dirty() {
@@ -434,88 +306,14 @@ impl Component for CompactMailListing {
                 context.dirty_areas.push_back(area);
                 return;
             }
-            /* Mark message as read */
-            let idx = self.cursor_pos.2;
-            let must_highlight = {
-                if self.length == 0 {
-                    false
-                } else {
-                    let threaded = context.accounts[self.cursor_pos.0]
-                        .runtime_settings
-                        .threaded;
-                    let account = &mut context.accounts[self.cursor_pos.0];
-                    let (hash, is_seen) = {
-                        let mailbox = &mut account[self.cursor_pos.1]
-                            .as_mut()
-                            .unwrap();
-                        let envelope: &mut Envelope = if threaded {
-                            let i = mailbox.threaded_mail(idx);
-                            &mut mailbox.collection[i]
-                        } else {
-                            &mut mailbox.collection[idx]
-                        };
-                        (envelope.hash(), envelope.is_seen())
-                    };
-                    if is_seen {
-                        let op = {
-                            let backend = &account.backend;
-                            backend.operation(hash)
-                        };
-                        let mailbox = &mut account[self.cursor_pos.1]
-                            .as_mut()
-                            .unwrap();
-                        let envelope: &mut Envelope = if threaded {
-                            let i = mailbox.threaded_mail(idx);
-                            &mut mailbox.collection[i]
-                        } else {
-                            &mut mailbox.collection[idx]
-                        };
-                        envelope.set_seen(op).unwrap();
-                        true
-                    } else {
-                        false
-                    }
-                }
-            };
-            if must_highlight {
-                self.highlight_line_self(idx, context);
-            }
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
-            self.draw_list(
-                grid,
-                (
-                    upper_left,
-                    (get_x(bottom_right), get_y(upper_left) + mid - 1),
-                ),
-                context,
-            );
-            if self.length == 0 {
-                self.dirty = false;
-                return;
-            }
-            {
-                /* TODO: Move the box drawing business in separate functions */
-                if get_x(upper_left) > 0 && grid[(get_x(upper_left) - 1, mid)].ch() == VERT_BOUNDARY
-                {
-                    grid[(get_x(upper_left) - 1, mid)].set_ch(LIGHT_VERTICAL_AND_RIGHT);
-                }
-
-                for i in get_x(upper_left)..=get_x(bottom_right) {
-                    grid[(i, mid)].set_ch('─');
-                }
-                context
-                    .dirty_areas
-                    .push_back((set_y(upper_left, mid), set_y(bottom_right, mid)));
-            }
-            // TODO: Make headers view configurable
-
             if !self.dirty {
                 if let Some(v) = self.view.as_mut() {
                     v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
                 }
                 return;
             }
-            self.view = Some(ThreadView::new(Vec::new()));
+            self.view = Some(ThreadView::new(self.cursor_pos));
             self.view.as_mut().unwrap().draw(
                 grid,
                 (set_y(upper_left, mid + 1), bottom_right),
@@ -541,53 +339,6 @@ impl Component for CompactMailListing {
             UIEventType::Input(Key::Char('\n')) if !self.unfocused => {
                 self.unfocused = true;
                 self.dirty = true;
-            }
-            UIEventType::Input(Key::Char('m')) if !self.unfocused => {
-                use std::process::{Command, Stdio};
-                /* Kill input thread so that spawned command can be sole receiver of stdin */
-                {
-                    /* I tried thread::park() here but for some reason it never blocked and always
-                     * returned. Spinlocks are also useless because you have to keep the mutex
-                     * guard alive til the child process exits, which requires some effort.
-                     *
-                     * The only problem with this approach is tht the user has to send some input
-                     * in order for the input-thread to wake up and realise it should kill itself.
-                     *
-                     * I tried writing to stdin/tty manually but for some reason rustty didn't
-                     * acknowledge it.
-                     */
-
-                    /*
-                     * tx sends to input-thread and it kills itself.
-                     */
-                    let tx = context.input_thread();
-                    tx.send(true);
-                }
-                let mut f = create_temp_file(&new_draft(context), None);
-                //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
-
-                // TODO: check exit status
-                let mut output = Command::new("vim")
-                    .arg("+/^$")
-                    .arg(&f.path())
-                    .stdin(Stdio::inherit())
-                    .stdout(Stdio::inherit())
-                    .spawn()
-                    .expect("failed to execute process");
-
-                /*
-                 * Main loop will wait on children and when they reap them the loop spawns a new
-                 * input-thread
-                 */
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Fork(ForkType::NewDraft(f, output)),
-                });
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::ChangeMode(UIMode::Fork),
-                });
-                return;
             }
             UIEventType::Input(Key::Char('i')) if self.unfocused => {
                 self.unfocused = false;
@@ -649,9 +400,10 @@ impl Component for CompactMailListing {
                 self.view = None;
             }
             UIEventType::MailboxUpdate((ref idxa, ref idxf)) => {
-                if *idxa == self.new_cursor_pos.1 && *idxf == self.new_cursor_pos.0 {
-                    self.refresh_mailbox(context);
+                if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 {
                     self.dirty = true;
+                    self.refresh_mailbox(context);
+                    return;
                 }
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
@@ -677,24 +429,28 @@ impl Component for CompactMailListing {
                     self.refresh_mailbox(context);
                     return;
                 }
-                Action::Sort(field, order) => {
-                    self.sort = (field.clone(), order.clone());
+                Action::SubSort(field, order) => {
+                    eprintln!("SubSort {:?} , {:?}", field, order);
+                    self.subsort = (*field, *order);
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return;
                 }
-                _ => {}
+                Action::Sort(field, order) => {
+                    eprintln!("Sort {:?} , {:?}", field, order);
+                    self.sort = (*field, *order);
+                    self.dirty = true;
+                    self.refresh_mailbox(context);
+                    return;
+                }
+                // _ => {}
             },
             _ => {}
         }
-        if let Some(ref mut v) = self.view {
-            v.process_event(event, context);
-        }
     }
     fn is_dirty(&self) -> bool {
-        self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+        true
     }
     fn set_dirty(&mut self) {
-        self.dirty = true;
     }
 }

@@ -35,7 +35,6 @@ extern crate ui;
 pub use melib::*;
 pub use ui::*;
 
-use std::thread;
 
 #[macro_use]
 extern crate chan;
@@ -44,28 +43,6 @@ extern crate chan_signal;
 use chan_signal::Signal;
 
 extern crate nix;
-
-fn make_input_thread(
-    sx: chan::Sender<ThreadEvent>,
-    rx: chan::Receiver<bool>,
-) -> thread::JoinHandle<()> {
-    let stdin = std::io::stdin();
-    thread::Builder::new()
-        .name("input-thread".to_string())
-        .spawn(move || {
-            get_events(
-                stdin,
-                |k| {
-                    sx.send(ThreadEvent::Input(k));
-                },
-                || {
-                    sx.send(ThreadEvent::UIEvent(UIEventType::ChangeMode(UIMode::Fork)));
-                },
-                &rx,
-            )
-        })
-        .unwrap()
-}
 
 fn main() {
     /* Lock all stdio outs */
@@ -79,31 +56,22 @@ fn main() {
     /* Catch SIGWINCH to handle terminal resizing */
     let signal = chan_signal::notify(&[Signal::WINCH]);
 
-    /* Create a channel to communicate with other threads. The main process is the sole receiver.
-     * */
-    let (sender, receiver) = chan::sync(::std::mem::size_of::<ThreadEvent>());
-
-    /*
-     * Create async channel to block the input-thread if we need to fork and stop it from reading
-     * stdin, see get_events() for details
-     * */
-    let (tx, rx) = chan::async();
-    /* Get input thread handle to join it if we need to */
-    let mut _thread_handler = make_input_thread(sender.clone(), rx.clone());
 
     /* Create the application State. This is the 'System' part of an ECS architecture */
-    let mut state = State::new(sender.clone(), tx);
+    let mut state = State::new();
+
+    let receiver = state.receiver();
 
     /* Register some reasonably useful interfaces */
     let menu = Entity {
         component: Box::new(AccountMenu::new(&state.context.accounts)),
     };
-    let listing = MailListing::new();
+    let listing = CompactListing::new();
     let b = Entity {
         component: Box::new(listing),
     };
     let mut tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true))]));
-    tabs.add_component(Box::new(Composer {}));
+    tabs.add_component(Box::new(Composer::default()));
     let window = Entity { component: tabs };
 
     let status_bar = Entity {
@@ -137,7 +105,7 @@ fn main() {
                             let self_pid = nix::unistd::Pid::this();
                             nix::sys::signal::kill(self_pid, nix::sys::signal::Signal::SIGSTOP).unwrap();
                             state.switch_to_alternate_screen();
-                            _thread_handler = make_input_thread(sender.clone(), rx.clone());
+                            state.restore_input();
                             // BUG: thread sends input event after one received key
                             state.update_size();
                             state.render();
@@ -237,7 +205,7 @@ fn main() {
         'reap: loop {
             match state.try_wait_on_child() {
                 Some(true) => {
-                    make_input_thread(sender.clone(), rx.clone());
+                    state.restore_input();
                     state.mode = UIMode::Normal;
                     state.render();
                 }

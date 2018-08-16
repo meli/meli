@@ -107,6 +107,8 @@ pub struct Container {
 struct ContainerTree {
     id: usize,
     children: Option<Vec<ContainerTree>>,
+    len: usize,
+    has_unseen: bool,
 }
 
 impl ContainerTree {
@@ -114,6 +116,8 @@ impl ContainerTree {
         ContainerTree {
             id,
             children: None,
+            len: 1,
+            has_unseen: false,
         }
     }
 }
@@ -173,8 +177,33 @@ impl<'a> IntoIterator for &'a Threads {
 }
 
 
+pub struct RootIterator<'a> {
+    pos: usize,
+    tree: Ref<'a ,Vec<ContainerTree>>,
+}
+
+impl<'a> Iterator for RootIterator<'a> {
+    type Item  = (usize, usize, bool);
+    fn next(&mut self) -> Option<(usize, usize, bool)> {
+        if self.pos == self.tree.len() {
+            return None;
+        }
+        let node = &self.tree[self.pos];
+        self.pos += 1;
+        return Some((node.id, node.len, node.has_unseen));
+    }
+}
 
 impl Threads {
+    pub fn root_len(&self) -> usize {
+        self.tree.borrow().len()
+    }
+    pub fn root_set(&self) -> &Vec<usize> {
+        &self.root_set
+    }
+    pub fn root_set_iter(&self) ->  RootIterator {
+        RootIterator { pos: 0, tree: self.tree.borrow() }
+    }
     pub fn thread_to_mail(&self, i: usize) -> usize {
         let thread = self.containers[self.threaded_collection[i]];
         thread.message().unwrap()
@@ -226,49 +255,49 @@ impl Threads {
                     }
                 }
                 });
-                }
             }
+        }
     }
 
     fn inner_sort_by(&self, sort: (SortField, SortOrder), collection: &[Envelope]) {
         let tree = &mut self.tree.borrow_mut();
         let containers = &self.containers;
-            tree.sort_by(|a, b| { match sort {
-                (SortField::Date, SortOrder::Desc) => {
-                    let a = containers[a.id];
-                    let b = containers[b.id];
-                    b.date.cmp(&a.date)
+        tree.sort_by(|a, b| { match sort {
+            (SortField::Date, SortOrder::Desc) => {
+                let a = containers[a.id];
+                let b = containers[b.id];
+                b.date.cmp(&a.date)
 
-                }
-                (SortField::Date, SortOrder::Asc) => {
-                    let a = containers[a.id];
-                    let b = containers[b.id];
-                    a.date.cmp(&b.date)
-                }
-                (SortField::Subject, SortOrder::Desc) => {
-                    let a = containers[a.id].message();
-                    let b = containers[b.id].message();
-
-                    if a.is_none() || b.is_none() {
-                        return Ordering::Equal;
-                    }
-                    let ma = &collection[a.unwrap()];
-                    let mb = &collection[b.unwrap()];
-                    ma.subject().cmp(&mb.subject())
-                }
-                (SortField::Subject, SortOrder::Asc) => {
-                    let a = containers[a.id].message();
-                    let b = containers[b.id].message();
-
-                    if a.is_none() || b.is_none() {
-                        return Ordering::Equal;
-                    }
-                    let ma = &collection[a.unwrap()];
-                    let mb = &collection[b.unwrap()];
-                    mb.subject().cmp(&ma.subject())
-                }
             }
-            });
+            (SortField::Date, SortOrder::Asc) => {
+                let a = containers[a.id];
+                let b = containers[b.id];
+                a.date.cmp(&b.date)
+            }
+            (SortField::Subject, SortOrder::Desc) => {
+                let a = containers[a.id].message();
+                let b = containers[b.id].message();
+
+                if a.is_none() || b.is_none() {
+                    return Ordering::Equal;
+                }
+                let ma = &collection[a.unwrap()];
+                let mb = &collection[b.unwrap()];
+                ma.subject().cmp(&mb.subject())
+            }
+            (SortField::Subject, SortOrder::Asc) => {
+                let a = containers[a.id].message();
+                let b = containers[b.id].message();
+
+                if a.is_none() || b.is_none() {
+                    return Ordering::Equal;
+                }
+                let ma = &collection[a.unwrap()];
+                let mb = &collection[b.unwrap()];
+                mb.subject().cmp(&ma.subject())
+            }
+        }
+        });
     }
     pub fn sort_by(&self, sort: (SortField, SortOrder), subsort: (SortField, SortOrder), collection: &[Envelope]) {
         if *self.sort.borrow() != sort {
@@ -292,7 +321,6 @@ impl Threads {
             root_subject_idx: usize,
             collection: &[Envelope],
             ) {
-            tree.id = i;
             let thread = containers[i];
             if let Some(msg_idx) = containers[root_subject_idx].message() {
                 let root_subject = collection[msg_idx].subject();
@@ -301,6 +329,7 @@ impl Threads {
                  * list.) */
                 if indentation > 0 && thread.has_message() {
                     let subject = collection[thread.message().unwrap()].subject();
+                    tree.has_unseen = !collection[thread.message().unwrap()].is_seen();
                     if subject == root_subject
                         || subject.starts_with("Re: ")
                             && subject.as_ref().ends_with(root_subject.as_ref())
@@ -332,6 +361,7 @@ impl Threads {
                 loop {
                     let mut new_child_tree = ContainerTree::new(fc);
                     build_threaded(&mut new_child_tree, containers, indentation, threaded, fc, i, collection);
+                    tree.has_unseen |= new_child_tree.has_unseen;
                     child_vec.push(new_child_tree);
                     let thread_ = containers[fc];
                     if !thread_.has_sibling() {
@@ -339,6 +369,7 @@ impl Threads {
                     }
                     fc = thread_.next_sibling().unwrap();
                 }
+                tree.len = child_vec.iter().map(|c| c.len).sum();
                 tree.children = Some(child_vec);
             }
         }

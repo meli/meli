@@ -21,7 +21,26 @@
 
 use super::*;
 
-pub struct Composer {}
+pub struct Composer {
+    dirty: bool,
+    mode: ViewMode,
+    pager: Pager,
+}
+
+impl Default for Composer {
+    fn default() -> Self {
+        Composer {
+            dirty: true,
+            mode: ViewMode::Overview,
+            pager: Pager::from_str("asdfs\nfdsfds\ndsfdsfs\n\n\n\naaaaaaaaaaaaaa\nfdgfd", None),
+        }
+    }
+}
+
+enum ViewMode {
+    //Compose,
+    Overview,
+}
 
 impl fmt::Display for Composer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -32,14 +51,90 @@ impl fmt::Display for Composer {
 
 impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        clear_area(grid, area);
-        context.dirty_areas.push_back(area);
+        if self.dirty {
+            clear_area(grid, area);
+        }
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+
+        let header_height = 12;
+        let width = width!(area);
+        let mid = if width > 80 {
+            let width = width - 80;
+            let mid = width / 2;;
+
+            if self.dirty {
+                for i in get_y(upper_left)..=get_y(bottom_right) {
+                    grid[(mid, i)].set_ch(VERT_BOUNDARY);
+                    grid[(mid, i)].set_fg(Color::Default);
+                    grid[(mid, i)].set_bg(Color::Default);
+                    grid[(mid + 80, i)].set_ch(VERT_BOUNDARY);
+                    grid[(mid + 80, i)].set_fg(Color::Default);
+                    grid[(mid + 80, i)].set_bg(Color::Default);
+                }
+            }
+            mid
+        } else { 0 };
+
+        if self.dirty {
+            for i in get_x(upper_left)+ mid + 1..=get_x(upper_left) + mid + 79 {
+                grid[(i, header_height)].set_ch(HORZ_BOUNDARY);
+                grid[(i, header_height)].set_fg(Color::Default);
+                grid[(i, header_height)].set_bg(Color::Default);
+            }
+        }
+
+        let body_area = ((mid + 1, header_height+2), (mid + 78, get_y(bottom_right)));
+
+        if self.dirty {
+            context.dirty_areas.push_back(area);
+            self.dirty = false;
+        }
+        match self.mode {
+            ViewMode::Overview => {
+                self.pager.draw(grid, body_area, context);
+
+            },
+        }
     }
 
-    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {}
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+        match event.event_type {
+            UIEventType::Resize => {
+                self.dirty = true;
+            }
+            UIEventType::Input(Key::Char('\n')) => {
+                use std::process::{Command, Stdio};
+                /* Kill input thread so that spawned command can be sole receiver of stdin */
+                {
+                    context.input_kill();
+                }
+                let mut f = create_temp_file(&new_draft(context), None);
+                //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
+
+                // TODO: check exit status
+                Command::new("vim")
+                    .arg("+/^$")
+                    .arg(&f.path())
+                    .stdin(Stdio::inherit())
+                    .stdout(Stdio::inherit())
+                    .output()
+                    .expect("failed to execute process");
+                self.pager.update_from_string(f.read_to_string());
+                context.restore_input();
+                self.dirty = true;
+                return;
+            },
+            _ => {},
+        }
+        self.pager.process_event(event, context);
+    }
 
     fn is_dirty(&self) -> bool {
-        true
+        self.dirty || self.pager.is_dirty()
     }
-    fn set_dirty(&mut self) {}
+    fn set_dirty(&mut self) {
+        self.dirty = true;
+        self.pager.set_dirty();
+    }
 }
