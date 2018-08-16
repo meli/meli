@@ -49,7 +49,7 @@ use std::fs;
 use std::io;
 use std::io::Read;
 use std::sync::{Mutex, Arc};
-use std::hash::Hasher;
+use std::hash::{Hasher, Hash};
 use std::path::{Path, PathBuf};
 extern crate fnv;
 use self::fnv::FnvHashMap;
@@ -213,21 +213,20 @@ impl MailBackend for MaildirType {
                         Ok(event) => match event {
                             DebouncedEvent::Create(mut pathbuf)
                                 | DebouncedEvent::Remove(mut pathbuf) => {
-                                    let path = if pathbuf.is_dir() {
+                                    if pathbuf.is_dir() {
                                         if pathbuf.ends_with("cur") | pathbuf.ends_with("new") {
                                             pathbuf.pop();
                                         }
-                                        pathbuf.to_str().unwrap()
                                     } else {
                                         pathbuf.pop();
-                                        pathbuf.parent().unwrap().to_str().unwrap()
+                                        pathbuf.pop();
                                     };
-                                    eprintln!(" got event in {}", path);
+                                    eprintln!(" got event in {}", pathbuf.display());
 
                                     let mut hasher = DefaultHasher::new();
-                                    hasher.write(path.as_bytes());
+                                    pathbuf.hash(&mut hasher);
                                     sender.send(RefreshEvent {
-                                        folder: format!("{}", path),
+                                        folder: format!("{}", pathbuf.display()),
                                         hash: hasher.finish(),
                                     });
                                 }
@@ -306,16 +305,15 @@ impl MaildirType {
             let tx = w.tx();
             // TODO: Avoid clone
             let folder: &MaildirFolder = &self.folders[self.owned_folder_idx(folder)];
-            let path = folder.path().to_string();
+            let mut path: PathBuf = folder.path().into();
             let name = format!("parsing {:?}", folder.name());
             let map = self.hash_index.clone();
             let map2 = self.hash_index.clone();
 
             thread::Builder::new()
-                .name(name)
+                .name(name.clone())
                 .spawn(move || {
                     let cache_dir = cache_dir.clone();
-                    let mut path = PathBuf::from(path);
                     path.push("cur");
                     let iter = path.read_dir()?;
                     let count = path.read_dir()?.count();
@@ -341,7 +339,7 @@ impl MaildirType {
                                 let cache_dir = cache_dir.clone();
                                 let mut tx = tx.clone();
                                 let map = map.clone();
-                                let s = scope.spawn(move || {
+                                let s = scope.builder().name(name.clone()).spawn(move || {
                                     let len = chunk.len();
                                     let size = if len <= 100 { 100 } else { (len / 100) * 100 };
                                     let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
@@ -419,7 +417,7 @@ impl MaildirType {
                                     }
                                     local_r
                                 });
-                                threads.push(s);
+                                threads.push(s.unwrap());
                             }
                         });
                     }
@@ -447,26 +445,27 @@ impl MaildirType {
 pub struct MaildirFolder {
     hash: u64,
     name: String,
-    path: String,
+    path: PathBuf,
     children: Vec<usize>,
 }
 
 impl MaildirFolder {
     pub fn new(path: String, file_name: String, children: Vec<usize>) -> Result<Self> {
+        let pathbuf = PathBuf::from(path);
         let mut h = DefaultHasher::new();
-        h.write(&path.as_bytes());
+        pathbuf.hash(&mut h);
 
         let ret = MaildirFolder {
             hash: h.finish(),
             name: file_name,
-            path: path,
+            path: pathbuf,
             children: children,
         };
         ret.is_valid()?;
         Ok(ret)
     }
-    pub fn path(&self) -> &str {
-        &self.path
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
     }
     fn is_valid(&self) -> Result<()> {
         let path = self.path();
@@ -476,7 +475,7 @@ impl MaildirFolder {
             if !p.is_dir() {
                 return Err(MeliError::new(format!(
                             "{} is not a valid maildir folder",
-                            path
+                            path.display()
                             )));
             }
             p.pop();

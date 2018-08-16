@@ -66,7 +66,7 @@ fn main() {
     let menu = Entity {
         component: Box::new(AccountMenu::new(&state.context.accounts)),
     };
-    let listing = CompactListing::new();
+    let listing = MailListing::new();
     let b = Entity {
         component: Box::new(listing),
     };
@@ -150,7 +150,6 @@ fn main() {
                         },
                         ThreadEvent::RefreshMailbox { hash : h } => {
                             state.hash_to_folder(h);
-                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Notification(String::from("Update in mailbox"))});
                             state.redraw();
                         },
                         ThreadEvent::UIEvent(UIEventType::ChangeMode(f)) => {
@@ -160,10 +159,10 @@ fn main() {
                         ThreadEvent::UIEvent(UIEventType::StartupCheck) => {
                             let mut flag = false;
                             let mut render_flag = false;
-                            for account in &mut state.context.accounts {
-                                let len = account.len();
-                                for i in 0..len {
-                                    match account.status(i) {
+                            for idx_a in 0..state.context.accounts.len() {
+                                let len = state.context.accounts[idx_a].len();
+                                for idx_m in 0..len {
+                                    match state.context.account_status(idx_a, idx_m) {
                                         Ok(true) => {
                                             render_flag = true;
                                         },

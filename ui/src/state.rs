@@ -33,6 +33,7 @@ use chan::{Receiver, Sender};
 use fnv::FnvHashMap;
 use std::io::Write;
 use std::thread;
+use std::result;
 use std::time;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
@@ -96,6 +97,24 @@ impl Context {
     }
     pub fn restore_input(&self) {
         self.input.restore(self.sender.clone());
+    }
+    pub fn account_status(&mut self, idx_a: usize, idx_m: usize) -> result::Result<bool, usize> {
+        let s = self.accounts[idx_a].status(idx_m)?;
+        if let Some(event) = s {
+            eprintln!("setting up notification");
+            let (idx_a, idx_m) = self.mailbox_hashes[&event.folder];
+            let subjects = {
+                let mut ret = Vec::with_capacity(event.index.len());
+                eprintln!("index is {:?}", &event.index);
+                for &i in &event.index {
+                    ret.push(self.accounts[idx_a][idx_m].as_ref().unwrap().collection[i].subject());
+                }
+                ret
+            };
+            self.replies.push_back(UIEvent { id: 0, event_type: UIEventType::Notification(format!("Update in {}/{}, indexes {:?}", self.accounts[idx_a].name(), self.accounts[idx_a][idx_m].as_ref().unwrap().folder.name(), subjects)) });
+            return Ok(true);
+        }
+        Ok(false)
     }
 }
 
@@ -224,8 +243,10 @@ impl State<std::io::Stdout> {
             cursor::Goto(1, 1)
         ).unwrap();
         s.flush();
+        eprintln!("DEBUG: inserting mailbox hashes:");
         for (x, account) in s.context.accounts.iter_mut().enumerate() {
             for (y, folder) in account.backend.folders().iter().enumerate() {
+                eprintln!("{:?}", folder);
                 s.context.mailbox_hashes.insert(folder.hash(), (x, y));
             }
             let sender = s.context.sender.clone();
@@ -242,35 +263,38 @@ impl State<std::io::Stdout> {
      * and startup a thread to remind us to poll it every now and then till it's finished.
      */
     pub fn hash_to_folder(&mut self, hash: u64) {
-        let (idxa, idxm) = self.context.mailbox_hashes[&hash];
-        self.context.accounts[idxa].reload(idxm);
-        let (startup_tx, startup_rx) = chan::async();
-        let startup_thread = {
-            let sender = self.context.sender.clone();
-            let startup_rx = startup_rx.clone();
+        if let Some(&(idxa, idxm)) = self.context.mailbox_hashes.get(&hash) {
+            self.context.accounts[idxa].reload(idxm);
+            let (startup_tx, startup_rx) = chan::async();
+            let startup_thread = {
+                let sender = self.context.sender.clone();
+                let startup_rx = startup_rx.clone();
 
-            thread::Builder::new()
-                .name("startup-thread".to_string())
-                .spawn(move || {
-                    let dur = time::Duration::from_millis(100);
-                    loop {
-                        chan_select! {
-                            default => {},
-                            startup_rx.recv() -> _ => {
-                                sender.send(ThreadEvent::UIEvent(UIEventType::MailboxUpdate((idxa,idxm))));
-                                sender.send(ThreadEvent::ThreadJoin(thread::current().id()));
-                                return;
+                thread::Builder::new()
+                    .name("startup-thread".to_string())
+                    .spawn(move || {
+                        let dur = time::Duration::from_millis(100);
+                        loop {
+                            chan_select! {
+                                default => {},
+                                startup_rx.recv() -> _ => {
+                                    sender.send(ThreadEvent::UIEvent(UIEventType::MailboxUpdate((idxa,idxm))));
+                                    sender.send(ThreadEvent::ThreadJoin(thread::current().id()));
+                                    return;
+                                }
                             }
+                            sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
+                            thread::sleep(dur);
                         }
-                        sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
-                        thread::sleep(dur);
-                    }
-                })
-                .unwrap()
-        };
-        self.startup_thread = Some(startup_tx.clone());
-        self.threads
-            .insert(startup_thread.thread().id(), (startup_tx, startup_thread));
+                    })
+                .expect("Failed to spawn startup-thread in hash_to_folder()")
+            };
+            self.startup_thread = Some(startup_tx.clone());
+            self.threads
+                .insert(startup_thread.thread().id(), (startup_tx, startup_thread));
+        } else {
+            eprintln!("BUG: mailbox with hash {} not found in mailbox_hashes.", hash);
+        }
     }
 
     /// If an owned thread returns a `ThreadEvent::ThreadJoin` event to `State` then it must remove
