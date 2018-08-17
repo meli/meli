@@ -99,8 +99,8 @@ impl Account {
     pub fn workers(&mut self) -> &mut Vec<Worker> {
         &mut self.workers
     }
-    fn load_mailbox(&mut self, index: usize, envelopes: Result<Vec<Envelope>>) -> Option<NewMailEvent> {
-        let mut ret: Option<NewMailEvent> = None;
+    fn load_mailbox(&mut self, index: usize, envelopes: Result<Vec<Envelope>>) -> Option<Option<NewMailEvent>> {
+        let mut ret: Option<Option<NewMailEvent>> = None;
 
         // TODO: Cleanup this function
         let folders = self.backend.folders();
@@ -115,14 +115,15 @@ impl Account {
                         let diff = self.folders[index].as_ref().map(|v| v.as_ref().unwrap().collection.len()).unwrap_or(0).saturating_sub(old_m.as_ref().map(|v| v.collection.len()).unwrap_or(0));
                         if diff > 0 {
                             let mut index = old_m.as_ref().unwrap().collection.iter().zip(&self.folders[index].as_ref().unwrap().as_ref().unwrap().collection).count();
-                            ret = Some(NewMailEvent {
+                            ret = Some(Some(NewMailEvent {
                                 folder: folder.hash(),
                                 index: (index.saturating_sub(1)..(self.folders[index].as_ref().unwrap().as_ref().unwrap().collection.len().saturating_sub(1))).collect(),
-                            });
+                            }));
 
                         }
-
                     }
+                } else {
+                    ret = Some(None);
                 }
             /* ======================== */
             } else {
@@ -147,14 +148,16 @@ impl Account {
                         let diff = cur[0].as_ref().map(|v| v.as_ref().unwrap().collection.len()).unwrap_or(0).saturating_sub(old_m.as_ref().map(|v| v.collection.len()).unwrap_or(0));
                         if diff > 0 {
                             let mut index = old_m.as_ref().unwrap().collection.iter().zip(&cur[0].as_ref().unwrap().as_ref().unwrap().collection).count();
-                            ret = Some(NewMailEvent {
+                            ret = Some(Some(NewMailEvent {
                                 folder: folder.hash(),
                                 index: (index.saturating_sub(1)..(cur[0].as_ref().unwrap().as_ref().unwrap().collection.len()).saturating_sub(1)).collect(),
-                            });
+                            }));
 
                         }
 
                     }
+                } else {
+                    ret = Some(None);
                 }
             /* ======================== */
             }
@@ -166,14 +169,15 @@ impl Account {
                         let diff = self.folders[index].as_ref().map(|v| v.as_ref().unwrap().collection.len()).unwrap_or(0).saturating_sub(old_m.as_ref().map(|v| v.collection.len()).unwrap_or(0));
                         if diff > 0 {
                             let mut index = old_m.as_ref().unwrap().collection.iter().zip(&self.folders[index].as_ref().unwrap().as_ref().unwrap().collection).count();
-                            ret = Some(NewMailEvent {
+                            ret = Some(Some(NewMailEvent {
                                 folder: folder.hash(),
                                 index: (index.saturating_sub(1)..(self.folders[index].as_ref().unwrap().as_ref().unwrap().collection.len().saturating_sub(1))).collect(),
-                            });
+                            }));
 
                         }
-
                     }
+                } else {
+                    ret = Some(None);
                 }
             /* ======================== */
         };
@@ -181,7 +185,7 @@ impl Account {
         ret
     }
 
-    pub fn status(&mut self, index: usize) -> result::Result<Option<NewMailEvent>, usize> {
+    pub fn status(&mut self, index: usize) -> result::Result<Option<Option<NewMailEvent>>, usize> {
         match self.workers[index].as_mut() {
             None => {
                 return Ok(None);

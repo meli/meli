@@ -100,7 +100,7 @@ impl Context {
     }
     pub fn account_status(&mut self, idx_a: usize, idx_m: usize) -> result::Result<bool, usize> {
         let s = self.accounts[idx_a].status(idx_m)?;
-        if let Some(event) = s {
+        if let Some(Some(event)) = s {
             eprintln!("setting up notification");
             let (idx_a, idx_m) = self.mailbox_hashes[&event.folder];
             let subjects = {
@@ -112,9 +112,12 @@ impl Context {
                 ret
             };
             self.replies.push_back(UIEvent { id: 0, event_type: UIEventType::Notification(format!("Update in {}/{}, indexes {:?}", self.accounts[idx_a].name(), self.accounts[idx_a][idx_m].as_ref().unwrap().folder.name(), subjects)) });
-            return Ok(true);
+            Ok(true)
+        } else if let Some(None) = s {
+            Ok(true)
+        } else {
+            Ok(false)
         }
-        Ok(false)
     }
 }
 
