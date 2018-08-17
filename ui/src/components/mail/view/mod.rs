@@ -90,7 +90,7 @@ impl MailView {
     /// Returns the string to be displayed in the Viewer
     fn attachment_to_text(&self, body: Attachment) -> String {
         let finder = LinkFinder::new();
-        let body_text = if body.content_type().0.is_text() && body.content_type().1.is_html() {
+        let body_text = if body.content_type().is_text_html() {
             let mut s =
                 String::from("Text piped through `w3m`. Press `v` to open in web browser. \n\n");
             s.extend(
@@ -390,7 +390,7 @@ impl Component for MailView {
                     let envelope: &Envelope = &mailbox.collection[envelope_idx];
                     let op = context.accounts[self.coordinates.0].backend.operation(envelope.hash());
                     if let Some(u) = envelope.body(op).attachments().get(lidx) {
-                        match u.content_type().0 {
+                        match u.content_type() {
                             ContentType::Text { .. } => {
                                 self.mode = ViewMode::Attachment(lidx);
                                 self.dirty = true;

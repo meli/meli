@@ -25,37 +25,6 @@ use std::str;
 
 pub use mailbox::email::attachment_types::*;
 
-#[derive(Clone, Serialize, Deserialize)]
-pub enum AttachmentType {
-    Data {
-        tag: Vec<u8>,
-    },
-    Text {
-        content: Vec<u8>,
-    },
-    Multipart {
-        of_type: MultipartType,
-        subattachments: Vec<Attachment>,
-    },
-}
-
-impl fmt::Debug for AttachmentType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            AttachmentType::Data { .. } => write!(f, "AttachmentType::Data {{ .. }}"),
-            AttachmentType::Text { .. } => write!(f, "AttachmentType::Text {{ .. }}"),
-            AttachmentType::Multipart {
-                of_type,
-                subattachments,
-            } => write!(
-                f,
-                "AttachmentType::Multipart {{ of_type: {:?},\nsubattachments: {:?} }}",
-                of_type, subattachments
-            ),
-        }
-    }
-}
-
 /*
  *
  * Data
@@ -64,8 +33,9 @@ impl fmt::Debug for AttachmentType {
  */
 // TODO: Add example.
 //
+#[derive(Default)]
 pub struct AttachmentBuilder {
-    content_type: (ContentType, ContentSubType),
+    content_type: ContentType,
     content_transfer_encoding: ContentTransferEncoding,
 
     raw: Vec<u8>,
@@ -73,37 +43,25 @@ pub struct AttachmentBuilder {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Attachment {
-    content_type: (ContentType, ContentSubType),
+    content_type: ContentType,
     content_transfer_encoding: ContentTransferEncoding,
 
     raw: Vec<u8>,
-    attachment_type: AttachmentType,
 }
 
 impl fmt::Debug for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n attachment_type: {:?}\n }}",
+        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n }}",
         self.content_type,
         self.content_transfer_encoding,
-        self.raw.len(),
-        self.attachment_type)
-    }
-}
-
-impl fmt::Display for AttachmentType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            AttachmentType::Data { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
-            AttachmentType::Text { content: ref c } => write!(f, "{}", String::from_utf8_lossy(c)),
-            AttachmentType::Multipart { of_type: ref t, .. } => write!(f, "{}", t),
-        }
+        self.raw.len())
     }
 }
 
 impl AttachmentBuilder {
     pub fn new(content: &[u8]) -> Self {
         AttachmentBuilder {
-            content_type: (Default::default(), ContentSubType::Plain),
+            content_type: Default::default(),
             content_transfer_encoding: ContentTransferEncoding::_7Bit,
             raw: content.to_vec(),
         }
@@ -114,42 +72,63 @@ impl AttachmentBuilder {
                 let mut boundary = None;
                 for (n, v) in params {
                     if n.eq_ignore_ascii_case(b"boundary") {
-                        let mut vec: Vec<u8> = Vec::with_capacity(v.len() + 4);
-                        vec.extend_from_slice(b"--");
-                        vec.extend(v);
-                        vec.extend_from_slice(b"--");
-                        boundary = Some(vec);
+                        boundary = Some(v);
                         break;
                     }
                 }
                 assert!(boundary.is_some());
-                self.content_type.0 = ContentType::Multipart {
-                    boundary: boundary.unwrap(),
+                let _boundary = boundary.unwrap();
+                let offset = _boundary.as_ptr() as usize - value.as_ptr() as usize;
+                let boundary = SliceBuild::new(offset, _boundary.len());
+                let subattachments = Self::subattachments(&self.raw, boundary.get(&value));
+                eprintln!("boundary is {} and suba is {:?}", str::from_utf8(_boundary).unwrap(), subattachments);
+                self.content_type = ContentType::Multipart {
+                    boundary,
+                    kind: if cst.eq_ignore_ascii_case(b"mixed") {
+                        MultipartType::Mixed
+                    } else if cst.eq_ignore_ascii_case(b"alternative") {
+                        MultipartType::Alternative
+                    } else if cst.eq_ignore_ascii_case(b"digest") {
+                        MultipartType::Digest
+                    } else {
+                        Default::default()
+                    },
+                    subattachments
                 };
-                self.content_type.1 = ContentSubType::Other { tag: cst.into() };
             } else if ct.eq_ignore_ascii_case(b"text") {
-                self.content_type.0 = Default::default();
+                self.content_type = ContentType::Text {
+                    kind: Text::Plain,
+                    charset: Charset::UTF8,
+                };
                 for (n, v) in params {
                     if n.eq_ignore_ascii_case(b"charset") {
-                        self.content_type.0 = ContentType::Text {
-                            charset: Charset::from(v),
-                        };
-                        break;
+                        match self.content_type {
+                            ContentType::Text { charset: ref mut c, .. } => {
+                        *c = Charset::from(v);
+                            },
+                            _ => {},
+                        }
+                            break;
                     }
                 }
                 if cst.eq_ignore_ascii_case(b"html") {
-                    self.content_type.1 = ContentSubType::Html;
+                    match self.content_type {
+                        ContentType::Text { kind: ref mut k, .. } => {
+                            *k = Text::Html;
+                        },
+                        _ => {},
+                    }
                 } else if !cst.eq_ignore_ascii_case(b"plain") {
-                    self.content_type.1 = ContentSubType::Other {
-                        tag: cst.to_ascii_lowercase(),
-                    };
+                    match self.content_type {
+                        ContentType::Text { kind: ref mut k, .. } => {
+                            *k = Text::Other { tag: cst.into() };
+                        },
+                        _ => {},
+                    }
                 }
             } else {
-                self.content_type.0 = ContentType::Unsupported {
-                    tag: ct.to_ascii_lowercase(),
-                };
-                self.content_type.1 = ContentSubType::Other {
-                    tag: cst.to_ascii_lowercase(),
+                self.content_type = ContentType::Unsupported {
+                    tag: ct.into(),
                 };
             },
             Err(v) => {
@@ -176,8 +155,8 @@ impl AttachmentBuilder {
     }
     fn decode(&self) -> Vec<u8> {
         // TODO merge this and standalone decode() function
-        let charset = match self.content_type.0 {
-            ContentType::Text { charset: c } => c,
+        let charset = match self.content_type {
+            ContentType::Text { charset: c, .. } => c,
             _ => Default::default(),
         };
 
@@ -194,73 +173,54 @@ impl AttachmentBuilder {
             | ContentTransferEncoding::Other { .. } => self.raw.to_vec(),
         };
 
-        let decoded_result = parser::decode_charset(&bytes, charset);
-        decoded_result
-            .as_ref()
-            .map(|v| v.as_bytes())
-            .unwrap_or_else(|_| &self.raw)
-            .to_vec()
+        if let Ok(b) = parser::decode_charset(&bytes, charset) {
+            b.into_bytes()
+        } else {
+            self.raw.to_vec()
+        }
     }
     pub fn build(self) -> Attachment {
-        let attachment_type = match self.content_type.0 {
-            ContentType::Text { .. } => AttachmentType::Text {
-                content: self.decode(),
-            },
-            ContentType::Multipart { boundary: ref b } => {
-                let multipart_type = match self.content_type.1 {
-                    ContentSubType::Other { ref tag } => match &tag[..] {
-                        b"mixed" | b"Mixed" | b"MIXED" => MultipartType::Mixed,
-                        b"alternative" | b"Alternative" | b"ALTERNATIVE" => {
-                            MultipartType::Alternative
-                        }
-                        b"digest" | b"Digest" | b"DIGEST" => MultipartType::Digest,
-                        _ => MultipartType::Unsupported { tag: tag.clone() },
-                    },
-                    _ => panic!(),
-                };
-                AttachmentType::Multipart {
-                    of_type: multipart_type,
-                    subattachments: Self::subattachments(&self.raw, b),
-                }
-            }
-            ContentType::Unsupported { ref tag } => AttachmentType::Data { tag: tag.clone() },
-        };
         Attachment {
             content_type: self.content_type,
             content_transfer_encoding: self.content_transfer_encoding,
             raw: self.raw,
-            attachment_type: attachment_type,
         }
     }
 
     pub fn subattachments(raw: &[u8], boundary: &[u8]) -> Vec<Attachment> {
-        let boundary_length = boundary.len();
-        match parser::attachments(raw, &boundary[0..boundary_length - 2], boundary).to_full_result()
+        eprintln!("subattachments boundary {}", str::from_utf8(boundary).unwrap());
+        match parser::attachments(raw, boundary).to_full_result()
         {
             Ok(attachments) => {
                 let mut vec = Vec::with_capacity(attachments.len());
                 for a in attachments {
-                    let (headers, body) = match parser::attachment(a).to_full_result() {
-                        Ok(v) => v,
-                        Err(_) => {
-                            eprintln!("error in parsing attachment");
-                            eprintln!("\n-------------------------------");
-                            eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
-                            eprintln!("-------------------------------\n");
+                    let mut builder = AttachmentBuilder::default();
+                    let body_slice = {
+                        let (headers, body) = match parser::attachment(&a).to_full_result() {
+                            Ok(v) => v,
+                            Err(_) => {
+                                eprintln!("error in parsing attachment");
+                                eprintln!("\n-------------------------------");
+                                eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
+                                eprintln!("-------------------------------\n");
 
-                            continue;
+                                continue;
+                            }
+                        };
+                        for (name, value) in headers {
+                            if name.eq_ignore_ascii_case(b"content-type") {
+                                builder.content_type(value);
+                            } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
+                                builder.content_transfer_encoding(value);
+                            }
                         }
+                        let offset = body.as_ptr() as usize - a.as_ptr() as usize;
+                        SliceBuild::new(offset, body.len())
                     };
-                    let mut builder = AttachmentBuilder::new(body);
-                    for (name, value) in headers {
-                        if name.eq_ignore_ascii_case(b"content-type") {
-                            builder.content_type(value);
-                        } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
-                            builder.content_transfer_encoding(value);
-                        }
-                    }
+                    builder.raw = body_slice.get(a).into();
                     vec.push(builder.build());
                 }
+                eprintln!("subattachments {:?}", vec);
                 vec
             }
             a => {
@@ -278,16 +238,17 @@ impl AttachmentBuilder {
 
 impl fmt::Display for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.attachment_type {
-            AttachmentType::Data { .. } => {
+        match self.content_type {
+            ContentType::Unsupported { .. } => {
                 write!(f, "Data attachment of type {}", self.mime_type())
             }
-            AttachmentType::Text { .. } => {
+            ContentType::Text { .. } => {
                 write!(f, "Text attachment of type {}", self.mime_type())
             }
-            AttachmentType::Multipart {
-                of_type: ref multipart_type,
+            ContentType::Multipart {
+                kind: ref multipart_type,
                 subattachments: ref sub_att_vec,
+                ..
             } => if *multipart_type == MultipartType::Alternative {
                 write!(
                     f,
@@ -312,29 +273,31 @@ impl Attachment {
         &self.raw
     }
     fn get_text_recursive(&self, text: &mut Vec<u8>) {
-        match self.attachment_type {
-            AttachmentType::Data { .. } => {
-                //text.push_str(&format!("Data attachment of type {}", self.mime_type()));
-            }
-            AttachmentType::Text { .. } => {
+        match self.content_type {
+            ContentType::Text { .. } => {
                 text.extend(decode(self, None));
             }
-            AttachmentType::Multipart {
-                of_type: ref multipart_type,
+            ContentType::Multipart {
+                kind: ref multipart_type,
                 subattachments: ref sub_att_vec,
-            } => if *multipart_type == MultipartType::Alternative {
-                for a in sub_att_vec {
-                    if a.content_type.1 == ContentSubType::Plain {
-                        a.get_text_recursive(text);
-                        break;
+                ..
+            } => match *multipart_type {
+                MultipartType::Alternative => {
+                    for a in sub_att_vec {
+                        if let ContentType::Text { kind: Text::Plain, .. } = a.content_type {
+                            a.get_text_recursive(text);
+                            break;
+                        }
                     }
-                }
-            } else {
-                for a in sub_att_vec {
-                    a.get_text_recursive(text);
-                    text.extend_from_slice(b"\n\n");
-                }
-            },
+                },
+                MultipartType::Mixed | MultipartType::Digest => {
+                    for a in sub_att_vec {
+                        a.get_text_recursive(text);
+                        text.extend_from_slice(b"\n\n");
+                    }
+                },
+            }
+            _ => {},
         }
     }
     pub fn text(&self) -> String {
@@ -346,16 +309,16 @@ impl Attachment {
         self.attachments().iter().map(|a| a.text()).collect()
     }
     pub fn mime_type(&self) -> String {
-        format!("{}/{}", self.content_type.0, self.content_type.1).to_string()
+        format!("{}", self.content_type).to_string()
     }
     pub fn attachments(&self) -> Vec<Attachment> {
         let mut ret = Vec::new();
         fn count_recursive(att: &Attachment, ret: &mut Vec<Attachment>) {
-            match att.attachment_type {
-                AttachmentType::Data { .. } | AttachmentType::Text { .. } => ret.push(att.clone()),
-                AttachmentType::Multipart {
-                    of_type: _,
+            match att.content_type {
+                ContentType::Unsupported { .. } | ContentType::Text { .. } => ret.push(att.clone()),
+                ContentType::Multipart {
                     subattachments: ref sub_att_vec,
+                    ..
                 } => {
                     ret.push(att.clone());
                     // TODO: Fix this, wrong count
@@ -372,17 +335,17 @@ impl Attachment {
     pub fn count_attachments(&self) -> usize {
         self.attachments().len()
     }
-    pub fn attachment_type(&self) -> &AttachmentType {
-        &self.attachment_type
-    }
-    pub fn content_type(&self) -> &(ContentType, ContentSubType) {
+    pub fn content_type(&self) -> &ContentType {
         &self.content_type
     }
     pub fn content_transfer_encoding(&self) -> &ContentTransferEncoding {
         &self.content_transfer_encoding
     }
     pub fn is_html(&self) -> bool {
-        self.content_type().0.is_text() && self.content_type().1.is_html()
+        match self.content_type {
+            ContentType::Text { kind: Text::Html, .. } => true,
+            _ => false,
+        }
     }
 }
 
@@ -395,15 +358,16 @@ fn decode_rec_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment) -> Vec<
     if let Some(filter) = filter {
         return filter(a);
     }
-    match a.attachment_type {
-        AttachmentType::Data { .. } => Vec::new(),
-        AttachmentType::Text { .. } => decode_helper(a, filter),
-        AttachmentType::Multipart {
-            of_type: ref multipart_type,
+    match a.content_type {
+        ContentType::Unsupported { .. } => Vec::new(),
+        ContentType::Text { .. } => decode_helper(a, filter),
+        ContentType::Multipart {
+            kind: ref multipart_type,
             subattachments: ref sub_att_vec,
+            ..
         } => if *multipart_type == MultipartType::Alternative {
             for a in sub_att_vec {
-                if a.content_type.1 == ContentSubType::Plain {
+                if let ContentType::Text { kind: Text::Plain, .. } = a.content_type {
                     return decode_helper(a, filter);
                 }
             }
@@ -426,8 +390,8 @@ fn decode_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment) -> Vec<u8>>
         return filter(a);
     }
 
-    let charset = match a.content_type.0 {
-        ContentType::Text { charset: c } => c,
+    let charset = match a.content_type {
+        ContentType::Text { charset: c, .. } => c,
         _ => Default::default(),
     };
 
@@ -444,13 +408,12 @@ fn decode_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment) -> Vec<u8>>
         | ContentTransferEncoding::Other { .. } => a.bytes().to_vec(),
     };
 
-    if a.content_type().0.is_text() {
-        let decoded_result = parser::decode_charset(&bytes, charset);
-        decoded_result
-            .as_ref()
-            .map(|v| v.as_bytes())
-            .unwrap_or_else(|_| a.bytes())
-            .to_vec()
+    if a.content_type.is_text() {
+        if let Ok(v) = parser::decode_charset(&bytes, charset) {
+            v.into_bytes()
+        } else {
+            a.bytes().to_vec()
+        }
     } else {
         bytes.to_vec()
     }

@@ -22,8 +22,11 @@ use super::*;
 use chrono;
 use data_encoding::BASE64_MIME;
 use encoding::{DecoderTrap, Encoding};
-use nom::{is_hex_digit, le_u8, };
+use nom::FindSubstring;
+use nom::Slice;
+use nom::{is_hex_digit, le_u8};
 use nom::{ErrorKind, IResult, Needed};
+
 use encoding::all::*;
 use std;
 
@@ -47,7 +50,7 @@ pub trait BytesExt {
 impl BytesExt for [u8] {
     fn rtrim(&self) -> &Self {
         if let Some(last) = self.iter().rposition(|b| !is_whitespace!(*b)) {
-            &self[..last+1]
+            &self[..last + 1]
         } else {
             &[]
         }
@@ -192,7 +195,6 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     }
     let tag_end_idx = tag_end_idx.unwrap();
 
-
     if input[2 + tag_end_idx] != b'?' {
         return IResult::Error(error_code!(ErrorKind::Custom(43)));
     }
@@ -225,17 +227,14 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         _ => return IResult::Error(error_code!(ErrorKind::Custom(46))),
     };
 
-
     let charset = Charset::from(&input[2..tag_end_idx]);
 
     if let Charset::UTF8 = charset {
         IResult::Done(&input[encoded_end_idx + 2..], s)
     } else {
         match decode_charset(&s, charset) {
-            Ok(v) => {
-                IResult::Done(&input[encoded_end_idx + 2..], v.into_bytes())
-            },
-            _ =>   IResult::Error(error_code!(ErrorKind::Custom(43))),
+            Ok(v) => IResult::Done(&input[encoded_end_idx + 2..], v.into_bytes()),
+            _ => IResult::Error(error_code!(ErrorKind::Custom(43))),
         }
     }
 }
@@ -269,7 +268,10 @@ fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
     }
 }
 
-named!(qp_underscore_header<u8>, do_parse!(tag!(b"_") >> ({ 0x20 })));
+named!(
+    qp_underscore_header<u8>,
+    do_parse!(tag!(b"_") >> ({ 0x20 }))
+);
 
 // With MIME, headers in quoted printable format can contain underscores that represent spaces.
 // In non-header context, an underscore is just a plain underscore.
@@ -288,7 +290,6 @@ named!(
         preceded!(quoted_printable_soft_break, le_u8) | quoted_printable_byte | le_u8
     ))
 );
-
 
 fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
     if input.is_empty() || input.len() < 3 {
@@ -440,7 +441,6 @@ fn group(input: &[u8]) -> IResult<&[u8], Address> {
 
 named!(address<Address>, ws!(alt_complete!(mailbox | group)));
 
-
 named!(pub rfc2822address_list<Vec<Address>>, ws!( separated_list!(is_a!(","), address)));
 
 named!(pub address_list<String>, ws!(do_parse!(
@@ -519,34 +519,35 @@ fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
 
 named!(pub references<Vec<&[u8]>>, separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
 
-named_args!(pub attachments<'a>(boundary: &'a [u8], boundary_end: &'a [u8]) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
+named_args!(pub attachments<'a>(boundary: &'a [u8]) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
             alt_complete!(do_parse!(
-                take_until!(boundary) >>
+                take_until_and_consume!(boundary) >>
                 vecs: many0!(complete!(do_parse!(
-                            tag!(boundary) >>
                             tag!("\n") >>
-                            body: take_until1!(boundary)  >>
+                            body: take_until_and_consume1!(boundary)  >>
                             ( { body } )))) >>
-                tag!(boundary_end) >>
+                tag!(b"--") >>
                 tag!("\n") >>
                 take_while!(call!(|_| { true })) >>
                 ( {
                     vecs
                 } )
             ) | do_parse!(
-                        take_until!(boundary_end) >>
-                        tag!(boundary_end) >>
+                        take_until_and_consume!(&b"--"[..]) >>
+                        take_until_and_consume!(boundary) >>
                         ( { Vec::<&[u8]>::new() } ))
                     ));
 
 named!(
     content_type_parameter<(&[u8], &[u8])>,
     do_parse!(
-        tag!(";") >> name: terminated!(ws!(take_until!("=")), tag!("="))
+        tag!(";")
+            >> name: terminated!(ws!(take_until!("=")), tag!("="))
             >> value:
                 ws!(alt_complete!(
                     delimited!(tag!("\""), take_until!("\""), tag!("\"")) | is_not!(";")
-                )) >> ({ (name, value) })
+                ))
+            >> ({ (name, value) })
     )
 );
 
@@ -565,31 +566,33 @@ named!(pub space, eat_separator!(&b" \t\r\n"[..]));
 named!(
     encoded_word_list<Vec<u8>>,
     ws!(do_parse!(
-        list: separated_nonempty_list!(call!(space), encoded_word) >> ({
-            let list_len = list.iter().fold(0, |mut acc, x| {
-                acc += x.len();
-                acc
-            });
-            let bytes = list
-                .iter()
-                .fold(Vec::with_capacity(list_len), |mut acc, x| {
-                    acc.append(&mut x.clone());
+        list: separated_nonempty_list!(call!(space), encoded_word)
+            >> ({
+                let list_len = list.iter().fold(0, |mut acc, x| {
+                    acc += x.len();
                     acc
                 });
-            bytes
-        })
+                let bytes = list
+                    .iter()
+                    .fold(Vec::with_capacity(list_len), |mut acc, x| {
+                        acc.append(&mut x.clone());
+                        acc
+                    });
+                bytes
+            })
     ))
 );
 named!(
     ascii_token<Vec<u8>>,
     do_parse!(
         word: alt_complete!(
-            terminated!(take_until1!(" =?"), peek!(preceded!(tag!(b" "), call!(encoded_word))))
-                | take_while!(call!(|_| true))
+            terminated!(
+                take_until1!(" =?"),
+                peek!(preceded!(tag!(b" "), call!(encoded_word)))
+            ) | take_while!(call!(|_| true))
         ) >> ({ word.into() })
     )
 );
-
 
 pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     if input.is_empty() {
@@ -635,10 +638,18 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
             ptr += 1;
         }
         if ptr >= input.len() {
-            acc.extend(ascii_token(&input[ascii_s..ascii_e]).to_full_result().unwrap());
+            acc.extend(
+                ascii_token(&input[ascii_s..ascii_e])
+                    .to_full_result()
+                    .unwrap(),
+            );
             break;
         }
-        acc.extend(ascii_token(&input[ascii_s..ascii_e]).to_full_result().unwrap());
+        acc.extend(
+            ascii_token(&input[ascii_s..ascii_e])
+                .to_full_result()
+                .unwrap(),
+        );
         if ptr != ascii_e {
             acc.push(b' ');
         }
@@ -649,108 +660,139 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 #[cfg(test)]
 mod tests {
 
-use super::*;
+    use super::*;
 
-#[test]
-fn test_subject() {
-    let words = b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
+    #[test]
+    fn test_subject() {
+        let words = b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
      =?iso-8859-7?B?INb18+nq3l0gzd3hIMHt4erv3+358+c6IMzF0c/TIMHQz9TFy8XTzMHU?=
       =?iso-8859-7?B?2c0gwiDUzC4gysHNLiDFzsXUwdPH0yAyMDE3LTE4OiDTx8zFydnTxw==?=";
-    assert!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
-    let words = b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=";
-    assert!("Πρόσθετη εξεταστική" == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
-    let words = b"[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
-    assert!("[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store" == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
-    let words = b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
+        assert!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
+        let words = b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=";
+        assert!(
+            "Πρόσθετη εξεταστική"
+                == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
+        );
+        let words = b"[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
+        assert!(
+            "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store"
+                == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
+        );
+        let words = b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
 	=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=
 	=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
-    assert!("Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store" ==  std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
-    let words = b"sdf";
-    assert!("sdf" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
-    let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
-    assert!("Seg fault στην εκτέλεση του example ru n _sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
-    let words = b"Re: [Advcomparch]
+        assert!(
+            "Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store"
+                == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
+        );
+        let words = b"sdf";
+        assert!("sdf" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
+        let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
+        assert!(
+            "Seg fault στην εκτέλεση του example ru n _sniper"
+                == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
+        );
+        let words = b"Re: [Advcomparch]
  =?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?=
  =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
 
-    //TODO Fix this
-    assert!("Re: [Advcomparch] Seg fault στην εκτέλεση του example run_sniper" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
-}
+        //TODO Fix this
+        assert!(
+            "Re: [Advcomparch] Seg fault στην εκτέλεση του example run_sniper"
+                == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
+        );
+    }
 
-#[test]
-fn test_address() {
-    let s = b"Obit Oppidum <user@domain>,
+    #[test]
+    fn test_address() {
+        let s = b"Obit Oppidum <user@domain>,
             list <list@domain.tld>, list2 <list2@domain.tld>,
             Bobit Boppidum <user@otherdomain.com>, Cobit Coppidum <user2@otherdomain.com>";
-    println!("{:?}", rfc2822address_list(s).unwrap());
-}
+        println!("{:?}", rfc2822address_list(s).unwrap());
+    }
 
-#[test]
-fn test_date() {
-    let s = b"Thu, 31 Aug 2017 13:43:37 +0000 (UTC)";
-    let _s = b"Thu, 31 Aug 2017 13:43:37 +0000";
-    let __s = b"=?utf-8?q?Thu=2C_31_Aug_2017_13=3A43=3A37_-0000?=";
-    eprintln!("{:?}, {:?}", date(s), date(_s));
-    eprintln!("{:?}", date(__s));
-    assert_eq!(date(s).unwrap(), date(_s).unwrap());
-    assert_eq!(date(_s).unwrap(), date(__s).unwrap());
-}
-#[test]
-fn test_attachments() {
-    use std::io::Read;
-    let mut buffer: Vec<u8> = Vec::new();
-    let _ = std::fs::File::open("test/attachment_test")
+    #[test]
+    fn test_date() {
+        let s = b"Thu, 31 Aug 2017 13:43:37 +0000 (UTC)";
+        let _s = b"Thu, 31 Aug 2017 13:43:37 +0000";
+        let __s = b"=?utf-8?q?Thu=2C_31_Aug_2017_13=3A43=3A37_-0000?=";
+        eprintln!("{:?}, {:?}", date(s), date(_s));
+        eprintln!("{:?}", date(__s));
+        assert_eq!(date(s).unwrap(), date(_s).unwrap());
+        assert_eq!(date(_s).unwrap(), date(__s).unwrap());
+    }
+    #[test]
+    fn test_attachments() {
+        use std::io::Read;
+        let mut buffer: Vec<u8> = Vec::new();
+        let _ = std::fs::File::open(
+            "./Trash/cur/1490727777_3.37623.post,U=51565,FMD5=7e33429f656f1e6e9d79b29c3f82c57e:2,S",
+        )
         .unwrap()
         .read_to_end(&mut buffer);
-    let boundary = b"--b1_4382d284f0c601a737bb32aaeda53160--";
-    let boundary_len = boundary.len();
-    let (_, body) = match mail(&buffer).to_full_result() {
-        Ok(v) => v,
-        Err(_) => panic!(),
-    };
-    let attachments = attachments(body, &boundary[0..boundary_len - 2], boundary)
-        .to_full_result()
-        .unwrap();
-    assert_eq!(attachments.len(), 4);
-}
-#[test]
-fn test_addresses() {
-    {
-    let s = b"=?iso-8859-7?B?0/Th/fHv8iDM4ev03ebv8g==?= <maltezos@central.ntua.gr>";
-        let r = mailbox(s).unwrap().1;
-        match r {
-            Address::Mailbox(ref m) => assert!("Σταύρος Μαλτέζος" == std::str::from_utf8(&m.display_name.display_bytes(&m.raw)).unwrap() && std::str::from_utf8(&m.address_spec.display_bytes(&m.raw)).unwrap() == "maltezos@central.ntua.gr"),
-            _ => assert!(false),
+        let boundary = b"bb11dc565bd54a03b36cc119a6266ebd";
+        //let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
+        let boundary_len = boundary.len();
+        let (_, body) = match mail(&buffer).to_full_result() {
+            Ok(v) => v,
+            Err(_) => panic!(),
+        };
+        let attachments = attachments(body, boundary).to_full_result().unwrap();
+        assert_eq!(attachments.len(), 2);
+        let v: Vec<&str> = attachments
+            .iter()
+            .map(|v| std::str::from_utf8(v).unwrap())
+            .collect();
+        println!("attachments {:?}", v);
+    }
+    #[test]
+    fn test_addresses() {
+        {
+            let s = b"=?iso-8859-7?B?0/Th/fHv8iDM4ev03ebv8g==?= <maltezos@central.ntua.gr>";
+            let r = mailbox(s).unwrap().1;
+            match r {
+                Address::Mailbox(ref m) => assert!(
+                    "Σταύρος Μαλτέζος"
+                        == std::str::from_utf8(&m.display_name.display_bytes(&m.raw)).unwrap()
+                        && std::str::from_utf8(&m.address_spec.display_bytes(&m.raw)).unwrap()
+                            == "maltezos@central.ntua.gr"
+                ),
+                _ => assert!(false),
+            }
+        }
+        {
+            let s = b"user@domain";
+            let r = mailbox(s).unwrap().1;
+            match r {
+                Address::Mailbox(ref m) => assert!(
+                    m.display_name.display_bytes(&m.raw) == b""
+                        && m.address_spec.display_bytes(&m.raw) == b"user@domain"
+                ),
+                _ => assert!(false),
+            }
+        }
+        {
+            let s = b"Name <user@domain>";
+            let r = display_addr(s).unwrap().1;
+            match r {
+                Address::Mailbox(ref m) => assert!(
+                    b"Name" == m.display_name.display_bytes(&m.raw)
+                        && b"user@domain" == m.address_spec.display_bytes(&m.raw)
+                ),
+                _ => {}
+            }
+        }
+        {
+            let s = b"user@domain";
+            let r = mailbox(s).unwrap().1;
+            match r {
+                Address::Mailbox(ref m) => assert!(
+                    b"" == m.display_name.display_bytes(&m.raw)
+                        && b"user@domain" == m.address_spec.display_bytes(&m.raw)
+                ),
+                _ => {}
+            }
         }
     }
-    {
-        let s = b"user@domain";
-        let r = mailbox(s).unwrap().1;
-        match r {
-            Address::Mailbox(ref m) => assert!(m.display_name.display_bytes(&m.raw) == b"" 
-                                               && m.address_spec.display_bytes(&m.raw) == b"user@domain"),
-            _ => assert!(false),
-        }
-    }
-    {
-    let s = b"Name <user@domain>";
-    let r = display_addr(s).unwrap().1;
-    match r {
-        Address::Mailbox(ref m) => assert!(b"Name" == m.display_name.display_bytes(&m.raw) &&
-                b"user@domain" == m.address_spec.display_bytes(&m.raw)),
-        _ => {},
-    }
-}
-    {
-        let s = b"user@domain";
-        let r = mailbox(s).unwrap().1;
-        match r {
-            Address::Mailbox(ref m) => assert!(b"" == m.display_name.display_bytes(&m.raw) &&
-                    b"user@domain" ==m.address_spec.display_bytes(&m.raw)),
-            _ => {},
-        }
-    }
-}
-
 
 }

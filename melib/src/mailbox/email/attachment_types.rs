@@ -1,6 +1,31 @@
 use mailbox::email::parser::BytesExt;
+use mailbox::email::attachments::Attachment;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
+
+// TODO: rename.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub struct SliceBuild {
+    offset: usize,
+    end: usize,
+}
+
+impl SliceBuild {
+    pub fn new(offset: usize, length: usize) -> Self {
+        SliceBuild {
+            offset,
+            end: offset + length,
+        }
+    }
+    //fn length(&self) -> usize {
+    //    self.end - self.offset + 1
+    //}
+    pub fn get<'a>(&self, slice:&'a [u8]) -> &'a [u8] {
+        &slice[self.offset..self.end]
+    }
+}
+
+
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Charset {
@@ -57,7 +82,12 @@ pub enum MultipartType {
     Mixed,
     Alternative,
     Digest,
-    Unsupported { tag: Vec<u8> },
+}
+
+impl Default for MultipartType {
+    fn default() -> Self {
+        MultipartType::Mixed
+    }
 }
 
 impl Display for MultipartType {
@@ -66,23 +96,21 @@ impl Display for MultipartType {
             MultipartType::Mixed => write!(f, "multipart/mixed"),
             MultipartType::Alternative => write!(f, "multipart/alternative"),
             MultipartType::Digest => write!(f, "multipart/digest"),
-            MultipartType::Unsupported { tag: ref t } => {
-                write!(f, "multipart/{}", String::from_utf8_lossy(t))
-            }
         }
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ContentType {
-    Text { charset: Charset },
-    Multipart { boundary: Vec<u8> },
+    Text { kind: Text, charset: Charset },
+    Multipart { boundary: SliceBuild, kind: MultipartType, subattachments: Vec<Attachment>},
     Unsupported { tag: Vec<u8> },
 }
 
 impl Default for ContentType {
     fn default() -> Self {
         ContentType::Text {
+            kind: Text::Plain,
             charset: Charset::UTF8,
         }
     }
@@ -90,9 +118,9 @@ impl Default for ContentType {
 
 impl Display for ContentType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match *self {
-            ContentType::Text { .. } => write!(f, "text"),
-            ContentType::Multipart { .. } => write!(f, "multipart"),
+        match self {
+            ContentType::Text { kind: t, .. } => t.fmt(f),
+            ContentType::Multipart { kind: k, .. } => k.fmt(f),
             ContentType::Unsupported { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
         }
     }
@@ -106,18 +134,8 @@ impl ContentType {
             false
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum ContentSubType {
-    Plain,
-    Html,
-    Other { tag: Vec<u8> },
-}
-
-impl ContentSubType {
-    pub fn is_html(&self) -> bool {
-        if let ContentSubType::Html = self {
+    pub fn is_text_html(&self) -> bool {
+        if let ContentType::Text { kind: Text::Html, .. } = self {
             true
         } else {
             false
@@ -125,12 +143,31 @@ impl ContentSubType {
     }
 }
 
-impl Display for ContentSubType {
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum Text {
+    Plain,
+    Html,
+    Rfc822,
+    Other { tag: Vec<u8> },
+}
+
+impl Text {
+    pub fn is_html(&self) -> bool {
+        if let Text::Html = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl Display for Text {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match *self {
-            ContentSubType::Plain => write!(f, "plain"),
-            ContentSubType::Html => write!(f, "html"),
-            ContentSubType::Other { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
+            Text::Plain => write!(f, "text/plain"),
+            Text::Html => write!(f, "text/html"),
+            Text::Rfc822 => write!(f, "text/rfc822"),
+            Text::Other { tag: ref t } => write!(f, "text/{}", String::from_utf8_lossy(t)),
         }
     }
 }
@@ -141,4 +178,10 @@ pub enum ContentTransferEncoding {
     Base64,
     QuotedPrintable,
     Other { tag: Vec<u8> },
+}
+
+impl Default for ContentTransferEncoding {
+    fn default() -> Self {
+        ContentTransferEncoding::_7Bit
+    }
 }
