@@ -20,6 +20,7 @@
  */
 use data_encoding::BASE64_MIME;
 use mailbox::email::parser;
+use mailbox::email::parser::BytesExt;
 use std::fmt;
 use std::str;
 
@@ -51,10 +52,11 @@ pub struct Attachment {
 
 impl fmt::Debug for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n }}",
+        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n, body:\n{}\n }}",
         self.content_type,
         self.content_transfer_encoding,
-        self.raw.len())
+        self.raw.len(),
+        str::from_utf8(&self.raw).unwrap())
     }
 }
 
@@ -81,7 +83,7 @@ impl AttachmentBuilder {
                 let offset = _boundary.as_ptr() as usize - value.as_ptr() as usize;
                 let boundary = SliceBuild::new(offset, _boundary.len());
                 let subattachments = Self::subattachments(&self.raw, boundary.get(&value));
-                eprintln!("boundary is {} and suba is {:?}", str::from_utf8(_boundary).unwrap(), subattachments);
+                assert!(subattachments.len() > 0);
                 self.content_type = ContentType::Multipart {
                     boundary,
                     kind: if cst.eq_ignore_ascii_case(b"mixed") {
@@ -188,39 +190,37 @@ impl AttachmentBuilder {
     }
 
     pub fn subattachments(raw: &[u8], boundary: &[u8]) -> Vec<Attachment> {
-        eprintln!("subattachments boundary {}", str::from_utf8(boundary).unwrap());
         match parser::attachments(raw, boundary).to_full_result()
         {
             Ok(attachments) => {
                 let mut vec = Vec::with_capacity(attachments.len());
                 for a in attachments {
                     let mut builder = AttachmentBuilder::default();
-                    let body_slice = {
-                        let (headers, body) = match parser::attachment(&a).to_full_result() {
-                            Ok(v) => v,
-                            Err(_) => {
-                                eprintln!("error in parsing attachment");
-                                eprintln!("\n-------------------------------");
-                                eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
-                                eprintln!("-------------------------------\n");
+                    let (headers, body) = match parser::attachment(&a).to_full_result() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            eprintln!("error in parsing attachment");
+                            eprintln!("\n-------------------------------");
+                            eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
+                            eprintln!("-------------------------------\n");
 
-                                continue;
-                            }
-                        };
-                        for (name, value) in headers {
-                            if name.eq_ignore_ascii_case(b"content-type") {
-                                builder.content_type(value);
-                            } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
-                                builder.content_transfer_encoding(value);
-                            }
+                            continue;
                         }
+                    };
+                    let body_slice = {
                         let offset = body.as_ptr() as usize - a.as_ptr() as usize;
                         SliceBuild::new(offset, body.len())
                     };
                     builder.raw = body_slice.get(a).into();
+                    for (name, value) in headers {
+                        if name.eq_ignore_ascii_case(b"content-type") {
+                            builder.content_type(value);
+                        } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
+                            builder.content_transfer_encoding(value);
+                        }
+                    }
                     vec.push(builder.build());
                 }
-                eprintln!("subattachments {:?}", vec);
                 vec
             }
             a => {
@@ -303,7 +303,7 @@ impl Attachment {
     pub fn text(&self) -> String {
         let mut text = Vec::with_capacity(self.raw.len());
         self.get_text_recursive(&mut text);
-        String::from_utf8_lossy(&text).into()
+        String::from_utf8_lossy(text.as_slice().trim()).into()
     }
     pub fn description(&self) -> Vec<String> {
         self.attachments().iter().map(|a| a.text()).collect()

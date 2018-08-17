@@ -22,8 +22,6 @@ use super::*;
 use chrono;
 use data_encoding::BASE64_MIME;
 use encoding::{DecoderTrap, Encoding};
-use nom::FindSubstring;
-use nom::Slice;
 use nom::{is_hex_digit, le_u8};
 use nom::{ErrorKind, IResult, Needed};
 
@@ -519,20 +517,53 @@ fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
 
 named!(pub references<Vec<&[u8]>>, separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
 
+fn attachments_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<&'a [u8]>> {
+    let mut ret: Vec<&[u8]> = Vec::new();
+    let mut input = input.ltrim();
+    loop {
+        let b_start = if let Some(v) = input.find(boundary) {
+            v
+        } else {
+            return IResult::Error(error_code!(ErrorKind::Custom(39)));
+        };
+
+        if b_start < 2 {
+            return IResult::Error(error_code!(ErrorKind::Custom(40)));
+        }
+        input = &input[b_start - 2..];
+        if &input[0..2] == b"--" {
+            input = &input[2 + boundary.len()..];
+            if &input[0..1] != b"\n" {
+                continue;
+            }
+            input = &input[1..];
+            break;
+        }
+    }
+    loop {
+        if input.len() < boundary.len() + 4 {
+            return IResult::Error(error_code!(ErrorKind::Custom(41)));
+        }
+        if let Some(end) = input.find(boundary) {
+            if &input[end - 2..end] != b"--" {
+                return IResult::Error(error_code!(ErrorKind::Custom(42)));
+            }
+            ret.push(&input[0..end - 2]);
+            input = &input[end + boundary.len()..];
+            if input.len() < 2 || input[0] != b'\n' || &input[0..2] == b"--" {
+                break;
+            }
+            input = &input[1..];
+            continue;
+        } else {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        }
+    }
+    return IResult::Done(input, ret);
+}
+
 named_args!(pub attachments<'a>(boundary: &'a [u8]) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
-            alt_complete!(do_parse!(
-                take_until_and_consume!(boundary) >>
-                vecs: many0!(complete!(do_parse!(
-                            tag!("\n") >>
-                            body: take_until_and_consume1!(boundary)  >>
-                            ( { body } )))) >>
-                tag!(b"--") >>
-                tag!("\n") >>
-                take_while!(call!(|_| { true })) >>
-                ( {
-                    vecs
-                } )
-            ) | do_parse!(
+            alt_complete!(call!(attachments_f, boundary) | do_parse!(
                         take_until_and_consume!(&b"--"[..]) >>
                         take_until_and_consume!(boundary) >>
                         ( { Vec::<&[u8]>::new() } ))
@@ -725,20 +756,17 @@ mod tests {
     fn test_attachments() {
         use std::io::Read;
         let mut buffer: Vec<u8> = Vec::new();
-        let _ = std::fs::File::open(
-            "./Trash/cur/1490727777_3.37623.post,U=51565,FMD5=7e33429f656f1e6e9d79b29c3f82c57e:2,S",
-        )
-        .unwrap()
-        .read_to_end(&mut buffer);
-        let boundary = b"bb11dc565bd54a03b36cc119a6266ebd";
-        //let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
+        let _ = std::fs::File::open("./attachment_test")
+            .unwrap()
+            .read_to_end(&mut buffer);
+        let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
         let boundary_len = boundary.len();
         let (_, body) = match mail(&buffer).to_full_result() {
             Ok(v) => v,
             Err(_) => panic!(),
         };
         let attachments = attachments(body, boundary).to_full_result().unwrap();
-        assert_eq!(attachments.len(), 2);
+        assert_eq!(attachments.len(), 4);
         let v: Vec<&str> = attachments
             .iter()
             .map(|v| std::str::from_utf8(v).unwrap())
