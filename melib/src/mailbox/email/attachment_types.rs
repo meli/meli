@@ -104,6 +104,7 @@ impl Display for MultipartType {
 pub enum ContentType {
     Text { kind: Text, charset: Charset },
     Multipart { boundary: SliceBuild, kind: MultipartType, subattachments: Vec<Attachment>},
+    MessageRfc822,
     Unsupported { tag: Vec<u8> },
 }
 
@@ -122,6 +123,7 @@ impl Display for ContentType {
             ContentType::Text { kind: t, .. } => t.fmt(f),
             ContentType::Multipart { kind: k, .. } => k.fmt(f),
             ContentType::Unsupported { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
+            ContentType::MessageRfc822 => write!(f, "message/rfc822"),
         }
     }
 }

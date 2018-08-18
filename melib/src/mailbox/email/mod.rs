@@ -207,29 +207,39 @@ bitflags! {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct EnvelopeBuilder {
-    from: Option<Vec<Address>>,
-    to: Vec<Address>,
-    body: Option<Attachment>,
-    in_reply_to: Option<MessageID>,
-    flags: Flag,
+pub struct EnvelopeWrapper {
+    envelope: Envelope,
+    buffer: Vec<u8>,
 }
 
-impl EnvelopeBuilder {
-    pub fn new() -> Self {
-        Default::default()
+
+use std::ops::Deref;
+
+impl Deref for EnvelopeWrapper {
+    type Target = Envelope;
+
+    fn deref(&self) -> &Envelope {
+        &self.envelope
+    }
+}
+
+impl EnvelopeWrapper {
+    pub fn new(buffer: Vec<u8>) -> Self {
+        EnvelopeWrapper {
+            envelope: Envelope::from_bytes(&buffer).unwrap(),
+            buffer,
+        }
     }
 
-    pub fn build(self) -> Envelope {
-        unimplemented!();
+    pub fn update(&mut self, new_buffer: Vec<u8>) {
+        *self = EnvelopeWrapper::new(new_buffer);
+    }
 
-        /*
-         * 1. Check for date. Default is now
-         * 2.
-        Envelope {
-
-
-        */
+    pub fn envelope(&self) -> &Envelope {
+        &self.envelope
+    }
+    pub fn buffer(&self) -> &[u8] {
+        &self.buffer
     }
 }
 
@@ -240,7 +250,7 @@ impl EnvelopeBuilder {
 ///  Access to the underlying email object in the account's backend (for example the file or the
 ///  entry in an IMAP server) is given through `operation_token`. For more information see
 ///  `BackendOp`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Envelope {
     date: String,
     from: Vec<Address>,
@@ -279,100 +289,118 @@ impl Envelope {
             flags: Flag::default(),
         }
     }
-    pub fn from_token(operation: Box<BackendOp>, hash: u64) -> Option<Envelope> {
+    pub fn from_bytes(bytes: &[u8]) -> Option<Envelope> {
+        let mut h = DefaultHasher::new();
+        h.write(bytes);
+        let mut e = Envelope::new(h.finish());
+        let res = e.populate_headers(bytes).ok();
+        if res.is_some() {
+            return Some(e);
+        }
+        None
+    }
+    pub fn from_token(mut operation: Box<BackendOp>, hash: u64) -> Option<Envelope> {
         let mut e = Envelope::new(hash);
         e.flags = operation.fetch_flags();
-        let res = e.populate_headers(operation).ok();
-        if res.is_some() {
-            Some(e)
-        } else {
-            None
+        if let Ok(bytes) = operation.as_bytes() {
+            let res = e.populate_headers(bytes).ok();
+            if res.is_some() {
+                return Some(e);
+            }
         }
+        None
     }
     pub fn hash(&self) -> u64 {
         self.hash
     }
-    pub fn populate_headers(&mut self, mut operation: Box<BackendOp>) -> Result<()> {
-        {
-            let headers = match parser::headers(operation.fetch_headers()?).to_full_result() {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("error in parsing mail\n");
-                    return Err(MeliError::from(e));
-                }
-            };
+    pub fn populate_headers(&mut self, bytes: &[u8]) -> Result<()> {
 
-            let mut in_reply_to = None;
-            let mut datetime = None;
+        let (headers, _) = match parser::mail(bytes).to_full_result() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("error in parsing mail\n{:?}\n", e);
+                let error_msg = String::from("Mail cannot be shown because of errors.");
+                return Err(MeliError::new(error_msg));
+            }
+        };
+        let mut in_reply_to = None;
+        let mut datetime = None;
 
-            for (name, value) in headers {
-                if value.len() == 1 && value.is_empty() {
-                    continue;
-                }
-                if name.eq_ignore_ascii_case(b"to") {
-                    let parse_result = parser::rfc2822address_list(value);
-                    let value = if parse_result.is_done() {
-                        parse_result.to_full_result().unwrap()
-                    } else {
-                        Vec::new()
-                    };
-                    self.set_to(value);
-                } else if name.eq_ignore_ascii_case(b"from") {
-                    let parse_result = parser::rfc2822address_list(value);
-                    let value = if parse_result.is_done() {
-                        parse_result.to_full_result().unwrap()
-                    } else {
-                        Vec::new()
-                    };
-                    self.set_from(value);
-                } else if name.eq_ignore_ascii_case(b"subject") {
-                    let parse_result = parser::phrase(value.trim());
-                    let value = if parse_result.is_done() {
-                        parse_result.to_full_result().unwrap()
-                    } else {
-                        "".into()
-                    };
-                    self.set_subject(value);
-                } else if name.eq_ignore_ascii_case(b"message-id") {
-                    self.set_message_id(value);
-                } else if name.eq_ignore_ascii_case(b"references") {
-                    {
-                        let parse_result = parser::references(value);
-                        if parse_result.is_done() {
-                            for v in parse_result.to_full_result().unwrap() {
-                                self.push_references(v);
-                            }
+        for (name, value) in headers {
+            if value.len() == 1 && value.is_empty() {
+                continue;
+            }
+            if name.eq_ignore_ascii_case(b"to") {
+                let parse_result = parser::rfc2822address_list(value);
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    Vec::new()
+                };
+                self.set_to(value);
+            } else if name.eq_ignore_ascii_case(b"from") {
+                let parse_result = parser::rfc2822address_list(value);
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    Vec::new()
+                };
+                self.set_from(value);
+            } else if name.eq_ignore_ascii_case(b"subject") {
+                let parse_result = parser::phrase(value.trim());
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    "".into()
+                };
+                self.set_subject(value);
+            } else if name.eq_ignore_ascii_case(b"message-id") {
+                self.set_message_id(value);
+            } else if name.eq_ignore_ascii_case(b"references") {
+                {
+                    let parse_result = parser::references(value);
+                    if parse_result.is_done() {
+                        for v in parse_result.to_full_result().unwrap() {
+                            self.push_references(v);
                         }
                     }
-                    self.set_references(value);
-                } else if name.eq_ignore_ascii_case(b"in-reply-to") {
-                    self.set_in_reply_to(value);
-                    in_reply_to = Some(value);
-                } else if name.eq_ignore_ascii_case(b"date") {
-                    self.set_date(value);
-                    datetime = Some(value);
                 }
+                self.set_references(value);
+            } else if name.eq_ignore_ascii_case(b"in-reply-to") {
+                self.set_in_reply_to(value);
+                in_reply_to = Some(value);
+            } else if name.eq_ignore_ascii_case(b"date") {
+                self.set_date(value);
+                datetime = Some(value);
             }
-            /*
-             * https://tools.ietf.org/html/rfc5322#section-3.6.4
-             *
-             * if self.message_id.is_none()  ...
-             */
-            if let Some(ref mut x) = in_reply_to {
-                self.push_references(x);
+        }
+        /*
+         * https://tools.ietf.org/html/rfc5322#section-3.6.4
+         *
+         * if self.message_id.is_none()  ...
+         */
+        if let Some(ref mut x) = in_reply_to {
+            self.push_references(x);
+        }
+        if let Some(ref mut d) = datetime {
+            if let Some(d) = parser::date(d) {
+                self.set_datetime(d);
             }
-            if let Some(ref mut d) = datetime {
-                if let Some(d) = parser::date(d) {
-                    self.set_datetime(d);
-                }
-            }
-    }
+        }
         if self.message_id.is_none() {
             let mut h = DefaultHasher::new();
-            h.write(&self.bytes(operation));
+            h.write(bytes);
             self.set_message_id(format!("<{:x}>", h.finish()).as_bytes());
         }
         Ok(())
+    }
+
+
+    pub fn populate_headers_from_token(&mut self, mut operation: Box<BackendOp>) -> Result<()> {
+        {
+            let headers = operation.fetch_headers()?;
+            return self.populate_headers(headers);
+        }
     }
     pub fn date(&self) -> u64 {
         self.timestamp
@@ -409,6 +437,29 @@ impl Envelope {
             .as_bytes()
             .map(|v| v.into())
             .unwrap_or_else(|_| Vec::new())
+    }
+    pub fn body_bytes(&self, bytes: &[u8]) -> Attachment {
+        let (headers, body) = match parser::mail(bytes).to_full_result() {
+            Ok(v) => v,
+            Err(_) => {
+                eprintln!("error in parsing mail\n");
+                let error_msg = b"Mail cannot be shown because of errors.";
+                let mut builder = AttachmentBuilder::new(error_msg);
+                return builder.build();
+            }
+        };
+        let mut builder = AttachmentBuilder::new(body);
+        for (name, value) in headers {
+            if value.len() == 1 && value.is_empty() {
+                continue;
+            }
+            if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
+                builder.content_transfer_encoding(value);
+            } else if name.eq_ignore_ascii_case(b"content-type") {
+                builder.content_type(value);
+            }
+        }
+        builder.build()
     }
     pub fn body(&self, mut operation: Box<BackendOp>) -> Attachment {
         let file = operation.as_bytes();

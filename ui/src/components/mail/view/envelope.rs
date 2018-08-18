@@ -23,14 +23,6 @@ use super::*;
 use linkify::{Link, LinkFinder};
 use std::process::{Command, Stdio};
 
-mod html;
-pub use self::html::*;
-mod thread;
-pub use self::thread::*;
-
-mod envelope;
-pub use self::envelope::*;
-
 use mime_apps::query_default_app;
 
 #[derive(PartialEq, Debug)]
@@ -53,38 +45,35 @@ impl ViewMode {
 
 /// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
 /// menus
-pub struct MailView {
-    coordinates: (usize, usize, usize),
-    local_collection: Vec<usize>,
+pub struct EnvelopeView {
     pager: Option<Pager>,
     subview: Option<Box<Component>>,
     dirty: bool,
     mode: ViewMode,
+    wrapper: EnvelopeWrapper,
 
     cmd_buf: String,
 }
 
-impl fmt::Display for MailView {
+impl fmt::Display for EnvelopeView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display subject/info
         write!(f, "view mail")
     }
 }
 
-impl MailView {
+impl EnvelopeView {
     pub fn new(
-        coordinates: (usize, usize, usize),
-        local_collection: Vec<usize>,
+        wrapper: EnvelopeWrapper,
         pager: Option<Pager>,
         subview: Option<Box<Component>>,
         ) -> Self {
-        MailView {
-            coordinates,
-            local_collection,
+        EnvelopeView {
             pager,
             subview,
             dirty: true,
             mode: ViewMode::Normal,
+            wrapper,
 
             cmd_buf: String::with_capacity(4),
         }
@@ -202,29 +191,18 @@ impl MailView {
     }
 }
 
-impl Component for MailView {
+impl Component for EnvelopeView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        let (envelope_idx, y): (usize, usize) = {
-            let accounts = &mut context.accounts;
-            let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
-            let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
-                .as_ref()
-                .unwrap();
-            let envelope_idx: usize = if threaded {
-                mailbox.threaded_mail(self.coordinates.2)
-            } else {
-                self.local_collection[self.coordinates.2]
-            };
-
-            let envelope: &Envelope = &mailbox.collection[envelope_idx];
+        let y :usize = {
+            let envelope: &Envelope = &self.wrapper;
 
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area);
                 context.dirty_areas.push_back(area);
-                (envelope_idx, get_y(upper_left) - 1)
+                get_y(upper_left) - 1
             } else {
                 let (x, y) = write_string_to_grid(
                     &format!("Date: {}", envelope.date_as_str()),
@@ -295,18 +273,12 @@ impl Component for MailView {
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 1)));
-                (envelope_idx, y + 1)
+                y + 1
             }
         };
 
         if self.dirty {
-            let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
-            let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
-                .as_ref()
-                .unwrap();
-            let envelope: &Envelope = &mailbox.collection[envelope_idx];
-            let op = context.accounts[mailbox_idx.0].backend.operation(envelope.hash());
-            let body = envelope.body(op);
+            let body = self.wrapper.body_bytes(self.wrapper.buffer());
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(decode(
@@ -322,7 +294,7 @@ impl Component for MailView {
                     let buf = {
                         let text = self.attachment_to_text(body);
                         // URL indexes must be colored (ugh..)
-                        MailView::plain_text_to_buf(&text, self.mode == ViewMode::Url)
+                        EnvelopeView::plain_text_to_buf(&text, self.mode == ViewMode::Url)
                     };
                     let cursor_pos = if self.mode.is_attachment() {
                         Some(0)
@@ -371,25 +343,12 @@ impl Component for MailView {
                 self.cmd_buf.clear();
 
                 {
-                    let accounts = &context.accounts;
-                    let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
-                    let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
-                        .as_ref()
-                        .unwrap();
-                    let envelope_idx: usize = if threaded {
-                        mailbox.threaded_mail(self.coordinates.2)
-                    } else {
-                        self.local_collection[self.coordinates.2]
-                    };
-
-                    let envelope: &Envelope = &mailbox.collection[envelope_idx];
-                    let op = context.accounts[self.coordinates.0].backend.operation(envelope.hash());
-                    if let Some(u) = envelope.body(op).attachments().get(lidx) {
+                    let envelope: &Envelope = self.wrapper.envelope();
+                    if let Some(u) = envelope.body_bytes(self.wrapper.buffer()).attachments().get(lidx) {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
                                 self.mode = ViewMode::Subview;
-                                let wrapper = EnvelopeWrapper::new(u.bytes().to_vec());
-                                self.subview = Some(Box::new(EnvelopeView::new(wrapper, None, None)));
+                                self.subview = Some(Box::new(Pager::from_str(&String::from_utf8_lossy(&decode_rec(u, None)).to_string(), None)));
                             },
 
                             ContentType::Text { .. } => {
@@ -449,21 +408,9 @@ impl Component for MailView {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
                 let url = {
-                    let accounts = &context.accounts;
-                    let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
-                    let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
-                        .as_ref()
-                        .unwrap();
-                    let envelope_idx: usize = if threaded {
-                        mailbox.threaded_mail(self.coordinates.2)
-                    } else {
-                        self.local_collection[self.coordinates.2]
-                    };
-
-                    let envelope: &Envelope = &mailbox.collection[envelope_idx];
+                    let envelope: &Envelope = self.wrapper.envelope();
                     let finder = LinkFinder::new();
-                    let op = context.accounts[self.coordinates.0].backend.operation(envelope.hash());
-                    let mut t = envelope.body(op).text().to_string();
+                    let mut t = envelope.body_bytes(self.wrapper.buffer()).text().to_string();
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {
                         u.as_str().to_string()
