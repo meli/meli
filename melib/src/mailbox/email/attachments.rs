@@ -247,10 +247,11 @@ impl fmt::Display for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.content_type {
             ContentType::MessageRfc822 => {
-                let wrapper = EnvelopeWrapper::new(self.bytes().to_vec());
-                write!(f, "message/rfc822: {} - {} - {}", wrapper.date(), wrapper.from_to_string(), wrapper.subject())
-            }
-
+                match EnvelopeWrapper::new(self.bytes().to_vec()) {
+                    Ok(wrapper) => write!(f, "message/rfc822: {} - {} - {}", wrapper.date(), wrapper.from_to_string(), wrapper.subject()),
+                    Err(e) => write!(f, "{}", e),
+                }
+            },
             ContentType::Unsupported { .. } => {
                 write!(f, "Data attachment of type {}", self.mime_type())
             }

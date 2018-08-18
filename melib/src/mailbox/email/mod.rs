@@ -224,15 +224,18 @@ impl Deref for EnvelopeWrapper {
 }
 
 impl EnvelopeWrapper {
-    pub fn new(buffer: Vec<u8>) -> Self {
-        EnvelopeWrapper {
-            envelope: Envelope::from_bytes(&buffer).unwrap(),
+    pub fn new(buffer: Vec<u8>) -> Result<Self> {
+        Ok(EnvelopeWrapper {
+            envelope: Envelope::from_bytes(&buffer)?,
             buffer,
-        }
+        })
     }
 
     pub fn update(&mut self, new_buffer: Vec<u8>) {
-        *self = EnvelopeWrapper::new(new_buffer);
+        // TODO: Propagate error.
+        if let Ok(e) = EnvelopeWrapper::new(new_buffer) {
+            *self = e;
+        }
     }
 
     pub fn envelope(&self) -> &Envelope {
@@ -289,15 +292,15 @@ impl Envelope {
             flags: Flag::default(),
         }
     }
-    pub fn from_bytes(bytes: &[u8]) -> Option<Envelope> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Envelope> {
         let mut h = DefaultHasher::new();
         h.write(bytes);
         let mut e = Envelope::new(h.finish());
         let res = e.populate_headers(bytes).ok();
         if res.is_some() {
-            return Some(e);
+            return Ok(e);
         }
-        None
+        Err(MeliError::new("Couldn't parse mail."))
     }
     pub fn from_token(mut operation: Box<BackendOp>, hash: u64) -> Option<Envelope> {
         let mut e = Envelope::new(hash);

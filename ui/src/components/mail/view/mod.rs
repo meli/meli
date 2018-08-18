@@ -388,8 +388,20 @@ impl Component for MailView {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
                                 self.mode = ViewMode::Subview;
-                                let wrapper = EnvelopeWrapper::new(u.bytes().to_vec());
-                                self.subview = Some(Box::new(EnvelopeView::new(wrapper, None, None)));
+                                match EnvelopeWrapper::new(u.bytes().to_vec()) {
+                                    Ok(wrapper) => {
+                                        self.subview = Some(Box::new(EnvelopeView::new(wrapper, None, None)));
+                                    }, 
+                                    Err(e) => {
+                                        context.replies.push_back(UIEvent {
+                                            id: 0,
+                                            event_type: UIEventType::StatusNotification(
+                                                format!("{}", e)
+                                                ),
+                                        });
+                                    }
+                                }
+                                return;
                             },
 
                             ContentType::Text { .. } => {

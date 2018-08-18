@@ -25,6 +25,7 @@ pub struct Composer {
     dirty: bool,
     mode: ViewMode,
     pager: Pager,
+    buffer: String,
 }
 
 impl Default for Composer {
@@ -33,6 +34,7 @@ impl Default for Composer {
             dirty: true,
             mode: ViewMode::Overview,
             pager: Pager::from_str("asdfs\nfdsfds\ndsfdsfs\n\n\n\naaaaaaaaaaaaaa\nfdgfd", None),
+            buffer: String::new(),
         }
     }
 }
@@ -53,6 +55,10 @@ impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
             clear_area(grid, area);
+        }
+        if !self.buffer.is_empty() {
+            eprintln!("{:?}", EnvelopeWrapper::new(self.buffer.as_bytes().to_vec()));
+
         }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -109,7 +115,11 @@ impl Component for Composer {
                 {
                     context.input_kill();
                 }
-                let mut f = create_temp_file(&new_draft(context), None);
+                let mut f = if self.buffer.is_empty() {
+                    create_temp_file(&new_draft(context), None)
+                } else {
+                    create_temp_file(&self.buffer.as_bytes(), None)
+                };
                 //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
 
                 // TODO: check exit status
@@ -120,7 +130,9 @@ impl Component for Composer {
                     .stdout(Stdio::inherit())
                     .output()
                     .expect("failed to execute process");
-                self.pager.update_from_string(f.read_to_string());
+                let result = f.read_to_string();
+                self.buffer = result.clone();
+                self.pager.update_from_string(result);
                 context.restore_input();
                 self.dirty = true;
                 return;
