@@ -31,8 +31,6 @@ pub use self::email::*;
 pub mod backends;
 use error::Result;
 use mailbox::backends::{folder_default, Folder, MailBackend};
-pub mod accounts;
-pub use mailbox::accounts::Account;
 pub mod thread;
 pub use mailbox::thread::{build_threads, Container, Threads, SortOrder, SortField};
 

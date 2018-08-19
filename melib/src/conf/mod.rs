@@ -25,7 +25,6 @@ pub struct AccountSettings {
     pub root_folder: String,
     pub format: String,
     pub sent_folder: String,
-    pub threaded: bool,
 }
 
 impl AccountSettings {

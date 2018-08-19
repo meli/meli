@@ -209,7 +209,7 @@ impl Component for MailView {
 
         let (envelope_idx, y): (usize, usize) = {
             let accounts = &mut context.accounts;
-            let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
+            let threaded = accounts[self.coordinates.0].runtime_settings.conf().threaded();
             let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
                 .unwrap();
@@ -372,7 +372,7 @@ impl Component for MailView {
 
                 {
                     let accounts = &context.accounts;
-                    let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
+                    let threaded = accounts[self.coordinates.0].runtime_settings.conf().threaded();
                     let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();
@@ -462,7 +462,7 @@ impl Component for MailView {
                 self.cmd_buf.clear();
                 let url = {
                     let accounts = &context.accounts;
-                    let threaded = accounts[self.coordinates.0].runtime_settings.threaded;
+                    let threaded = accounts[self.coordinates.0].runtime_settings.conf().threaded();
                     let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();

@@ -42,6 +42,12 @@ impl FileAccount {
     pub fn folder(&self) -> &str {
         &self.root_folder
     }
+    pub fn threaded(&self) -> bool {
+        self.threaded
+    }
+    pub fn toggle_threaded(&mut self) {
+        self.threaded = !self.threaded;
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -51,23 +57,26 @@ struct FileSettings {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct AccountConfiguration {
+pub struct AccountConf {
     account: AccountSettings,
     conf: FileAccount,
 }
 
-impl AccountConfiguration {
+impl AccountConf {
     pub fn account(&self) -> &AccountSettings {
         &self.account
     }
     pub fn conf(&self) -> &FileAccount {
         &self.conf
     }
+    pub fn conf_mut(&mut self) -> &mut FileAccount {
+        &mut self.conf
+    }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Settings {
-    pub accounts: HashMap<String, AccountConfiguration>,
+    pub accounts: HashMap<String, AccountConf>,
     pub pager: PagerSettings,
 }
 
@@ -91,12 +100,11 @@ impl FileSettings {
 impl Settings {
     pub fn new() -> Settings {
         let fs = FileSettings::new();
-        let mut s: HashMap<String, AccountConfiguration> = HashMap::new();
+        let mut s: HashMap<String, AccountConf> = HashMap::new();
 
         for (id, x) in fs.accounts {
             let format = x.format.to_lowercase();
             let sent_folder = x.sent_folder.clone();
-            let threaded = x.threaded;
             let root_folder = x.root_folder.clone();
 
             let acc = AccountSettings {
@@ -104,10 +112,9 @@ impl Settings {
                 root_folder,
                 format,
                 sent_folder,
-                threaded,
             };
 
-            s.insert(id, AccountConfiguration {
+            s.insert(id, AccountConf {
                 account: acc,
                 conf: x
             });

@@ -24,8 +24,9 @@
  */
 
 use async::*;
-use conf::AccountSettings;
-use mailbox::backends::{Backends, RefreshEventConsumer};
+use conf::AccountConf;
+use melib::error::Result;
+use mailbox::backends::{MailBackend, Folder, Backends, RefreshEventConsumer};
 use mailbox::*;
 use std::ops::{Index, IndexMut};
 use std::result;
@@ -47,20 +48,20 @@ pub struct Account {
 
     sent_folder: Option<usize>,
 
-    pub settings: AccountSettings,
-    pub runtime_settings: AccountSettings,
+    pub settings: AccountConf,
+    pub runtime_settings: AccountConf,
     pub backend: Box<MailBackend>,
 }
 
 impl Account {
-    pub fn new(name: String, settings: AccountSettings, map: &Backends) -> Self {
-        let mut backend = map.get(settings.format())(&settings);
+    pub fn new(name: String, settings: AccountConf, map: &Backends) -> Self {
+        let mut backend = map.get(settings.account().format())(settings.account());
         let ref_folders: Vec<Folder> = backend.folders();
         let mut folders: Vec<Option<Result<Mailbox>>> = Vec::with_capacity(ref_folders.len());
         let mut workers: Vec<Worker> = Vec::new();
         let sent_folder = ref_folders
             .iter()
-            .position(|x: &Folder| x.name() == settings.sent_folder);
+            .position(|x: &Folder| x.name() == settings.account().sent_folder);
         for f in ref_folders {
             folders.push(None);
             let handle = backend.get(&f);

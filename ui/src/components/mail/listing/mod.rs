@@ -96,7 +96,8 @@ impl MailListing {
 
         let threaded = context.accounts[self.cursor_pos.0]
             .runtime_settings
-            .threaded;
+            .conf()
+            .threaded();
         // Inform State that we changed the current folder view.
         context.replies.push_back(UIEvent {
             id: 0,
@@ -293,7 +294,8 @@ impl MailListing {
     fn highlight_line_self(&mut self, idx: usize, context: &Context) {
         let threaded = context.accounts[self.cursor_pos.0]
             .runtime_settings
-            .threaded;
+            .conf()
+            .threaded();
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
@@ -327,7 +329,8 @@ impl MailListing {
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
         let threaded = context.accounts[self.cursor_pos.0]
             .runtime_settings
-            .threaded;
+            .conf()
+            .threaded();
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
@@ -515,7 +518,8 @@ impl Component for MailListing {
                 } else {
                     let threaded = context.accounts[self.cursor_pos.0]
                         .runtime_settings
-                        .threaded;
+                        .conf()
+                        .threaded();
                     let account = &mut context.accounts[self.cursor_pos.0];
                     let (hash, is_seen) = {
                         let mailbox = &mut account[self.cursor_pos.1]
@@ -737,9 +741,8 @@ impl Component for MailListing {
                 Action::MailListing(MailListingAction::ToggleThreaded) => {
                     context.accounts[self.cursor_pos.0]
                         .runtime_settings
-                        .threaded = !context.accounts[self.cursor_pos.0]
-                        .runtime_settings
-                        .threaded;
+                        .conf_mut()
+                        .toggle_threaded();
                     self.refresh_mailbox(context);
                     self.dirty = true;
                     return;

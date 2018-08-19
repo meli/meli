@@ -416,9 +416,8 @@ impl Component for CompactListing {
                 Action::MailListing(MailListingAction::ToggleThreaded) => {
                     context.accounts[self.cursor_pos.0]
                         .runtime_settings
-                        .threaded = !context.accounts[self.cursor_pos.0]
-                        .runtime_settings
-                        .threaded;
+                        .conf_mut()
+                        .toggle_threaded();
                     self.refresh_mailbox(context);
                     self.dirty = true;
                     return;
