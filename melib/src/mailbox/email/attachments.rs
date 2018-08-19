@@ -81,7 +81,7 @@ impl AttachmentBuilder {
                 }
                 assert!(boundary.is_some());
                 let _boundary = boundary.unwrap();
-                let offset = _boundary.as_ptr() as usize - value.as_ptr() as usize;
+                let offset = (_boundary.as_ptr() as usize).wrapping_sub(value.as_ptr() as usize);
                 let boundary = SliceBuild::new(offset, _boundary.len());
                 let subattachments = Self::subattachments(&self.raw, boundary.get(&value));
                 assert!(subattachments.len() > 0);
@@ -215,7 +215,7 @@ impl AttachmentBuilder {
                         }
                     };
                     let body_slice = {
-                        let offset = body.as_ptr() as usize - a.as_ptr() as usize;
+                        let offset = (body.as_ptr() as usize).wrapping_sub(a.as_ptr() as usize);
                         SliceBuild::new(offset, body.len())
                     };
                     builder.raw = body_slice.get(a).ltrim().into();

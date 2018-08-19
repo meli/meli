@@ -418,7 +418,7 @@ fn group(input: &[u8]) -> IResult<&[u8], Address> {
             return IResult::Error(e);
         }
         IResult::Done(rest, vec) => {
-            let size: usize = (rest.as_ptr() as usize) - ((&input[0..] as &[u8]).as_ptr() as usize);
+            let size: usize = (rest.as_ptr() as usize).wrapping_sub((&input[0..] as &[u8]).as_ptr() as usize);
             return IResult::Done(
                 rest,
                 Address::Group(GroupAddress {
