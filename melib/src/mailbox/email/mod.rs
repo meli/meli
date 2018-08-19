@@ -327,7 +327,6 @@ impl Envelope {
             }
         };
         let mut in_reply_to = None;
-        let mut datetime = None;
 
         for (name, value) in headers {
             if value.len() == 1 && value.is_empty() {
@@ -373,8 +372,13 @@ impl Envelope {
                 self.set_in_reply_to(value);
                 in_reply_to = Some(value);
             } else if name.eq_ignore_ascii_case(b"date") {
-                self.set_date(value);
-                datetime = Some(value);
+                    let parse_result = parser::phrase(value);
+                    if parse_result.is_done() {
+                        let value = parse_result.to_full_result().unwrap();
+                        self.set_date(value.as_slice());
+                    } else {
+                        self.set_date(value);
+                    }
             }
         }
         /*
@@ -385,10 +389,8 @@ impl Envelope {
         if let Some(ref mut x) = in_reply_to {
             self.push_references(x);
         }
-        if let Some(ref mut d) = datetime {
-            if let Some(d) = parser::date(d) {
-                self.set_datetime(d);
-            }
+        if let Some(d) = parser::date(&self.date.as_bytes()) {
+            self.set_datetime(d);
         }
         if self.message_id.is_none() {
             let mut h = DefaultHasher::new();
