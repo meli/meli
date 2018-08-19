@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct AccountSettings {
     pub name: String,
     pub root_folder: String,

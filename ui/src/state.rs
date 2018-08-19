@@ -179,7 +179,7 @@ impl State<std::io::Stdout> {
         let mut accounts: Vec<Account> = settings
             .accounts
             .iter()
-            .map(|(n, a_s)| Account::new(n.to_string(), a_s.clone(), &backends))
+            .map(|(n, a_s)| Account::new(n.to_string(), a_s.account().clone(), &backends))
             .collect();
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
         let (startup_tx, startup_rx) = chan::async();

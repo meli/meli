@@ -29,7 +29,7 @@ use pager::PagerSettings;
 
 use std::collections::HashMap;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct FileAccount {
     root_folder: String,
     format: String,
@@ -44,15 +44,30 @@ impl FileAccount {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 struct FileSettings {
     accounts: HashMap<String, FileAccount>,
     pager: PagerSettings,
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct AccountConfiguration {
+    account: AccountSettings,
+    conf: FileAccount,
+}
+
+impl AccountConfiguration {
+    pub fn account(&self) -> &AccountSettings {
+        &self.account
+    }
+    pub fn conf(&self) -> &FileAccount {
+        &self.conf
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Settings {
-    pub accounts: HashMap<String, AccountSettings>,
+    pub accounts: HashMap<String, AccountConfiguration>,
     pub pager: PagerSettings,
 }
 
@@ -67,8 +82,8 @@ impl FileSettings {
         let mut s = Config::new();
         let s = s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml));
 
-        // No point in returning without a config file.
-        // TODO: Error and exit instead of panic.
+        /* No point in returning without a config file.
+           TODO: Error and exit instead of panic. */
         s.unwrap().deserialize().unwrap()
     }
 }
@@ -76,13 +91,13 @@ impl FileSettings {
 impl Settings {
     pub fn new() -> Settings {
         let fs = FileSettings::new();
-        let mut s: HashMap<String, AccountSettings> = HashMap::new();
+        let mut s: HashMap<String, AccountConfiguration> = HashMap::new();
 
         for (id, x) in fs.accounts {
             let format = x.format.to_lowercase();
-            let sent_folder = x.sent_folder;
+            let sent_folder = x.sent_folder.clone();
             let threaded = x.threaded;
-            let root_folder = x.root_folder;
+            let root_folder = x.root_folder.clone();
 
             let acc = AccountSettings {
                 name: id.clone(),
@@ -92,7 +107,10 @@ impl Settings {
                 threaded,
             };
 
-            s.insert(id, acc);
+            s.insert(id, AccountConfiguration {
+                account: acc,
+                conf: x
+            });
         }
 
         Settings {
