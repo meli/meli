@@ -19,40 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern crate config;
-extern crate serde;
-extern crate xdg;
-pub mod pager;
-
-use pager::PagerSettings;
-
-use std::collections::HashMap;
-
-#[derive(Debug, Deserialize)]
-pub struct FileAccount {
-    root_folder: String,
-    format: String,
-    sent_folder: String,
-    threaded: bool,
-}
-
-impl FileAccount {
-    pub fn folder(&self) -> &str {
-        &self.root_folder
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct FileSettings {
-    accounts: HashMap<String, FileAccount>,
-    pager: PagerSettings,
-}
-
 #[derive(Debug, Clone)]
 pub struct AccountSettings {
-    name: String,
-    root_folder: String,
-    format: String,
+    pub name: String,
+    pub root_folder: String,
+    pub format: String,
     pub sent_folder: String,
     pub threaded: bool,
 }
@@ -66,57 +37,5 @@ impl AccountSettings {
     }
     pub fn root_folder(&self) -> &str {
         &self.root_folder
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct Settings {
-    pub accounts: HashMap<String, AccountSettings>,
-    pub pager: PagerSettings,
-}
-
-use self::config::{Config, File, FileFormat};
-impl FileSettings {
-    pub fn new() -> FileSettings {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
-        let config_path = xdg_dirs
-            .place_config_file("config")
-            .expect("cannot create configuration directory");
-        //let setts = Config::default().merge(File::new(config_path.to_str().unwrap_or_default(), config::FileFormat::Toml)).unwrap();
-        let mut s = Config::new();
-        let s = s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml));
-
-        // No point in returning without a config file.
-        // TODO: Error and exit instead of panic.
-        s.unwrap().deserialize().unwrap()
-    }
-}
-
-impl Settings {
-    pub fn new() -> Settings {
-        let fs = FileSettings::new();
-        let mut s: HashMap<String, AccountSettings> = HashMap::new();
-
-        for (id, x) in fs.accounts {
-            let format = x.format.to_lowercase();
-            let sent_folder = x.sent_folder;
-            let threaded = x.threaded;
-            let root_folder = x.root_folder;
-
-            let acc = AccountSettings {
-                name: id.clone(),
-                root_folder,
-                format,
-                sent_folder,
-                threaded,
-            };
-
-            s.insert(id, acc);
-        }
-
-        Settings {
-            accounts: s,
-            pager: fs.pager,
-        }
     }
 }

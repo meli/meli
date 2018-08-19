@@ -5,6 +5,10 @@ authors = []
 workspace = ".."
 
 [dependencies]
+xdg = "2.1.0"
+serde = "1.0.71"
+serde_derive = "1.0.71"
+config = "0.6"
 chan = "0.1.21"
 chan-signal = "0.3.1"
 fnv = "1.0.3"

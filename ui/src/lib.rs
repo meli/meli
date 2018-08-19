@@ -27,6 +27,8 @@ extern crate melib;
 extern crate mime_apps;
 extern crate notify_rust;
 #[macro_use]
+extern crate serde_derive;
+#[macro_use]
 extern crate chan;
 extern crate chan_signal;
 extern crate linkify;
@@ -54,3 +56,6 @@ pub use state::*;
 
 pub mod components;
 pub use components::*;
+
+pub mod conf;
+pub use conf::*;
