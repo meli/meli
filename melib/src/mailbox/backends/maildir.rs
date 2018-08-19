@@ -490,6 +490,9 @@ impl BackendFolder for MaildirFolder {
     fn name(&self) -> &str {
         &self.name
     }
+    fn change_name(&mut self, s: &str) {
+        self.name = s.to_string();
+    }
     fn children(&self) -> &Vec<usize> {
         &self.children
     }

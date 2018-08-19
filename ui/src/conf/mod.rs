@@ -39,6 +39,9 @@ pub struct FileAccount {
 }
 
 impl FileAccount {
+    pub fn folders(&self) -> Option<&HashMap<String, String>> {
+        self.folders.as_ref()
+    }
     pub fn folder(&self) -> &str {
         &self.root_folder
     }

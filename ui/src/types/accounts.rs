@@ -92,7 +92,18 @@ impl Account {
         self.folders.len()
     }
     pub fn list_folders(&self) -> Vec<Folder> {
-        self.backend.folders()
+        let mut folders = self.backend.folders();
+        if let Some(folder_renames) = self.settings.conf().folders() {
+            eprintln!("folder renames: {:?}", folder_renames);
+            for f in &mut folders {
+                eprintln!("f.name() is {}", f.name());
+                if let Some(name) = folder_renames.get(&f.name().to_ascii_lowercase()) {
+                    eprintln!("name is {}", name);
+                    f.change_name(name);
+                }
+            }
+        }
+        folders
     }
     pub fn name(&self) -> &str {
         &self.name

@@ -177,6 +177,7 @@ impl fmt::Debug for BackendOpGenerator {
 pub trait BackendFolder: Debug {
     fn hash(&self) -> u64;
     fn name(&self) -> &str;
+    fn change_name(&mut self, &str);
     fn clone(&self) -> Folder;
     fn children(&self) -> &Vec<usize>;
 }
@@ -193,6 +194,7 @@ impl BackendFolder for DummyFolder {
     fn name(&self) -> &str {
         ""
     }
+    fn change_name(&mut self, _s: &str) {}
     fn clone(&self) -> Folder {
         folder_default()
     }

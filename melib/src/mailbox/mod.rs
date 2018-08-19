@@ -30,7 +30,7 @@ pub use self::email::*;
 /* Mail backends. Currently only maildir is supported */
 pub mod backends;
 use error::Result;
-use mailbox::backends::{folder_default, Folder, MailBackend};
+use mailbox::backends::{folder_default, Folder};
 pub mod thread;
 pub use mailbox::thread::{build_threads, Container, Threads, SortOrder, SortField};
 
