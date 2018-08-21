@@ -182,21 +182,23 @@ impl Component for VSplit {
     }
 }
 
+#[derive(Debug)]
+enum PagerMovement {
+    PageUp,
+    PageDown,
+}
+
 /// A pager for text.
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is called, it draws the
 /// current view of the text. It is responsible for scrolling etc.
+#[derive(Default, Debug)]
 pub struct Pager {
     cursor_pos: usize,
     height: usize,
     width: usize,
     dirty: bool,
     content: CellBuffer,
-}
-
-impl Default for Pager {
-    fn default() -> Self {
-        Pager::from_str("", None)
-    }
+    movement: Option<PagerMovement>,
 }
 
 impl fmt::Display for Pager {
@@ -258,6 +260,7 @@ impl Pager {
             width: width,
             dirty: true,
             content: content,
+            .. Default::default()
         }
     }
     pub fn from_str(s: &str, cursor_pos: Option<usize>) -> Self {
@@ -272,29 +275,18 @@ impl Pager {
             width,
             dirty: true,
             content,
+            .. Default::default()
         }
     }
-    pub fn from_buf(buf: &CellBuffer, cursor_pos: Option<usize>) -> Self {
-        let lines: Vec<&[Cell]> = buf.split(|cell| cell.ch() == '\n').collect();
-        let height = lines.len();
-        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0) + 1;
-        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        {
-            let mut x;
-            let c_slice: &mut [Cell] = &mut content;
-            for (y, l) in lines.iter().enumerate() {
-                let y_r = y * width;
-                x = l.len() + y_r;
-                c_slice[y_r..x].copy_from_slice(l);
-                c_slice[x].set_ch('\n');
-            }
-        }
+    pub fn from_buf(content: CellBuffer, cursor_pos: Option<usize>) -> Self {
+        let (width, height) = content.size();
         Pager {
             cursor_pos: cursor_pos.unwrap_or(0),
             height,
             width,
             dirty: true,
             content,
+            .. Default::default()
         }
     }
     pub fn print_string(content: &mut CellBuffer, s: &str) {
@@ -328,15 +320,37 @@ impl Component for Pager {
         }
 
         self.dirty = false;
-        if self.cursor_pos > 0 && self.cursor_pos + 1 + height!(area) > self.height {
-            self.cursor_pos = self.cursor_pos.saturating_sub(1);
-            return;
+
+        let height = height!(area);
+        if let Some(mvm) = self.movement.take() {
+            // TODO:  Spend some time on this
+            match mvm {
+                PagerMovement::PageUp => {
+                    self.cursor_pos = self.cursor_pos.saturating_sub(height);
+                },
+                PagerMovement::PageDown => {
+                    if self.cursor_pos + 2*height + 1 < self.height {
+                        self.cursor_pos += height;
+                    } else {
+                        self.cursor_pos = self.height.saturating_sub(height).saturating_sub(1);
+                    }
+                },
+            }
+        }
+
+        if self.height > height {
+            if self.cursor_pos > 0 && self.cursor_pos + height >= self.height {
+                self.cursor_pos = self.height.saturating_sub(height).saturating_sub(2);
+                //return;
+            }
+        } else {
+            self.cursor_pos = 0;
         }
 
         if self.height == 0 || self.height == self.cursor_pos || self.width == 0 {
             return;
         }
-
+        
         clear_area(grid, area);
         //let pager_context: usize = context.settings.pager.pager_context;
         //let pager_stop: bool = context.settings.pager.pager_stop;
@@ -363,6 +377,14 @@ impl Component for Pager {
                     self.cursor_pos += 1;
                     self.dirty = true;
                 }
+            }
+            UIEventType::Input(Key::PageUp) => {
+                self.movement = Some(PagerMovement::PageUp);
+                self.dirty = true;
+            }
+            UIEventType::Input(Key::PageDown) => {
+                self.movement = Some(PagerMovement::PageDown);
+                self.dirty = true;
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;

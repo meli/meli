@@ -49,7 +49,7 @@ impl HtmlView {
         ));
 
         let buf = MailView::plain_text_to_buf(&display_text, true);
-        let pager = Pager::from_buf(&buf, None);
+        let pager = Pager::from_buf(buf.split_newlines(), None);
         HtmlView { pager, bytes }
     }
 }

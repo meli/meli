@@ -97,14 +97,24 @@ pub trait CellAccessor: HasSize {
 ///
 /// The first index, `Cellbuffer[y]`, corresponds to a row, and thus the y-axis. The second
 /// index, `Cellbuffer[y][x]`, corresponds to a column within a row and thus the x-axis.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct CellBuffer {
     cols: usize,
     rows: usize,
     buf: Vec<Cell>,
 }
 
+impl fmt::Debug for CellBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "CellBuffer {{ cols: {}, rows: {}, buf: {} cells", self.cols, self.rows, self.buf.len())
+    }
+}
+
 impl CellBuffer {
+    pub fn set_cols(&mut self, new_cols: usize) {
+        self.cols = new_cols;
+    }
+
     /// Constructs a new `CellBuffer` with the given number of columns and rows, using the given
     /// `cell` as a blank.
     pub fn new(cols: usize, rows: usize, cell: Cell) -> CellBuffer {
@@ -129,6 +139,24 @@ impl CellBuffer {
         self.buf = newbuf;
         self.cols = newcols;
         self.rows = newrows;
+    }
+
+    pub fn split_newlines(self) -> Self {
+        let lines: Vec<&[Cell]> = self.split(|cell| cell.ch() == '\n').collect();
+        let height = lines.len();
+        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0) + 1;
+        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        {
+            let mut x;
+            let c_slice: &mut [Cell] = &mut content;
+            for (y, l) in lines.iter().enumerate() {
+                let y_r = y * width;
+                x = l.len() + y_r;
+                c_slice[y_r..x].copy_from_slice(l);
+                c_slice[x].set_ch('\n');
+            }
+        }
+        content
     }
 }
 

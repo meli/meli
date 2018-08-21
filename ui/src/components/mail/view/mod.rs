@@ -329,7 +329,7 @@ impl Component for MailView {
                     } else {
                         self.pager.as_mut().map(|p| p.cursor_pos())
                     };
-                    self.pager = Some(Pager::from_buf(&buf, cursor_pos));
+                    self.pager = Some(Pager::from_buf(buf.split_newlines(), cursor_pos));
                 }
             };
             self.dirty = false;

@@ -21,7 +21,6 @@
 
 use super::*;
 
-//use melib::mailbox::backends::BackendOp;
 mod compact;
 pub use self::compact::*;
 
@@ -779,6 +778,7 @@ impl Component for MailListing {
         self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }
     fn set_dirty(&mut self) {
+        self.view.as_mut().map(|p| p.set_dirty());
         self.dirty = true;
     }
 }

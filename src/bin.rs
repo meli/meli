@@ -66,7 +66,7 @@ fn main() {
     let menu = Entity {
         component: Box::new(AccountMenu::new(&state.context.accounts)),
     };
-    let listing = MailListing::new();
+    let listing = CompactListing::new();
     let b = Entity {
         component: Box::new(listing),
     };

@@ -102,14 +102,15 @@ pub fn copy_area_with_break(
     grid_src: &CellBuffer,
     dest: Area,
     src: Area,
-) {
+) -> Pos {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
         eprintln!(
             "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
             src, dest
         );
-        return;
+        return upper_left!(dest);
     }
+    let mut ret = bottom_right!(dest);
     let mut src_x = get_x(upper_left!(src));
     let mut src_y = get_y(upper_left!(src));
 
@@ -119,6 +120,7 @@ pub fn copy_area_with_break(
                 src_y += 1;
                 src_x = 0;
                 if src_y >= get_y(bottom_right!(src)) {
+                    ret.1 = y;
                     break 'y_;
                 }
                 continue 'y_;
@@ -131,29 +133,33 @@ pub fn copy_area_with_break(
                 src_x = 0;
                 if src_y >= get_y(bottom_right!(src)) {
                     //clear_area(grid_dest, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
+                    ret.1 = y;
                     break 'y_;
                 }
                 break 'x_;
             }
         }
     }
+    ret
 }
 
 /// Copy a source `Area` to a destination.
-pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) {
+pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) -> Pos {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
         eprintln!(
             "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
             src, dest
         );
-        return;
+        return upper_left!(dest);
     }
+
+    let mut ret = bottom_right!(dest);
     let mut src_x = get_x(upper_left!(src));
     let mut src_y = get_y(upper_left!(src));
     let (cols, rows) = grid_src.size();
     if src_x >= cols || src_y >= rows {
         eprintln!("DEBUG: src area outside of grid_src in copy_area",);
-        return;
+        return upper_left!(dest);
     }
 
     for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
@@ -170,10 +176,12 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
                 grid_dest,
                 ((get_x(upper_left!(dest)), y), bottom_right!(dest)),
             );
+            ret.1 = y;
             break;
         }
         src_y += 1;
     }
+    ret
 }
 
 /// Change foreground and background colors in an `Area`
@@ -211,8 +219,7 @@ fn write_string_to_grid(
         eprintln!(" Invalid area with string {} and area {:?}", s, area);
         return (x, y);
     }
-    for l in s.lines() {
-        'char: for c in l.chars() {
+        'char: for c in s.chars() {
             grid[(x, y)].set_ch(c);
             grid[(x, y)].set_fg(fg_color);
             grid[(x, y)].set_bg(bg_color);
@@ -228,7 +235,6 @@ fn write_string_to_grid(
                     break 'char;
                 }
             }
-        }
     }
     (x, y)
 }

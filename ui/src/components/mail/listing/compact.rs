@@ -289,34 +289,22 @@ impl Component for CompactListing {
             /* Draw the entire list */
             self.draw_list(grid, area, context);
         } else {
-            let upper_left = upper_left!(area);
-            let bottom_right = bottom_right!(area);
             if self.length == 0 && self.dirty {
                 clear_area(grid, area);
                 context.dirty_areas.push_back(area);
             }
 
-            /* Render the mail body in a pager, basically copy what HSplit does */
-            let total_rows = get_y(bottom_right) - get_y(upper_left);
-            let pager_ratio = context.runtime_settings.pager.pager_ratio;
-            let bottom_entity_rows = (pager_ratio * total_rows) / 100;
-
-            if bottom_entity_rows > total_rows {
-                clear_area(grid, area);
-                context.dirty_areas.push_back(area);
-                return;
-            }
-            let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
+            /* Render the mail body in a pager */
             if !self.dirty {
                 if let Some(v) = self.view.as_mut() {
-                    v.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+                    v.draw(grid, area, context);
                 }
                 return;
             }
             self.view = Some(ThreadView::new(self.cursor_pos));
             self.view.as_mut().unwrap().draw(
                 grid,
-                (set_y(upper_left, mid + 1), bottom_right),
+                area,
                 context,
             );
             self.dirty = false;
@@ -446,10 +434,15 @@ impl Component for CompactListing {
             },
             _ => {}
         }
+        if let Some(ref mut v) = self.view {
+            v.process_event(event, context);
+        }
     }
     fn is_dirty(&self) -> bool {
-        true
+        self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }
     fn set_dirty(&mut self) {
+        self.view.as_mut().map(|p| p.set_dirty());
+        self.dirty = true;
     }
 }
