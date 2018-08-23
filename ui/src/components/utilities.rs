@@ -195,7 +195,9 @@ enum PagerMovement {
 #[derive(Default, Debug)]
 pub struct Pager {
     cursor_pos: usize,
+    max_cursor_pos: Option<usize>,
     height: usize,
+    
     width: usize,
     dirty: bool,
     content: CellBuffer,
@@ -222,6 +224,7 @@ impl Pager {
         self.width = width;
         self.dirty = true;
         self.cursor_pos = 0;
+        self.max_cursor_pos = None;
     }
     pub fn from_string(mut text: String, context: &mut Context, cursor_pos: Option<usize>) -> Self {
         let pager_filter: Option<&String> = context.settings.pager.filter.as_ref();
@@ -324,7 +327,6 @@ impl Component for Pager {
 
         let height = height!(area);
         if let Some(mvm) = self.movement.take() {
-            // TODO:  Spend some time on this
             match mvm {
                 PagerMovement::PageUp => {
                     self.cursor_pos = self.cursor_pos.saturating_sub(height);
@@ -339,17 +341,20 @@ impl Component for Pager {
             }
         }
 
-        if self.height > height {
-            if self.cursor_pos > 0 && self.cursor_pos + height >= self.height {
-                self.cursor_pos = self.height.saturating_sub(height).saturating_sub(2);
-                //return;
-            }
-        } else {
-            self.cursor_pos = 0;
+        if self.height == 0 || self.width == 0 {
+            return;
         }
 
-        if self.height == 0 || self.height == self.cursor_pos || self.width == 0 {
-            return;
+        match self.max_cursor_pos {
+            Some(max) if max <= self.cursor_pos => {
+                self.cursor_pos -= 1;
+                return;
+            },
+            Some(max) if max >= height => {
+                self.cursor_pos = 0;
+                return;
+            }
+            _ => {},
         }
 
         clear_area(grid, area);
@@ -357,12 +362,15 @@ impl Component for Pager {
         //let pager_stop: bool = context.settings.pager.pager_stop;
         //let rows = y(bottom_right) - y(upper_left);
         //let page_length = rows / self.height;
-        copy_area_with_break(
+        let pos = copy_area_with_break(
             grid,
             &self.content,
             area,
             ((0, self.cursor_pos), (self.width - 1, self.height - 1)),
         );
+        if pos.1 < get_y(bottom_right!(area)) {
+            self.max_cursor_pos = Some(self.cursor_pos + 1);
+        }
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
@@ -393,6 +401,7 @@ impl Component for Pager {
             }
             UIEventType::Resize => {
                 self.dirty = true;
+                self.max_cursor_pos = None;
                 return false;
             }
             _ => {
