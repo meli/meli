@@ -21,6 +21,7 @@
 
 use super::*;
 
+#[derive(Debug)]
 pub struct Composer {
     dirty: bool,
     mode: ViewMode,
@@ -39,6 +40,7 @@ impl Default for Composer {
     }
 }
 
+#[derive(Debug)]
 enum ViewMode {
     //Compose,
     Overview,
@@ -55,10 +57,6 @@ impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
             clear_area(grid, area);
-        }
-        if !self.buffer.is_empty() {
-            eprintln!("{:?}", EnvelopeWrapper::new(self.buffer.as_bytes().to_vec()));
-
         }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -104,7 +102,11 @@ impl Component for Composer {
         }
     }
 
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        if self.pager.process_event(event, context) {
+            return true;
+        }
+
         match event.event_type {
             UIEventType::Resize => {
                 self.dirty = true;
@@ -135,11 +137,11 @@ impl Component for Composer {
                 self.pager.update_from_string(result);
                 context.restore_input();
                 self.dirty = true;
-                return;
+                return true;
             },
             _ => {},
         }
-        self.pager.process_event(event, context);
+        false
     }
 
     fn is_dirty(&self) -> bool {

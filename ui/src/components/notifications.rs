@@ -27,6 +27,7 @@ use notify_rust::Notification as notify_Notification;
 use super::*;
 
 /// Passes notifications to the OS using the XDG specifications.
+#[derive(Debug)]
 pub struct XDGNotifications {}
 
 impl fmt::Display for XDGNotifications {
@@ -38,7 +39,7 @@ impl fmt::Display for XDGNotifications {
 
 impl Component for XDGNotifications {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
+    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
         if let UIEventType::Notification(ref t) = event.event_type {
             notify_Notification::new()
                 .summary("Refresh Event")
@@ -47,6 +48,7 @@ impl Component for XDGNotifications {
                 .show()
                 .unwrap();
         }
+        false
     }
     fn set_dirty(&mut self) {}
 }

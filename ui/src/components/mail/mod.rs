@@ -234,7 +234,7 @@ impl Component for AccountMenu {
 
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
+    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::RefreshMailbox(c) => {
                 self.cursor = Some(c);
@@ -248,6 +248,7 @@ impl Component for AccountMenu {
             }
             _ => {}
         }
+        false
     }
     fn is_dirty(&self) -> bool {
         self.dirty

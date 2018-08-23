@@ -23,6 +23,7 @@ use super::*;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
+#[derive(Debug)]
 pub struct HtmlView {
     pager: Pager,
     bytes: Vec<u8>,
@@ -65,7 +66,10 @@ impl Component for HtmlView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         self.pager.draw(grid, area, context);
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        if self.pager.process_event(event, context) {
+            return true;
+        }
         match event.event_type {
             UIEventType::Input(Key::Char('v')) => {
                 // TODO: Optional filter that removes outgoing resource requests (images and
@@ -88,11 +92,11 @@ impl Component for HtmlView {
                         )),
                     });
                 }
-                return;
+                return true;
             }
             _ => {}
         }
-        self.pager.process_event(event, context);
+        false
     }
     fn is_dirty(&self) -> bool {
         self.pager.is_dirty()

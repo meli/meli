@@ -42,6 +42,12 @@ enum ViewMode {
     Subview,
 }
 
+impl Default for ViewMode {
+    fn default() -> Self {
+        ViewMode::Normal
+    }
+}
+
 impl ViewMode {
     fn is_attachment(&self) -> bool {
         match self {
@@ -53,9 +59,9 @@ impl ViewMode {
 
 /// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
 /// menus
+#[derive(Debug, Default)]
 pub struct MailView {
     coordinates: (usize, usize, usize),
-    local_collection: Vec<usize>,
     pager: Option<Pager>,
     subview: Option<Box<Component>>,
     dirty: bool,
@@ -74,13 +80,11 @@ impl fmt::Display for MailView {
 impl MailView {
     pub fn new(
         coordinates: (usize, usize, usize),
-        local_collection: Vec<usize>,
         pager: Option<Pager>,
         subview: Option<Box<Component>>,
         ) -> Self {
         MailView {
             coordinates,
-            local_collection,
             pager,
             subview,
             dirty: true,
@@ -207,24 +211,17 @@ impl Component for MailView {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        let (envelope_idx, y): (usize, usize) = {
+        let y: usize = {
             let accounts = &mut context.accounts;
-            let threaded = accounts[self.coordinates.0].runtime_settings.conf().threaded();
             let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
                 .unwrap();
-            let envelope_idx: usize = if threaded {
-                mailbox.threaded_mail(self.coordinates.2)
-            } else {
-                self.local_collection[self.coordinates.2]
-            };
-
-            let envelope: &Envelope = &mailbox.collection[envelope_idx];
+            let envelope: &Envelope = &mailbox.collection[self.coordinates.2];
 
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area);
                 context.dirty_areas.push_back(area);
-                (envelope_idx, get_y(upper_left) - 1)
+                get_y(upper_left) - 1
             } else {
                 let (x, y) = write_string_to_grid(
                     &format!("Date: {}", envelope.date_as_str()),
@@ -295,7 +292,7 @@ impl Component for MailView {
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 1)));
-                (envelope_idx, y + 1)
+                y + 1
             }
         };
 
@@ -304,7 +301,7 @@ impl Component for MailView {
             let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
                 .as_ref()
                 .unwrap();
-            let envelope: &Envelope = &mailbox.collection[envelope_idx];
+            let envelope: &Envelope = &mailbox.collection[mailbox_idx.2];
             let op = context.accounts[mailbox_idx.0].backend.operation(envelope.hash());
             let body = envelope.body(op);
             match self.mode {
@@ -341,7 +338,16 @@ impl Component for MailView {
         }
     }
 
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        if let Some(ref mut sub) = self.subview {
+            if sub.process_event(event, context) {
+                return true;
+            }
+        } else if let Some(ref mut p) = self.pager {
+            if p.process_event(event, context) {
+                return true;
+            }
+        }
         match event.event_type {
             UIEventType::Input(Key::Esc) => {
                 self.cmd_buf.clear();
@@ -372,17 +378,11 @@ impl Component for MailView {
 
                 {
                     let accounts = &context.accounts;
-                    let threaded = accounts[self.coordinates.0].runtime_settings.conf().threaded();
                     let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();
-                    let envelope_idx: usize = if threaded {
-                        mailbox.threaded_mail(self.coordinates.2)
-                    } else {
-                        self.local_collection[self.coordinates.2]
-                    };
 
-                    let envelope: &Envelope = &mailbox.collection[envelope_idx];
+                    let envelope: &Envelope = &mailbox.collection[self.coordinates.2];
                     let op = context.accounts[self.coordinates.0].backend.operation(envelope.hash());
                     if let Some(u) = envelope.body(op).attachments().get(lidx) {
                         match u.content_type() {
@@ -391,7 +391,7 @@ impl Component for MailView {
                                 match EnvelopeWrapper::new(u.bytes().to_vec()) {
                                     Ok(wrapper) => {
                                         self.subview = Some(Box::new(EnvelopeView::new(wrapper, None, None)));
-                                    }, 
+                                    },
                                     Err(e) => {
                                         context.replies.push_back(UIEvent {
                                             id: 0,
@@ -401,7 +401,7 @@ impl Component for MailView {
                                         });
                                     }
                                 }
-                                return;
+                                return true;
                             },
 
                             ContentType::Text { .. } => {
@@ -415,7 +415,7 @@ impl Component for MailView {
                                         "Multipart attachments are not supported yet.".to_string(),
                                     ),
                                 });
-                                return;
+                                return true;
                             }
                             ContentType::Unsupported { .. } => {
                                 let attachment_type = u.mime_type();
@@ -439,7 +439,7 @@ impl Component for MailView {
                                             attachment_type
                                         )),
                                     });
-                                    return;
+                                    return true;
                                 }
                             }
                         }
@@ -451,7 +451,7 @@ impl Component for MailView {
                                 lidx
                             )),
                         });
-                        return;
+                        return true;
                     }
                 };
             }
@@ -462,17 +462,11 @@ impl Component for MailView {
                 self.cmd_buf.clear();
                 let url = {
                     let accounts = &context.accounts;
-                    let threaded = accounts[self.coordinates.0].runtime_settings.conf().threaded();
                     let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
                         .unwrap();
-                    let envelope_idx: usize = if threaded {
-                        mailbox.threaded_mail(self.coordinates.2)
-                    } else {
-                        self.local_collection[self.coordinates.2]
-                    };
 
-                    let envelope: &Envelope = &mailbox.collection[envelope_idx];
+                    let envelope: &Envelope = &mailbox.collection[self.coordinates.2];
                     let finder = LinkFinder::new();
                     let op = context.accounts[self.coordinates.0].backend.operation(envelope.hash());
                     let mut t = envelope.body(op).text().to_string();
@@ -487,7 +481,7 @@ impl Component for MailView {
                                 lidx
                             )),
                         });
-                        return;
+                        return true;
                     }
                 };
 
@@ -506,13 +500,9 @@ impl Component for MailView {
                 }
                 self.dirty = true;
             }
-            _ => {}
+            _ => { return false; }
         }
-        if let Some(ref mut sub) = self.subview {
-            sub.process_event(event, context);
-        } else if let Some(ref mut p) = self.pager {
-            p.process_event(event, context);
-        }
+        true
     }
     fn is_dirty(&self) -> bool {
         self.dirty

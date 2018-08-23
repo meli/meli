@@ -24,6 +24,7 @@
 use super::*;
 
 /// A horizontally split in half container.
+#[derive(Debug)]
 pub struct HSplit {
     top: Entity,
     bottom: Entity,
@@ -34,7 +35,7 @@ pub struct HSplit {
 impl fmt::Display for HSplit {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display subject/info
-        self.top.fmt(f)
+        Display::fmt(&self.top, f)
     }
 }
 
@@ -81,9 +82,8 @@ impl Component for HSplit {
             context,
         );
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
-        self.top.rcv_event(event, context);
-        self.bottom.rcv_event(event, context);
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        self.top.rcv_event(event, context) || self.bottom.rcv_event(event, context)
     }
     fn is_dirty(&self) -> bool {
         self.top.component.is_dirty() || self.bottom.component.is_dirty()
@@ -95,6 +95,7 @@ impl Component for HSplit {
 }
 
 /// A vertically split in half container.
+#[derive(Debug)]
 pub struct VSplit {
     left: Entity,
     right: Entity,
@@ -106,7 +107,7 @@ pub struct VSplit {
 impl fmt::Display for VSplit {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display focused entity
-        self.right.fmt(f)
+        Display::fmt(&self.right, f)
     }
 }
 
@@ -169,9 +170,8 @@ impl Component for VSplit {
             .component
             .draw(grid, ((mid + 1, get_y(upper_left)), bottom_right), context);
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
-        self.left.rcv_event(event, context);
-        self.right.rcv_event(event, context);
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        (self.left.rcv_event(event, context) || self.right.rcv_event(event, context))
     }
     fn is_dirty(&self) -> bool {
         self.left.component.is_dirty() || self.right.component.is_dirty()
@@ -350,7 +350,7 @@ impl Component for Pager {
         if self.height == 0 || self.height == self.cursor_pos || self.width == 0 {
             return;
         }
-        
+
         clear_area(grid, area);
         //let pager_context: usize = context.settings.pager.pager_context;
         //let pager_stop: bool = context.settings.pager.pager_stop;
@@ -364,7 +364,7 @@ impl Component for Pager {
         );
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) {
+    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::Input(Key::Char('k')) => {
                 if self.cursor_pos > 0 {
@@ -388,12 +388,15 @@ impl Component for Pager {
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
+                return false;
             }
             UIEventType::Resize => {
                 self.dirty = true;
+                return false;
             }
-            _ => {}
+            _ => { return false; }
         }
+        true
     }
     fn is_dirty(&self) -> bool {
         self.dirty
@@ -404,6 +407,7 @@ impl Component for Pager {
 }
 
 /// Status bar.
+#[derive(Debug)]
 pub struct StatusBar {
     container: Entity,
     status: String,
@@ -513,14 +517,17 @@ impl Component for StatusBar {
             _ => {}
         }
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
-        self.container.rcv_event(event, context);
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        if self.container.rcv_event(event, context) {
+            return true;
+        }
+
         match &event.event_type {
             UIEventType::RefreshMailbox((ref idx_a, ref idx_f)) => {
                 match context.accounts[*idx_a].status(*idx_f) {
                     Ok(_) => {}
                     Err(_) => {
-                        return;
+                        return false;
                     }
                 }
                 let m = &context.accounts[*idx_a][*idx_f].as_ref().unwrap();
@@ -558,14 +565,17 @@ impl Component for StatusBar {
             UIEventType::ExInput(Key::Char(c)) => {
                 self.dirty = true;
                 self.ex_buffer.push(*c);
+                return true;
             }
             UIEventType::ExInput(Key::Ctrl('u')) => {
                 self.dirty = true;
                 self.ex_buffer.clear();
+                return true;
             }
             UIEventType::ExInput(Key::Backspace) | UIEventType::ExInput(Key::Ctrl('h')) => {
                 self.dirty = true;
                 self.ex_buffer.pop();
+                return true;
             }
             UIEventType::Resize => {
                 self.dirty = true;
@@ -576,6 +586,7 @@ impl Component for StatusBar {
             }
             _ => {}
         }
+        return false;
     }
     fn is_dirty(&self) -> bool {
         self.dirty || self.container.component.is_dirty()
@@ -586,6 +597,7 @@ impl Component for StatusBar {
 }
 
 // A box with a text content.
+#[derive(Debug)]
 pub struct TextBox {
     _content: String,
 }
@@ -605,10 +617,11 @@ impl fmt::Display for TextBox {
 
 impl Component for TextBox {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {}
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) -> bool { false }
     fn set_dirty(&mut self) {}
 }
 
+#[derive(Debug)]
 pub struct Progress {
     description: String,
     total_work: usize,
@@ -655,12 +668,13 @@ impl Component for Progress {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {
         unimplemented!()
     }
-    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) {
-        return;
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) -> bool {
+        return false;
     }
     fn set_dirty(&mut self) {}
 }
 
+#[derive(Debug)]
 pub struct Tabbed {
     children: Vec<Box<Component>>,
     cursor_pos: usize,
@@ -736,16 +750,16 @@ impl Component for Tabbed {
             self.children[self.cursor_pos].draw(grid, area, context);
         }
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
         match &event.event_type {
             UIEventType::Input(Key::Char('T')) => {
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
                 self.children[self.cursor_pos].set_dirty();
-                return;
+                return true;
             }
             _ => {}
         }
-        self.children[self.cursor_pos].process_event(event, context);
+        self.children[self.cursor_pos].process_event(event, context)
     }
     fn is_dirty(&self) -> bool {
         self.children[self.cursor_pos].is_dirty()

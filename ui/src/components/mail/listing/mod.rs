@@ -28,6 +28,7 @@ const MAX_COLS: usize = 500;
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `MailView`.
+#[derive(Debug)]
 pub struct MailListing {
     /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
     cursor_pos: (usize, usize, usize),
@@ -591,7 +592,23 @@ impl Component for MailListing {
                 }
                 return;
             }
-            self.view = Some(MailView::new(self.cursor_pos, self.local_collection.clone(), None, None));
+            {
+                let threaded = context.accounts[self.cursor_pos.0]
+                    .runtime_settings
+                    .conf()
+                    .threaded();
+                let account = &context.accounts[self.cursor_pos.0];
+                let mailbox = &account[self.cursor_pos.1]
+                    .as_ref()
+                    .unwrap();
+                let mut coordinates = self.cursor_pos;
+                coordinates.2 = if threaded {
+                    mailbox.threaded_mail(self.cursor_pos.2)
+                } else {
+                    self.local_collection[self.cursor_pos.2]
+                };
+                self.view = Some(MailView::new(coordinates, None, None));
+            }
             self.view.as_mut().unwrap().draw(
                 grid,
                 (set_y(upper_left, mid + 1), bottom_right),
@@ -600,23 +617,31 @@ impl Component for MailListing {
             self.dirty = false;
         }
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        if let Some(ref mut v) = self.view {
+            if v.process_event(event, context) {
+                return true;
+            }
+        }
         match event.event_type {
             UIEventType::Input(Key::Up) => {
                 if self.cursor_pos.2 > 0 {
                     self.new_cursor_pos.2 -= 1;
                     self.dirty = true;
                 }
+                return true;
             }
             UIEventType::Input(Key::Down) => {
                 if self.length > 0 && self.new_cursor_pos.2 < self.length - 1 {
                     self.new_cursor_pos.2 += 1;
                     self.dirty = true;
                 }
+                return true;
             }
             UIEventType::Input(Key::Char('\n')) if !self.unfocused => {
                 self.unfocused = true;
                 self.dirty = true;
+                return true;
             }
             UIEventType::Input(Key::Char('m')) if !self.unfocused => {
                 use std::process::{Command, Stdio};
@@ -662,12 +687,13 @@ impl Component for MailListing {
                     id: 0,
                     event_type: UIEventType::ChangeMode(UIMode::Fork),
                 });
-                return;
+                return true;
             }
             UIEventType::Input(Key::Char('i')) if self.unfocused => {
                 self.unfocused = false;
                 self.dirty = true;
                 self.view = None;
+                return true;
             }
             UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
                 let folder_length = context.accounts[self.cursor_pos.0].len();
@@ -700,6 +726,7 @@ impl Component for MailListing {
                     }
                     _ => {}
                 }
+                return true;
             }
             UIEventType::Input(Key::Char(k @ 'h')) | UIEventType::Input(Key::Char(k @ 'l')) => {
                 let accounts_length = context.accounts.len();
@@ -718,6 +745,7 @@ impl Component for MailListing {
                     }
                     _ => {}
                 }
+                return true;
             }
             UIEventType::RefreshMailbox(_) => {
                 self.dirty = true;
@@ -727,7 +755,6 @@ impl Component for MailListing {
                 if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 {
                     self.dirty = true;
                     self.refresh_mailbox(context);
-                    return;
                 }
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
@@ -744,35 +771,33 @@ impl Component for MailListing {
                         .toggle_threaded();
                     self.refresh_mailbox(context);
                     self.dirty = true;
-                    return;
+                    return true;
                 }
                 Action::ViewMailbox(idx) => {
                     self.new_cursor_pos.1 = *idx;
                     self.dirty = true;
                     self.refresh_mailbox(context);
-                    return;
+                    return true;
                 }
                 Action::SubSort(field, order) => {
                     eprintln!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
                     self.dirty = true;
                     self.refresh_mailbox(context);
-                    return;
+                    return true;
                 }
                 Action::Sort(field, order) => {
                     eprintln!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
                     self.dirty = true;
                     self.refresh_mailbox(context);
-                    return;
+                    return true;
                 }
                 // _ => {}
             },
             _ => {}
         }
-        if let Some(ref mut v) = self.view {
-            v.process_event(event, context);
-        }
+        false
     }
     fn is_dirty(&self) -> bool {
         self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)

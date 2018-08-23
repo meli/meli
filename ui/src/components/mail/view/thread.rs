@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use std::cmp;
 
 #[derive(Debug)]
 struct ThreadEntry {
@@ -28,30 +29,113 @@ struct ThreadEntry {
     content: CellBuffer,
 
     msg_idx: usize,
-    expanded: bool,
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ThreadView {
+    new_cursor_pos: usize,
+    cursor_pos: usize,
+    expanded_pos: usize,
+    new_expanded_pos: usize,
     dirty: bool,
     coordinates: (usize, usize, usize),
-    pager: Pager,
+    mailview: MailView,
     entries: Vec<ThreadEntry>,
+    content: CellBuffer,
+    initiated: bool,
 }
 
 impl ThreadView {
-    pub fn new(coordinates: (usize, usize, usize),
-    ) -> Self {
-        ThreadView {
-            dirty: true,
-            coordinates,
-            pager: Pager::default(),
-            entries: Vec::new(),
+    pub fn new(coordinates: (usize, usize, usize), context: &Context) -> Self {
+        let mut stack: Vec<(usize, usize)> = Vec::with_capacity(32);
+        let mailbox = &context.accounts[coordinates.0][coordinates.1].as_ref().unwrap();
+        let threads = &mailbox.threads;
+        let container = &threads.containers()[threads.root_set()[coordinates.2]];
+
+        if container.message().is_some() {
+            stack.push((0, threads.root_set()[coordinates.2]));
+        } else {
+            stack.push((1, container.first_child().unwrap()));
         }
+        let mut view = ThreadView {
+            dirty: true,
+            initiated: false,
+            coordinates,
+            mailview: MailView::default(),
+            entries: Vec::new(),
+            cursor_pos: 1,
+            new_cursor_pos: 0,
+            .. Default::default()
+        };
+        let mut line = 0;
+        let mut max_ind = 0;
+        while let Some((ind, idx)) = stack.pop() {
+            max_ind = cmp::max(max_ind, ind);
+            let entry = view.make_entry(context, (ind, idx, line));
+            view.entries.push(entry);
+            line += 1;
+            let container = &threads.containers()[idx];
+            if let Some(i) = container.next_sibling() {
+                stack.push((ind, i));
+            }
+
+            if let Some(i) = container.first_child() {
+                stack.push((ind + 1, i));
+            }
+        }
+        view.new_expanded_pos = view.entries.len() - 1;
+        view.expanded_pos = view.new_expanded_pos + 1;
+
+        let height = 2*view.entries.len();
+        let mut width = 0;
+
+        let mut strings: Vec<String> = Vec::with_capacity(view.entries.len());
+
+
+        for e in &view.entries {
+            let envelope: &Envelope = &mailbox.collection[e.msg_idx];
+            strings.push(format!(" {}{} - {}", " ".repeat(e.index.0 * 4), envelope.date_as_str(), envelope.from_to_string()));
+            width = cmp::max(width, e.index.0 + strings.last().as_ref().unwrap().len() + 1);
+
+        }
+        let mut content = CellBuffer::new(width, height,  Cell::default());
+        for (y, e) in view.entries.iter().enumerate() {
+            if y > 0 && content.get_mut(e.index.0 * 4, 2*y - 1).is_some() {
+                let index = (e.index.0 * 4, 2*y - 1);
+                if content[index].ch() == ' ' {
+                    let mut ctr = 1;
+                    while content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() == ' ' {
+                        content[(e.index.0 * 4 + ctr, 2 * y - 1)].set_ch(HORZ_BOUNDARY);
+                        ctr += 1;
+                    }
+                    content[index].set_ch(_TOP_LEFT_CORNER);
+                } else {
+                    content[index].set_ch(LIGHT_DOWN_AND_HORIZONTAL);
+                };
+            }
+
+            write_string_to_grid(
+                &strings[y],
+                &mut content,
+                Color::Default,
+                Color::Default,
+                ((e.index.0 + 1, 2*y), (width - 1, height - 1)),
+                true,
+                );
+            content[(e.index.0 * 4, 2*y)].set_ch(VERT_BOUNDARY);
+            for i in (e.index.0 * 4)..width {
+                content[(i, 2*y + 1)].set_ch(HORZ_BOUNDARY);
+            }
+            content[(e.index.0 *4, 2*y + 1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
+        }
+        //view.mailview = MailView::new((view.coordinates.0, view.coordinates.1, view.entries[view.expanded_pos].msg_idx), None, None);
+        view.content = content;
+        view.new_cursor_pos = view.new_expanded_pos;
+        view
     }
 
-    fn make_entry(&mut self, context: &mut Context, i: (usize, usize, usize)) -> ThreadEntry {
+    fn make_entry(&mut self, context: &Context, i: (usize, usize, usize)) -> ThreadEntry {
         let (ind, idx, order) = i;
         let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
             .as_ref()
@@ -90,7 +174,7 @@ impl ThreadView {
             &mut buf,
             Color::Byte(33),
             Color::Default,
-            ((0, 0), (width, height)),
+            ((ind, 0), (width, height)),
             true,
             );
         write_string_to_grid(
@@ -98,7 +182,7 @@ impl ThreadView {
             &mut buf,
             Color::Byte(33),
             Color::Default,
-            ((0, 1), (width, height)),
+            ((ind, 1), (width, height)),
             true,
             );
         write_string_to_grid(
@@ -106,7 +190,7 @@ impl ThreadView {
             &mut buf,
             Color::Byte(33),
             Color::Default,
-            ((0, 2), (width, height)),
+            ((ind, 2), (width, height)),
             true,
             );
 
@@ -116,8 +200,70 @@ impl ThreadView {
             content: buf,
 
             msg_idx,
-            expanded: false,
         }
+    }
+
+    fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize) {
+        let fg_color = Color::Default;
+        let bg_color = if self.cursor_pos == idx {
+            Color::Byte(246)
+        } else {
+            Color::Default
+        };
+        change_colors(grid, area, fg_color, bg_color);
+    }
+
+    /// Draw the list
+    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        let (width, height) = self.content.size();
+        if height == 0 {
+            clear_area(grid, area);
+            copy_area(grid, &self.content, area, ((0, 0), (width - 1, 0)));
+            context.dirty_areas.push_back(area);
+            return;
+        }
+        let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 2;
+        let prev_page_no = (self.cursor_pos).wrapping_div(rows);
+        let page_no = (self.new_cursor_pos).wrapping_div(rows);
+
+        let top_idx = page_no * rows;
+
+        /* If cursor position has changed, remove the highlight from the previous position and
+         * apply it in the new one. */
+        if prev_page_no == page_no {
+            let old_cursor_pos = self.cursor_pos;
+            self.cursor_pos = self.new_cursor_pos;
+            for &idx in &[old_cursor_pos, self.new_cursor_pos] {
+                let new_area = (
+                    set_y(upper_left, get_y(upper_left) + 2*(idx % rows)),
+                    set_y(bottom_right, get_y(upper_left) + 2*(idx % rows)),
+                );
+                self.highlight_line(grid, new_area, idx);
+                context.dirty_areas.push_back(new_area);
+            }
+            return;
+        } else if self.cursor_pos != self.new_cursor_pos {
+            self.cursor_pos = self.new_cursor_pos;
+        }
+
+        /* Page_no has changed, so draw new page */
+        copy_area(
+            grid,
+            &self.content,
+            area,
+            ((0, 2*top_idx), (width - 1, height - 1)),
+        );
+        self.highlight_line(
+            grid,
+            (
+                set_y(upper_left, get_y(upper_left) + 2*(self.cursor_pos % rows)),
+                set_y(bottom_right, get_y(upper_left) + 2*(self.cursor_pos % rows)),
+            ),
+            self.cursor_pos,
+        );
+        context.dirty_areas.push_back(area);
     }
 }
 
@@ -132,11 +278,27 @@ impl Component for ThreadView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
-        clear_area(grid, area);
-        let mut stack: Vec<(usize, usize)> = Vec::with_capacity(32);
 
-        let y =
-        {
+        let total_rows = get_y(bottom_right) - get_y(upper_left);
+        let pager_ratio = context.runtime_settings.pager.pager_ratio;
+        let bottom_entity_rows = (pager_ratio * total_rows) / 100;
+
+        if bottom_entity_rows > total_rows {
+            clear_area(grid, area);
+            context.dirty_areas.push_back(area);
+            return;
+        }
+
+        let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
+
+        if !self.dirty {
+            self.mailview.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+            return;
+        }
+
+        self.dirty = false;
+
+        let y = {
             let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1].as_ref().unwrap();
             let threads = &mailbox.threads;
             let container = &threads.containers()[threads.root_set()[self.coordinates.2]];
@@ -162,62 +324,80 @@ impl Component for ThreadView {
                 grid[(x, y)].set_bg(Color::Default);
                 grid[(x, y)].set_fg(Color::Default);
             }
-            if container.message().is_some() {
-                stack.push((0, threads.root_set()[self.coordinates.2]));
-            } else {
-                stack.push((1, container.first_child().unwrap()));
-            }
-            y
+            //context.dirty_areas.push_back(((0,0), set_y(bottom_right, y)));
+            y + 2
         };
 
-        if self.dirty {
-
-            let mut line = 0;
-            while let Some((ind, idx)) = stack.pop() {
-                let entry = self.make_entry(context, (ind, idx, line));
-                self.entries.push(entry);
-                line += 1;
-                let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1].as_ref().unwrap();
-                let threads = &mailbox.threads;
-                let container = &threads.containers()[idx];
-                if let Some(i) = container.next_sibling() {
-                    stack.push((ind, i));
-                }
-                if let Some(i) = container.first_child() {
-                    stack.push((ind + 1, i));
-                }
-            }
-            let height = self.entries.iter().map(|x| x.content.size().1).sum();
-            let width = self.entries.iter().map(|x| x.content.size().0).max().unwrap_or(0);
-            let mut content = CellBuffer::new(width, height, Cell::default());
-
-            let mut y = 0;
-
-            let (cols_dest, rows_dest) = content.size();
-            for e in &self.entries {
-                let (cols_src, rows_src) = e.content.size();
-                y = copy_area(&mut content, &e.content, ((0, y), (cols_dest - 1, rows_dest - 1)), ((0, 0), (cols_src - 1, rows_src - 1))).1;
-                for i in 0..cols_dest {
-                    content[(i, y)].set_ch(HORZ_BOUNDARY);
-                }
-            }
-            self.pager = Pager::from_buf(content, None);
-            self.dirty = false;
+        let (width, height) = self.content.size();
+        if height == 0 || height == self.cursor_pos || width == 0 {
+            return;
         }
 
-        self.pager.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+        if !self.initiated {
+            clear_area(grid, (set_y(upper_left, y - 1), bottom_right));
+            let (width, height) = self.content.size();
+            copy_area(
+                grid,
+                &self.content,
+                (set_y(upper_left, y), set_y(bottom_right, mid - 1)),
+                ((0, 0), (width - 1, height - 1)),
+                );
+            for x in get_x(upper_left)..=get_x(bottom_right) {
+                grid[(x, mid)].set_ch(HORZ_BOUNDARY);
+            }
+            if let Some(cell) = grid.get_mut(get_x(upper_left).saturating_sub(1), mid) {
+                if cell.ch() == VERT_BOUNDARY {
+                    cell.set_ch(LIGHT_VERTICAL_AND_RIGHT);
+                }
+            }
+            context.dirty_areas.push_back(area);
+            self.initiated = true;
+        }
 
-        context
-            .dirty_areas
-            .push_back(area);
+        if self.new_expanded_pos != self.expanded_pos {
+            self.expanded_pos = self.new_expanded_pos;
+            self.mailview = MailView::new((self.coordinates.0, self.coordinates.1, self.entries[self.expanded_pos].msg_idx), None, None);
+        }
+        self.draw_list(grid, (set_y(upper_left, y), set_y(bottom_right, mid - 1)), context);
+        self.mailview.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
-        self.pager.process_event(event, context);
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        if self.mailview.process_event(event, context) {
+            return true;
+        }
+        match event.event_type {
+            UIEventType::Input(Key::Up) => {
+                if self.cursor_pos > 0 {
+                    self.new_cursor_pos -= 1;
+                    self.dirty = true;
+                }
+                return true;
+            },
+            UIEventType::Input(Key::Down) => {
+                let height = self.entries.len();
+                if height > 0 && self.cursor_pos + 1 < height {
+                    self.new_cursor_pos += 1;
+                    self.dirty = true;
+                }
+                return true;
+            }
+            UIEventType::Input(Key::Char('\n')) => {
+                self.new_expanded_pos = self.cursor_pos;
+                self.dirty = true;
+                return true;
+            },
+            UIEventType::Resize => {
+                self.dirty = true;
+            },
+            _ => {}
+        }
+        false
     }
     fn is_dirty(&self) -> bool {
-        self.dirty || self.pager.is_dirty()
+        self.dirty || self.mailview.is_dirty()
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
+        self.mailview.set_dirty();
     }
 }

@@ -36,7 +36,7 @@ pub mod utilities;
 pub use self::utilities::*;
 
 use std::fmt;
-use std::fmt::Display;
+use std::fmt::{Display, Debug};
 use std::ops::Deref;
 
 use super::{Key, UIEvent, UIEventType};
@@ -64,10 +64,18 @@ const LIGHT_UP_AND_HORIZONTAL: char = '┴';
 
 /// `Entity` is a container for Components. Totally useless now so if it is not useful in the
 /// future (ie hold some information, id or state) it should be removed.
+#[derive(Debug)]
 pub struct Entity {
     //context: VecDeque,
     pub component: Box<Component>, // more than one?
 }
+
+impl Display for Entity {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt(&self.component, f)
+    }
+}
+
 
 impl Deref for Entity {
     type Target = Box<Component>;
@@ -79,17 +87,17 @@ impl Deref for Entity {
 
 impl Entity {
     /// Pass events to child component.
-    pub fn rcv_event(&mut self, event: &UIEvent, context: &mut Context) {
-        self.component.process_event(&event, context);
+    pub fn rcv_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        self.component.process_event(&event, context)
     }
 }
 
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
 /// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
-pub trait Component: Display {
+pub trait Component: Display + Debug {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context);
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool;
     fn is_dirty(&self) -> bool {
         true
     }
@@ -228,7 +236,7 @@ fn write_string_to_grid(
             if x == (get_x(bottom_right)) + 1 || x > get_x(bounds) {
                 x = get_x(upper_left);
                 y += 1;
-                if y >= (get_y(bottom_right)) || y > get_y(bounds) {
+                if y > (get_y(bottom_right)) || y > get_y(bounds) {
                     return (x, y - 1);
                 }
                 if !line_break {

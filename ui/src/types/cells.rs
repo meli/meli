@@ -111,6 +111,9 @@ impl fmt::Debug for CellBuffer {
 }
 
 impl CellBuffer {
+    pub fn area(&self) -> Area {
+        ((0, 0), (self.cols.saturating_sub(1), self.rows.saturating_sub(1)))
+    }
     pub fn set_cols(&mut self, new_cols: usize) {
         self.cols = new_cols;
     }

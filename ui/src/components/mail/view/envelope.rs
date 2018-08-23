@@ -45,6 +45,7 @@ impl ViewMode {
 
 /// Contains an Envelope view, with sticky headers, a pager for the body, and subviews for more
 /// menus
+#[derive(Debug)]
 pub struct EnvelopeView {
     pager: Option<Pager>,
     subview: Option<Box<Component>>,
@@ -313,13 +314,24 @@ impl Component for EnvelopeView {
         }
     }
 
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) {
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        if let Some(ref mut sub) = self.subview {
+            if sub.process_event(event, context) {
+                return true;
+            }
+        } else if let Some(ref mut p) = self.pager {
+            if p.process_event(event, context) {
+                return true;
+            }
+        }
         match event.event_type {
             UIEventType::Input(Key::Esc) => {
                 self.cmd_buf.clear();
+                return true;
             }
             UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
                 self.cmd_buf.push(c);
+                return true;
             }
             UIEventType::Input(Key::Char('r'))
                 if self.mode == ViewMode::Normal || self.mode == ViewMode::Raw =>
@@ -330,11 +342,13 @@ impl Component for EnvelopeView {
                     ViewMode::Raw
                 };
                 self.dirty = true;
+                return true;
             }
             UIEventType::Input(Key::Char('r')) if self.mode.is_attachment() || self.mode == ViewMode::Subview => {
                 self.mode = ViewMode::Normal;
                 self.subview.take();
                 self.dirty = true;
+                return true;
             }
             UIEventType::Input(Key::Char('a'))
                 if !self.cmd_buf.is_empty() && self.mode == ViewMode::Normal =>
@@ -362,7 +376,7 @@ impl Component for EnvelopeView {
                                         "Multipart attachments are not supported yet.".to_string(),
                                     ),
                                 });
-                                return;
+                                return true;
                             }
                             ContentType::Unsupported { .. } => {
                                 let attachment_type = u.mime_type();
@@ -386,7 +400,7 @@ impl Component for EnvelopeView {
                                             attachment_type
                                         )),
                                     });
-                                    return;
+                                    return true;
                                 }
                             }
                         }
@@ -398,10 +412,11 @@ impl Component for EnvelopeView {
                                 lidx
                             )),
                         });
-                        return;
+                        return true;
                     }
                 };
-            }
+                return true;
+            },
             UIEventType::Input(Key::Char('g'))
                 if !self.cmd_buf.is_empty() && self.mode == ViewMode::Url =>
             {
@@ -422,7 +437,7 @@ impl Component for EnvelopeView {
                                 lidx
                             )),
                         });
-                        return;
+                        return true;
                     }
                 };
 
@@ -432,6 +447,7 @@ impl Component for EnvelopeView {
                     .stdout(Stdio::piped())
                     .spawn()
                     .expect("Failed to start xdg_open");
+                return true;
             }
             UIEventType::Input(Key::Char('u')) => {
                 match self.mode {
@@ -440,14 +456,11 @@ impl Component for EnvelopeView {
                     _ => {}
                 }
                 self.dirty = true;
+                return true;
             }
             _ => {}
         }
-        if let Some(ref mut sub) = self.subview {
-            sub.process_event(event, context);
-        } else if let Some(ref mut p) = self.pager {
-            p.process_event(event, context);
-        }
+        false
     }
     fn is_dirty(&self) -> bool {
         self.dirty
