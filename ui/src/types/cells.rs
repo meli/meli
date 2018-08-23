@@ -106,13 +106,22 @@ pub struct CellBuffer {
 
 impl fmt::Debug for CellBuffer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "CellBuffer {{ cols: {}, rows: {}, buf: {} cells", self.cols, self.rows, self.buf.len())
+        write!(
+            f,
+            "CellBuffer {{ cols: {}, rows: {}, buf: {} cells",
+            self.cols,
+            self.rows,
+            self.buf.len()
+        )
     }
 }
 
 impl CellBuffer {
     pub fn area(&self) -> Area {
-        ((0, 0), (self.cols.saturating_sub(1), self.rows.saturating_sub(1)))
+        (
+            (0, 0),
+            (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
+        )
     }
     pub fn set_cols(&mut self, new_cols: usize) {
         self.cols = new_cols;
@@ -216,13 +225,13 @@ impl Default for CellBuffer {
     }
 }
 
-impl<'a> From<&'a String> for CellBuffer {
-    fn from(s: &'a String) -> Self {
+impl<'a> From<&'a str> for CellBuffer {
+    fn from(s: &'a str) -> Self {
         let lines: Vec<&str> = s.lines().map(|l| l.trim_right()).collect();
         let len = s.len() + lines.len();
         let mut buf = CellBuffer::new(len, 1, Cell::default());
         let mut x = 0;
-        for l in lines.iter() {
+        for l in &lines {
             for (idx, c) in l.chars().enumerate() {
                 buf[(x + idx, 0)].set_ch(c);
             }

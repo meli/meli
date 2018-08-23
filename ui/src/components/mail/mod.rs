@@ -65,10 +65,8 @@ impl AccountMenu {
                 index: i,
                 entries: {
                     let mut entries = Vec::with_capacity(a.len());
-                    let mut idx = 0;
-                    for acc in a.list_folders() {
+                    for (idx, acc) in a.list_folders().into_iter().enumerate() {
                         entries.push((idx, acc));
-                        idx += 1;
                     }
                     entries
                 },

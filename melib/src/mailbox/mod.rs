@@ -32,7 +32,7 @@ pub mod backends;
 use error::Result;
 use mailbox::backends::{folder_default, Folder};
 pub mod thread;
-pub use mailbox::thread::{build_threads, Container, Threads, SortOrder, SortField};
+pub use mailbox::thread::{build_threads, Container, SortField, SortOrder, Threads};
 
 use std::option::Option;
 
@@ -74,9 +74,12 @@ impl Mailbox {
         let threads = build_threads(&mut collection, sent_folder);
         Ok(Mailbox {
             folder: (*folder).clone(),
-            collection: collection,
-            threads: threads,
+            collection,
+            threads,
         })
+    }
+    pub fn is_empty(&self) -> bool {
+        self.collection.is_empty()
     }
     pub fn len(&self) -> usize {
         self.collection.len()

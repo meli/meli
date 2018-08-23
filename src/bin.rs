@@ -35,7 +35,6 @@ extern crate ui;
 pub use melib::*;
 pub use ui::*;
 
-
 #[macro_use]
 extern crate chan;
 extern crate chan_signal;
@@ -55,7 +54,6 @@ fn main() {
 
     /* Catch SIGWINCH to handle terminal resizing */
     let signal = chan_signal::notify(&[Signal::WINCH]);
-
 
     /* Create the application State. This is the 'System' part of an ECS architecture */
     let mut state = State::new();

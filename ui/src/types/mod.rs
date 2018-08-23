@@ -20,7 +20,7 @@
  */
 
 pub mod accounts;
-pub use self::accounts::Account;
+pub use self::accounts::{Account, LoadMailboxResult};
 #[macro_use]
 mod position;
 #[macro_use]

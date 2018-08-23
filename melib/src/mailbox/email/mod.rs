@@ -129,10 +129,10 @@ impl StrBuilder {
         let offset = self.offset;
         let length = self.length;
         String::from_utf8(s[offset..offset + length].to_vec()).unwrap()
-    } 
+    }
     #[cfg(test)]
     fn display_bytes<'a>(&self, b: &'a [u8]) -> &'a [u8] {
-        &b[self.offset..(self.offset+self.length)]
+        &b[self.offset..(self.offset + self.length)]
     }
 }
 
@@ -146,7 +146,7 @@ impl StrBuild for MessageID {
         MessageID(
             string.to_owned(),
             StrBuilder {
-                offset: offset,
+                offset,
                 length: slice.len() + 1,
             },
         )
@@ -197,12 +197,12 @@ struct References {
 bitflags! {
     #[derive(Default, Serialize, Deserialize)]
     pub struct Flag: u8 {
-        const PASSED  =  0b00000001;
-        const REPLIED =  0b00000010;
-        const SEEN    =  0b00000100;
-        const TRASHED =  0b00001000;
-        const DRAFT   =  0b00010000;
-        const FLAGGED =  0b00100000;
+        const PASSED  =  0b0000_0001;
+        const REPLIED =  0b0000_0010;
+        const SEEN    =  0b0000_0100;
+        const TRASHED =  0b0000_1000;
+        const DRAFT   =  0b0001_0000;
+        const FLAGGED =  0b0010_0000;
     }
 }
 
@@ -211,7 +211,6 @@ pub struct EnvelopeWrapper {
     envelope: Envelope,
     buffer: Vec<u8>,
 }
-
 
 use std::ops::Deref;
 
@@ -317,7 +316,6 @@ impl Envelope {
         self.hash
     }
     pub fn populate_headers(&mut self, bytes: &[u8]) -> Result<()> {
-
         let (headers, _) = match parser::mail(bytes).to_full_result() {
             Ok(v) => v,
             Err(e) => {
@@ -372,13 +370,13 @@ impl Envelope {
                 self.set_in_reply_to(value);
                 in_reply_to = Some(value);
             } else if name.eq_ignore_ascii_case(b"date") {
-                    let parse_result = parser::phrase(value);
-                    if parse_result.is_done() {
-                        let value = parse_result.to_full_result().unwrap();
-                        self.set_date(value.as_slice());
-                    } else {
-                        self.set_date(value);
-                    }
+                let parse_result = parser::phrase(value);
+                if parse_result.is_done() {
+                    let value = parse_result.to_full_result().unwrap();
+                    self.set_date(value.as_slice());
+                } else {
+                    self.set_date(value);
+                }
             }
         }
         /*
@@ -400,24 +398,21 @@ impl Envelope {
         Ok(())
     }
 
-
     pub fn populate_headers_from_token(&mut self, mut operation: Box<BackendOp>) -> Result<()> {
-        {
-            let headers = operation.fetch_headers()?;
-            return self.populate_headers(headers);
-        }
+        let headers = operation.fetch_headers()?;
+        self.populate_headers(headers)
     }
     pub fn date(&self) -> u64 {
         self.timestamp
     }
 
     pub fn datetime(&self) -> chrono::DateTime<chrono::FixedOffset> {
-            if let Some(d) = parser::date(&self.date.as_bytes()) {
-                return d;
-            }
-            chrono::FixedOffset::west(0)
-                .ymd(1970, 1, 1)
-                .and_hms(0, 0, 0)
+        if let Some(d) = parser::date(&self.date.as_bytes()) {
+            return d;
+        }
+        chrono::FixedOffset::west(0)
+            .ymd(1970, 1, 1)
+            .and_hms(0, 0, 0)
     }
     pub fn date_as_str(&self) -> &str {
         &self.date
@@ -426,14 +421,14 @@ impl Envelope {
         &self.from
     }
 
-    pub fn from_to_string(&self) -> String {
+    pub fn field_from_to_string(&self) -> String {
         let _strings: Vec<String> = self.from.iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
     }
     pub fn to(&self) -> &Vec<Address> {
         &self.to
     }
-    pub fn to_to_string(&self) -> String {
+    pub fn field_to_to_string(&self) -> String {
         let _strings: Vec<String> = self.to.iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
     }
@@ -504,7 +499,7 @@ impl Envelope {
     }
     pub fn in_reply_to_raw(&self) -> Cow<str> {
         match self.in_reply_to {
-            Some(ref s) => String::from_utf8_lossy(s.raw()).into(),
+            Some(ref s) => String::from_utf8_lossy(s.raw()),
             _ => Cow::from(String::new()),
         }
     }

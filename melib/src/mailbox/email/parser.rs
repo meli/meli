@@ -114,12 +114,11 @@ fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
 fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
     let input_len = input.len();
     for (i, x) in input.iter().enumerate() {
-        if *x == b'\n' {
-            if ((i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t')
-                || i + 1 == input_len
-            {
-                return IResult::Done(&input[(i + 1)..], &input[0..i]);
-            }
+        if *x == b'\n'
+            && (((i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t')
+                || i + 1 == input_len)
+        {
+            return IResult::Done(&input[(i + 1)..], &input[0..i]);
         }
     }
     IResult::Incomplete(Needed::Unknown)
@@ -146,7 +145,7 @@ pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
             return IResult::Done(&input[(i + 1)..], &input[0..i + 1]);
         }
     }
-    return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    IResult::Error(error_code!(ErrorKind::Custom(43)))
 }
 
 named!(pub body_raw<&[u8]>,
@@ -337,9 +336,9 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
                     IResult::Done(
                         rest,
                         Address::Mailbox(MailboxAddress {
-                            raw: raw,
-                            display_name: display_name,
-                            address_spec: address_spec,
+                            raw,
+                            display_name,
+                            address_spec,
                         }),
                     )
                 }
@@ -414,12 +413,11 @@ fn group(input: &[u8]) -> IResult<&[u8], Address> {
     }
 
     match mailbox_list(&input[dlength..]) {
-        IResult::Error(e) => {
-            return IResult::Error(e);
-        }
+        IResult::Error(e) => IResult::Error(e),
         IResult::Done(rest, vec) => {
-            let size: usize = (rest.as_ptr() as usize).wrapping_sub((&input[0..] as &[u8]).as_ptr() as usize);
-            return IResult::Done(
+            let size: usize =
+                (rest.as_ptr() as usize).wrapping_sub((&input[0..] as &[u8]).as_ptr() as usize);
+            IResult::Done(
                 rest,
                 Address::Group(GroupAddress {
                     raw: input[0..size].into(),
@@ -429,11 +427,9 @@ fn group(input: &[u8]) -> IResult<&[u8], Address> {
                     },
                     mailbox_list: vec,
                 }),
-            );
+            )
         }
-        IResult::Incomplete(i) => {
-            return IResult::Incomplete(i);
-        }
+        IResult::Incomplete(i) => IResult::Incomplete(i),
     }
 }
 
@@ -559,7 +555,7 @@ fn attachments_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<
             return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
     }
-    return IResult::Done(input, ret);
+    IResult::Done(input, ret)
 }
 
 named_args!(pub attachments<'a>(boundary: &'a [u8]) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
@@ -603,13 +599,11 @@ named!(
                     acc += x.len();
                     acc
                 });
-                let bytes = list
-                    .iter()
+                list.iter()
                     .fold(Vec::with_capacity(list_len), |mut acc, x| {
                         acc.append(&mut x.clone());
                         acc
-                    });
-                bytes
+                    })
             })
     ))
 );
@@ -685,7 +679,7 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
             acc.push(b' ');
         }
     }
-    return IResult::Done(&[], acc);
+    IResult::Done(&[], acc)
 }
 
 #[cfg(test)]

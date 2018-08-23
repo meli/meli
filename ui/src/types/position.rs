@@ -87,7 +87,7 @@ macro_rules! height {
 /// # }
 /// ```
 #[macro_export]
-macro_rules! width{
+macro_rules! width {
     ($a:expr) => {
         (get_x(bottom_right!($a))).saturating_sub(get_x(upper_left!($a)))
     };

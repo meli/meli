@@ -65,7 +65,7 @@ impl Component for Composer {
         let width = width!(area);
         let mid = if width > 80 {
             let width = width - 80;
-            let mid = width / 2;;
+            let mid = width / 2;
 
             if self.dirty {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
@@ -78,17 +78,22 @@ impl Component for Composer {
                 }
             }
             mid
-        } else { 0 };
+        } else {
+            0
+        };
 
         if self.dirty {
-            for i in get_x(upper_left)+ mid + 1..=get_x(upper_left) + mid + 79 {
+            for i in get_x(upper_left) + mid + 1..=get_x(upper_left) + mid + 79 {
                 grid[(i, header_height)].set_ch(HORZ_BOUNDARY);
                 grid[(i, header_height)].set_fg(Color::Default);
                 grid[(i, header_height)].set_bg(Color::Default);
             }
         }
 
-        let body_area = ((mid + 1, header_height+2), (mid + 78, get_y(bottom_right)));
+        let body_area = (
+            (mid + 1, header_height + 2),
+            (mid + 78, get_y(bottom_right)),
+        );
 
         if self.dirty {
             context.dirty_areas.push_back(area);
@@ -97,8 +102,7 @@ impl Component for Composer {
         match self.mode {
             ViewMode::Overview => {
                 self.pager.draw(grid, body_area, context);
-
-            },
+            }
         }
     }
 
@@ -134,12 +138,12 @@ impl Component for Composer {
                     .expect("failed to execute process");
                 let result = f.read_to_string();
                 self.buffer = result.clone();
-                self.pager.update_from_string(result);
+                self.pager.update_from_str(result.as_str());
                 context.restore_input();
                 self.dirty = true;
                 return true;
-            },
-            _ => {},
+            }
+            _ => {}
         }
         false
     }

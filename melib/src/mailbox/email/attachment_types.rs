@@ -1,5 +1,5 @@
-use mailbox::email::parser::BytesExt;
 use mailbox::email::attachments::Attachment;
+use mailbox::email::parser::BytesExt;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
 
@@ -20,12 +20,10 @@ impl SliceBuild {
     //fn length(&self) -> usize {
     //    self.end - self.offset + 1
     //}
-    pub fn get<'a>(&self, slice:&'a [u8]) -> &'a [u8] {
+    pub fn get<'a>(&self, slice: &'a [u8]) -> &'a [u8] {
         &slice[self.offset..self.end]
     }
 }
-
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Charset {
@@ -72,7 +70,7 @@ impl<'a> From<&'a [u8]> for Charset {
             _ => {
                 eprintln!("unknown tag is {:?}", str::from_utf8(b));
                 Charset::Ascii
-            },
+            }
         }
     }
 }
@@ -102,10 +100,19 @@ impl Display for MultipartType {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ContentType {
-    Text { kind: Text, charset: Charset },
-    Multipart { boundary: SliceBuild, kind: MultipartType, subattachments: Vec<Attachment>},
+    Text {
+        kind: Text,
+        charset: Charset,
+    },
+    Multipart {
+        boundary: SliceBuild,
+        kind: MultipartType,
+        subattachments: Vec<Attachment>,
+    },
     MessageRfc822,
-    Unsupported { tag: Vec<u8> },
+    Unsupported {
+        tag: Vec<u8>,
+    },
 }
 
 impl Default for ContentType {
@@ -137,7 +144,10 @@ impl ContentType {
         }
     }
     pub fn is_text_html(&self) -> bool {
-        if let ContentType::Text { kind: Text::Html, .. } = self {
+        if let ContentType::Text {
+            kind: Text::Html, ..
+        } = self
+        {
             true
         } else {
             false

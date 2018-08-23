@@ -23,13 +23,12 @@
  * User actions that need to be handled by the UI
  */
 
-pub use melib::mailbox::{SortOrder, SortField};
+pub use melib::mailbox::{SortField, SortOrder};
 
 #[derive(Debug, Clone)]
 pub enum MailListingAction {
     ToggleThreaded,
 }
-
 
 #[derive(Debug, Clone)]
 pub enum Action {

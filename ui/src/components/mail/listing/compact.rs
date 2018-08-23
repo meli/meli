@@ -67,14 +67,14 @@ impl CompactListing {
                 &CompactListing::format_date(e),
                 e.subject(),
                 len
-                )
+            )
         } else {
             format!(
                 "{}    {}    {:.85}",
                 idx,
                 &CompactListing::format_date(e),
                 e.subject(),
-                )
+            )
         }
     }
 
@@ -86,7 +86,7 @@ impl CompactListing {
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
-            content: content,
+            content,
             dirty: true,
             unfocused: false,
             view: None,
@@ -110,14 +110,16 @@ impl CompactListing {
         //
         loop {
             // TODO: Show progress visually
-            if let Ok(_) = context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+            if context.accounts[self.cursor_pos.0]
+                .status(self.cursor_pos.1)
+                .is_ok()
+            {
                 break;
             }
         }
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
-
 
         self.length = mailbox.threads.root_len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
@@ -139,9 +141,9 @@ impl CompactListing {
             let i = if let Some(i) = container.message() {
                 i
             } else {
-                threads.containers()[
-                    container.first_child().unwrap()
-                ].message().unwrap()
+                threads.containers()[container.first_child().unwrap()]
+                    .message()
+                    .unwrap()
             };
             let root_envelope: &Envelope = &mailbox.collection[i];
             let fg_color = if has_unseen {
@@ -163,16 +165,13 @@ impl CompactListing {
                 bg_color,
                 ((0, idx), (MAX_COLS - 1, idx)),
                 false,
-                );
+            );
 
             for x in x..MAX_COLS {
                 self.content[(x, idx)].set_ch(' ');
                 self.content[(x, idx)].set_bg(bg_color);
             }
-
-
         }
-
     }
 
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
@@ -185,9 +184,9 @@ impl CompactListing {
         let i = if let Some(i) = container.message() {
             i
         } else {
-            threads.containers()[
-                container.first_child().unwrap()
-            ].message().unwrap()
+            threads.containers()[container.first_child().unwrap()]
+                .message()
+                .unwrap()
         };
         let root_envelope: &Envelope = &mailbox.collection[i];
         let fg_color = if !root_envelope.is_seen() {
@@ -303,11 +302,7 @@ impl Component for CompactListing {
                 return;
             }
             self.view = Some(ThreadView::new(self.cursor_pos, context));
-            self.view.as_mut().unwrap().draw(
-                grid,
-                area,
-                context,
-            );
+            self.view.as_mut().unwrap().draw(grid, area, context);
             self.dirty = false;
         }
     }
@@ -440,8 +435,7 @@ impl Component for CompactListing {
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;
-                }
-                // _ => {}
+                } // _ => {}
             },
             _ => {}
         }
@@ -451,7 +445,9 @@ impl Component for CompactListing {
         self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }
     fn set_dirty(&mut self) {
-        self.view.as_mut().map(|p| p.set_dirty());
+        if let Some(p) = self.view.as_mut() {
+            p.set_dirty();
+        }
         self.dirty = true;
     }
 }

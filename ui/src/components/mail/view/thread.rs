@@ -31,7 +31,6 @@ struct ThreadEntry {
     msg_idx: usize,
 }
 
-
 #[derive(Debug, Default)]
 pub struct ThreadView {
     new_cursor_pos: usize,
@@ -49,7 +48,9 @@ pub struct ThreadView {
 impl ThreadView {
     pub fn new(coordinates: (usize, usize, usize), context: &Context) -> Self {
         let mut stack: Vec<(usize, usize)> = Vec::with_capacity(32);
-        let mailbox = &context.accounts[coordinates.0][coordinates.1].as_ref().unwrap();
+        let mailbox = &context.accounts[coordinates.0][coordinates.1]
+            .as_ref()
+            .unwrap();
         let threads = &mailbox.threads;
         let container = &threads.containers()[threads.root_set()[coordinates.2]];
 
@@ -66,7 +67,7 @@ impl ThreadView {
             entries: Vec::new(),
             cursor_pos: 1,
             new_cursor_pos: 0,
-            .. Default::default()
+            ..Default::default()
         };
         let mut line = 0;
         let mut max_ind = 0;
@@ -87,22 +88,28 @@ impl ThreadView {
         view.new_expanded_pos = view.entries.len() - 1;
         view.expanded_pos = view.new_expanded_pos + 1;
 
-        let height = 2*view.entries.len();
+        let height = 2 * view.entries.len();
         let mut width = 0;
 
         let mut strings: Vec<String> = Vec::with_capacity(view.entries.len());
 
-
         for e in &view.entries {
             let envelope: &Envelope = &mailbox.collection[e.msg_idx];
-            strings.push(format!(" {}{} - {}", " ".repeat(e.index.0 * 4), envelope.date_as_str(), envelope.from_to_string()));
-            width = cmp::max(width, e.index.0 + strings.last().as_ref().unwrap().len() + 1);
-
+            strings.push(format!(
+                " {}{} - {}",
+                " ".repeat(e.index.0 * 4),
+                envelope.date_as_str(),
+                envelope.field_from_to_string()
+            ));
+            width = cmp::max(
+                width,
+                e.index.0 + strings.last().as_ref().unwrap().len() + 1,
+            );
         }
-        let mut content = CellBuffer::new(width, height,  Cell::default());
+        let mut content = CellBuffer::new(width, height, Cell::default());
         for (y, e) in view.entries.iter().enumerate() {
-            if y > 0 && content.get_mut(e.index.0 * 4, 2*y - 1).is_some() {
-                let index = (e.index.0 * 4, 2*y - 1);
+            if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
+                let index = (e.index.0 * 4, 2 * y - 1);
                 if content[index].ch() == ' ' {
                     let mut ctr = 1;
                     while content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() == ' ' {
@@ -120,14 +127,14 @@ impl ThreadView {
                 &mut content,
                 Color::Default,
                 Color::Default,
-                ((e.index.0 + 1, 2*y), (width - 1, height - 1)),
+                ((e.index.0 + 1, 2 * y), (width - 1, height - 1)),
                 true,
-                );
-            content[(e.index.0 * 4, 2*y)].set_ch(VERT_BOUNDARY);
+            );
+            content[(e.index.0 * 4, 2 * y)].set_ch(VERT_BOUNDARY);
             for i in (e.index.0 * 4)..width {
-                content[(i, 2*y + 1)].set_ch(HORZ_BOUNDARY);
+                content[(i, 2 * y + 1)].set_ch(HORZ_BOUNDARY);
             }
-            content[(e.index.0 *4, 2*y + 1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
+            content[(e.index.0 * 4, 2 * y + 1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
         }
         //view.mailview = MailView::new((view.coordinates.0, view.coordinates.1, view.entries[view.expanded_pos].msg_idx), None, None);
         view.content = content;
@@ -144,23 +151,28 @@ impl ThreadView {
         let msg_idx = if let Some(i) = container.message() {
             i
         } else {
-            mailbox.threads.containers()[
-                container.first_child().unwrap()
-            ].message().unwrap()
+            mailbox.threads.containers()[container.first_child().unwrap()]
+                .message()
+                .unwrap()
         };
         let envelope: &Envelope = &mailbox.collection[msg_idx];
-        let op = context.accounts[self.coordinates.0].backend.operation(envelope.hash());
+        let op = context.accounts[self.coordinates.0]
+            .backend
+            .operation(envelope.hash());
         let body = envelope.body(op);
 
         let mut body_text: String = " \n".repeat(6);
         body_text.push_str(&String::from_utf8_lossy(&decode_rec(&body, None)));
-        let mut buf = CellBuffer::from(&body_text).split_newlines();
-
+        let mut buf = CellBuffer::from(body_text.as_str()).split_newlines();
 
         let date = format!("Date: {}\n", envelope.date_as_str());
-        let from = format!("From: {}\n", envelope.from_to_string());
+        let from = format!("From: {}\n", envelope.field_from_to_string());
         let message_id = &format!("Message-ID: <{}>\n\n", envelope.message_id_raw());
-        let mut width = [date.len(), from.len(), message_id.len(), buf.size().0].iter().map(|&v| v).max().unwrap_or(1);
+        let mut width = [date.len(), from.len(), message_id.len(), buf.size().0]
+            .iter()
+            .cloned()
+            .max()
+            .unwrap_or(1);
         let height = buf.size().1;
         if width > buf.size().0 {
             buf.resize(width, height, Cell::default());
@@ -176,7 +188,7 @@ impl ThreadView {
             Color::Default,
             ((ind, 0), (width, height)),
             true,
-            );
+        );
         write_string_to_grid(
             &from,
             &mut buf,
@@ -184,7 +196,7 @@ impl ThreadView {
             Color::Default,
             ((ind, 1), (width, height)),
             true,
-            );
+        );
         write_string_to_grid(
             &message_id,
             &mut buf,
@@ -192,7 +204,7 @@ impl ThreadView {
             Color::Default,
             ((ind, 2), (width, height)),
             true,
-            );
+        );
 
         ThreadEntry {
             index: (ind, idx, order),
@@ -237,8 +249,8 @@ impl ThreadView {
             self.cursor_pos = self.new_cursor_pos;
             for &idx in &[old_cursor_pos, self.new_cursor_pos] {
                 let new_area = (
-                    set_y(upper_left, get_y(upper_left) + 2*(idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + 2*(idx % rows)),
+                    set_y(upper_left, get_y(upper_left) + 2 * (idx % rows)),
+                    set_y(bottom_right, get_y(upper_left) + 2 * (idx % rows)),
                 );
                 self.highlight_line(grid, new_area, idx);
                 context.dirty_areas.push_back(new_area);
@@ -253,13 +265,16 @@ impl ThreadView {
             grid,
             &self.content,
             area,
-            ((0, 2*top_idx), (width - 1, height - 1)),
+            ((0, 2 * top_idx), (width - 1, height - 1)),
         );
         self.highlight_line(
             grid,
             (
-                set_y(upper_left, get_y(upper_left) + 2*(self.cursor_pos % rows)),
-                set_y(bottom_right, get_y(upper_left) + 2*(self.cursor_pos % rows)),
+                set_y(upper_left, get_y(upper_left) + 2 * (self.cursor_pos % rows)),
+                set_y(
+                    bottom_right,
+                    get_y(upper_left) + 2 * (self.cursor_pos % rows),
+                ),
             ),
             self.cursor_pos,
         );
@@ -292,22 +307,25 @@ impl Component for ThreadView {
         let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
 
         if !self.dirty {
-            self.mailview.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+            self.mailview
+                .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
             return;
         }
 
         self.dirty = false;
 
         let y = {
-            let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1].as_ref().unwrap();
+            let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
+                .as_ref()
+                .unwrap();
             let threads = &mailbox.threads;
             let container = &threads.containers()[threads.root_set()[self.coordinates.2]];
             let i = if let Some(i) = container.message() {
                 i
             } else {
-                threads.containers()[
-                    container.first_child().unwrap()
-                ].message().unwrap()
+                threads.containers()[container.first_child().unwrap()]
+                    .message()
+                    .unwrap()
             };
             let envelope: &Envelope = &mailbox.collection[i];
 
@@ -318,7 +336,7 @@ impl Component for ThreadView {
                 Color::Default,
                 area,
                 true,
-                );
+            );
             for x in x..=get_x(bottom_right) {
                 grid[(x, y)].set_ch(' ');
                 grid[(x, y)].set_bg(Color::Default);
@@ -341,7 +359,7 @@ impl Component for ThreadView {
                 &self.content,
                 (set_y(upper_left, y), set_y(bottom_right, mid - 1)),
                 ((0, 0), (width - 1, height - 1)),
-                );
+            );
             for x in get_x(upper_left)..=get_x(bottom_right) {
                 grid[(x, mid)].set_ch(HORZ_BOUNDARY);
             }
@@ -356,10 +374,23 @@ impl Component for ThreadView {
 
         if self.new_expanded_pos != self.expanded_pos {
             self.expanded_pos = self.new_expanded_pos;
-            self.mailview = MailView::new((self.coordinates.0, self.coordinates.1, self.entries[self.expanded_pos].msg_idx), None, None);
+            self.mailview = MailView::new(
+                (
+                    self.coordinates.0,
+                    self.coordinates.1,
+                    self.entries[self.expanded_pos].msg_idx,
+                ),
+                None,
+                None,
+            );
         }
-        self.draw_list(grid, (set_y(upper_left, y), set_y(bottom_right, mid - 1)), context);
-        self.mailview.draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+        self.draw_list(
+            grid,
+            (set_y(upper_left, y), set_y(bottom_right, mid - 1)),
+            context,
+        );
+        self.mailview
+            .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
         if self.mailview.process_event(event, context) {
@@ -372,7 +403,7 @@ impl Component for ThreadView {
                     self.dirty = true;
                 }
                 return true;
-            },
+            }
             UIEventType::Input(Key::Down) => {
                 let height = self.entries.len();
                 if height > 0 && self.cursor_pos + 1 < height {
@@ -385,10 +416,10 @@ impl Component for ThreadView {
                 self.new_expanded_pos = self.cursor_pos;
                 self.dirty = true;
                 return true;
-            },
+            }
             UIEventType::Resize => {
                 self.dirty = true;
-            },
+            }
             _ => {}
         }
         false

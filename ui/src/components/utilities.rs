@@ -65,7 +65,9 @@ impl Component for HSplit {
             for i in get_x(upper_left)..=get_x(bottom_right) {
                 grid[(i, mid)].set_ch('─');
             }
-            context.dirty_areas.push_back(((get_x(upper_left), mid), (get_x(bottom_right), mid)));
+            context
+                .dirty_areas
+                .push_back(((get_x(upper_left), mid), (get_x(bottom_right), mid)));
         }
 
         self.top.component.draw(
@@ -154,14 +156,13 @@ impl Component for VSplit {
                     .get(mid, get_y(bottom_right) - 1)
                     .map(|a| a.ch())
                     .unwrap_or_else(|| ' ');
-                match c {
-                    HORZ_BOUNDARY => {
-                        grid[(mid, get_y(bottom_right) + 1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
-                    }
-                    _ => {}
+                if let HORZ_BOUNDARY = c {
+                    grid[(mid, get_y(bottom_right) + 1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
                 }
             }
-            context.dirty_areas.push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
+            context
+                .dirty_areas
+                .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
         }
         self.left
             .component
@@ -209,13 +210,13 @@ impl fmt::Display for Pager {
 }
 
 impl Pager {
-    pub fn update_from_string(&mut self, text: String) -> () {
+    pub fn update_from_str(&mut self, text: &str) -> () {
         let lines: Vec<&str> = text.trim().split('\n').collect();
         let height = lines.len() + 1;
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
         //interpret_format_flowed(&text);
-        Pager::print_string(&mut content, &text);
+        Pager::print_string(&mut content, text);
         self.content = content;
         self.height = height;
         self.width = width;
@@ -256,11 +257,11 @@ impl Pager {
         Pager::print_string(&mut content, &text);
         Pager {
             cursor_pos: cursor_pos.unwrap_or(0),
-            height: height,
-            width: width,
+            height,
+            width,
             dirty: true,
-            content: content,
-            .. Default::default()
+            content,
+            ..Default::default()
         }
     }
     pub fn from_str(s: &str, cursor_pos: Option<usize>) -> Self {
@@ -275,7 +276,7 @@ impl Pager {
             width,
             dirty: true,
             content,
-            .. Default::default()
+            ..Default::default()
         }
     }
     pub fn from_buf(content: CellBuffer, cursor_pos: Option<usize>) -> Self {
@@ -286,7 +287,7 @@ impl Pager {
             width,
             dirty: true,
             content,
-            .. Default::default()
+            ..Default::default()
         }
     }
     pub fn print_string(content: &mut CellBuffer, s: &str) {
@@ -327,14 +328,14 @@ impl Component for Pager {
             match mvm {
                 PagerMovement::PageUp => {
                     self.cursor_pos = self.cursor_pos.saturating_sub(height);
-                },
+                }
                 PagerMovement::PageDown => {
-                    if self.cursor_pos + 2*height + 1 < self.height {
+                    if self.cursor_pos + 2 * height + 1 < self.height {
                         self.cursor_pos += height;
                     } else {
                         self.cursor_pos = self.height.saturating_sub(height).saturating_sub(1);
                     }
-                },
+                }
             }
         }
 
@@ -394,7 +395,9 @@ impl Component for Pager {
                 self.dirty = true;
                 return false;
             }
-            _ => { return false; }
+            _ => {
+                return false;
+            }
         }
         true
     }
@@ -586,7 +589,7 @@ impl Component for StatusBar {
             }
             _ => {}
         }
-        return false;
+        false
     }
     fn is_dirty(&self) -> bool {
         self.dirty || self.container.component.is_dirty()
@@ -617,7 +620,9 @@ impl fmt::Display for TextBox {
 
 impl Component for TextBox {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) -> bool { false }
+    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) -> bool {
+        false
+    }
     fn set_dirty(&mut self) {}
 }
 
@@ -669,7 +674,7 @@ impl Component for Progress {
         unimplemented!()
     }
     fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) -> bool {
-        return false;
+        false
     }
     fn set_dirty(&mut self) {}
 }
@@ -751,13 +756,10 @@ impl Component for Tabbed {
         }
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
-        match &event.event_type {
-            UIEventType::Input(Key::Char('T')) => {
-                self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
-                self.children[self.cursor_pos].set_dirty();
-                return true;
-            }
-            _ => {}
+        if let UIEventType::Input(Key::Char('T')) = event.event_type {
+            self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
+            self.children[self.cursor_pos].set_dirty();
+            return true;
         }
         self.children[self.cursor_pos].process_event(event, context)
     }

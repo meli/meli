@@ -68,7 +68,7 @@ impl EnvelopeView {
         wrapper: EnvelopeWrapper,
         pager: Option<Pager>,
         subview: Option<Box<Component>>,
-        ) -> Self {
+    ) -> Self {
         EnvelopeView {
             pager,
             subview,
@@ -81,33 +81,34 @@ impl EnvelopeView {
     }
 
     /// Returns the string to be displayed in the Viewer
-    fn attachment_to_text(&self, body: Attachment) -> String {
+    fn attachment_to_text(&self, body: &Attachment) -> String {
         let finder = LinkFinder::new();
         let body_text = String::from_utf8_lossy(&decode_rec(
-                &body,
-                Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
-                    if a.content_type().is_text_html() {
-                        use std::io::Write;
-                        use std::process::{Command, Stdio};
+            &body,
+            Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
+                if a.content_type().is_text_html() {
+                    use std::io::Write;
+                    use std::process::{Command, Stdio};
 
-                        let mut html_filter = Command::new("w3m")
-                            .args(&["-I", "utf-8", "-T", "text/html"])
-                            .stdin(Stdio::piped())
-                            .stdout(Stdio::piped())
-                            .spawn()
-                            .expect("Failed to start html filter process");
+                    let mut html_filter = Command::new("w3m")
+                        .args(&["-I", "utf-8", "-T", "text/html"])
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .spawn()
+                        .expect("Failed to start html filter process");
 
-                        html_filter
-                            .stdin
-                            .as_mut()
-                            .unwrap()
-                            .write_all(&v)
-                            .expect("Failed to write to w3m stdin");
-                        *v = b"Text piped through `w3m`. Press `v` to open in web browser. \n\n".to_vec();
-                        v.extend(html_filter.wait_with_output().unwrap().stdout);
-                    }
-                })),
-                )).into_owned();
+                    html_filter
+                        .stdin
+                        .as_mut()
+                        .unwrap()
+                        .write_all(&v)
+                        .expect("Failed to write to w3m stdin");
+                    *v = b"Text piped through `w3m`. Press `v` to open in web browser. \n\n"
+                        .to_vec();
+                    v.extend(html_filter.wait_with_output().unwrap().stdout);
+                }
+            })),
+        )).into_owned();
         match self.mode {
             ViewMode::Normal | ViewMode::Subview => {
                 let mut t = body_text.to_string();
@@ -158,7 +159,7 @@ impl EnvelopeView {
             }
         }
     }
-    pub fn plain_text_to_buf(s: &String, highlight_urls: bool) -> CellBuffer {
+    pub fn plain_text_to_buf(s: &str, highlight_urls: bool) -> CellBuffer {
         let mut buf = CellBuffer::from(s);
 
         if highlight_urls {
@@ -197,7 +198,7 @@ impl Component for EnvelopeView {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        let y :usize = {
+        let y: usize = {
             let envelope: &Envelope = &self.wrapper;
 
             if self.mode == ViewMode::Raw {
@@ -219,7 +220,7 @@ impl Component for EnvelopeView {
                     grid[(x, y)].set_fg(Color::Default);
                 }
                 let (x, y) = write_string_to_grid(
-                    &format!("From: {}", envelope.from_to_string()),
+                    &format!("From: {}", envelope.field_from_to_string()),
                     grid,
                     Color::Byte(33),
                     Color::Default,
@@ -232,7 +233,7 @@ impl Component for EnvelopeView {
                     grid[(x, y)].set_fg(Color::Default);
                 }
                 let (x, y) = write_string_to_grid(
-                    &format!("To: {}", envelope.to_to_string()),
+                    &format!("To: {}", envelope.field_to_to_string()),
                     grid,
                     Color::Byte(33),
                     Color::Default,
@@ -293,7 +294,7 @@ impl Component for EnvelopeView {
                 }
                 _ => {
                     let buf = {
-                        let text = self.attachment_to_text(body);
+                        let text = self.attachment_to_text(&body);
                         // URL indexes must be colored (ugh..)
                         EnvelopeView::plain_text_to_buf(&text, self.mode == ViewMode::Url)
                     };
@@ -344,7 +345,9 @@ impl Component for EnvelopeView {
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Input(Key::Char('r')) if self.mode.is_attachment() || self.mode == ViewMode::Subview => {
+            UIEventType::Input(Key::Char('r'))
+                if self.mode.is_attachment() || self.mode == ViewMode::Subview =>
+            {
                 self.mode = ViewMode::Normal;
                 self.subview.take();
                 self.dirty = true;
@@ -358,12 +361,19 @@ impl Component for EnvelopeView {
 
                 {
                     let envelope: &Envelope = self.wrapper.envelope();
-                    if let Some(u) = envelope.body_bytes(self.wrapper.buffer()).attachments().get(lidx) {
+                    if let Some(u) = envelope
+                        .body_bytes(self.wrapper.buffer())
+                        .attachments()
+                        .get(lidx)
+                    {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
                                 self.mode = ViewMode::Subview;
-                                self.subview = Some(Box::new(Pager::from_str(&String::from_utf8_lossy(&decode_rec(u, None)).to_string(), None)));
-                            },
+                                self.subview = Some(Box::new(Pager::from_str(
+                                    &String::from_utf8_lossy(&decode_rec(u, None)).to_string(),
+                                    None,
+                                )));
+                            }
 
                             ContentType::Text { .. } => {
                                 self.mode = ViewMode::Attachment(lidx);
@@ -416,7 +426,7 @@ impl Component for EnvelopeView {
                     }
                 };
                 return true;
-            },
+            }
             UIEventType::Input(Key::Char('g'))
                 if !self.cmd_buf.is_empty() && self.mode == ViewMode::Url =>
             {
@@ -425,7 +435,10 @@ impl Component for EnvelopeView {
                 let url = {
                     let envelope: &Envelope = self.wrapper.envelope();
                     let finder = LinkFinder::new();
-                    let mut t = envelope.body_bytes(self.wrapper.buffer()).text().to_string();
+                    let mut t = envelope
+                        .body_bytes(self.wrapper.buffer())
+                        .text()
+                        .to_string();
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {
                         u.as_str().to_string()

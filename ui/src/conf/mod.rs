@@ -117,10 +117,13 @@ impl Settings {
                 sent_folder,
             };
 
-            s.insert(id, AccountConf {
-                account: acc,
-                conf: x
-            });
+            s.insert(
+                id,
+                AccountConf {
+                    account: acc,
+                    conf: x,
+                },
+            );
         }
 
         Settings {

@@ -70,31 +70,28 @@ impl Component for HtmlView {
         if self.pager.process_event(event, context) {
             return true;
         }
-        match event.event_type {
-            UIEventType::Input(Key::Char('v')) => {
-                // TODO: Optional filter that removes outgoing resource requests (images and
-                // scripts)
-                let binary = query_default_app("text/html");
-                if let Ok(binary) = binary {
-                    let mut p = create_temp_file(&self.bytes, None);
-                    Command::new(&binary)
-                        .arg(p.path())
-                        .stdin(Stdio::piped())
-                        .stdout(Stdio::piped())
-                        .spawn()
-                        .unwrap_or_else(|_| panic!("Failed to start {}", binary.display()));
-                    context.temp_files.push(p);
-                } else {
-                    context.replies.push_back(UIEvent {
-                        id: 0,
-                        event_type: UIEventType::StatusNotification(format!(
-                            "Couldn't find a default application for html files."
-                        )),
-                    });
-                }
-                return true;
+        if let UIEventType::Input(Key::Char('v')) = event.event_type {
+            // TODO: Optional filter that removes outgoing resource requests (images and
+            // scripts)
+            let binary = query_default_app("text/html");
+            if let Ok(binary) = binary {
+                let mut p = create_temp_file(&self.bytes, None);
+                Command::new(&binary)
+                    .arg(p.path())
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .unwrap_or_else(|_| panic!("Failed to start {}", binary.display()));
+                context.temp_files.push(p);
+            } else {
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::StatusNotification(
+                        "Couldn't find a default application for html files.".to_string(),
+                    ),
+                });
             }
-            _ => {}
+            return true;
         }
         false
     }

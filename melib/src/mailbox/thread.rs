@@ -30,11 +30,11 @@ use mailbox::Mailbox;
 extern crate fnv;
 use self::fnv::FnvHashMap;
 use std::borrow::Cow;
-use std::ops::{Index, };
-use std::str::FromStr;
-use std::result::Result as StdResult;
 use std::cell::{Ref, RefCell};
 use std::cmp::Ordering;
+use std::ops::Index;
+use std::result::Result as StdResult;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum SortOrder {
@@ -122,7 +122,6 @@ impl ContainerTree {
     }
 }
 
-
 #[derive(Clone, Debug, Default)]
 pub struct Threads {
     containers: Vec<Container>,
@@ -136,10 +135,10 @@ pub struct Threads {
 pub struct ThreadIterator<'a> {
     pos: usize,
     stack: Vec<usize>,
-    tree: Ref<'a ,Vec<ContainerTree>>,
+    tree: Ref<'a, Vec<ContainerTree>>,
 }
 impl<'a> Iterator for ThreadIterator<'a> {
-    type Item  = usize;
+    type Item = usize;
     fn next(&mut self) -> Option<usize> {
         {
             let mut tree = &(*self.tree);
@@ -163,7 +162,7 @@ impl<'a> Iterator for ThreadIterator<'a> {
                 return Some(ret);
             }
         }
-        return self.next();
+        self.next()
     }
 }
 
@@ -172,25 +171,28 @@ impl<'a> IntoIterator for &'a Threads {
     type IntoIter = ThreadIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        ThreadIterator { pos: 0, stack: Vec::new(), tree: self.tree.borrow() }
+        ThreadIterator {
+            pos: 0,
+            stack: Vec::new(),
+            tree: self.tree.borrow(),
+        }
     }
 }
 
-
 pub struct RootIterator<'a> {
     pos: usize,
-    tree: Ref<'a ,Vec<ContainerTree>>,
+    tree: Ref<'a, Vec<ContainerTree>>,
 }
 
 impl<'a> Iterator for RootIterator<'a> {
-    type Item  = (usize, usize, bool);
+    type Item = (usize, usize, bool);
     fn next(&mut self) -> Option<(usize, usize, bool)> {
         if self.pos == self.tree.len() {
             return None;
         }
         let node = &self.tree[self.pos];
         self.pos += 1;
-        return Some((node.id, node.len, node.has_unseen));
+        Some((node.id, node.len, node.has_unseen))
     }
 }
 
@@ -201,8 +203,11 @@ impl Threads {
     pub fn root_set(&self) -> &Vec<usize> {
         &self.root_set
     }
-    pub fn root_set_iter(&self) ->  RootIterator {
-        RootIterator { pos: 0, tree: self.tree.borrow() }
+    pub fn root_set_iter(&self) -> RootIterator {
+        RootIterator {
+            pos: 0,
+            tree: self.tree.borrow(),
+        }
     }
     pub fn thread_to_mail(&self, i: usize) -> usize {
         let thread = self.containers[self.threaded_collection[i]];
@@ -219,8 +224,8 @@ impl Threads {
         let tree = &mut self.tree.borrow_mut();
         let containers = &self.containers;
         for mut t in tree.iter_mut() {
-            if let Some(ref mut c ) = t.children {
-                c.sort_by(|a, b| { match subsort {
+            if let Some(ref mut c) = t.children {
+                c.sort_by(|a, b| match subsort {
                     (SortField::Date, SortOrder::Desc) => {
                         let a = containers[a.id];
                         let b = containers[b.id];
@@ -253,7 +258,6 @@ impl Threads {
                         let mb = &collection[b.unwrap()];
                         mb.subject().cmp(&ma.subject())
                     }
-                }
                 });
             }
         }
@@ -262,12 +266,11 @@ impl Threads {
     fn inner_sort_by(&self, sort: (SortField, SortOrder), collection: &[Envelope]) {
         let tree = &mut self.tree.borrow_mut();
         let containers = &self.containers;
-        tree.sort_by(|a, b| { match sort {
+        tree.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
                 let a = containers[a.id];
                 let b = containers[b.id];
                 b.date.cmp(&a.date)
-
             }
             (SortField::Date, SortOrder::Asc) => {
                 let a = containers[a.id];
@@ -296,10 +299,14 @@ impl Threads {
                 let mb = &collection[b.unwrap()];
                 mb.subject().cmp(&ma.subject())
             }
-        }
         });
     }
-    pub fn sort_by(&self, sort: (SortField, SortOrder), subsort: (SortField, SortOrder), collection: &[Envelope]) {
+    pub fn sort_by(
+        &self,
+        sort: (SortField, SortOrder),
+        subsort: (SortField, SortOrder),
+        collection: &[Envelope],
+    ) {
         if *self.sort.borrow() != sort {
             self.inner_sort_by(sort, collection);
             *self.sort.borrow_mut() = sort;
@@ -308,7 +315,6 @@ impl Threads {
             self.inner_subsort_by(subsort, collection);
             *self.subsort.borrow_mut() = subsort;
         }
-
     }
 
     pub fn build_collection(&mut self, collection: &[Envelope]) {
@@ -320,7 +326,7 @@ impl Threads {
             i: usize,
             root_subject_idx: usize,
             collection: &[Envelope],
-            ) {
+        ) {
             let thread = containers[i];
             if let Some(msg_idx) = containers[root_subject_idx].message() {
                 let root_subject = collection[msg_idx].subject();
@@ -333,9 +339,9 @@ impl Threads {
                     if subject == root_subject
                         || subject.starts_with("Re: ")
                             && subject.as_ref().ends_with(root_subject.as_ref())
-                            {
-                                containers[i].set_show_subject(false);
-                            }
+                    {
+                        containers[i].set_show_subject(false);
+                    }
                 }
             }
             if thread.has_parent() && !containers[thread.parent().unwrap()].has_message() {
@@ -360,7 +366,15 @@ impl Threads {
 
                 loop {
                     let mut new_child_tree = ContainerTree::new(fc);
-                    build_threaded(&mut new_child_tree, containers, indentation, threaded, fc, i, collection);
+                    build_threaded(
+                        &mut new_child_tree,
+                        containers,
+                        indentation,
+                        threaded,
+                        fc,
+                        i,
+                        collection,
+                    );
                     tree.has_unseen |= new_child_tree.has_unseen;
                     child_vec.push(new_child_tree);
                     let thread_ = containers[fc];
@@ -384,7 +398,7 @@ impl Threads {
                 *i,
                 *i,
                 collection,
-                );
+            );
             tree.push(tree_node);
         }
         self.tree.replace(tree);
@@ -397,10 +411,11 @@ impl Index<usize> for Threads {
     type Output = Container;
 
     fn index(&self, index: usize) -> &Container {
-        self.containers.get(index).expect("thread index out of bounds")
+        self.containers
+            .get(index)
+            .expect("thread index out of bounds")
     }
 }
-
 
 impl Container {
     pub fn date(&self) -> UnixTimestamp {
@@ -474,7 +489,7 @@ fn build_collection(
     threads: &mut Vec<Container>,
     id_table: &mut FnvHashMap<Cow<str>, usize>,
     collection: &mut [Envelope],
-    ) -> () {
+) -> () {
     for (i, x) in collection.iter_mut().enumerate() {
         let x_index; /* x's index in threads */
         let m_id = x.message_id_raw().into_owned();
@@ -529,7 +544,7 @@ fn build_collection(
             let parent_id = if id_table.contains_key(&r) {
                 let p = id_table[r.as_ref()];
                 if !(threads[p].is_descendant(threads, &threads[curr_ref])
-                     || threads[curr_ref].is_descendant(threads, &threads[p]))
+                    || threads[curr_ref].is_descendant(threads, &threads[p]))
                 {
                     threads[curr_ref].parent = Some(p);
                     if threads[p].first_child.is_none() {
@@ -589,7 +604,7 @@ fn build_collection(
 pub fn build_threads(
     collection: &mut Vec<Envelope>,
     sent_folder: &Option<Result<Mailbox>>,
-    ) -> Threads {
+) -> Threads {
     /* To reconstruct thread information from the mails we need: */
 
     /* a vector to hold thread members */
@@ -623,77 +638,77 @@ pub fn build_threads(
                 if id_table.contains_key(&m_id)
                     || (!x.in_reply_to_raw().is_empty()
                         && id_table.contains_key(&x.in_reply_to_raw()))
+                {
+                    let mut x: Envelope = (*x).clone();
+                    if id_table.contains_key(&m_id) {
+                        let c = id_table[&m_id];
+                        if threads[c].message.is_some() {
+                            /* skip duplicate message-id, but this should be handled instead */
+                            continue;
+                        }
+                        threads[c].message = Some(idx);
+                        assert!(threads[c].has_children());
+                        threads[c].date = x.date();
+                        x.set_thread(c);
+                    } else if !x.in_reply_to_raw().is_empty()
+                        && id_table.contains_key(&x.in_reply_to_raw())
                     {
-                        let mut x: Envelope = (*x).clone();
-                        if id_table.contains_key(&m_id) {
-                            let c = id_table[&m_id];
-                            if threads[c].message.is_some() {
-                                /* skip duplicate message-id, but this should be handled instead */
-                                continue;
+                        let p = id_table[&x_r_id];
+                        let c = if id_table.contains_key(&m_id) {
+                            id_table[&m_id]
+                        } else {
+                            threads.push(Container {
+                                message: Some(idx),
+                                id: tidx,
+                                parent: Some(p),
+                                first_child: None,
+                                next_sibling: None,
+                                date: x.date(),
+                                indentation: 0,
+                                show_subject: true,
+                            });
+                            id_table.insert(Cow::from(m_id.into_owned()), tidx);
+                            x.set_thread(tidx);
+                            tidx += 1;
+                            tidx - 1
+                        };
+                        threads[c].parent = Some(p);
+                        if threads[p].is_descendant(&threads, &threads[c])
+                            || threads[c].is_descendant(&threads, &threads[p])
+                        {
+                            continue;
+                        }
+                        if threads[p].first_child.is_none() {
+                            threads[p].first_child = Some(c);
+                        } else {
+                            let mut fc = threads[p].first_child.unwrap();
+                            while threads[fc].next_sibling.is_some() {
+                                threads[fc].parent = Some(p);
+                                fc = threads[fc].next_sibling.unwrap();
                             }
-                            threads[c].message = Some(idx);
-                            assert!(threads[c].has_children());
-                            threads[c].date = x.date();
-                            x.set_thread(c);
-                        } else if !x.in_reply_to_raw().is_empty()
-                            && id_table.contains_key(&x.in_reply_to_raw())
-                            {
-                                let p = id_table[&x_r_id];
-                                let c = if id_table.contains_key(&m_id) {
-                                    id_table[&m_id]
-                                } else {
-                                    threads.push(Container {
-                                        message: Some(idx),
-                                        id: tidx,
-                                        parent: Some(p),
-                                        first_child: None,
-                                        next_sibling: None,
-                                        date: x.date(),
-                                        indentation: 0,
-                                        show_subject: true,
-                                    });
-                                    id_table.insert(Cow::from(m_id.into_owned()), tidx);
-                                    x.set_thread(tidx);
-                                    tidx += 1;
-                                    tidx - 1
-                                };
-                                threads[c].parent = Some(p);
-                                if threads[p].is_descendant(&threads, &threads[c])
-                                    || threads[c].is_descendant(&threads, &threads[p])
-                                    {
-                                        continue;
-                                    }
-                                if threads[p].first_child.is_none() {
-                                    threads[p].first_child = Some(c);
-                                } else {
-                                    let mut fc = threads[p].first_child.unwrap();
-                                    while threads[fc].next_sibling.is_some() {
-                                        threads[fc].parent = Some(p);
-                                        fc = threads[fc].next_sibling.unwrap();
-                                    }
-                                    threads[fc].next_sibling = Some(c);
-                                    threads[fc].parent = Some(p);
+                            threads[fc].next_sibling = Some(c);
+                            threads[fc].parent = Some(p);
+                        }
+                        /* update thread date */
+                        let mut parent_iter = p;
+                        'date: loop {
+                            let p = &mut threads[parent_iter];
+                            if p.date < x.date() {
+                                p.date = x.date();
+                            }
+                            match p.parent {
+                                Some(p) => {
+                                    parent_iter = p;
                                 }
-                                /* update thread date */
-                                let mut parent_iter = p;
-                                'date: loop {
-                                    let p = &mut threads[parent_iter];
-                                    if p.date < x.date() {
-                                        p.date = x.date();
-                                    }
-                                    match p.parent {
-                                        Some(p) => {
-                                            parent_iter = p;
-                                        }
-                                        None => {
-                                            break 'date;
-                                        }
-                                    }
+                                None => {
+                                    break 'date;
                                 }
                             }
-                        collection.push(x);
-                        idx += 1;
+                        }
                     }
+                    collection.push(x);
+                    idx += 1;
+                }
             }
         }
     }
@@ -704,14 +719,14 @@ pub fn build_threads(
         if threads[*v].parent.is_none() {
             if !threads[*v].has_message()
                 && threads[*v].has_children()
-                    && !threads[threads[*v].first_child.unwrap()].has_sibling()
-                    {
-                        /* Do not promote the children if doing so would promote them to the root set
-                         * -- unless there is only one child, in which case, do. */
-                        root_set.push(threads[*v].first_child.unwrap());
+                && !threads[threads[*v].first_child.unwrap()].has_sibling()
+            {
+                /* Do not promote the children if doing so would promote them to the root set
+                 * -- unless there is only one child, in which case, do. */
+                root_set.push(threads[*v].first_child.unwrap());
 
-                        continue 'root_set;
-                    }
+                continue 'root_set;
+            }
             root_set.push(*v);
         }
     }

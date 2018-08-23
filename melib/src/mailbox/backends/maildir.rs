@@ -19,15 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern crate xdg;
 extern crate bincode;
+extern crate xdg;
 
 use async::*;
 use conf::AccountSettings;
 use error::{MeliError, Result};
 use mailbox::backends::{
-    BackendFolder, BackendOp, Folder, MailBackend, RefreshEvent,
-    RefreshEventConsumer,
+    BackendFolder, BackendOp, Folder, MailBackend, RefreshEvent, RefreshEventConsumer,
 };
 use mailbox::email::parser;
 use mailbox::email::{Envelope, Flag};
@@ -46,11 +45,11 @@ extern crate crossbeam;
 use memmap::{Mmap, Protection};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::io::Read;
-use std::sync::{Mutex, Arc};
-use std::hash::{Hasher, Hash};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 extern crate fnv;
 use self::fnv::FnvHashMap;
 
@@ -66,7 +65,7 @@ impl Clone for MaildirOp {
     fn clone(&self) -> Self {
         MaildirOp {
             hash_index: self.hash_index.clone(),
-            hash: self.hash.clone(),
+            hash: self.hash,
             slice: None,
         }
     }
@@ -89,7 +88,7 @@ impl MaildirOp {
 
 impl<'a> BackendOp for MaildirOp {
     fn description(&self) -> String {
-        format!("Path of file:")// self.0ipath)
+        format!("Path of file: {}", self.path())
     }
     fn as_bytes(&mut self) -> Result<&[u8]> {
         if self.slice.is_none() {
@@ -133,10 +132,10 @@ impl<'a> BackendOp for MaildirOp {
 
     fn set_flag(&mut self, envelope: &mut Envelope, f: &Flag) -> Result<()> {
         let path = self.path();
-        let idx: usize = path.rfind(":2,").ok_or(MeliError::new(format!(
-                    "Invalid email filename: {:?}",
-                    self
-                    )))? + 3;
+        let idx: usize = path
+            .rfind(":2,")
+            .ok_or_else(|| MeliError::new(format!("Invalid email filename: {:?}", self)))?
+            + 3;
         let mut new_name: String = path[..idx].to_string();
         let mut flags = self.fetch_flags();
         if !(flags & *f).is_empty() {
@@ -212,24 +211,24 @@ impl MailBackend for MaildirType {
                     match rx.recv() {
                         Ok(event) => match event {
                             DebouncedEvent::Create(mut pathbuf)
-                                | DebouncedEvent::Remove(mut pathbuf) => {
-                                    if pathbuf.is_dir() {
-                                        if pathbuf.ends_with("cur") | pathbuf.ends_with("new") {
-                                            pathbuf.pop();
-                                        }
-                                    } else {
+                            | DebouncedEvent::Remove(mut pathbuf) => {
+                                if pathbuf.is_dir() {
+                                    if pathbuf.ends_with("cur") | pathbuf.ends_with("new") {
                                         pathbuf.pop();
-                                        pathbuf.pop();
-                                    };
-                                    eprintln!(" got event in {}", pathbuf.display());
+                                    }
+                                } else {
+                                    pathbuf.pop();
+                                    pathbuf.pop();
+                                };
+                                eprintln!(" got event in {}", pathbuf.display());
 
-                                    let mut hasher = DefaultHasher::new();
-                                    pathbuf.hash(&mut hasher);
-                                    sender.send(RefreshEvent {
-                                        folder: format!("{}", pathbuf.display()),
-                                        hash: hasher.finish(),
-                                    });
-                                }
+                                let mut hasher = DefaultHasher::new();
+                                pathbuf.hash(&mut hasher);
+                                sender.send(RefreshEvent {
+                                    folder: format!("{}", pathbuf.display()),
+                                    hash: hasher.finish(),
+                                });
+                            }
                             _ => {}
                         },
                         Err(e) => eprintln!("watch error: {:?}", e),
@@ -261,7 +260,7 @@ impl MaildirType {
                                 path.to_str().unwrap().to_string(),
                                 path.file_name().unwrap().to_str().unwrap().to_string(),
                                 path_children,
-                                ) {
+                            ) {
                                 folders.push(f);
                                 children.push(folders.len() - 1);
                             }
@@ -277,7 +276,7 @@ impl MaildirType {
                 path.to_str().unwrap().to_string(),
                 path.file_name().unwrap().to_str().unwrap().to_string(),
                 Vec::with_capacity(0),
-                ) {
+            ) {
                 folders.push(f);
             }
         }
@@ -285,7 +284,10 @@ impl MaildirType {
         MaildirType {
             name: f.name().to_string(),
             folders,
-            hash_index: Arc::new(Mutex::new(FnvHashMap::with_capacity_and_hasher(0, Default::default()))),
+            hash_index: Arc::new(Mutex::new(FnvHashMap::with_capacity_and_hasher(
+                0,
+                Default::default(),
+            ))),
             path: f.root_folder().to_string(),
         }
     }
@@ -342,28 +344,33 @@ impl MaildirType {
                                 let s = scope.builder().name(name.clone()).spawn(move || {
                                     let len = chunk.len();
                                     let size = if len <= 100 { 100 } else { (len / 100) * 100 };
-                                    let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());
+                                    let mut local_r: Vec<
+                                        Envelope,
+                                    > = Vec::with_capacity(chunk.len());
                                     for c in chunk.chunks(size) {
                                         let map = map.clone();
                                         let len = c.len();
                                         for file in c {
-                                            let ri = file.rfind("/").unwrap() + 1;
+                                            let ri = file.rfind('/').unwrap() + 1;
                                             let file_name = &file[ri..];
-                                            if let Some(cached) = cache_dir.find_cache_file(file_name) {
+                                            if let Some(cached) =
+                                                cache_dir.find_cache_file(file_name)
+                                            {
                                                 // TODO:: error checking
-                                                let reader = io::BufReader::new(fs::File::open(cached).unwrap());
+                                                let reader = io::BufReader::new(
+                                                    fs::File::open(cached).unwrap(),
+                                                );
                                                 let env: Envelope = bincode::deserialize_from(reader).unwrap();
-                                                    {
-                                                        let mut map = map.lock().unwrap();
-                                                        let hash = env.hash();
-                                                        if (*map).contains_key(&hash) {
-                                                            continue;
-                                                        }
-                                                        (*map).insert(hash, (0, file.to_string()));
-                                                        local_r.push(env);
+                                                {
+                                                    let mut map = map.lock().unwrap();
+                                                    let hash = env.hash();
+                                                    if (*map).contains_key(&hash) {
                                                         continue;
                                                     }
-
+                                                    (*map).insert(hash, (0, file.to_string()));
+                                                    local_r.push(env);
+                                                    continue;
+                                                }
                                             }
                                             let e_copy = file.to_string();
                                             /*
@@ -376,41 +383,48 @@ impl MaildirType {
                                              */
                                             {
                                                 let mut hasher = DefaultHasher::new();
-                                                    let hash = {
-                                                        let mut buf = Vec::new();
-                                                        let mut f = fs::File::open(&e_copy).expect(&format!("Can't open {}", e_copy));
-                                                        f.read_to_end(&mut buf).expect(&format!("Can't read {}", e_copy));
-                                                        /* Unwrap is safe since we use ? above. */
-                                                        hasher.write(&buf);
-                                                        hasher.finish()
-                                                    };
-                                                    {
-                                                        let mut map = map.lock().unwrap();
-                                                        if (*map).contains_key(&hash) {
-                                                            continue;
-                                                        }
-                                                        (*map).insert(hash, (0, e_copy));
-                                                    }
-                                                    // TODO: Check cache
-                                                    let op = Box::new(MaildirOp::new(hash, map.clone()));
-                                                    if let Some(mut e) = Envelope::from_token(op, hash) {
-                                            if let Ok(cached) = cache_dir.place_cache_file(file_name) {
-                                                let f = match fs::File::create(cached) {
-                                                    Ok(f) => f,
-                                                    Err(e) => {
-                                                        panic!("{}",e);
-                                                    }
+                                                let hash = {
+                                                    let mut buf = Vec::new();
+                                                    let mut f = fs::File::open(&e_copy)
+                                                        .unwrap_or_else(|_| {
+                                                            panic!("Can't open {}", e_copy)
+                                                        });
+                                                    f.read_to_end(&mut buf).unwrap_or_else(|_| {
+                                                        panic!("Can't read {}", e_copy)
+                                                    });
+                                                    /* Unwrap is safe since we use ? above. */
+                                                    hasher.write(&buf);
+                                                    hasher.finish()
                                                 };
-                                                let writer = io::BufWriter::new(f);
-                                                bincode::serialize_into(writer, &e).unwrap();
-                                            }
-                                                        local_r.push(e);
-
-
-                                                    } else {
+                                                {
+                                                    let mut map = map.lock().unwrap();
+                                                    if (*map).contains_key(&hash) {
                                                         continue;
                                                     }
-
+                                                    (*map).insert(hash, (0, e_copy));
+                                                }
+                                                // TODO: Check cache
+                                                let op =
+                                                    Box::new(MaildirOp::new(hash, map.clone()));
+                                                if let Some(mut e) = Envelope::from_token(op, hash)
+                                                {
+                                                    if let Ok(cached) =
+                                                        cache_dir.place_cache_file(file_name)
+                                                    {
+                                                        let f = match fs::File::create(cached) {
+                                                            Ok(f) => f,
+                                                            Err(e) => {
+                                                                panic!("{}", e);
+                                                            }
+                                                        };
+                                                        let writer = io::BufWriter::new(f);
+                                                        bincode::serialize_into(writer, &e)
+                                                            .unwrap();
+                                                    }
+                                                    local_r.push(e);
+                                                } else {
+                                                    continue;
+                                                }
                                             }
                                         }
                                         tx.send(AsyncStatus::ProgressReport(len));
@@ -429,16 +443,15 @@ impl MaildirType {
                     for (idx, e) in r.iter().enumerate() {
                         let mut y = (*map)[&e.hash()].clone();
                         y.0 = idx;
-                        (*map).insert(e.hash(),y);
+                        (*map).insert(e.hash(), y);
                     }
                     tx.send(AsyncStatus::Finished);
                     Ok(r)
                 })
-            .unwrap()
+                .unwrap()
         };
         w.build(handle)
     }
-
 }
 
 #[derive(Debug, Default)]
@@ -459,7 +472,7 @@ impl MaildirFolder {
             hash: h.finish(),
             name: file_name,
             path: pathbuf,
-            children: children,
+            children,
         };
         ret.is_valid()?;
         Ok(ret)
@@ -474,9 +487,9 @@ impl MaildirFolder {
             p.push(d);
             if !p.is_dir() {
                 return Err(MeliError::new(format!(
-                            "{} is not a valid maildir folder",
-                            path.display()
-                            )));
+                    "{} is not a valid maildir folder",
+                    path.display()
+                )));
             }
             p.pop();
         }

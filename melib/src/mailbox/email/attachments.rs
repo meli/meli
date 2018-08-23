@@ -19,9 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use data_encoding::BASE64_MIME;
-use mailbox::email::EnvelopeWrapper;
 use mailbox::email::parser;
 use mailbox::email::parser::BytesExt;
+use mailbox::email::EnvelopeWrapper;
 use std::fmt;
 use std::str;
 
@@ -84,7 +84,7 @@ impl AttachmentBuilder {
                 let offset = (_boundary.as_ptr() as usize).wrapping_sub(value.as_ptr() as usize);
                 let boundary = SliceBuild::new(offset, _boundary.len());
                 let subattachments = Self::subattachments(&self.raw, boundary.get(&value));
-                assert!(subattachments.len() > 0);
+                assert!(!subattachments.is_empty());
                 self.content_type = ContentType::Multipart {
                     boundary,
                     kind: if cst.eq_ignore_ascii_case(b"mixed") {
@@ -96,7 +96,7 @@ impl AttachmentBuilder {
                     } else {
                         Default::default()
                     },
-                    subattachments
+                    subattachments,
                 };
             } else if ct.eq_ignore_ascii_case(b"text") {
                 self.content_type = ContentType::Text {
@@ -105,28 +105,28 @@ impl AttachmentBuilder {
                 };
                 for (n, v) in params {
                     if n.eq_ignore_ascii_case(b"charset") {
-                        match self.content_type {
-                            ContentType::Text { charset: ref mut c, .. } => {
-                        *c = Charset::from(v);
-                            },
-                            _ => {},
+                        if let ContentType::Text {
+                            charset: ref mut c, ..
+                        } = self.content_type
+                        {
+                            *c = Charset::from(v);
                         }
-                            break;
+                        break;
                     }
                 }
                 if cst.eq_ignore_ascii_case(b"html") {
-                    match self.content_type {
-                        ContentType::Text { kind: ref mut k, .. } => {
-                            *k = Text::Html;
-                        },
-                        _ => {},
+                    if let ContentType::Text {
+                        kind: ref mut k, ..
+                    } = self.content_type
+                    {
+                        *k = Text::Html;
                     }
                 } else if !cst.eq_ignore_ascii_case(b"plain") {
-                    match self.content_type {
-                        ContentType::Text { kind: ref mut k, .. } => {
-                            *k = Text::Other { tag: cst.into() };
-                        },
-                        _ => {},
+                    if let ContentType::Text {
+                        kind: ref mut k, ..
+                    } = self.content_type
+                    {
+                        *k = Text::Other { tag: cst.into() };
                     }
                 }
             } else if ct.eq_ignore_ascii_case(b"message") && cst.eq_ignore_ascii_case(b"rfc822") {
@@ -136,9 +136,7 @@ impl AttachmentBuilder {
                 tag.extend(ct);
                 tag.push(b'/');
                 tag.extend(cst);
-                self.content_type = ContentType::Unsupported {
-                    tag
-                };
+                self.content_type = ContentType::Unsupported { tag };
             },
             Err(v) => {
                 eprintln!("parsing error in content_type: {:?} {:?}", value, v);
@@ -197,8 +195,7 @@ impl AttachmentBuilder {
     }
 
     pub fn subattachments(raw: &[u8], boundary: &[u8]) -> Vec<Attachment> {
-        match parser::attachments(raw, boundary).to_full_result()
-        {
+        match parser::attachments(raw, boundary).to_full_result() {
             Ok(attachments) => {
                 let mut vec = Vec::with_capacity(attachments.len());
                 for a in attachments {
@@ -246,37 +243,29 @@ impl AttachmentBuilder {
 impl fmt::Display for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.content_type {
-            ContentType::MessageRfc822 => {
-                match EnvelopeWrapper::new(self.bytes().to_vec()) {
-                    Ok(wrapper) => write!(f, "message/rfc822: {} - {} - {}", wrapper.date(), wrapper.from_to_string(), wrapper.subject()),
-                    Err(e) => write!(f, "{}", e),
-                }
+            ContentType::MessageRfc822 => match EnvelopeWrapper::new(self.bytes().to_vec()) {
+                Ok(wrapper) => write!(
+                    f,
+                    "message/rfc822: {} - {} - {}",
+                    wrapper.date(),
+                    wrapper.field_from_to_string(),
+                    wrapper.subject()
+                ),
+                Err(e) => write!(f, "{}", e),
             },
             ContentType::Unsupported { .. } => {
                 write!(f, "Data attachment of type {}", self.mime_type())
             }
-            ContentType::Text { .. } => {
-                write!(f, "Text attachment of type {}", self.mime_type())
-            }
+            ContentType::Text { .. } => write!(f, "Text attachment of type {}", self.mime_type()),
             ContentType::Multipart {
-                kind: ref multipart_type,
                 subattachments: ref sub_att_vec,
                 ..
-            } => if *multipart_type == MultipartType::Alternative {
-                write!(
-                    f,
-                    "{} attachment with {} subs",
-                    self.mime_type(),
-                    sub_att_vec.len()
-                )
-            } else {
-                write!(
-                    f,
-                    "{} attachment with {} subs",
-                    self.mime_type(),
-                    sub_att_vec.len()
-                )
-            },
+            } => write!(
+                f,
+                "{} attachment with {} subs",
+                self.mime_type(),
+                sub_att_vec.len()
+            ),
         }
     }
 }
@@ -297,20 +286,23 @@ impl Attachment {
             } => match *multipart_type {
                 MultipartType::Alternative => {
                     for a in sub_att_vec {
-                        if let ContentType::Text { kind: Text::Plain, .. } = a.content_type {
+                        if let ContentType::Text {
+                            kind: Text::Plain, ..
+                        } = a.content_type
+                        {
                             a.get_text_recursive(text);
                             break;
                         }
                     }
-                },
+                }
                 MultipartType::Mixed | MultipartType::Digest => {
                     for a in sub_att_vec {
                         a.get_text_recursive(text);
                         text.extend_from_slice(b"\n\n");
                     }
-                },
-            }
-            _ => {},
+                }
+            },
+            _ => {}
         }
     }
     pub fn text(&self) -> String {
@@ -356,7 +348,9 @@ impl Attachment {
     }
     pub fn is_html(&self) -> bool {
         match self.content_type {
-            ContentType::Text { kind: Text::Html, .. } => true,
+            ContentType::Text {
+                kind: Text::Html, ..
+            } => true,
             _ => false,
         }
     }
@@ -369,13 +363,13 @@ pub fn interpret_format_flowed(_t: &str) -> String {
 
 fn decode_rfc822(_raw: &[u8]) -> Attachment {
     let builder = AttachmentBuilder::new(b"");
-    return builder.build();
+    builder.build()
 
     /*
-    eprintln!("raw is\n{:?}", str::from_utf8(raw).unwrap()); 
+    eprintln!("raw is\n{:?}", str::from_utf8(raw).unwrap());
     let e = match Envelope::from_bytes(raw) {
         Some(e) => e,
-        None => { 
+        None => {
             eprintln!("error in parsing mail");
             let error_msg = b"Mail cannot be shown because of errors.";
             let mut builder = AttachmentBuilder::new(error_msg);
@@ -384,10 +378,11 @@ fn decode_rfc822(_raw: &[u8]) -> Attachment {
     };
     e.body(None)
     */
-
 }
 
-fn decode_rec_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment, &mut Vec<u8>) -> ()>>) -> Vec<u8> {
+type Filter = Box<Fn(&Attachment, &mut Vec<u8>) -> ()>;
+
+fn decode_rec_helper(a: &Attachment, filter: &Option<Filter>) -> Vec<u8> {
     let mut ret = match a.content_type {
         ContentType::Unsupported { .. } => Vec::new(),
         ContentType::Text { .. } => decode_helper(a, filter),
@@ -398,7 +393,10 @@ fn decode_rec_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment, &mut Ve
             ..
         } => if *multipart_type == MultipartType::Alternative {
             for a in sub_att_vec {
-                if let ContentType::Text { kind: Text::Plain, .. } = a.content_type {
+                if let ContentType::Text {
+                    kind: Text::Plain, ..
+                } = a.content_type
+                {
                     return decode_helper(a, filter);
                 }
             }
@@ -417,10 +415,10 @@ fn decode_rec_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment, &mut Ve
     }
     ret
 }
-pub fn decode_rec(a: &Attachment, filter: Option<Box<Fn(&Attachment, &mut Vec<u8>) -> ()>>) -> Vec<u8> {
+pub fn decode_rec(a: &Attachment, filter: Option<Filter>) -> Vec<u8> {
     decode_rec_helper(a, &filter)
 }
-fn decode_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment, &mut Vec<u8>) -> ()>>) -> Vec<u8> {
+fn decode_helper(a: &Attachment, filter: &Option<Filter>) -> Vec<u8> {
     let charset = match a.content_type {
         ContentType::Text { charset: c, .. } => c,
         _ => Default::default(),
@@ -449,12 +447,11 @@ fn decode_helper(a: &Attachment, filter: &Option<Box<Fn(&Attachment, &mut Vec<u8
         bytes.to_vec()
     };
     if let Some(filter) = filter {
-       filter(a, &mut ret);
+        filter(a, &mut ret);
     }
 
     ret
-
 }
-pub fn decode(a: &Attachment, filter: Option<Box<Fn(&Attachment, &mut Vec<u8>) -> ()>>) -> Vec<u8> {
+pub fn decode(a: &Attachment, filter: Option<Filter>) -> Vec<u8> {
     decode_helper(a, &filter)
 }

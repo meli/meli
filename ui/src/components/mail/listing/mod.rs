@@ -79,7 +79,7 @@ impl MailListing {
             local_collection: Vec::new(),
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
-            content: content,
+            content,
             dirty: true,
             unfocused: false,
             view: None,
@@ -107,7 +107,10 @@ impl MailListing {
         //
         loop {
             // TODO: Show progress visually
-            if let Ok(_) = context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+            if context.accounts[self.cursor_pos.0]
+                .status(self.cursor_pos.1)
+                .is_ok()
+            {
                 break;
             }
         }
@@ -162,7 +165,6 @@ impl MailListing {
                     continue;
                 }
 
-
                 match iter.peek() {
                     Some(&x) if threads[x].indentation() == indentation => {
                         indentations.pop();
@@ -198,7 +200,7 @@ impl MailListing {
                         container,
                         &indentations,
                         len,
-                    //    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
+                        //    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
                     ),
                     &mut self.content,
                     fg_color,
@@ -522,9 +524,7 @@ impl Component for MailListing {
                         .threaded();
                     let account = &mut context.accounts[self.cursor_pos.0];
                     let (hash, is_seen) = {
-                        let mailbox = &mut account[self.cursor_pos.1]
-                            .as_mut()
-                            .unwrap();
+                        let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
                         let envelope: &mut Envelope = if threaded {
                             let i = mailbox.threaded_mail(idx);
                             &mut mailbox.collection[i]
@@ -538,9 +538,7 @@ impl Component for MailListing {
                             let backend = &account.backend;
                             backend.operation(hash)
                         };
-                        let mailbox = &mut account[self.cursor_pos.1]
-                            .as_mut()
-                            .unwrap();
+                        let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
                         let envelope: &mut Envelope = if threaded {
                             let i = mailbox.threaded_mail(idx);
                             &mut mailbox.collection[i]
@@ -598,9 +596,7 @@ impl Component for MailListing {
                     .conf()
                     .threaded();
                 let account = &context.accounts[self.cursor_pos.0];
-                let mailbox = &account[self.cursor_pos.1]
-                    .as_ref()
-                    .unwrap();
+                let mailbox = &account[self.cursor_pos.1].as_ref().unwrap();
                 let mut coordinates = self.cursor_pos;
                 coordinates.2 = if threaded {
                     mailbox.threaded_mail(self.cursor_pos.2)
@@ -792,8 +788,7 @@ impl Component for MailListing {
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;
-                }
-                // _ => {}
+                } // _ => {}
             },
             _ => {}
         }
@@ -803,7 +798,9 @@ impl Component for MailListing {
         self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }
     fn set_dirty(&mut self) {
-        self.view.as_mut().map(|p| p.set_dirty());
+        if let Some(p) = self.view.as_mut() {
+            p.set_dirty();
+        };
         self.dirty = true;
     }
 }

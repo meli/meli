@@ -36,7 +36,7 @@ pub mod utilities;
 pub use self::utilities::*;
 
 use std::fmt;
-use std::fmt::{Display, Debug};
+use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
 use super::{Key, UIEvent, UIEventType};
@@ -75,7 +75,6 @@ impl Display for Entity {
         Display::fmt(&self.component, f)
     }
 }
-
 
 impl Deref for Entity {
     type Target = Box<Component>;
@@ -227,22 +226,22 @@ fn write_string_to_grid(
         eprintln!(" Invalid area with string {} and area {:?}", s, area);
         return (x, y);
     }
-        'char: for c in s.chars() {
-            grid[(x, y)].set_ch(c);
-            grid[(x, y)].set_fg(fg_color);
-            grid[(x, y)].set_bg(bg_color);
-            x += 1;
+    'char: for c in s.chars() {
+        grid[(x, y)].set_ch(c);
+        grid[(x, y)].set_fg(fg_color);
+        grid[(x, y)].set_bg(bg_color);
+        x += 1;
 
-            if x == (get_x(bottom_right)) + 1 || x > get_x(bounds) {
-                x = get_x(upper_left);
-                y += 1;
-                if y > (get_y(bottom_right)) || y > get_y(bounds) {
-                    return (x, y - 1);
-                }
-                if !line_break {
-                    break 'char;
-                }
+        if x == (get_x(bottom_right)) + 1 || x > get_x(bounds) {
+            x = get_x(upper_left);
+            y += 1;
+            if y > (get_y(bottom_right)) || y > get_y(bounds) {
+                return (x, y - 1);
             }
+            if !line_break {
+                break 'char;
+            }
+        }
     }
     (x, y)
 }

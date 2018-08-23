@@ -32,8 +32,8 @@ use super::*;
 use chan::{Receiver, Sender};
 use fnv::FnvHashMap;
 use std::io::Write;
-use std::thread;
 use std::result;
+use std::thread;
 use std::time;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
@@ -60,9 +60,9 @@ impl InputHandler {
                         tx.send(ThreadEvent::UIEvent(UIEventType::ChangeMode(UIMode::Fork)));
                     },
                     &rx,
-                    )
+                )
             })
-        .unwrap();
+            .unwrap();
     }
     fn kill(&self) {
         self.tx.send(false);
@@ -100,23 +100,33 @@ impl Context {
     }
     pub fn account_status(&mut self, idx_a: usize, idx_m: usize) -> result::Result<bool, usize> {
         let s = self.accounts[idx_a].status(idx_m)?;
-        if let Some(Some(event)) = s {
-            eprintln!("setting up notification");
-            let (idx_a, idx_m) = self.mailbox_hashes[&event.folder];
-            let subjects = {
-                let mut ret = Vec::with_capacity(event.index.len());
-                eprintln!("index is {:?}", &event.index);
-                for &i in &event.index {
-                    ret.push(self.accounts[idx_a][idx_m].as_ref().unwrap().collection[i].subject());
-                }
-                ret
-            };
-            self.replies.push_back(UIEvent { id: 0, event_type: UIEventType::Notification(format!("Update in {}/{}, indexes {:?}", self.accounts[idx_a].name(), self.accounts[idx_a][idx_m].as_ref().unwrap().folder.name(), subjects)) });
-            Ok(true)
-        } else if let Some(None) = s {
-            Ok(true)
-        } else {
-            Ok(false)
+        match s {
+            LoadMailboxResult::New(event) => {
+                eprintln!("setting up notification");
+                let (idx_a, idx_m) = self.mailbox_hashes[&event.folder];
+                let subjects = {
+                    let mut ret = Vec::with_capacity(event.index.len());
+                    eprintln!("index is {:?}", &event.index);
+                    for &i in &event.index {
+                        ret.push(
+                            self.accounts[idx_a][idx_m].as_ref().unwrap().collection[i].subject(),
+                        );
+                    }
+                    ret
+                };
+                self.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::Notification(format!(
+                        "Update in {}/{}, indexes {:?}",
+                        self.accounts[idx_a].name(),
+                        self.accounts[idx_a][idx_m].as_ref().unwrap().folder.name(),
+                        subjects
+                    )),
+                });
+                Ok(true)
+            }
+            LoadMailboxResult::Loaded => Ok(true),
+            LoadMailboxResult::Refresh => Ok(false),
         }
     }
 }
@@ -151,6 +161,12 @@ impl<W: Write> Drop for State<W> {
             cursor::Show
         ).unwrap();
         self.flush();
+    }
+}
+
+impl Default for State<std::io::Stdout> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -236,8 +252,10 @@ impl State<std::io::Stdout> {
             startup_thread: Some(startup_tx.clone()),
             threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
         };
-        s.threads
-            .insert(startup_thread.thread().id(), (startup_tx.clone(), startup_thread));
+        s.threads.insert(
+            startup_thread.thread().id(),
+            (startup_tx.clone(), startup_thread),
+        );
         write!(
             s.stdout(),
             "{}{}{}",
@@ -290,13 +308,16 @@ impl State<std::io::Stdout> {
                             thread::sleep(dur);
                         }
                     })
-                .expect("Failed to spawn startup-thread in hash_to_folder()")
+                    .expect("Failed to spawn startup-thread in hash_to_folder()")
             };
             self.startup_thread = Some(startup_tx.clone());
             self.threads
                 .insert(startup_thread.thread().id(), (startup_tx, startup_thread));
         } else {
-            eprintln!("BUG: mailbox with hash {} not found in mailbox_hashes.", hash);
+            eprintln!(
+                "BUG: mailbox with hash {} not found in mailbox_hashes.",
+                hash
+            );
         }
     }
 

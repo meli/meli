@@ -44,6 +44,12 @@ pub struct Backends {
     map: FnvHashMap<std::string::String, Box<Fn() -> BackendCreator>>,
 }
 
+impl Default for Backends {
+    fn default() -> Self {
+        Backends::new()
+    }
+}
+
 impl Backends {
     pub fn new() -> Self {
         let mut b = Backends {

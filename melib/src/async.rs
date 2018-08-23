@@ -58,6 +58,12 @@ pub struct Async<T> {
     rx: chan::Receiver<AsyncStatus>,
 }
 
+impl Default for AsyncBuilder {
+    fn default() -> Self {
+        AsyncBuilder::new()
+    }
+}
+
 impl AsyncBuilder {
     pub fn new() -> Self {
         let (sender, receiver) = chan::sync(::std::mem::size_of::<AsyncStatus>());
@@ -117,6 +123,6 @@ impl<T> Async<T> {
         }
         let v = self.worker.take().unwrap().join().unwrap();
         self.value = Some(v);
-        return Ok(AsyncStatus::Finished);
+        Ok(AsyncStatus::Finished)
     }
 }
