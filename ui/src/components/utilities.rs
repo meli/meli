@@ -197,7 +197,7 @@ pub struct Pager {
     cursor_pos: usize,
     max_cursor_pos: Option<usize>,
     height: usize,
-    
+
     width: usize,
     dirty: bool,
     content: CellBuffer,
@@ -332,6 +332,9 @@ impl Component for Pager {
                     self.cursor_pos = self.cursor_pos.saturating_sub(height);
                 }
                 PagerMovement::PageDown => {
+                    /* This might "overflow" beyond the max_cursor_pos boundary if it's not yet
+                     * set. TODO: Rework the page up/down stuff
+                     */
                     if self.cursor_pos + 2 * height + 1 < self.height {
                         self.cursor_pos += height;
                     } else {
@@ -349,12 +352,12 @@ impl Component for Pager {
             Some(max) if max <= self.cursor_pos => {
                 self.cursor_pos -= 1;
                 return;
-            },
+            }
             Some(max) if max >= height => {
                 self.cursor_pos = 0;
                 return;
             }
-            _ => {},
+            _ => {}
         }
 
         clear_area(grid, area);

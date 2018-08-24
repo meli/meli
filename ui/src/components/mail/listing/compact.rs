@@ -175,35 +175,46 @@ impl CompactListing {
     }
 
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap();
-        let threads = &mailbox.threads;
-        let container = threads.root_set()[idx];
-        let container = &threads.containers()[container];
-        let i = if let Some(i) = container.message() {
-            i
-        } else {
-            threads.containers()[container.first_child().unwrap()]
-                .message()
-                .unwrap()
-        };
-        let root_envelope: &Envelope = &mailbox.collection[i];
-        let fg_color = if !root_envelope.is_seen() {
-            Color::Byte(0)
-        } else {
-            Color::Default
-        };
-        let bg_color = if self.cursor_pos.2 == idx {
-            Color::Byte(246)
-        } else if !root_envelope.is_seen() {
-            Color::Byte(251)
-        } else if idx % 2 == 0 {
-            Color::Byte(236)
-        } else {
-            Color::Default
-        };
-        change_colors(grid, area, fg_color, bg_color);
+        if idx == self.cursor_pos.2 {
+            let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+                .as_ref()
+                .unwrap();
+            let threads = &mailbox.threads;
+            let container = threads.root_set()[idx];
+            let container = &threads.containers()[container];
+            let i = if let Some(i) = container.message() {
+                i
+            } else {
+                threads.containers()[container.first_child().unwrap()]
+                    .message()
+                    .unwrap()
+            };
+            let root_envelope: &Envelope = &mailbox.collection[i];
+            let fg_color = if !root_envelope.is_seen() {
+                Color::Byte(0)
+            } else {
+                Color::Default
+            };
+            let bg_color = if self.cursor_pos.2 == idx {
+                Color::Byte(246)
+            } else if !root_envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            };
+            change_colors(grid, area, fg_color, bg_color);
+            return;
+        }
+
+        let (width, height) = self.content.size();
+        copy_area(
+            grid,
+            &self.content,
+            area,
+            ((0, idx), (width - 1, height - 1)),
+        );
     }
 
     /// Draw the list of `Envelope`s.

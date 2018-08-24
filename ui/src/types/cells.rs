@@ -551,3 +551,162 @@ pub enum Attr {
     UnderlineReverse = 0b110,
     BoldReverseUnderline = 0b111,
 }
+
+// TODO: word break.
+pub fn copy_area_with_break(
+    grid_dest: &mut CellBuffer,
+    grid_src: &CellBuffer,
+    dest: Area,
+    src: Area,
+) -> Pos {
+    if !is_valid_area!(dest) || !is_valid_area!(src) {
+        eprintln!(
+            "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
+            src, dest
+        );
+        return upper_left!(dest);
+    }
+    let mut ret = bottom_right!(dest);
+    let mut src_x = get_x(upper_left!(src));
+    let mut src_y = get_y(upper_left!(src));
+
+    'y_: for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
+        'x_: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
+            if grid_src[(src_x, src_y)].ch() == '\n' {
+                src_y += 1;
+                src_x = 0;
+                if src_y >= get_y(bottom_right!(src)) {
+                    ret.1 = y;
+                    break 'y_;
+                }
+                continue 'y_;
+            }
+
+            grid_dest[(x, y)] = grid_src[(src_x, src_y)];
+            src_x += 1;
+            if src_x >= get_x(bottom_right!(src)) {
+                src_y += 1;
+                src_x = 0;
+                if src_y >= get_y(bottom_right!(src)) {
+                    //clear_area(grid_dest, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
+                    ret.1 = y;
+                    break 'y_;
+                }
+                break 'x_;
+            }
+        }
+    }
+    ret
+}
+
+/// Copy a source `Area` to a destination.
+pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) -> Pos {
+    if !is_valid_area!(dest) || !is_valid_area!(src) {
+        eprintln!(
+            "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
+            src, dest
+        );
+        return upper_left!(dest);
+    }
+
+    let mut ret = bottom_right!(dest);
+    let mut src_x = get_x(upper_left!(src));
+    let mut src_y = get_y(upper_left!(src));
+    let (cols, rows) = grid_src.size();
+    if src_x >= cols || src_y >= rows {
+        eprintln!("DEBUG: src area outside of grid_src in copy_area",);
+        return upper_left!(dest);
+    }
+
+    for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
+        'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
+            grid_dest[(x, y)] = grid_src[(src_x, src_y)];
+            if src_x >= get_x(bottom_right!(src)) {
+                break 'for_x;
+            }
+            src_x += 1;
+        }
+        src_x = get_x(upper_left!(src));
+        if src_y >= get_y(bottom_right!(src)) {
+            clear_area(
+                grid_dest,
+                ((get_x(upper_left!(dest)), y), bottom_right!(dest)),
+            );
+            ret.1 = y;
+            break;
+        }
+        src_y += 1;
+    }
+    ret
+}
+
+/// Change foreground and background colors in an `Area`
+pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_color: Color) {
+    if !is_valid_area!(area) {
+        eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+        return;
+    }
+    for y in get_y(upper_left!(area))..=get_y(bottom_right!(area)) {
+        for x in get_x(upper_left!(area))..=get_x(bottom_right!(area)) {
+            grid[(x, y)].set_fg(fg_color);
+            grid[(x, y)].set_bg(bg_color);
+        }
+    }
+}
+
+/// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed colors.
+pub fn write_string_to_grid(
+    s: &str,
+    grid: &mut CellBuffer,
+    fg_color: Color,
+    bg_color: Color,
+    area: Area,
+    line_break: bool,
+) -> Pos {
+    let bounds = grid.size();
+    let upper_left = upper_left!(area);
+    let bottom_right = bottom_right!(area);
+    let (mut x, mut y) = upper_left;
+    if y > (get_y(bottom_right))
+        || x > get_x(bottom_right)
+        || y > get_y(bounds)
+        || x > get_x(bounds)
+    {
+        eprintln!(" Invalid area with string {} and area {:?}", s, area);
+        return (x, y);
+    }
+    'char: for c in s.chars() {
+        grid[(x, y)].set_ch(c);
+        grid[(x, y)].set_fg(fg_color);
+        grid[(x, y)].set_bg(bg_color);
+        x += 1;
+
+        if x == (get_x(bottom_right)) + 1 || x > get_x(bounds) {
+            x = get_x(upper_left);
+            y += 1;
+            if y > (get_y(bottom_right)) || y > get_y(bounds) {
+                return (x, y - 1);
+            }
+            if !line_break {
+                break 'char;
+            }
+        }
+    }
+    (x, y)
+}
+
+/// Completely clear an `Area` with an empty char and the terminal's default colors.
+pub fn clear_area(grid: &mut CellBuffer, area: Area) {
+    if !is_valid_area!(area) {
+        return;
+    }
+    let upper_left = upper_left!(area);
+    let bottom_right = bottom_right!(area);
+    for y in get_y(upper_left)..=get_y(bottom_right) {
+        for x in get_x(upper_left)..=get_x(bottom_right) {
+            grid[(x, y)].set_ch(' ');
+            grid[(x, y)].set_bg(Color::Default);
+            grid[(x, y)].set_fg(Color::Default);
+        }
+    }
+}

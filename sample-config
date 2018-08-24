@@ -1,0 +1,15 @@
+[accounts.account-name]
+root_folder = "/path/to/root/folder"
+sent_folder = "/path/to/sent/folder" # optional
+format = "Maildir"
+threaded = true
+
+  [accounts.account-name.folders]
+  "Inbox" = "inbox"
+  "Sent" = "sent"
+  "Drafts" = "drafts"
+  "foobar-devel" = "devbar-fooel"
+
+#[pager]
+#pager_ratio = 80
+#filter = "/usr/bin/pygmentize"

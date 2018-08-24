@@ -103,165 +103,6 @@ pub trait Component: Display + Debug {
     fn set_dirty(&mut self);
 }
 
-// TODO: word break.
-pub fn copy_area_with_break(
-    grid_dest: &mut CellBuffer,
-    grid_src: &CellBuffer,
-    dest: Area,
-    src: Area,
-) -> Pos {
-    if !is_valid_area!(dest) || !is_valid_area!(src) {
-        eprintln!(
-            "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
-            src, dest
-        );
-        return upper_left!(dest);
-    }
-    let mut ret = bottom_right!(dest);
-    let mut src_x = get_x(upper_left!(src));
-    let mut src_y = get_y(upper_left!(src));
-
-    'y_: for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
-        'x_: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
-            if grid_src[(src_x, src_y)].ch() == '\n' {
-                src_y += 1;
-                src_x = 0;
-                if src_y >= get_y(bottom_right!(src)) {
-                    ret.1 = y;
-                    break 'y_;
-                }
-                continue 'y_;
-            }
-
-            grid_dest[(x, y)] = grid_src[(src_x, src_y)];
-            src_x += 1;
-            if src_x >= get_x(bottom_right!(src)) {
-                src_y += 1;
-                src_x = 0;
-                if src_y >= get_y(bottom_right!(src)) {
-                    //clear_area(grid_dest, ((get_x(upper_left!(dest)), y), bottom_right!(dest)));
-                    ret.1 = y;
-                    break 'y_;
-                }
-                break 'x_;
-            }
-        }
-    }
-    ret
-}
-
-/// Copy a source `Area` to a destination.
-pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) -> Pos {
-    if !is_valid_area!(dest) || !is_valid_area!(src) {
-        eprintln!(
-            "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
-            src, dest
-        );
-        return upper_left!(dest);
-    }
-
-    let mut ret = bottom_right!(dest);
-    let mut src_x = get_x(upper_left!(src));
-    let mut src_y = get_y(upper_left!(src));
-    let (cols, rows) = grid_src.size();
-    if src_x >= cols || src_y >= rows {
-        eprintln!("DEBUG: src area outside of grid_src in copy_area",);
-        return upper_left!(dest);
-    }
-
-    for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
-        'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
-            grid_dest[(x, y)] = grid_src[(src_x, src_y)];
-            if src_x >= get_x(bottom_right!(src)) {
-                break 'for_x;
-            }
-            src_x += 1;
-        }
-        src_x = get_x(upper_left!(src));
-        if src_y >= get_y(bottom_right!(src)) {
-            clear_area(
-                grid_dest,
-                ((get_x(upper_left!(dest)), y), bottom_right!(dest)),
-            );
-            ret.1 = y;
-            break;
-        }
-        src_y += 1;
-    }
-    ret
-}
-
-/// Change foreground and background colors in an `Area`
-pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_color: Color) {
-    if !is_valid_area!(area) {
-        eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
-        return;
-    }
-    for y in get_y(upper_left!(area))..=get_y(bottom_right!(area)) {
-        for x in get_x(upper_left!(area))..=get_x(bottom_right!(area)) {
-            grid[(x, y)].set_fg(fg_color);
-            grid[(x, y)].set_bg(bg_color);
-        }
-    }
-}
-
-/// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed colors.
-fn write_string_to_grid(
-    s: &str,
-    grid: &mut CellBuffer,
-    fg_color: Color,
-    bg_color: Color,
-    area: Area,
-    line_break: bool,
-) -> Pos {
-    let bounds = grid.size();
-    let upper_left = upper_left!(area);
-    let bottom_right = bottom_right!(area);
-    let (mut x, mut y) = upper_left;
-    if y > (get_y(bottom_right))
-        || x > get_x(bottom_right)
-        || y > get_y(bounds)
-        || x > get_x(bounds)
-    {
-        eprintln!(" Invalid area with string {} and area {:?}", s, area);
-        return (x, y);
-    }
-    'char: for c in s.chars() {
-        grid[(x, y)].set_ch(c);
-        grid[(x, y)].set_fg(fg_color);
-        grid[(x, y)].set_bg(bg_color);
-        x += 1;
-
-        if x == (get_x(bottom_right)) + 1 || x > get_x(bounds) {
-            x = get_x(upper_left);
-            y += 1;
-            if y > (get_y(bottom_right)) || y > get_y(bounds) {
-                return (x, y - 1);
-            }
-            if !line_break {
-                break 'char;
-            }
-        }
-    }
-    (x, y)
-}
-
-/// Completely clear an `Area` with an empty char and the terminal's default colors.
-fn clear_area(grid: &mut CellBuffer, area: Area) {
-    if !is_valid_area!(area) {
-        return;
-    }
-    let upper_left = upper_left!(area);
-    let bottom_right = bottom_right!(area);
-    for y in get_y(upper_left)..=get_y(bottom_right) {
-        for x in get_x(upper_left)..=get_x(bottom_right) {
-            grid[(x, y)].set_ch(' ');
-            grid[(x, y)].set_bg(Color::Default);
-            grid[(x, y)].set_fg(Color::Default);
-        }
-    }
-}
-
 fn new_draft(_context: &mut Context) -> Vec<u8> {
     // TODO: Generate proper message-id https://www.jwz.org/doc/mid.html
     let mut v = String::with_capacity(500);
@@ -270,4 +111,256 @@ fn new_draft(_context: &mut Context) -> Vec<u8> {
     v.push_str("Subject: \n");
     v.push_str("Message-Id: \n\n");
     v.into_bytes()
+}
+
+fn bin_to_ch(b: u32) -> char {
+    match b {
+        0b0001 => '╶',
+        0b0010 => '╵',
+        0b0011 => '└',
+        0b0100 => '╴',
+        0b0101 => '─',
+        0b0110 => '┘',
+        0b0111 => '┴',
+        0b1000 => '╷',
+        0b1001 => '┌',
+        0b1010 => '│',
+        0b1011 => '├',
+        0b1100 => '┐',
+        0b1101 => '┬',
+        0b1110 => '┤',
+        0b1111 => '┼',
+        x => unreachable!(format!("unreachable bin_to_ch(x), x = {:b}", x)),
+    }
+}
+
+fn ch_to_bin(ch: char) -> Option<u32> {
+    match ch {
+        '└' => Some(0b0011),
+        '─' => Some(0b0101),
+        '┘' => Some(0b0110),
+        '┴' => Some(0b0111),
+        '┌' => Some(0b1001),
+
+        '│' => Some(0b1010),
+
+        '├' => Some(0b1011),
+        '┐' => Some(0b1100),
+        '┬' => Some(0b1101),
+
+        '┤' => Some(0b1110),
+
+        '┼' => Some(0b1111),
+        '╷' => Some(0b1000),
+
+        '╵' => Some(0b0010),
+        '╴' => Some(0b0100),
+        '╶' => Some(0b0001),
+        _ => None,
+    }
+}
+
+#[allow(never_loop)]
+fn set_and_join_vert(grid: &mut CellBuffer, idx: Pos) -> u32 {
+    let (x, y) = idx;
+    let mut bin_set = 0b1010;
+    /* Check left side
+     *
+     *        1
+     *   -> 2 │ 0
+     *        3
+     */
+    loop {
+        if x > 0 {
+            if let Some(cell) = grid.get_mut(x - 1, y) {
+                if let Some(adj) = ch_to_bin(cell.ch()) {
+                    if (adj & 0b0001) > 0 {
+                        bin_set |= 0b0100;
+                        break;
+                    } else if adj == 0b0100 {
+                        cell.set_ch(bin_to_ch(0b0101));
+                        bin_set |= 0b0100;
+                        break;
+                    }
+                }
+            }
+        }
+        bin_set &= 0b1011;
+        break;
+    }
+
+    /* Check right side
+     *
+     *        1
+     *      2 │ 0 <-
+     *        3
+     */
+    loop {
+        if let Some(cell) = grid.get_mut(x + 1, y) {
+            if let Some(adj) = ch_to_bin(cell.ch()) {
+                if (adj & 0b0100) > 0 {
+                    bin_set |= 0b0001;
+                    break;
+                }
+            }
+        }
+        bin_set &= 0b1110;
+        break;
+    }
+
+    /* Set upper side
+     *
+     *        1 <-
+     *      2 │ 0
+     *        3
+     */
+    loop {
+        if y > 0 {
+            if let Some(cell) = grid.get_mut(x, y - 1) {
+                if let Some(adj) = ch_to_bin(cell.ch()) {
+                    cell.set_ch(bin_to_ch(adj | 0b1000));
+                    break;
+                }
+            }
+        }
+        bin_set &= 0b1101;
+        break;
+    }
+
+    /* Set bottom side
+     *
+     *        1
+     *      2 │ 0
+     *        3 <-
+     */
+    loop {
+        if let Some(cell) = grid.get_mut(x, y + 1) {
+            if let Some(adj) = ch_to_bin(cell.ch()) {
+                cell.set_ch(bin_to_ch(adj | 0b0010));
+                break;
+            }
+        }
+        bin_set &= 0b0111;
+        break;
+    }
+
+    if bin_set == 0 {
+        bin_set = 0b1010;
+    }
+
+    bin_set
+}
+
+#[allow(never_loop)]
+fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
+    let (x, y) = idx;
+    let mut bin_set = 0b0101;
+    /* Check upper side
+     *
+     *        1 <-
+     *      2 ─ 0
+     *        3
+     */
+    loop {
+        if y > 0 {
+            if let Some(cell) = grid.get_mut(x, y - 1) {
+                if let Some(adj) = ch_to_bin(cell.ch()) {
+                    if (adj & 0b1000) > 0 {
+                        bin_set |= 0b0010;
+                        break;
+                    } else if adj == 0b0010 {
+                        bin_set |= 0b0010;
+                        cell.set_ch(bin_to_ch(0b1010));
+                        break;
+                    }
+                }
+            }
+        }
+        bin_set &= 0b1101;
+        break;
+    }
+
+    /* Check bottom side
+     *
+     *        1
+     *      2 ─ 0
+     *        3 <-
+     */
+    loop {
+        if let Some(cell) = grid.get_mut(x, y + 1) {
+            if let Some(adj) = ch_to_bin(cell.ch()) {
+                if (adj & 0b0010) > 0 {
+                    bin_set |= 0b1000;
+                    break;
+                } else if adj == 0b1000 {
+                    cell.set_ch(bin_to_ch(0b1010));
+                    break;
+                }
+            }
+        }
+        bin_set &= 0b0111;
+        break;
+    }
+
+    /* Set left side
+     *
+     *        1
+     *   -> 2 ─ 0
+     *        3
+     */
+    loop {
+        if x > 0 {
+            if let Some(cell) = grid.get_mut(x - 1, y) {
+                if let Some(adj) = ch_to_bin(cell.ch()) {
+                    cell.set_ch(bin_to_ch(adj | 0b0001));
+                    break;
+                }
+            }
+        }
+        bin_set &= 0b1011;
+        break;
+    }
+
+    /* Set right side
+     *
+     *        1
+     *      2 ─ 0 <-
+     *        3
+     */
+    loop {
+        if let Some(cell) = grid.get_mut(x + 1, y) {
+            if let Some(adj) = ch_to_bin(cell.ch()) {
+                cell.set_ch(bin_to_ch(adj | 0b0100));
+                break;
+            }
+        }
+        bin_set &= 0b1110;
+        break;
+    }
+
+    if bin_set == 0 {
+        bin_set = 0b0101;
+    }
+
+    bin_set
+}
+
+fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: char) {
+    /* Connected sides:
+     *
+     *        1
+     *      2 c 0
+     *        3
+     *
+     *     #3210
+     *    0b____
+     */
+
+    let bin_set = match ch {
+        '│' => set_and_join_vert(grid, idx),
+        '─' => set_and_join_horz(grid, idx),
+        _ => unreachable!(),
+    };
+
+    grid[idx].set_ch(bin_to_ch(bin_set));
 }

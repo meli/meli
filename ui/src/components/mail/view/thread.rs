@@ -22,12 +22,11 @@
 use super::*;
 use std::cmp;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ThreadEntry {
     index: (usize, usize, usize),
+    /// (indentation, container index, line number in listing)
     indentation: usize,
-    content: CellBuffer,
-
     msg_idx: usize,
 }
 
@@ -40,6 +39,7 @@ pub struct ThreadView {
     dirty: bool,
     coordinates: (usize, usize, usize),
     mailview: MailView,
+    show_mailview: bool,
     entries: Vec<ThreadEntry>,
     content: CellBuffer,
     initiated: bool,
@@ -47,6 +47,7 @@ pub struct ThreadView {
 
 impl ThreadView {
     pub fn new(coordinates: (usize, usize, usize), context: &Context) -> Self {
+        /* stack to push thread messages in order in order to pop and print them later */
         let mut stack: Vec<(usize, usize)> = Vec::with_capacity(32);
         let mailbox = &context.accounts[coordinates.0][coordinates.1]
             .as_ref()
@@ -64,6 +65,7 @@ impl ThreadView {
             initiated: false,
             coordinates,
             mailview: MailView::default(),
+            show_mailview: true,
             entries: Vec::new(),
             cursor_pos: 1,
             new_cursor_pos: 0,
@@ -85,58 +87,88 @@ impl ThreadView {
                 stack.push((ind + 1, i));
             }
         }
-        view.new_expanded_pos = view.entries.len() - 1;
+        view.new_expanded_pos = view.entries.len().saturating_sub(1);
         view.expanded_pos = view.new_expanded_pos + 1;
 
-        let height = 2 * view.entries.len();
+        let height = 2 * view.entries.len() + 1;
         let mut width = 0;
 
         let mut strings: Vec<String> = Vec::with_capacity(view.entries.len());
 
+        let mut highlight_reply_subjects: Vec<Option<usize>> =
+            Vec::with_capacity(view.entries.len());
         for e in &view.entries {
             let envelope: &Envelope = &mailbox.collection[e.msg_idx];
-            strings.push(format!(
-                " {}{} - {}",
-                " ".repeat(e.index.0 * 4),
-                envelope.date_as_str(),
-                envelope.field_from_to_string()
-            ));
+            let container = &threads.containers()[e.index.1];
+            let string = if container.show_subject() {
+                let subject = envelope.subject();
+                highlight_reply_subjects.push(Some(subject.len()));
+                format!(
+                    " {}{} - {} {}",
+                    " ".repeat(e.index.0 * 4),
+                    envelope.date_as_str(),
+                    envelope.field_from_to_string(),
+                    envelope.subject(),
+                )
+            } else {
+                highlight_reply_subjects.push(None);
+                format!(
+                    " {}{} - {}",
+                    " ".repeat(e.index.0 * 4),
+                    envelope.date_as_str(),
+                    envelope.field_from_to_string(),
+                )
+            };
+            strings.push(string);
             width = cmp::max(
                 width,
-                e.index.0 + strings.last().as_ref().unwrap().len() + 1,
+                e.index.0 * 4 + strings.last().as_ref().unwrap().len() + 2,
             );
         }
         let mut content = CellBuffer::new(width, height, Cell::default());
         for (y, e) in view.entries.iter().enumerate() {
+            /* Box character drawing stuff */
             if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
                 let index = (e.index.0 * 4, 2 * y - 1);
                 if content[index].ch() == ' ' {
                     let mut ctr = 1;
                     while content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() == ' ' {
-                        content[(e.index.0 * 4 + ctr, 2 * y - 1)].set_ch(HORZ_BOUNDARY);
+                        set_and_join_box(
+                            &mut content,
+                            (e.index.0 * 4 + ctr, 2 * y - 1),
+                            HORZ_BOUNDARY,
+                        );
                         ctr += 1;
                     }
-                    content[index].set_ch(_TOP_LEFT_CORNER);
-                } else {
-                    content[index].set_ch(LIGHT_DOWN_AND_HORIZONTAL);
-                };
+                    set_and_join_box(&mut content, index, HORZ_BOUNDARY);
+                }
             }
-
             write_string_to_grid(
                 &strings[y],
                 &mut content,
                 Color::Default,
                 Color::Default,
-                ((e.index.0 + 1, 2 * y), (width - 1, height - 1)),
+                ((e.index.0 * 4 + 1, 2 * y), (width - 1, height - 1)),
                 true,
             );
-            content[(e.index.0 * 4, 2 * y)].set_ch(VERT_BOUNDARY);
-            for i in (e.index.0 * 4)..width {
-                content[(i, 2 * y + 1)].set_ch(HORZ_BOUNDARY);
+            if let Some(len) = highlight_reply_subjects[y] {
+                let index = e.index.0 * 4 + 1 + strings[y].len() - len;
+                let area = ((index, 2 * y), (width - 2, 2 * y));
+                let fg_color = Color::Byte(33);
+                let bg_color = Color::Default;
+                change_colors(&mut content, area, fg_color, bg_color);
             }
-            content[(e.index.0 * 4, 2 * y + 1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
+            set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), VERT_BOUNDARY);
+            set_and_join_box(&mut content, (e.index.0 * 4, 2 * y + 1), VERT_BOUNDARY);
+            for i in ((e.index.0 * 4) + 1)..width - 1 {
+                set_and_join_box(&mut content, (i, 2 * y + 1), HORZ_BOUNDARY);
+            }
+            set_and_join_box(&mut content, (width - 1, 2 * y + 1), VERT_BOUNDARY);
         }
-        //view.mailview = MailView::new((view.coordinates.0, view.coordinates.1, view.entries[view.expanded_pos].msg_idx), None, None);
+
+        for y in 0..height - 1 {
+            set_and_join_box(&mut content, (width - 1, y), VERT_BOUNDARY);
+        }
         view.content = content;
         view.new_cursor_pos = view.new_expanded_pos;
         view
@@ -155,74 +187,32 @@ impl ThreadView {
                 .message()
                 .unwrap()
         };
-        let envelope: &Envelope = &mailbox.collection[msg_idx];
-        let op = context.accounts[self.coordinates.0]
-            .backend
-            .operation(envelope.hash());
-        let body = envelope.body(op);
-
-        let mut body_text: String = " \n".repeat(6);
-        body_text.push_str(&String::from_utf8_lossy(&decode_rec(&body, None)));
-        let mut buf = CellBuffer::from(body_text.as_str()).split_newlines();
-
-        let date = format!("Date: {}\n", envelope.date_as_str());
-        let from = format!("From: {}\n", envelope.field_from_to_string());
-        let message_id = &format!("Message-ID: <{}>\n\n", envelope.message_id_raw());
-        let mut width = [date.len(), from.len(), message_id.len(), buf.size().0]
-            .iter()
-            .cloned()
-            .max()
-            .unwrap_or(1);
-        let height = buf.size().1;
-        if width > buf.size().0 {
-            buf.resize(width, height, Cell::default());
-            width -= 1;
-        } else {
-            width = buf.size().0 - 1;
-        }
-
-        write_string_to_grid(
-            &date,
-            &mut buf,
-            Color::Byte(33),
-            Color::Default,
-            ((ind, 0), (width, height)),
-            true,
-        );
-        write_string_to_grid(
-            &from,
-            &mut buf,
-            Color::Byte(33),
-            Color::Default,
-            ((ind, 1), (width, height)),
-            true,
-        );
-        write_string_to_grid(
-            &message_id,
-            &mut buf,
-            Color::Byte(33),
-            Color::Default,
-            ((ind, 2), (width, height)),
-            true,
-        );
 
         ThreadEntry {
             index: (ind, idx, order),
             indentation: ind,
-            content: buf,
-
             msg_idx,
         }
     }
 
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize) {
-        let fg_color = Color::Default;
-        let bg_color = if self.cursor_pos == idx {
-            Color::Byte(246)
-        } else {
-            Color::Default
-        };
-        change_colors(grid, area, fg_color, bg_color);
+        if idx == self.cursor_pos {
+            let fg_color = Color::Default;
+            let bg_color = Color::Byte(246);
+            change_colors(grid, area, fg_color, bg_color);
+            return;
+        }
+
+        let (width, height) = self.content.size();
+        copy_area(
+            grid,
+            &self.content,
+            area,
+            (
+                (self.entries[idx].index.0 * 4 + 1, 2 * idx),
+                (width - 1, height - 1),
+            ),
+        );
     }
 
     /// Draw the list
@@ -232,7 +222,6 @@ impl ThreadView {
         let (width, height) = self.content.size();
         if height == 0 {
             clear_area(grid, area);
-            copy_area(grid, &self.content, area, ((0, 0), (width - 1, 0)));
             context.dirty_areas.push_back(area);
             return;
         }
@@ -242,23 +231,38 @@ impl ThreadView {
 
         let top_idx = page_no * rows;
 
+        /* This closure (written for code clarity, should be inlined by the compiler) returns the
+         * **line** of an entry in the grid. */
+        let entries = &self.entries;
+        let get_entry_area = |idx: usize| {
+            (
+                (
+                    entries[idx].index.0 * 4 + 1 + get_x(upper_left),
+                    get_y(upper_left) + 2 * (idx % rows),
+                ),
+                (
+                    cmp::min(get_x(upper_left) + width - 2, get_x(bottom_right)),
+                    get_y(upper_left) + 2 * (idx % rows),
+                ),
+            )
+        };
+
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
         if prev_page_no == page_no {
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
             for &idx in &[old_cursor_pos, self.new_cursor_pos] {
-                let new_area = (
-                    set_y(upper_left, get_y(upper_left) + 2 * (idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + 2 * (idx % rows)),
-                );
+                if idx >= self.entries.len() {
+                    continue;
+                }
+                let new_area = get_entry_area(idx);
                 self.highlight_line(grid, new_area, idx);
                 context.dirty_areas.push_back(new_area);
             }
             return;
-        } else if self.cursor_pos != self.new_cursor_pos {
-            self.cursor_pos = self.new_cursor_pos;
         }
+        self.cursor_pos = self.new_cursor_pos;
 
         /* Page_no has changed, so draw new page */
         copy_area(
@@ -267,53 +271,28 @@ impl ThreadView {
             area,
             ((0, 2 * top_idx), (width - 1, height - 1)),
         );
-        self.highlight_line(
-            grid,
-            (
-                set_y(upper_left, get_y(upper_left) + 2 * (self.cursor_pos % rows)),
-                set_y(
-                    bottom_right,
-                    get_y(upper_left) + 2 * (self.cursor_pos % rows),
-                ),
-            ),
-            self.cursor_pos,
-        );
+        self.highlight_line(grid, get_entry_area(self.cursor_pos), self.cursor_pos);
         context.dirty_areas.push_back(area);
     }
-}
 
-impl fmt::Display for ThreadView {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display subject/info
-        write!(f, "view thread")
-    }
-}
-
-impl Component for ThreadView {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    fn draw_vert(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
+
         let bottom_right = bottom_right!(area);
-
-        let total_rows = get_y(bottom_right) - get_y(upper_left);
-        let pager_ratio = context.runtime_settings.pager.pager_ratio;
-        let bottom_entity_rows = (pager_ratio * total_rows) / 100;
-
-        if bottom_entity_rows > total_rows {
-            clear_area(grid, area);
-            context.dirty_areas.push_back(area);
-            return;
-        }
-
-        let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
+        let mid = get_x(upper_left) + self.content.size().0;
 
         if !self.dirty {
-            self.mailview
-                .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+            let upper_left = (mid + 1, get_y(upper_left) + 1);
+            if self.show_mailview {
+                self.mailview
+                    .draw(grid, (upper_left, bottom_right), context);
+            }
             return;
         }
 
         self.dirty = false;
 
+        /* First draw the thread subject on the first row */
         let y = {
             let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
@@ -351,27 +330,197 @@ impl Component for ThreadView {
             return;
         }
 
+        /* if this is the first ever draw, there is nothing on the grid to update so populate it
+         * first */
         if !self.initiated {
             clear_area(grid, (set_y(upper_left, y - 1), bottom_right));
             let (width, height) = self.content.size();
-            copy_area(
-                grid,
-                &self.content,
-                (set_y(upper_left, y), set_y(bottom_right, mid - 1)),
-                ((0, 0), (width - 1, height - 1)),
-            );
-            for x in get_x(upper_left)..=get_x(bottom_right) {
-                grid[(x, mid)].set_ch(HORZ_BOUNDARY);
-            }
-            if let Some(cell) = grid.get_mut(get_x(upper_left).saturating_sub(1), mid) {
-                if cell.ch() == VERT_BOUNDARY {
-                    cell.set_ch(LIGHT_VERTICAL_AND_RIGHT);
+            if self.show_mailview {
+                let area = (set_y(upper_left, y), set_x(bottom_right, mid - 1));
+                let upper_left = upper_left!(area);
+                let bottom_right = bottom_right!(area);
+
+                let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 2;
+                let page_no = (self.new_cursor_pos).wrapping_div(rows);
+                let top_idx = page_no * rows;
+
+                copy_area(
+                    grid,
+                    &self.content,
+                    area,
+                    ((0, 2 * top_idx), (width - 1, height - 1)),
+                );
+                for y in get_y(upper_left)..=get_y(bottom_right) {
+                    set_and_join_box(grid, (mid, y), VERT_BOUNDARY);
                 }
+            } else {
+                let area = (set_y(upper_left, y), bottom_right);
+                let upper_left = upper_left!(area);
+                let bottom_right = bottom_right!(area);
+
+                let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 2;
+                let page_no = (self.new_cursor_pos).wrapping_div(rows);
+                let top_idx = page_no * rows;
+                copy_area(
+                    grid,
+                    &self.content,
+                    area,
+                    ((0, 2 * top_idx), (width - 1, height - 1)),
+                );
             }
             context.dirty_areas.push_back(area);
             self.initiated = true;
         }
 
+        if self.show_mailview {
+            self.draw_list(
+                grid,
+                (set_y(upper_left, y), set_x(bottom_right, mid - 1)),
+                context,
+            );
+            let upper_left = (mid + 1, get_y(upper_left) + 1);
+            self.mailview
+                .draw(grid, (upper_left, bottom_right), context);
+        } else {
+            self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
+        }
+    }
+    fn draw_horz(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        let total_rows = height!(area);
+
+        let pager_ratio = context.runtime_settings.pager.pager_ratio;
+        let bottom_entity_rows = (pager_ratio * total_rows) / 100;
+
+        if bottom_entity_rows > total_rows {
+            clear_area(grid, area);
+            context.dirty_areas.push_back(area);
+            return;
+        }
+
+        let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
+
+        if !self.dirty {
+            if self.show_mailview {
+                self.mailview
+                    .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+            }
+            return;
+        }
+
+        self.dirty = false;
+
+        /* First draw the thread subject on the first row */
+        let y = {
+            let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
+                .as_ref()
+                .unwrap();
+            let threads = &mailbox.threads;
+            let container = &threads.containers()[threads.root_set()[self.coordinates.2]];
+            let i = if let Some(i) = container.message() {
+                i
+            } else {
+                threads.containers()[container.first_child().unwrap()]
+                    .message()
+                    .unwrap()
+            };
+            let envelope: &Envelope = &mailbox.collection[i];
+
+            let (x, y) = write_string_to_grid(
+                &envelope.subject(),
+                grid,
+                Color::Byte(33),
+                Color::Default,
+                area,
+                true,
+            );
+            for x in x..=get_x(bottom_right) {
+                grid[(x, y)].set_ch(' ');
+                grid[(x, y)].set_bg(Color::Default);
+                grid[(x, y)].set_fg(Color::Default);
+            }
+            //context.dirty_areas.push_back(((0,0), set_y(bottom_right, y)));
+            y + 2
+        };
+
+        let (width, height) = self.content.size();
+        if height == 0 || height == self.cursor_pos || width == 0 {
+            return;
+        }
+
+        /* if this is the first ever draw, there is nothing on the grid to update so populate it
+         * first */
+        if !self.initiated {
+            clear_area(grid, (set_y(upper_left, y - 1), bottom_right));
+            let (width, height) = self.content.size();
+
+            if self.show_mailview {
+                let area = (set_y(upper_left, y), set_y(bottom_right, mid - 1));
+                let upper_left = upper_left!(area);
+                let bottom_right = bottom_right!(area);
+
+                let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 2;
+                let page_no = (self.new_cursor_pos).wrapping_div(rows);
+                let top_idx = page_no * rows;
+
+                copy_area(
+                    grid,
+                    &self.content,
+                    area,
+                    ((0, 2 * top_idx), (width - 1, height - 1)),
+                );
+                for x in get_x(upper_left)..=get_x(bottom_right) {
+                    set_and_join_box(grid, (x, mid), HORZ_BOUNDARY);
+                }
+            } else {
+                let area = (set_y(upper_left, y), bottom_right);
+                let upper_left = upper_left!(area);
+                let bottom_right = bottom_right!(area);
+
+                let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 2;
+                let page_no = (self.new_cursor_pos).wrapping_div(rows);
+                let top_idx = page_no * rows;
+                copy_area(
+                    grid,
+                    &self.content,
+                    area,
+                    ((0, 2 * top_idx), (width - 1, height - 1)),
+                );
+            }
+            context.dirty_areas.push_back(area);
+            self.initiated = true;
+        }
+        if self.show_mailview {
+            self.draw_list(
+                grid,
+                (set_y(upper_left, y), set_y(bottom_right, mid - 1)),
+                context,
+            );
+            self.mailview
+                .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+        } else {
+            self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
+        }
+    }
+}
+
+impl fmt::Display for ThreadView {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display subject/info
+        write!(f, "view thread")
+    }
+}
+
+impl Component for ThreadView {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let total_rows = height!(area);
+        let total_cols = width!(area);
+        if total_rows < 24 || total_cols < 80 {
+            return;
+        }
+
+        /* If user has selected another mail to view, change to it */
         if self.new_expanded_pos != self.expanded_pos {
             self.expanded_pos = self.new_expanded_pos;
             self.mailview = MailView::new(
@@ -384,13 +533,12 @@ impl Component for ThreadView {
                 None,
             );
         }
-        self.draw_list(
-            grid,
-            (set_y(upper_left, y), set_y(bottom_right, mid - 1)),
-            context,
-        );
-        self.mailview
-            .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
+
+        if total_cols >= self.content.size().0 + 74 {
+            self.draw_vert(grid, area, context);
+        } else {
+            self.draw_horz(grid, area, context);
+        }
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
         if self.mailview.process_event(event, context) {
@@ -399,7 +547,7 @@ impl Component for ThreadView {
         match event.event_type {
             UIEventType::Input(Key::Up) => {
                 if self.cursor_pos > 0 {
-                    self.new_cursor_pos -= 1;
+                    self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
                     self.dirty = true;
                 }
                 return true;
@@ -414,7 +562,15 @@ impl Component for ThreadView {
             }
             UIEventType::Input(Key::Char('\n')) => {
                 self.new_expanded_pos = self.cursor_pos;
-                self.dirty = true;
+                self.show_mailview = true;
+                self.initiated = false;
+                self.set_dirty();
+                return true;
+            }
+            UIEventType::Input(Key::Char('p')) => {
+                self.show_mailview = !self.show_mailview;
+                self.initiated = false;
+                self.set_dirty();
                 return true;
             }
             UIEventType::Resize => {

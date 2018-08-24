@@ -80,8 +80,18 @@ impl Backends {
 }
 
 pub struct RefreshEvent {
-    pub hash: u64,
-    pub folder: String,
+    hash: u64,
+    folder: String,
+}
+
+impl RefreshEvent {
+    pub fn hash(&self) -> u64 {
+        self.hash
+    }
+
+    pub fn folder(&self) -> &str {
+        self.folder.as_str()
+    }
 }
 
 /// A `RefreshEventConsumer` is a boxed closure that must be used to consume a `RefreshEvent` and

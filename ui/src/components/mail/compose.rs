@@ -69,10 +69,10 @@ impl Component for Composer {
 
             if self.dirty {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
-                    grid[(mid, i)].set_ch(VERT_BOUNDARY);
+                    set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
                     grid[(mid, i)].set_fg(Color::Default);
                     grid[(mid, i)].set_bg(Color::Default);
-                    grid[(mid + 80, i)].set_ch(VERT_BOUNDARY);
+                    set_and_join_box(grid, (mid + 80, i), VERT_BOUNDARY);
                     grid[(mid + 80, i)].set_fg(Color::Default);
                     grid[(mid + 80, i)].set_bg(Color::Default);
                 }
@@ -84,7 +84,7 @@ impl Component for Composer {
 
         if self.dirty {
             for i in get_x(upper_left) + mid + 1..=get_x(upper_left) + mid + 79 {
-                grid[(i, header_height)].set_ch(HORZ_BOUNDARY);
+                set_and_join_box(grid, (i, header_height), HORZ_BOUNDARY);
                 grid[(i, header_height)].set_fg(Color::Default);
                 grid[(i, header_height)].set_bg(Color::Default);
             }
@@ -151,6 +151,7 @@ impl Component for Composer {
     fn is_dirty(&self) -> bool {
         self.dirty || self.pager.is_dirty()
     }
+
     fn set_dirty(&mut self) {
         self.dirty = true;
         self.pager.set_dirty();

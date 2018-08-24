@@ -58,7 +58,7 @@ pub enum ThreadEvent {
 
 impl From<RefreshEvent> for ThreadEvent {
     fn from(event: RefreshEvent) -> Self {
-        ThreadEvent::RefreshMailbox { hash: event.hash }
+        ThreadEvent::RefreshMailbox { hash: event.hash() }
     }
 }
 
