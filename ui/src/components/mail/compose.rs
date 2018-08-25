@@ -20,6 +20,21 @@
  */
 
 use super::*;
+use fnv::FnvHashMap;
+
+struct Draft {
+    headers: FnvHashMap<String, String>,
+    body: String,
+}
+
+impl Default for Draft {
+    fn default() -> Self {
+        Draft {
+            headers: FnvHashMap::with_capacity_and_hasher(8, Default::default()),
+            body: String::new(),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Composer {
