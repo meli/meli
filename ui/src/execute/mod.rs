@@ -71,7 +71,7 @@ named!(
 named!(
     threaded<Action>,
     map!(ws!(tag!("threaded")), |_| {
-        Action::MailListing(MailListingAction::ToggleThreaded)
+        Action::PlainListing(PlainListingAction::ToggleThreaded)
     })
 );
 named!(

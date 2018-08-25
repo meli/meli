@@ -418,7 +418,7 @@ impl Component for CompactListing {
                 self.dirty = true;
             }
             UIEventType::Action(ref action) => match action {
-                Action::MailListing(MailListingAction::ToggleThreaded) => {
+                Action::PlainListing(PlainListingAction::ToggleThreaded) => {
                     context.accounts[self.cursor_pos.0]
                         .runtime_settings
                         .conf_mut()

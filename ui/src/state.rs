@@ -536,8 +536,8 @@ impl<W: Write> State<W> {
                 self.entities[i].rcv_event(
                     &UIEvent {
                         id: 0,
-                        event_type: UIEventType::Action(Action::MailListing(
-                            MailListingAction::ToggleThreaded,
+                        event_type: UIEventType::Action(Action::PlainListing(
+                            PlainListingAction::ToggleThreaded,
                         )),
                     },
                     &mut self.context,

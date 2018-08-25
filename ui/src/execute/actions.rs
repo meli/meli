@@ -26,13 +26,13 @@
 pub use melib::mailbox::{SortField, SortOrder};
 
 #[derive(Debug, Clone)]
-pub enum MailListingAction {
+pub enum PlainListingAction {
     ToggleThreaded,
 }
 
 #[derive(Debug, Clone)]
 pub enum Action {
-    MailListing(MailListingAction),
+    PlainListing(PlainListingAction),
     ViewMailbox(usize),
     Sort(SortField, SortOrder),
     SubSort(SortField, SortOrder),

@@ -29,7 +29,7 @@ const MAX_COLS: usize = 500;
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `MailView`.
 #[derive(Debug)]
-pub struct MailListing {
+pub struct PlainListing {
     /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
     cursor_pos: (usize, usize, usize),
     new_cursor_pos: (usize, usize, usize),
@@ -46,20 +46,20 @@ pub struct MailListing {
     view: Option<MailView>,
 }
 
-impl Default for MailListing {
+impl Default for PlainListing {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl fmt::Display for MailListing {
+impl fmt::Display for PlainListing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "mail")
     }
 }
 
-impl MailListing {
-    /// Helper function to format entry strings for MailListing */
+impl PlainListing {
+    /// Helper function to format entry strings for PlainListing */
     /* TODO: Make this configurable */
     fn make_entry_string(e: &Envelope, idx: usize) -> String {
         format!(
@@ -72,7 +72,7 @@ impl MailListing {
 
     pub fn new() -> Self {
         let content = CellBuffer::new(0, 0, Cell::with_char(' '));
-        MailListing {
+        PlainListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (0, 0, 0),
             length: 0,
@@ -193,7 +193,7 @@ impl MailListing {
                     Color::Default
                 };
                 let (x, _) = write_string_to_grid(
-                    &MailListing::make_thread_entry(
+                    &PlainListing::make_thread_entry(
                         envelope,
                         idx,
                         indentation,
@@ -275,7 +275,7 @@ impl MailListing {
                     Color::Default
                 };
                 let (x, y) = write_string_to_grid(
-                    &MailListing::make_entry_string(envelope, idx),
+                    &PlainListing::make_entry_string(envelope, idx),
                     &mut self.content,
                     fg_color,
                     bg_color,
@@ -436,7 +436,7 @@ impl MailListing {
             "{}{}{} ",
             idx,
             " ".repeat(idx_width + 2 - (idx.to_string().chars().count())),
-            MailListing::format_date(&envelope)
+            PlainListing::format_date(&envelope)
         );
         for i in 0..indent {
             if indentations.len() > i && indentations[i] {
@@ -485,7 +485,7 @@ impl MailListing {
     }
 }
 
-impl Component for MailListing {
+impl Component for PlainListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.unfocused {
             if !self.is_dirty() {
@@ -760,7 +760,7 @@ impl Component for MailListing {
                 self.dirty = true;
             }
             UIEventType::Action(ref action) => match action {
-                Action::MailListing(MailListingAction::ToggleThreaded) => {
+                Action::PlainListing(PlainListingAction::ToggleThreaded) => {
                     context.accounts[self.cursor_pos.0]
                         .runtime_settings
                         .conf_mut()
