@@ -356,12 +356,10 @@ impl Attachment {
     }
 }
 
-
 pub fn interpret_format_flowed(_t: &str) -> String {
     //let mut n = String::with_capacity(t.len());
     unimplemented!()
 }
-
 
 fn decode_rfc822(_raw: &[u8]) -> Attachment {
     let builder = AttachmentBuilder::new(b"");
@@ -383,7 +381,6 @@ fn decode_rfc822(_raw: &[u8]) -> Attachment {
 }
 
 type Filter = Box<Fn(&Attachment, &mut Vec<u8>) -> ()>;
-
 
 fn decode_rec_helper(a: &Attachment, filter: &Option<Filter>) -> Vec<u8> {
     let mut ret = match a.content_type {
@@ -418,11 +415,9 @@ fn decode_rec_helper(a: &Attachment, filter: &Option<Filter>) -> Vec<u8> {
     ret
 }
 
-
 pub fn decode_rec(a: &Attachment, filter: Option<Filter>) -> Vec<u8> {
     decode_rec_helper(a, &filter)
 }
-
 
 fn decode_helper(a: &Attachment, filter: &Option<Filter>) -> Vec<u8> {
     let charset = match a.content_type {
@@ -458,7 +453,6 @@ fn decode_helper(a: &Attachment, filter: &Option<Filter>) -> Vec<u8> {
 
     ret
 }
-
 
 pub fn decode(a: &Attachment, filter: Option<Filter>) -> Vec<u8> {
     decode_helper(a, &filter)
