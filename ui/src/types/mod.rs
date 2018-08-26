@@ -41,6 +41,13 @@ use std;
 use std::fmt;
 use std::thread;
 
+#[derive(Debug)]
+pub enum StatusEvent {
+    DisplayMessage(String),
+    BufClear,
+    BufSet(String),
+}
+
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads
 /// to the main process.
 #[derive(Debug)]
@@ -83,7 +90,7 @@ pub enum UIEventType {
     Notification(String),
     EditDraft(File),
     Action(Action),
-    StatusNotification(String),
+    StatusEvent(StatusEvent),
     MailboxUpdate((usize, usize)),
 
     StartupCheck,

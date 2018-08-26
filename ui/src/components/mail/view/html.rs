@@ -86,9 +86,9 @@ impl Component for HtmlView {
             } else {
                 context.replies.push_back(UIEvent {
                     id: 0,
-                    event_type: UIEventType::StatusNotification(
+                    event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage(
                         "Couldn't find a default application for html files.".to_string(),
-                    ),
+                    )),
                 });
             }
             return true;

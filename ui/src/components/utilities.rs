@@ -428,6 +428,7 @@ pub struct StatusBar {
     status: String,
     notifications: VecDeque<String>,
     ex_buffer: String,
+    display_buffer: String,
     mode: UIMode,
     height: usize,
     dirty: bool,
@@ -447,6 +448,7 @@ impl StatusBar {
             status: String::with_capacity(256),
             notifications: VecDeque::new(),
             ex_buffer: String::with_capacity(256),
+            display_buffer: String::with_capacity(8),
             dirty: true,
             mode: UIMode::Normal,
             height: 1,
@@ -467,6 +469,15 @@ impl StatusBar {
                 false,
             );
         }
+        let (x, y) = bottom_right!(area);
+        for (idx, c) in self.display_buffer.chars().rev().enumerate() {
+            if let Some(cell) = grid.get_mut(x.saturating_sub(idx).saturating_sub(1), y) {
+                cell.set_ch(c);
+            } else {
+                break;
+            }
+        }
+
         change_colors(grid, area, Color::Byte(123), Color::Byte(26));
         context.dirty_areas.push_back(area);
     }
@@ -595,8 +606,16 @@ impl Component for StatusBar {
             UIEventType::Resize => {
                 self.dirty = true;
             }
-            UIEventType::StatusNotification(s) => {
+            UIEventType::StatusEvent(StatusEvent::DisplayMessage(s)) => {
                 self.notifications.push_back(s.clone());
+                self.dirty = true;
+            }
+            UIEventType::StatusEvent(StatusEvent::BufClear) => {
+                self.display_buffer.clear();
+                self.dirty = true;
+            }
+            UIEventType::StatusEvent(StatusEvent::BufSet(s)) => {
+                self.display_buffer = s.clone();
                 self.dirty = true;
             }
             _ => {}

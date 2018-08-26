@@ -326,8 +326,12 @@ impl Component for EnvelopeView {
             }
         }
         match event.event_type {
-            UIEventType::Input(Key::Esc) => {
+            UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Alt('')) => {
                 self.cmd_buf.clear();
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::StatusEvent(StatusEvent::BufClear),
+                });
                 return true;
             }
             UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
@@ -358,6 +362,10 @@ impl Component for EnvelopeView {
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::StatusEvent(StatusEvent::BufClear),
+                });
 
                 {
                     let envelope: &Envelope = self.wrapper.envelope();
@@ -382,8 +390,11 @@ impl Component for EnvelopeView {
                             ContentType::Multipart { .. } => {
                                 context.replies.push_back(UIEvent {
                                     id: 0,
-                                    event_type: UIEventType::StatusNotification(
-                                        "Multipart attachments are not supported yet.".to_string(),
+                                    event_type: UIEventType::StatusEvent(
+                                        StatusEvent::DisplayMessage(
+                                            "Multipart attachments are not supported yet."
+                                                .to_string(),
+                                        ),
                                     ),
                                 });
                                 return true;
@@ -405,10 +416,12 @@ impl Component for EnvelopeView {
                                 } else {
                                     context.replies.push_back(UIEvent {
                                         id: 0,
-                                        event_type: UIEventType::StatusNotification(format!(
-                                            "Couldn't find a default application for type {}",
-                                            attachment_type
-                                        )),
+                                        event_type: UIEventType::StatusEvent(
+                                            StatusEvent::DisplayMessage(format!(
+                                                "Couldn't find a default application for type {}",
+                                                attachment_type
+                                            )),
+                                        ),
                                     });
                                     return true;
                                 }
@@ -417,9 +430,8 @@ impl Component for EnvelopeView {
                     } else {
                         context.replies.push_back(UIEvent {
                             id: 0,
-                            event_type: UIEventType::StatusNotification(format!(
-                                "Attachment `{}` not found.",
-                                lidx
+                            event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage(
+                                format!("Attachment `{}` not found.", lidx),
                             )),
                         });
                         return true;
@@ -432,6 +444,10 @@ impl Component for EnvelopeView {
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::StatusEvent(StatusEvent::BufClear),
+                });
                 let url = {
                     let envelope: &Envelope = self.wrapper.envelope();
                     let finder = LinkFinder::new();
@@ -445,9 +461,8 @@ impl Component for EnvelopeView {
                     } else {
                         context.replies.push_back(UIEvent {
                             id: 0,
-                            event_type: UIEventType::StatusNotification(format!(
-                                "Link `{}` not found.",
-                                lidx
+                            event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage(
+                                format!("Link `{}` not found.", lidx),
                             )),
                         });
                         return true;

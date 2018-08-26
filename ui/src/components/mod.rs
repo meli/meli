@@ -39,7 +39,7 @@ use std::fmt;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 
-use super::{Key, UIEvent, UIEventType};
+use super::{Key, StatusEvent, UIEvent, UIEventType};
 /// The upper and lower boundary char.
 const HORZ_BOUNDARY: char = '─';
 /// The left and right boundary char.
@@ -112,6 +112,22 @@ fn new_draft(_context: &mut Context) -> Vec<u8> {
     v.push_str("Message-Id: \n\n");
     v.into_bytes()
 }
+
+pub(crate) fn is_box_char(ch: char) -> bool {
+    match ch {
+        HORZ_BOUNDARY | VERT_BOUNDARY => true,
+        _ => false,
+    }
+}
+
+/*
+ * pub(crate) fn is_box_char(ch: char) -> bool {
+ *  match ch {
+ *      '└' | '─' | '┘' | '┴' | '┌' | '│' | '├' | '┐' | '┬' | '┤' | '┼' | '╷' | '╵' | '╴' | '╶' => true,
+ *      _ => false,
+ *  }
+ * }
+ */
 
 fn bin_to_ch(b: u32) -> char {
     match b {
@@ -345,7 +361,7 @@ fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
     bin_set
 }
 
-fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: char) {
+pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: char) {
     /* Connected sides:
      *
      *        1
