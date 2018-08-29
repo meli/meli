@@ -63,6 +63,7 @@ impl Component for Composer {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
+        let upper_left = set_y(upper_left, get_y(upper_left) + 1);
         let header_height = 5;
         let width = width!(area);
         let mid = if width > 80 {
@@ -71,10 +72,10 @@ impl Component for Composer {
 
             if self.dirty {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
-                    set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
+                    //set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
                     grid[(mid, i)].set_fg(Color::Default);
                     grid[(mid, i)].set_bg(Color::Default);
-                    set_and_join_box(grid, (mid + 80, i), VERT_BOUNDARY);
+                    //set_and_join_box(grid, (mid + 80, i), VERT_BOUNDARY);
                     grid[(mid + 80, i)].set_fg(Color::Default);
                     grid[(mid + 80, i)].set_bg(Color::Default);
                 }
@@ -86,7 +87,7 @@ impl Component for Composer {
 
         if self.dirty {
             for i in get_x(upper_left) + mid + 1..=get_x(upper_left) + mid + 79 {
-                set_and_join_box(grid, (i, header_height), HORZ_BOUNDARY);
+                //set_and_join_box(grid, (i, header_height), HORZ_BOUNDARY);
                 grid[(i, header_height)].set_fg(Color::Default);
                 grid[(i, header_height)].set_bg(Color::Default);
             }
