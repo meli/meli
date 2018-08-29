@@ -40,6 +40,14 @@ impl Default for Draft {
 }
 
 impl Draft {
+    pub fn headers(&self) -> &FnvHashMap<String, String> {
+        &self.headers
+    }
+
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+
     pub fn set_body(&mut self, s: String) {
         self.body = s;
     }
@@ -47,7 +55,16 @@ impl Draft {
     pub fn to_string(&self) -> Result<String> {
         let mut ret = String::new();
 
+        let headers = &["Date", "From", "To", "Subject", "Message-ID"];
+        for k in headers {
+            ret.extend(format!("{}: {}\n", k, &self.headers[*k]).chars());
+        }
+
         for (k, v) in &self.headers {
+            if headers.contains(&k.as_str()) {
+                continue;
+            }
+
             ret.extend(format!("{}: {}\n", k, v).chars());
         }
 

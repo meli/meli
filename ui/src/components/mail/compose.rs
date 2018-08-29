@@ -21,12 +21,14 @@
 
 use super::*;
 
+use melib::Draft;
+
 #[derive(Debug)]
 pub struct Composer {
     dirty: bool,
     mode: ViewMode,
     pager: Pager,
-    buffer: String,
+    draft: Draft,
 }
 
 impl Default for Composer {
@@ -34,8 +36,8 @@ impl Default for Composer {
         Composer {
             dirty: true,
             mode: ViewMode::Overview,
-            pager: Pager::from_str("asdfs\nfdsfds\ndsfdsfs\n\n\n\naaaaaaaaaaaaaa\nfdgfd", None),
-            buffer: String::new(),
+            pager: Pager::from_str("", None),
+            draft: Draft::default(),
         }
     }
 }
@@ -61,7 +63,7 @@ impl Component for Composer {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        let header_height = 12;
+        let header_height = 5;
         let width = width!(area);
         let mid = if width > 80 {
             let width = width - 80;
@@ -101,6 +103,40 @@ impl Component for Composer {
         }
         match self.mode {
             ViewMode::Overview => {
+                let headers = self.draft.headers();
+                {
+                    let (mut x, mut y) = set_x(upper_left, mid + 1);
+                    for k in &["Date", "From", "To", "Subject"] {
+                        let update = {
+                            let (x, y) = write_string_to_grid(
+                                k,
+                                grid,
+                                Color::Default,
+                                Color::Default,
+                                ((x, y), (mid + 78, y)),
+                                true,
+                            );
+                            let (x, y) = write_string_to_grid(
+                                ": ",
+                                grid,
+                                Color::Default,
+                                Color::Default,
+                                ((x, y), (mid + 78, y)),
+                                true,
+                            );
+                            write_string_to_grid(
+                                &headers[*k],
+                                grid,
+                                Color::Default,
+                                Color::Default,
+                                ((x, y), (mid + 78, y)),
+                                true,
+                            )
+                        };
+                        x = mid + 1;
+                        y = update.1 + 1;
+                    }
+                }
                 self.pager.draw(grid, body_area, context);
             }
         }
@@ -121,11 +157,8 @@ impl Component for Composer {
                 {
                     context.input_kill();
                 }
-                let mut f = if self.buffer.is_empty() {
-                    create_temp_file(&new_draft(context), None)
-                } else {
-                    create_temp_file(&self.buffer.as_bytes(), None)
-                };
+                let mut f =
+                    create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
                 //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
 
                 // TODO: check exit status
@@ -137,8 +170,8 @@ impl Component for Composer {
                     .output()
                     .expect("failed to execute process");
                 let result = f.read_to_string();
-                self.buffer = result.clone();
-                self.pager.update_from_str(result.as_str());
+                self.draft = Draft::from_str(result.as_str()).unwrap();
+                self.pager.update_from_str(self.draft.body());
                 context.restore_input();
                 self.dirty = true;
                 return true;
