@@ -54,9 +54,6 @@ use execute::*;
 pub mod state;
 pub use state::*;
 
-mod compose;
-pub(crate) use compose::*;
-
 pub mod components;
 pub use components::*;
 

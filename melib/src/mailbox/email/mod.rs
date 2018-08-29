@@ -22,6 +22,10 @@
 /*!
  * Email parsing, handling, sending etc.
  */
+
+mod compose;
+pub use self::compose::*;
+
 mod attachment_types;
 pub mod attachments;
 pub use self::attachments::*;
@@ -439,6 +443,11 @@ impl Envelope {
             .unwrap_or_else(|_| Vec::new())
     }
     pub fn body_bytes(&self, bytes: &[u8]) -> Attachment {
+        if bytes.is_empty() {
+            let builder = AttachmentBuilder::new(bytes);
+            return builder.build();
+        }
+
         let (headers, body) = match parser::mail(bytes).to_full_result() {
             Ok(v) => v,
             Err(_) => {
@@ -463,10 +472,12 @@ impl Envelope {
     }
     pub fn body(&self, mut operation: Box<BackendOp>) -> Attachment {
         let file = operation.as_bytes();
+        self.body_bytes(file.unwrap())
+        /*
         let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
             Ok(v) => v,
             Err(_) => {
-                eprintln!("error in parsing mail\n");
+                eprintln!("2error in parsing mail\n");
                 let error_msg = b"Mail cannot be shown because of errors.";
                 let mut builder = AttachmentBuilder::new(error_msg);
                 return builder.build();
@@ -484,6 +495,7 @@ impl Envelope {
             }
         }
         builder.build()
+        */
     }
     pub fn subject(&self) -> Cow<str> {
         match self.subject {

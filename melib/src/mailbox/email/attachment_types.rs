@@ -98,7 +98,7 @@ impl Display for MultipartType {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum ContentType {
     Text {
         kind: Text,
@@ -183,7 +183,8 @@ impl Display for Text {
         }
     }
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum ContentTransferEncoding {
     _8Bit,
     _7Bit,
@@ -195,5 +196,19 @@ pub enum ContentTransferEncoding {
 impl Default for ContentTransferEncoding {
     fn default() -> Self {
         ContentTransferEncoding::_7Bit
+    }
+}
+
+impl Display for ContentTransferEncoding {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match *self {
+            ContentTransferEncoding::_7Bit => write!(f, "7bit"),
+            ContentTransferEncoding::_8Bit => write!(f, "8bit"),
+            ContentTransferEncoding::Base64 => write!(f, "base64"),
+            ContentTransferEncoding::QuotedPrintable => write!(f, "quoted-printable"),
+            ContentTransferEncoding::Other { tag: ref t } => {
+                panic!("unknown encoding {:?}", str::from_utf8(t))
+            }
+        }
     }
 }

@@ -35,7 +35,7 @@ pub use mailbox::email::attachment_types::*;
  */
 // TODO: Add example.
 //
-#[derive(Default)]
+#[derive(Default, PartialEq)]
 pub struct AttachmentBuilder {
     content_type: ContentType,
     content_transfer_encoding: ContentTransferEncoding,
@@ -43,7 +43,7 @@ pub struct AttachmentBuilder {
     raw: Vec<u8>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct Attachment {
     content_type: ContentType,
     content_transfer_encoding: ContentTransferEncoding,
@@ -272,6 +272,18 @@ impl fmt::Display for Attachment {
 }
 
 impl Attachment {
+    pub fn new(
+        content_type: ContentType,
+        content_transfer_encoding: ContentTransferEncoding,
+        raw: Vec<u8>,
+    ) -> Self {
+        Attachment {
+            content_type,
+            content_transfer_encoding,
+            raw,
+        }
+    }
+
     pub fn bytes(&self) -> &[u8] {
         &self.raw
     }
