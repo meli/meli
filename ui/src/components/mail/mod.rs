@@ -152,11 +152,10 @@ impl AccountMenu {
                 &format!("{} {}   {}\n  ", *inc, &entries[root].1.name(), count),
             );
             *inc += 1;
-            let children_no = entries[root].1.children().len();
-            for (idx, child) in entries[root].1.children().iter().enumerate() {
+            for child in entries[root].1.children().iter() {
                 let len = s.len();
-                s.insert_str(len, &format!("{}├─", depth));
-                push(depth, if idx == children_no - 1 { '│' } else { ' ' });
+                s.insert_str(len, &format!("{} ", depth));
+                push(depth, ' ');
                 print(*child, parents, depth, entries, s, inc, index, context);
                 pop(depth);
             }
@@ -177,11 +176,7 @@ impl AccountMenu {
             if idx == lines_len {
                 break;
             }
-            let s = if idx == lines_len - 2 {
-                lines[idx].replace("├", "└")
-            } else {
-                lines[idx].to_string()
-            };
+            let s = lines[idx].to_string();
             let (color_fg, color_bg) = if highlight {
                 if self.cursor.unwrap().1 + 1 == idx {
                     (Color::Byte(233), Color::Byte(15))
@@ -200,6 +195,28 @@ impl AccountMenu {
                 (set_y(upper_left, y), bottom_right),
                 false,
             );
+            {
+                let mut x = get_x(upper_left);
+                while let Some(cell) = grid.get_mut(x, y) {
+                    if x == get_x(bottom_right) {
+                        break;
+                    }
+                    match cell.ch() {
+                        c if c.is_numeric() => {
+                            cell.set_fg(Color::Byte(243));
+                            x += 1;
+                            continue;
+                        },
+                        c if c.is_whitespace() => {
+                            x += 1;
+                            continue;
+                        },
+                        _ => {
+                            break;
+                        }
+                    }
+                }
+            }
 
             if highlight && idx > 1 && self.cursor.unwrap().1 == idx - 1 {
                 change_colors(grid, ((x, y), (get_x(bottom_right), y)), color_fg, color_bg);
