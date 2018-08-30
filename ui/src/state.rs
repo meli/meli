@@ -362,9 +362,11 @@ impl State<std::io::Stdout> {
 
         write!(
             self.stdout(),
-            "{}{}",
+            "{}{}{}{}",
             termion::screen::ToAlternateScreen,
-            cursor::Hide
+            cursor::Hide,
+            clear::All,
+            cursor::Goto(1, 1)
         ).unwrap();
         self.flush();
     }
