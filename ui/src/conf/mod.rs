@@ -25,6 +25,7 @@ extern crate xdg;
 pub mod pager;
 
 use melib::conf::AccountSettings;
+use melib::error::*;
 use pager::PagerSettings;
 
 use std::collections::HashMap;
@@ -34,8 +35,34 @@ pub struct FileAccount {
     root_folder: String,
     format: String,
     sent_folder: String,
+    identity: String,
+    display_name: Option<String>,
     threaded: bool,
     folders: Option<HashMap<String, String>>,
+}
+
+impl From<FileAccount> for AccountConf {
+    fn from(x: FileAccount) -> Self {
+        let format = x.format.to_lowercase();
+        let sent_folder = x.sent_folder.clone();
+        let root_folder = x.root_folder.clone();
+        let identity = x.identity.clone();
+        let display_name = x.display_name.clone();
+
+        let acc = AccountSettings {
+            name: String::new(),
+            root_folder,
+            format,
+            sent_folder,
+            identity,
+            display_name,
+        };
+
+        AccountConf {
+            account: acc,
+            conf: x,
+        }
+    }
 }
 
 impl FileAccount {
@@ -85,45 +112,33 @@ pub struct Settings {
 
 use self::config::{Config, File, FileFormat};
 impl FileSettings {
-    pub fn new() -> FileSettings {
+    pub fn new() -> Result<FileSettings> {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
         let config_path = xdg_dirs
             .place_config_file("config")
             .expect("cannot create configuration directory");
-        //let setts = Config::default().merge(File::new(config_path.to_str().unwrap_or_default(), config::FileFormat::Toml)).unwrap();
         let mut s = Config::new();
         let s = s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml));
 
         /* No point in returning without a config file.
            TODO: Error and exit instead of panic. */
-        s.unwrap().deserialize().unwrap()
+        match s.unwrap().deserialize() {
+            Ok(v) => Ok(v),
+            Err(e) => Err(MeliError::new(e.to_string())),
+        }
     }
 }
 
 impl Settings {
     pub fn new() -> Settings {
-        let fs = FileSettings::new();
+        let fs = FileSettings::new().unwrap_or_else(|e| panic!(format!("{}", e)));
         let mut s: HashMap<String, AccountConf> = HashMap::new();
 
         for (id, x) in fs.accounts {
-            let format = x.format.to_lowercase();
-            let sent_folder = x.sent_folder.clone();
-            let root_folder = x.root_folder.clone();
+            let mut ac = AccountConf::from(x);
+            ac.account.set_name(id.clone());
 
-            let acc = AccountSettings {
-                name: id.clone(),
-                root_folder,
-                format,
-                sent_folder,
-            };
-
-            s.insert(
-                id,
-                AccountConf {
-                    account: acc,
-                    conf: x,
-                },
-            );
+            s.insert(id, ac);
         }
 
         Settings {

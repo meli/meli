@@ -40,6 +40,9 @@ impl Default for Draft {
 }
 
 impl Draft {
+    pub fn headers_mut(&mut self) -> &mut FnvHashMap<String, String> {
+        &mut self.headers
+    }
     pub fn headers(&self) -> &FnvHashMap<String, String> {
         &self.headers
     }

@@ -206,11 +206,11 @@ impl AccountMenu {
                             cell.set_fg(Color::Byte(243));
                             x += 1;
                             continue;
-                        },
+                        }
                         c if c.is_whitespace() => {
                             x += 1;
                             continue;
-                        },
+                        }
                         _ => {
                             break;
                         }

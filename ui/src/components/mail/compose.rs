@@ -25,10 +25,13 @@ use melib::Draft;
 
 #[derive(Debug)]
 pub struct Composer {
-    dirty: bool,
     mode: ViewMode,
     pager: Pager,
+
     draft: Draft,
+    account_cursor: usize,
+
+    dirty: bool,
 }
 
 impl Default for Composer {
@@ -36,8 +39,9 @@ impl Default for Composer {
         Composer {
             dirty: true,
             mode: ViewMode::Overview,
-            pager: Pager::from_str("", None),
+            pager: Pager::default(),
             draft: Draft::default(),
+            account_cursor: 0,
         }
     }
 }
@@ -55,9 +59,79 @@ impl fmt::Display for Composer {
     }
 }
 
+impl Composer {
+    fn draw_header_table(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+
+        let headers = self.draft.headers();
+        {
+            let (mut x, mut y) = upper_left;
+            for k in &["Date", "From", "To", "Subject"] {
+                let update = {
+                    let (x, y) = write_string_to_grid(
+                        k,
+                        grid,
+                        Color::Default,
+                        Color::Default,
+                        ((x, y), set_y(bottom_right, y)),
+                        true,
+                    );
+                    let (x, y) = write_string_to_grid(
+                        ": ",
+                        grid,
+                        Color::Default,
+                        Color::Default,
+                        ((x, y), set_y(bottom_right, y)),
+                        true,
+                    );
+                    let (x, y) = if k == &"From" {
+                        write_string_to_grid(
+                            "◀ ",
+                            grid,
+                            Color::Byte(251),
+                            Color::Default,
+                            ((x, y), set_y(bottom_right, y)),
+                            true,
+                        )
+                    } else {
+                        (x, y)
+                    };
+                    let (x, y) = write_string_to_grid(
+                        &headers[*k],
+                        grid,
+                        Color::Default,
+                        Color::Default,
+                        ((x, y), set_y(bottom_right, y)),
+                        true,
+                    );
+                    if k == &"From" {
+                        write_string_to_grid(
+                            " ▶",
+                            grid,
+                            Color::Byte(251),
+                            Color::Default,
+                            ((x, y), set_y(bottom_right, y)),
+                            true,
+                        )
+                    } else {
+                        (x, y)
+                    }
+                };
+                x = get_x(upper_left);
+                y = update.1 + 1;
+            }
+        }
+    }
+}
+
 impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
+            self.draft.headers_mut().insert(
+                "From".into(),
+                get_display_name(context, self.account_cursor),
+            );
             clear_area(grid, area);
         }
         let upper_left = upper_left!(area);
@@ -93,6 +167,7 @@ impl Component for Composer {
             }
         }
 
+        let header_area = (set_x(upper_left, mid + 1), (mid + 78, header_height + 1));
         let body_area = (
             (mid + 1, header_height + 2),
             (mid + 78, get_y(bottom_right)),
@@ -104,40 +179,7 @@ impl Component for Composer {
         }
         match self.mode {
             ViewMode::Overview => {
-                let headers = self.draft.headers();
-                {
-                    let (mut x, mut y) = set_x(upper_left, mid + 1);
-                    for k in &["Date", "From", "To", "Subject"] {
-                        let update = {
-                            let (x, y) = write_string_to_grid(
-                                k,
-                                grid,
-                                Color::Default,
-                                Color::Default,
-                                ((x, y), (mid + 78, y)),
-                                true,
-                            );
-                            let (x, y) = write_string_to_grid(
-                                ": ",
-                                grid,
-                                Color::Default,
-                                Color::Default,
-                                ((x, y), (mid + 78, y)),
-                                true,
-                            );
-                            write_string_to_grid(
-                                &headers[*k],
-                                grid,
-                                Color::Default,
-                                Color::Default,
-                                ((x, y), (mid + 78, y)),
-                                true,
-                            )
-                        };
-                        x = mid + 1;
-                        y = update.1 + 1;
-                    }
-                }
+                self.draw_header_table(grid, header_area, context);
                 self.pager.draw(grid, body_area, context);
             }
         }
@@ -151,6 +193,26 @@ impl Component for Composer {
         match event.event_type {
             UIEventType::Resize => {
                 self.dirty = true;
+            }
+            UIEventType::Input(Key::Left) => {
+                self.account_cursor = self.account_cursor.saturating_sub(1);
+                self.draft.headers_mut().insert(
+                    "From".into(),
+                    get_display_name(context, self.account_cursor),
+                );
+                self.dirty = true;
+                return true;
+            }
+            UIEventType::Input(Key::Right) => {
+                if self.account_cursor + 1 < context.accounts.len() {
+                    self.account_cursor += 1;
+                    self.draft.headers_mut().insert(
+                        "From".into(),
+                        get_display_name(context, self.account_cursor),
+                    );
+                    self.dirty = true;
+                }
+                return true;
             }
             UIEventType::Input(Key::Char('\n')) => {
                 use std::process::{Command, Stdio};
@@ -177,6 +239,16 @@ impl Component for Composer {
                 self.dirty = true;
                 return true;
             }
+            UIEventType::Input(Key::Char('m')) => {
+                let mut f =
+                    create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::EditDraft(f),
+                });
+                self.draft = Draft::default();
+                return true;
+            }
             _ => {}
         }
         false
@@ -189,5 +261,14 @@ impl Component for Composer {
     fn set_dirty(&mut self) {
         self.dirty = true;
         self.pager.set_dirty();
+    }
+}
+
+fn get_display_name(context: &Context, idx: usize) -> String {
+    let settings = context.accounts[idx].runtime_settings.account();
+    if let Some(d) = settings.display_name.as_ref() {
+        format!("{} <{}>", d, settings.identity)
+    } else {
+        settings.identity.to_string()
     }
 }

@@ -25,6 +25,8 @@ pub struct AccountSettings {
     pub root_folder: String,
     pub format: String,
     pub sent_folder: String,
+    pub identity: String,
+    pub display_name: Option<String>,
 }
 
 impl AccountSettings {
@@ -34,7 +36,16 @@ impl AccountSettings {
     pub fn name(&self) -> &str {
         &self.name
     }
+    pub fn set_name(&mut self, s: String) {
+        self.name = s;
+    }
     pub fn root_folder(&self) -> &str {
         &self.root_folder
+    }
+    pub fn identity(&self) -> &str {
+        &self.identity
+    }
+    pub fn display_name(&self) -> Option<&String> {
+        self.display_name.as_ref()
     }
 }
