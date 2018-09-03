@@ -640,48 +640,9 @@ impl Component for PlainListing {
                 return true;
             }
             UIEventType::Input(Key::Char('m')) if !self.unfocused => {
-                use std::process::{Command, Stdio};
-                /* Kill input thread so that spawned command can be sole receiver of stdin */
-                {
-                    /* I tried thread::park() here but for some reason it never blocked and always
-                     * returned. Spinlocks are also useless because you have to keep the mutex
-                     * guard alive til the child process exits, which requires some effort.
-                     *
-                     * The only problem with this approach is tht the user has to send some input
-                     * in order for the input-thread to wake up and realise it should kill itself.
-                     *
-                     * I tried writing to stdin/tty manually but for some reason rustty didn't
-                     * acknowledge it.
-                     */
-
-                    /*
-                     * tx sends to input-thread and it kills itself.
-                     */
-                    context.input_kill();
-                }
-                let mut f = create_temp_file(&new_draft(context), None);
-                //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
-
-                // TODO: check exit status
-                let mut output = Command::new("vim")
-                    .arg("+/^$")
-                    .arg(&f.path())
-                    .stdin(Stdio::inherit())
-                    .stdout(Stdio::inherit())
-                    .spawn()
-                    .expect("failed to execute process");
-
-                /*
-                 * Main loop will wait on children and when they reap them the loop spawns a new
-                 * input-thread
-                 */
                 context.replies.push_back(UIEvent {
                     id: 0,
-                    event_type: UIEventType::Fork(ForkType::NewDraft(f, output)),
-                });
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::ChangeMode(UIMode::Fork),
+                    event_type: UIEventType::Action(Tab(NewDraft)),
                 });
                 return true;
             }

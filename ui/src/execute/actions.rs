@@ -35,6 +35,8 @@ pub enum ListingAction {
 
 #[derive(Debug, Clone)]
 pub enum TabAction {
+    NewDraft,
+    Reply((usize, usize, usize), usize), // thread coordinates (account, mailbox, root_set idx) and message idx
     Close,
     Kill(Uuid),
 }

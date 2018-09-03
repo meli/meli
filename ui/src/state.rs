@@ -521,28 +521,6 @@ impl State {
                 }
                 return;
             }
-            UIEventType::EditDraft(mut file) => {
-                eprintln!("edit draft event");
-                use std::io::Read;
-                use std::process::{Command, Stdio};
-                let mut output = Command::new("msmtp")
-                    .arg("-t")
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                    .expect("failed to execute process");
-                {
-                    let mut in_pipe = output.stdin.as_mut().unwrap();
-                    let mut buf = Vec::new();
-                    let mut f = file.file();
-
-                    f.read_to_end(&mut buf).unwrap();
-                    in_pipe.write_all(&buf).unwrap();
-                }
-                output.wait_with_output().expect("Failed to read stdout");
-
-                return;
-            }
             UIEventType::Input(Key::Char('t')) => for i in 0..self.entities.len() {
                 self.entities[i].rcv_event(
                     &UIEvent {
@@ -618,12 +596,6 @@ impl State {
             }
         };
         if should_return_flag {
-            if let Some(ForkType::NewDraft(f, _)) = std::mem::replace(&mut self.child, None) {
-                self.rcv_event(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::EditDraft(f),
-                });
-            }
             return Some(true);
         }
         Some(false)

@@ -636,7 +636,6 @@ impl Envelope {
             }
         }
     }
-    // TODO: Check what references should be like again.
     fn set_references(&mut self, new_val: &[u8]) -> () {
         match self.references {
             Some(ref mut s) => {

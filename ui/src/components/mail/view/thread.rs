@@ -567,10 +567,10 @@ impl Component for ThreadView {
             UIEventType::Input(Key::Char('R')) => {
                 context.replies.push_back(UIEvent {
                     id: 0,
-                    event_type: UIEventType::Reply(
+                    event_type: UIEventType::Action(Tab(Reply(
                         self.coordinates,
                         self.entries[self.expanded_pos].index.1,
-                    ),
+                    ))),
                 });
                 return true;
             }

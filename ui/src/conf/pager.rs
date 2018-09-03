@@ -19,8 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// TODO: Move this to `ui` crate.
-
 fn false_val() -> bool {
     true
 }

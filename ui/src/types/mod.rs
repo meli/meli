@@ -90,14 +90,10 @@ pub enum UIEventType {
     ChangeMode(UIMode),
     Command(String),
     Notification(String),
-    EditDraft(File),
     Action(Action),
     StatusEvent(StatusEvent),
     MailboxUpdate((usize, usize)), // (account_idx, mailbox_idx)
-
-    Reply((usize, usize, usize), usize), // thread coordinates (account, mailbox, root_set idx) and message idx
     EntityKill(Uuid),
-
     StartupCheck,
 }
 

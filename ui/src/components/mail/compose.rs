@@ -431,17 +431,6 @@ impl Component for Composer {
                 self.dirty = true;
                 return true;
             }
-            // TODO: Replace EditDraft with compose tabs
-            UIEventType::Input(Key::Char('m')) => {
-                let mut f =
-                    create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::EditDraft(f),
-                });
-                self.draft = Draft::default();
-                return true;
-            }
             _ => {}
         }
         false

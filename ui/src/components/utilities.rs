@@ -798,7 +798,13 @@ impl Component for Tabbed {
                 self.set_dirty();
                 return true;
             }
-            UIEventType::Reply(coordinates, msg) => {
+            UIEventType::Action(Tab(NewDraft)) => {
+                self.add_component(Box::new(Composer::default()));
+                self.cursor_pos = self.children.len() - 1;
+                self.children[self.cursor_pos].set_dirty();
+                return true;
+            }
+            UIEventType::Action(Tab(Reply(coordinates, msg))) => {
                 self.add_component(Box::new(Composer::with_context(coordinates, msg, context)));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
