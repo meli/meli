@@ -25,15 +25,25 @@
 
 pub use melib::mailbox::{SortField, SortOrder};
 
+extern crate uuid;
+use uuid::Uuid;
+
 #[derive(Debug, Clone)]
-pub enum PlainListingAction {
+pub enum ListingAction {
     ToggleThreaded,
 }
 
 #[derive(Debug, Clone)]
+pub enum TabAction {
+    Close,
+    Kill(Uuid),
+}
+
+#[derive(Debug, Clone)]
 pub enum Action {
-    PlainListing(PlainListingAction),
+    Listing(ListingAction),
     ViewMailbox(usize),
     Sort(SortField, SortOrder),
     SubSort(SortField, SortOrder),
+    Tab(TabAction),
 }

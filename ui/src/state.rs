@@ -39,6 +39,8 @@ use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use termion::{clear, cursor, style};
 
+type StateStdout = termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>;
+
 struct InputHandler {
     rx: Receiver<bool>,
     tx: Sender<bool>,
@@ -133,12 +135,12 @@ impl Context {
 
 /// A State object to manage and own components and entities of the UI. `State` is responsible for
 /// managing the terminal and interfacing with `melib`
-pub struct State<W: Write> {
+pub struct State {
     cols: usize,
     rows: usize,
 
     grid: CellBuffer,
-    stdout: Option<termion::screen::AlternateScreen<termion::raw::RawTerminal<W>>>,
+    stdout: Option<StateStdout>,
     child: Option<ForkType>,
     pub mode: UIMode,
     entities: Vec<Entity>,
@@ -149,7 +151,7 @@ pub struct State<W: Write> {
     threads: FnvHashMap<thread::ThreadId, (chan::Sender<bool>, thread::JoinHandle<()>)>,
 }
 
-impl<W: Write> Drop for State<W> {
+impl Drop for State {
     fn drop(&mut self) {
         // When done, restore the defaults to avoid messing with the terminal.
         write!(
@@ -164,13 +166,13 @@ impl<W: Write> Drop for State<W> {
     }
 }
 
-impl Default for State<std::io::Stdout> {
+impl Default for State {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl State<std::io::Stdout> {
+impl State {
     pub fn new() -> Self {
         /* Create a channel to communicate with other threads. The main process is the sole receiver.
          * */
@@ -370,8 +372,7 @@ impl State<std::io::Stdout> {
         ).unwrap();
         self.flush();
     }
-}
-impl<W: Write> State<W> {
+
     pub fn receiver(&self) -> Receiver<ThreadEvent> {
         self.context.receiver.clone()
     }
@@ -509,7 +510,15 @@ impl<W: Write> State<W> {
             UIEventType::Fork(child) => {
                 self.mode = UIMode::Fork;
                 self.child = Some(child);
-                self.flush();
+                if let Some(ForkType::Finished) = self.child {
+                    /*
+                     * Fork has finished in the past.
+                     * We're back in the AlternateScreen, but the cursor is reset to Shown, so fix
+                     * it.
+                     */
+                    write!(self.stdout(), "{}", cursor::Hide,).unwrap();
+                    self.flush();
+                }
                 return;
             }
             UIEventType::EditDraft(mut file) => {
@@ -538,8 +547,8 @@ impl<W: Write> State<W> {
                 self.entities[i].rcv_event(
                     &UIEvent {
                         id: 0,
-                        event_type: UIEventType::Action(Action::PlainListing(
-                            PlainListingAction::ToggleThreaded,
+                        event_type: UIEventType::Action(Action::Listing(
+                            ListingAction::ToggleThreaded,
                         )),
                     },
                     &mut self.context,
@@ -578,7 +587,7 @@ impl<W: Write> State<W> {
     }
 
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
-        if match self.child {
+        let should_return_flag = match self.child {
             Some(ForkType::NewDraft(_, ref mut c)) => {
                 let mut w = c.try_wait();
                 match w {
@@ -599,10 +608,16 @@ impl<W: Write> State<W> {
                     }
                 }
             }
+            Some(ForkType::Finished) => {
+                /* Fork has already finished */
+                std::mem::replace(&mut self.child, None);
+                return None;
+            }
             _ => {
                 return None;
             }
-        } {
+        };
+        if should_return_flag {
             if let Some(ForkType::NewDraft(f, _)) = std::mem::replace(&mut self.child, None) {
                 self.rcv_event(UIEvent {
                     id: 0,
@@ -618,7 +633,7 @@ impl<W: Write> State<W> {
             s.flush().unwrap();
         }
     }
-    fn stdout(&mut self) -> &mut termion::screen::AlternateScreen<termion::raw::RawTerminal<W>> {
+    fn stdout(&mut self) -> &mut StateStdout {
         self.stdout.as_mut().unwrap()
     }
 }

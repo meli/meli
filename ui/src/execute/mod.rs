@@ -21,10 +21,13 @@
 
 /*! A parser module for user commands passed through the Ex mode.
 */
+pub use melib::mailbox::{SortField, SortOrder};
 use nom::{digit, not_line_ending};
 use std;
 pub mod actions;
-pub use actions::*;
+pub use actions::Action::{self, *};
+pub use actions::ListingAction::{self, *};
+pub use actions::TabAction::{self, *};
 
 named!(
     usize_c<usize>,
@@ -50,6 +53,7 @@ named!(
     )
 );
 
+named!(close<Action>, map!(ws!(tag!("close")), |_| Tab(Close)));
 named!(
     goto<Action>,
     preceded!(tag!("b "), map!(call!(usize_c), Action::ViewMailbox))
@@ -57,22 +61,18 @@ named!(
 
 named!(
     subsort<Action>,
-    do_parse!(tag!("subsort ") >> p: pair!(sortfield, sortorder) >> (Action::SubSort(p.0, p.1)))
+    do_parse!(tag!("subsort ") >> p: pair!(sortfield, sortorder) >> (SubSort(p.0, p.1)))
 );
 named!(
     sort<Action>,
     do_parse!(
-        tag!("sort ")
-            >> p: separated_pair!(sortfield, tag!(" "), sortorder)
-            >> (Action::Sort(p.0, p.1))
+        tag!("sort ") >> p: separated_pair!(sortfield, tag!(" "), sortorder) >> (Sort(p.0, p.1))
     )
 );
 
 named!(
     threaded<Action>,
-    map!(ws!(tag!("threaded")), |_| {
-        Action::PlainListing(PlainListingAction::ToggleThreaded)
-    })
+    map!(ws!(tag!("threaded")), |_| Listing(ToggleThreaded))
 );
 named!(
     toggle<Action>,
@@ -80,5 +80,5 @@ named!(
 );
 
 named!(pub parse_command<Action>,
-    alt_complete!( goto | toggle | sort | subsort)
+    alt_complete!( goto | toggle | sort | subsort | close)
         );

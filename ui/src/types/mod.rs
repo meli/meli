@@ -40,6 +40,7 @@ use melib::RefreshEvent;
 use std;
 use std::fmt;
 use std::thread;
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum StatusEvent {
@@ -71,6 +72,7 @@ impl From<RefreshEvent> for ThreadEvent {
 
 #[derive(Debug)]
 pub enum ForkType {
+    Finished, // Already finished fork, we only want to restore input/output
     Generic(std::process::Child),
     NewDraft(File, std::process::Child),
 }
@@ -91,7 +93,10 @@ pub enum UIEventType {
     EditDraft(File),
     Action(Action),
     StatusEvent(StatusEvent),
-    MailboxUpdate((usize, usize)),
+    MailboxUpdate((usize, usize)), // (account_idx, mailbox_idx)
+
+    Reply((usize, usize, usize), usize), // thread coordinates (account, mailbox, root_set idx) and message idx
+    EntityKill(Uuid),
 
     StartupCheck,
 }

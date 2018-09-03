@@ -760,7 +760,7 @@ impl Component for PlainListing {
                 self.dirty = true;
             }
             UIEventType::Action(ref action) => match action {
-                Action::PlainListing(PlainListingAction::ToggleThreaded) => {
+                Action::Listing(ListingAction::ToggleThreaded) => {
                     context.accounts[self.cursor_pos.0]
                         .runtime_settings
                         .conf_mut()
@@ -788,7 +788,8 @@ impl Component for PlainListing {
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;
-                } // _ => {}
+                }
+                _ => {}
             },
             _ => {}
         }

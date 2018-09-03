@@ -25,49 +25,148 @@ use melib::Draft;
 
 #[derive(Debug)]
 pub struct Composer {
-    mode: ViewMode,
-    pager: Pager,
-
-    draft: Draft,
+    reply_context: Option<((usize, usize), Box<ThreadView>)>, // (folder_index, container_index)
     account_cursor: usize,
 
+    pager: Pager,
+    draft: Draft,
+
+    mode: ViewMode,
     dirty: bool,
+    initialized: bool,
 }
 
 impl Default for Composer {
     fn default() -> Self {
         Composer {
-            dirty: true,
-            mode: ViewMode::Overview,
+            reply_context: None,
+            account_cursor: 0,
+
             pager: Pager::default(),
             draft: Draft::default(),
-            account_cursor: 0,
+
+            mode: ViewMode::Overview,
+            dirty: true,
+            initialized: false,
         }
     }
 }
 
 #[derive(Debug)]
 enum ViewMode {
-    //Compose,
+    Discard(Uuid),
+    Pager,
     Overview,
+}
+
+impl ViewMode {
+    fn is_discard(&self) -> bool {
+        if let ViewMode::Discard(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_overview(&self) -> bool {
+        if let ViewMode::Overview = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_pager(&self) -> bool {
+        if let ViewMode::Pager = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl fmt::Display for Composer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display subject/info
-        write!(f, "compose")
+        if self.reply_context.is_some() {
+            write!(f, "reply: {:8}", self.draft.headers()["Subject"])
+        } else {
+            write!(f, "compose")
+        }
     }
 }
 
 impl Composer {
-    fn draw_header_table(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    /*
+     * coordinates: (account index, mailbox index, root set container index)
+     * msg: index of message we reply to in containers
+     * context: current context
+     */
+    pub fn with_context(coordinates: (usize, usize, usize), msg: usize, context: &Context) -> Self {
+        let mailbox = &context.accounts[coordinates.0][coordinates.1]
+            .as_ref()
+            .unwrap();
+        let threads = &mailbox.threads;
+        let containers = &threads.containers();
+
+        let mut ret = Composer::default();
+
+        let p = containers[msg];
+        ret.draft.headers_mut().insert(
+            "Subject".into(),
+            if p.show_subject() {
+                format!(
+                    "Re: {}",
+                    mailbox.collection[p.message().unwrap()].subject().clone()
+                )
+            } else {
+                mailbox.collection[p.message().unwrap()].subject().into()
+            },
+        );
+        let parent_message = &mailbox.collection[p.message().unwrap()];
+        ret.draft.headers_mut().insert(
+            "References".into(),
+            format!(
+                "{} {}",
+                parent_message
+                    .references()
+                    .iter()
+                    .fold(String::new(), |mut acc, x| {
+                        if !acc.is_empty() {
+                            acc.push(' ');
+                        }
+                        acc.push_str(&x.to_string());
+                        acc
+                    }),
+                parent_message.message_id()
+            ),
+        );
+        ret.draft
+            .headers_mut()
+            .insert("In-Reply-To".into(), parent_message.message_id().into());
+        ret.draft
+            .headers_mut()
+            .insert("To".into(), parent_message.field_from_to_string());
+        ret.draft
+            .headers_mut()
+            .insert("Cc".into(), parent_message.field_cc_to_string());
+
+        ret.account_cursor = coordinates.0;
+        ret.reply_context = Some((
+            (coordinates.1, coordinates.2),
+            Box::new(ThreadView::new(coordinates, Some(msg), context)),
+        ));
+        ret
+    }
+
+    fn draw_header_table(&mut self, grid: &mut CellBuffer, area: Area) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
         let headers = self.draft.headers();
         {
             let (mut x, mut y) = upper_left;
-            for k in &["Date", "From", "To", "Subject"] {
+            for k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
                 let update = {
                     let (x, y) = write_string_to_grid(
                         k,
@@ -127,22 +226,37 @@ impl Composer {
 
 impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if self.dirty {
-            self.draft.headers_mut().insert(
-                "From".into(),
-                get_display_name(context, self.account_cursor),
-            );
+        if !self.initialized {
             clear_area(grid, area);
+            self.initialized = true;
         }
+
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
         let upper_left = set_y(upper_left, get_y(upper_left) + 1);
         let header_height = 5;
-        let width = width!(area);
+        let width = if width!(area) > 80 && self.reply_context.is_some() {
+            width!(area) / 2
+        } else {
+            width!(area)
+        };
+
         let mid = if width > 80 {
             let width = width - 80;
-            let mid = width / 2;
+            let mid = if self.reply_context.is_some() {
+                width!(area) / 2 + width / 2
+            } else {
+                width / 2
+            };
+
+            if self.reply_context.is_some() {
+                for i in get_y(upper_left)..=get_y(bottom_right) {
+                    set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
+                    grid[(mid, i)].set_fg(Color::Default);
+                    grid[(mid, i)].set_bg(Color::Default);
+                }
+            }
 
             if self.dirty {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
@@ -159,6 +273,12 @@ impl Component for Composer {
             0
         };
 
+        if width > 80 && self.reply_context.is_some() {
+            let area = (upper_left, set_x(bottom_right, mid - 1));
+            let view = &mut self.reply_context.as_mut().unwrap().1;
+            view.draw(grid, area, context);
+        }
+
         if self.dirty {
             for i in get_x(upper_left) + mid + 1..=get_x(upper_left) + mid + 79 {
                 //set_and_join_box(grid, (i, header_height), HORZ_BOUNDARY);
@@ -174,26 +294,62 @@ impl Component for Composer {
         );
 
         if self.dirty {
-            context.dirty_areas.push_back(area);
+            self.draft.headers_mut().insert(
+                "From".into(),
+                get_display_name(context, self.account_cursor),
+            );
             self.dirty = false;
         }
-        match self.mode {
-            ViewMode::Overview => {
-                self.draw_header_table(grid, header_area, context);
-                self.pager.draw(grid, body_area, context);
+
+        /* Regardless of view mode, do the following */
+        clear_area(grid, header_area);
+        clear_area(grid, body_area);
+        self.draw_header_table(grid, header_area);
+        self.pager.draw(grid, body_area, context);
+
+        if let ViewMode::Discard(_) = self.mode {
+            let mid_x = width!(area) / 2;
+            let mid_y = height!(area) / 2;
+
+            for i in mid_x - 40..=mid_x + 40 {
+                set_and_join_box(grid, (i, mid_y - 11), HORZ_BOUNDARY);
+
+                set_and_join_box(grid, (i, mid_y + 11), HORZ_BOUNDARY);
+            }
+
+            for i in mid_y - 11..=mid_y + 11 {
+                set_and_join_box(grid, (mid_x - 40, i), VERT_BOUNDARY);
+
+                set_and_join_box(grid, (mid_x + 40, i), VERT_BOUNDARY);
             }
         }
+
+        context.dirty_areas.push_back(area);
     }
 
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
-        if self.pager.process_event(event, context) {
-            return true;
+        match (&mut self.mode, &mut self.reply_context) {
+            (ViewMode::Pager, _) => {
+                /* Cannot mutably borrow in pattern guard, pah! */
+                if self.pager.process_event(event, context) {
+                    return true;
+                }
+            }
+            (ViewMode::Overview, Some((_, ref mut view))) => {
+                if view.process_event(event, context) {
+                    self.dirty = true;
+                    return true;
+                }
+            }
+            _ => {}
         }
 
         match event.event_type {
             UIEventType::Resize => {
                 self.dirty = true;
+                self.initialized = false;
             }
+            /* Switch e-mail From: field to the `left` configured account. */
             UIEventType::Input(Key::Left) => {
                 self.account_cursor = self.account_cursor.saturating_sub(1);
                 self.draft.headers_mut().insert(
@@ -203,6 +359,7 @@ impl Component for Composer {
                 self.dirty = true;
                 return true;
             }
+            /* Switch e-mail From: field to the `right` configured account. */
             UIEventType::Input(Key::Right) => {
                 if self.account_cursor + 1 < context.accounts.len() {
                     self.account_cursor += 1;
@@ -214,7 +371,38 @@ impl Component for Composer {
                 }
                 return true;
             }
-            UIEventType::Input(Key::Char('\n')) => {
+            UIEventType::Input(Key::Char(k)) if self.mode.is_discard() => {
+                match (k, &self.mode) {
+                    ('y', ViewMode::Discard(u)) => {
+                        context.replies.push_back(UIEvent {
+                            id: 0,
+                            event_type: UIEventType::Action(Tab(Kill(u.clone()))),
+                        });
+                        return true;
+                    }
+                    ('n', _) => {}
+                    _ => {
+                        return false;
+                    }
+                }
+                self.mode = ViewMode::Overview;
+                self.set_dirty();
+                return true;
+            }
+            /* Switch to Overview mode if we're on Pager mode */
+            UIEventType::Input(Key::Char('o')) if self.mode.is_pager() => {
+                self.mode = ViewMode::Overview;
+                self.set_dirty();
+                return true;
+            }
+            /* Switch to Pager mode if we're on Overview mode */
+            UIEventType::Input(Key::Char('p')) if self.mode.is_overview() => {
+                self.mode = ViewMode::Pager;
+                self.set_dirty();
+                return true;
+            }
+            /* Edit draft in $EDITOR */
+            UIEventType::Input(Key::Char('e')) => {
                 use std::process::{Command, Stdio};
                 /* Kill input thread so that spawned command can be sole receiver of stdin */
                 {
@@ -235,10 +423,15 @@ impl Component for Composer {
                 let result = f.read_to_string();
                 self.draft = Draft::from_str(result.as_str()).unwrap();
                 self.pager.update_from_str(self.draft.body());
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::Fork(ForkType::Finished),
+                });
                 context.restore_input();
                 self.dirty = true;
                 return true;
             }
+            // TODO: Replace EditDraft with compose tabs
             UIEventType::Input(Key::Char('m')) => {
                 let mut f =
                     create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
@@ -256,11 +449,24 @@ impl Component for Composer {
 
     fn is_dirty(&self) -> bool {
         self.dirty || self.pager.is_dirty()
+            || self
+                .reply_context
+                .as_ref()
+                .map(|(_, p)| p.is_dirty())
+                .unwrap_or(false)
     }
 
     fn set_dirty(&mut self) {
         self.dirty = true;
+        self.initialized = false;
         self.pager.set_dirty();
+        if let Some((_, ref mut view)) = self.reply_context {
+            view.set_dirty();
+        }
+    }
+
+    fn kill(&mut self, uuid: Uuid) {
+        self.mode = ViewMode::Discard(uuid);
     }
 }
 

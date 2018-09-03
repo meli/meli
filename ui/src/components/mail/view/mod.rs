@@ -309,15 +309,19 @@ impl Component for MailView {
             let body = envelope.body(op);
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
+                    self.pager = None;
                     self.subview = Some(Box::new(HtmlView::new(decode(
                         &body.attachments()[aidx],
                         None,
                     ))));
+                    self.mode = ViewMode::Subview;
                 }
                 ViewMode::Normal if body.is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(decode(&body, None))));
+                    self.pager = None;
                     self.mode = ViewMode::Subview;
                 }
+                ViewMode::Subview => {}
                 _ => {
                     let buf = {
                         let text = self.attachment_to_text(&body);
@@ -330,27 +334,43 @@ impl Component for MailView {
                         self.pager.as_mut().map(|p| p.cursor_pos())
                     };
                     self.pager = Some(Pager::from_buf(buf.split_newlines(), cursor_pos));
+                    self.subview = None;
                 }
             };
             self.dirty = false;
         }
-        if let Some(s) = self.subview.as_mut() {
-            s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-        } else if let Some(p) = self.pager.as_mut() {
-            p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+        match self.mode {
+            ViewMode::Subview => {
+                if let Some(s) = self.subview.as_mut() {
+                    s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+                }
+            }
+            _ => {
+                if let Some(p) = self.pager.as_mut() {
+                    p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+                }
+            }
         }
     }
 
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
-        if let Some(ref mut sub) = self.subview {
-            if sub.process_event(event, context) {
-                return true;
+        match self.mode {
+            ViewMode::Subview => {
+                if let Some(s) = self.subview.as_mut() {
+                    if s.process_event(event, context) {
+                        return true;
+                    }
+                }
             }
-        } else if let Some(ref mut p) = self.pager {
-            if p.process_event(event, context) {
-                return true;
+            _ => {
+                if let Some(p) = self.pager.as_mut() {
+                    if p.process_event(event, context) {
+                        return true;
+                    }
+                }
             }
         }
+
         match event.event_type {
             UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Alt('')) => {
                 self.cmd_buf.clear();
@@ -542,5 +562,18 @@ impl Component for MailView {
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
+        match self.mode {
+            ViewMode::Normal => {
+                if let Some(p) = self.pager.as_mut() {
+                    p.set_dirty();
+                }
+            }
+            ViewMode::Subview => {
+                if let Some(s) = self.subview.as_mut() {
+                    s.set_dirty();
+                }
+            }
+            _ => {}
+        }
     }
 }

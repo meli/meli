@@ -712,14 +712,17 @@ impl Component for Progress {
 
 #[derive(Debug)]
 pub struct Tabbed {
-    children: Vec<Box<Component>>,
+    children: Vec<Entity>,
     cursor_pos: usize,
 }
 
 impl Tabbed {
     pub fn new(children: Vec<Box<Component>>) -> Self {
         Tabbed {
-            children,
+            children: children
+                .into_iter()
+                .map(|x: Box<Component>| Entity::from(x))
+                .collect(),
             cursor_pos: 0,
         }
     }
@@ -748,13 +751,15 @@ impl Tabbed {
         }
         let (cols, _) = grid.size();
         let cslice: &mut [Cell] = grid;
-        for c in cslice[(y * cols) + x..(y * cols) + cols].iter_mut() {
+        for c in cslice[(y * cols) + x - 1..(y * cols) + cols].iter_mut() {
             c.set_bg(Color::Byte(7));
+            c.set_ch(' ');
         }
+
         context.dirty_areas.push_back(area);
     }
     pub fn add_component(&mut self, new: Box<Component>) {
-        self.children.push(new);
+        self.children.push(Entity::from(new));
     }
 }
 
@@ -787,15 +792,44 @@ impl Component for Tabbed {
         }
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
-        if let UIEventType::Input(Key::Char('T')) = event.event_type {
-            self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
-            self.children[self.cursor_pos].set_dirty();
-            return true;
+        match event.event_type {
+            UIEventType::Input(Key::Char('T')) => {
+                self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
+                self.set_dirty();
+                return true;
+            }
+            UIEventType::Reply(coordinates, msg) => {
+                self.add_component(Box::new(Composer::with_context(coordinates, msg, context)));
+                self.cursor_pos = self.children.len() - 1;
+                self.children[self.cursor_pos].set_dirty();
+                return true;
+            }
+            UIEventType::Action(Tab(Close)) => {
+                let uuid = self.children[self.cursor_pos].uuid().clone();
+                self.children[self.cursor_pos].kill(uuid);
+                return true;
+            }
+            UIEventType::Action(Tab(Kill(ref uuid))) => {
+                if let Some(c_idx) = self.children.iter().position(|x| x.uuid() == uuid) {
+                    self.children.remove(c_idx);
+                    self.cursor_pos = self.cursor_pos.saturating_sub(1);
+                    self.set_dirty();
+                    return true;
+                } else {
+                    eprintln!(
+                        "DEBUG: Child entity with uuid {:?} not found.\nList: {:?}",
+                        uuid, self.children
+                    );
+                }
+            }
+            _ => {}
         }
         self.children[self.cursor_pos].process_event(event, context)
     }
     fn is_dirty(&self) -> bool {
         self.children[self.cursor_pos].is_dirty()
     }
-    fn set_dirty(&mut self) {}
+    fn set_dirty(&mut self) {
+        self.children[self.cursor_pos].set_dirty();
+    }
 }

@@ -46,7 +46,17 @@ pub struct ThreadView {
 }
 
 impl ThreadView {
-    pub fn new(coordinates: (usize, usize, usize), context: &Context) -> Self {
+    /*
+     * coordinates: (account index, mailbox index, root set container index)
+     * expanded_idx: optional position of expanded entry when we render the threadview. Default
+     *  expanded message is the last one.
+     * context: current context
+     */
+    pub fn new(
+        coordinates: (usize, usize, usize),
+        expanded_idx: Option<usize>,
+        context: &Context,
+    ) -> Self {
         /* stack to push thread messages in order in order to pop and print them later */
         let mut stack: Vec<(usize, usize)> = Vec::with_capacity(32);
         let mailbox = &context.accounts[coordinates.0][coordinates.1]
@@ -78,6 +88,13 @@ impl ThreadView {
             let entry = view.make_entry(context, (ind, idx, line));
             view.entries.push(entry);
             line += 1;
+            match expanded_idx {
+                Some(expanded_idx) if expanded_idx == idx => {
+                    view.new_expanded_pos = view.entries.len().saturating_sub(1);
+                    view.expanded_pos = view.new_expanded_pos + 1;
+                }
+                _ => {}
+            }
             let container = &threads.containers()[idx];
             if let Some(i) = container.next_sibling() {
                 stack.push((ind, i));
@@ -87,8 +104,10 @@ impl ThreadView {
                 stack.push((ind + 1, i));
             }
         }
-        view.new_expanded_pos = view.entries.len().saturating_sub(1);
-        view.expanded_pos = view.new_expanded_pos + 1;
+        if expanded_idx.is_none() {
+            view.new_expanded_pos = view.entries.len().saturating_sub(1);
+            view.expanded_pos = view.new_expanded_pos + 1;
+        }
 
         let height = 2 * view.entries.len() + 1;
         let mut width = 0;
@@ -545,6 +564,16 @@ impl Component for ThreadView {
             return true;
         }
         match event.event_type {
+            UIEventType::Input(Key::Char('R')) => {
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::Reply(
+                        self.coordinates,
+                        self.entries[self.expanded_pos].index.1,
+                    ),
+                });
+                return true;
+            }
             UIEventType::Input(Key::Up) => {
                 if self.cursor_pos > 0 {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
@@ -574,7 +603,7 @@ impl Component for ThreadView {
                 return true;
             }
             UIEventType::Resize => {
-                self.dirty = true;
+                self.set_dirty();
             }
             _ => {}
         }
@@ -584,6 +613,7 @@ impl Component for ThreadView {
         self.dirty || self.mailview.is_dirty()
     }
     fn set_dirty(&mut self) {
+        self.initiated = false;
         self.dirty = true;
         self.mailview.set_dirty();
     }

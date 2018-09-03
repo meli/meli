@@ -70,6 +70,7 @@ impl Component for HtmlView {
         if self.pager.process_event(event, context) {
             return true;
         }
+
         if let UIEventType::Input(Key::Char('v')) = event.event_type {
             // TODO: Optional filter that removes outgoing resource requests (images and
             // scripts)
@@ -98,5 +99,7 @@ impl Component for HtmlView {
     fn is_dirty(&self) -> bool {
         self.pager.is_dirty()
     }
-    fn set_dirty(&mut self) {}
+    fn set_dirty(&mut self) {
+        self.pager.set_dirty();
+    }
 }

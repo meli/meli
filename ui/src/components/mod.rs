@@ -37,7 +37,9 @@ pub use self::utilities::*;
 
 use std::fmt;
 use std::fmt::{Debug, Display};
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
+
+use uuid::Uuid;
 
 use super::{Key, StatusEvent, UIEvent, UIEventType};
 /// The upper and lower boundary char.
@@ -62,17 +64,43 @@ const LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
 
 const LIGHT_UP_AND_HORIZONTAL: char = '┴';
 
-/// `Entity` is a container for Components. Totally useless now so if it is not useful in the
-/// future (ie hold some information, id or state) it should be removed.
+/// `Entity` is a container for Components.
 #[derive(Debug)]
 pub struct Entity {
-    //context: VecDeque,
+    id: Uuid,
     pub component: Box<Component>, // more than one?
+}
+
+impl From<Box<Component>> for Entity {
+    fn from(kind: Box<Component>) -> Entity {
+        Entity {
+            id: Uuid::new_v4(),
+            component: kind,
+        }
+    }
+}
+
+impl<C: 'static> From<Box<C>> for Entity
+where
+    C: Component,
+{
+    fn from(kind: Box<C>) -> Entity {
+        Entity {
+            id: Uuid::new_v4(),
+            component: kind,
+        }
+    }
 }
 
 impl Display for Entity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt(&self.component, f)
+    }
+}
+
+impl DerefMut for Entity {
+    fn deref_mut(&mut self) -> &mut Box<Component> {
+        &mut self.component
     }
 }
 
@@ -85,6 +113,9 @@ impl Deref for Entity {
 }
 
 impl Entity {
+    pub fn uuid(&self) -> &Uuid {
+        &self.id
+    }
     /// Pass events to child component.
     pub fn rcv_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
         self.component.process_event(&event, context)
@@ -101,6 +132,7 @@ pub trait Component: Display + Debug {
         true
     }
     fn set_dirty(&mut self);
+    fn kill(&mut self, _uuid: Uuid) {}
 }
 
 fn new_draft(_context: &mut Context) -> Vec<u8> {
@@ -113,6 +145,7 @@ fn new_draft(_context: &mut Context) -> Vec<u8> {
     v.into_bytes()
 }
 
+/*
 pub(crate) fn is_box_char(ch: char) -> bool {
     match ch {
         HORZ_BOUNDARY | VERT_BOUNDARY => true,
@@ -120,7 +153,6 @@ pub(crate) fn is_box_char(ch: char) -> bool {
     }
 }
 
-/*
  * pub(crate) fn is_box_char(ch: char) -> bool {
  *  match ch {
  *      '└' | '─' | '┘' | '┴' | '┌' | '│' | '├' | '┐' | '┬' | '┤' | '┼' | '╷' | '╵' | '╴' | '╶' => true,

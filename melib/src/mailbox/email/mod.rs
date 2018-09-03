@@ -41,6 +41,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
 use std::option::Option;
+use std::str;
 use std::string::String;
 
 use chrono;
@@ -181,6 +182,16 @@ fn test_strbuilder() {
     );
 }
 
+impl fmt::Display for MessageID {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.val().is_ascii() {
+            write!(f, "{}", unsafe { str::from_utf8_unchecked(self.val()) })
+        } else {
+            write!(f, "{}", String::from_utf8_lossy(self.val()))
+        }
+    }
+}
+
 impl PartialEq for MessageID {
     fn eq(&self, other: &MessageID) -> bool {
         self.raw() == other.raw()
@@ -261,6 +272,8 @@ pub struct Envelope {
     date: String,
     from: Vec<Address>,
     to: Vec<Address>,
+    cc: Vec<Address>,
+    bcc: Vec<Address>,
     body: Option<Attachment>,
     subject: Option<Vec<u8>>,
     message_id: Option<MessageID>,
@@ -281,6 +294,8 @@ impl Envelope {
             date: String::new(),
             from: Vec::new(),
             to: Vec::new(),
+            cc: Vec::new(),
+            bcc: Vec::new(),
             body: None,
             subject: None,
             message_id: None,
@@ -342,6 +357,22 @@ impl Envelope {
                     Vec::new()
                 };
                 self.set_to(value);
+            } else if name.eq_ignore_ascii_case(b"cc") {
+                let parse_result = parser::rfc2822address_list(value);
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    Vec::new()
+                };
+                self.set_cc(value);
+            } else if name.eq_ignore_ascii_case(b"bcc") {
+                let parse_result = parser::rfc2822address_list(value);
+                let value = if parse_result.is_done() {
+                    parse_result.to_full_result().unwrap()
+                } else {
+                    Vec::new()
+                };
+                self.set_bcc(value);
             } else if name.eq_ignore_ascii_case(b"from") {
                 let parse_result = parser::rfc2822address_list(value);
                 let value = if parse_result.is_done() {
@@ -424,7 +455,14 @@ impl Envelope {
     pub fn from(&self) -> &Vec<Address> {
         &self.from
     }
-
+    pub fn field_bcc_to_string(&self) -> String {
+        let _strings: Vec<String> = self.bcc.iter().map(|a| format!("{}", a)).collect();
+        _strings.join(", ")
+    }
+    pub fn field_cc_to_string(&self) -> String {
+        let _strings: Vec<String> = self.cc.iter().map(|a| format!("{}", a)).collect();
+        _strings.join(", ")
+    }
     pub fn field_from_to_string(&self) -> String {
         let _strings: Vec<String> = self.from.iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
@@ -529,6 +567,12 @@ impl Envelope {
     }
     fn set_date(&mut self, new_val: &[u8]) -> () {
         self.date = String::from_utf8_lossy(new_val).into_owned();
+    }
+    fn set_bcc(&mut self, new_val: Vec<Address>) -> () {
+        self.from = new_val;
+    }
+    fn set_cc(&mut self, new_val: Vec<Address>) -> () {
+        self.from = new_val;
     }
     fn set_from(&mut self, new_val: Vec<Address>) -> () {
         self.from = new_val;

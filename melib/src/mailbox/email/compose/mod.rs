@@ -22,12 +22,14 @@ pub struct Draft {
 impl Default for Draft {
     fn default() -> Self {
         let mut headers = FnvHashMap::with_capacity_and_hasher(8, Default::default());
-        headers.insert("From".into(), "x".into());
-        headers.insert("To".into(), "x".into());
+        headers.insert("From".into(), "".into());
+        headers.insert("To".into(), "".into());
+        headers.insert("Cc".into(), "".into());
+        headers.insert("Bcc".into(), "".into());
 
         let now: DateTime<Local> = Local::now();
         headers.insert("Date".into(), now.to_rfc2822());
-        headers.insert("Subject".into(), "x".into());
+        headers.insert("Subject".into(), "".into());
         headers.insert("Message-ID".into(), random::gen_message_id());
         headers.insert("User-Agent".into(), "meli".into());
         Draft {
@@ -58,7 +60,7 @@ impl Draft {
     pub fn to_string(&self) -> Result<String> {
         let mut ret = String::new();
 
-        let headers = &["Date", "From", "To", "Subject", "Message-ID"];
+        let headers = &["Date", "From", "To", "Cc", "Bcc", "Subject", "Message-ID"];
         for k in headers {
             ret.extend(format!("{}: {}\n", k, &self.headers[*k]).chars());
         }
@@ -131,6 +133,8 @@ fn ignore_header(header: &[u8]) -> bool {
         b"Reply-to" => false,
         b"Cc" => false,
         b"Bcc" => false,
+        b"In-Reply-To" => false,
+        b"References" => false,
         h if h.starts_with(b"X-") => false,
         _ => true,
     }

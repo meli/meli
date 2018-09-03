@@ -103,6 +103,21 @@ pub struct Container {
     show_subject: bool,
 }
 
+impl Default for Container {
+    fn default() -> Container {
+        Container {
+            id: 0,
+            message: None,
+            parent: None,
+            first_child: None,
+            next_sibling: None,
+            date: UnixTimestamp::default(),
+            indentation: 0,
+            show_subject: true,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ContainerTree {
     id: usize,
@@ -513,12 +528,8 @@ fn build_collection(
             threads.push(Container {
                 message: Some(i),
                 id: x_index,
-                parent: None,
-                first_child: None,
-                next_sibling: None,
                 date: x.date(),
-                indentation: 0,
-                show_subject: true,
+                ..Default::default()
             });
             x.set_thread(x_index);
             id_table.insert(m_id, x_index);
@@ -565,12 +576,9 @@ fn build_collection(
                 threads.push(Container {
                     message: None,
                     id: idx,
-                    parent: None,
                     first_child: Some(curr_ref),
-                    next_sibling: None,
                     date: x.date(),
-                    indentation: 0,
-                    show_subject: true,
+                    ..Default::default()
                 });
                 if threads[curr_ref].parent.is_none() {
                     threads[curr_ref].parent = Some(idx);
@@ -661,11 +669,8 @@ pub fn build_threads(
                                 message: Some(idx),
                                 id: tidx,
                                 parent: Some(p),
-                                first_child: None,
-                                next_sibling: None,
                                 date: x.date(),
-                                indentation: 0,
-                                show_subject: true,
+                                ..Default::default()
                             });
                             id_table.insert(Cow::from(m_id.into_owned()), tidx);
                             x.set_thread(tidx);

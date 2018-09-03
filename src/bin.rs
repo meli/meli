@@ -61,25 +61,18 @@ fn main() {
     let receiver = state.receiver();
 
     /* Register some reasonably useful interfaces */
-    let menu = Entity {
-        component: Box::new(AccountMenu::new(&state.context.accounts)),
-    };
+    let menu = Entity::from(Box::new(AccountMenu::new(&state.context.accounts)));
     let listing = CompactListing::new();
-    let b = Entity {
-        component: Box::new(listing),
-    };
+    let b = Entity::from(Box::new(listing));
     let mut tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true))]));
     tabs.add_component(Box::new(Composer::default()));
-    let window = Entity { component: tabs };
+    let window = Entity::from(tabs);
 
-    let status_bar = Entity {
-        component: Box::new(StatusBar::new(window)),
-    };
+    let status_bar = Entity::from(Box::new(StatusBar::new(window)));
     state.register_entity(status_bar);
 
-    let xdg_notifications = Entity {
-        component: Box::new(ui::components::notifications::XDGNotifications {}),
-    };
+    let xdg_notifications =
+        Entity::from(Box::new(ui::components::notifications::XDGNotifications {}));
     state.register_entity(xdg_notifications);
 
     /* Keep track of the input mode. See ui::UIMode for details */
@@ -203,8 +196,7 @@ fn main() {
             match state.try_wait_on_child() {
                 Some(true) => {
                     state.restore_input();
-                    state.mode = UIMode::Normal;
-                    state.render();
+                    state.switch_to_alternate_screen();
                 }
                 Some(false) => {
                     use std::{thread, time};
@@ -214,6 +206,8 @@ fn main() {
                     continue 'reap;
                 }
                 None => {
+                    state.mode = UIMode::Normal;
+                    state.render();
                     break 'reap;
                 }
             }

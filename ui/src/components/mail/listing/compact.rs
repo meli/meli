@@ -303,6 +303,7 @@ impl Component for CompactListing {
             if self.length == 0 && self.dirty {
                 clear_area(grid, area);
                 context.dirty_areas.push_back(area);
+                return;
             }
 
             /* Render the mail body in a pager */
@@ -312,7 +313,7 @@ impl Component for CompactListing {
                 }
                 return;
             }
-            self.view = Some(ThreadView::new(self.cursor_pos, context));
+            self.view = Some(ThreadView::new(self.cursor_pos, None, context));
             self.view.as_mut().unwrap().draw(grid, area, context);
             self.dirty = false;
         }
@@ -418,15 +419,6 @@ impl Component for CompactListing {
                 self.dirty = true;
             }
             UIEventType::Action(ref action) => match action {
-                Action::PlainListing(PlainListingAction::ToggleThreaded) => {
-                    context.accounts[self.cursor_pos.0]
-                        .runtime_settings
-                        .conf_mut()
-                        .toggle_threaded();
-                    self.refresh_mailbox(context);
-                    self.dirty = true;
-                    return true;
-                }
                 Action::ViewMailbox(idx) => {
                     self.new_cursor_pos.1 = *idx;
                     self.dirty = true;
@@ -446,7 +438,8 @@ impl Component for CompactListing {
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;
-                } // _ => {}
+                }
+                _ => {}
             },
             _ => {}
         }
