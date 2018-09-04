@@ -66,15 +66,6 @@ else
 	printf "${SUCCESS}\n"
 fi
 
-printf "${PREFIX} Checking for rustfmt ... "
-command -v rustfmt &>/dev/null
-if [ $? == 0 ]; then
-	printf "${SUCCESS}\n"
-else
-	printf "${FAILURE}\n"
-	exit 1
-fi
-
 printf "${PREFIX} Checking for shasum ... "
 command -v shasum &>/dev/null
 if [ $? == 0 ]; then
