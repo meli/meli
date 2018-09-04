@@ -108,10 +108,15 @@ impl Composer {
             .unwrap();
         let threads = &mailbox.threads;
         let containers = &threads.containers();
-
         let mut ret = Composer::default();
-
         let p = containers[msg];
+        let parent_message = &mailbox.collection[p.message().unwrap()];
+        let mut op = context.accounts[coordinates.0]
+            .backend
+            .operation(parent_message.hash());
+        let parent_bytes = op.as_bytes();
+
+        ret.draft = Draft::as_reply(parent_message, parent_bytes.unwrap());
         ret.draft.headers_mut().insert(
             "Subject".into(),
             if p.show_subject() {
@@ -123,33 +128,6 @@ impl Composer {
                 mailbox.collection[p.message().unwrap()].subject().into()
             },
         );
-        let parent_message = &mailbox.collection[p.message().unwrap()];
-        ret.draft.headers_mut().insert(
-            "References".into(),
-            format!(
-                "{} {}",
-                parent_message
-                    .references()
-                    .iter()
-                    .fold(String::new(), |mut acc, x| {
-                        if !acc.is_empty() {
-                            acc.push(' ');
-                        }
-                        acc.push_str(&x.to_string());
-                        acc
-                    }),
-                parent_message.message_id()
-            ),
-        );
-        ret.draft
-            .headers_mut()
-            .insert("In-Reply-To".into(), parent_message.message_id().into());
-        ret.draft
-            .headers_mut()
-            .insert("To".into(), parent_message.field_from_to_string());
-        ret.draft
-            .headers_mut()
-            .insert("Cc".into(), parent_message.field_cc_to_string());
 
         ret.account_cursor = coordinates.0;
         ret.reply_context = Some((
@@ -436,7 +414,7 @@ impl Component for Composer {
                 return true;
             }
             /* Switch to Pager mode if we're on Overview mode */
-            UIEventType::Input(Key::Char('p')) if self.mode.is_overview() => {
+            UIEventType::Input(Key::Char('v')) if self.mode.is_overview() => {
                 self.mode = ViewMode::Pager;
                 self.set_dirty();
                 return true;

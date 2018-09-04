@@ -42,9 +42,53 @@ impl Default for Draft {
 }
 
 impl Draft {
+    pub fn as_reply(envelope: &Envelope, bytes: &[u8]) -> Self {
+        let mut ret = Draft::default();
+        ret.headers_mut().insert(
+            "References".into(),
+            format!(
+                "{} {}",
+                envelope
+                    .references()
+                    .iter()
+                    .fold(String::new(), |mut acc, x| {
+                        if !acc.is_empty() {
+                            acc.push(' ');
+                        }
+                        acc.push_str(&x.to_string());
+                        acc
+                    }),
+                envelope.message_id()
+            ),
+        );
+        ret.headers_mut()
+            .insert("In-Reply-To".into(), envelope.message_id().into());
+        ret.headers_mut()
+            .insert("To".into(), envelope.field_from_to_string());
+        ret.headers_mut()
+            .insert("Cc".into(), envelope.field_cc_to_string());
+        let body = envelope.body_bytes(bytes);
+        ret.body = {
+            let reply_body_bytes = decode_rec(&body, None);
+            let reply_body = String::from_utf8_lossy(&reply_body_bytes);
+            let lines: Vec<&str> = reply_body.lines().collect();
+            let mut ret = String::with_capacity(reply_body.len() + lines.len());
+            for l in lines {
+                ret.push('>');
+                ret.push_str(l.trim());
+                ret.push('\n');
+            }
+            ret.pop();
+            ret
+        };
+
+        ret
+    }
+
     pub fn headers_mut(&mut self) -> &mut FnvHashMap<String, String> {
         &mut self.headers
     }
+
     pub fn headers(&self) -> &FnvHashMap<String, String> {
         &self.headers
     }
