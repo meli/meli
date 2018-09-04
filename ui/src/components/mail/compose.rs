@@ -307,9 +307,15 @@ impl Component for Composer {
         self.draw_header_table(grid, header_area);
         self.pager.draw(grid, body_area, context);
 
+        /* Let user choose whether to quit with/without saving or cancel */
         if let ViewMode::Discard(_) = self.mode {
             let mid_x = width!(area) / 2;
             let mid_y = height!(area) / 2;
+            for x in mid_x - 40..=mid_x + 40 {
+                for y in mid_y - 11..=mid_y + 11 {
+                    grid[(x, y)] = Cell::default();
+                }
+            }
 
             for i in mid_x - 40..=mid_x + 40 {
                 set_and_join_box(grid, (i, mid_y - 11), HORZ_BOUNDARY);
@@ -322,6 +328,41 @@ impl Component for Composer {
 
                 set_and_join_box(grid, (mid_x + 40, i), VERT_BOUNDARY);
             }
+
+            let area = ((mid_x - 20, mid_y - 7), (mid_x + 39, mid_y + 10));
+
+            let (_, y) = write_string_to_grid(
+                &format!("Draft \"{:10}\"", self.draft.headers()["Subject"]),
+                grid,
+                Color::Default,
+                Color::Default,
+                area,
+                true,
+            );
+            let (_, y) = write_string_to_grid(
+                "[x] quit without saving",
+                grid,
+                Color::Byte(124),
+                Color::Default,
+                (set_y(upper_left!(area), y + 2), bottom_right!(area)),
+                true,
+            );
+            let (_, y) = write_string_to_grid(
+                "[y] save draft and quit",
+                grid,
+                Color::Byte(124),
+                Color::Default,
+                (set_y(upper_left!(area), y + 1), bottom_right!(area)),
+                true,
+            );
+            write_string_to_grid(
+                "[n] cancel",
+                grid,
+                Color::Byte(124),
+                Color::Default,
+                (set_y(upper_left!(area), y + 1), bottom_right!(area)),
+                true,
+            );
         }
 
         context.dirty_areas.push_back(area);
@@ -346,8 +387,7 @@ impl Component for Composer {
 
         match event.event_type {
             UIEventType::Resize => {
-                self.dirty = true;
-                self.initialized = false;
+                self.set_dirty();
             }
             /* Switch e-mail From: field to the `left` configured account. */
             UIEventType::Input(Key::Left) => {
@@ -371,9 +411,9 @@ impl Component for Composer {
                 }
                 return true;
             }
-            UIEventType::Input(Key::Char(k)) if self.mode.is_discard() => {
-                match (k, &self.mode) {
-                    ('y', ViewMode::Discard(u)) => {
+            UIEventType::Input(Key::Char(key)) if self.mode.is_discard() => {
+                match (key, &self.mode) {
+                    ('x', ViewMode::Discard(u)) => {
                         context.replies.push_back(UIEvent {
                             id: 0,
                             event_type: UIEventType::Action(Tab(Kill(u.clone()))),
