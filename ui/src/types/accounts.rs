@@ -25,23 +25,14 @@
 
 use async::*;
 use conf::AccountConf;
-use mailbox::backends::{Backends, Folder, MailBackend, RefreshEventConsumer};
+use mailbox::backends::{
+    Backends, Folder, MailBackend, RefreshEvent, RefreshEventConsumer, RefreshEventKind,
+};
 use mailbox::*;
 use melib::error::Result;
-use std::mem;
 use std::ops::{Index, IndexMut};
 use std::result;
-
-pub enum LoadMailboxResult {
-    New(NewMailEvent),
-    Refresh,
-    Loaded,
-}
-
-pub struct NewMailEvent {
-    pub folder: u64,
-    pub index: Vec<usize>,
-}
+use types::UIEventType::{self, Notification};
 
 pub type Worker = Option<Async<Result<Vec<Envelope>>>>;
 
@@ -83,10 +74,36 @@ impl Account {
             backend,
         }
     }
-    pub fn reload(&mut self, idx: usize) {
-        let ref_folders: Vec<Folder> = self.backend.folders();
-        let handle = self.backend.get(&ref_folders[idx]);
-        self.workers[idx] = Some(handle);
+    pub fn reload(&mut self, event: RefreshEvent, idx: usize) -> Option<UIEventType> {
+        let kind = event.kind();
+        let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
+        match kind {
+            RefreshEventKind::Update(old_hash, envelope) => {
+                mailbox.update(old_hash, envelope);
+            }
+            RefreshEventKind::Create(envelope) => {
+                let env: &Envelope = mailbox.insert(envelope);
+                let ref_folders: Vec<Folder> = self.backend.folders();
+                return Some(Notification(
+                    Some("New mail".into()),
+                    format!(
+                        "Subject: {:15}:\n{:15}\nFrom: {:15}",
+                        ref_folders[idx].name(),
+                        env.subject(),
+                        env.field_from_to_string()
+                    ),
+                ));
+            }
+            RefreshEventKind::Remove(envelope_hash) => {
+                mailbox.remove(envelope_hash);
+            }
+            RefreshEventKind::Rescan => {
+                let ref_folders: Vec<Folder> = self.backend.folders();
+                let handle = self.backend.get(&ref_folders[idx]);
+                self.workers[idx] = Some(handle);
+            }
+        }
+        return None;
     }
     pub fn watch(&self, r: RefreshEventConsumer) -> () {
         self.backend.watch(r).unwrap();
@@ -119,13 +136,7 @@ impl Account {
         &mut self.workers
     }
 
-    fn load_mailbox(
-        &mut self,
-        index: usize,
-        envelopes: Result<Vec<Envelope>>,
-    ) -> LoadMailboxResult {
-        let mut ret: LoadMailboxResult = LoadMailboxResult::Refresh;
-
+    fn load_mailbox(&mut self, index: usize, envelopes: Result<Vec<Envelope>>) {
         // TODO: Cleanup this function
         let folders = self.backend.folders();
         let folder = &folders[index];
@@ -133,50 +144,7 @@ impl Account {
             let id = self.sent_folder.unwrap();
             if id == index {
                 /* ======================== */
-                let old_m = mem::replace(
-                    &mut self.folders[index],
-                    Some(Mailbox::new(folder, &None, envelopes)),
-                );
-                if let Some(old_m) = old_m {
-                    if self.folders[index].is_some() && old_m.is_ok() {
-                        let diff = self.folders[index]
-                            .as_ref()
-                            .map(|v| v.as_ref().unwrap().collection.len())
-                            .unwrap_or(0)
-                            .saturating_sub(
-                                old_m.as_ref().map(|v| v.collection.len()).unwrap_or(0),
-                            );
-                        if diff > 0 {
-                            let mut index = old_m
-                                .as_ref()
-                                .unwrap()
-                                .collection
-                                .iter()
-                                .zip(
-                                    &self.folders[index]
-                                        .as_ref()
-                                        .unwrap()
-                                        .as_ref()
-                                        .unwrap()
-                                        .collection,
-                                )
-                                .count();
-                            ret = LoadMailboxResult::New(NewMailEvent {
-                                folder: folder.hash(),
-                                index: (index.saturating_sub(1)
-                                    ..(self.folders[index]
-                                        .as_ref()
-                                        .unwrap()
-                                        .as_ref()
-                                        .unwrap()
-                                        .collection
-                                        .len()
-                                        .saturating_sub(1)))
-                                    .collect(),
-                            });
-                        }
-                    }
-                }
+                self.folders[index] = Some(Mailbox::new(folder, &None, envelopes));
             /* ======================== */
             } else {
                 let (sent, cur) = {
@@ -194,97 +162,20 @@ impl Account {
                     sent[0] = Some(Mailbox::new(sent_path, &None, envelopes.clone()));
                 }
                 /* ======================== */
-                let old_m =
-                    mem::replace(&mut cur[0], Some(Mailbox::new(folder, &sent[0], envelopes)));
-                if let Some(old_m) = old_m {
-                    if cur[0].is_some() && old_m.is_ok() {
-                        let diff = cur[0]
-                            .as_ref()
-                            .map(|v| v.as_ref().unwrap().collection.len())
-                            .unwrap_or(0)
-                            .saturating_sub(
-                                old_m.as_ref().map(|v| v.collection.len()).unwrap_or(0),
-                            );
-                        if diff > 0 {
-                            let mut index = old_m
-                                .as_ref()
-                                .unwrap()
-                                .collection
-                                .iter()
-                                .zip(&cur[0].as_ref().unwrap().as_ref().unwrap().collection)
-                                .count();
-                            ret = LoadMailboxResult::New(NewMailEvent {
-                                folder: folder.hash(),
-                                index: (index.saturating_sub(1)
-                                    ..(cur[0]
-                                        .as_ref()
-                                        .unwrap()
-                                        .as_ref()
-                                        .unwrap()
-                                        .collection
-                                        .len())
-                                        .saturating_sub(1))
-                                    .collect(),
-                            });
-                        }
-                    }
-                }
+                cur[0] = Some(Mailbox::new(folder, &sent[0], envelopes));
                 /* ======================== */
             }
         } else {
             /* ======================== */
-            let old_m = mem::replace(
-                &mut self.folders[index],
-                Some(Mailbox::new(folder, &None, envelopes)),
-            );
-            if let Some(old_m) = old_m {
-                if self.folders[index].is_some() && old_m.is_ok() {
-                    let diff = self.folders[index]
-                        .as_ref()
-                        .map(|v| v.as_ref().unwrap().collection.len())
-                        .unwrap_or(0)
-                        .saturating_sub(old_m.as_ref().map(|v| v.collection.len()).unwrap_or(0));
-                    if diff > 0 {
-                        let mut index = old_m
-                            .as_ref()
-                            .unwrap()
-                            .collection
-                            .iter()
-                            .zip(
-                                &self.folders[index]
-                                    .as_ref()
-                                    .unwrap()
-                                    .as_ref()
-                                    .unwrap()
-                                    .collection,
-                            )
-                            .count();
-                        ret = LoadMailboxResult::New(NewMailEvent {
-                            folder: folder.hash(),
-                            index: (index.saturating_sub(1)
-                                ..(self.folders[index]
-                                    .as_ref()
-                                    .unwrap()
-                                    .as_ref()
-                                    .unwrap()
-                                    .collection
-                                    .len()
-                                    .saturating_sub(1)))
-                                .collect(),
-                        });
-                    }
-                }
-            }
+            self.folders[index] = Some(Mailbox::new(folder, &None, envelopes));
             /* ======================== */
         };
-
-        ret
     }
 
-    pub fn status(&mut self, index: usize) -> result::Result<LoadMailboxResult, usize> {
+    pub fn status(&mut self, index: usize) -> result::Result<(), usize> {
         match self.workers[index].as_mut() {
             None => {
-                return Ok(LoadMailboxResult::Loaded);
+                return Ok(());
             }
             Some(ref mut w) => match w.poll() {
                 Ok(AsyncStatus::NoUpdate) => {

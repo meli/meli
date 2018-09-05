@@ -95,4 +95,30 @@ impl Mailbox {
     pub fn thread(&self, i: usize) -> &Container {
         &self.threads[i]
     }
+
+    pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope) {
+        if let Some(i) = self.collection.iter().position(|e| e.hash() == old_hash) {
+            self.collection[i] = envelope;
+        } else {
+            panic!()
+        }
+    }
+
+    pub fn insert(&mut self, envelope: Envelope) -> &Envelope {
+        self.collection.push(envelope);
+        // TODO: Update threads.
+        eprintln!("Inserted envelope");
+        &self.collection[self.collection.len() - 1]
+    }
+
+    pub fn remove(&mut self, envelope_hash: EnvelopeHash) {
+        if let Some(i) = self
+            .collection
+            .iter()
+            .position(|e| e.hash() == envelope_hash)
+        {
+            self.collection.remove(i);
+        }
+        //   eprintln!("envelope_hash: {}\ncollection:\n{:?}", envelope_hash, self.collection);
+    }
 }

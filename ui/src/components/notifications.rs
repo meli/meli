@@ -40,10 +40,15 @@ impl fmt::Display for XDGNotifications {
 impl Component for XDGNotifications {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
-        if let UIEventType::Notification(ref t) = event.event_type {
+        if let UIEventType::Notification(ref title, ref body) = event.event_type {
             notify_Notification::new()
-                .summary("Refresh Event")
-                .body(t)
+                .summary(
+                    title
+                        .as_ref()
+                        .map(|v| v.as_str())
+                        .unwrap_or("Refresh Event"),
+                )
+                .body(body)
                 .icon("dialog-information")
                 .show()
                 .unwrap();

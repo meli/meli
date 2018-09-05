@@ -20,7 +20,7 @@
  */
 
 pub mod accounts;
-pub use self::accounts::{Account, LoadMailboxResult};
+pub use self::accounts::Account;
 #[macro_use]
 mod position;
 #[macro_use]
@@ -57,16 +57,14 @@ pub enum ThreadEvent {
     /// User input.
     Input(Key),
     /// A watched folder has been refreshed.
-    RefreshMailbox {
-        hash: u64,
-    },
+    RefreshMailbox(RefreshEvent),
     UIEvent(UIEventType),
     //Decode { _ }, // For gpg2 signature check
 }
 
 impl From<RefreshEvent> for ThreadEvent {
     fn from(event: RefreshEvent) -> Self {
-        ThreadEvent::RefreshMailbox { hash: event.hash() }
+        ThreadEvent::RefreshMailbox(event)
     }
 }
 
@@ -89,7 +87,7 @@ pub enum UIEventType {
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),
-    Notification(String),
+    Notification(Option<String>, String),
     Action(Action),
     StatusEvent(StatusEvent),
     MailboxUpdate((usize, usize)), // (account_idx, mailbox_idx)

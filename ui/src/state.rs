@@ -29,6 +29,8 @@
   */
 
 use super::*;
+use melib::backends::FolderHash;
+
 use chan::{Receiver, Sender};
 use fnv::FnvHashMap;
 use std::io::Write;
@@ -74,7 +76,7 @@ impl InputHandler {
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: Vec<Account>,
-    mailbox_hashes: FnvHashMap<u64, (usize, usize)>,
+    mailbox_hashes: FnvHashMap<FolderHash, (usize, usize)>,
     pub settings: Settings,
 
     pub runtime_settings: Settings,
@@ -101,34 +103,9 @@ impl Context {
         self.input.restore(self.sender.clone());
     }
     pub fn account_status(&mut self, idx_a: usize, idx_m: usize) -> result::Result<bool, usize> {
-        let s = self.accounts[idx_a].status(idx_m)?;
-        match s {
-            LoadMailboxResult::New(event) => {
-                eprintln!("setting up notification");
-                let (idx_a, idx_m) = self.mailbox_hashes[&event.folder];
-                let subjects = {
-                    let mut ret = Vec::with_capacity(event.index.len());
-                    eprintln!("index is {:?}", &event.index);
-                    for &i in &event.index {
-                        ret.push(
-                            self.accounts[idx_a][idx_m].as_ref().unwrap().collection[i].subject(),
-                        );
-                    }
-                    ret
-                };
-                self.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Notification(format!(
-                        "Update in {}/{}, indexes {:?}",
-                        self.accounts[idx_a].name(),
-                        self.accounts[idx_a][idx_m].as_ref().unwrap().folder.name(),
-                        subjects
-                    )),
-                });
-                Ok(true)
-            }
-            LoadMailboxResult::Loaded => Ok(true),
-            LoadMailboxResult::Refresh => Ok(false),
+        match self.accounts[idx_a].status(idx_m) {
+            Ok(()) => Ok(true),
+            Err(n) => Err(n),
         }
     }
 }
@@ -285,9 +262,16 @@ impl State {
      * we match the hash to the index of the mailbox, request a reload
      * and startup a thread to remind us to poll it every now and then till it's finished.
      */
-    pub fn hash_to_folder(&mut self, hash: u64) {
+    pub fn refresh_event(&mut self, event: RefreshEvent) {
+        let hash = event.hash();
         if let Some(&(idxa, idxm)) = self.context.mailbox_hashes.get(&hash) {
-            self.context.accounts[idxa].reload(idxm);
+            if let Some(notification) = self.context.accounts[idxa].reload(event, idxm) {
+                self.context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: notification,
+                });
+            }
+
             let (startup_tx, startup_rx) = chan::async();
             let startup_thread = {
                 let sender = self.context.sender.clone();

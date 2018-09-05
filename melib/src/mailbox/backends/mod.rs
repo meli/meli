@@ -28,7 +28,7 @@ use error::Result;
 //use mailbox::backends::imap::ImapType;
 //use mailbox::backends::mbox::MboxType;
 use mailbox::backends::maildir::MaildirType;
-use mailbox::email::{Envelope, Flag};
+use mailbox::email::{Envelope, EnvelopeHash, Flag};
 use std::fmt;
 use std::fmt::Debug;
 
@@ -79,18 +79,27 @@ impl Backends {
     }
 }
 
+#[derive(Debug)]
+pub enum RefreshEventKind {
+    Update(EnvelopeHash, Envelope),
+    Create(Envelope),
+    Remove(FolderHash),
+    Rescan,
+}
+
+#[derive(Debug)]
 pub struct RefreshEvent {
-    hash: u64,
-    folder: String,
+    hash: FolderHash,
+    kind: RefreshEventKind,
 }
 
 impl RefreshEvent {
-    pub fn hash(&self) -> u64 {
+    pub fn hash(&self) -> FolderHash {
         self.hash
     }
-
-    pub fn folder(&self) -> &str {
-        self.folder.as_str()
+    pub fn kind(self) -> RefreshEventKind {
+        /* consumes self! */
+        self.kind
     }
 }
 
@@ -112,7 +121,7 @@ pub trait MailBackend: ::std::fmt::Debug {
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
     fn folders(&self) -> Vec<Folder>;
-    fn operation(&self, hash: u64) -> Box<BackendOp>;
+    fn operation(&self, hash: EnvelopeHash) -> Box<BackendOp>;
     //login function
 }
 
@@ -191,7 +200,7 @@ impl fmt::Debug for BackendOpGenerator {
 }
 
 pub trait BackendFolder: Debug {
-    fn hash(&self) -> u64;
+    fn hash(&self) -> FolderHash;
     fn name(&self) -> &str;
     fn change_name(&mut self, &str);
     fn clone(&self) -> Folder;
@@ -204,7 +213,7 @@ struct DummyFolder {
 }
 
 impl BackendFolder for DummyFolder {
-    fn hash(&self) -> u64 {
+    fn hash(&self) -> FolderHash {
         0
     }
     fn name(&self) -> &str {
@@ -224,4 +233,5 @@ pub fn folder_default() -> Folder {
     })
 }
 
+pub type FolderHash = u64;
 pub type Folder = Box<BackendFolder>;

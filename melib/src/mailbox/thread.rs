@@ -82,8 +82,6 @@ impl FromStr for SortOrder {
     }
 }
 
-type UnixTimestamp = u64;
-
 /// A `Container` struct is needed to describe the thread tree forest during creation of threads.
 /// Because of Rust's memory model, we store indexes of Envelopes inside a collection instead of
 /// references and every reference is passed through the `Container` owner (a `Vec<Container>`).

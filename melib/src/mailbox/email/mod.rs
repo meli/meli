@@ -260,6 +260,9 @@ impl EnvelopeWrapper {
     }
 }
 
+pub type UnixTimestamp = u64;
+pub type EnvelopeHash = u64;
+
 /// `Envelope` represents all the data of an email we need to know.
 ///
 ///  Attachments (the email's body) is parsed on demand with `body`.
@@ -280,16 +283,16 @@ pub struct Envelope {
     in_reply_to: Option<MessageID>,
     references: Option<References>,
 
-    timestamp: u64,
+    timestamp: UnixTimestamp,
     thread: usize,
 
-    hash: u64,
+    hash: EnvelopeHash,
 
     flags: Flag,
 }
 
 impl Envelope {
-    pub fn new(hash: u64) -> Self {
+    pub fn new(hash: EnvelopeHash) -> Self {
         Envelope {
             date: String::new(),
             from: Vec::new(),
@@ -320,7 +323,7 @@ impl Envelope {
         }
         Err(MeliError::new("Couldn't parse mail."))
     }
-    pub fn from_token(mut operation: Box<BackendOp>, hash: u64) -> Option<Envelope> {
+    pub fn from_token(mut operation: Box<BackendOp>, hash: EnvelopeHash) -> Option<Envelope> {
         let mut e = Envelope::new(hash);
         e.flags = operation.fetch_flags();
         if let Ok(bytes) = operation.as_bytes() {
@@ -331,7 +334,7 @@ impl Envelope {
         }
         None
     }
-    pub fn hash(&self) -> u64 {
+    pub fn hash(&self) -> EnvelopeHash {
         self.hash
     }
     pub fn populate_headers(&mut self, bytes: &[u8]) -> Result<()> {
@@ -437,7 +440,7 @@ impl Envelope {
         let headers = operation.fetch_headers()?;
         self.populate_headers(headers)
     }
-    pub fn date(&self) -> u64 {
+    pub fn date(&self) -> UnixTimestamp {
         self.timestamp
     }
 
@@ -672,7 +675,7 @@ impl Envelope {
         self.thread = new_val;
     }
     pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) -> () {
-        self.timestamp = new_val.timestamp() as u64;
+        self.timestamp = new_val.timestamp() as UnixTimestamp;
     }
     pub fn set_flag(&mut self, f: Flag, mut operation: Box<BackendOp>) -> Result<()> {
         operation.set_flag(self, &f)?;
