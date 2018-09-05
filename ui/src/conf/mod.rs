@@ -29,6 +29,26 @@ use melib::error::*;
 use pager::PagerSettings;
 
 use std::collections::HashMap;
+use std::env;
+use std::path::PathBuf;
+
+fn true_val() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct FolderConf {
+    rename: Option<String>,
+    #[serde(default = "true_val")]
+    autoload: bool,
+    ignore: bool,
+}
+
+impl FolderConf {
+    pub fn rename(&self) -> Option<&str> {
+        self.rename.as_ref().map(|v| v.as_str())
+    }
+}
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct FileAccount {
@@ -38,7 +58,7 @@ pub struct FileAccount {
     identity: String,
     display_name: Option<String>,
     threaded: bool,
-    folders: Option<HashMap<String, String>>,
+    folders: Option<HashMap<String, FolderConf>>,
 }
 
 impl From<FileAccount> for AccountConf {
@@ -66,7 +86,7 @@ impl From<FileAccount> for AccountConf {
 }
 
 impl FileAccount {
-    pub fn folders(&self) -> Option<&HashMap<String, String>> {
+    pub fn folders(&self) -> Option<&HashMap<String, FolderConf>> {
         self.folders.as_ref()
     }
     pub fn folder(&self) -> &str {
@@ -113,15 +133,25 @@ pub struct Settings {
 use self::config::{Config, File, FileFormat};
 impl FileSettings {
     pub fn new() -> Result<FileSettings> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
-        let config_path = xdg_dirs
-            .place_config_file("config")
-            .expect("cannot create configuration directory");
+        let config_path = match env::var("MELI_CONFIG") {
+            Ok(path) => PathBuf::from(path),
+            Err(_) => {
+                let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
+                xdg_dirs
+                    .place_config_file("config")
+                    .expect("cannot create configuration directory")
+            }
+        };
+        if !config_path.exists() {
+            panic!(
+                "Config file path `{}` doesn't exist or can't be created.",
+                config_path.display()
+            );
+        }
         let mut s = Config::new();
         let s = s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml));
 
-        /* No point in returning without a config file.
-           TODO: Error and exit instead of panic. */
+        /* No point in returning without a config file. */
         match s.unwrap().deserialize() {
             Ok(v) => Ok(v),
             Err(e) => Err(MeliError::new(e.to_string())),

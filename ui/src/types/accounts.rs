@@ -100,11 +100,13 @@ impl Account {
     }
     pub fn list_folders(&self) -> Vec<Folder> {
         let mut folders = self.backend.folders();
-        if let Some(folder_renames) = self.settings.conf().folders() {
+        if let Some(folder_confs) = self.settings.conf().folders() {
             //eprintln!("folder renames: {:?}", folder_renames);
             for f in &mut folders {
-                if let Some(name) = folder_renames.get(&f.name().to_ascii_lowercase()) {
-                    f.change_name(name);
+                if let Some(r) = folder_confs.get(&f.name().to_ascii_lowercase()) {
+                    if let Some(rename) = r.rename() {
+                        f.change_name(rename);
+                    }
                 }
             }
         }
