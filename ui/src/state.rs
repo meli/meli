@@ -185,7 +185,7 @@ impl State {
             thread::Builder::new()
                 .name("startup-thread".to_string())
                 .spawn(move || {
-                    let dur = time::Duration::from_millis(100);
+                    let dur = time::Duration::from_millis(800);
                     loop {
                         chan_select! {
                             default => {},

@@ -25,7 +25,7 @@ use melib::Draft;
 
 #[derive(Debug)]
 pub struct Composer {
-    reply_context: Option<((usize, usize), Box<ThreadView>)>, // (folder_index, container_index)
+    reply_context: Option<((usize, usize), Box<ThreadView>)>, // (folder_index, thread_node_index)
     account_cursor: usize,
 
     pager: Pager,
@@ -98,19 +98,19 @@ impl fmt::Display for Composer {
 
 impl Composer {
     /*
-     * coordinates: (account index, mailbox index, root set container index)
-     * msg: index of message we reply to in containers
+     * coordinates: (account index, mailbox index, root set thread_node index)
+     * msg: index of message we reply to in thread_nodes
      * context: current context
      */
     pub fn with_context(coordinates: (usize, usize, usize), msg: usize, context: &Context) -> Self {
         let mailbox = &context.accounts[coordinates.0][coordinates.1]
             .as_ref()
             .unwrap();
-        let threads = &mailbox.threads;
-        let containers = &threads.containers();
+        let threads = &mailbox.collection.threads;
+        let thread_nodes = &threads.thread_nodes();
         let mut ret = Composer::default();
-        let p = containers[msg];
-        let parent_message = &mailbox.collection[p.message().unwrap()];
+        let p = &thread_nodes[msg];
+        let parent_message = &mailbox.collection[&p.message().unwrap()];
         let mut op = context.accounts[coordinates.0]
             .backend
             .operation(parent_message.hash());
@@ -122,10 +122,10 @@ impl Composer {
             if p.show_subject() {
                 format!(
                     "Re: {}",
-                    mailbox.collection[p.message().unwrap()].subject().clone()
+                    mailbox.collection[&p.message().unwrap()].subject().clone()
                 )
             } else {
-                mailbox.collection[p.message().unwrap()].subject().into()
+                mailbox.collection[&p.message().unwrap()].subject().into()
             },
         );
 

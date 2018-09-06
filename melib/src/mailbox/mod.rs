@@ -32,7 +32,10 @@ pub mod backends;
 use error::Result;
 use mailbox::backends::{folder_default, Folder};
 pub mod thread;
-pub use mailbox::thread::{build_threads, Container, SortField, SortOrder, Threads};
+pub use mailbox::thread::{SortField, SortOrder, ThreadNode, Threads};
+
+mod collection;
+pub use self::collection::*;
 
 use std::option::Option;
 
@@ -40,8 +43,7 @@ use std::option::Option;
 #[derive(Debug)]
 pub struct Mailbox {
     pub folder: Folder,
-    pub collection: Vec<Envelope>,
-    pub threads: Threads,
+    pub collection: Collection,
 }
 
 impl Clone for Mailbox {
@@ -49,7 +51,6 @@ impl Clone for Mailbox {
         Mailbox {
             folder: self.folder.clone(),
             collection: self.collection.clone(),
-            threads: self.threads.clone(),
         }
     }
 }
@@ -57,8 +58,7 @@ impl Default for Mailbox {
     fn default() -> Self {
         Mailbox {
             folder: folder_default(),
-            collection: Vec::default(),
-            threads: Threads::default(),
+            collection: Collection::default(),
         }
     }
 }
@@ -67,15 +67,14 @@ impl Mailbox {
     pub fn new(
         folder: &Folder,
         sent_folder: &Option<Result<Mailbox>>,
-        collection: Result<Vec<Envelope>>,
+        envelopes: Result<Vec<Envelope>>,
     ) -> Result<Mailbox> {
-        let mut collection: Vec<Envelope> = collection?;
-        collection.sort_by(|a, b| a.date().cmp(&b.date()));
-        let threads = build_threads(&mut collection, sent_folder);
+        let mut envelopes: Vec<Envelope> = envelopes?;
+        envelopes.sort_by(|a, b| a.date().cmp(&b.date()));
+        let collection = Collection::new(envelopes);
         Ok(Mailbox {
             folder: (*folder).clone(),
             collection,
-            threads,
         })
     }
     pub fn is_empty(&self) -> bool {
@@ -84,41 +83,36 @@ impl Mailbox {
     pub fn len(&self) -> usize {
         self.collection.len()
     }
-    pub fn threaded_mail(&self, i: usize) -> usize {
-        self.threads.thread_to_mail(i)
+    pub fn threaded_mail(&self, i: usize) -> EnvelopeHash {
+        self.collection.threads.thread_to_mail(i)
     }
-    pub fn mail_and_thread(&mut self, i: usize) -> (&mut Envelope, Container) {
-        let x = &mut self.collection.as_mut_slice()[i];
-        let thread = self.threads[x.thread()];
-        (x, thread)
+    pub fn mail_and_thread(&mut self, i: EnvelopeHash) -> (&mut Envelope, &ThreadNode) {
+        let thread;
+        {
+            let x = &mut self.collection.envelopes.entry(i).or_default();
+            thread = &self.collection.threads[x.thread()];
+        }
+        (self.collection.envelopes.entry(i).or_default(), thread)
     }
-    pub fn thread(&self, i: usize) -> &Container {
-        &self.threads[i]
+    pub fn thread(&self, i: usize) -> &ThreadNode {
+        &self.collection.threads.thread_nodes()[i]
     }
 
     pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope) {
-        if let Some(i) = self.collection.iter().position(|e| e.hash() == old_hash) {
-            self.collection[i] = envelope;
-        } else {
-            panic!()
-        }
+        self.collection.remove(&old_hash);
+        self.collection.insert(envelope.hash(), envelope);
     }
 
     pub fn insert(&mut self, envelope: Envelope) -> &Envelope {
-        self.collection.push(envelope);
+        let hash = envelope.hash();
+        self.collection.insert(hash, envelope);
         // TODO: Update threads.
         eprintln!("Inserted envelope");
-        &self.collection[self.collection.len() - 1]
+        &self.collection[&hash]
     }
 
     pub fn remove(&mut self, envelope_hash: EnvelopeHash) {
-        if let Some(i) = self
-            .collection
-            .iter()
-            .position(|e| e.hash() == envelope_hash)
-        {
-            self.collection.remove(i);
-        }
+        self.collection.remove(&envelope_hash);
         //   eprintln!("envelope_hash: {}\ncollection:\n{:?}", envelope_hash, self.collection);
     }
 }

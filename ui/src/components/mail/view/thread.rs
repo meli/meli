@@ -25,9 +25,9 @@ use std::cmp;
 #[derive(Debug, Clone)]
 struct ThreadEntry {
     index: (usize, usize, usize),
-    /// (indentation, container index, line number in listing)
+    /// (indentation, thread_node index, line number in listing)
     indentation: usize,
-    msg_idx: usize,
+    msg_idx: EnvelopeHash,
 }
 
 #[derive(Debug, Default)]
@@ -47,7 +47,7 @@ pub struct ThreadView {
 
 impl ThreadView {
     /*
-     * coordinates: (account index, mailbox index, root set container index)
+     * coordinates: (account index, mailbox index, root set thread_node index)
      * expanded_idx: optional position of expanded entry when we render the threadview. Default
      *  expanded message is the last one.
      * context: current context
@@ -62,13 +62,13 @@ impl ThreadView {
         let mailbox = &context.accounts[coordinates.0][coordinates.1]
             .as_ref()
             .unwrap();
-        let threads = &mailbox.threads;
-        let container = &threads.containers()[threads.root_set()[coordinates.2]];
+        let threads = &mailbox.collection.threads;
+        let thread_node = &threads.thread_nodes()[threads.root_set()[coordinates.2]];
 
-        if container.message().is_some() {
+        if thread_node.message().is_some() {
             stack.push((0, threads.root_set()[coordinates.2]));
         } else {
-            stack.push((1, container.first_child().unwrap()));
+            stack.push((1, thread_node.children()[0]));
         }
         let mut view = ThreadView {
             dirty: true,
@@ -95,13 +95,9 @@ impl ThreadView {
                 }
                 _ => {}
             }
-            let container = &threads.containers()[idx];
-            if let Some(i) = container.next_sibling() {
-                stack.push((ind, i));
-            }
-
-            if let Some(i) = container.first_child() {
-                stack.push((ind + 1, i));
+            let thread_node = &threads.thread_nodes()[idx];
+            for &c in thread_node.children().iter() {
+                stack.push((ind + 1, c));
             }
         }
         if expanded_idx.is_none() {
@@ -117,9 +113,9 @@ impl ThreadView {
         let mut highlight_reply_subjects: Vec<Option<usize>> =
             Vec::with_capacity(view.entries.len());
         for e in &view.entries {
-            let envelope: &Envelope = &mailbox.collection[e.msg_idx];
-            let container = &threads.containers()[e.index.1];
-            let string = if container.show_subject() {
+            let envelope: &Envelope = &mailbox.collection[&e.msg_idx];
+            let thread_node = &threads.thread_nodes()[e.index.1];
+            let string = if thread_node.show_subject() {
                 let subject = envelope.subject();
                 highlight_reply_subjects.push(Some(subject.len()));
                 format!(
@@ -198,11 +194,11 @@ impl ThreadView {
         let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
             .as_ref()
             .unwrap();
-        let container = &mailbox.threads.containers()[idx];
-        let msg_idx = if let Some(i) = container.message() {
+        let thread_node = &mailbox.collection.threads.thread_nodes()[idx];
+        let msg_idx = if let Some(i) = thread_node.message() {
             i
         } else {
-            mailbox.threads.containers()[container.first_child().unwrap()]
+            mailbox.collection.threads.thread_nodes()[thread_node.children()[0]]
                 .message()
                 .unwrap()
         };
@@ -316,16 +312,16 @@ impl ThreadView {
             let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
                 .unwrap();
-            let threads = &mailbox.threads;
-            let container = &threads.containers()[threads.root_set()[self.coordinates.2]];
-            let i = if let Some(i) = container.message() {
+            let threads = &mailbox.collection.threads;
+            let thread_node = &threads.thread_nodes()[threads.root_set()[self.coordinates.2]];
+            let i = if let Some(i) = thread_node.message() {
                 i
             } else {
-                threads.containers()[container.first_child().unwrap()]
+                threads.thread_nodes()[thread_node.children()[0]]
                     .message()
                     .unwrap()
             };
-            let envelope: &Envelope = &mailbox.collection[i];
+            let envelope: &Envelope = &mailbox.collection[&i];
 
             let (x, y) = write_string_to_grid(
                 &envelope.subject(),
@@ -435,16 +431,16 @@ impl ThreadView {
             let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
                 .unwrap();
-            let threads = &mailbox.threads;
-            let container = &threads.containers()[threads.root_set()[self.coordinates.2]];
-            let i = if let Some(i) = container.message() {
+            let threads = &mailbox.collection.threads;
+            let thread_node = &threads.thread_nodes()[threads.root_set()[self.coordinates.2]];
+            let i = if let Some(i) = thread_node.message() {
                 i
             } else {
-                threads.containers()[container.first_child().unwrap()]
+                threads.thread_nodes()[thread_node.children()[0]]
                     .message()
                     .unwrap()
             };
-            let envelope: &Envelope = &mailbox.collection[i];
+            let envelope: &Envelope = &mailbox.collection[&i];
 
             let (x, y) = write_string_to_grid(
                 &envelope.subject(),

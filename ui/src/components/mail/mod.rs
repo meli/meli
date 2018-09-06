@@ -144,7 +144,7 @@ impl AccountMenu {
                 .as_ref()
                 .unwrap()
                 .collection
-                .iter()
+                .values()
                 .filter(|e| !e.is_seen())
                 .count();
             s.insert_str(

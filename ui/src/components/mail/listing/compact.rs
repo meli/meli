@@ -121,7 +121,7 @@ impl CompactListing {
             .as_ref()
             .unwrap();
 
-        self.length = mailbox.threads.root_len();
+        self.length = mailbox.collection.threads.root_set().len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(
@@ -134,24 +134,24 @@ impl CompactListing {
             );
             return;
         }
-        let threads = &mailbox.threads;
+        let threads = &mailbox.collection.threads;
         threads.sort_by(self.sort, self.subsort, &mailbox.collection);
-        for (idx, (t, len, has_unseen)) in threads.root_set_iter().enumerate() {
-            let container = &threads.containers()[t];
-            let i = if let Some(i) = container.message() {
+        for (idx, root_idx) in threads.root_set().iter().enumerate() {
+            let thread_node = &threads.thread_nodes()[*root_idx];
+            let i = if let Some(i) = thread_node.message() {
                 i
             } else {
-                threads.containers()[container.first_child().unwrap()]
+                threads.thread_nodes()[thread_node.children()[0]]
                     .message()
                     .unwrap()
             };
-            let root_envelope: &Envelope = &mailbox.collection[i];
-            let fg_color = if has_unseen {
+            let root_envelope: &Envelope = &mailbox.collection[&i];
+            let fg_color = if thread_node.has_unseen() {
                 Color::Byte(0)
             } else {
                 Color::Default
             };
-            let bg_color = if has_unseen {
+            let bg_color = if thread_node.has_unseen() {
                 Color::Byte(251)
             } else if idx % 2 == 0 {
                 Color::Byte(236)
@@ -159,7 +159,7 @@ impl CompactListing {
                 Color::Default
             };
             let (x, _) = write_string_to_grid(
-                &CompactListing::make_entry_string(root_envelope, len, idx),
+                &CompactListing::make_entry_string(root_envelope, thread_node.len(), idx),
                 &mut self.content,
                 fg_color,
                 bg_color,
@@ -179,17 +179,17 @@ impl CompactListing {
             let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
                 .as_ref()
                 .unwrap();
-            let threads = &mailbox.threads;
-            let container = threads.root_set()[idx];
-            let container = &threads.containers()[container];
-            let i = if let Some(i) = container.message() {
+            let threads = &mailbox.collection.threads;
+            let thread_node = threads.root_set()[idx];
+            let thread_node = &threads.thread_nodes()[thread_node];
+            let i = if let Some(i) = thread_node.message() {
                 i
             } else {
-                threads.containers()[container.first_child().unwrap()]
+                threads.thread_nodes()[thread_node.children()[0]]
                     .message()
                     .unwrap()
             };
-            let root_envelope: &Envelope = &mailbox.collection[i];
+            let root_envelope: &Envelope = &mailbox.collection[&i];
             let fg_color = if !root_envelope.is_seen() {
                 Color::Byte(0)
             } else {

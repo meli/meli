@@ -562,7 +562,7 @@ impl Component for StatusBar {
                     self.mode,
                     m.folder.name(),
                     m.collection.len(),
-                    m.collection.iter().filter(|e| !e.is_seen()).count()
+                    m.collection.values().filter(|e| !e.is_seen()).count()
                 );
                 self.dirty = true;
             }

@@ -111,7 +111,7 @@ impl<'a> BackendOp for MaildirOp {
                 'R' => flag |= Flag::REPLIED,
                 'S' => flag |= Flag::SEEN,
                 'T' => flag |= Flag::TRASHED,
-                _ => panic!(),
+                _ => eprintln!("DEBUG: in fetch_flags, path is {}", path),
             }
         }
 

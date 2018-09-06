@@ -34,7 +34,7 @@ pub struct PlainListing {
     cursor_pos: (usize, usize, usize),
     new_cursor_pos: (usize, usize, usize),
     length: usize,
-    local_collection: Vec<usize>,
+    local_collection: Vec<EnvelopeHash>,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
     /// Cache current view.
@@ -118,11 +118,7 @@ impl PlainListing {
             .as_ref()
             .unwrap();
 
-        self.length = if threaded {
-            mailbox.threads.threaded_collection().len()
-        } else {
-            mailbox.len()
-        };
+        self.length = mailbox.len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(
@@ -136,160 +132,68 @@ impl PlainListing {
             return;
         }
 
-        // TODO: Fix the threaded hell and refactor stuff into seperate functions and/or modules.
-        if threaded {
-            let mut indentations: Vec<bool> = Vec::with_capacity(6);
-            let mut thread_idx = 0; // needed for alternate thread colors
-                                    /* Draw threaded view. */
-            let threads = &mailbox.threads;
-            threads.sort_by(self.sort, self.subsort, &mailbox.collection);
-            let containers: &Vec<Container> = &threads.containers();
-            let mut iter = threads.into_iter().peekable();
-            let len = threads
-                .threaded_collection()
-                .len()
-                .to_string()
-                .chars()
-                .count();
-            /* This is just a desugared for loop so that we can use .peek() */
-            let mut idx = 0;
-            while let Some(i) = iter.next() {
-                let container = &containers[i];
-                let indentation = container.indentation();
-
-                if indentation == 0 {
-                    thread_idx += 1;
-                }
-
-                if !container.has_message() {
-                    continue;
-                }
-
-                match iter.peek() {
-                    Some(&x) if threads[x].indentation() == indentation => {
-                        indentations.pop();
-                        indentations.push(true);
-                    }
-                    _ => {
-                        indentations.pop();
-                        indentations.push(false);
-                    }
-                }
-                if container.has_sibling() {
-                    indentations.pop();
-                    indentations.push(true);
-                }
-                let envelope: &Envelope = &mailbox.collection[container.message().unwrap()];
-                let fg_color = if !envelope.is_seen() {
-                    Color::Byte(0)
-                } else {
-                    Color::Default
-                };
-                let bg_color = if !envelope.is_seen() {
-                    Color::Byte(251)
-                } else if thread_idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                };
-                let (x, _) = write_string_to_grid(
-                    &PlainListing::make_thread_entry(
-                        envelope,
-                        idx,
-                        indentation,
-                        container,
-                        &indentations,
-                        len,
-                        //    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
-                    ),
-                    &mut self.content,
-                    fg_color,
-                    bg_color,
-                    ((0, idx), (MAX_COLS - 1, idx)),
-                    false,
-                );
-                for x in x..MAX_COLS {
-                    self.content[(x, idx)].set_ch(' ');
-                    self.content[(x, idx)].set_bg(bg_color);
-                }
-
-                match iter.peek() {
-                    Some(&x) if containers[x].indentation() > indentation => {
-                        indentations.push(false);
-                    }
-                    Some(&x) if containers[x].indentation() < indentation => {
-                        for _ in 0..(indentation - containers[x].indentation()) {
-                            indentations.pop();
-                        }
-                    }
-                    _ => {}
-                }
-                idx += 1;
+        // Populate `CellBuffer` with every entry.
+        let mut idx = 0;
+        for y in 0..=self.length {
+            if idx >= self.length {
+                /* No more entries left, so fill the rest of the area with empty space */
+                clear_area(&mut self.content, ((0, y), (MAX_COLS - 1, self.length)));
+                break;
             }
-        } else {
-            // Populate `CellBuffer` with every entry.
-            let mut idx = 0;
-            for y in 0..=self.length {
-                if idx >= self.length {
-                    /* No more entries left, so fill the rest of the area with empty space */
-                    clear_area(&mut self.content, ((0, y), (MAX_COLS - 1, self.length)));
-                    break;
+            /* Write an entire line for each envelope entry. */
+            self.local_collection = mailbox.collection.keys().map(|v| *v).collect();
+            let sort = self.sort;
+            self.local_collection.sort_by(|a, b| match sort {
+                (SortField::Date, SortOrder::Desc) => {
+                    let ma = &mailbox.collection[a];
+                    let mb = &mailbox.collection[b];
+                    mb.date().cmp(&ma.date())
                 }
-                /* Write an entire line for each envelope entry. */
-                self.local_collection = (0..mailbox.collection.len()).collect();
-                let sort = self.sort;
-                self.local_collection.sort_by(|a, b| match sort {
-                    (SortField::Date, SortOrder::Desc) => {
-                        let ma = &mailbox.collection[*a];
-                        let mb = &mailbox.collection[*b];
-                        mb.date().cmp(&ma.date())
-                    }
-                    (SortField::Date, SortOrder::Asc) => {
-                        let ma = &mailbox.collection[*a];
-                        let mb = &mailbox.collection[*b];
-                        ma.date().cmp(&mb.date())
-                    }
-                    (SortField::Subject, SortOrder::Desc) => {
-                        let ma = &mailbox.collection[*a];
-                        let mb = &mailbox.collection[*b];
-                        ma.subject().cmp(&mb.subject())
-                    }
-                    (SortField::Subject, SortOrder::Asc) => {
-                        let ma = &mailbox.collection[*a];
-                        let mb = &mailbox.collection[*b];
-                        mb.subject().cmp(&ma.subject())
-                    }
-                });
-                let envelope: &Envelope = &mailbox.collection[self.local_collection[idx]];
-
-                let fg_color = if !envelope.is_seen() {
-                    Color::Byte(0)
-                } else {
-                    Color::Default
-                };
-                let bg_color = if !envelope.is_seen() {
-                    Color::Byte(251)
-                } else if idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                };
-                let (x, y) = write_string_to_grid(
-                    &PlainListing::make_entry_string(envelope, idx),
-                    &mut self.content,
-                    fg_color,
-                    bg_color,
-                    ((0, y), (MAX_COLS - 1, y)),
-                    false,
-                );
-
-                for x in x..MAX_COLS {
-                    self.content[(x, y)].set_ch(' ');
-                    self.content[(x, y)].set_bg(bg_color);
+                (SortField::Date, SortOrder::Asc) => {
+                    let ma = &mailbox.collection[a];
+                    let mb = &mailbox.collection[b];
+                    ma.date().cmp(&mb.date())
                 }
+                (SortField::Subject, SortOrder::Desc) => {
+                    let ma = &mailbox.collection[a];
+                    let mb = &mailbox.collection[b];
+                    ma.subject().cmp(&mb.subject())
+                }
+                (SortField::Subject, SortOrder::Asc) => {
+                    let ma = &mailbox.collection[a];
+                    let mb = &mailbox.collection[b];
+                    mb.subject().cmp(&ma.subject())
+                }
+            });
+            let envelope: &Envelope = &mailbox.collection[&self.local_collection[idx]];
 
-                idx += 1;
+            let fg_color = if !envelope.is_seen() {
+                Color::Byte(0)
+            } else {
+                Color::Default
+            };
+            let bg_color = if !envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            };
+            let (x, y) = write_string_to_grid(
+                &PlainListing::make_entry_string(envelope, idx),
+                &mut self.content,
+                fg_color,
+                bg_color,
+                ((0, y), (MAX_COLS - 1, y)),
+                false,
+            );
+
+            for x in x..MAX_COLS {
+                self.content[(x, y)].set_ch(' ');
+                self.content[(x, y)].set_bg(bg_color);
             }
+
+            idx += 1;
         }
     }
 
@@ -301,12 +205,7 @@ impl PlainListing {
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
-        let envelope: &Envelope = if threaded {
-            let i = mailbox.threaded_mail(idx);
-            &mailbox.collection[i]
-        } else {
-            &mailbox.collection[idx]
-        };
+        let envelope: &Envelope = &mailbox.collection[&self.local_collection[idx]];
 
         let fg_color = if !envelope.is_seen() {
             Color::Byte(0)
@@ -336,12 +235,7 @@ impl PlainListing {
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
-        let envelope: &Envelope = if threaded {
-            let i = mailbox.threaded_mail(idx);
-            &mailbox.collection[i]
-        } else {
-            &mailbox.collection[idx]
-        };
+        let envelope: &Envelope = &mailbox.collection[&self.local_collection[idx]];
 
         let fg_color = if !envelope.is_seen() {
             Color::Byte(0)
@@ -423,14 +317,15 @@ impl PlainListing {
         envelope: &Envelope,
         idx: usize,
         indent: usize,
-        container: &Container,
+        node_idx: usize,
+        nodes: &Threads,
         indentations: &[bool],
         idx_width: usize,
         //op: Box<BackendOp>,
     ) -> String {
-        let has_sibling = container.has_sibling();
-        let has_parent = container.has_parent();
-        let show_subject = container.show_subject();
+        let has_sibling = nodes.has_sibling(node_idx);
+        let has_parent = nodes[node_idx].has_parent();
+        let show_subject = nodes[node_idx].show_subject();
 
         let mut s = format!(
             "{}{}{} ",
@@ -525,12 +420,10 @@ impl Component for PlainListing {
                     let account = &mut context.accounts[self.cursor_pos.0];
                     let (hash, is_seen) = {
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        let envelope: &mut Envelope = if threaded {
-                            let i = mailbox.threaded_mail(idx);
-                            &mut mailbox.collection[i]
-                        } else {
-                            &mut mailbox.collection[self.local_collection[idx]]
-                        };
+                        let envelope: &mut Envelope = &mut mailbox
+                            .collection
+                            .entry(self.local_collection[idx])
+                            .or_default();
                         (envelope.hash(), envelope.is_seen())
                     };
                     if !is_seen {
@@ -539,12 +432,10 @@ impl Component for PlainListing {
                             backend.operation(hash)
                         };
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        let envelope: &mut Envelope = if threaded {
-                            let i = mailbox.threaded_mail(idx);
-                            &mut mailbox.collection[i]
-                        } else {
-                            &mut mailbox.collection[self.local_collection[idx]]
-                        };
+                        let envelope: &mut Envelope = &mut mailbox
+                            .collection
+                            .entry(self.local_collection[idx])
+                            .or_default();
                         envelope.set_seen(op).unwrap();
                         true
                     } else {
@@ -598,11 +489,11 @@ impl Component for PlainListing {
                 let account = &context.accounts[self.cursor_pos.0];
                 let mailbox = &account[self.cursor_pos.1].as_ref().unwrap();
                 let mut coordinates = self.cursor_pos;
-                coordinates.2 = if threaded {
-                    mailbox.threaded_mail(self.cursor_pos.2)
-                } else {
-                    self.local_collection[self.cursor_pos.2]
-                };
+                let coordinates = (
+                    coordinates.0,
+                    coordinates.1,
+                    self.local_collection[self.cursor_pos.2],
+                );
                 self.view = Some(MailView::new(coordinates, None, None));
             }
             self.view.as_mut().unwrap().draw(

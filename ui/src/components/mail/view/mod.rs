@@ -61,7 +61,7 @@ impl ViewMode {
 /// menus
 #[derive(Debug, Default)]
 pub struct MailView {
-    coordinates: (usize, usize, usize),
+    coordinates: (usize, usize, EnvelopeHash),
     pager: Option<Pager>,
     subview: Option<Box<Component>>,
     dirty: bool,
@@ -79,7 +79,7 @@ impl fmt::Display for MailView {
 
 impl MailView {
     pub fn new(
-        coordinates: (usize, usize, usize),
+        coordinates: (usize, usize, EnvelopeHash),
         pager: Option<Pager>,
         subview: Option<Box<Component>>,
     ) -> Self {
@@ -217,7 +217,7 @@ impl Component for MailView {
             let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
                 .unwrap();
-            let envelope: &Envelope = &mailbox.collection[self.coordinates.2];
+            let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
 
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area);
@@ -302,7 +302,7 @@ impl Component for MailView {
             let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
                 .as_ref()
                 .unwrap();
-            let envelope: &Envelope = &mailbox.collection[mailbox_idx.2];
+            let envelope: &Envelope = &mailbox.collection[&mailbox_idx.2];
             let op = context.accounts[mailbox_idx.0]
                 .backend
                 .operation(envelope.hash());
@@ -419,7 +419,7 @@ impl Component for MailView {
                         .as_ref()
                         .unwrap();
 
-                    let envelope: &Envelope = &mailbox.collection[self.coordinates.2];
+                    let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
                     let op = context.accounts[self.coordinates.0]
                         .backend
                         .operation(envelope.hash());
@@ -514,7 +514,7 @@ impl Component for MailView {
                         .as_ref()
                         .unwrap();
 
-                    let envelope: &Envelope = &mailbox.collection[self.coordinates.2];
+                    let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
                     let finder = LinkFinder::new();
                     let op = context.accounts[self.coordinates.0]
                         .backend
