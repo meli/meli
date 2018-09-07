@@ -26,7 +26,7 @@
 use mailbox::email::*;
 
 extern crate fnv;
-use self::fnv::FnvHashMap;
+use self::fnv::{FnvHashMap, FnvHashSet};
 use std::cell::RefCell;
 use std::ops::Index;
 use std::result::Result as StdResult;
@@ -163,6 +163,7 @@ pub struct Threads {
     root_set: Vec<usize>,
 
     message_ids: FnvHashMap<String, usize>,
+    hash_set: FnvHashSet<EnvelopeHash>,
     sort: RefCell<(SortField, SortOrder)>,
     subsort: RefCell<(SortField, SortOrder)>,
 }
@@ -186,9 +187,16 @@ impl Threads {
         /* A hash table of Message IDs */
         let mut message_ids: FnvHashMap<String, usize> =
             FnvHashMap::with_capacity_and_hasher(collection.len(), Default::default());
+        let mut hash_set: FnvHashSet<EnvelopeHash> =
+            FnvHashSet::with_capacity_and_hasher(collection.len(), Default::default());
         /* Add each message to message_ids and threads, and link them together according to the
          * References / In-Reply-To headers */
-        link_threads(&mut thread_nodes, &mut message_ids, collection);
+        link_threads(
+            &mut thread_nodes,
+            &mut message_ids,
+            &mut hash_set,
+            collection,
+        );
 
         /* Walk over the elements of message_ids, and gather a list of the ThreadNode objects that have
          * no parents. These are the root messages of each thread */
@@ -211,6 +219,7 @@ impl Threads {
             thread_nodes,
             root_set,
             message_ids,
+            hash_set,
             ..Default::default()
         };
         t.build_collection(&collection);
@@ -218,7 +227,12 @@ impl Threads {
     }
 
     pub fn insert(&mut self, envelope: &mut Envelope) {
-        link_envelope(&mut self.thread_nodes, &mut self.message_ids, envelope);
+        link_envelope(
+            &mut self.thread_nodes,
+            &mut self.message_ids,
+            &mut self.hash_set,
+            envelope,
+        );
     }
 
     fn build_collection(&mut self, collection: &FnvHashMap<EnvelopeHash, Envelope>) {
@@ -292,6 +306,7 @@ impl Threads {
 fn link_envelope(
     thread_nodes: &mut Vec<ThreadNode>,
     message_ids: &mut FnvHashMap<String, usize>,
+    hash_set: &mut FnvHashSet<EnvelopeHash>,
     envelope: &mut Envelope,
 ) {
     let m_id = envelope.message_id_raw().to_string();
@@ -320,6 +335,7 @@ fn link_envelope(
         });
         envelope.set_thread(thread_nodes.len() - 1);
         message_ids.insert(m_id, thread_nodes.len() - 1);
+        hash_set.insert(envelope.hash());
         thread_nodes.len() - 1
     };
 
@@ -407,10 +423,11 @@ fn link_envelope(
 fn link_threads(
     thread_nodes: &mut Vec<ThreadNode>,
     message_ids: &mut FnvHashMap<String, usize>,
+    hash_set: &mut FnvHashSet<EnvelopeHash>,
     collection: &mut FnvHashMap<EnvelopeHash, Envelope>,
 ) {
     for v in collection.values_mut() {
-        link_envelope(thread_nodes, message_ids, v);
+        link_envelope(thread_nodes, message_ids, hash_set, v);
     }
 }
 
