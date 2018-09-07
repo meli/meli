@@ -354,44 +354,34 @@ impl Envelope {
             }
             if name.eq_ignore_ascii_case(b"to") {
                 let parse_result = parser::rfc2822address_list(value);
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    Vec::new()
+                if parse_result.is_done() {
+                    let value = parse_result.to_full_result().unwrap();
+                    self.set_to(value);
                 };
-                self.set_to(value);
             } else if name.eq_ignore_ascii_case(b"cc") {
                 let parse_result = parser::rfc2822address_list(value);
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    Vec::new()
+                if parse_result.is_done() {
+                    let value = parse_result.to_full_result().unwrap();
+                    self.set_cc(value);
                 };
-                self.set_cc(value);
             } else if name.eq_ignore_ascii_case(b"bcc") {
                 let parse_result = parser::rfc2822address_list(value);
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    Vec::new()
+                if parse_result.is_done() {
+                    let value = parse_result.to_full_result().unwrap();
+                    self.set_bcc(value);
                 };
-                self.set_bcc(value);
             } else if name.eq_ignore_ascii_case(b"from") {
                 let parse_result = parser::rfc2822address_list(value);
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    Vec::new()
-                };
-                self.set_from(value);
+                if parse_result.is_done() {
+                    let value = parse_result.to_full_result().unwrap();
+                    self.set_from(value);
+                }
             } else if name.eq_ignore_ascii_case(b"subject") {
                 let parse_result = parser::phrase(value.trim());
-                let value = if parse_result.is_done() {
-                    parse_result.to_full_result().unwrap()
-                } else {
-                    "".into()
+                if parse_result.is_done() {
+                    let value = parse_result.to_full_result().unwrap();
+                    self.set_subject(value);
                 };
-                self.set_subject(value);
             } else if name.eq_ignore_ascii_case(b"message-id") {
                 self.set_message_id(value);
             } else if name.eq_ignore_ascii_case(b"references") {
@@ -467,7 +457,7 @@ impl Envelope {
         _strings.join(", ")
     }
     pub fn field_from_to_string(&self) -> String {
-        let _strings: Vec<String> = self.from.iter().map(|a| format!("{}", a)).collect();
+        let _strings: Vec<String> = self.from().iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
     }
     pub fn to(&self) -> &Vec<Address> {
@@ -572,10 +562,10 @@ impl Envelope {
         self.date = String::from_utf8_lossy(new_val).into_owned();
     }
     fn set_bcc(&mut self, new_val: Vec<Address>) -> () {
-        self.from = new_val;
+        self.bcc = new_val;
     }
     fn set_cc(&mut self, new_val: Vec<Address>) -> () {
-        self.from = new_val;
+        self.cc = new_val;
     }
     fn set_from(&mut self, new_val: Vec<Address>) -> () {
         self.from = new_val;
