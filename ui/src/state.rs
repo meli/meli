@@ -505,18 +505,6 @@ impl State {
                 }
                 return;
             }
-            UIEventType::Input(Key::Char('t')) => for i in 0..self.entities.len() {
-                self.entities[i].rcv_event(
-                    &UIEvent {
-                        id: 0,
-                        event_type: UIEventType::Action(Action::Listing(
-                            ListingAction::ToggleThreaded,
-                        )),
-                    },
-                    &mut self.context,
-                );
-            },
-
             _ => {}
         }
         /* inform each entity */

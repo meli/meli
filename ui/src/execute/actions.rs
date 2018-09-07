@@ -30,7 +30,9 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 pub enum ListingAction {
-    ToggleThreaded,
+    SetPlain,
+    SetThreaded,
+    SetCompact,
 }
 
 #[derive(Debug, Clone)]

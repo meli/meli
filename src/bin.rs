@@ -62,7 +62,7 @@ fn main() {
 
     /* Register some reasonably useful interfaces */
     let menu = Entity::from(Box::new(AccountMenu::new(&state.context.accounts)));
-    let listing = PlainListing::new();
+    let listing = listing::Listing::default();
     let b = Entity::from(Box::new(listing));
     let tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true))]));
     let window = Entity::from(tabs);

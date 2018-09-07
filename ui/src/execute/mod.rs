@@ -72,11 +72,22 @@ named!(
 
 named!(
     threaded<Action>,
-    map!(ws!(tag!("threaded")), |_| Listing(ToggleThreaded))
+    map!(ws!(tag!("threaded")), |_| Listing(SetThreaded))
 );
+
+named!(
+    plain<Action>,
+    map!(ws!(tag!("plain")), |_| Listing(SetPlain))
+);
+
+named!(
+    compact<Action>,
+    map!(ws!(tag!("compact")), |_| Listing(SetCompact))
+);
+
 named!(
     toggle<Action>,
-    preceded!(tag!("toggle "), alt_complete!(threaded))
+    preceded!(tag!("set "), alt_complete!(threaded | plain | compact))
 );
 
 named!(pub parse_command<Action>,

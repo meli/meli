@@ -630,8 +630,7 @@ impl Envelope {
                 s.refs.push(new_ref);
             }
             None => {
-                let mut v = Vec::new();
-                v.push(new_ref);
+                let v = vec![new_ref];
                 self.references = Some(References {
                     raw: "".into(),
                     refs: v,
@@ -645,10 +644,9 @@ impl Envelope {
                 s.raw = new_val.into();
             }
             None => {
-                let v = Vec::new();
                 self.references = Some(References {
                     raw: new_val.into(),
-                    refs: v,
+                    refs: Vec::new(),
                 });
             }
         }

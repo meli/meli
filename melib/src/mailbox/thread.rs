@@ -151,6 +151,10 @@ impl ThreadNode {
     pub fn children(&self) -> &[usize] {
         &self.children
     }
+
+    pub fn indentation(&self) -> usize {
+        self.indentation
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -194,7 +198,7 @@ impl Threads {
                 if !thread_nodes[*v].has_message() && thread_nodes[*v].children.len() == 1 {
                     /* Do not promote the children if doing so would promote them to the root set
                      * -- unless there is only one child, in which case, do. */
-                    root_set.push(*v);
+                    root_set.push(thread_nodes[*v].children[0]);
 
                     continue 'root_set;
                 }
@@ -334,7 +338,13 @@ fn link_threads(
         /* The index of the reference we are currently examining, start from current message */
         let mut ref_ptr = t_idx;
 
+        let mut iasf = 0;
         for &refn in v.references().iter().rev() {
+            if iasf == 1 {
+                /*FIXME: Skips anything other than direct parents */
+                continue;
+            }
+            iasf += 1;
             let r_id = String::from_utf8_lossy(refn.raw()).into();
             let parent_id = if message_ids.contains_key(&r_id) {
                 let parent_id = message_ids[&r_id];
@@ -368,7 +378,6 @@ fn link_threads(
                 if thread_nodes[ref_ptr].parent.is_none() {
                     thread_nodes[ref_ptr].parent = Some(thread_nodes.len() - 1);
                 }
-                /* Can't avoid copy here since we have different lifetimes */
                 message_ids.insert(r_id, thread_nodes.len() - 1);
                 thread_nodes.len() - 1
             };
@@ -401,6 +410,7 @@ impl Index<usize> for Threads {
             .expect("thread index out of bounds")
     }
 }
+
 fn node_build(
     idx: usize,
     thread_nodes: &mut Vec<ThreadNode>,

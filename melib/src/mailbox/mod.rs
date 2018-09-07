@@ -83,6 +83,15 @@ impl Mailbox {
     pub fn len(&self) -> usize {
         self.collection.len()
     }
+    pub fn thread_to_mail_mut(&mut self, i: usize) -> &mut Envelope {
+        self.collection
+            .envelopes
+            .entry(self.collection.threads.thread_to_mail(i))
+            .or_default()
+    }
+    pub fn thread_to_mail(&self, i: usize) -> &Envelope {
+        &self.collection.envelopes[&self.collection.threads.thread_to_mail(i)]
+    }
     pub fn threaded_mail(&self, i: usize) -> EnvelopeHash {
         self.collection.threads.thread_to_mail(i)
     }
