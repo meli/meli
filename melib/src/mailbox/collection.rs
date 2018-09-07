@@ -40,6 +40,11 @@ impl Collection {
     pub fn is_empty(&self) -> bool {
         self.envelopes.is_empty()
     }
+
+    pub fn insert(&mut self, hash: EnvelopeHash, mut envelope: Envelope) {
+        self.threads.insert(&mut envelope);
+        self.envelopes.insert(hash, envelope);
+    }
 }
 
 impl Deref for Collection {

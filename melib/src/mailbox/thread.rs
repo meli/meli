@@ -162,7 +162,7 @@ pub struct Threads {
     thread_nodes: Vec<ThreadNode>,
     root_set: Vec<usize>,
 
-    message_ids: FnvHashMap<String, EnvelopeHash>,
+    message_ids: FnvHashMap<String, usize>,
     sort: RefCell<(SortField, SortOrder)>,
     subsort: RefCell<(SortField, SortOrder)>,
 }
@@ -210,10 +210,15 @@ impl Threads {
         let mut t = Threads {
             thread_nodes,
             root_set,
+            message_ids,
             ..Default::default()
         };
         t.build_collection(&collection);
         t
+    }
+
+    pub fn insert(&mut self, envelope: &mut Envelope) {
+        link_envelope(&mut self.thread_nodes, &mut self.message_ids, envelope);
     }
 
     fn build_collection(&mut self, collection: &FnvHashMap<EnvelopeHash, Envelope>) {
@@ -284,120 +289,128 @@ impl Threads {
     }
 }
 
+fn link_envelope(
+    thread_nodes: &mut Vec<ThreadNode>,
+    message_ids: &mut FnvHashMap<String, usize>,
+    envelope: &mut Envelope,
+) {
+    let m_id = envelope.message_id_raw().to_string();
+
+    /* The index of this message's ThreadNode in thread_nodes */
+
+    let t_idx: usize = if message_ids.get(&m_id).is_some() {
+        let node_idx = message_ids[&m_id];
+        /* the already existing ThreadNote should be empty, since we're
+         * seeing this message for the first time. otherwise it's a
+         * duplicate. */
+        if thread_nodes[node_idx].message.is_some() {
+            return;
+        }
+        thread_nodes[node_idx].date = envelope.date();
+        thread_nodes[node_idx].message = Some(envelope.hash());
+        envelope.set_thread(node_idx);
+
+        node_idx
+    } else {
+        /* Create a new ThreadNode object holding this message */
+        thread_nodes.push(ThreadNode {
+            message: Some(envelope.hash()),
+            date: envelope.date(),
+            ..Default::default()
+        });
+        envelope.set_thread(thread_nodes.len() - 1);
+        message_ids.insert(m_id, thread_nodes.len() - 1);
+        thread_nodes.len() - 1
+    };
+
+    /* For each element in the message's References field:
+     *
+     * Find a ThreadNode object for the given Message-ID:
+     * If there's one in message_ids use that;
+     * Otherwise, make (and index) one with a null Message
+     *
+     * Link the References field's ThreadNode together in the order implied
+     * by the References header.
+     * If they are already linked, don't change the existing links.
+     * Do not add a link if adding that link would introduce a loop: that
+     * is, before asserting A->B, search down the children of B to see if A
+     * is reachable, and also search down the children of A to see if B is
+     * reachable. If either is already reachable as a child of the other,
+     * don't add the link.
+     */
+
+    /* The index of the reference we are currently examining, start from current message */
+    let mut ref_ptr = t_idx;
+
+    let mut iasf = 0;
+    for &refn in envelope.references().iter().rev() {
+        if iasf == 1 {
+            /*FIXME: Skips anything other than direct parents */
+            continue;
+        }
+        iasf += 1;
+        let r_id = String::from_utf8_lossy(refn.raw()).into();
+        let parent_id = if message_ids.contains_key(&r_id) {
+            let parent_id = message_ids[&r_id];
+            if !(thread_nodes[parent_id].is_descendant(thread_nodes, &thread_nodes[ref_ptr])
+                || thread_nodes[ref_ptr].is_descendant(thread_nodes, &thread_nodes[parent_id]))
+            {
+                thread_nodes[ref_ptr].parent = Some(parent_id);
+                if thread_nodes[parent_id].children.is_empty() {
+                    thread_nodes[parent_id].children.push(ref_ptr);
+                }
+
+                let (left, right) = thread_nodes.split_at_mut(parent_id);
+                let (parent, right) = right.split_first_mut().unwrap();
+                for &c in &parent.children {
+                    if c > parent_id {
+                        right[c - parent_id - 1].parent = Some(parent_id);
+                    } else {
+                        left[c].parent = Some(parent_id);
+                    }
+                }
+            }
+            parent_id
+        } else {
+            /* Create a new ThreadNode object holding this reference */
+            thread_nodes.push(ThreadNode {
+                message: None,
+                children: vec![ref_ptr; 1],
+                date: envelope.date(),
+                ..Default::default()
+            });
+            if thread_nodes[ref_ptr].parent.is_none() {
+                thread_nodes[ref_ptr].parent = Some(thread_nodes.len() - 1);
+            }
+            message_ids.insert(r_id, thread_nodes.len() - 1);
+            thread_nodes.len() - 1
+        };
+
+        /* Update thread's date */
+
+        let mut parent_iter = parent_id;
+        'date: loop {
+            let p: &mut ThreadNode = &mut thread_nodes[parent_iter];
+            if p.date < envelope.date() {
+                p.date = envelope.date();
+            }
+            if let Some(p) = p.parent {
+                parent_iter = p;
+            } else {
+                break 'date;
+            }
+        }
+        ref_ptr = parent_id;
+    }
+}
+
 fn link_threads(
     thread_nodes: &mut Vec<ThreadNode>,
     message_ids: &mut FnvHashMap<String, usize>,
     collection: &mut FnvHashMap<EnvelopeHash, Envelope>,
 ) {
-    for (k, v) in collection.iter_mut() {
-        let m_id = v.message_id_raw().to_string();
-
-        /* The index of this message's ThreadNode in thread_nodes */
-
-        let t_idx: usize = if message_ids.get(&m_id).is_some() {
-            let node_idx = message_ids[&m_id];
-            /* the already existing ThreadNote should be empty, since we're
-             * seeing this message for the first time. otherwise it's a
-             * duplicate. */
-            if thread_nodes[node_idx].message.is_some() {
-                continue;
-            }
-            thread_nodes[node_idx].date = v.date();
-            thread_nodes[node_idx].message = Some(*k);
-            v.set_thread(node_idx);
-
-            node_idx
-        } else {
-            /* Create a new ThreadNode object holding this message */
-            thread_nodes.push(ThreadNode {
-                message: Some(*k),
-                date: v.date(),
-                ..Default::default()
-            });
-            v.set_thread(thread_nodes.len() - 1);
-            message_ids.insert(m_id, thread_nodes.len() - 1);
-            thread_nodes.len() - 1
-        };
-
-        /* For each element in the message's References field:
-         *
-         * Find a ThreadNode object for the given Message-ID:
-         * If there's one in message_ids use that;
-         * Otherwise, make (and index) one with a null Message
-         *
-         * Link the References field's ThreadNode together in the order implied
-         * by the References header.
-         * If they are already linked, don't change the existing links.
-         * Do not add a link if adding that link would introduce a loop: that
-         * is, before asserting A->B, search down the children of B to see if A
-         * is reachable, and also search down the children of A to see if B is
-         * reachable. If either is already reachable as a child of the other,
-         * don't add the link.
-         */
-
-        /* The index of the reference we are currently examining, start from current message */
-        let mut ref_ptr = t_idx;
-
-        let mut iasf = 0;
-        for &refn in v.references().iter().rev() {
-            if iasf == 1 {
-                /*FIXME: Skips anything other than direct parents */
-                continue;
-            }
-            iasf += 1;
-            let r_id = String::from_utf8_lossy(refn.raw()).into();
-            let parent_id = if message_ids.contains_key(&r_id) {
-                let parent_id = message_ids[&r_id];
-                if !(thread_nodes[parent_id].is_descendant(thread_nodes, &thread_nodes[ref_ptr])
-                    || thread_nodes[ref_ptr].is_descendant(thread_nodes, &thread_nodes[parent_id]))
-                {
-                    thread_nodes[ref_ptr].parent = Some(parent_id);
-                    if thread_nodes[parent_id].children.is_empty() {
-                        thread_nodes[parent_id].children.push(ref_ptr);
-                    }
-
-                    let (left, right) = thread_nodes.split_at_mut(parent_id);
-                    let (parent, right) = right.split_first_mut().unwrap();
-                    for &c in &parent.children {
-                        if c > parent_id {
-                            right[c - parent_id - 1].parent = Some(parent_id);
-                        } else {
-                            left[c].parent = Some(parent_id);
-                        }
-                    }
-                }
-                parent_id
-            } else {
-                /* Create a new ThreadNode object holding this reference */
-                thread_nodes.push(ThreadNode {
-                    message: None,
-                    children: vec![ref_ptr; 1],
-                    date: v.date(),
-                    ..Default::default()
-                });
-                if thread_nodes[ref_ptr].parent.is_none() {
-                    thread_nodes[ref_ptr].parent = Some(thread_nodes.len() - 1);
-                }
-                message_ids.insert(r_id, thread_nodes.len() - 1);
-                thread_nodes.len() - 1
-            };
-
-            /* Update thread's date */
-
-            let mut parent_iter = parent_id;
-            'date: loop {
-                let p: &mut ThreadNode = &mut thread_nodes[parent_iter];
-                if p.date < v.date() {
-                    p.date = v.date();
-                }
-                if let Some(p) = p.parent {
-                    parent_iter = p;
-                } else {
-                    break 'date;
-                }
-            }
-            ref_ptr = parent_id;
-        }
+    for v in collection.values_mut() {
+        link_envelope(thread_nodes, message_ids, v);
     }
 }
 

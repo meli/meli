@@ -115,7 +115,6 @@ impl Mailbox {
     pub fn insert(&mut self, envelope: Envelope) -> &Envelope {
         let hash = envelope.hash();
         self.collection.insert(hash, envelope);
-        // TODO: Update threads.
         eprintln!("Inserted envelope");
         &self.collection[&hash]
     }
