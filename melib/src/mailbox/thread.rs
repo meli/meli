@@ -203,6 +203,18 @@ impl Threads {
          * no parents. These are the root messages of each thread */
         let mut root_set: Vec<usize> = Vec::with_capacity(collection.len());
         'root_set: for v in message_ids.values() {
+            /* update length */
+            fn set_length(id: usize, thread_nodes: &mut Vec<ThreadNode>) -> usize {
+                let mut length = thread_nodes[id].children.len();
+                let children: Vec<usize> = thread_nodes[id].children.iter().cloned().collect();
+                for c in children {
+                    length += set_length(c, thread_nodes);
+                }
+                thread_nodes[id].len = length;
+                return length;
+            }
+            set_length(*v, &mut thread_nodes);
+
             if thread_nodes[*v].parent.is_none() {
                 if !thread_nodes[*v].has_message() && thread_nodes[*v].children.len() == 1 {
                     /* Do not promote the children if doing so would promote them to the root set
