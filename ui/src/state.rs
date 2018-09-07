@@ -29,14 +29,13 @@
   */
 
 use super::*;
-use melib::backends::FolderHash;
+use melib::backends::{FolderHash, NotifyFn};
 
 use chan::{Receiver, Sender};
 use fnv::FnvHashMap;
 use std::io::Write;
 use std::result;
 use std::thread;
-use std::time;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use termion::{clear, cursor, style};
@@ -122,9 +121,6 @@ pub struct State {
     pub mode: UIMode,
     entities: Vec<Entity>,
     pub context: Context,
-
-    startup_thread: Option<chan::Sender<bool>>,
-
     threads: FnvHashMap<thread::ThreadId, (chan::Sender<bool>, thread::JoinHandle<()>)>,
 }
 
@@ -174,34 +170,19 @@ impl State {
         let mut accounts: Vec<Account> = settings
             .accounts
             .iter()
-            .map(|(n, a_s)| Account::new(n.to_string(), a_s.clone(), &backends))
+            .map(|(n, a_s)| {
+                let sender = sender.clone();
+                Account::new(
+                    n.to_string(),
+                    a_s.clone(),
+                    &backends,
+                    NotifyFn::new(Box::new(move || {
+                        sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck))
+                    })),
+                )
+            })
             .collect();
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
-        let (startup_tx, startup_rx) = chan::async();
-        let startup_thread = {
-            let sender = sender.clone();
-            let startup_rx = startup_rx.clone();
-
-            thread::Builder::new()
-                .name("startup-thread".to_string())
-                .spawn(move || {
-                    let dur = time::Duration::from_millis(800);
-                    loop {
-                        chan_select! {
-                            default => {},
-                            startup_rx.recv() -> _ => {
-                                sender.send(ThreadEvent::ThreadJoin(thread::current().id()));
-                                break;
-                            }
-                        }
-                        sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
-                        thread::sleep(dur);
-                    }
-                    startup_rx.recv();
-                    return;
-                })
-                .unwrap()
-        };
         let mut s = State {
             cols,
             rows,
@@ -228,13 +209,8 @@ impl State {
                     tx: input_thread.0,
                 },
             },
-            startup_thread: Some(startup_tx.clone()),
             threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
         };
-        s.threads.insert(
-            startup_thread.thread().id(),
-            (startup_tx.clone(), startup_thread),
-        );
         write!(
             s.stdout(),
             "{}{}{}",
@@ -271,34 +247,6 @@ impl State {
                     event_type: notification,
                 });
             }
-
-            let (startup_tx, startup_rx) = chan::async();
-            let startup_thread = {
-                let sender = self.context.sender.clone();
-                let startup_rx = startup_rx.clone();
-
-                thread::Builder::new()
-                    .name("startup-thread".to_string())
-                    .spawn(move || {
-                        let dur = time::Duration::from_millis(100);
-                        loop {
-                            chan_select! {
-                                default => {},
-                                startup_rx.recv() -> _ => {
-                                    sender.send(ThreadEvent::UIEvent(UIEventType::MailboxUpdate((idxa,idxm))));
-                                    sender.send(ThreadEvent::ThreadJoin(thread::current().id()));
-                                    return;
-                                }
-                            }
-                            sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
-                            thread::sleep(dur);
-                        }
-                    })
-                    .expect("Failed to spawn startup-thread in hash_to_folder()")
-            };
-            self.startup_thread = Some(startup_tx.clone());
-            self.threads
-                .insert(startup_thread.thread().id(), (startup_tx, startup_thread));
         } else {
             eprintln!(
                 "BUG: mailbox with hash {} not found in mailbox_hashes.",
@@ -313,19 +261,6 @@ impl State {
         let (tx, handle) = self.threads.remove(&id).unwrap();
         tx.send(true);
         handle.join().unwrap();
-    }
-
-    /// If startup has finished, inform startup thread that it doesn't need to tick us with startup
-    /// check reminders and let it die.
-    pub fn finish_startup(&mut self) {
-        // TODO: Encode startup process with the type system if possible
-        if self.startup_thread.is_none() {
-            return;
-        }
-        {
-            let tx = self.startup_thread.take().unwrap();
-            tx.send(true);
-        }
     }
 
     /// Switch back to the terminal's main screen (The command line the user sees before opening

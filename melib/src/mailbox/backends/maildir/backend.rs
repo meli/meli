@@ -24,7 +24,7 @@ extern crate fnv;
 extern crate notify;
 extern crate xdg;
 
-use super::{MaildirFolder, MaildirOp};
+use super::{MaildirFolder, MaildirOp, NotifyFn};
 use async::*;
 use conf::AccountSettings;
 use error::Result;
@@ -125,8 +125,8 @@ impl MailBackend for MaildirType {
     fn folders(&self) -> Vec<Folder> {
         self.folders.iter().map(|f| f.clone()).collect()
     }
-    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
-        self.multicore(4, folder)
+    fn get(&mut self, folder: &Folder, notify_fn: Arc<NotifyFn>) -> Async<Result<Vec<Envelope>>> {
+        self.multicore(4, folder, notify_fn)
     }
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()> {
         let (tx, rx) = channel();
@@ -345,7 +345,12 @@ impl MaildirType {
             .0
     }
 
-    pub fn multicore(&mut self, cores: usize, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
+    pub fn multicore(
+        &mut self,
+        cores: usize,
+        folder: &Folder,
+        notify_fn: Arc<NotifyFn>,
+    ) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let root_path = self.path.to_path_buf();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
@@ -483,6 +488,7 @@ impl MaildirType {
                         (*map).insert(e.hash(), y);
                     }
                     tx.send(AsyncStatus::Finished);
+                    notify_fn.notify();
                     Ok(r)
                 })
                 .unwrap()

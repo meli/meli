@@ -71,7 +71,7 @@ impl Mailbox {
     ) -> Result<Mailbox> {
         let mut envelopes: Vec<Envelope> = envelopes?;
         envelopes.sort_by(|a, b| a.date().cmp(&b.date()));
-        let collection = Collection::new(envelopes);
+        let collection = Collection::new(envelopes, folder.name());
         Ok(Mailbox {
             folder: (*folder).clone(),
             collection,

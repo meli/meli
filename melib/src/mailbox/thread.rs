@@ -28,17 +28,18 @@ use mailbox::email::*;
 extern crate fnv;
 use self::fnv::{FnvHashMap, FnvHashSet};
 use std::cell::RefCell;
+use std::iter::FromIterator;
 use std::ops::Index;
 use std::result::Result as StdResult;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Copy, Deserialize)]
 pub enum SortOrder {
     Asc,
     Desc,
 }
 
-#[derive(Debug, Clone, PartialEq, Copy)]
+#[derive(Debug, Clone, PartialEq, Copy, Deserialize)]
 pub enum SortField {
     Subject,
     Date,
@@ -78,7 +79,7 @@ impl FromStr for SortOrder {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct ThreadNode {
     message: Option<EnvelopeHash>,
     parent: Option<usize>,
@@ -157,7 +158,7 @@ impl ThreadNode {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct Threads {
     thread_nodes: Vec<ThreadNode>,
     root_set: Vec<usize>,
@@ -224,6 +225,16 @@ impl Threads {
         };
         t.build_collection(&collection);
         t
+    }
+
+    pub fn update(&mut self, collection: &mut FnvHashMap<EnvelopeHash, Envelope>) {
+        let new_hash_set = FnvHashSet::from_iter(collection.keys().cloned());
+
+        let difference: Vec<EnvelopeHash> =
+            new_hash_set.difference(&self.hash_set).cloned().collect();
+        for h in difference {
+            self.insert(collection.entry(h).or_default());
+        }
     }
 
     pub fn insert(&mut self, envelope: &mut Envelope) {

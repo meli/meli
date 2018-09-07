@@ -147,7 +147,6 @@ fn main() {
                             break 'inner; // `goto` 'reap loop, and wait on child.
                         }
                         ThreadEvent::UIEvent(UIEventType::StartupCheck) => {
-                            let mut flag = false;
                             let mut render_flag = false;
                             for idx_a in 0..state.context.accounts.len() {
                                 let len = state.context.accounts[idx_a].len();
@@ -156,15 +155,9 @@ fn main() {
                                         Ok(true) => {
                                             render_flag = true;
                                         },
-                                        Ok(false) => {},
-                                        Err(_) => {
-                                            flag |= true;
-                                        }
+                                        Ok(false) | Err(_) => {}
                                     }
                                 }
-                            }
-                            if !flag {
-                                state.finish_startup();
                             }
                             if render_flag {
                                 state.render();

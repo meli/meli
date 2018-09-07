@@ -26,12 +26,13 @@
 use async::*;
 use conf::AccountConf;
 use mailbox::backends::{
-    Backends, Folder, MailBackend, RefreshEvent, RefreshEventConsumer, RefreshEventKind,
+    Backends, Folder, MailBackend, NotifyFn, RefreshEvent, RefreshEventConsumer, RefreshEventKind,
 };
 use mailbox::*;
 use melib::error::Result;
 use std::ops::{Index, IndexMut};
 use std::result;
+use std::sync::Arc;
 use types::UIEventType::{self, Notification};
 
 pub type Worker = Option<Async<Result<Vec<Envelope>>>>;
@@ -48,10 +49,11 @@ pub struct Account {
     pub settings: AccountConf,
     pub runtime_settings: AccountConf,
     pub backend: Box<MailBackend>,
+    notify_fn: Arc<NotifyFn>,
 }
 
 impl Account {
-    pub fn new(name: String, settings: AccountConf, map: &Backends) -> Self {
+    pub fn new(name: String, settings: AccountConf, map: &Backends, notify_fn: NotifyFn) -> Self {
         let mut backend = map.get(settings.account().format())(settings.account());
         let ref_folders: Vec<Folder> = backend.folders();
         let mut folders: Vec<Option<Result<Mailbox>>> = Vec::with_capacity(ref_folders.len());
@@ -59,9 +61,10 @@ impl Account {
         let sent_folder = ref_folders
             .iter()
             .position(|x: &Folder| x.name() == settings.account().sent_folder);
+        let notify_fn = Arc::new(notify_fn);
         for f in ref_folders {
             folders.push(None);
-            let handle = backend.get(&f);
+            let handle = backend.get(&f, notify_fn.clone());
             workers.push(Some(handle));
         }
         Account {
@@ -72,6 +75,7 @@ impl Account {
             settings: settings.clone(),
             runtime_settings: settings,
             backend,
+            notify_fn,
         }
     }
     pub fn reload(&mut self, event: RefreshEvent, idx: usize) -> Option<UIEventType> {
@@ -99,7 +103,7 @@ impl Account {
             }
             RefreshEventKind::Rescan => {
                 let ref_folders: Vec<Folder> = self.backend.folders();
-                let handle = self.backend.get(&ref_folders[idx]);
+                let handle = self.backend.get(&ref_folders[idx], self.notify_fn.clone());
                 self.workers[idx] = Some(handle);
             }
         }

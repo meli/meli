@@ -31,6 +31,7 @@ use mailbox::backends::maildir::MaildirType;
 use mailbox::email::{Envelope, EnvelopeHash, Flag};
 use std::fmt;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 extern crate fnv;
 use self::fnv::FnvHashMap;
@@ -117,8 +118,33 @@ impl RefreshEventConsumer {
         self.0(r);
     }
 }
+
+pub struct NotifyFn(Box<Fn() -> ()>);
+unsafe impl Send for NotifyFn {}
+unsafe impl Sync for NotifyFn {}
+
+impl fmt::Debug for NotifyFn {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "NotifyFn Box")
+    }
+}
+
+impl From<Box<Fn() -> ()>> for NotifyFn {
+    fn from(kind: Box<Fn() -> ()>) -> Self {
+        NotifyFn(kind)
+    }
+}
+
+impl NotifyFn {
+    pub fn new(b: Box<Fn() -> ()>) -> Self {
+        NotifyFn(b)
+    }
+    pub fn notify(&self) -> () {
+        self.0();
+    }
+}
 pub trait MailBackend: ::std::fmt::Debug {
-    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
+    fn get(&mut self, folder: &Folder, notify_fn: Arc<NotifyFn>) -> Async<Result<Vec<Envelope>>>;
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
     fn folders(&self) -> Vec<Folder>;
     fn operation(&self, hash: EnvelopeHash) -> Box<BackendOp>;

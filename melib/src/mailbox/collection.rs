@@ -1,6 +1,12 @@
+extern crate bincode;
+extern crate xdg;
+
 use super::*;
 use std::collections::BTreeMap;
+use std::fs;
+use std::io;
 use std::ops::{Deref, DerefMut};
+use std::result;
 
 extern crate fnv;
 use self::fnv::FnvHashMap;
@@ -15,7 +21,7 @@ pub struct Collection {
 }
 
 impl Collection {
-    pub fn new(vec: Vec<Envelope>) -> Collection {
+    pub fn new(vec: Vec<Envelope>, name: &str) -> Collection {
         let mut envelopes: FnvHashMap<EnvelopeHash, Envelope> =
             FnvHashMap::with_capacity_and_hasher(vec.len(), Default::default());
         for e in vec {
@@ -24,7 +30,19 @@ impl Collection {
         let date_index = BTreeMap::new();
         let subject_index = None;
 
-        let threads = Threads::new(&mut envelopes); // sent_folder);
+        let cache_dir = xdg::BaseDirectories::with_profile("meli", name).unwrap();
+        let threads = if let Some(cached) = cache_dir.find_cache_file("threads") {
+            let reader = io::BufReader::new(fs::File::open(cached).unwrap());
+            let result: result::Result<Threads, _> = bincode::deserialize_from(reader);
+            if let Ok(mut cached_t) = result {
+                cached_t.update(&mut envelopes);
+                cached_t
+            } else {
+                Threads::new(&mut envelopes) // sent_folder);
+            }
+        } else {
+            Threads::new(&mut envelopes) // sent_folder);
+        };
         Collection {
             envelopes,
             date_index,
