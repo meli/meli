@@ -85,7 +85,7 @@ impl CompactListing {
             new_cursor_pos: (0, 0, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
-            subsort: (Default::default(), Default::default()),
+            subsort: (SortField::Subject, SortOrder::Desc),
             content,
             dirty: true,
             unfocused: false,

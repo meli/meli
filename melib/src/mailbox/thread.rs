@@ -96,26 +96,27 @@ impl ThreadTree {
 }
 
 pub struct ThreadIterator<'a> {
+    init_pos: usize,
     pos: usize,
     stack: Vec<usize>,
     tree: Ref<'a, Vec<ThreadTree>>,
 }
 impl<'a> Iterator for ThreadIterator<'a> {
-    type Item = usize;
-    fn next(&mut self) -> Option<usize> {
+    type Item = (usize, usize);
+    fn next(&mut self) -> Option<(usize, usize)> {
         {
             let mut tree = &(*self.tree);
-            for i in &self.stack {
+            for i in self.stack.iter() {
                 tree = &tree[*i].children;
             }
-            if self.pos == tree.len() {
+            if self.pos == tree.len() || (self.stack.is_empty() && self.pos > self.init_pos) {
                 if self.stack.is_empty() {
                     return None;
                 }
                 self.pos = self.stack.pop().unwrap() + 1;
             } else {
                 debug_assert!(self.pos < tree.len());
-                let ret = tree[self.pos].id;
+                let ret = (self.stack.len(), tree[self.pos].id);
                 if !tree[self.pos].children.is_empty() {
                     self.stack.push(self.pos);
                     self.pos = 0;
@@ -231,18 +232,18 @@ impl PartialEq for ThreadNode {
 
 pub struct RootIterator<'a> {
     pos: usize,
-    root_set: Ref<'a, Vec<usize>>,
+    root_tree: Ref<'a, Vec<ThreadTree>>,
 }
 
 impl<'a> Iterator for RootIterator<'a> {
     type Item = usize;
     fn next(&mut self) -> Option<usize> {
         {
-            if self.pos == self.root_set.len() {
+            if self.pos == self.root_tree.len() {
                 return None;
             }
             self.pos += 1;
-            return Some(self.root_set[self.pos - 1]);
+            return Some(self.root_tree[self.pos - 1].id);
         }
     }
 }
@@ -301,6 +302,8 @@ impl Threads {
             root_set: RefCell::new(root_set),
             message_ids,
             hash_set,
+            subsort: RefCell::new((SortField::Subject, SortOrder::Desc)),
+
             ..Default::default()
         };
         t.build_collection(&collection);
@@ -309,6 +312,7 @@ impl Threads {
 
     pub fn thread_iter(&self, index: usize) -> ThreadIterator {
         ThreadIterator {
+            init_pos: index,
             pos: index,
             stack: Vec::new(),
             tree: self.tree.borrow(),
@@ -470,13 +474,13 @@ impl Threads {
     }
 
     pub fn root_set(&self, idx: usize) -> usize {
-        self.root_set.borrow()[idx]
+        self.tree.borrow()[idx].id
     }
 
     pub fn root_iter<'a>(&'a self) -> RootIterator<'a> {
         RootIterator {
             pos: 0,
-            root_set: self.root_set.borrow(),
+            root_tree: self.tree.borrow(),
         }
     }
 
