@@ -81,6 +81,55 @@ impl FromStr for SortOrder {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct ThreadTree {
+    id: usize,
+    children: Vec<ThreadTree>,
+}
+
+impl ThreadTree {
+    fn new(id: usize) -> Self {
+        ThreadTree {
+            id,
+            children: Vec::new(),
+        }
+    }
+}
+
+pub struct ThreadIterator<'a> {
+    pos: usize,
+    stack: Vec<usize>,
+    tree: Ref<'a, Vec<ThreadTree>>,
+}
+impl<'a> Iterator for ThreadIterator<'a> {
+    type Item = usize;
+    fn next(&mut self) -> Option<usize> {
+        {
+            let mut tree = &(*self.tree);
+            for i in &self.stack {
+                tree = &tree[*i].children;
+            }
+            if self.pos == tree.len() {
+                if self.stack.is_empty() {
+                    return None;
+                }
+                self.pos = self.stack.pop().unwrap() + 1;
+            } else {
+                debug_assert!(self.pos < tree.len());
+                let ret = tree[self.pos].id;
+                if !tree[self.pos].children.is_empty() {
+                    self.stack.push(self.pos);
+                    self.pos = 0;
+                    return Some(ret);
+                }
+                self.pos += 1;
+                return Some(ret);
+            }
+        }
+        self.next()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct ThreadNode {
     message: Option<EnvelopeHash>,
     parent: Option<usize>,
@@ -163,6 +212,7 @@ impl ThreadNode {
 pub struct Threads {
     thread_nodes: Vec<ThreadNode>,
     root_set: RefCell<Vec<usize>>,
+    tree: RefCell<Vec<ThreadTree>>,
 
     message_ids: FnvHashMap<String, usize>,
     hash_set: FnvHashSet<EnvelopeHash>,
@@ -221,6 +271,7 @@ impl Threads {
         /* Walk over the elements of message_ids, and gather a list of the ThreadNode objects that have
          * no parents. These are the root messages of each thread */
         let mut root_set: Vec<usize> = Vec::with_capacity(collection.len());
+
         'root_set: for v in message_ids.values() {
             /* update length */
             fn set_length(id: usize, thread_nodes: &mut Vec<ThreadNode>) -> usize {
@@ -256,6 +307,14 @@ impl Threads {
         t
     }
 
+    pub fn thread_iter(&self, index: usize) -> ThreadIterator {
+        ThreadIterator {
+            pos: index,
+            stack: Vec::new(),
+            tree: self.tree.borrow(),
+        }
+    }
+
     pub fn update(&mut self, collection: &mut FnvHashMap<EnvelopeHash, Envelope>) {
         let new_hash_set = FnvHashSet::from_iter(collection.keys().cloned());
 
@@ -276,14 +335,20 @@ impl Threads {
     }
 
     fn build_collection(&mut self, collection: &FnvHashMap<EnvelopeHash, Envelope>) {
-        for i in self.root_set.borrow().iter() {
-            node_build(
-                *i,
-                &mut self.thread_nodes,
-                0,  /* indentation */
-                *i, /* root_subject_idx */
-                collection,
-            );
+        {
+            let tree = self.tree.get_mut();
+            for i in self.root_set.borrow().iter() {
+                let mut tree_node = ThreadTree::new(*i);
+                node_build(
+                    &mut tree_node,
+                    *i,
+                    &mut self.thread_nodes,
+                    0,  /* indentation */
+                    *i, /* root_subject_idx */
+                    collection,
+                );
+                tree.push(tree_node);
+            }
         }
         self.inner_sort_by(*self.sort.borrow(), collection);
         self.inner_subsort_by(*self.subsort.borrow(), collection);
@@ -294,6 +359,43 @@ impl Threads {
         subsort: (SortField, SortOrder),
         collection: &FnvHashMap<EnvelopeHash, Envelope>,
     ) {
+        let tree = &mut self.tree.borrow_mut();
+        for mut t in tree.iter_mut() {
+            t.children.sort_by(|a, b| match subsort {
+                (SortField::Date, SortOrder::Desc) => {
+                    let a = &self.thread_nodes[a.id];
+                    let b = &self.thread_nodes[b.id];
+                    b.date.cmp(&a.date)
+                }
+                (SortField::Date, SortOrder::Asc) => {
+                    let a = &self.thread_nodes[a.id];
+                    let b = &self.thread_nodes[b.id];
+                    a.date.cmp(&b.date)
+                }
+                (SortField::Subject, SortOrder::Desc) => {
+                    let a = &self.thread_nodes[a.id].message();
+                    let b = &self.thread_nodes[b.id].message();
+
+                    if a.is_none() || b.is_none() {
+                        return Ordering::Equal;
+                    }
+                    let ma = &collection[&a.unwrap()];
+                    let mb = &collection[&b.unwrap()];
+                    ma.subject().cmp(&mb.subject())
+                }
+                (SortField::Subject, SortOrder::Asc) => {
+                    let a = &self.thread_nodes[a.id].message();
+                    let b = &self.thread_nodes[b.id].message();
+
+                    if a.is_none() || b.is_none() {
+                        return Ordering::Equal;
+                    }
+                    let ma = &collection[&a.unwrap()];
+                    let mb = &collection[&b.unwrap()];
+                    mb.subject().cmp(&ma.subject())
+                }
+            });
+        }
     }
 
     fn inner_sort_by(
@@ -301,21 +403,21 @@ impl Threads {
         sort: (SortField, SortOrder),
         collection: &FnvHashMap<EnvelopeHash, Envelope>,
     ) {
-        let root_set = &mut self.root_set.borrow_mut();
-        root_set.sort_by(|a, b| match sort {
+        let tree = &mut self.tree.borrow_mut();
+        tree.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
-                let a = &self.thread_nodes[*a];
-                let b = &self.thread_nodes[*b];
+                let a = &self.thread_nodes[a.id];
+                let b = &self.thread_nodes[b.id];
                 b.date.cmp(&a.date)
             }
             (SortField::Date, SortOrder::Asc) => {
-                let a = &self.thread_nodes[*a];
-                let b = &self.thread_nodes[*b];
+                let a = &self.thread_nodes[a.id];
+                let b = &self.thread_nodes[b.id];
                 a.date.cmp(&b.date)
             }
             (SortField::Subject, SortOrder::Desc) => {
-                let a = &self.thread_nodes[*a].message();
-                let b = &self.thread_nodes[*b].message();
+                let a = &self.thread_nodes[a.id].message();
+                let b = &self.thread_nodes[b.id].message();
 
                 if a.is_none() || b.is_none() {
                     return Ordering::Equal;
@@ -325,8 +427,8 @@ impl Threads {
                 ma.subject().cmp(&mb.subject())
             }
             (SortField::Subject, SortOrder::Asc) => {
-                let a = &self.thread_nodes[*a].message();
-                let b = &self.thread_nodes[*b].message();
+                let a = &self.thread_nodes[a.id].message();
+                let b = &self.thread_nodes[b.id].message();
 
                 if a.is_none() || b.is_none() {
                     return Ordering::Equal;
@@ -514,12 +616,13 @@ impl Index<usize> for Threads {
 
     fn index(&self, index: usize) -> &ThreadNode {
         self.thread_nodes
-            .get(index)
+            .get(self.tree.borrow()[index].id)
             .expect("thread index out of bounds")
     }
 }
 
 fn node_build(
+    tree: &mut ThreadTree,
     idx: usize,
     thread_nodes: &mut Vec<ThreadNode>,
     indentation: usize,
@@ -557,9 +660,20 @@ fn node_build(
     };
 
     let mut has_unseen = thread_nodes[idx].has_unseen;
+    let mut child_vec: Vec<ThreadTree> = Vec::new();
     for c in thread_nodes[idx].children.clone().iter() {
-        node_build(*c, thread_nodes, indentation, idx, collection);
+        let mut new_tree = ThreadTree::new(*c);
+        node_build(
+            &mut new_tree,
+            *c,
+            thread_nodes,
+            indentation,
+            idx,
+            collection,
+        );
         has_unseen |= thread_nodes[*c].has_unseen;
+        child_vec.push(new_tree);
     }
+    tree.children = child_vec;
     thread_nodes[idx].has_unseen = has_unseen;
 }
