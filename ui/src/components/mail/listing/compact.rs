@@ -121,7 +121,7 @@ impl CompactListing {
             .as_ref()
             .unwrap();
 
-        self.length = mailbox.collection.threads.root_set().len();
+        self.length = mailbox.collection.threads.root_len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(
@@ -136,14 +136,16 @@ impl CompactListing {
         }
         let threads = &mailbox.collection.threads;
         threads.sort_by(self.sort, self.subsort, &mailbox.collection);
-        for (idx, root_idx) in threads.root_set().iter().enumerate() {
-            let thread_node = &threads.thread_nodes()[*root_idx];
+        for (idx, root_idx) in threads.root_iter().enumerate() {
+            let thread_node = &threads.thread_nodes()[root_idx];
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
-                threads.thread_nodes()[thread_node.children()[0]]
-                    .message()
-                    .unwrap()
+                let mut iter_ptr = thread_node.children()[0];
+                while threads.thread_nodes()[iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[iter_ptr].children()[0];
+                }
+                threads.thread_nodes()[iter_ptr].message().unwrap()
             };
             let root_envelope: &Envelope = &mailbox.collection[&i];
             let fg_color = if thread_node.has_unseen() {
@@ -180,14 +182,16 @@ impl CompactListing {
                 .as_ref()
                 .unwrap();
             let threads = &mailbox.collection.threads;
-            let thread_node = threads.root_set()[idx];
+            let thread_node = threads.root_set(idx);
             let thread_node = &threads.thread_nodes()[thread_node];
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
-                threads.thread_nodes()[thread_node.children()[0]]
-                    .message()
-                    .unwrap()
+                let mut iter_ptr = thread_node.children()[0];
+                while threads.thread_nodes()[iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[iter_ptr].children()[0];
+                }
+                threads.thread_nodes()[iter_ptr].message().unwrap()
             };
             let root_envelope: &Envelope = &mailbox.collection[&i];
             let fg_color = if !root_envelope.is_seen() {

@@ -27,7 +27,8 @@ use mailbox::email::*;
 
 extern crate fnv;
 use self::fnv::{FnvHashMap, FnvHashSet};
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
+use std::cmp::Ordering;
 use std::iter::FromIterator;
 use std::ops::Index;
 use std::result::Result as StdResult;
@@ -161,7 +162,7 @@ impl ThreadNode {
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct Threads {
     thread_nodes: Vec<ThreadNode>,
-    root_set: Vec<usize>,
+    root_set: RefCell<Vec<usize>>,
 
     message_ids: FnvHashMap<String, usize>,
     hash_set: FnvHashSet<EnvelopeHash>,
@@ -174,6 +175,24 @@ impl PartialEq for ThreadNode {
         match (self.message, other.message) {
             (Some(s), Some(o)) => s == o,
             _ => false,
+        }
+    }
+}
+
+pub struct RootIterator<'a> {
+    pos: usize,
+    root_set: Ref<'a, Vec<usize>>,
+}
+
+impl<'a> Iterator for RootIterator<'a> {
+    type Item = usize;
+    fn next(&mut self) -> Option<usize> {
+        {
+            if self.pos == self.root_set.len() {
+                return None;
+            }
+            self.pos += 1;
+            return Some(self.root_set[self.pos - 1]);
         }
     }
 }
@@ -226,11 +245,9 @@ impl Threads {
                 root_set.push(*v);
             }
         }
-        root_set.sort_by(|a, b| thread_nodes[*b].date.cmp(&thread_nodes[*a].date));
-
         let mut t = Threads {
             thread_nodes,
-            root_set,
+            root_set: RefCell::new(root_set),
             message_ids,
             hash_set,
             ..Default::default()
@@ -259,7 +276,7 @@ impl Threads {
     }
 
     fn build_collection(&mut self, collection: &FnvHashMap<EnvelopeHash, Envelope>) {
-        for i in &self.root_set {
+        for i in self.root_set.borrow().iter() {
             node_build(
                 *i,
                 &mut self.thread_nodes,
@@ -284,6 +301,41 @@ impl Threads {
         sort: (SortField, SortOrder),
         collection: &FnvHashMap<EnvelopeHash, Envelope>,
     ) {
+        let root_set = &mut self.root_set.borrow_mut();
+        root_set.sort_by(|a, b| match sort {
+            (SortField::Date, SortOrder::Desc) => {
+                let a = &self.thread_nodes[*a];
+                let b = &self.thread_nodes[*b];
+                b.date.cmp(&a.date)
+            }
+            (SortField::Date, SortOrder::Asc) => {
+                let a = &self.thread_nodes[*a];
+                let b = &self.thread_nodes[*b];
+                a.date.cmp(&b.date)
+            }
+            (SortField::Subject, SortOrder::Desc) => {
+                let a = &self.thread_nodes[*a].message();
+                let b = &self.thread_nodes[*b].message();
+
+                if a.is_none() || b.is_none() {
+                    return Ordering::Equal;
+                }
+                let ma = &collection[&a.unwrap()];
+                let mb = &collection[&b.unwrap()];
+                ma.subject().cmp(&mb.subject())
+            }
+            (SortField::Subject, SortOrder::Asc) => {
+                let a = &self.thread_nodes[*a].message();
+                let b = &self.thread_nodes[*b].message();
+
+                if a.is_none() || b.is_none() {
+                    return Ordering::Equal;
+                }
+                let ma = &collection[&a.unwrap()];
+                let mb = &collection[&b.unwrap()];
+                mb.subject().cmp(&ma.subject())
+            }
+        });
     }
 
     pub fn sort_by(
@@ -292,7 +344,6 @@ impl Threads {
         subsort: (SortField, SortOrder),
         collection: &FnvHashMap<EnvelopeHash, Envelope>,
     ) {
-        /*
         if *self.sort.borrow() != sort {
             self.inner_sort_by(sort, collection);
             *self.sort.borrow_mut() = sort;
@@ -301,11 +352,10 @@ impl Threads {
             self.inner_subsort_by(subsort, collection);
             *self.subsort.borrow_mut() = subsort;
         }
-        */
     }
 
     pub fn thread_to_mail(&self, i: usize) -> EnvelopeHash {
-        let thread = &self.thread_nodes[self.root_set[i]];
+        let thread = &self.thread_nodes[self.root_set.borrow()[i]];
         thread.message().unwrap()
     }
 
@@ -313,8 +363,19 @@ impl Threads {
         &self.thread_nodes
     }
 
-    pub fn root_set(&self) -> &Vec<usize> {
-        &self.root_set
+    pub fn root_len(&self) -> usize {
+        self.root_set.borrow().len()
+    }
+
+    pub fn root_set(&self, idx: usize) -> usize {
+        self.root_set.borrow()[idx]
+    }
+
+    pub fn root_iter<'a>(&'a self) -> RootIterator<'a> {
+        RootIterator {
+            pos: 0,
+            root_set: self.root_set.borrow(),
+        }
     }
 
     pub fn has_sibling(&self, i: usize) -> bool {
@@ -381,13 +442,7 @@ fn link_envelope(
     /* The index of the reference we are currently examining, start from current message */
     let mut ref_ptr = t_idx;
 
-    let mut iasf = 0;
     for &refn in envelope.references().iter().rev() {
-        if iasf == 1 {
-            /*FIXME: Skips anything other than direct parents */
-            continue;
-        }
-        iasf += 1;
         let r_id = String::from_utf8_lossy(refn.raw()).into();
         let parent_id = if message_ids.contains_key(&r_id) {
             let parent_id = message_ids[&r_id];
@@ -395,7 +450,7 @@ fn link_envelope(
                 || thread_nodes[ref_ptr].is_descendant(thread_nodes, &thread_nodes[parent_id]))
             {
                 thread_nodes[ref_ptr].parent = Some(parent_id);
-                if thread_nodes[parent_id].children.is_empty() {
+                if !thread_nodes[parent_id].children.contains(&ref_ptr) {
                     thread_nodes[parent_id].children.push(ref_ptr);
                 }
 
@@ -503,7 +558,7 @@ fn node_build(
 
     let mut has_unseen = thread_nodes[idx].has_unseen;
     for c in thread_nodes[idx].children.clone().iter() {
-        node_build(*c, thread_nodes, indentation, *c, collection);
+        node_build(*c, thread_nodes, indentation, idx, collection);
         has_unseen |= thread_nodes[*c].has_unseen;
     }
     thread_nodes[idx].has_unseen = has_unseen;

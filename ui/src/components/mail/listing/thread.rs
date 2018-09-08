@@ -98,7 +98,7 @@ impl ThreadListing {
             .as_ref()
             .unwrap();
 
-        self.length = mailbox.collection.threads.root_set().len();
+        self.length = mailbox.collection.threads.root_len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(
@@ -118,12 +118,12 @@ impl ThreadListing {
         let threads = &mailbox.collection.threads;
         threads.sort_by(self.sort, self.subsort, &mailbox.collection);
         let thread_nodes: &Vec<ThreadNode> = &threads.thread_nodes();
-        let mut iter = threads.root_set().into_iter().peekable();
-        let len = threads.root_set().len().to_string().chars().count();
+        let mut iter = threads.root_iter().peekable();
+        let len = threads.root_len().to_string().chars().count();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
         while let Some(i) = iter.next() {
-            let thread_node = &thread_nodes[*i];
+            let thread_node = &thread_nodes[i];
 
             if !thread_node.has_message() {
                 continue;
@@ -136,7 +136,7 @@ impl ThreadListing {
             }
 
             match iter.peek() {
-                Some(&x) if thread_nodes[*x].indentation() == indentation => {
+                Some(&x) if thread_nodes[x].indentation() == indentation => {
                     indentations.pop();
                     indentations.push(true);
                 }
@@ -145,7 +145,7 @@ impl ThreadListing {
                     indentations.push(false);
                 }
             }
-            if threads.has_sibling(*i) {
+            if threads.has_sibling(i) {
                 indentations.pop();
                 indentations.push(true);
             }
@@ -167,7 +167,7 @@ impl ThreadListing {
                     envelope,
                     idx,
                     indentation,
-                    *i,
+                    i,
                     threads,
                     &indentations,
                     len,
@@ -185,11 +185,11 @@ impl ThreadListing {
             }
 
             match iter.peek() {
-                Some(&x) if thread_nodes[*x].indentation() > indentation => {
+                Some(&x) if thread_nodes[x].indentation() > indentation => {
                     indentations.push(false);
                 }
-                Some(&x) if thread_nodes[*x].indentation() < indentation => {
-                    for _ in 0..(indentation - thread_nodes[*x].indentation()) {
+                Some(&x) if thread_nodes[x].indentation() < indentation => {
+                    for _ in 0..(indentation - thread_nodes[x].indentation()) {
                         indentations.pop();
                     }
                 }

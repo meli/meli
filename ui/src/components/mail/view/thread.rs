@@ -63,12 +63,14 @@ impl ThreadView {
             .as_ref()
             .unwrap();
         let threads = &mailbox.collection.threads;
-        let thread_node = &threads.thread_nodes()[threads.root_set()[coordinates.2]];
+        let thread_node = &threads.thread_nodes()[threads.root_set(coordinates.2)];
 
         if thread_node.message().is_some() {
-            stack.push((0, threads.root_set()[coordinates.2]));
+            stack.push((0, threads.root_set(coordinates.2)));
         } else {
-            stack.push((1, thread_node.children()[0]));
+            for &c in thread_node.children().iter() {
+                stack.push((1, c));
+            }
         }
         let mut view = ThreadView {
             dirty: true,
@@ -313,7 +315,7 @@ impl ThreadView {
                 .as_ref()
                 .unwrap();
             let threads = &mailbox.collection.threads;
-            let thread_node = &threads.thread_nodes()[threads.root_set()[self.coordinates.2]];
+            let thread_node = &threads.thread_nodes()[threads.root_set(self.coordinates.2)];
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
@@ -432,7 +434,7 @@ impl ThreadView {
                 .as_ref()
                 .unwrap();
             let threads = &mailbox.collection.threads;
-            let thread_node = &threads.thread_nodes()[threads.root_set()[self.coordinates.2]];
+            let thread_node = &threads.thread_nodes()[threads.root_set(self.coordinates.2)];
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
