@@ -44,6 +44,7 @@ use std::option::Option;
 pub struct Mailbox {
     pub folder: Folder,
     pub collection: Collection,
+    has_sent: bool,
 }
 
 impl Clone for Mailbox {
@@ -51,6 +52,7 @@ impl Clone for Mailbox {
         Mailbox {
             folder: self.folder.clone(),
             collection: self.collection.clone(),
+            has_sent: self.has_sent,
         }
     }
 }
@@ -59,22 +61,20 @@ impl Default for Mailbox {
         Mailbox {
             folder: folder_default(),
             collection: Collection::default(),
+            has_sent: false,
         }
     }
 }
 
 impl Mailbox {
-    pub fn new(
-        folder: &Folder,
-        sent_folder: &Option<Result<Mailbox>>,
-        envelopes: Result<Vec<Envelope>>,
-    ) -> Result<Mailbox> {
+    pub fn new(folder: &Folder, envelopes: Result<Vec<Envelope>>) -> Result<Mailbox> {
         let mut envelopes: Vec<Envelope> = envelopes?;
         envelopes.sort_by(|a, b| a.date().cmp(&b.date()));
         let collection = Collection::new(envelopes, folder.name());
         Ok(Mailbox {
             folder: (*folder).clone(),
             collection,
+            ..Default::default()
         })
     }
     pub fn is_empty(&self) -> bool {
@@ -107,6 +107,15 @@ impl Mailbox {
         &self.collection.threads.thread_nodes()[i]
     }
 
+    pub fn insert_sent_folder(&mut self, sent: &Mailbox) {
+        if !self.has_sent {
+            for envelope in sent.collection.envelopes.values().cloned() {
+                self.insert_reply(envelope);
+            }
+            self.has_sent = true;
+        }
+    }
+
     pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope) {
         self.collection.remove(&old_hash);
         self.collection.insert(envelope.hash(), envelope);
@@ -115,8 +124,12 @@ impl Mailbox {
     pub fn insert(&mut self, envelope: Envelope) -> &Envelope {
         let hash = envelope.hash();
         self.collection.insert(hash, envelope);
-        eprintln!("Inserted envelope");
         &self.collection[&hash]
+    }
+
+    fn insert_reply(&mut self, envelope: Envelope) {
+        let hash = envelope.hash();
+        self.collection.insert_reply(hash, envelope);
     }
 
     pub fn remove(&mut self, envelope_hash: EnvelopeHash) {

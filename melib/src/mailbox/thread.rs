@@ -338,6 +338,62 @@ impl Threads {
         );
     }
 
+    pub fn insert_reply(&mut self, envelope: &mut Envelope) -> bool {
+        {
+            let in_reply_to = envelope.in_reply_to_raw();
+            if !self.message_ids.contains_key(in_reply_to.as_ref()) {
+                return false;
+            }
+        }
+        /* FIXME: This does not update show_subject and len which is done in node_build upon
+         * creation */
+        link_envelope(
+            &mut self.thread_nodes,
+            &mut self.message_ids,
+            &mut self.hash_set,
+            envelope,
+        );
+        self.rebuild_thread(envelope);
+        return true;
+    }
+
+    /* Update thread tree information on envelope insertion */
+    fn rebuild_thread(&mut self, envelope: &Envelope) {
+        let m_id = envelope.message_id_raw();
+        let mut node_idx = self.message_ids[m_id.as_ref()];
+        let mut stack = Vec::with_capacity(32);
+
+        /* Trace path back to root ThreadNode */
+        while let Some(p) = &self.thread_nodes[node_idx].parent {
+            node_idx = *p;
+            stack.push(node_idx);
+        }
+        for &p in stack.iter() {
+            self.thread_nodes[p].len += 1;
+        }
+
+        /* Trace path from root ThreadTree to the envelope's parent */
+        let mut tree = self.tree.get_mut();
+        for &s in stack.iter().rev() {
+            /* Borrow checker is being a tad silly here, so the following
+             * is basically this:
+             *
+             *  let tree = &mut tree[s].children;
+             */
+            let temp_tree = tree;
+            let pos = temp_tree.iter().position(|v| v.id == s).unwrap();
+            match temp_tree[pos].children {
+                ref mut v => {
+                    tree = v;
+                }
+            }
+        }
+        /* Add new child */
+        tree.push(ThreadTree::new(self.message_ids[m_id.as_ref()]));
+    }
+
+    /*
+     * Finalize instance by building the thread tree, set show subject and thread lengths etc. */
     fn build_collection(&mut self, collection: &FnvHashMap<EnvelopeHash, Envelope>) {
         {
             let tree = self.tree.get_mut();
@@ -648,11 +704,6 @@ fn node_build(
                 thread_nodes[idx].show_subject = false;
             }
         }
-    }
-    if thread_nodes[idx].has_parent()
-        && !thread_nodes[thread_nodes[idx].parent().unwrap()].has_message()
-    {
-        thread_nodes[idx].parent = None;
     }
     let indentation = if thread_nodes[idx].has_message() {
         thread_nodes[idx].indentation = indentation;

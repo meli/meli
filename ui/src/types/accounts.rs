@@ -141,39 +141,54 @@ impl Account {
     }
 
     fn load_mailbox(&mut self, index: usize, envelopes: Result<Vec<Envelope>>) {
-        // TODO: Cleanup this function
         let folders = self.backend.folders();
         let folder = &folders[index];
-        if self.sent_folder.is_some() {
-            let id = self.sent_folder.unwrap();
-            if id == index {
-                /* ======================== */
-                self.folders[index] = Some(Mailbox::new(folder, &None, envelopes));
-            /* ======================== */
-            } else {
+        if self.sent_folder.is_some() && self.sent_folder.unwrap() == index {
+            self.folders[index] = Some(Mailbox::new(folder, envelopes));
+            /* Add our replies to other folders */
+            for id in (0..self.folders.len()).filter(|i| *i != index) {
+                self.add_replies_to_folder(id);
+            }
+        } else {
+            self.folders[index] = Some(Mailbox::new(folder, envelopes));
+            self.add_replies_to_folder(index);
+        };
+    }
+
+    fn add_replies_to_folder(&mut self, folder_index: usize) {
+        if let Some(sent_index) = self.sent_folder.as_ref() {
+            if self.folders[*sent_index]
+                .as_ref()
+                .map(|v| v.is_ok())
+                .unwrap_or(false)
+                && self.folders[folder_index]
+                    .as_ref()
+                    .map(|v| v.is_ok())
+                    .unwrap_or(false)
+            {
                 let (sent, cur) = {
                     let ptr = self.folders.as_mut_ptr();
                     unsafe {
                         use std::slice::from_raw_parts_mut;
                         (
-                            from_raw_parts_mut(ptr.offset(id as isize), id + 1),
-                            from_raw_parts_mut(ptr.offset(index as isize), index + 1),
+                            from_raw_parts_mut(ptr.offset(*sent_index as isize), *sent_index + 1)
+                                [0]
+                                .as_mut()
+                                .unwrap()
+                                .as_mut()
+                                .unwrap(),
+                            from_raw_parts_mut(ptr.offset(folder_index as isize), folder_index + 1)
+                                [0]
+                                .as_mut()
+                                .unwrap()
+                                .as_mut()
+                                .unwrap(),
                         )
                     }
                 };
-                let sent_path = &folders[id];
-                if sent[0].is_none() {
-                    sent[0] = Some(Mailbox::new(sent_path, &None, envelopes.clone()));
-                }
-                /* ======================== */
-                cur[0] = Some(Mailbox::new(folder, &sent[0], envelopes));
-                /* ======================== */
+                cur.insert_sent_folder(&sent);
             }
-        } else {
-            /* ======================== */
-            self.folders[index] = Some(Mailbox::new(folder, &None, envelopes));
-            /* ======================== */
-        };
+        }
     }
 
     pub fn status(&mut self, index: usize) -> result::Result<(), usize> {
