@@ -20,7 +20,9 @@
  */
 
 use chan;
+use std::fmt;
 use std::io;
+use termion::event::Event as TermionEvent;
 use termion::event::Key as TermionKey;
 use termion::input::TermRead;
 
@@ -64,6 +66,13 @@ pub enum Key {
     Null,
     /// Esc key.
     Esc,
+    Paste(String),
+}
+
+impl<'a> From<&'a String> for Key {
+    fn from(v: &'a String) -> Self {
+        Key::Paste(v.to_string())
+    }
 }
 
 impl From<TermionKey> for Key {
@@ -91,6 +100,12 @@ impl From<TermionKey> for Key {
     }
 }
 
+#[derive(PartialEq)]
+enum InputMode {
+    Normal,
+    Paste,
+}
+
 /*
  * If we fork (for example start $EDITOR) we want the input-thread to stop reading from stdin. The
  * best way I came up with right now is to send a signal to the thread that is read in the first
@@ -105,7 +120,9 @@ pub fn get_events(
     mut exit: impl FnMut(),
     rx: &chan::Receiver<bool>,
 ) -> () {
-    for c in stdin.keys() {
+    let mut input_mode = InputMode::Normal;
+    let mut paste_buf = String::with_capacity(256);
+    for c in stdin.events() {
         chan_select! {
             default => {},
             rx.recv() -> val => {
@@ -119,8 +136,66 @@ pub fn get_events(
 
 
         };
-        if let Ok(k) = c {
-            closure(Key::from(k));
+        match c {
+            Ok(TermionEvent::Key(k)) if input_mode == InputMode::Normal => {
+                closure(Key::from(k));
+            }
+            Ok(TermionEvent::Key(TermionKey::Char(k))) if input_mode == InputMode::Paste => {
+                paste_buf.push(k);
+            }
+            Ok(TermionEvent::Unsupported(ref k)) if k.as_slice() == BRACKET_PASTE_START => {
+                input_mode = InputMode::Paste;
+            }
+            Ok(TermionEvent::Unsupported(ref k)) if k.as_slice() == BRACKET_PASTE_END => {
+                input_mode = InputMode::Normal;
+                let ret = Key::from(&paste_buf);
+                paste_buf.clear();
+                closure(ret);
+            }
+            _ => {} // Mouse events or errors.
         }
     }
 }
+
+/*
+ * CSI events we use
+ */
+
+// Some macros taken from termion:
+/// Create a CSI-introduced sequence.
+macro_rules! csi {
+    ($( $l:expr ),*) => { concat!("\x1B[", $( $l ),*) };
+}
+
+/// Derive a CSI sequence struct.
+macro_rules! derive_csi_sequence {
+    ($doc:expr, $name:ident, $value:expr) => {
+        ///$doc
+        #[derive(Copy, Clone)]
+        pub struct $name;
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, csi!($value))
+            }
+        }
+
+        impl AsRef<[u8]> for $name {
+            fn as_ref(&self) -> &'static [u8] {
+                csi!($value).as_bytes()
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &'static str {
+                csi!($value)
+            }
+        }
+    };
+}
+
+derive_csi_sequence!("Start Bracketed Paste Mode", BracketModeStart, "?2004h"); //
+derive_csi_sequence!("End Bracketed Paste Mode", BracketModeEnd, "?2003l");
+
+pub const BRACKET_PASTE_START: &[u8] = b"\x1B[200~";
+pub const BRACKET_PASTE_END: &[u8] = b"\x1B[201~";

@@ -129,11 +129,12 @@ impl Drop for State {
         // When done, restore the defaults to avoid messing with the terminal.
         write!(
             self.stdout(),
-            "{}{}{}{}",
+            "{}{}{}{}{}",
             clear::All,
             style::Reset,
             cursor::Goto(1, 1),
-            cursor::Show
+            cursor::Show,
+            BracketModeEnd,
         ).unwrap();
         self.flush();
     }
@@ -213,7 +214,8 @@ impl State {
         };
         write!(
             s.stdout(),
-            "{}{}{}",
+            "{}{}{}{}",
+            BracketModeStart,
             cursor::Hide,
             clear::All,
             cursor::Goto(1, 1)
