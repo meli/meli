@@ -57,14 +57,14 @@ pub enum ThreadEvent {
     /// User input.
     Input(Key),
     /// A watched folder has been refreshed.
-    RefreshMailbox(RefreshEvent),
+    RefreshMailbox(Box<RefreshEvent>),
     UIEvent(UIEventType),
     //Decode { _ }, // For gpg2 signature check
 }
 
 impl From<RefreshEvent> for ThreadEvent {
     fn from(event: RefreshEvent) -> Self {
-        ThreadEvent::RefreshMailbox(event)
+        ThreadEvent::RefreshMailbox(Box::new(event))
     }
 }
 

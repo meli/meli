@@ -1,6 +1,7 @@
 use super::*;
 use chrono::{DateTime, Local};
 use data_encoding::BASE64_MIME;
+use std::str;
 
 mod random;
 
@@ -41,8 +42,38 @@ impl Default for Draft {
     }
 }
 
+impl str::FromStr for Draft {
+    type Err = MeliError;
+    fn from_str(s: &str) -> Result<Self> {
+        if s.is_empty() {
+            return Err(MeliError::new("sadfsa"));
+        }
+
+        let (headers, _) = parser::mail(s.as_bytes()).to_full_result()?;
+        let mut ret = Draft::default();
+
+        for (k, v) in headers {
+            if ignore_header(k) {
+                continue;
+            }
+            ret.headers.insert(
+                String::from_utf8(k.to_vec())?,
+                String::from_utf8(v.to_vec())?,
+            );
+        }
+
+        let body = Envelope::new(0).body_bytes(s.as_bytes());
+
+        ret.body = String::from_utf8(decode(&body, None))?;
+
+        //ret.attachments = body.attachments();
+
+        Ok(ret)
+    }
+}
+
 impl Draft {
-    pub fn as_reply(envelope: &Envelope, bytes: &[u8]) -> Self {
+    pub fn new_reply(envelope: &Envelope, bytes: &[u8]) -> Self {
         let mut ret = Draft::default();
         ret.headers_mut().insert(
             "References".into(),
@@ -58,11 +89,11 @@ impl Draft {
                         acc.push_str(&x.to_string());
                         acc
                     }),
-                envelope.message_id()
+                envelope.message_id_display()
             ),
         );
         ret.headers_mut()
-            .insert("In-Reply-To".into(), envelope.message_id().into());
+            .insert("In-Reply-To".into(), envelope.message_id_display().into());
         ret.headers_mut()
             .insert("To".into(), envelope.field_from_to_string());
         ret.headers_mut()
@@ -134,33 +165,6 @@ impl Draft {
             ret.push_str(&BASE64_MIME.encode(&self.body.as_bytes()).trim());
             ret.push('\n');
         }
-
-        Ok(ret)
-    }
-
-    pub fn from_str(s: &str) -> Result<Self> {
-        if s.is_empty() {
-            return Err(MeliError::new("sadfsa"));
-        }
-
-        let (headers, _) = parser::mail(s.as_bytes()).to_full_result()?;
-        let mut ret = Draft::default();
-
-        for (k, v) in headers {
-            if ignore_header(k) {
-                continue;
-            }
-            ret.headers.insert(
-                String::from_utf8(k.to_vec())?,
-                String::from_utf8(v.to_vec())?,
-            );
-        }
-
-        let body = Envelope::new(0).body_bytes(s.as_bytes());
-
-        ret.body = String::from_utf8(decode(&body, None))?;
-
-        //ret.attachments = body.attachments();
 
         Ok(ret)
     }

@@ -183,7 +183,7 @@ impl MailBackend for MaildirType {
                                 ) {
                                     sender.send(RefreshEvent {
                                         hash: get_path_hash!(pathbuf),
-                                        kind: Create(env),
+                                        kind: Create(Box::new(env)),
                                     });
                                 } else {
                                     continue;
@@ -216,7 +216,7 @@ impl MailBackend for MaildirType {
                                         ) {
                                             sender.send(RefreshEvent {
                                                 hash: get_path_hash!(pathbuf),
-                                                kind: Create(env),
+                                                kind: Create(Box::new(env)),
                                             });
                                         }
                                         return;
@@ -233,7 +233,7 @@ impl MailBackend for MaildirType {
 
                                         sender.send(RefreshEvent {
                                             hash: get_path_hash!(pathbuf),
-                                            kind: Update(old_hash, env),
+                                            kind: Update(old_hash, Box::new(env)),
                                         });
                                     }
                                 }

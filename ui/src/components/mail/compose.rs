@@ -22,6 +22,7 @@
 use super::*;
 
 use melib::Draft;
+use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct Composer {
@@ -116,7 +117,7 @@ impl Composer {
             .operation(parent_message.hash());
         let parent_bytes = op.as_bytes();
 
-        ret.draft = Draft::as_reply(parent_message, parent_bytes.unwrap());
+        ret.draft = Draft::new_reply(parent_message, parent_bytes.unwrap());
         ret.draft.headers_mut().insert(
             "Subject".into(),
             if p.show_subject() {
@@ -394,7 +395,7 @@ impl Component for Composer {
                     ('x', ViewMode::Discard(u)) => {
                         context.replies.push_back(UIEvent {
                             id: 0,
-                            event_type: UIEventType::Action(Tab(Kill(u.clone()))),
+                            event_type: UIEventType::Action(Tab(Kill(*u))),
                         });
                         return true;
                     }

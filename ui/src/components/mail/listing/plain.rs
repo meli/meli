@@ -134,7 +134,7 @@ impl PlainListing {
                 break;
             }
             /* Write an entire line for each envelope entry. */
-            self.local_collection = mailbox.collection.keys().map(|v| *v).collect();
+            self.local_collection = mailbox.collection.keys().cloned().collect();
             let sort = self.sort;
             self.local_collection.sort_by(|a, b| match sort {
                 (SortField::Date, SortOrder::Desc) => {

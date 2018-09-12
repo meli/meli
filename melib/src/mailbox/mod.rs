@@ -128,8 +128,7 @@ impl Mailbox {
     }
 
     fn insert_reply(&mut self, envelope: Envelope) {
-        let hash = envelope.hash();
-        self.collection.insert_reply(hash, envelope);
+        self.collection.insert_reply(envelope);
     }
 
     pub fn remove(&mut self, envelope_hash: EnvelopeHash) {

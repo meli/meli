@@ -82,8 +82,8 @@ impl Backends {
 
 #[derive(Debug)]
 pub enum RefreshEventKind {
-    Update(EnvelopeHash, Envelope),
-    Create(Envelope),
+    Update(EnvelopeHash, Box<Envelope>),
+    Create(Box<Envelope>),
     Remove(FolderHash),
     Rescan,
 }

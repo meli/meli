@@ -20,7 +20,15 @@
  */
 
 /*!
- * Threading algorithm
+ * This module implements Jamie Zawinski's (threading algorithm)
+ * [https://www.jwz.org/doc/threading.html]. It is a bit of a beast, so prepare for a lot of
+ * bloated code that's necessary for the crap modern e-mail is.
+ *
+ * The entry point of this module is the `Threads` struct and its `new` method. It contains `ThreadNodes` which are the
+ * nodes in the thread trees that might have messages associated with them. The root nodes (first
+ * messages in each thread) are stored in `root_set` and `tree` vectors. The `ThreadTree` struct
+ * contains the sorted threads. `Threads` has inner mutability since we need to sort without the
+ * user having mutable ownership.
  */
 
 use mailbox::email::*;
@@ -30,9 +38,93 @@ use self::fnv::{FnvHashMap, FnvHashSet};
 use std::cell::{Ref, RefCell};
 use std::cmp::Ordering;
 use std::iter::FromIterator;
+use std::mem;
 use std::ops::Index;
 use std::result::Result as StdResult;
 use std::str::FromStr;
+
+/* Helper macros to avoid repeating ourselves */
+
+macro_rules! remove_from_parent {
+    ($t:expr, $i:expr) => {
+        if let Some(p) = $t[$i].parent {
+            if let Some(pos) = $t[p].children.iter().position(|c| *c == $i) {
+                $t[p].children.remove(pos);
+            }
+        }
+        $t[$i].parent = None;
+    };
+}
+
+macro_rules! make {
+    (($p:expr)parent of($c:expr), $t:expr) => {
+        remove_from_parent!($t, $c);
+        if !($t[$p]).children.contains(&$c) {
+            $t[$p].children.push($c);
+        }
+        $t[$c].parent = Some($p);
+    };
+}
+
+/* Strip common prefixes from subjects */
+trait SubjectPrefix {
+    fn strip_prefixes(&mut self) -> bool;
+}
+
+impl SubjectPrefix for String {
+    fn strip_prefixes(&mut self) -> bool {
+        let mut ret: bool = false;
+        let result = {
+            let mut slice = self.trim();
+            let mut end_prefix_idx = 0;
+            loop {
+                if slice.starts_with("RE: ")
+                    || slice.starts_with("Re: ")
+                    || slice.starts_with("FW: ")
+                    || slice.starts_with("Fw: ")
+                {
+                    if end_prefix_idx == 0 {
+                        ret = true;
+                    }
+                    slice = &slice[3..];
+                    end_prefix_idx += 3;
+                    continue;
+                }
+                if slice.starts_with("FWD: ")
+                    || slice.starts_with("Fwd: ")
+                    || slice.starts_with("fwd: ")
+                {
+                    slice = &slice[4..];
+                    end_prefix_idx += 4;
+                    continue;
+                }
+                if slice.starts_with(' ') || slice.starts_with('\t') || slice.starts_with('\r') {
+                    slice = &slice[1..];
+                    end_prefix_idx += 1;
+                    continue;
+                }
+                if slice.starts_with('[')
+                    && !(slice.starts_with("[PATCH") || slice.starts_with("[RFC"))
+                {
+                    if let Some(pos) = slice.chars().position(|c| c == ']') {
+                        end_prefix_idx += pos;
+                        slice = &slice[pos..];
+                        continue;
+                    }
+                    slice = &slice[1..];
+                    end_prefix_idx += 1;
+                    continue;
+                }
+                break;
+            }
+            slice.to_string()
+        };
+        mem::replace(self, result);
+        ret
+    }
+}
+
+/* Sorting states. */
 
 #[derive(Debug, Clone, PartialEq, Copy, Deserialize)]
 pub enum SortOrder {
@@ -80,6 +172,9 @@ impl FromStr for SortOrder {
     }
 }
 
+/*
+ * The thread tree holds the sorted state of the thread nodes */
+
 #[derive(Clone, Debug, Deserialize)]
 struct ThreadTree {
     id: usize,
@@ -95,6 +190,21 @@ impl ThreadTree {
     }
 }
 
+/* `ThreadIterator` returns messages according to the sorted order. For example, for the following
+ * threads:
+ *
+ *  ```
+ *  A_
+ *   |_ B
+ *   |_C
+ *  D
+ *  E_
+ *   |_F
+ *   ```
+ *
+ *   the iterator returns them as `A, B, C, D, E, F`
+ */
+
 pub struct ThreadIterator<'a> {
     init_pos: usize,
     pos: usize,
@@ -106,7 +216,7 @@ impl<'a> Iterator for ThreadIterator<'a> {
     fn next(&mut self) -> Option<(usize, usize)> {
         {
             let mut tree = &(*self.tree);
-            for i in self.stack.iter() {
+            for i in &self.stack {
                 tree = &tree[*i].children;
             }
             if self.pos == tree.len() || (self.stack.is_empty() && self.pos > self.init_pos) {
@@ -141,6 +251,8 @@ pub struct ThreadNode {
 
     len: usize,
     has_unseen: bool,
+
+    thread_group: usize,
 }
 
 impl Default for ThreadNode {
@@ -155,6 +267,7 @@ impl Default for ThreadNode {
 
             len: 0,
             has_unseen: false,
+            thread_group: 0,
         }
     }
 }
@@ -172,18 +285,10 @@ impl ThreadNode {
         self.len
     }
 
-    fn is_descendant(&self, thread_nodes: &[ThreadNode], other: &ThreadNode) -> bool {
-        if self == other {
-            return true;
-        }
-
-        for v in &self.children {
-            if thread_nodes[*v].is_descendant(thread_nodes, other) {
-                return true;
-            }
-        }
-        return false;
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
+
     pub fn message(&self) -> Option<EnvelopeHash> {
         self.message
     }
@@ -243,69 +348,250 @@ impl<'a> Iterator for RootIterator<'a> {
                 return None;
             }
             self.pos += 1;
-            return Some(self.root_tree[self.pos - 1].id);
+            Some(self.root_tree[self.pos - 1].id)
         }
     }
 }
 
 impl Threads {
+    fn find(&mut self, i: usize) -> usize {
+        if self.thread_nodes[i].thread_group == i {
+            return i;
+        }
+        let p = self.thread_nodes[i].thread_group;
+        self.thread_nodes[i].thread_group = self.find(p);
+        self.thread_nodes[i].thread_group
+    }
+    fn union(&mut self, x: usize, y: usize) -> usize {
+        let x_root = self.find(x);
+        let y_root = self.find(y);
+
+        // x and y are already in the same set
+        if x_root == y_root {
+            return x_root;
+        }
+
+        // x and y are not in same set, so we merge them
+        self.thread_nodes[y].thread_group = x_root;
+        self.thread_nodes[x].thread_group = x_root;
+        x_root
+    }
+
+    // FIXME: Split this function
     pub fn new(collection: &mut FnvHashMap<EnvelopeHash, Envelope>) -> Threads {
         /* To reconstruct thread information from the mails we need: */
 
         /* a vector to hold thread members */
-        let mut thread_nodes: Vec<ThreadNode> =
+        let thread_nodes: Vec<ThreadNode> =
             Vec::with_capacity((collection.len() as f64 * 1.2) as usize);
         /* A hash table of Message IDs */
-        let mut message_ids: FnvHashMap<String, usize> =
+        let message_ids: FnvHashMap<String, usize> =
             FnvHashMap::with_capacity_and_hasher(collection.len(), Default::default());
-        let mut hash_set: FnvHashSet<EnvelopeHash> =
+        let hash_set: FnvHashSet<EnvelopeHash> =
             FnvHashSet::with_capacity_and_hasher(collection.len(), Default::default());
-        /* Add each message to message_ids and threads, and link them together according to the
-         * References / In-Reply-To headers */
-        link_threads(
-            &mut thread_nodes,
-            &mut message_ids,
-            &mut hash_set,
-            collection,
-        );
 
-        /* Walk over the elements of message_ids, and gather a list of the ThreadNode objects that have
-         * no parents. These are the root messages of each thread */
-        let mut root_set: Vec<usize> = Vec::with_capacity(collection.len());
-
-        'root_set: for v in message_ids.values() {
-            /* update length */
-            fn set_length(id: usize, thread_nodes: &mut Vec<ThreadNode>) -> usize {
-                let mut length = thread_nodes[id].children.len();
-                let children: Vec<usize> = thread_nodes[id].children.iter().cloned().collect();
-                for c in children {
-                    length += set_length(c, thread_nodes);
-                }
-                thread_nodes[id].len = length;
-                return length;
-            }
-            set_length(*v, &mut thread_nodes);
-
-            if thread_nodes[*v].parent.is_none() {
-                if !thread_nodes[*v].has_message() && thread_nodes[*v].children.len() == 1 {
-                    /* Do not promote the children if doing so would promote them to the root set
-                     * -- unless there is only one child, in which case, do. */
-                    root_set.push(thread_nodes[*v].children[0]);
-
-                    continue 'root_set;
-                }
-                root_set.push(*v);
-            }
-        }
         let mut t = Threads {
             thread_nodes,
-            root_set: RefCell::new(root_set),
             message_ids,
             hash_set,
             subsort: RefCell::new((SortField::Subject, SortOrder::Desc)),
 
             ..Default::default()
         };
+        /* Add each message to message_ids and threads, and link them together according to the
+         * References / In-Reply-To headers */
+        t.link_threads(collection);
+
+        /* Walk over the elements of message_ids, and gather a list of the ThreadNode objects that
+         * have no parents. These are the root messages of each thread */
+        let mut root_set: Vec<usize> = Vec::with_capacity(collection.len());
+
+        'root_set: for v in t.message_ids.values() {
+            /* update length */
+            fn set_length(mut id: usize, thread_nodes: &mut Vec<ThreadNode>) -> usize {
+                let mut length = thread_nodes[id].children.len();
+                let children: Vec<usize> = thread_nodes[id].children.clone();
+
+                /* Do some sanitization first */
+                if length == 0 && !thread_nodes[id].has_message() {
+                    /* Drop empty node. */
+                    remove_from_parent!(thread_nodes, id);
+                    return 0;
+                }
+                if thread_nodes[id].has_parent() && !thread_nodes[id].has_message() {
+                    /* Node is empty so transfer its children to its parent */
+                    let orphan_children: Vec<usize> =
+                        mem::replace(&mut thread_nodes[id].children, Vec::new());
+                    let parent_id = thread_nodes[id].parent.unwrap();
+                    remove_from_parent!(thread_nodes, id);
+                    for c in orphan_children {
+                        make!((parent_id) parent of (c), thread_nodes);
+                    }
+                    id = parent_id;
+                    length = thread_nodes[id].len;
+                }
+
+                for c in children {
+                    length += set_length(c, thread_nodes);
+                }
+                thread_nodes[id].len = length;
+                length
+            }
+            set_length(*v, &mut t.thread_nodes);
+
+            if t.thread_nodes[*v].parent.is_none() {
+                if !t.thread_nodes[*v].has_message() {
+                    if t.thread_nodes[*v].children.len() == 1 {
+                        /* Do not promote the children if doing so would promote them to the root set
+                         * -- unless there is only one child, in which case, do. */
+                        root_set.push(t.thread_nodes[*v].children[0]);
+
+                        continue 'root_set;
+                    } else if t.thread_nodes[*v].children.is_empty() {
+                        /* Drop empty node. */
+                        continue;
+                    }
+                }
+                root_set.push(*v);
+            }
+        }
+
+        let mut subject_table: FnvHashMap<String, (bool, usize)> =
+            FnvHashMap::with_capacity_and_hasher(collection.len(), Default::default());
+
+        for r in &root_set {
+            let (mut subject, mut is_re): (String, bool) = if t.thread_nodes[*r].message.is_some() {
+                let msg_idx = t.thread_nodes[*r].message.unwrap();
+                let envelope = &collection[&msg_idx];
+                (
+                    envelope.subject().to_string(),
+                    !envelope.references().is_empty(),
+                )
+            } else {
+                let msg_idx = t.thread_nodes[t.thread_nodes[*r].children[0]]
+                    .message
+                    .unwrap();
+                let envelope = &collection[&msg_idx];
+                (
+                    envelope.subject().to_string(),
+                    !envelope.references().is_empty(),
+                )
+            };
+
+            is_re |= subject.strip_prefixes();
+
+            if subject.is_empty() {
+                continue;
+            }
+
+            if subject_table.contains_key(&subject) {
+                let (other_is_re, id) = subject_table[&subject];
+                /* "This one is an empty container and the old one is not: the empty one is more
+                 * interesting as a root, so put it in the table instead." */
+                if (!t.thread_nodes[id].has_message() && t.thread_nodes[*r].has_message())
+                    || (other_is_re && !is_re)
+                {
+                    mem::replace(subject_table.entry(subject).or_default(), (is_re, *r));
+                }
+            } else {
+                subject_table.insert(subject, (is_re, *r));
+            }
+        }
+
+        let mut roots_to_remove: Vec<usize> = Vec::with_capacity(root_set.len());
+
+        for i in 0..root_set.len() {
+            let r = root_set[i];
+            let (mut subject, mut is_re): (String, bool) = if t.thread_nodes[r].message.is_some() {
+                let msg_idx = t.thread_nodes[r].message.unwrap();
+                let envelope = &collection[&msg_idx];
+                (
+                    envelope.subject().to_string(),
+                    !envelope.references().is_empty(),
+                )
+            } else {
+                let msg_idx = t.thread_nodes[t.thread_nodes[r].children[0]]
+                    .message
+                    .unwrap();
+                let envelope = &collection[&msg_idx];
+                (
+                    envelope.subject().to_string(),
+                    !envelope.references().is_empty(),
+                )
+            };
+
+            is_re |= subject.strip_prefixes();
+
+            if !subject_table.contains_key(&subject) || subject_table[&subject].1 == r {
+                continue;
+            }
+
+            let (other_is_re, other_idx) = subject_table[&subject];
+            /*
+             * "If both are dummies, append one's children to the other, and remove the now-empty
+             * container."
+             */
+            if !t.thread_nodes[r].has_message() && !t.thread_nodes[other_idx].has_message() {
+                let children = mem::replace(&mut t.thread_nodes[r].children, Vec::new());
+                t.thread_nodes[other_idx]
+                    .children
+                    .extend(children.into_iter());
+                roots_to_remove.push(i);
+
+            /* "If one container is a empty and the other is not, make the non-empty one be a child
+             * of the empty, and a sibling of the other ``real'' messages with the same subject
+             * (the empty's children.)"
+             */
+            } else if t.thread_nodes[r].has_message() && !t.thread_nodes[other_idx].has_message() {
+                make!((other_idx) parent of (r), t.thread_nodes);
+                roots_to_remove.push(i);
+            } else if !t.thread_nodes[r].has_message() && t.thread_nodes[other_idx].has_message() {
+                make!((r) parent of (other_idx), t.thread_nodes);
+                if let Some(pos) = root_set.iter().position(|r| *r == other_idx) {
+                    roots_to_remove.push(pos);
+                }
+            /*
+             * "If that container is a non-empty, and that message's subject does not begin with ``Re:'', but this
+             * message's subject does, then make this be a child of the other."
+             */
+            } else if t.thread_nodes[other_idx].has_message() && !other_is_re && is_re {
+                make!((other_idx) parent of (r), t.thread_nodes);
+                roots_to_remove.push(i);
+
+            /* "If that container is a non-empty, and that message's subject begins with ``Re:'', but this
+             * message's subject does not, then make that be a child of this one -- they were misordered. (This
+             * happens somewhat implicitly, since if there are two messages, one with Re: and one without, the one
+             * without will be in the hash table, regardless of the order in which they were
+             * seen.)"
+             */
+            } else if t.thread_nodes[other_idx].has_message() && other_is_re && !is_re {
+                make!((r) parent of (other_idx), t.thread_nodes);
+                if let Some(pos) = root_set.iter().position(|r| *r == other_idx) {
+                    roots_to_remove.push(pos);
+                }
+
+            /* "Otherwise, make a new empty container and make both msgs be a child of it. This catches the
+             * both-are-replies and neither-are-replies cases, and makes them be siblings instead of asserting a
+             * hierarchical relationship which might not be true."
+             */
+            } else {
+                t.thread_nodes.push(Default::default());
+                let new_id = t.thread_nodes.len() - 1;
+                make!((new_id) parent of (r), t.thread_nodes);
+                make!((new_id) parent of (other_idx), t.thread_nodes);
+                root_set[i] = new_id;
+                if let Some(pos) = root_set.iter().position(|r| *r == other_idx) {
+                    roots_to_remove.push(pos);
+                }
+            }
+        }
+        roots_to_remove.sort_unstable();
+        roots_to_remove.dedup();
+        for r in roots_to_remove.into_iter().rev() {
+            root_set.remove(r);
+        }
+
+        t.root_set = RefCell::new(root_set);
         t.build_collection(&collection);
         t
     }
@@ -330,46 +616,63 @@ impl Threads {
     }
 
     pub fn insert(&mut self, envelope: &mut Envelope) {
-        link_envelope(
-            &mut self.thread_nodes,
-            &mut self.message_ids,
-            &mut self.hash_set,
-            envelope,
-        );
+        self.link_envelope(envelope);
     }
 
-    pub fn insert_reply(&mut self, envelope: &mut Envelope) -> bool {
+    pub fn insert_reply(
+        &mut self,
+        envelope: Envelope,
+        collection: &mut FnvHashMap<EnvelopeHash, Envelope>,
+    ) -> bool {
         {
             let in_reply_to = envelope.in_reply_to_raw();
             if !self.message_ids.contains_key(in_reply_to.as_ref()) {
                 return false;
             }
         }
-        /* FIXME: This does not update show_subject and len which is done in node_build upon
-         * creation */
-        link_envelope(
-            &mut self.thread_nodes,
-            &mut self.message_ids,
-            &mut self.hash_set,
-            envelope,
-        );
-        self.rebuild_thread(envelope);
-        return true;
+        let hash: EnvelopeHash = envelope.hash();
+        collection.insert(hash, envelope);
+        {
+            let envelope: &mut Envelope = collection.entry(hash).or_default();
+
+            /* FIXME: This does not update show_subject and len which is done in node_build upon
+             * creation */
+            self.link_envelope(envelope);
+        }
+        let envelope: &Envelope = &collection[&hash];
+        {
+            let in_reply_to = envelope.in_reply_to_raw();
+            let parent_id = self.message_ids[in_reply_to.as_ref()];
+            let msg_id = envelope.message_id_raw();
+            let msg_idx = self.message_ids[msg_id.as_ref()];
+            for c in self.thread_nodes[parent_id].children.clone() {
+                if let Some(message_hash) = self.thread_nodes[c].message {
+                    if collection.contains_key(&message_hash)
+                        && collection[&message_hash]
+                            .references()
+                            .last()
+                            .map(|r| **r == *envelope.message_id())
+                            .unwrap_or(false)
+                    {
+                        make!((msg_idx) parent of (c), self.thread_nodes);
+                    }
+                }
+            }
+            make!((parent_id) parent of (msg_idx), self.thread_nodes);
+            self.rebuild_thread(parent_id, collection);
+        }
+        true
     }
 
     /* Update thread tree information on envelope insertion */
-    fn rebuild_thread(&mut self, envelope: &Envelope) {
-        let m_id = envelope.message_id_raw();
-        let mut node_idx = self.message_ids[m_id.as_ref()];
+    fn rebuild_thread(&mut self, id: usize, collection: &FnvHashMap<EnvelopeHash, Envelope>) {
+        let mut node_idx = id;
         let mut stack = Vec::with_capacity(32);
 
         /* Trace path back to root ThreadNode */
         while let Some(p) = &self.thread_nodes[node_idx].parent {
             node_idx = *p;
             stack.push(node_idx);
-        }
-        for &p in stack.iter() {
-            self.thread_nodes[p].len += 1;
         }
 
         /* Trace path from root ThreadTree to the envelope's parent */
@@ -389,7 +692,15 @@ impl Threads {
             }
         }
         /* Add new child */
-        tree.push(ThreadTree::new(self.message_ids[m_id.as_ref()]));
+        let pos = tree.iter().position(|v| v.id == id).unwrap();
+        node_build(
+            &mut tree[pos],
+            id,
+            &mut self.thread_nodes,
+            1,
+            id,
+            collection,
+        );
     }
 
     /*
@@ -526,14 +837,14 @@ impl Threads {
     }
 
     pub fn root_len(&self) -> usize {
-        self.root_set.borrow().len()
+        self.tree.borrow().len()
     }
 
     pub fn root_set(&self, idx: usize) -> usize {
         self.tree.borrow()[idx].id
     }
 
-    pub fn root_iter<'a>(&'a self) -> RootIterator<'a> {
+    pub fn root_iter(&self) -> RootIterator {
         RootIterator {
             pos: 0,
             root_tree: self.tree.borrow(),
@@ -547,127 +858,101 @@ impl Threads {
             false
         }
     }
-}
 
-fn link_envelope(
-    thread_nodes: &mut Vec<ThreadNode>,
-    message_ids: &mut FnvHashMap<String, usize>,
-    hash_set: &mut FnvHashSet<EnvelopeHash>,
-    envelope: &mut Envelope,
-) {
-    let m_id = envelope.message_id_raw().to_string();
+    fn link_envelope(&mut self, envelope: &mut Envelope) {
+        let m_id = envelope.message_id_raw().to_string();
 
-    /* The index of this message's ThreadNode in thread_nodes */
+        /* The index of this message's ThreadNode in thread_nodes */
 
-    let t_idx: usize = if message_ids.get(&m_id).is_some() {
-        let node_idx = message_ids[&m_id];
-        /* the already existing ThreadNote should be empty, since we're
-         * seeing this message for the first time. otherwise it's a
-         * duplicate. */
-        if thread_nodes[node_idx].message.is_some() {
-            return;
-        }
-        thread_nodes[node_idx].date = envelope.date();
-        thread_nodes[node_idx].message = Some(envelope.hash());
-        envelope.set_thread(node_idx);
-
-        node_idx
-    } else {
-        /* Create a new ThreadNode object holding this message */
-        thread_nodes.push(ThreadNode {
-            message: Some(envelope.hash()),
-            date: envelope.date(),
-            ..Default::default()
-        });
-        envelope.set_thread(thread_nodes.len() - 1);
-        message_ids.insert(m_id, thread_nodes.len() - 1);
-        hash_set.insert(envelope.hash());
-        thread_nodes.len() - 1
-    };
-
-    /* For each element in the message's References field:
-     *
-     * Find a ThreadNode object for the given Message-ID:
-     * If there's one in message_ids use that;
-     * Otherwise, make (and index) one with a null Message
-     *
-     * Link the References field's ThreadNode together in the order implied
-     * by the References header.
-     * If they are already linked, don't change the existing links.
-     * Do not add a link if adding that link would introduce a loop: that
-     * is, before asserting A->B, search down the children of B to see if A
-     * is reachable, and also search down the children of A to see if B is
-     * reachable. If either is already reachable as a child of the other,
-     * don't add the link.
-     */
-
-    /* The index of the reference we are currently examining, start from current message */
-    let mut ref_ptr = t_idx;
-
-    for &refn in envelope.references().iter().rev() {
-        let r_id = String::from_utf8_lossy(refn.raw()).into();
-        let parent_id = if message_ids.contains_key(&r_id) {
-            let parent_id = message_ids[&r_id];
-            if !(thread_nodes[parent_id].is_descendant(thread_nodes, &thread_nodes[ref_ptr])
-                || thread_nodes[ref_ptr].is_descendant(thread_nodes, &thread_nodes[parent_id]))
-            {
-                thread_nodes[ref_ptr].parent = Some(parent_id);
-                if !thread_nodes[parent_id].children.contains(&ref_ptr) {
-                    thread_nodes[parent_id].children.push(ref_ptr);
-                }
-
-                let (left, right) = thread_nodes.split_at_mut(parent_id);
-                let (parent, right) = right.split_first_mut().unwrap();
-                for &c in &parent.children {
-                    if c > parent_id {
-                        right[c - parent_id - 1].parent = Some(parent_id);
-                    } else {
-                        left[c].parent = Some(parent_id);
-                    }
-                }
+        let t_idx: usize = if self.message_ids.get(&m_id).is_some() {
+            let node_idx = self.message_ids[&m_id];
+            /* the already existing ThreadNote should be empty, since we're
+             * seeing this message for the first time. otherwise it's a
+             * duplicate. */
+            if self.thread_nodes[node_idx].message.is_some() {
+                return;
             }
-            parent_id
+            node_idx
         } else {
-            /* Create a new ThreadNode object holding this reference */
-            thread_nodes.push(ThreadNode {
-                message: None,
-                children: vec![ref_ptr; 1],
+            /* Create a new ThreadNode object holding this message */
+            self.thread_nodes.push(ThreadNode {
+                message: Some(envelope.hash()),
                 date: envelope.date(),
                 ..Default::default()
             });
-            if thread_nodes[ref_ptr].parent.is_none() {
-                thread_nodes[ref_ptr].parent = Some(thread_nodes.len() - 1);
-            }
-            message_ids.insert(r_id, thread_nodes.len() - 1);
-            thread_nodes.len() - 1
+            let new_id = self.thread_nodes.len() - 1;
+            self.thread_nodes[new_id].thread_group = new_id;
+            self.message_ids.insert(m_id, new_id);
+            new_id
         };
+        self.thread_nodes[t_idx].date = envelope.date();
+        self.thread_nodes[t_idx].message = Some(envelope.hash());
+        envelope.set_thread(t_idx);
+        self.hash_set.insert(envelope.hash());
 
-        /* Update thread's date */
+        /* For each element in the message's References field:
+         *
+         * Find a ThreadNode object for the given Message-ID:
+         * If there's one in message_ids use that;
+         * Otherwise, make (and index) one with a null Message
+         *
+         * Link the References field's ThreadNode together in the order implied
+         * by the References header.
+         * If they are already linked, don't change the existing links.
+         * Do not add a link if adding that link would introduce a loop: that
+         * is, before asserting A->B, search down the children of B to see if A
+         * is reachable, and also search down the children of A to see if B is
+         * reachable. If either is already reachable as a child of the other,
+         * don't add the link.
+         */
 
-        let mut parent_iter = parent_id;
-        'date: loop {
-            let p: &mut ThreadNode = &mut thread_nodes[parent_iter];
-            if p.date < envelope.date() {
-                p.date = envelope.date();
-            }
-            if let Some(p) = p.parent {
-                parent_iter = p;
-            } else {
-                break 'date;
-            }
+        /* The index of the reference we are currently examining, start from current message */
+        let mut ref_ptr = t_idx;
+        if self.thread_nodes[t_idx].has_parent() {
+            remove_from_parent!(self.thread_nodes, t_idx);
         }
-        ref_ptr = parent_id;
-    }
-}
 
-fn link_threads(
-    thread_nodes: &mut Vec<ThreadNode>,
-    message_ids: &mut FnvHashMap<String, usize>,
-    hash_set: &mut FnvHashSet<EnvelopeHash>,
-    collection: &mut FnvHashMap<EnvelopeHash, Envelope>,
-) {
-    for v in collection.values_mut() {
-        link_envelope(thread_nodes, message_ids, hash_set, v);
+        for &refn in envelope.references().iter().rev() {
+            let r_id = String::from_utf8_lossy(refn.raw()).into();
+            let parent_id = if self.message_ids.contains_key(&r_id) {
+                self.message_ids[&r_id]
+            } else {
+                /* Create a new ThreadNode object holding this reference */
+                self.thread_nodes.push(ThreadNode {
+                    ..Default::default()
+                });
+                let new_id = self.thread_nodes.len() - 1;
+                self.thread_nodes[new_id].thread_group = new_id;
+                self.message_ids.insert(r_id, new_id);
+                new_id
+            };
+            if self.find(ref_ptr) != self.find(parent_id) {
+                self.union(ref_ptr, parent_id);
+                make!((parent_id) parent of (ref_ptr), self.thread_nodes);
+            }
+
+            /* Update thread's date */
+
+            let mut parent_iter = parent_id;
+            'date: loop {
+                let p: &mut ThreadNode = &mut self.thread_nodes[parent_iter];
+                if p.date < envelope.date() {
+                    p.date = envelope.date();
+                }
+                if let Some(p) = p.parent {
+                    parent_iter = p;
+                } else {
+                    break 'date;
+                }
+            }
+            ref_ptr = parent_id;
+        }
+    }
+
+    fn link_threads(&mut self, collection: &mut FnvHashMap<EnvelopeHash, Envelope>) {
+        for v in collection.values_mut() {
+            self.link_envelope(v);
+        }
     }
 }
 
@@ -716,17 +1001,10 @@ fn node_build(
 
     let mut has_unseen = thread_nodes[idx].has_unseen;
     let mut child_vec: Vec<ThreadTree> = Vec::new();
-    for c in thread_nodes[idx].children.clone().iter() {
-        let mut new_tree = ThreadTree::new(*c);
-        node_build(
-            &mut new_tree,
-            *c,
-            thread_nodes,
-            indentation,
-            idx,
-            collection,
-        );
-        has_unseen |= thread_nodes[*c].has_unseen;
+    for c in thread_nodes[idx].children.clone() {
+        let mut new_tree = ThreadTree::new(c);
+        node_build(&mut new_tree, c, thread_nodes, indentation, idx, collection);
+        has_unseen |= thread_nodes[c].has_unseen;
         child_vec.push(new_tree);
     }
     tree.children = child_vec;

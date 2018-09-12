@@ -63,10 +63,8 @@ impl Collection {
         self.threads.insert(&mut envelope);
         self.envelopes.insert(hash, envelope);
     }
-    pub(crate) fn insert_reply(&mut self, hash: EnvelopeHash, mut envelope: Envelope) {
-        if self.threads.insert_reply(&mut envelope) {
-            self.envelopes.insert(hash, envelope);
-        }
+    pub(crate) fn insert_reply(&mut self, envelope: Envelope) {
+        self.threads.insert_reply(envelope, &mut self.envelopes);
     }
 }
 

@@ -423,6 +423,19 @@ impl Envelope {
             h.write(bytes);
             self.set_message_id(format!("<{:x}>", h.finish()).as_bytes());
         }
+        if self.references.is_some() {
+            if let Some(pos) = self
+                .references
+                .as_ref()
+                .map(|r| &r.refs)
+                .unwrap()
+                .iter()
+                .position(|r| r == self.message_id.as_ref().unwrap())
+            {
+                self.references.as_mut().unwrap().refs.remove(pos);
+            }
+        }
+
         Ok(())
     }
 
@@ -546,7 +559,10 @@ impl Envelope {
             _ => Cow::from(String::new()),
         }
     }
-    pub fn message_id(&self) -> Cow<str> {
+    pub fn message_id(&self) -> &MessageID {
+        self.message_id.as_ref().unwrap()
+    }
+    pub fn message_id_display(&self) -> Cow<str> {
         match self.message_id {
             Some(ref s) => String::from_utf8_lossy(s.val()),
             _ => Cow::from(String::new()),

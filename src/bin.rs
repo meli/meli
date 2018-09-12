@@ -139,7 +139,7 @@ fn main() {
                             }
                         },
                         ThreadEvent::RefreshMailbox(event) => {
-                            state.refresh_event(event);
+                            state.refresh_event(*event);
                             state.redraw();
                         },
                         ThreadEvent::UIEvent(UIEventType::ChangeMode(f)) => {

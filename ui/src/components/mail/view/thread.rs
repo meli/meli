@@ -75,15 +75,13 @@ impl ThreadView {
             new_cursor_pos: 0,
             ..Default::default()
         };
-        let mut line = 0;
-        for (ind, idx) in thread_iter {
+        for (line, (ind, idx)) in thread_iter.enumerate() {
             let entry = if let Some(msg_idx) = threads.thread_nodes()[idx].message() {
                 view.make_entry((ind, idx, line), msg_idx)
             } else {
                 continue;
             };
             view.entries.push(entry);
-            line += 1;
             match expanded_idx {
                 Some(expanded_idx) if expanded_idx == idx => {
                     view.new_expanded_pos = view.entries.len().saturating_sub(1);

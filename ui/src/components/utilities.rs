@@ -719,10 +719,7 @@ pub struct Tabbed {
 impl Tabbed {
     pub fn new(children: Vec<Box<Component>>) -> Self {
         Tabbed {
-            children: children
-                .into_iter()
-                .map(|x: Box<Component>| Entity::from(x))
-                .collect(),
+            children: children.into_iter().map(Entity::from).collect(),
             cursor_pos: 0,
         }
     }
@@ -811,7 +808,7 @@ impl Component for Tabbed {
                 return true;
             }
             UIEventType::Action(Tab(Close)) => {
-                let uuid = self.children[self.cursor_pos].uuid().clone();
+                let uuid = *self.children[self.cursor_pos].uuid();
                 self.children[self.cursor_pos].kill(uuid);
                 return true;
             }

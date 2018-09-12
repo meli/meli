@@ -83,10 +83,10 @@ impl Account {
         let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
         match kind {
             RefreshEventKind::Update(old_hash, envelope) => {
-                mailbox.update(old_hash, envelope);
+                mailbox.update(old_hash, *envelope);
             }
             RefreshEventKind::Create(envelope) => {
-                let env: &Envelope = mailbox.insert(envelope);
+                let env: &Envelope = mailbox.insert(*envelope);
                 let ref_folders: Vec<Folder> = self.backend.folders();
                 return Some(Notification(
                     Some("New mail".into()),
@@ -107,7 +107,7 @@ impl Account {
                 self.workers[idx] = Some(handle);
             }
         }
-        return None;
+        None
     }
     pub fn watch(&self, r: RefreshEventConsumer) -> () {
         self.backend.watch(r).unwrap();
@@ -212,7 +212,8 @@ impl Account {
         };
         let m = self.workers[index].take().unwrap().extract();
         self.workers[index] = None;
-        Ok(self.load_mailbox(index, m))
+        self.load_mailbox(index, m);
+        Ok(())
     }
 }
 
