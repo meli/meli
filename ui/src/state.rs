@@ -243,6 +243,10 @@ impl State {
     pub fn refresh_event(&mut self, event: RefreshEvent) {
         let hash = event.hash();
         if let Some(&(idxa, idxm)) = self.context.mailbox_hashes.get(&hash) {
+            if self.context.accounts[idxa].status(idxm).is_err() {
+                self.context.replies.push_back(UIEvent::from(event));
+                return;
+            }
             if let Some(notification) = self.context.accounts[idxa].reload(event, idxm) {
                 self.context.replies.push_back(UIEvent {
                     id: 0,

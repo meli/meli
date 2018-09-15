@@ -93,6 +93,16 @@ pub enum UIEventType {
     MailboxUpdate((usize, usize)), // (account_idx, mailbox_idx)
     EntityKill(Uuid),
     StartupCheck,
+    RefreshEvent(Box<RefreshEvent>),
+}
+
+impl From<RefreshEvent> for UIEvent {
+    fn from(event: RefreshEvent) -> Self {
+        UIEvent {
+            id: 0,
+            event_type: UIEventType::RefreshEvent(Box::new(event)),
+        }
+    }
 }
 
 /// An event passed from `State` to its Entities.
