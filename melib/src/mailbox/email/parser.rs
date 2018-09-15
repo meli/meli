@@ -653,11 +653,12 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 
         let end = end.unwrap_or_else(|| input.len() - ptr) + ptr;
         let ascii_s = ptr;
-        let ascii_e;
+        let mut ascii_e;
 
         while ptr < end && !(is_whitespace!(input[ptr])) {
             ptr += 1;
         }
+
         ascii_e = ptr;
         while ptr < input.len() && (is_whitespace!(input[ptr])) {
             ptr += 1;
@@ -670,6 +671,14 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
             );
             break;
         }
+        if ascii_s == ascii_e {
+            /* We have the start of an encoded word but not the end, so parse it as ascii */
+            ascii_e = input[ascii_s..]
+                .find(b" ")
+                .unwrap_or_else(|| input[ascii_s..].len());
+            ptr = ascii_e;
+        }
+
         acc.extend(
             ascii_token(&input[ascii_s..ascii_e])
                 .to_full_result()
