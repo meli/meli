@@ -125,4 +125,8 @@ impl<T> Async<T> {
         self.value = Some(v);
         Ok(AsyncStatus::Finished)
     }
+    /// Blocks until thread joins.
+    pub fn join(mut self) -> T {
+        self.worker.take().unwrap().join().unwrap()
+    }
 }
