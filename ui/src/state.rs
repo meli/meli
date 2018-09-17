@@ -103,7 +103,13 @@ impl Context {
     }
     pub fn account_status(&mut self, idx_a: usize, idx_m: usize) -> result::Result<bool, usize> {
         match self.accounts[idx_a].status(idx_m) {
-            Ok(()) => Ok(true),
+            Ok(()) => {
+                self.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::MailboxUpdate((idx_a, idx_m)),
+                });
+                Ok(true)
+            }
             Err(n) => Err(n),
         }
     }

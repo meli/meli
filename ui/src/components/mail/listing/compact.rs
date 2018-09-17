@@ -108,13 +108,21 @@ impl CompactListing {
         });
         // Get mailbox as a reference.
         //
-        loop {
-            // TODO: Show progress visually
-            if context.accounts[self.cursor_pos.0]
-                .status(self.cursor_pos.1)
-                .is_ok()
-            {
-                break;
+        // TODO: Show progress visually
+        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+            Ok(_) => {}
+            Err(_) => {
+                self.content = CellBuffer::new(MAX_COLS, 1, Cell::with_char(' '));
+                self.length = 0;
+                write_string_to_grid(
+                    "Loading.",
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    ((0, 0), (MAX_COLS - 1, 0)),
+                    true,
+                );
+                return;
             }
         }
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
