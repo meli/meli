@@ -33,9 +33,10 @@ use melib::error::Result;
 use std::ops::{Index, IndexMut};
 use std::result;
 use std::sync::Arc;
+use std::thread;
 use types::UIEventType::{self, Notification};
 
-pub type Worker = Option<Async<Result<Vec<Envelope>>>>;
+pub type Worker = Option<Async<Result<Mailbox>>>;
 
 #[derive(Debug)]
 pub struct Account {
@@ -64,8 +65,12 @@ impl Account {
         let notify_fn = Arc::new(notify_fn);
         for f in ref_folders {
             folders.push(None);
-            let handle = backend.get(&f, notify_fn.clone());
-            workers.push(Some(handle));
+            workers.push(Account::new_worker(
+                &name,
+                f,
+                &mut backend,
+                notify_fn.clone(),
+            ));
         }
         Account {
             name,
@@ -77,6 +82,30 @@ impl Account {
             backend,
             notify_fn,
         }
+    }
+    fn new_worker(
+        name: &str,
+        folder: Folder,
+        backend: &mut Box<MailBackend>,
+        notify_fn: Arc<NotifyFn>,
+    ) -> Worker {
+        let mailbox_handle = backend.get(&folder, notify_fn.clone());
+        let mut builder = AsyncBuilder::new();
+        let tx = builder.tx();
+        Some(
+            builder.build(
+                thread::Builder::new()
+                    .name(format!("Loading {}", name))
+                    .spawn(move || {
+                        let envelopes = mailbox_handle.join();
+                        let ret = Mailbox::new(folder, envelopes);
+                        tx.send(AsyncStatus::Finished);
+                        notify_fn.notify();
+                        ret
+                    })
+                    .unwrap(),
+            ),
+        )
     }
     pub fn reload(&mut self, event: RefreshEvent, idx: usize) -> Option<UIEventType> {
         let kind = event.kind();
@@ -103,8 +132,13 @@ impl Account {
             }
             RefreshEventKind::Rescan => {
                 let ref_folders: Vec<Folder> = self.backend.folders();
-                let handle = self.backend.get(&ref_folders[idx], self.notify_fn.clone());
-                self.workers[idx] = Some(handle);
+                let handle = Account::new_worker(
+                    &self.name,
+                    ref_folders[idx].clone(),
+                    &mut self.backend,
+                    self.notify_fn.clone(),
+                );
+                self.workers[idx] = handle;
             }
         }
         None
@@ -140,17 +174,15 @@ impl Account {
         &mut self.workers
     }
 
-    fn load_mailbox(&mut self, index: usize, envelopes: Result<Vec<Envelope>>) {
-        let folders = self.backend.folders();
-        let folder = &folders[index];
+    fn load_mailbox(&mut self, index: usize, mailbox: Result<Mailbox>) {
         if self.sent_folder.is_some() && self.sent_folder.unwrap() == index {
-            self.folders[index] = Some(Mailbox::new(folder, envelopes));
+            self.folders[index] = Some(mailbox);
             /* Add our replies to other folders */
             for id in (0..self.folders.len()).filter(|i| *i != index) {
                 self.add_replies_to_folder(id);
             }
         } else {
-            self.folders[index] = Some(Mailbox::new(folder, envelopes));
+            self.folders[index] = Some(mailbox);
             self.add_replies_to_folder(index);
         };
     }

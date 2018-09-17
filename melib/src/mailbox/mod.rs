@@ -67,12 +67,12 @@ impl Default for Mailbox {
 }
 
 impl Mailbox {
-    pub fn new(folder: &Folder, envelopes: Result<Vec<Envelope>>) -> Result<Mailbox> {
+    pub fn new(folder: Folder, envelopes: Result<Vec<Envelope>>) -> Result<Mailbox> {
         let mut envelopes: Vec<Envelope> = envelopes?;
         envelopes.sort_by(|a, b| a.date().cmp(&b.date()));
-        let collection = Collection::new(envelopes, folder.name());
+        let collection = Collection::new(envelopes, &folder);
         Ok(Mailbox {
-            folder: (*folder).clone(),
+            folder,
             collection,
             ..Default::default()
         })
@@ -118,12 +118,12 @@ impl Mailbox {
 
     pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope) {
         self.collection.remove(&old_hash);
-        self.collection.insert(envelope.hash(), envelope);
+        self.collection.insert(envelope);
     }
 
     pub fn insert(&mut self, envelope: Envelope) -> &Envelope {
         let hash = envelope.hash();
-        self.collection.insert(hash, envelope);
+        self.collection.insert(envelope);
         &self.collection[&hash]
     }
 

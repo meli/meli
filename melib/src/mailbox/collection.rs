@@ -21,7 +21,7 @@ pub struct Collection {
 }
 
 impl Collection {
-    pub fn new(vec: Vec<Envelope>, name: &str) -> Collection {
+    pub fn new(vec: Vec<Envelope>, folder: &Folder) -> Collection {
         let mut envelopes: FnvHashMap<EnvelopeHash, Envelope> =
             FnvHashMap::with_capacity_and_hasher(vec.len(), Default::default());
         for e in vec {
@@ -30,7 +30,9 @@ impl Collection {
         let date_index = BTreeMap::new();
         let subject_index = None;
 
-        let cache_dir = xdg::BaseDirectories::with_profile("meli", name).unwrap();
+        let cache_dir =
+            xdg::BaseDirectories::with_profile("meli", format!("{}_Thread", folder.hash()))
+                .unwrap();
         let threads = if let Some(cached) = cache_dir.find_cache_file("threads") {
             let reader = io::BufReader::new(fs::File::open(cached).unwrap());
             let result: result::Result<Threads, _> = bincode::deserialize_from(reader);
@@ -38,10 +40,34 @@ impl Collection {
                 cached_t.update(&mut envelopes);
                 cached_t
             } else {
-                Threads::new(&mut envelopes) // sent_folder);
+                let ret = Threads::new(&mut envelopes); // sent_folder);
+                if let Ok(cached) = cache_dir.place_cache_file("threads") {
+                    /* place result in cache directory */
+                    let f = match fs::File::create(cached) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            panic!("{}", e);
+                        }
+                    };
+                    let writer = io::BufWriter::new(f);
+                    bincode::serialize_into(writer, &ret).unwrap();
+                }
+                ret
             }
         } else {
-            Threads::new(&mut envelopes) // sent_folder);
+            let ret = Threads::new(&mut envelopes); // sent_folder);
+            if let Ok(cached) = cache_dir.place_cache_file("threads") {
+                /* place result in cache directory */
+                let f = match fs::File::create(cached) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        panic!("{}", e);
+                    }
+                };
+                let writer = io::BufWriter::new(f);
+                bincode::serialize_into(writer, &ret).unwrap();
+            }
+            ret
         };
         Collection {
             envelopes,
@@ -59,8 +85,9 @@ impl Collection {
         self.envelopes.is_empty()
     }
 
-    pub fn insert(&mut self, hash: EnvelopeHash, mut envelope: Envelope) {
-        self.threads.insert(&mut envelope);
+    pub fn insert(&mut self, mut envelope: Envelope) {
+        self.threads.insert(&mut envelope, &self.envelopes);
+        let hash = envelope.hash();
         self.envelopes.insert(hash, envelope);
     }
     pub(crate) fn insert_reply(&mut self, envelope: Envelope) {

@@ -205,15 +205,19 @@ impl BackendFolder for MaildirFolder {
     fn hash(&self) -> FolderHash {
         self.hash
     }
+
     fn name(&self) -> &str {
         &self.name
     }
+
     fn change_name(&mut self, s: &str) {
         self.name = s.to_string();
     }
+
     fn children(&self) -> &Vec<usize> {
         &self.children
     }
+
     fn clone(&self) -> Folder {
         Box::new(MaildirFolder {
             hash: self.hash,

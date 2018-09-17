@@ -242,17 +242,22 @@ impl BackendFolder for DummyFolder {
     fn hash(&self) -> FolderHash {
         0
     }
+
     fn name(&self) -> &str {
         ""
     }
+
     fn change_name(&mut self, _s: &str) {}
+
     fn clone(&self) -> Folder {
         folder_default()
     }
+
     fn children(&self) -> &Vec<usize> {
         &self.v
     }
 }
+
 pub fn folder_default() -> Folder {
     Box::new(DummyFolder {
         v: Vec::with_capacity(0),
@@ -260,4 +265,4 @@ pub fn folder_default() -> Folder {
 }
 
 pub type FolderHash = u64;
-pub type Folder = Box<BackendFolder>;
+pub type Folder = Box<BackendFolder + Send>;

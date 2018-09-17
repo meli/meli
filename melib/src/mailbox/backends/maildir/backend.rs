@@ -50,7 +50,6 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io;
 use std::io::Read;
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use std::result;
 use std::sync::{Arc, Mutex};
@@ -98,12 +97,11 @@ macro_rules! get_path_hash {
 }
 
 fn get_file_hash(file: &Path) -> EnvelopeHash {
-    let mut buf = Vec::new();
+    let mut buf = Vec::with_capacity(2048);
     let mut f = fs::File::open(&file).unwrap_or_else(|_| panic!("Can't open {}", file.display()));
     f.read_to_end(&mut buf)
         .unwrap_or_else(|_| panic!("Can't read {}", file.display()));
     let mut hasher = FnvHasher::default();
-    hasher.write(file.as_os_str().as_bytes());
     hasher.write(&buf);
     hasher.finish()
 }
@@ -412,17 +410,20 @@ impl MaildirType {
                                         let map = map.clone();
                                         let len = c.len();
                                         for file in c {
+                                            //thread::yield_now();
+
                                             /* Check if we have a cache file with this email's
                                              * filename */
                                             let file_name = PathBuf::from(file)
                                                 .strip_prefix(&root_path)
                                                 .unwrap()
                                                 .to_path_buf();
-                                            if let Some(cached) =
+                                            let hash = if let Some(cached) =
                                                 cache_dir.find_cache_file(&file_name)
                                             {
+                                                /* Cached struct exists, try to load it */
                                                 let reader = io::BufReader::new(
-                                                    fs::File::open(cached).unwrap(),
+                                                    fs::File::open(&cached).unwrap(),
                                                 );
                                                 let result: result::Result<Envelope, _> = bincode::deserialize_from(reader);
                                                 if let Ok(env) = result {
@@ -431,13 +432,26 @@ impl MaildirType {
                                                     if (*map).contains_key(&hash) {
                                                         continue;
                                                     }
+
                                                     (*map).insert(hash, (0, file.clone()));
                                                     local_r.push(env);
                                                     continue;
                                                 }
-                                            }
+
+                                                let mut reader = io::BufReader::new(
+                                                    fs::File::open(cached).unwrap(),
+                                                );
+                                                let mut buf = Vec::with_capacity(2048);
+                                                reader.read_to_end(&mut buf).unwrap_or_else(|_| {
+                                                    panic!("Can't read {}", file.display())
+                                                });
+                                                let mut hasher = FnvHasher::default();
+                                                hasher.write(&buf);
+                                                hasher.finish()
+                                            } else {
+                                                get_file_hash(file)
+                                            };
                                             {
-                                                let hash = get_file_hash(file);
                                                 {
                                                     let mut map = map.lock().unwrap();
                                                     if (*map).contains_key(&hash) {
