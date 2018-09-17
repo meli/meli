@@ -113,7 +113,7 @@ impl fmt::Display for Address {
 }
 
 /// Helper struct to return slices from a struct field on demand.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 struct StrBuilder {
     offset: usize,
     length: usize,
@@ -142,7 +142,7 @@ impl StrBuilder {
 }
 
 /// `MessageID` is accessed through the `StrBuild` trait.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 pub struct MessageID(Vec<u8>, StrBuilder);
 
 impl StrBuild for MessageID {
@@ -159,7 +159,7 @@ impl StrBuild for MessageID {
     fn raw(&self) -> &[u8] {
         let offset = self.1.offset;
         let length = self.1.length;
-        &self.0[offset..offset + length - 1]
+        &self.0[offset..offset + length.saturating_sub(1)]
     }
     fn val(&self) -> &[u8] {
         &self.0
@@ -279,7 +279,7 @@ pub struct Envelope {
     bcc: Vec<Address>,
     body: Option<Attachment>,
     subject: Option<Vec<u8>>,
-    message_id: Option<MessageID>,
+    message_id: MessageID,
     in_reply_to: Option<MessageID>,
     references: Option<References>,
 
@@ -301,7 +301,7 @@ impl Envelope {
             bcc: Vec::new(),
             body: None,
             subject: None,
-            message_id: None,
+            message_id: MessageID::default(),
             in_reply_to: None,
             references: None,
 
@@ -418,10 +418,9 @@ impl Envelope {
         if let Some(d) = parser::date(&self.date.as_bytes()) {
             self.set_datetime(d);
         }
-        if self.message_id.is_none() {
-            let mut h = DefaultHasher::new();
-            h.write(bytes);
-            self.set_message_id(format!("<{:x}>", h.finish()).as_bytes());
+        if self.message_id.raw().is_empty() {
+            let hash = self.hash;
+            self.set_message_id(format!("<{:x}>", hash).as_bytes());
         }
         if self.references.is_some() {
             if let Some(pos) = self
@@ -430,7 +429,7 @@ impl Envelope {
                 .map(|r| &r.refs)
                 .unwrap()
                 .iter()
-                .position(|r| r == self.message_id.as_ref().unwrap())
+                .position(|r| r == &self.message_id)
             {
                 self.references.as_mut().unwrap().refs.remove(pos);
             }
@@ -547,6 +546,12 @@ impl Envelope {
             _ => Cow::from(String::new()),
         }
     }
+    pub fn in_reply_to_bytes<'a>(&'a self) -> &'a [u8] {
+        match self.in_reply_to {
+            Some(ref s) => s.raw(),
+            _ => &[],
+        }
+    }
     pub fn in_reply_to(&self) -> Cow<str> {
         match self.in_reply_to {
             Some(ref s) => String::from_utf8_lossy(s.val()),
@@ -560,19 +565,13 @@ impl Envelope {
         }
     }
     pub fn message_id(&self) -> &MessageID {
-        self.message_id.as_ref().unwrap()
+        &self.message_id
     }
     pub fn message_id_display(&self) -> Cow<str> {
-        match self.message_id {
-            Some(ref s) => String::from_utf8_lossy(s.val()),
-            _ => Cow::from(String::new()),
-        }
+        String::from_utf8_lossy(self.message_id.val())
     }
     pub fn message_id_raw(&self) -> Cow<str> {
-        match self.message_id {
-            Some(ref s) => String::from_utf8_lossy(s.raw()),
-            _ => Cow::from(String::new()),
-        }
+        String::from_utf8_lossy(self.message_id.raw())
     }
     fn set_date(&mut self, new_val: &[u8]) -> () {
         self.date = String::from_utf8_lossy(new_val).into_owned();
@@ -606,11 +605,10 @@ impl Envelope {
         let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
             Err(_) => {
-                self.message_id = None;
                 return;
             }
         };
-        self.message_id = Some(MessageID::new(new_val, slice));
+        self.message_id = MessageID::new(new_val, slice);
     }
     fn push_references(&mut self, new_val: &[u8]) -> () {
         let slice = match parser::message_id(new_val).to_full_result() {
@@ -711,6 +709,6 @@ impl PartialOrd for Envelope {
 
 impl PartialEq for Envelope {
     fn eq(&self, other: &Envelope) -> bool {
-        self.message_id_raw() == other.message_id_raw()
+        self.hash == other.hash
     }
 }
