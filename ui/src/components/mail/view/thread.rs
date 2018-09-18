@@ -529,6 +529,11 @@ impl Component for ThreadView {
             );
         }
 
+        if self.entries.len() == 1 {
+            self.mailview.draw(grid, area, context);
+            return;
+        }
+
         if total_cols >= self.content.size().0 + 74 {
             self.draw_vert(grid, area, context);
         } else {
