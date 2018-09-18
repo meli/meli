@@ -369,25 +369,21 @@ impl Component for CompactListing {
                     'J' if folder_length > 0 => {
                         if self.new_cursor_pos.1 < folder_length - 1 {
                             self.new_cursor_pos.1 = self.cursor_pos.1 + 1;
-                            self.dirty = true;
                             self.refresh_mailbox(context);
                         } else if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1
                         {
                             self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
                             self.new_cursor_pos.1 = 0;
-                            self.dirty = true;
                             self.refresh_mailbox(context);
                         }
                     }
                     'K' => {
                         if self.cursor_pos.1 > 0 {
                             self.new_cursor_pos.1 = self.cursor_pos.1 - 1;
-                            self.dirty = true;
                             self.refresh_mailbox(context);
                         } else if self.cursor_pos.0 > 0 {
                             self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
                             self.new_cursor_pos.1 = 0;
-                            self.dirty = true;
                             self.refresh_mailbox(context);
                         }
                     }
@@ -401,13 +397,11 @@ impl Component for CompactListing {
                     'h' if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1 => {
                         self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
                         self.new_cursor_pos.1 = 0;
-                        self.dirty = true;
                         self.refresh_mailbox(context);
                     }
                     'l' if self.cursor_pos.0 > 0 => {
                         self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
                         self.new_cursor_pos.1 = 0;
-                        self.dirty = true;
                         self.refresh_mailbox(context);
                     }
                     _ => {}
@@ -420,7 +414,6 @@ impl Component for CompactListing {
             }
             UIEventType::MailboxUpdate((ref idxa, ref idxf)) => {
                 if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 {
-                    self.dirty = true;
                     self.refresh_mailbox(context);
                 }
             }
@@ -433,21 +426,18 @@ impl Component for CompactListing {
             UIEventType::Action(ref action) => match action {
                 Action::ViewMailbox(idx) => {
                     self.new_cursor_pos.1 = *idx;
-                    self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;
                 }
                 Action::SubSort(field, order) => {
                     eprintln!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
-                    self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;
                 }
                 Action::Sort(field, order) => {
                     eprintln!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
-                    self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;
                 }
