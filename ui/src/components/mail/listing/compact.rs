@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use components::utilities::PageMovement;
 
 //use melib::mailbox::backends::BackendOp;
 
@@ -42,6 +43,8 @@ pub struct CompactListing {
     /// If `self.view` exists or not.
     unfocused: bool,
     view: Option<ThreadView>,
+
+    movement: Option<PageMovement>,
 }
 
 impl Default for CompactListing {
@@ -60,6 +63,9 @@ impl CompactListing {
     /// Helper function to format entry strings for CompactListing */
     /* TODO: Make this configurable */
     fn make_entry_string(e: &Envelope, len: usize, idx: usize) -> String {
+        if e.subject().contains("https://custory.com") {
+            eprintln!("it's {:?}", e.subject());
+        }
         if len > 1 {
             format!(
                 "{}    {}    {:.85} ({})",
@@ -85,11 +91,13 @@ impl CompactListing {
             new_cursor_pos: (0, 0, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
-            subsort: (SortField::Subject, SortOrder::Desc),
+            subsort: (SortField::Date, SortOrder::Desc),
             content,
             dirty: true,
             unfocused: false,
             view: None,
+
+            movement: None,
         }
     }
     /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
@@ -243,6 +251,25 @@ impl CompactListing {
             return;
         }
         let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+
+        if let Some(mvm) = self.movement.take() {
+            match mvm {
+                PageMovement::PageUp => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows);
+                }
+                PageMovement::PageDown => {
+                    /* This might "overflow" beyond the max_cursor_pos boundary if it's not yet
+                     * set. TODO: Rework the page up/down stuff
+                     */
+                    if self.new_cursor_pos.2 + 2 * rows + 1 < self.length {
+                        self.new_cursor_pos.2 += rows;
+                    } else {
+                        self.new_cursor_pos.2 = self.length.saturating_sub(rows).saturating_sub(1);
+                    }
+                }
+            }
+        }
+
         let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
@@ -355,6 +382,14 @@ impl Component for CompactListing {
                 self.unfocused = true;
                 self.dirty = true;
                 return true;
+            }
+            UIEventType::Input(Key::PageUp) => {
+                self.movement = Some(PageMovement::PageUp);
+                self.set_dirty();
+            }
+            UIEventType::Input(Key::PageDown) => {
+                self.movement = Some(PageMovement::PageDown);
+                self.set_dirty();
             }
             UIEventType::Input(Key::Char('i')) if self.unfocused => {
                 self.unfocused = false;

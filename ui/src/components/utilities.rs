@@ -184,7 +184,7 @@ impl Component for VSplit {
 }
 
 #[derive(Debug)]
-enum PagerMovement {
+pub enum PageMovement {
     PageUp,
     PageDown,
 }
@@ -201,7 +201,7 @@ pub struct Pager {
     width: usize,
     dirty: bool,
     content: CellBuffer,
-    movement: Option<PagerMovement>,
+    movement: Option<PageMovement>,
 }
 
 impl fmt::Display for Pager {
@@ -328,10 +328,10 @@ impl Component for Pager {
         let height = height!(area);
         if let Some(mvm) = self.movement.take() {
             match mvm {
-                PagerMovement::PageUp => {
+                PageMovement::PageUp => {
                     self.cursor_pos = self.cursor_pos.saturating_sub(height);
                 }
-                PagerMovement::PageDown => {
+                PageMovement::PageDown => {
                     /* This might "overflow" beyond the max_cursor_pos boundary if it's not yet
                      * set. TODO: Rework the page up/down stuff
                      */
@@ -391,11 +391,11 @@ impl Component for Pager {
                 }
             }
             UIEventType::Input(Key::PageUp) => {
-                self.movement = Some(PagerMovement::PageUp);
+                self.movement = Some(PageMovement::PageUp);
                 self.dirty = true;
             }
             UIEventType::Input(Key::PageDown) => {
-                self.movement = Some(PagerMovement::PageDown);
+                self.movement = Some(PageMovement::PageDown);
                 self.dirty = true;
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
