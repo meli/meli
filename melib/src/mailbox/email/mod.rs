@@ -277,7 +277,6 @@ pub struct Envelope {
     to: Vec<Address>,
     cc: Vec<Address>,
     bcc: Vec<Address>,
-    body: Option<Attachment>,
     subject: Option<Vec<u8>>,
     message_id: MessageID,
     in_reply_to: Option<MessageID>,
@@ -299,7 +298,6 @@ impl Envelope {
             to: Vec::new(),
             cc: Vec::new(),
             bcc: Vec::new(),
-            body: None,
             subject: None,
             message_id: MessageID::default(),
             in_reply_to: None,
@@ -666,9 +664,6 @@ impl Envelope {
                 }),
             None => Vec::new(),
         }
-    }
-    pub fn set_body(&mut self, new_val: Attachment) -> () {
-        self.body = Some(new_val);
     }
     pub fn thread(&self) -> usize {
         self.thread
