@@ -118,9 +118,9 @@ impl Account {
                 let env: &Envelope = mailbox.insert(*envelope);
                 let ref_folders: Vec<Folder> = self.backend.folders();
                 return Some(Notification(
-                    Some("New mail".into()),
+                    Some("new mail".into()),
                     format!(
-                        "Subject: {:15}:\n{:15}\nFrom: {:15}",
+                        "{:.15}:\nSubject: {:.15}\nFrom: {:.15}",
                         ref_folders[idx].name(),
                         env.subject(),
                         env.field_from_to_string()

@@ -63,9 +63,6 @@ impl CompactListing {
     /// Helper function to format entry strings for CompactListing */
     /* TODO: Make this configurable */
     fn make_entry_string(e: &Envelope, len: usize, idx: usize) -> String {
-        if e.subject().contains("https://custory.com") {
-            eprintln!("it's {:?}", e.subject());
-        }
         if len > 1 {
             format!(
                 "{}    {}    {:.85} ({})",
