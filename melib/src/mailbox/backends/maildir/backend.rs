@@ -97,12 +97,17 @@ macro_rules! get_path_hash {
 }
 
 fn get_file_hash(file: &Path) -> EnvelopeHash {
+    /*
     let mut buf = Vec::with_capacity(2048);
     let mut f = fs::File::open(&file).unwrap_or_else(|_| panic!("Can't open {}", file.display()));
     f.read_to_end(&mut buf)
         .unwrap_or_else(|_| panic!("Can't read {}", file.display()));
     let mut hasher = FnvHasher::default();
     hasher.write(&buf);
+    hasher.finish()
+        */
+    let mut hasher = FnvHasher::default();
+    file.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -143,7 +148,7 @@ impl MailBackend for MaildirType {
             p.push("new");
             watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
         }
-        let map = self.hash_index.clone();
+        let hash_index = self.hash_index.clone();
         thread::Builder::new()
             .name("folder watch".to_string())
             .spawn(move || {
@@ -174,7 +179,7 @@ impl MailBackend for MaildirType {
                                     .unwrap()
                                     .to_path_buf();
                                 if let Some(env) = add_path_to_index(
-                                    &map,
+                                    &hash_index,
                                     pathbuf.as_path(),
                                     &cache_dir,
                                     file_name,
@@ -197,9 +202,9 @@ impl MailBackend for MaildirType {
                                     .to_path_buf();
                                 /* Linear search in hash_index to find old hash */
                                 let old_hash: EnvelopeHash = {
-                                    let mut map_lock = map.lock().unwrap();
+                                    let mut index_lock = hash_index.lock().unwrap();
                                     if let Some((k, v)) =
-                                        map_lock.iter_mut().find(|(_, v)| v.1 == pathbuf)
+                                        index_lock.iter_mut().find(|(_, v)| v.1 == pathbuf)
                                     {
                                         v.1 = pathbuf.clone();
                                         *k
@@ -207,7 +212,7 @@ impl MailBackend for MaildirType {
                                         /* Did we just miss a Create event? In any case, create
                                          * envelope. */
                                         if let Some(env) = add_path_to_index(
-                                            &map,
+                                            &hash_index,
                                             pathbuf.as_path(),
                                             &cache_dir,
                                             file_name,
@@ -221,11 +226,11 @@ impl MailBackend for MaildirType {
                                     }
                                 };
                                 let new_hash: EnvelopeHash = get_file_hash(pathbuf.as_path());
-                                let mut map_lock = map.lock().unwrap();
-                                if map_lock.get_mut(&new_hash).is_none() {
-                                    let op = Box::new(MaildirOp::new(new_hash, map.clone()));
+                                let mut index_lock = hash_index.lock().unwrap();
+                                if index_lock.get_mut(&new_hash).is_none() {
+                                    let op = Box::new(MaildirOp::new(new_hash, hash_index.clone()));
                                     if let Some(env) = Envelope::from_token(op, new_hash) {
-                                        map_lock.insert(new_hash, (0, pathbuf.clone()));
+                                        index_lock.insert(new_hash, (0, pathbuf.clone()));
 
                                         /* Send Write notice */
 
@@ -239,9 +244,9 @@ impl MailBackend for MaildirType {
                             /* Remove */
                             DebouncedEvent::NoticeRemove(mut pathbuf)
                             | DebouncedEvent::Remove(mut pathbuf) => {
-                                let map = map.lock().unwrap();
+                                let index_lock = hash_index.lock().unwrap();
                                 let hash: EnvelopeHash = if let Some((k, _)) =
-                                    map.iter().find(|(_, v)| v.1 == pathbuf)
+                                    index_lock.iter().find(|(_, v)| v.1 == pathbuf)
                                 {
                                     *k
                                 } else {
@@ -254,10 +259,10 @@ impl MailBackend for MaildirType {
                                 });
                             }
                             /* Envelope hasn't changed, so handle this here */
-                            DebouncedEvent::Rename(_, mut dest) => {
-                                let new_hash: EnvelopeHash = get_file_hash(dest.as_path());
-                                let mut map = map.lock().unwrap();
-                                if let Some(v) = map.get_mut(&new_hash) {
+                            DebouncedEvent::Rename(src, mut dest) => {
+                                let old_hash: EnvelopeHash = get_file_hash(src.as_path());
+                                let mut index_lock = hash_index.lock().unwrap();
+                                if let Some(v) = index_lock.get_mut(&old_hash) {
                                     v.1 = dest;
                                 } else {
                                     /* Maybe a re-read should be triggered here just to be safe. */
@@ -512,7 +517,7 @@ impl MaildirType {
 }
 
 fn add_path_to_index(
-    map: &HashIndex,
+    hash_index: &HashIndex,
     path: &Path,
     cache_dir: &xdg::BaseDirectories,
     file_name: PathBuf,
@@ -520,13 +525,13 @@ fn add_path_to_index(
     let env: Envelope;
     let hash = get_file_hash(path);
     {
-        let mut map = map.lock().unwrap();
-        if (*map).contains_key(&hash) {
+        let mut index_lock = hash_index.lock().unwrap();
+        if (*index_lock).contains_key(&hash) {
             return None;
         }
-        (*map).insert(hash, (0, path.to_path_buf()));
+        (*index_lock).insert(hash, (0, path.to_path_buf()));
     }
-    let op = Box::new(MaildirOp::new(hash, map.clone()));
+    let op = Box::new(MaildirOp::new(hash, hash_index.clone()));
     if let Some(e) = Envelope::from_token(op, hash) {
         if let Ok(cached) = cache_dir.place_cache_file(file_name) {
             /* place result in cache directory */
