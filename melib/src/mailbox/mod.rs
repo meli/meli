@@ -43,6 +43,7 @@ use std::option::Option;
 #[derive(Debug)]
 pub struct Mailbox {
     pub folder: Folder,
+    name: String,
     pub collection: Collection,
     has_sent: bool,
 }
@@ -53,6 +54,7 @@ impl Clone for Mailbox {
             folder: self.folder.clone(),
             collection: self.collection.clone(),
             has_sent: self.has_sent,
+            name: self.name.clone(),
         }
     }
 }
@@ -62,6 +64,7 @@ impl Default for Mailbox {
             folder: folder_default(),
             collection: Collection::default(),
             has_sent: false,
+            name: String::new(),
         }
     }
 }
@@ -71,12 +74,19 @@ impl Mailbox {
         let mut envelopes: Vec<Envelope> = envelopes?;
         envelopes.sort_by(|a, b| a.date().cmp(&b.date()));
         let collection = Collection::new(envelopes, &folder);
+        let name = folder.name().into();
         Ok(Mailbox {
             folder,
             collection,
+            name: name,
             ..Default::default()
         })
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     pub fn is_empty(&self) -> bool {
         self.collection.is_empty()
     }

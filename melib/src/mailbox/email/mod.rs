@@ -61,7 +61,7 @@ pub struct MailboxAddress {
     address_spec: StrBuilder,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Address {
     Mailbox(MailboxAddress),
     Group(GroupAddress),
@@ -78,11 +78,11 @@ impl PartialEq for Address {
                 s.address_spec.display(&s.raw) == o.address_spec.display(&o.raw)
             }
             (Address::Group(s), Address::Group(o)) => {
-                s.display_name.display(&s.raw) == o.display_name.display(&o.raw)
-                    && s.mailbox_list
-                        .iter()
-                        .zip(o.mailbox_list.iter())
-                        .fold(true, |b, (s, o)| b && (s == o))
+                s.display_name.display(&s.raw) == o.display_name.display(&o.raw) && s
+                    .mailbox_list
+                    .iter()
+                    .zip(o.mailbox_list.iter())
+                    .fold(true, |b, (s, o)| b && (s == o))
             }
         }
     }
@@ -109,6 +109,12 @@ impl fmt::Display for Address {
             }
             Address::Mailbox(m) => write!(f, "{}", m.address_spec.display(&m.raw)),
         }
+    }
+}
+
+impl fmt::Debug for Address {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self, f)
     }
 }
 
@@ -270,7 +276,7 @@ pub type EnvelopeHash = u64;
 ///  Access to the underlying email object in the account's backend (for example the file or the
 ///  entry in an IMAP server) is given through `operation_token`. For more information see
 ///  `BackendOp`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Envelope {
     date: String,
     from: Vec<Address>,
@@ -288,6 +294,19 @@ pub struct Envelope {
     hash: EnvelopeHash,
 
     flags: Flag,
+}
+
+impl fmt::Debug for Envelope {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Envelope {{\ndate: {}\n,from:{:#?}\nto {:#?}\nmessage_id: {},\n references: {:#?}\nhash: {}\n
+               }}",
+               self.date,
+               self.from,
+               self.to,
+               self.message_id_display(),
+               self.references,
+               self.hash)
+    }
 }
 
 impl Envelope {

@@ -40,6 +40,7 @@ use self::fnv::{FnvHashMap, FnvHashSet};
 use std::cell::{Ref, RefCell};
 use std::cmp;
 use std::cmp::Ordering;
+use std::fmt;
 use std::iter::FromIterator;
 use std::mem;
 use std::ops::Index;
@@ -199,10 +200,16 @@ impl FromStr for SortOrder {
 /*
  * The thread tree holds the sorted state of the thread nodes */
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct ThreadTree {
     id: usize,
     children: Vec<ThreadTree>,
+}
+
+impl fmt::Debug for ThreadTree {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "")
+    }
 }
 
 impl ThreadTree {
