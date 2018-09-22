@@ -85,10 +85,13 @@ impl Collection {
         self.envelopes.is_empty()
     }
 
-    pub fn insert(&mut self, mut envelope: Envelope) {
-        self.threads.insert(&mut envelope, &self.envelopes);
+    pub fn insert(&mut self, envelope: Envelope) {
         let hash = envelope.hash();
         self.envelopes.insert(hash, envelope);
+        let env = self.envelopes.entry(hash).or_default() as *mut Envelope;
+        unsafe {
+            self.threads.insert(&mut (*env), &self.envelopes);
+        }
     }
     pub(crate) fn insert_reply(&mut self, envelope: Envelope) {
         self.threads.insert_reply(envelope, &mut self.envelopes);
