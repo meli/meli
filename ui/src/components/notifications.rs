@@ -42,13 +42,14 @@ impl Component for XDGNotifications {
     fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
         if let UIEventType::Notification(ref title, ref body) = event.event_type {
             notify_Notification::new()
+                .appname("meli")
+                .icon("mail-message-new")
                 .summary(
                     title
                         .as_ref()
                         .map(|v| v.as_str())
                         .unwrap_or("Refresh Event"),
-                )
-                .body(body)
+                ).body(body)
                 .icon("dialog-information")
                 .show()
                 .unwrap();
