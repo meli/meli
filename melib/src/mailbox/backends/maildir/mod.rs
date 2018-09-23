@@ -20,7 +20,6 @@
  */
 
 extern crate fnv;
-use self::fnv::FnvHashMap;
 
 mod backend;
 pub use self::backend::*;
@@ -35,12 +34,12 @@ use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 /// `BackendOp` implementor for Maildir
 #[derive(Debug)]
 pub struct MaildirOp {
-    hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (usize, PathBuf)>>>,
+    hash_index: HashIndexes,
+    folder_hash: FolderHash,
     hash: EnvelopeHash,
     slice: Option<Mmap>,
 }
@@ -49,6 +48,7 @@ impl Clone for MaildirOp {
     fn clone(&self) -> Self {
         MaildirOp {
             hash_index: self.hash_index.clone(),
+            folder_hash: self.folder_hash,
             hash: self.hash,
             slice: None,
         }
@@ -56,19 +56,17 @@ impl Clone for MaildirOp {
 }
 
 impl MaildirOp {
-    pub fn new(
-        hash: EnvelopeHash,
-        hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (usize, PathBuf)>>>,
-    ) -> Self {
+    pub fn new(hash: EnvelopeHash, hash_index: HashIndexes, folder_hash: FolderHash) -> Self {
         MaildirOp {
             hash_index,
+            folder_hash,
             hash,
             slice: None,
         }
     }
     fn path(&self) -> PathBuf {
-        let hash_index = self.hash_index.clone();
-        let map = hash_index.lock().unwrap();
+        let map = self.hash_index.lock().unwrap();
+        let map = &map[&self.folder_hash];
         map.get(&self.hash).unwrap().1.clone()
     }
 }
@@ -154,6 +152,7 @@ impl<'a> BackendOp for MaildirOp {
         let hash = envelope.hash();
         let hash_index = self.hash_index.clone();
         let mut map = hash_index.lock().unwrap();
+        let map = map.entry(self.folder_hash).or_default();
         map.get_mut(&hash).unwrap().1 = PathBuf::from(new_name);
         Ok(())
     }

@@ -30,6 +30,7 @@ use mailbox::backends::{
 };
 use mailbox::*;
 use melib::error::Result;
+use std::mem;
 use std::ops::{Index, IndexMut};
 use std::result;
 use std::sync::Arc;
@@ -102,44 +103,48 @@ impl Account {
                         tx.send(AsyncStatus::Finished);
                         notify_fn.notify();
                         ret
-                    })
-                    .unwrap(),
+                    }).unwrap(),
             ),
         )
     }
     pub fn reload(&mut self, event: RefreshEvent, idx: usize) -> Option<UIEventType> {
         let kind = event.kind();
-        let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
-        match kind {
-            RefreshEventKind::Update(old_hash, envelope) => {
-                mailbox.update(old_hash, *envelope);
+        {
+            let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
+            match kind {
+                RefreshEventKind::Update(old_hash, envelope) => {
+                    mailbox.update(old_hash, *envelope);
+                }
+                RefreshEventKind::Create(envelope) => {
+                    let env: &Envelope = mailbox.insert(*envelope);
+                    let ref_folders: Vec<Folder> = self.backend.folders();
+                    return Some(Notification(
+                        Some("new mail".into()),
+                        format!(
+                            "{:.15}:\nSubject: {:.15}\nFrom: {:.15}",
+                            ref_folders[idx].name(),
+                            env.subject(),
+                            env.field_from_to_string()
+                        ),
+                    ));
+                }
+                RefreshEventKind::Remove(envelope_hash) => {
+                    mailbox.remove(envelope_hash);
+                }
+                RefreshEventKind::Rescan => {
+                    let ref_folders: Vec<Folder> = self.backend.folders();
+                    let handle = Account::new_worker(
+                        &self.name,
+                        ref_folders[idx].clone(),
+                        &mut self.backend,
+                        self.notify_fn.clone(),
+                    );
+                    self.workers[idx] = handle;
+                }
             }
-            RefreshEventKind::Create(envelope) => {
-                let env: &Envelope = mailbox.insert(*envelope);
-                let ref_folders: Vec<Folder> = self.backend.folders();
-                return Some(Notification(
-                    Some("new mail".into()),
-                    format!(
-                        "{:.15}:\nSubject: {:.15}\nFrom: {:.15}",
-                        ref_folders[idx].name(),
-                        env.subject(),
-                        env.field_from_to_string()
-                    ),
-                ));
-            }
-            RefreshEventKind::Remove(envelope_hash) => {
-                mailbox.remove(envelope_hash);
-            }
-            RefreshEventKind::Rescan => {
-                let ref_folders: Vec<Folder> = self.backend.folders();
-                let handle = Account::new_worker(
-                    &self.name,
-                    ref_folders[idx].clone(),
-                    &mut self.backend,
-                    self.notify_fn.clone(),
-                );
-                self.workers[idx] = handle;
-            }
+        }
+        if self.workers[idx].is_some() {
+            self.folders[idx] = None;
         }
         None
     }
@@ -204,17 +209,15 @@ impl Account {
                         use std::slice::from_raw_parts_mut;
                         (
                             from_raw_parts_mut(ptr.offset(*sent_index as isize), *sent_index + 1)
-                                [0]
-                                .as_mut()
-                                .unwrap()
-                                .as_mut()
-                                .unwrap(),
+                                [0].as_mut()
+                            .unwrap()
+                            .as_mut()
+                            .unwrap(),
                             from_raw_parts_mut(ptr.offset(folder_index as isize), folder_index + 1)
-                                [0]
-                                .as_mut()
-                                .unwrap()
-                                .as_mut()
-                                .unwrap(),
+                                [0].as_mut()
+                            .unwrap()
+                            .as_mut()
+                            .unwrap(),
                         )
                     }
                 };

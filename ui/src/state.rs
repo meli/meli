@@ -64,8 +64,7 @@ impl InputHandler {
                     },
                     &rx,
                 )
-            })
-            .unwrap();
+            }).unwrap();
     }
     fn kill(&self) {
         self.tx.send(false);
@@ -187,8 +186,7 @@ impl State {
                         sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck))
                     })),
                 )
-            })
-            .collect();
+            }).collect();
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
         let mut s = State {
             cols,
@@ -257,6 +255,10 @@ impl State {
                 self.context.replies.push_back(UIEvent {
                     id: 0,
                     event_type: notification,
+                });
+                self.context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::MailboxUpdate((idxa, idxm)),
                 });
             }
         } else {

@@ -719,6 +719,21 @@ impl Threads {
         }
     }
 
+    pub fn update_envelope(&mut self, old_hash: EnvelopeHash, envelope: &Envelope) {
+        /* must update:
+         * - hash_set
+         * - message fields in thread_nodes
+         */
+        self.hash_set.remove(&old_hash);
+        self.hash_set.insert(envelope.hash());
+        let node = self
+            .thread_nodes
+            .iter_mut()
+            .find(|n| n.message.map(|n| n == old_hash).unwrap_or(false))
+            .unwrap();
+        node.message = Some(envelope.hash());
+    }
+
     pub fn update(&mut self, collection: &mut FnvHashMap<EnvelopeHash, Envelope>) {
         let new_hash_set = FnvHashSet::from_iter(collection.keys().cloned());
 
@@ -731,6 +746,18 @@ impl Threads {
                 // `thread` field.
                 self.insert(&mut (*env), collection);
             }
+        }
+
+        let difference: Vec<EnvelopeHash> =
+            self.hash_set.difference(&new_hash_set).cloned().collect();
+        for h in difference {
+            self.hash_set.remove(&h);
+            let node = self
+                .thread_nodes
+                .iter_mut()
+                .find(|n| n.message.map(|n| n == h).unwrap_or(false))
+                .unwrap();
+            node.message = None;
         }
     }
 
@@ -787,29 +814,34 @@ impl Threads {
             stack.push(node_idx);
         }
 
-        /* Trace path from root ThreadTree to the envelope's parent */
-        let mut tree = self.tree.get_mut();
-        for &s in stack.iter().rev() {
-            /* Borrow checker is being a tad silly here, so the following
-             * is basically this:
-             *
-             *  let tree = &mut tree[s].children;
-             */
-            let temp_tree = tree;
-            if let Some(pos) = temp_tree.iter().position(|v| v.id == s) {
-                tree = &mut temp_tree[pos].children;
-            } else {
-                let tree_node = ThreadTree::new(s);
-                temp_tree.push(tree_node);
-                let new_id = temp_tree.len() - 1;
-                tree = &mut temp_tree[new_id].children;
+        {
+            /* Trace path from root ThreadTree to the envelope's parent */
+            let mut tree = self.tree.get_mut();
+            for &s in stack.iter().rev() {
+                /* Borrow checker is being a tad silly here, so the following
+                 * is basically this:
+                 *
+                 *  let tree = &mut tree[s].children;
+                 */
+                let temp_tree = tree;
+                if let Some(pos) = temp_tree.iter().position(|v| v.id == s) {
+                    tree = &mut temp_tree[pos].children;
+                } else {
+                    let tree_node = ThreadTree::new(s);
+                    temp_tree.push(tree_node);
+                    let new_id = temp_tree.len() - 1;
+                    tree = &mut temp_tree[new_id].children;
+                }
             }
+            /* Add new child */
+            let tree_node = ThreadTree::new(id);
+            tree.push(tree_node);
+            let new_id = tree.len() - 1;
+            node_build(&mut tree[new_id], id, &mut self.thread_nodes, 1, collection);
         }
-        /* Add new child */
-        let tree_node = ThreadTree::new(id);
-        tree.push(tree_node);
-        let new_id = tree.len() - 1;
-        node_build(&mut tree[new_id], id, &mut self.thread_nodes, 1, collection);
+        // FIXME: use insertion according to self.sort etc instead of sorting everytime
+        self.inner_sort_by(*self.sort.borrow(), collection);
+        self.inner_subsort_by(*self.subsort.borrow(), collection);
     }
 
     /*
@@ -1073,26 +1105,6 @@ impl Index<usize> for Threads {
             .expect("thread index out of bounds")
     }
 }
-/*
- *
- *
-            /* Update thread's date */
-            let mut parent_iter = parent_id;
-            'date: loop {
-                let p: &mut ThreadNode = &mut self.thread_nodes[parent_iter];
-                if p.date < envelope.date() {
-                    p.date = envelope.date();
-                }
-                if let Some(p) = p.parent {
-                    parent_iter = p;
-                } else {
-                    break 'date;
-                }
-            }
-            ref_ptr = parent_id;
- *
- *
- * */
 
 fn node_build(
     tree: &mut ThreadTree,
@@ -1104,6 +1116,10 @@ fn node_build(
     if let Some(hash) = thread_nodes[idx].message {
         if let Some(parent_id) = thread_nodes[idx].parent {
             if let Some(parent_hash) = thread_nodes[parent_id].message {
+                /* decide if the subject should be shown in the UI.
+                 * If parent subject is Foobar and reply is `Re: Foobar`
+                 * then showing the reply's subject can be reduntant
+                 */
                 let mut subject = collection[&hash].subject();
                 let mut subject = subject.to_mut().as_bytes();
                 let subject = subject.strip_prefixes();

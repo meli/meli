@@ -58,7 +58,7 @@ impl<'a> From<&'a [u8]> for Charset {
             b"utf-16" | b"UTF-16" => Charset::UTF16,
             b"iso-8859-1" | b"ISO-8859-1" => Charset::ISO8859_1,
             b"iso-8859-2" | b"ISO-8859-2" => Charset::ISO8859_2,
-            b"iso-8859-7" | b"ISO-8859-7" => Charset::ISO8859_7,
+            b"iso-8859-7" | b"ISO-8859-7" | b"iso8859-7" => Charset::ISO8859_7,
             b"iso-8859-15" | b"ISO-8859-15" => Charset::ISO8859_15,
             b"windows-1251" | b"Windows-1251" => Charset::Windows1251,
             b"windows-1252" | b"Windows-1252" => Charset::Windows1252,

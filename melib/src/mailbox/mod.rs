@@ -30,7 +30,7 @@ pub use self::email::*;
 /* Mail backends. Currently only maildir is supported */
 pub mod backends;
 use error::Result;
-use mailbox::backends::{folder_default, Folder};
+use mailbox::backends::Folder;
 pub mod thread;
 pub use mailbox::thread::{SortField, SortOrder, ThreadNode, Threads};
 
@@ -40,33 +40,12 @@ pub use self::collection::*;
 use std::option::Option;
 
 /// `Mailbox` represents a folder of mail.
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct Mailbox {
     pub folder: Folder,
     name: String,
     pub collection: Collection,
     has_sent: bool,
-}
-
-impl Clone for Mailbox {
-    fn clone(&self) -> Self {
-        Mailbox {
-            folder: self.folder.clone(),
-            collection: self.collection.clone(),
-            has_sent: self.has_sent,
-            name: self.name.clone(),
-        }
-    }
-}
-impl Default for Mailbox {
-    fn default() -> Self {
-        Mailbox {
-            folder: folder_default(),
-            collection: Collection::default(),
-            has_sent: false,
-            name: String::new(),
-        }
-    }
 }
 
 impl Mailbox {

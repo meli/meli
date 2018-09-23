@@ -14,10 +14,30 @@ use self::fnv::FnvHashMap;
 /// `Mailbox` represents a folder of mail.
 #[derive(Debug, Clone, Default)]
 pub struct Collection {
+    folder: Folder,
     pub envelopes: FnvHashMap<EnvelopeHash, Envelope>,
     date_index: BTreeMap<UnixTimestamp, EnvelopeHash>,
     subject_index: Option<BTreeMap<String, EnvelopeHash>>,
     pub threads: Threads,
+}
+
+impl Drop for Collection {
+    fn drop(&mut self) {
+        let cache_dir =
+            xdg::BaseDirectories::with_profile("meli", format!("{}_Thread", self.folder.hash()))
+                .unwrap();
+        if let Ok(cached) = cache_dir.place_cache_file("threads") {
+            /* place result in cache directory */
+            let f = match fs::File::create(cached) {
+                Ok(f) => f,
+                Err(e) => {
+                    panic!("{}", e);
+                }
+            };
+            let writer = io::BufWriter::new(f);
+            bincode::serialize_into(writer, &self.threads).unwrap();
+        }
+    }
 }
 
 impl Collection {
@@ -36,26 +56,26 @@ impl Collection {
         let threads = if let Some(cached) = cache_dir.find_cache_file("threads") {
             let reader = io::BufReader::new(fs::File::open(cached).unwrap());
             let result: result::Result<Threads, _> = bincode::deserialize_from(reader);
-            if let Ok(mut cached_t) = result {
+            let ret = if let Ok(mut cached_t) = result {
                 cached_t.update(&mut envelopes);
                 cached_t
             } else {
-                let ret = Threads::new(&mut envelopes); // sent_folder);
-                if let Ok(cached) = cache_dir.place_cache_file("threads") {
-                    /* place result in cache directory */
-                    let f = match fs::File::create(cached) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            panic!("{}", e);
-                        }
-                    };
-                    let writer = io::BufWriter::new(f);
-                    bincode::serialize_into(writer, &ret).unwrap();
-                }
-                ret
+                Threads::new(&mut envelopes)
+            };
+            if let Ok(cached) = cache_dir.place_cache_file("threads") {
+                /* place result in cache directory */
+                let f = match fs::File::create(cached) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        panic!("{}", e);
+                    }
+                };
+                let writer = io::BufWriter::new(f);
+                bincode::serialize_into(writer, &ret).unwrap();
             }
+            ret
         } else {
-            let ret = Threads::new(&mut envelopes); // sent_folder);
+            let ret = Threads::new(&mut envelopes);
             if let Ok(cached) = cache_dir.place_cache_file("threads") {
                 /* place result in cache directory */
                 let f = match fs::File::create(cached) {
@@ -70,6 +90,7 @@ impl Collection {
             ret
         };
         Collection {
+            folder: folder.clone(),
             envelopes,
             date_index,
             subject_index,
@@ -94,7 +115,8 @@ impl Collection {
         }
     }
     pub(crate) fn insert_reply(&mut self, envelope: Envelope) {
-        self.threads.insert_reply(envelope, &mut self.envelopes);
+        self.insert(envelope);
+        //self.threads.insert_reply(envelope, &mut self.envelopes);
     }
 }
 

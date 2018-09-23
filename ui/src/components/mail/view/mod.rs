@@ -305,7 +305,7 @@ impl Component for MailView {
             let envelope: &Envelope = &mailbox.collection[&mailbox_idx.2];
             let op = context.accounts[mailbox_idx.0]
                 .backend
-                .operation(envelope.hash());
+                .operation(envelope.hash(), mailbox.folder.hash());
             let body = envelope.body(op);
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
@@ -422,7 +422,7 @@ impl Component for MailView {
                     let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
                     let op = context.accounts[self.coordinates.0]
                         .backend
-                        .operation(envelope.hash());
+                        .operation(envelope.hash(), mailbox.folder.hash());
                     if let Some(u) = envelope.body(op).attachments().get(lidx) {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
@@ -518,7 +518,7 @@ impl Component for MailView {
                     let finder = LinkFinder::new();
                     let op = context.accounts[self.coordinates.0]
                         .backend
-                        .operation(envelope.hash());
+                        .operation(envelope.hash(), mailbox.folder.hash());
                     let mut t = envelope.body(op).text().to_string();
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {

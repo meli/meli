@@ -114,7 +114,7 @@ impl Composer {
         let parent_message = &mailbox.collection[&p.message().unwrap()];
         let mut op = context.accounts[coordinates.0]
             .backend
-            .operation(parent_message.hash());
+            .operation(parent_message.hash(), mailbox.folder.hash());
         let parent_bytes = op.as_bytes();
 
         ret.draft = Draft::new_reply(parent_message, parent_bytes.unwrap());
@@ -456,12 +456,11 @@ impl Component for Composer {
     }
 
     fn is_dirty(&self) -> bool {
-        self.dirty || self.pager.is_dirty()
-            || self
-                .reply_context
-                .as_ref()
-                .map(|(_, p)| p.is_dirty())
-                .unwrap_or(false)
+        self.dirty || self.pager.is_dirty() || self
+            .reply_context
+            .as_ref()
+            .map(|(_, p)| p.is_dirty())
+            .unwrap_or(false)
     }
 
     fn set_dirty(&mut self) {

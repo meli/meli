@@ -113,7 +113,6 @@ impl CompactListing {
         });
         // Get mailbox as a reference.
         //
-        // TODO: Show progress visually
         match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
             Ok(_) => {}
             Err(_) => {
@@ -160,6 +159,17 @@ impl CompactListing {
                 }
                 threads.thread_nodes()[iter_ptr].message().unwrap()
             };
+            if !mailbox.collection.contains_key(&i) {
+                eprintln!("key = {}", i);
+                eprintln!(
+                    "name = {} {}",
+                    mailbox.name(),
+                    context.accounts[self.cursor_pos.0].name()
+                );
+                eprintln!("{:#?}", context.accounts);
+
+                panic!();
+            }
             let root_envelope: &Envelope = &mailbox.collection[&i];
             let fg_color = if thread_node.has_unseen() {
                 Color::Byte(0)
@@ -291,6 +301,10 @@ impl CompactListing {
             return;
         } else if self.cursor_pos != self.new_cursor_pos {
             self.cursor_pos = self.new_cursor_pos;
+        }
+        if self.new_cursor_pos.2 >= self.length {
+            self.new_cursor_pos.2 = self.length - 1;
+            self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
         /* Page_no has changed, so draw new page */
@@ -441,12 +455,13 @@ impl Component for CompactListing {
                 return true;
             }
             UIEventType::RefreshMailbox(_) => {
-                self.dirty = true;
                 self.view = None;
+                self.dirty = true;
             }
             UIEventType::MailboxUpdate((ref idxa, ref idxf)) => {
                 if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 {
                     self.refresh_mailbox(context);
+                    self.set_dirty();
                 }
             }
             UIEventType::ChangeMode(UIMode::Normal) => {

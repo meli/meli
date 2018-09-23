@@ -31,6 +31,7 @@ use mailbox::backends::maildir::MaildirType;
 use mailbox::email::{Envelope, EnvelopeHash, Flag};
 use std::fmt;
 use std::fmt::Debug;
+use std::ops::Deref;
 use std::sync::Arc;
 
 extern crate fnv;
@@ -147,7 +148,7 @@ pub trait MailBackend: ::std::fmt::Debug {
     fn get(&mut self, folder: &Folder, notify_fn: Arc<NotifyFn>) -> Async<Result<Vec<Envelope>>>;
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
     fn folders(&self) -> Vec<Folder>;
-    fn operation(&self, hash: EnvelopeHash) -> Box<BackendOp>;
+    fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp>;
     //login function
 }
 
@@ -265,4 +266,16 @@ pub fn folder_default() -> Folder {
 }
 
 pub type FolderHash = u64;
-pub type Folder = Box<BackendFolder + Send>;
+pub type Folder = Box<dyn BackendFolder + Send>;
+
+impl Clone for Folder {
+    fn clone(&self) -> Self {
+        BackendFolder::clone(self.deref())
+    }
+}
+
+impl Default for Folder {
+    fn default() -> Self {
+        folder_default()
+    }
+}

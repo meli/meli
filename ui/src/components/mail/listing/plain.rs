@@ -342,9 +342,13 @@ impl Component for PlainListing {
                         (envelope.hash(), envelope.is_seen())
                     };
                     if !is_seen {
+                        let folder_hash = {
+                            let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
+                            mailbox.folder.hash()
+                        };
                         let op = {
                             let backend = &account.backend;
-                            backend.operation(hash)
+                            backend.operation(hash, folder_hash)
                         };
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
                         let envelope: &mut Envelope = &mut mailbox

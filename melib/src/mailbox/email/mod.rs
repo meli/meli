@@ -209,10 +209,16 @@ impl fmt::Debug for MessageID {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct References {
     raw: Vec<u8>,
     refs: Vec<MessageID>,
+}
+
+impl fmt::Debug for References {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:#?}", self.refs)
+    }
 }
 
 bitflags! {

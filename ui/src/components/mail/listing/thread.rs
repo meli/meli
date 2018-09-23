@@ -415,9 +415,13 @@ impl Component for ThreadListing {
                         (envelope.hash(), envelope.is_seen())
                     };
                     if !is_seen {
+                        let folder_hash = {
+                            let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
+                            mailbox.folder.hash()
+                        };
                         let op = {
                             let backend = &account.backend;
-                            backend.operation(hash)
+                            backend.operation(hash, folder_hash)
                         };
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
                         let envelope: &mut Envelope = mailbox.thread_to_mail_mut(idx);
