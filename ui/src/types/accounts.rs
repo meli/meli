@@ -34,10 +34,15 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 use std::result;
 use std::sync::Arc;
-use std::thread;
 use types::UIEventType::{self, Notification};
 
 pub type Worker = Option<Async<Result<Mailbox>>>;
+
+macro_rules! mailbox {
+    ($idx:expr, $folders:expr) => {
+        $folders[$idx].as_mut().unwrap().as_mut().unwrap()
+    };
+}
 
 #[derive(Debug)]
 pub struct Account {
@@ -66,13 +71,9 @@ impl Account {
         let notify_fn = Arc::new(notify_fn);
         for f in ref_folders {
             folders.push(None);
-            workers.push(Account::new_worker(
-                &name,
-                f,
-                &mut backend,
-                notify_fn.clone(),
-            ));
+            workers.push(Account::new_worker(f, &mut backend, notify_fn.clone()));
         }
+        eprintln!("sent_folder for {} is {:?}", name, sent_folder);
         Account {
             name,
             folders,
@@ -85,56 +86,56 @@ impl Account {
         }
     }
     fn new_worker(
-        name: &str,
         folder: Folder,
         backend: &mut Box<MailBackend>,
         notify_fn: Arc<NotifyFn>,
     ) -> Worker {
-        let mailbox_handle = backend.get(&folder, notify_fn.clone());
+        let mailbox_handle = backend.get(&folder);
         let mut builder = AsyncBuilder::new();
         let tx = builder.tx();
-        Some(
-            builder.build(
-                thread::Builder::new()
-                    .name(format!("Loading {}", name))
-                    .spawn(move || {
-                        let envelopes = mailbox_handle.join();
-                        let ret = Mailbox::new(folder, envelopes);
-                        tx.send(AsyncStatus::Finished);
-                        notify_fn.notify();
-                        ret
-                    }).unwrap(),
-            ),
-        )
+        Some(builder.build(Box::new(move || {
+            let mut handle = mailbox_handle.clone();
+            let folder = folder.clone();
+            let work = handle.work().unwrap();
+            work.compute();
+            handle.join();
+            let envelopes = handle.extract();
+            let ret = Mailbox::new(folder, envelopes);
+            tx.send(AsyncStatus::Payload(ret));
+            notify_fn.notify();
+        })))
     }
     pub fn reload(&mut self, event: RefreshEvent, idx: usize) -> Option<UIEventType> {
         let kind = event.kind();
         {
-            let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
+            //let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
             match kind {
                 RefreshEventKind::Update(old_hash, envelope) => {
-                    mailbox.update(old_hash, *envelope);
+                    mailbox!(idx, self.folders).update(old_hash, *envelope);
+                }
+                RefreshEventKind::Rename(old_hash, new_hash) => {
+                    mailbox!(idx, self.folders).rename(old_hash, new_hash);
                 }
                 RefreshEventKind::Create(envelope) => {
-                    let env: &Envelope = mailbox.insert(*envelope);
+                    eprintln!("create {}", envelope.hash());
+                    let env: &Envelope = mailbox!(idx, self.folders).insert(*envelope);
                     let ref_folders: Vec<Folder> = self.backend.folders();
                     return Some(Notification(
                         Some("new mail".into()),
                         format!(
-                            "{:.15}:\nSubject: {:.15}\nFrom: {:.15}",
+                            "{:<15}:\nSubject: {:<15}\nFrom: {:<15}",
                             ref_folders[idx].name(),
                             env.subject(),
-                            env.field_from_to_string()
+                            env.field_from_to_string(),
                         ),
                     ));
                 }
                 RefreshEventKind::Remove(envelope_hash) => {
-                    mailbox.remove(envelope_hash);
+                    mailbox!(idx, self.folders).remove(envelope_hash);
                 }
                 RefreshEventKind::Rescan => {
                     let ref_folders: Vec<Folder> = self.backend.folders();
                     let handle = Account::new_worker(
-                        &self.name,
                         ref_folders[idx].clone(),
                         &mut self.backend,
                         self.notify_fn.clone(),
@@ -142,9 +143,6 @@ impl Account {
                     self.workers[idx] = handle;
                 }
             }
-        }
-        if self.workers[idx].is_some() {
-            self.folders[idx] = None;
         }
         None
     }
@@ -180,6 +178,8 @@ impl Account {
     }
 
     fn load_mailbox(&mut self, index: usize, mailbox: Result<Mailbox>) {
+        self.folders[index] = Some(mailbox);
+        /*
         if self.sent_folder.is_some() && self.sent_folder.unwrap() == index {
             self.folders[index] = Some(mailbox);
             /* Add our replies to other folders */
@@ -190,6 +190,7 @@ impl Account {
             self.folders[index] = Some(mailbox);
             self.add_replies_to_folder(index);
         };
+    */
     }
 
     fn add_replies_to_folder(&mut self, folder_index: usize) {
@@ -231,7 +232,7 @@ impl Account {
             None => {
                 return Ok(());
             }
-            Some(ref mut w) => match w.poll() {
+            Some(ref mut w) if self.folders[index].is_none() => match w.poll() {
                 Ok(AsyncStatus::NoUpdate) => {
                     return Err(0);
                 }
@@ -239,13 +240,15 @@ impl Account {
                 Ok(AsyncStatus::ProgressReport(n)) => {
                     return Err(n);
                 }
-                a => {
-                    eprintln!("Error: {:?}", a);
+                _ => {
                     return Err(0);
                 }
             },
+            Some(_) => return Ok(()),
         };
-        let m = self.workers[index].take().unwrap().extract();
+        let m = mem::replace(&mut self.workers[index], None)
+            .unwrap()
+            .extract();
         self.workers[index] = None;
         self.load_mailbox(index, m);
         Ok(())

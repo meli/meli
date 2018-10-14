@@ -70,8 +70,7 @@ impl AccountMenu {
                     }
                     entries
                 },
-            })
-            .collect();
+            }).collect();
         AccountMenu {
             accounts,
             dirty: true,

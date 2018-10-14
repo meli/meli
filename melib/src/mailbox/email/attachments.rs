@@ -160,6 +160,7 @@ impl AttachmentBuilder {
         };
         self
     }
+    /*
     fn decode(&self) -> Vec<u8> {
         // TODO merge this and standalone decode() function
         let charset = match self.content_type {
@@ -186,6 +187,7 @@ impl AttachmentBuilder {
             self.raw.to_vec()
         }
     }
+    */
     pub fn build(self) -> Attachment {
         Attachment {
             content_type: self.content_type,

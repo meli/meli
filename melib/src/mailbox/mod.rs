@@ -57,7 +57,7 @@ impl Mailbox {
         Ok(Mailbox {
             folder,
             collection,
-            name: name,
+            name,
             ..Default::default()
         })
     }
@@ -96,18 +96,21 @@ impl Mailbox {
         &self.collection.threads.thread_nodes()[i]
     }
 
-    pub fn insert_sent_folder(&mut self, sent: &Mailbox) {
-        if !self.has_sent {
-            for envelope in sent.collection.envelopes.values().cloned() {
+    pub fn insert_sent_folder(&mut self, _sent: &Mailbox) {
+        /*if !self.has_sent {
+            for envelope in sent.collection.envelopes.values() {
                 self.insert_reply(envelope);
             }
             self.has_sent = true;
-        }
+        }*/
+    }
+
+    pub fn rename(&mut self, old_hash: EnvelopeHash, new_hash: EnvelopeHash) {
+        self.collection.rename(old_hash, new_hash);
     }
 
     pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope) {
-        self.collection.remove(&old_hash);
-        self.collection.insert(envelope);
+        self.collection.update_envelope(old_hash, envelope);
     }
 
     pub fn insert(&mut self, envelope: Envelope) -> &Envelope {
@@ -116,12 +119,13 @@ impl Mailbox {
         &self.collection[&hash]
     }
 
-    fn insert_reply(&mut self, envelope: Envelope) {
+    pub fn insert_reply(&mut self, envelope: &Envelope) {
+        eprintln!("mailbox insert reply {}", self.name);
         self.collection.insert_reply(envelope);
     }
 
     pub fn remove(&mut self, envelope_hash: EnvelopeHash) {
-        self.collection.remove(&envelope_hash);
+        self.collection.remove(envelope_hash);
         //   eprintln!("envelope_hash: {}\ncollection:\n{:?}", envelope_hash, self.collection);
     }
 }

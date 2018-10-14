@@ -32,6 +32,9 @@ pub use mail::*;
 
 pub mod notifications;
 
+pub mod indexer;
+pub use self::indexer::*;
+
 pub mod utilities;
 pub use self::utilities::*;
 

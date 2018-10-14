@@ -100,14 +100,14 @@ impl Context {
     pub fn restore_input(&self) {
         self.input.restore(self.sender.clone());
     }
-    pub fn account_status(&mut self, idx_a: usize, idx_m: usize) -> result::Result<bool, usize> {
+    pub fn account_status(&mut self, idx_a: usize, idx_m: usize) -> result::Result<(), usize> {
         match self.accounts[idx_a].status(idx_m) {
             Ok(()) => {
                 self.replies.push_back(UIEvent {
                     id: 0,
                     event_type: UIEventType::MailboxUpdate((idx_a, idx_m)),
                 });
-                Ok(true)
+                Ok(())
             }
             Err(n) => Err(n),
         }
@@ -127,6 +127,7 @@ pub struct State {
     entities: Vec<Entity>,
     pub context: Context,
     threads: FnvHashMap<thread::ThreadId, (chan::Sender<bool>, thread::JoinHandle<()>)>,
+    work_controller: WorkController,
 }
 
 impl Drop for State {
@@ -155,7 +156,7 @@ impl State {
     pub fn new() -> Self {
         /* Create a channel to communicate with other threads. The main process is the sole receiver.
          * */
-        let (sender, receiver) = chan::sync(::std::mem::size_of::<ThreadEvent>());
+        let (sender, receiver) = chan::sync(32 * ::std::mem::size_of::<ThreadEvent>());
 
         /*
          * Create async channel to block the input-thread if we need to fork and stop it from reading
@@ -215,7 +216,18 @@ impl State {
                 },
             },
             threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
+            work_controller: WorkController::new(),
         };
+        for a in s.context.accounts.iter_mut() {
+            for worker in a.workers.iter_mut() {
+                if let Some(worker) = worker.as_mut() {
+                    if let Some(w) = worker.work() {
+                        s.work_controller.queue.add_work(w);
+                    }
+                }
+            }
+        }
+
         write!(
             s.stdout(),
             "{}{}{}{}",
@@ -239,6 +251,11 @@ impl State {
         s.restore_input();
         s
     }
+
+    pub fn worker_receiver(&mut self) -> chan::Receiver<bool> {
+        self.work_controller.results_rx()
+    }
+
     /*
      * When we receive a folder hash from a watcher thread,
      * we match the hash to the index of the mailbox, request a reload
@@ -252,15 +269,18 @@ impl State {
                 return;
             }
             if let Some(notification) = self.context.accounts[idxa].reload(event, idxm) {
+                self.context
+                    .sender
+                    .send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
                 self.context.replies.push_back(UIEvent {
                     id: 0,
                     event_type: notification,
                 });
-                self.context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::MailboxUpdate((idxa, idxm)),
-                });
             }
+            self.context.replies.push_back(UIEvent {
+                id: 0,
+                event_type: UIEventType::MailboxUpdate((idxa, idxm)),
+            });
         } else {
             eprintln!(
                 "BUG: mailbox with hash {} not found in mailbox_hashes.",

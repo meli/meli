@@ -336,6 +336,11 @@ impl Envelope {
             flags: Flag::default(),
         }
     }
+
+    pub fn set_hash(&mut self, new_hash: EnvelopeHash) {
+        self.hash = new_hash;
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Result<Envelope> {
         let mut h = DefaultHasher::new();
         h.write(bytes);
@@ -569,22 +574,21 @@ impl Envelope {
             _ => Cow::from(String::new()),
         }
     }
-    pub fn in_reply_to_bytes<'a>(&'a self) -> &'a [u8] {
-        match self.in_reply_to {
-            Some(ref s) => s.raw(),
-            _ => &[],
+    pub fn in_reply_to(&self) -> Option<&MessageID> {
+        self.in_reply_to.as_ref()
+    }
+    pub fn in_reply_to_display(&self) -> Option<Cow<str>> {
+        if let Some(ref m) = self.in_reply_to {
+            Some(String::from_utf8_lossy(m.val()))
+        } else {
+            None
         }
     }
-    pub fn in_reply_to(&self) -> Cow<str> {
-        match self.in_reply_to {
-            Some(ref s) => String::from_utf8_lossy(s.val()),
-            _ => Cow::from(String::new()),
-        }
-    }
-    pub fn in_reply_to_raw(&self) -> Cow<str> {
-        match self.in_reply_to {
-            Some(ref s) => String::from_utf8_lossy(s.raw()),
-            _ => Cow::from(String::new()),
+    pub fn in_reply_to_raw(&self) -> Option<Cow<str>> {
+        if let Some(ref m) = self.in_reply_to {
+            Some(String::from_utf8_lossy(m.raw()))
+        } else {
+            None
         }
     }
     pub fn message_id(&self) -> &MessageID {

@@ -63,7 +63,7 @@ impl CompactListing {
     /// Helper function to format entry strings for CompactListing */
     /* TODO: Make this configurable */
     fn make_entry_string(e: &Envelope, len: usize, idx: usize) -> String {
-        if len > 1 {
+        if len > 0 {
             format!(
                 "{}    {}    {:.85} ({})",
                 idx,
@@ -101,8 +101,13 @@ impl CompactListing {
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context) {
         self.dirty = true;
-        self.cursor_pos.2 = 0;
-        self.new_cursor_pos.2 = 0;
+        if !(self.cursor_pos.0 == self.new_cursor_pos.0
+            && self.cursor_pos.1 == self.new_cursor_pos.1)
+        {
+            //TODO: store cursor_pos in each folder
+            self.cursor_pos.2 = 0;
+            self.new_cursor_pos.2 = 0;
+        }
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
@@ -124,7 +129,7 @@ impl CompactListing {
                     Color::Default,
                     Color::Default,
                     ((0, 0), (MAX_COLS - 1, 0)),
-                    true,
+                    false,
                 );
                 return;
             }
@@ -142,7 +147,7 @@ impl CompactListing {
                 Color::Default,
                 Color::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
-                true,
+                false,
             );
             return;
         }
@@ -204,6 +209,9 @@ impl CompactListing {
             let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
                 .as_ref()
                 .unwrap();
+            if mailbox.len() == 0 {
+                return;
+            }
             let threads = &mailbox.collection.threads;
             let thread_node = threads.root_set(idx);
             let thread_node = &threads.thread_nodes()[thread_node];
@@ -216,6 +224,7 @@ impl CompactListing {
                 }
                 threads.thread_nodes()[iter_ptr].message().unwrap()
             };
+
             let root_envelope: &Envelope = &mailbox.collection[&i];
             let fg_color = if !root_envelope.is_seen() {
                 Color::Byte(0)
@@ -253,7 +262,12 @@ impl CompactListing {
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
             clear_area(grid, area);
-            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, 0)));
+            copy_area(
+                grid,
+                &self.content,
+                area,
+                ((0, 0), (MAX_COLS - 1, self.length)),
+            );
             context.dirty_areas.push_back(area);
             return;
         }
@@ -346,7 +360,6 @@ impl Component for CompactListing {
             if !self.is_dirty() {
                 return;
             }
-            self.dirty = false;
             /* Draw the entire list */
             self.draw_list(grid, area, context);
         } else {
@@ -365,8 +378,8 @@ impl Component for CompactListing {
             }
             self.view = Some(ThreadView::new(self.cursor_pos, None, context));
             self.view.as_mut().unwrap().draw(grid, area, context);
-            self.dirty = false;
         }
+        self.dirty = false;
     }
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
         if let Some(ref mut v) = self.view {

@@ -67,7 +67,14 @@ impl MaildirOp {
     fn path(&self) -> PathBuf {
         let map = self.hash_index.lock().unwrap();
         let map = &map[&self.folder_hash];
-        map.get(&self.hash).unwrap().1.clone()
+        eprintln!("looking for {} in {} map", self.hash, self.folder_hash);
+        if !map.contains_key(&self.hash) {
+            eprintln!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
+            for e in map.iter() {
+                eprintln!("{:#?}", e);
+            }
+        }
+        map.get(&self.hash).unwrap().clone()
     }
 }
 
@@ -153,7 +160,7 @@ impl<'a> BackendOp for MaildirOp {
         let hash_index = self.hash_index.clone();
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(self.folder_hash).or_default();
-        map.get_mut(&hash).unwrap().1 = PathBuf::from(new_name);
+        *map.get_mut(&hash).unwrap() = PathBuf::from(new_name);
         Ok(())
     }
 }

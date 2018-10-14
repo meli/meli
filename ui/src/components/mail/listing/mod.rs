@@ -49,7 +49,7 @@ impl fmt::Display for Listing {
 
 impl Default for Listing {
     fn default() -> Self {
-        Listing::Compact(Default::default())
+        Listing::Threaded(Default::default())
     }
 }
 

@@ -35,10 +35,13 @@ pub struct ThreadListing {
     subsort: (SortField, SortOrder),
     /// Cache current view.
     content: CellBuffer,
+
+    locations: Vec<(usize, usize)>,
     /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.view` exists or not.
     unfocused: bool,
+    initialised: bool,
     view: Option<MailView>,
 }
 
@@ -64,17 +67,24 @@ impl ThreadListing {
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
             content,
+            locations: Vec::new(),
             dirty: true,
             unfocused: false,
             view: None,
+            initialised: false,
         }
     }
     /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context) {
         self.dirty = true;
-        self.cursor_pos.2 = 0;
-        self.new_cursor_pos.2 = 0;
+        if !(self.cursor_pos.0 == self.new_cursor_pos.0
+            && self.cursor_pos.1 == self.new_cursor_pos.1)
+        {
+            //TODO: store cursor_pos in each folder
+            self.cursor_pos.2 = 0;
+            self.new_cursor_pos.2 = 0;
+        }
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
@@ -85,20 +95,27 @@ impl ThreadListing {
         });
         // Get mailbox as a reference.
         //
-        loop {
-            // TODO: Show progress visually
-            if context.accounts[self.cursor_pos.0]
-                .status(self.cursor_pos.1)
-                .is_ok()
-            {
-                break;
+        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+            Ok(_) => {}
+            Err(_) => {
+                self.content = CellBuffer::new(MAX_COLS, 1, Cell::with_char(' '));
+                self.length = 0;
+                write_string_to_grid(
+                    "Loading.",
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    ((0, 0), (MAX_COLS - 1, 0)),
+                    false,
+                );
+                return;
             }
         }
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
 
-        self.length = mailbox.collection.threads.root_len();
+        self.length = mailbox.collection.threads.len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         if self.length == 0 {
             write_string_to_grid(
@@ -118,25 +135,19 @@ impl ThreadListing {
         let threads = &mailbox.collection.threads;
         threads.sort_by(self.sort, self.subsort, &mailbox.collection);
         let thread_nodes: &Vec<ThreadNode> = &threads.thread_nodes();
-        let mut iter = threads.root_iter().peekable();
-        let len = threads.root_len().to_string().chars().count();
+        self.locations = threads.threads_iter().collect();
+        let mut iter = self.locations.iter().peekable();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
-        while let Some(i) = iter.next() {
-            let thread_node = &thread_nodes[i];
+        while let Some((indentation, i)) = iter.next() {
+            let thread_node = &thread_nodes[*i];
 
-            if !thread_node.has_message() {
-                continue;
-            }
-
-            let indentation = thread_node.indentation();
-
-            if indentation == 0 {
+            if *indentation == 0 {
                 thread_idx += 1;
             }
 
             match iter.peek() {
-                Some(&x) if thread_nodes[x].indentation() == indentation => {
+                Some((x, _)) if *x == *indentation => {
                     indentations.pop();
                     indentations.push(true);
                 }
@@ -145,51 +156,58 @@ impl ThreadListing {
                     indentations.push(false);
                 }
             }
-            if threads.has_sibling(i) {
+            if threads.has_sibling(*i) {
                 indentations.pop();
                 indentations.push(true);
             }
-            let envelope: &Envelope = &mailbox.collection[&thread_node.message().unwrap()];
-            let fg_color = if !envelope.is_seen() {
-                Color::Byte(0)
+            if thread_node.has_message() {
+                let envelope: &Envelope = &mailbox.collection[&thread_node.message().unwrap()];
+                let fg_color = if !envelope.is_seen() {
+                    Color::Byte(0)
+                } else {
+                    Color::Default
+                };
+                let bg_color = if !envelope.is_seen() {
+                    Color::Byte(251)
+                } else if thread_idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                };
+                let (x, _) = write_string_to_grid(
+                    &ThreadListing::make_thread_entry(
+                        envelope,
+                        idx,
+                        *indentation,
+                        *i,
+                        threads,
+                        &indentations,
+                        self.length,
+                        //    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
+                    ),
+                    &mut self.content,
+                    fg_color,
+                    bg_color,
+                    ((0, idx), (MAX_COLS - 1, idx)),
+                    false,
+                );
+                for x in x..MAX_COLS {
+                    self.content[(x, idx)].set_ch(' ');
+                    self.content[(x, idx)].set_bg(bg_color);
+                }
             } else {
-                Color::Default
-            };
-            let bg_color = if !envelope.is_seen() {
-                Color::Byte(251)
-            } else if thread_idx % 2 == 0 {
-                Color::Byte(236)
-            } else {
-                Color::Default
-            };
-            let (x, _) = write_string_to_grid(
-                &ThreadListing::make_thread_entry(
-                    envelope,
-                    idx,
-                    indentation,
-                    i,
-                    threads,
-                    &indentations,
-                    len,
-                    //    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
-                ),
-                &mut self.content,
-                fg_color,
-                bg_color,
-                ((0, idx), (MAX_COLS - 1, idx)),
-                false,
-            );
-            for x in x..MAX_COLS {
-                self.content[(x, idx)].set_ch(' ');
-                self.content[(x, idx)].set_bg(bg_color);
+                for x in 0..MAX_COLS {
+                    self.content[(x, idx)].set_ch(' ');
+                    self.content[(x, idx)].set_bg(Color::Default);
+                }
             }
 
             match iter.peek() {
-                Some(&x) if thread_nodes[x].indentation() > indentation => {
+                Some((x, _)) if *x > *indentation => {
                     indentations.push(false);
                 }
-                Some(&x) if thread_nodes[x].indentation() < indentation => {
-                    for _ in 0..(indentation - thread_nodes[x].indentation()) {
+                Some((x, _)) if *x < *indentation => {
+                    for _ in 0..(*indentation - *x) {
                         indentations.pop();
                     }
                 }
@@ -203,49 +221,64 @@ impl ThreadListing {
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
-        let envelope: &Envelope = mailbox.thread_to_mail(idx);
+        if mailbox.len() == 0 {
+            return;
+        }
+        if let Some(hash) =
+            mailbox.collection.threads.thread_nodes()[self.locations[idx].1].message()
+        {
+            let envelope: &Envelope = &mailbox.collection[&hash];
 
-        let fg_color = if !envelope.is_seen() {
-            Color::Byte(0)
-        } else {
-            Color::Default
-        };
-        let bg_color = if !envelope.is_seen() {
-            Color::Byte(251)
-        } else if idx % 2 == 0 {
-            Color::Byte(236)
-        } else {
-            Color::Default
-        };
-        change_colors(
-            &mut self.content,
-            ((0, idx), (MAX_COLS - 1, idx)),
-            fg_color,
-            bg_color,
-        );
+            let fg_color = if !envelope.is_seen() {
+                Color::Byte(0)
+            } else {
+                Color::Default
+            };
+            let bg_color = if !envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            };
+            change_colors(
+                &mut self.content,
+                ((0, idx), (MAX_COLS - 1, idx)),
+                fg_color,
+                bg_color,
+            );
+        }
     }
 
     fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
-        let envelope: &Envelope = mailbox.thread_to_mail(idx);
+        if mailbox.len() == 0 || mailbox.len() <= idx {
+            return;
+        }
 
-        let fg_color = if !envelope.is_seen() {
-            Color::Byte(0)
-        } else {
-            Color::Default
-        };
-        let bg_color = if self.cursor_pos.2 == idx {
-            Color::Byte(246)
-        } else if !envelope.is_seen() {
-            Color::Byte(251)
-        } else if idx % 2 == 0 {
-            Color::Byte(236)
-        } else {
-            Color::Default
-        };
-        change_colors(grid, area, fg_color, bg_color);
+        if let Some(hash) =
+            mailbox.collection.threads.thread_nodes()[self.locations[idx].1].message()
+        {
+            let envelope: &Envelope = &mailbox.collection[&hash];
+
+            let fg_color = if !envelope.is_seen() {
+                Color::Byte(0)
+            } else {
+                Color::Default
+            };
+            let bg_color = if self.cursor_pos.2 == idx {
+                Color::Byte(246)
+            } else if !envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            };
+            change_colors(grid, area, fg_color, bg_color);
+        }
     }
 
     /// Draw the list of `Envelope`s.
@@ -266,7 +299,25 @@ impl ThreadListing {
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let top_idx = page_no * rows;
-
+        if !self.initialised {
+            self.initialised = false;
+            copy_area(
+                grid,
+                &self.content,
+                area,
+                ((0, top_idx), (MAX_COLS - 1, self.length)),
+            );
+            self.highlight_line(
+                grid,
+                (
+                    set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+                    set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+                ),
+                self.cursor_pos.2,
+                context,
+            );
+            context.dirty_areas.push_back(area);
+        }
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
@@ -402,8 +453,26 @@ impl Component for ThreadListing {
                 context.dirty_areas.push_back(area);
                 return;
             }
-            /* Mark message as read */
+
             let idx = self.cursor_pos.2;
+
+            {
+                let has_message: bool = {
+                    let account = &context.accounts[self.cursor_pos.0];
+                    let mailbox = &account[self.cursor_pos.1].as_ref().unwrap();
+                    mailbox.collection.threads.thread_nodes()
+                        [self.locations[self.new_cursor_pos.2].1]
+                        .message()
+                        .is_some()
+                };
+                if !has_message {
+                    self.dirty = false;
+                    /* Draw the entire list */
+                    return self.draw_list(grid, area, context);
+                }
+            }
+
+            /* Mark message as read */
             let must_highlight = {
                 if self.length == 0 {
                     false
@@ -411,7 +480,8 @@ impl Component for ThreadListing {
                     let account = &mut context.accounts[self.cursor_pos.0];
                     let (hash, is_seen) = {
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        let envelope: &mut Envelope = mailbox.thread_to_mail_mut(idx);
+                        let envelope: &mut Envelope =
+                            mailbox.thread_to_mail_mut(self.locations[self.new_cursor_pos.2].1);
                         (envelope.hash(), envelope.is_seen())
                     };
                     if !is_seen {
@@ -424,7 +494,8 @@ impl Component for ThreadListing {
                             backend.operation(hash, folder_hash)
                         };
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        let envelope: &mut Envelope = mailbox.thread_to_mail_mut(idx);
+                        let envelope: &mut Envelope =
+                            mailbox.thread_to_mail_mut(self.locations[self.new_cursor_pos.2].1);
                         envelope.set_seen(op).unwrap();
                         true
                     } else {
@@ -476,7 +547,7 @@ impl Component for ThreadListing {
                 let coordinates = (
                     self.cursor_pos.0,
                     self.cursor_pos.1,
-                    mailbox.threaded_mail(self.cursor_pos.2),
+                    mailbox.threaded_mail(self.locations[self.cursor_pos.2].1),
                 );
                 self.view = Some(MailView::new(coordinates, None, None));
             }
@@ -587,6 +658,7 @@ impl Component for ThreadListing {
                 if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 {
                     self.dirty = true;
                     self.refresh_mailbox(context);
+                    eprintln!("mailboxupdate");
                 }
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
@@ -596,8 +668,8 @@ impl Component for ThreadListing {
                 self.dirty = true;
             }
             UIEventType::Action(ref action) => match action {
-                Action::ViewMailbox(idx) => {
-                    self.new_cursor_pos.1 = *idx;
+                Action::ViewMailbox(idx_m) => {
+                    self.new_cursor_pos.1 = *idx_m;
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;

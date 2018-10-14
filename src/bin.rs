@@ -60,6 +60,8 @@ fn main() {
 
     let receiver = state.receiver();
 
+    let worker_receiver = state.worker_receiver();
+
     /* Register some reasonably useful interfaces */
     let menu = Entity::from(Box::new(AccountMenu::new(&state.context.accounts)));
     let listing = listing::Listing::default();
@@ -84,6 +86,7 @@ fn main() {
             for e in events {
                 state.rcv_event(e);
             }
+            state.redraw();
 
             /* Poll on all channels. Currently we have the input channel for stdin, watching events and the signal watcher. */
             chan_select! {
@@ -151,11 +154,12 @@ fn main() {
                             for idx_a in 0..state.context.accounts.len() {
                                 let len = state.context.accounts[idx_a].len();
                                 for idx_m in 0..len {
+
                                     match state.context.account_status(idx_a, idx_m) {
-                                        Ok(true) => {
+                                        Ok(_) => {
                                             render_flag = true;
                                         },
-                                        Ok(false) | Err(_) => {}
+                                        Err(_) => {}
                                     }
                                 }
                             }
@@ -180,6 +184,10 @@ fn main() {
                             state.redraw();
                         }
                     }
+                },
+                worker_receiver.recv() -> _ => {
+                    /* Some worker thread finished their job, acknowledge
+                     * it and move on*/
                 },
             }
         } // end of 'inner

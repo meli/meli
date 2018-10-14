@@ -59,3 +59,6 @@ pub use components::*;
 
 pub mod conf;
 pub use conf::*;
+
+pub mod workers;
+pub use workers::*;

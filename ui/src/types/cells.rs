@@ -627,15 +627,15 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
             src_x += 1;
         }
         src_x = get_x(upper_left!(src));
-        if src_y >= get_y(bottom_right!(src)) {
+        src_y += 1;
+        if src_y > get_y(bottom_right!(src)) {
             clear_area(
                 grid_dest,
-                ((get_x(upper_left!(dest)), y), bottom_right!(dest)),
+                ((get_x(upper_left!(dest)), y + 1), bottom_right!(dest)),
             );
             ret.1 = y;
             break;
         }
-        src_y += 1;
     }
     ret
 }

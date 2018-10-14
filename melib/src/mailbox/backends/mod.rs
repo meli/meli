@@ -32,7 +32,6 @@ use mailbox::email::{Envelope, EnvelopeHash, Flag};
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::Arc;
 
 extern crate fnv;
 use self::fnv::FnvHashMap;
@@ -84,6 +83,8 @@ impl Backends {
 #[derive(Debug)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),
+    /// Rename(old_hash, new_hash)
+    Rename(EnvelopeHash, EnvelopeHash),
     Create(Box<Envelope>),
     Remove(FolderHash),
     Rescan,
@@ -145,7 +146,7 @@ impl NotifyFn {
     }
 }
 pub trait MailBackend: ::std::fmt::Debug {
-    fn get(&mut self, folder: &Folder, notify_fn: Arc<NotifyFn>) -> Async<Result<Vec<Envelope>>>;
+    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
     fn folders(&self) -> Vec<Folder>;
     fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp>;
