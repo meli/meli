@@ -48,8 +48,8 @@ impl Component for XDGNotifications {
                     title
                         .as_ref()
                         .map(|v| v.as_str())
-                        .unwrap_or("Refresh Event"),
-                ).body(body)
+                        .unwrap_or("Event"),
+                ).body(&escape_str(body))
                 .icon("dialog-information")
                 .show()
                 .unwrap();
@@ -57,4 +57,50 @@ impl Component for XDGNotifications {
         false
     }
     fn set_dirty(&mut self) {}
+}
+
+
+fn escape_str(s: &str) -> String {
+    let mut ret: String = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => ret.push_str("&amp;"),
+            '<' => ret.push_str("&lt;"),
+            '>' => ret.push_str("&gt;"),
+            '\'' => ret.push_str("&apos;"),
+            '"' => ret.push_str("&quot;"),
+            _ => {
+                let i = c as u32;
+                if (0x1 <= i && i <= 0x8) ||
+                    (0xb <= i && i  <= 0xc) ||
+                    (0xe <= i && i <= 0x1f) ||
+                    (0x7f <= i && i <= 0x84) ||
+                    (0x86 <= i && i <= 0x9f) {
+                    ret.push_str(&format!("&#{:x}%{:x};", i, i));
+                } else {
+                    ret.push(c);
+                }
+            },
+        }
+    }
+    ret
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_escape_str() {
+        let title: &str = "& > Title τίτλος";
+        let body: &str = "& > Body σώμα";
+        notify_Notification::new()
+            .appname("meli")
+            .icon("mail-message-new")
+            .summary(title)
+            .body(&escape_str(body))
+            .icon("dialog-information")
+            .show()
+            .unwrap();
+    }
 }
