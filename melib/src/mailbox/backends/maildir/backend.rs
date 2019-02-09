@@ -131,16 +131,17 @@ fn get_file_hash(file: &Path) -> EnvelopeHash {
 }
 
 fn move_to_cur(p: PathBuf) -> PathBuf {
-    eprintln!("moved to cur");
-    let mut new = p.clone();
-    {
-        let file_name = p.file_name().unwrap();
-        new.pop();
-        new.pop();
+		let mut new = p.clone();
+		{
+			let file_name = p.file_name().unwrap();
+			new.pop();
+			new.pop();
 
-        new.push("cur");
-        new.push(file_name);
-    }
+			new.push("cur");
+			new.push(file_name);
+			new.set_extension(":2,");
+		}
+    eprintln!("moved to cur: {}", new.display());
     fs::rename(p, &new).unwrap();
     new
 }
@@ -428,7 +429,6 @@ impl MaildirType {
                 let thunk = move || {
                     let mut path = path.clone();
                     let cache_dir = cache_dir.clone();
-                    {
                         path.push("new");
                         for d in path.read_dir()? {
                             if let Ok(p) = d {
@@ -436,7 +436,6 @@ impl MaildirType {
                             }
                         }
                         path.pop();
-                    }
 
                     path.push("cur");
                     let iter = path.read_dir()?;
