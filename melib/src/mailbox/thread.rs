@@ -1115,7 +1115,7 @@ impl Threads {
     }
 
     pub fn len(&self) -> usize {
-        self.thread_nodes.len()
+        self.hash_set.len()
     }
 
     pub fn root_len(&self) -> usize {
