@@ -24,6 +24,9 @@ extern crate serde;
 extern crate xdg;
 pub mod pager;
 
+pub mod accounts;
+pub use self::accounts::Account;
+
 use melib::conf::AccountSettings;
 use melib::error::*;
 use pager::PagerSettings;

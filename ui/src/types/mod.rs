@@ -19,8 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-pub mod accounts;
-pub use self::accounts::Account;
 #[macro_use]
 mod position;
 #[macro_use]
