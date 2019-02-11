@@ -6,11 +6,9 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::ops::{Deref, DerefMut};
-use std::result;
 
 extern crate fnv;
 use self::fnv::FnvHashMap;
-use self::fnv::FnvHashSet;
 
 /// `Mailbox` represents a folder of mail.
 #[derive(Debug, Clone, Default)]
@@ -51,16 +49,16 @@ impl Collection {
         let date_index = BTreeMap::new();
         let subject_index = None;
 
-        let cache_dir =
-            xdg::BaseDirectories::with_profile("meli", format!("{}_Thread", folder.hash()))
-                .unwrap();
         /* Scrap caching for now. When a cached threads file is loaded, we must remove/rehash the
          * thread nodes that shouldn't exist anymore (e.g. because their file moved from /new to
          * /cur, or it was deleted).
          */
         let threads = Threads::new(&mut envelopes);
 
-        /*if let Some(cached) = cache_dir.find_cache_file("threads") {
+        /*let cache_dir =
+            xdg::BaseDirectories::with_profile("meli", format!("{}_Thread", folder.hash()))
+                .unwrap();
+        if let Some(cached) = cache_dir.find_cache_file("threads") {
             let reader = io::BufReader::new(fs::File::open(cached).unwrap());
             let result: result::Result<Threads, _> = bincode::deserialize_from(reader);
             let ret = if let Ok(mut cached_t) = result {

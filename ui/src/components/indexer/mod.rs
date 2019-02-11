@@ -58,7 +58,8 @@ impl Default for Indexer {
 }
 
 impl Indexer {
-    fn draw_menu(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {}
+    fn draw_menu(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {
+    }
 }
 
 impl Component for Indexer {
@@ -104,7 +105,7 @@ impl Component for Indexer {
         }
 
         match event.event_type {
-            UIEventType::RefreshMailbox(c) => {
+            UIEventType::RefreshMailbox(_) => {
                 self.dirty = true;
             }
             UIEventType::ChangeMode(UIMode::Normal) => {

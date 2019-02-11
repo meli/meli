@@ -422,7 +422,6 @@ impl MaildirType {
                 let name = name.clone();
                 let root_path = root_path.clone();
                 let map = map.clone();
-                let map2 = map.clone();
                 let tx = tx.clone();
                 let cache_dir = cache_dir.clone();
                 let path = path.clone();
@@ -540,8 +539,6 @@ impl MaildirType {
                         let mut result = t.join();
                         ret.append(&mut result);
                     }
-                    let mut map = map2.lock().unwrap();
-                    let map = map.entry(folder_hash).or_default();
                     Ok(ret)
                 };
                 let result = thunk();

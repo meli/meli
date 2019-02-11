@@ -1,5 +1,4 @@
 use super::*;
-use components::utilities::PageMovement;
 
 pub trait IndexContent: Component {
     /* Handles the drawing of one entry */
@@ -16,10 +15,10 @@ pub trait IndexContent: Component {
 
 #[derive(Debug, PartialEq)]
 enum IndexState {
-    Uninitialized,
+    //Uninitialized,
     Listing,
     Unfocused,
-    Search,
+    //Search,
 }
 
 #[derive(Debug)]
@@ -58,14 +57,6 @@ impl Component for Index {
         }
 
         match self.state {
-            IndexState::Uninitialized => {
-                self.content.refresh(context);
-
-                /* copy area */
-                self.state = IndexState::Listing;
-                self.draw(grid, area, context);
-                return;
-            }
             IndexState::Listing => {
                 /* rehighlight entries, redraw pages */
                 let upper_left = upper_left!(area);
@@ -125,7 +116,7 @@ impl Component for Index {
             IndexState::Unfocused => {
                 self.content.draw(grid, area, context);
             }
-            IndexState::Search => unreachable!(),
+            //IndexState::Search => unreachable!(),
         }
 
         self.dirty = false;

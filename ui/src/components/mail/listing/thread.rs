@@ -530,21 +530,20 @@ impl Component for ThreadListing {
                 }
                 return;
             }
-            {
-                let account = &context.accounts[self.cursor_pos.0];
-                let mailbox = &account[self.cursor_pos.1].as_ref().unwrap();
-                let coordinates = (
-                    self.cursor_pos.0,
-                    self.cursor_pos.1,
-                    self.locations[self.cursor_pos.2],
+
+            let coordinates = (
+                self.cursor_pos.0,
+                self.cursor_pos.1,
+                self.locations[self.cursor_pos.2],
                 );
-                self.view = Some(MailView::new(coordinates, None, None));
-            }
+
+            self.view = Some(MailView::new(coordinates, None, None));
             self.view.as_mut().unwrap().draw(
                 grid,
                 (set_y(upper_left, mid + 1), bottom_right),
                 context,
             );
+
             self.dirty = false;
         }
     }

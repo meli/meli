@@ -193,6 +193,7 @@ impl Account {
     */
     }
 
+    /*
     fn add_replies_to_folder(&mut self, folder_index: usize) {
         if let Some(sent_index) = self.sent_folder.as_ref() {
             if self.folders[*sent_index]
@@ -226,6 +227,7 @@ impl Account {
             }
         }
     }
+    */
 
     pub fn status(&mut self, index: usize) -> result::Result<(), usize> {
         match self.workers[index].as_mut() {

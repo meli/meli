@@ -627,7 +627,7 @@ impl Threads {
         let mut subject_table: FnvHashMap<Vec<u8>, (bool, usize)> =
             FnvHashMap::with_capacity_and_hasher(collection.len(), Default::default());
 
-        for (i, &r) in root_set.iter().enumerate() {
+        for &r in root_set.iter() {
             /* "Find the subject of that sub-tree": */
             let (mut subject, mut is_re): (_, bool) = if self.thread_nodes[r].message.is_some() {
                 /* "If there is a message in the Container, the subject is the subject of that
