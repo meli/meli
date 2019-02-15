@@ -7,7 +7,7 @@ workspace = ".."
 [dependencies]
 bitflags = "1.0"
 chan = "0.1.21"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 crossbeam = "^0.3.0"
 data-encoding = "2.1.1"
 encoding = "0.2.33"
@@ -21,3 +21,4 @@ xdg = "2.1.0"
 serde = "1.0.71"
 serde_derive = "1.0.71"
 bincode = "1.0.1"
+uuid = { version = "0.6", features = ["serde", "v4"] }

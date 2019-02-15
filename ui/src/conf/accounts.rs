@@ -30,6 +30,10 @@ use mailbox::backends::{
 };
 use mailbox::*;
 use melib::error::Result;
+use melib::AddressBook;
+
+use std::fs;
+use std::io;
 use std::mem;
 use std::ops::{Index, IndexMut};
 use std::result;
@@ -48,15 +52,36 @@ macro_rules! mailbox {
 pub struct Account {
     name: String,
     folders: Vec<Option<Result<Mailbox>>>,
-
-    pub workers: Vec<Worker>,
-
     sent_folder: Option<usize>,
 
-    pub settings: AccountConf,
-    pub runtime_settings: AccountConf,
-    pub backend: Box<MailBackend>,
+    pub(crate) address_book: AddressBook,
+
+    pub(crate) workers: Vec<Worker>,
+
+
+    pub(crate) settings: AccountConf,
+    pub(crate) runtime_settings: AccountConf,
+    pub(crate) backend: Box<MailBackend>,
     notify_fn: Arc<NotifyFn>,
+}
+
+impl Drop for Account {
+    fn drop(&mut self) {
+        let data_dir =
+            xdg::BaseDirectories::with_profile("meli", &self.name)
+                .unwrap();
+        if let Ok(data) = data_dir.place_data_file("addressbook") {
+            /* place result in cache directory */
+            let f = match fs::File::create(data) {
+                Ok(f) => f,
+                Err(e) => {
+                    panic!("{}", e);
+                }
+            };
+            let writer = io::BufWriter::new(f);
+            bincode::serialize_into(writer, &self.address_book).unwrap();
+        };
+    }
 }
 
 impl Account {
@@ -73,12 +98,31 @@ impl Account {
             folders.push(None);
             workers.push(Account::new_worker(f, &mut backend, notify_fn.clone()));
         }
-        eprintln!("sent_folder for {} is {:?}", name, sent_folder);
+        let data_dir =
+            xdg::BaseDirectories::with_profile("meli", &name)
+            .unwrap();
+        let address_book = if let Ok(data) = data_dir.place_data_file("addressbook") {
+            if data.exists() {
+                let reader = io::BufReader::new(fs::File::open(data).unwrap());
+                let result: result::Result<AddressBook, _> = bincode::deserialize_from(reader);
+                if let Ok(mut data_t) = result {
+                    data_t
+                } else {
+                    AddressBook::new(name.clone())
+                }
+            } else {
+                AddressBook::new(name.clone())
+            }
+        } else {
+            AddressBook::new(name.clone())
+        };
+
         Account {
             name,
             folders,
-            workers,
+            address_book,
             sent_folder,
+            workers,
             settings: settings.clone(),
             runtime_settings: settings,
             backend,

@@ -66,7 +66,7 @@ fn main() {
     let menu = Entity::from(Box::new(AccountMenu::new(&state.context.accounts)));
     let listing = listing::Listing::default();
     let b = Entity::from(Box::new(listing));
-    let tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true))]));
+    let tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true)), Box::new(AccountsPanel::new(&state.context))]));
     let window = Entity::from(tabs);
 
     let status_bar = Entity::from(Box::new(StatusBar::new(window)));

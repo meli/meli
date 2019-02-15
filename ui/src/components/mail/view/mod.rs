@@ -22,6 +22,7 @@
 use super::*;
 use linkify::{Link, LinkFinder};
 use std::process::{Command, Stdio};
+use std::any::Any;
 
 mod html;
 pub use self::html::*;
@@ -40,6 +41,7 @@ enum ViewMode {
     Attachment(usize),
     Raw,
     Subview,
+    ContactSelector(Selector),
 }
 
 impl Default for ViewMode {
@@ -170,7 +172,8 @@ impl MailView {
                 let mut ret = "Viewing attachment. Press `r` to return \n".to_string();
                 ret.push_str(&attachments[aidx].text());
                 ret
-            }
+            },
+            ViewMode::ContactSelector(_) => { unimplemented!()},
         }
     }
     pub fn plain_text_to_buf(s: &str, highlight_urls: bool) -> CellBuffer {
@@ -339,11 +342,15 @@ impl Component for MailView {
             };
             self.dirty = false;
         }
+        
         match self.mode {
             ViewMode::Subview => {
                 if let Some(s) = self.subview.as_mut() {
                     s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
                 }
+            },
+            ViewMode::ContactSelector(ref mut s) => {
+                    s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
             }
             _ => {
                 if let Some(p) = self.pager.as_mut() {
@@ -361,7 +368,12 @@ impl Component for MailView {
                         return true;
                     }
                 }
-            }
+            },
+            ViewMode::ContactSelector(ref mut s) => {
+                if s.process_event(event, context) {
+                    return true;
+                }
+            },
             _ => {
                 if let Some(p) = self.pager.as_mut() {
                     if p.process_event(event, context) {
@@ -372,6 +384,36 @@ impl Component for MailView {
         }
 
         match event.event_type {
+            UIEventType::Input(Key::Char('c')) => {
+                /*
+                let mut new_card: Card = Card::new();
+                new_card.set_email(&envelope.from()[0].get_email());
+                new_card.set_firstname(&envelope.from()[0].get_display_name());
+
+                eprintln!("{:?}", new_card);
+
+                */
+                match self.mode {
+                    ViewMode::ContactSelector(_) => {
+                        if let ViewMode::ContactSelector(s) = std::mem::replace(&mut self.mode, ViewMode::Normal) {
+                        //eprintln!("{:?}", s.collect());
+                        }
+                        return true;
+                    },
+                    _ => {},
+                }
+
+                let accounts = &context.accounts;
+                let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
+                    .as_ref()
+                    .unwrap();
+                let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
+                let mut entries = Vec::new();
+                entries.push((envelope.from()[0].get_email().into_bytes(), format!("{}", envelope.from()[0])));
+                entries.push((String::from("foo@bar.de").into_bytes(), String::from("Johann de Vir <foo@bar.de>")));
+                self.mode = ViewMode::ContactSelector(Selector::new(entries, true));
+                //context.accounts.context(self.coordinates.0).address_book.add_card(new_card);
+            },
             UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Alt('')) => {
                 self.cmd_buf.clear();
                 context.replies.push_back(UIEvent {
@@ -556,7 +598,7 @@ impl Component for MailView {
         true
     }
     fn is_dirty(&self) -> bool {
-        self.dirty
+        self.dirty || true
             || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }

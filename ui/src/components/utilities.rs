@@ -836,3 +836,114 @@ impl Component for Tabbed {
         self.children[self.cursor_pos].set_dirty();
     }
 }
+
+
+type EntryIdentifier = Vec<u8>;
+/// Shows selection to user
+#[derive(Debug, PartialEq)]
+pub struct Selector {
+    single_only: bool, /// allow only one selection
+    entries: Vec<(EntryIdentifier, bool)>,
+    selected_entry_count: u32,
+    content: CellBuffer,
+
+    cursor: usize,
+
+    dirty: bool,
+}
+
+impl fmt::Display for Selector {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt("Selector", f)
+    }
+}
+
+impl Component for Selector {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let (width, height) = self.content.size();
+        copy_area_with_break(
+            grid,
+            &self.content,
+            area,
+            ((0, 0), (width, height)),
+        );
+        context.dirty_areas.push_back(area);
+    }
+    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        let (width, height) = self.content.size();
+        match event.event_type {
+            UIEventType::Input(Key::Char(' ')) => {
+                self.entries[self.cursor].1 = ! self.entries[self.cursor].1;
+                if self.entries[self.cursor].1 {
+                    write_string_to_grid(
+                        "x",
+                        &mut self.content,
+                        Color::Default,
+                        Color::Default,
+                        ((1, self.cursor), (width, self.cursor)),
+                        false,
+                        );
+                } else {
+                    write_string_to_grid(
+                        " ",
+                        &mut self.content,
+                        Color::Default,
+                        Color::Default,
+                        ((1, self.cursor), (width, self.cursor)),
+                        false,
+                        );
+                }
+                return true;
+            },
+            UIEventType::Input(Key::Up) if self.cursor > 0 => {
+                self.cursor -= 1;
+                return true;
+            },
+            UIEventType::Input(Key::Down) if self.cursor < height - 1=> {
+                self.cursor += 1;
+                return true;
+            },
+            _ => {}
+        }
+
+        false
+    }
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+    fn set_dirty(&mut self) {
+        self.dirty = true;
+    }
+}
+
+impl Selector {
+    pub fn new(mut entries: Vec<(EntryIdentifier, String)>, single_only: bool) -> Selector {
+        let width = entries.iter().max_by_key(|e| e.1.len()).map(|v| v.1.len()).unwrap_or(0) + 4;
+        let height = entries.len();
+        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        let identifiers = entries.iter_mut().map(|(id, _)| (std::mem::replace(&mut *id, Vec::new()), false)).collect();
+        for (i, e) in entries.into_iter().enumerate() {
+            write_string_to_grid(
+                &format!("[ ] {}", e.1),
+                &mut content,
+                Color::Default,
+                Color::Default,
+                ((0, i), (width - 1, i)),
+                false,
+            );
+        }
+
+        Selector {
+            single_only,
+            entries: identifiers,
+            selected_entry_count: 0,
+            content,
+            cursor: 0,
+            dirty: true,
+        }
+    }
+
+    pub fn collect(self) -> Vec<EntryIdentifier> {
+        self.entries.into_iter().filter(|v| v.1).map(|(id, _)| id).collect()
+    }
+}

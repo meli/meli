@@ -22,6 +22,8 @@
 extern crate config;
 extern crate serde;
 extern crate xdg;
+extern crate bincode;
+
 pub mod pager;
 
 pub mod accounts;

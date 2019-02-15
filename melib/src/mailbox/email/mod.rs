@@ -67,6 +67,22 @@ pub enum Address {
     Group(GroupAddress),
 }
 
+impl Address {
+    pub fn get_display_name(&self) -> String {
+        match self {
+            Address::Mailbox(m) => m.display_name.display(&m.raw),
+            Address::Group(g) => g.display_name.display(&g.raw),
+        }
+    }
+    
+    pub fn get_email(&self) -> String {
+        match self {
+            Address::Mailbox(m) => m.address_spec.display(&m.raw),
+            Address::Group(_) => String::new(),
+        }
+    }
+}
+
 impl Eq for Address {}
 impl PartialEq for Address {
     fn eq(&self, other: &Address) -> bool {

@@ -38,6 +38,9 @@ pub use self::indexer::*;
 pub mod utilities;
 pub use self::utilities::*;
 
+pub mod contacts;
+pub use contacts::*;
+
 use std::fmt;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
@@ -66,6 +69,11 @@ const _LIGHT_VERTICAL_AND_LEFT: char = '┤';
 const LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
 
 const LIGHT_UP_AND_HORIZONTAL: char = '┴';
+
+const DOUBLE_DOWN_AND_RIGHT: char = '╔';
+const DOUBLE_DOWN_AND_LEFT: char = '╗';
+const DOUBLE_UP_AND_LEFT: char = '╝';
+const DOUBLE_UP_AND_RIGHT: char = '╚';
 
 /// `Entity` is a container for Components.
 #[derive(Debug)]
@@ -404,4 +412,23 @@ pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: char) {
     };
 
     grid[idx].set_ch(bin_to_ch(bin_set));
+}
+
+pub fn create_box(grid: &mut CellBuffer, area: Area) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+
+        for x in get_x(upper_left)..get_x(bottom_right) {
+            grid[(x, get_y(upper_left))].set_ch(HORZ_BOUNDARY);
+            grid[(x, get_y(bottom_right))].set_ch(HORZ_BOUNDARY);
+        }
+
+        for y in get_y(upper_left)..get_y(bottom_right) {
+            grid[(get_x(upper_left), y)].set_ch(VERT_BOUNDARY);
+            grid[(get_x(bottom_right), y)].set_ch(VERT_BOUNDARY);
+        }
+        set_and_join_box(grid, upper_left, HORZ_BOUNDARY);
+        set_and_join_box(grid, set_x(upper_left, get_x(bottom_right)), HORZ_BOUNDARY);
+        set_and_join_box(grid, set_y(upper_left, get_y(bottom_right)), VERT_BOUNDARY);
+        set_and_join_box(grid, bottom_right, VERT_BOUNDARY);
 }

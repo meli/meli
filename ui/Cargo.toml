@@ -19,4 +19,5 @@ nom = "3.2.0"
 notify = "4.0.1"
 notify-rust = "^3"
 termion = "1.5.1"
+bincode = "1.0.1"
 uuid = { version = "0.6", features = ["serde", "v4"] }

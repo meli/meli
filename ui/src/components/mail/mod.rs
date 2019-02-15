@@ -31,6 +31,9 @@ pub use view::*;
 mod compose;
 pub use self::compose::*;
 
+mod accounts;
+pub use self::accounts::*;
+
 #[derive(Debug)]
 struct AccountMenuEntry {
     name: String,
