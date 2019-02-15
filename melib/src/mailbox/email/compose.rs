@@ -4,6 +4,9 @@ use data_encoding::BASE64_MIME;
 use std::str;
 
 mod random;
+mod mime;
+
+use self::mime::*;
 
 use super::parser;
 
@@ -15,6 +18,7 @@ pub struct Draft {
     // FIXME: Preserve header order
     // FIXME: Validate headers, allow custom ones
     headers: FnvHashMap<String, String>,
+    header_order: Vec<String>,
     body: String,
 
     attachments: Vec<Attachment>,
@@ -23,18 +27,28 @@ pub struct Draft {
 impl Default for Draft {
     fn default() -> Self {
         let mut headers = FnvHashMap::with_capacity_and_hasher(8, Default::default());
+        let mut header_order = Vec::with_capacity(8);
         headers.insert("From".into(), "".into());
         headers.insert("To".into(), "".into());
         headers.insert("Cc".into(), "".into());
         headers.insert("Bcc".into(), "".into());
+        header_order.push("From".into());
+        header_order.push("To".into());
+        header_order.push("Cc".into());
+        header_order.push("Bcc".into());
 
         let now: DateTime<Local> = Local::now();
         headers.insert("Date".into(), now.to_rfc2822());
         headers.insert("Subject".into(), "".into());
         headers.insert("Message-ID".into(), random::gen_message_id());
         headers.insert("User-Agent".into(), "meli".into());
+        header_order.push("Date".into());
+        header_order.push("Subject".into());
+        header_order.push("Message-ID".into());
+        header_order.push("User-Agent".into());
         Draft {
             headers,
+            header_order,
             body: String::new(),
 
             attachments: Vec::new(),
@@ -46,7 +60,7 @@ impl str::FromStr for Draft {
     type Err = MeliError;
     fn from_str(s: &str) -> Result<Self> {
         if s.is_empty() {
-            return Err(MeliError::new("sadfsa"));
+            return Err(MeliError::new("Empty input in Draft::from_str"));
         }
 
         let (headers, _) = parser::mail(s.as_bytes()).to_full_result()?;
@@ -56,10 +70,13 @@ impl str::FromStr for Draft {
             if ignore_header(k) {
                 continue;
             }
-            ret.headers.insert(
+            if ret.headers.insert(
                 String::from_utf8(k.to_vec())?,
                 String::from_utf8(v.to_vec())?,
-            );
+            ).is_none() {
+                ret.header_order.push(String::from_utf8(k.to_vec())?);
+            }
+
         }
 
         let body = Envelope::new(0).body_bytes(s.as_bytes());
@@ -92,8 +109,10 @@ impl Draft {
                 envelope.message_id_display()
             ),
         );
+        ret.header_order.push("References".into());
         ret.headers_mut()
             .insert("In-Reply-To".into(), envelope.message_id_display().into());
+        ret.header_order.push("In-Reply-To".into());
         ret.headers_mut()
             .insert("To".into(), envelope.field_from_to_string());
         ret.headers_mut()
@@ -135,16 +154,21 @@ impl Draft {
     pub fn to_string(&self) -> Result<String> {
         let mut ret = String::new();
 
-        let headers = &["Date", "From", "To", "Cc", "Bcc", "Subject", "Message-ID"];
-        for k in headers {
-            ret.extend(format!("{}: {}\n", k, &self.headers[*k]).chars());
+        for k in &self.header_order {
+            let v = &self.headers[k];
+            ret.extend(format!("{}: {}\n", k, v).chars());
         }
 
-        for (k, v) in &self.headers {
-            if headers.contains(&k.as_str()) {
-                continue;
-            }
+        ret.push('\n');
+        ret.push_str(&self.body);
 
+        Ok(ret)
+    }
+    pub fn finalise(self) -> Result<String> {
+        let mut ret = String::new();
+
+        for k in &self.header_order {
+            let v = &self.headers[k];
             ret.extend(format!("{}: {}\n", k, v).chars());
         }
 
@@ -167,6 +191,7 @@ impl Draft {
         }
 
         Ok(ret)
+
     }
 }
 

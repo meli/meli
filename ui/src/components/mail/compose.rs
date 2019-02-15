@@ -399,7 +399,15 @@ impl Component for Composer {
                         });
                         return true;
                     }
-                    ('n', _) => {}
+                    ('n', _) => {},
+                    ('y', ViewMode::Discard(u)) => {
+                        eprintln!("{:?}", self.draft.to_string());
+                        context.replies.push_back(UIEvent {
+                            id: 0,
+                            event_type: UIEventType::Action(Tab(Kill(*u))),
+                        });
+                        return true;
+                    },
                     _ => {
                         return false;
                     }
