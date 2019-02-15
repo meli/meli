@@ -342,7 +342,7 @@ impl CompactListing {
 
     fn format_date(envelope: &Envelope) -> String {
         let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
-        let now: std::time::Duration = std::time::SystemTime::now().duration_since(d).unwrap();
+        let now: std::time::Duration = std::time::SystemTime::now().duration_since(d).unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
         match now.as_secs() {
             n if n < 10 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(8)),
             n if n < 24 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(7)),
