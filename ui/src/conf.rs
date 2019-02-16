@@ -60,6 +60,7 @@ pub struct FileAccount {
     root_folder: String,
     format: String,
     sent_folder: String,
+    draft_folder: String,
     identity: String,
     display_name: Option<String>,
     threaded: bool,

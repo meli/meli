@@ -401,7 +401,11 @@ impl Component for Composer {
                     }
                     ('n', _) => {},
                     ('y', ViewMode::Discard(u)) => {
-                        eprintln!("{:?}", self.draft.to_string());
+                        let account = &context.accounts[self.account_cursor];
+                        let draft = std::mem::replace(&mut self.draft, Draft::default());
+                        eprintln!("{:?}", account.save_draft(draft));
+
+                        //eprintln!("{:?}", self.draft.to_string());
                         context.replies.push_back(UIEvent {
                             id: 0,
                             event_type: UIEventType::Action(Tab(Kill(*u))),

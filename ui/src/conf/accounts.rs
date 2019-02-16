@@ -299,6 +299,10 @@ impl Account {
         self.load_mailbox(index, m);
         Ok(())
     }
+
+    pub fn save_draft(&self, draft: Draft) -> Result<()> {
+        self.backend.save(draft.to_string()?, &self.settings.conf.draft_folder)
+    }
 }
 
 impl Index<usize> for Account {

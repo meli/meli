@@ -150,6 +150,8 @@ pub trait MailBackend: ::std::fmt::Debug {
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
     fn folders(&self) -> Vec<Folder>;
     fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp>;
+
+    fn save(&self, message: String, folder: &str) -> Result<()>;
     //login function
 }
 

@@ -27,7 +27,7 @@ extern crate xdg;
 use super::{MaildirFolder, MaildirOp};
 use async::*;
 use conf::AccountSettings;
-use error::Result;
+use error::{Result, MeliError};
 use mailbox::backends::{
     BackendFolder, BackendOp, Folder, FolderHash, MailBackend, RefreshEvent, RefreshEventConsumer,
     RefreshEventKind::*,
@@ -49,6 +49,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io;
+use std::io::Write;
 use std::ops::{Deref, DerefMut};
 use std::path::{Component, Path, PathBuf};
 use std::result;
@@ -327,8 +328,26 @@ impl MailBackend for MaildirType {
             })?;
         Ok(())
     }
+
     fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp> {
         Box::new(MaildirOp::new(hash, self.hash_indexes.clone(), folder_hash))
+    }
+
+    fn save(&self, message: String, folder: &str) -> Result<()> {
+        for f in &self.folders {
+            if f.name == folder {
+                let mut path = f.path.clone();
+                path.push("cur");
+                path.push("draft:2,");
+                eprintln!("saving at {}", path.display());
+                let file = fs::File::create(path)?;
+                let mut writer = io::BufWriter::new(file);
+                writer.write(&message.into_bytes());
+                return Ok(());
+            }
+        }
+
+        Err(MeliError::new(format!("'{}' is not a valid folder.", folder)))
     }
 }
 
