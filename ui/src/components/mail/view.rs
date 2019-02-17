@@ -22,7 +22,6 @@
 use super::*;
 use linkify::{Link, LinkFinder};
 use std::process::{Command, Stdio};
-use std::any::Any;
 
 mod html;
 pub use self::html::*;

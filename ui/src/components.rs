@@ -70,10 +70,10 @@ const LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
 
 const LIGHT_UP_AND_HORIZONTAL: char = '┴';
 
-const DOUBLE_DOWN_AND_RIGHT: char = '╔';
-const DOUBLE_DOWN_AND_LEFT: char = '╗';
-const DOUBLE_UP_AND_LEFT: char = '╝';
-const DOUBLE_UP_AND_RIGHT: char = '╚';
+const _DOUBLE_DOWN_AND_RIGHT: char = '╔';
+const _DOUBLE_DOWN_AND_LEFT: char = '╗';
+const _DOUBLE_UP_AND_LEFT: char = '╝';
+const _DOUBLE_UP_AND_RIGHT: char = '╚';
 
 /// `Entity` is a container for Components.
 #[derive(Debug)]

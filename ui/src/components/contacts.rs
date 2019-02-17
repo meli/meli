@@ -21,8 +21,6 @@
 
 use super::*;
 
-use melib::{AddressBook, Card};
-
 #[derive(Debug)]
 pub struct ContactManager {
     content: CellBuffer,

@@ -342,7 +342,7 @@ impl MailBackend for MaildirType {
                 eprintln!("saving at {}", path.display());
                 let file = fs::File::create(path)?;
                 let mut writer = io::BufWriter::new(file);
-                writer.write(&message.into_bytes());
+                writer.write(&message.into_bytes())?;
                 return Ok(());
             }
         }

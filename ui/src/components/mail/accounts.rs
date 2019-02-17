@@ -148,7 +148,7 @@ impl Component for AccountsPanel {
 
 impl AccountsPanel {
     pub fn new(context: &Context) -> AccountsPanel {
-        let mut content = CellBuffer::new(120, 25 + context.accounts.len() * 20, Cell::default());
+        let content = CellBuffer::new(120, 25 + context.accounts.len() * 20, Cell::default());
 
         AccountsPanel {
             cursor: 0,
