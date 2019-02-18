@@ -395,6 +395,13 @@ impl Component for MailView {
                 match self.mode {
                     ViewMode::ContactSelector(_) => {
                         if let ViewMode::ContactSelector(s) = std::mem::replace(&mut self.mode, ViewMode::Normal) {
+                            for c in s.collect() {
+                                let mut new_card: Card = Card::new();
+                                let email = String::from_utf8(c).unwrap();
+                                new_card.set_email(&email);
+                                new_card.set_firstname("");
+                                context.accounts[self.coordinates.0].address_book.add_card(new_card);
+                            }
                         //eprintln!("{:?}", s.collect());
                         }
                         return true;

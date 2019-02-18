@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use std::dbg;
 
 const MAX_COLS: usize = 500;
 
@@ -434,6 +435,7 @@ impl Component for ThreadListing {
             /* Draw the entire list */
             self.draw_list(grid, area, context);
         } else {
+            self.cursor_pos = self.new_cursor_pos;
             let upper_left = upper_left!(area);
             let bottom_right = bottom_right!(area);
             if self.length == 0 && self.dirty {
@@ -469,8 +471,9 @@ impl Component for ThreadListing {
                     let account = &mut context.accounts[self.cursor_pos.0];
                     let (hash, is_seen) = {
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
+                        eprintln!("key is {}", self.locations[dbg!(self.cursor_pos).2]);
                         let envelope: &Envelope =
-                            &mailbox.collection[&self.locations[self.new_cursor_pos.2]];
+                            &mailbox.collection[&self.locations[self.cursor_pos.2]];
                         (envelope.hash(), envelope.is_seen())
                     };
                     if !is_seen {
@@ -484,7 +487,7 @@ impl Component for ThreadListing {
                         };
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
                         let envelope: &mut Envelope =
-                            mailbox.collection.get_mut(&self.locations[self.new_cursor_pos.2]).unwrap();
+                            mailbox.collection.get_mut(&self.locations[self.cursor_pos.2]).unwrap();
                         envelope.set_seen(op).unwrap();
                         true
                     } else {

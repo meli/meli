@@ -116,3 +116,14 @@ impl Component for Listing {
         }
     }
 }
+
+impl From<IndexStyle> for Listing {
+    fn from(index_style: IndexStyle) -> Self {
+        match index_style {
+            IndexStyle::Plain => Listing::Plain(Default::default()),
+            IndexStyle::Threaded => Listing::Threaded(Default::default()),
+            IndexStyle::Compact => Listing::Compact(Default::default()),
+
+        }
+    }
+}

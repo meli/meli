@@ -21,8 +21,31 @@
 
 use super::*;
 
+macro_rules! write_field {
+    ($title:expr, $value:expr, $target_grid:expr, $fg_color:expr, $bg_color:expr, $width:expr, $y:expr) => {{
+        let (x, y) = write_string_to_grid(
+            $title,
+            &mut $target_grid,
+            $fg_color,
+            $bg_color,
+            ((1, $y + 2), ($width - 1, $y + 2)),
+            false,
+            );
+        write_string_to_grid(
+            &$value,
+            &mut $target_grid,
+            Color::Default,
+            Color::Default,
+            ((x, y), ($width - 1, y)),
+            false,
+            );
+        y
+    }}
+}
+
 #[derive(Debug)]
 pub struct ContactManager {
+    pub card: Card,
     content: CellBuffer,
     dirty: bool,
     initialized: bool,
@@ -31,7 +54,8 @@ pub struct ContactManager {
 impl Default for ContactManager {
     fn default() -> Self {
         ContactManager {
-            content: CellBuffer::default(),
+            card: Card::new(),
+            content: CellBuffer::new(200, 100, Cell::with_char(' ')),
             dirty: true,
             initialized: false,
         }
@@ -45,14 +69,66 @@ impl fmt::Display for ContactManager {
 }
 
 impl ContactManager {
+    fn initialize(&mut self) {
+        let (width, height) = self.content.size();
+
+        let (x, y) = write_string_to_grid(
+            "Contact Name  ",
+            &mut self.content,
+            Color::Byte(33),
+            Color::Default,
+            ((0, 0), (width, 0)),
+            false,
+            );
+        let (x, y) = write_string_to_grid(
+            "Last edited: ",
+            &mut self.content,
+            Color::Byte(250),
+            Color::Default,
+            ((x, 0), (width, 0)),
+            false,
+            );
+        let (x, y) = write_string_to_grid(
+            &self.card.last_edited(),
+            &mut self.content,
+            Color::Byte(250),
+            Color::Default,
+            ((x, 0), (width, 0)),
+            false,
+            );
+        for x in 0..width {
+            set_and_join_box(&mut self.content, (x, 2), HORZ_BOUNDARY);
+            set_and_join_box(&mut self.content, (x, 4), HORZ_BOUNDARY);
+            set_and_join_box(&mut self.content, (x, 6), HORZ_BOUNDARY);
+            set_and_join_box(&mut self.content, (x, 8), HORZ_BOUNDARY);
+            set_and_join_box(&mut self.content, (x, 10), HORZ_BOUNDARY);
+            set_and_join_box(&mut self.content, (x, 12), HORZ_BOUNDARY);
+            set_and_join_box(&mut self.content, (x, 14), HORZ_BOUNDARY);
+            set_and_join_box(&mut self.content, (x, 16), HORZ_BOUNDARY);
+        }
+        for y in 0..height {
+            set_and_join_box(&mut self.content, (width - 1, y), VERT_BOUNDARY);
+        }
+        let mut y = write_field!("First Name: ", self.card.firstname(), self.content, Color::Byte(250), Color::Default, width, 1);
+        y = write_field!("Last Name: ", self.card.lastname(), self.content, Color::Byte(250), Color::Default, width, y);
+        y = write_field!("Additional Name: ", self.card.additionalname(), self.content, Color::Byte(250), Color::Default, width, y);
+        y = write_field!("Name Prefix: ", self.card.name_prefix(), self.content, Color::Byte(250), Color::Default, width, y);
+        y = write_field!("Name Suffix: ", self.card.name_suffix(), self.content, Color::Byte(250), Color::Default, width, y);
+        y = write_field!("E-mail: ", self.card.email(), self.content, Color::Byte(250), Color::Default, width, y);
+        y = write_field!("url: ", self.card.url(), self.content, Color::Byte(250), Color::Default, width, y);
+        y = write_field!("key: ", self.card.key(), self.content, Color::Byte(250), Color::Default, width, y);
+    }
 }
 
 impl Component for ContactManager {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.initialized {
-            clear_area(grid, area);
+            self.initialize();
             self.initialized = true;
         }
+        clear_area(grid, area);
+        let (width, height) = self.content.size();
+        copy_area(grid, &self.content, area, ((0, 0), (width - 1, height -1)));
         context.dirty_areas.push_back(area);
     }
 

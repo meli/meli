@@ -170,6 +170,10 @@ impl CellBuffer {
         }
         content
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
+    }
 }
 
 impl HasSize for CellBuffer {
@@ -566,6 +570,11 @@ pub fn copy_area_with_break(
         );
         return upper_left!(dest);
     }
+    
+    if grid_src.is_empty() || grid_dest.is_empty() {
+        return upper_left!(dest);
+    }
+
     let mut ret = bottom_right!(dest);
     let mut src_x = get_x(upper_left!(src));
     let mut src_y = get_y(upper_left!(src));
@@ -606,6 +615,10 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
             "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
             src, dest
         );
+        return upper_left!(dest);
+    }
+
+    if grid_src.is_empty() || grid_dest.is_empty() {
         return upper_left!(dest);
     }
 

@@ -22,6 +22,7 @@ use chrono::{DateTime, Local};
 use uuid::Uuid;
 use fnv::FnvHashMap;
 
+use std::ops::Deref;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AddressBook {
@@ -71,6 +72,14 @@ impl AddressBook {
     }
 }
 
+impl Deref for AddressBook {
+    type Target = FnvHashMap<Uuid, Card>;
+
+    fn deref(&self) -> &FnvHashMap<Uuid, Card> {
+        &self.cards
+    }
+}
+
 
 impl Card {
     pub fn new() -> Card {
@@ -92,6 +101,10 @@ impl Card {
             last_edited: Local::now(),
             extra_properties: FnvHashMap::default(),
         }
+    }
+
+    pub fn uuid(&self) -> &Uuid {
+        &self.uuid
     }
 
     pub fn title(&self) -> &str {
@@ -120,6 +133,9 @@ impl Card {
     }
     pub fn key(&self) -> &str {
         self.key.as_str()
+    }
+    pub fn last_edited(&self) -> String {
+        self.last_edited.to_rfc2822()
     }
 
     pub fn set_title(&mut self, new: &str) {

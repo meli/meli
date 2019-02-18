@@ -20,14 +20,28 @@
  */
 
 use super::*;
+use std::dbg;
 
 use melib::Draft;
 use std::str::FromStr;
+
+
+#[derive(Debug, PartialEq)]
+enum Cursor {
+    From,
+    To,
+    Cc,
+    Bcc,
+    Body,
+    Attachments,
+}
 
 #[derive(Debug)]
 pub struct Composer {
     reply_context: Option<((usize, usize), Box<ThreadView>)>, // (folder_index, thread_node_index)
     account_cursor: usize,
+
+    cursor: Cursor,
 
     pager: Pager,
     draft: Draft,
@@ -43,6 +57,8 @@ impl Default for Composer {
             reply_context: None,
             account_cursor: 0,
 
+            cursor: Cursor::To,
+
             pager: Pager::default(),
             draft: Draft::default(),
 
@@ -57,6 +73,7 @@ impl Default for Composer {
 enum ViewMode {
     Discard(Uuid),
     Pager,
+    Selector(Selector),
     Overview,
 }
 
@@ -79,6 +96,14 @@ impl ViewMode {
 
     fn is_pager(&self) -> bool {
         if let ViewMode::Pager = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn is_selector(&self) -> bool {
+        if let ViewMode::Selector(_) = self {
             true
         } else {
             false
@@ -145,13 +170,21 @@ impl Composer {
         let headers = self.draft.headers();
         {
             let (mut x, mut y) = upper_left;
-            for k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
+            for &k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
+                let bg_color = match self.cursor {
+                    Cursor::Cc if k == "Cc" => Color::Byte(240),
+                    Cursor::Bcc if k == "Bcc" => Color::Byte(240),
+                    Cursor::To if k == "To" => Color::Byte(240),
+                    _ => Color::Default,
+                };
+
+
                 let update = {
                     let (x, y) = write_string_to_grid(
                         k,
                         grid,
                         Color::Default,
-                        Color::Default,
+                        bg_color,
                         ((x, y), set_y(bottom_right, y)),
                         true,
                     );
@@ -159,11 +192,11 @@ impl Composer {
                         ": ",
                         grid,
                         Color::Default,
-                        Color::Default,
+                        bg_color,
                         ((x, y), set_y(bottom_right, y)),
                         true,
                     );
-                    let (x, y) = if k == &"From" {
+                    let (x, y) = if k == "From" {
                         write_string_to_grid(
                             "◀ ",
                             grid,
@@ -176,14 +209,14 @@ impl Composer {
                         (x, y)
                     };
                     let (x, y) = write_string_to_grid(
-                        &headers[*k],
+                        &headers[k],
                         grid,
                         Color::Default,
-                        Color::Default,
+                        bg_color,
                         ((x, y), set_y(bottom_right, y)),
                         true,
                     );
-                    if k == &"From" {
+                    if k == "From" {
                         write_string_to_grid(
                             " ▶",
                             grid,
@@ -284,64 +317,72 @@ impl Component for Composer {
         clear_area(grid, header_area);
         clear_area(grid, body_area);
         self.draw_header_table(grid, header_area);
-        self.pager.draw(grid, body_area, context);
 
-        /* Let user choose whether to quit with/without saving or cancel */
-        if let ViewMode::Discard(_) = self.mode {
-            let mid_x = width!(area) / 2;
-            let mid_y = height!(area) / 2;
-            for x in mid_x - 40..=mid_x + 40 {
-                for y in mid_y - 11..=mid_y + 11 {
-                    grid[(x, y)] = Cell::default();
+        match self.mode {
+            ViewMode::Overview | ViewMode::Pager => {
+                self.pager.draw(grid, body_area, context);
+            },
+            ViewMode::Selector(ref mut s) => {
+                s.draw(grid, body_area, context);
+            },
+            ViewMode::Discard(_) => {
+                /* Let user choose whether to quit with/without saving or cancel */
+                let mid_x = width!(area) / 2;
+                let mid_y = height!(area) / 2;
+                for x in mid_x - 40..=mid_x + 40 {
+                    for y in mid_y - 11..=mid_y + 11 {
+                        grid[(x, y)] = Cell::default();
+                    }
                 }
-            }
 
-            for i in mid_x - 40..=mid_x + 40 {
-                set_and_join_box(grid, (i, mid_y - 11), HORZ_BOUNDARY);
+                for i in mid_x - 40..=mid_x + 40 {
+                    set_and_join_box(grid, (i, mid_y - 11), HORZ_BOUNDARY);
 
-                set_and_join_box(grid, (i, mid_y + 11), HORZ_BOUNDARY);
-            }
+                    set_and_join_box(grid, (i, mid_y + 11), HORZ_BOUNDARY);
+                }
 
-            for i in mid_y - 11..=mid_y + 11 {
-                set_and_join_box(grid, (mid_x - 40, i), VERT_BOUNDARY);
+                for i in mid_y - 11..=mid_y + 11 {
+                    set_and_join_box(grid, (mid_x - 40, i), VERT_BOUNDARY);
 
-                set_and_join_box(grid, (mid_x + 40, i), VERT_BOUNDARY);
-            }
+                    set_and_join_box(grid, (mid_x + 40, i), VERT_BOUNDARY);
+                }
 
-            let area = ((mid_x - 20, mid_y - 7), (mid_x + 39, mid_y + 10));
+                let area = ((mid_x - 20, mid_y - 7), (mid_x + 39, mid_y + 10));
 
-            let (_, y) = write_string_to_grid(
-                &format!("Draft \"{:10}\"", self.draft.headers()["Subject"]),
-                grid,
-                Color::Default,
-                Color::Default,
-                area,
-                true,
-            );
-            let (_, y) = write_string_to_grid(
-                "[x] quit without saving",
-                grid,
-                Color::Byte(124),
-                Color::Default,
-                (set_y(upper_left!(area), y + 2), bottom_right!(area)),
-                true,
-            );
-            let (_, y) = write_string_to_grid(
-                "[y] save draft and quit",
-                grid,
-                Color::Byte(124),
-                Color::Default,
-                (set_y(upper_left!(area), y + 1), bottom_right!(area)),
-                true,
-            );
-            write_string_to_grid(
-                "[n] cancel",
-                grid,
-                Color::Byte(124),
-                Color::Default,
-                (set_y(upper_left!(area), y + 1), bottom_right!(area)),
-                true,
-            );
+                let (_, y) = write_string_to_grid(
+                    &format!("Draft \"{:10}\"", self.draft.headers()["Subject"]),
+                    grid,
+                    Color::Default,
+                    Color::Default,
+                    area,
+                    true,
+                    );
+                let (_, y) = write_string_to_grid(
+                    "[x] quit without saving",
+                    grid,
+                    Color::Byte(124),
+                    Color::Default,
+                    (set_y(upper_left!(area), y + 2), bottom_right!(area)),
+                    true,
+                    );
+                let (_, y) = write_string_to_grid(
+                    "[y] save draft and quit",
+                    grid,
+                    Color::Byte(124),
+                    Color::Default,
+                    (set_y(upper_left!(area), y + 1), bottom_right!(area)),
+                    true,
+                    );
+                write_string_to_grid(
+                    "[n] cancel",
+                    grid,
+                    Color::Byte(124),
+                    Color::Default,
+                    (set_y(upper_left!(area), y + 1), bottom_right!(area)),
+                    true,
+                    );
+
+            },
         }
 
         context.dirty_areas.push_back(area);
@@ -360,16 +401,81 @@ impl Component for Composer {
                     self.dirty = true;
                     return true;
                 }
-            }
+            },
+            (ViewMode::Selector(ref mut s), _) => {
+                if s.process_event(event, context) {
+                    self.dirty = true;
+                    return true;
+                }
+            },
             _ => {}
         }
 
         match event.event_type {
+            UIEventType::Input(Key::Up) if self.mode.is_overview() => {
+                match self.cursor {
+                    Cursor::From => {},
+                    Cursor::To => {
+                        self.cursor = Cursor::From;
+                        self.dirty = true;
+                    },
+                    Cursor::Cc => {
+                        self.cursor = Cursor::To;
+                        self.dirty = true;
+                    },
+                    Cursor::Bcc => {
+                        self.cursor = Cursor::Cc;
+                        self.dirty = true;
+                    },
+                    Cursor::Body => {
+                        self.cursor = Cursor::Bcc;
+                        self.dirty = true;
+                    },
+                    _ => {},
+                }
+                return true;
+            },
+            UIEventType::Input(Key::Down) if self.mode.is_overview() => {
+                match self.cursor {
+                    Cursor::From => {
+                        self.cursor = Cursor::To;
+                        self.dirty = true;
+                    },
+                    Cursor::To => {
+                        self.cursor = Cursor::Cc;
+                        self.dirty = true;
+                    },
+                    Cursor::Cc => {
+                        self.cursor = Cursor::Bcc;
+                        self.dirty = true;
+                    },
+                    Cursor::Bcc => {
+                        self.cursor = Cursor::Body;
+                        self.dirty = true;
+                    },
+                    Cursor::Body => {},
+                    _ => {},
+                }
+                return true;
+            },
+            UIEventType::Input(Key::Esc) if self.mode.is_selector() => {
+                self.mode = ViewMode::Overview;
+                return true;
+            },
+            UIEventType::Input(Key::Char('\n')) if self.mode.is_selector() => {
+                let mut old_mode = std::mem::replace(&mut self.mode, ViewMode::Overview);
+                if let ViewMode::Selector(s) = old_mode {
+                    eprintln!("collected {:?}", s.collect());
+                } else {
+                    unreachable!()
+                }
+                return true;
+            },
             UIEventType::Resize => {
                 self.set_dirty();
-            }
+            },
             /* Switch e-mail From: field to the `left` configured account. */
-            UIEventType::Input(Key::Left) => {
+            UIEventType::Input(Key::Left) if self.cursor == Cursor::From => {
                 self.account_cursor = self.account_cursor.saturating_sub(1);
                 self.draft.headers_mut().insert(
                     "From".into(),
@@ -379,7 +485,7 @@ impl Component for Composer {
                 return true;
             }
             /* Switch e-mail From: field to the `right` configured account. */
-            UIEventType::Input(Key::Right) => {
+            UIEventType::Input(Key::Right) if self.cursor == Cursor::From => {
                 if self.account_cursor + 1 < context.accounts.len() {
                     self.account_cursor += 1;
                     self.draft.headers_mut().insert(
@@ -432,33 +538,48 @@ impl Component for Composer {
                 self.set_dirty();
                 return true;
             }
-            /* Edit draft in $EDITOR */
             UIEventType::Input(Key::Char('e')) => {
-                use std::process::{Command, Stdio};
-                /* Kill input thread so that spawned command can be sole receiver of stdin */
-                {
-                    context.input_kill();
-                }
-                let mut f =
-                    create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
-                //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
+                match self.cursor {
+                    Cursor::Body => {
+                        /* Edit draft in $EDITOR */
+                        use std::process::{Command, Stdio};
+                        /* Kill input thread so that spawned command can be sole receiver of stdin */
+                        {
+                            context.input_kill();
+                        }
+                        let mut f =
+                            create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
+                        //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
 
-                // TODO: check exit status
-                Command::new("vim")
-                    .arg("+/^$")
-                    .arg(&f.path())
-                    .stdin(Stdio::inherit())
-                    .stdout(Stdio::inherit())
-                    .output()
-                    .expect("failed to execute process");
-                let result = f.read_to_string();
-                self.draft = Draft::from_str(result.as_str()).unwrap();
-                self.pager.update_from_str(self.draft.body());
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Fork(ForkType::Finished),
-                });
-                context.restore_input();
+                        // TODO: check exit status
+                        Command::new("vim")
+                            .arg("+/^$")
+                            .arg(&f.path())
+                            .stdin(Stdio::inherit())
+                            .stdout(Stdio::inherit())
+                            .output()
+                            .expect("failed to execute process");
+                        let result = f.read_to_string();
+                        self.draft = Draft::from_str(result.as_str()).unwrap();
+                        self.pager.update_from_str(self.draft.body());
+                        context.replies.push_back(UIEvent {
+                            id: 0,
+                            event_type: UIEventType::Fork(ForkType::Finished),
+                        });
+                        context.restore_input();
+                    },
+                    Cursor::To | Cursor::Cc | Cursor::Bcc => {
+                        let account = &context.accounts[self.account_cursor];
+                        let mut entries = account.address_book.values().map(|v| (v.uuid().as_bytes().to_vec(), v.email().to_string())).collect();
+                        self.mode = ViewMode::Selector(Selector::new(entries, true));
+                    },
+                    Cursor::Attachments => {
+                        unimplemented!()
+                    },
+                    Cursor::From => {
+                        return true;
+                    }
+                }
                 self.dirty = true;
                 return true;
             }

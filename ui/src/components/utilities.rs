@@ -899,7 +899,7 @@ impl Component for Selector {
                 self.cursor -= 1;
                 return true;
             },
-            UIEventType::Input(Key::Down) if self.cursor < height - 1=> {
+            UIEventType::Input(Key::Down) if self.cursor < height.saturating_sub(1) => {
                 self.cursor += 1;
                 return true;
             },

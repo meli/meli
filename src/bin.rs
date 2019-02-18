@@ -64,9 +64,9 @@ fn main() {
 
     /* Register some reasonably useful interfaces */
     let menu = Entity::from(Box::new(AccountMenu::new(&state.context.accounts)));
-    let listing = listing::Listing::default();
+    let listing = listing::Listing::from(IndexStyle::Compact);
     let b = Entity::from(Box::new(listing));
-    let tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true)), Box::new(AccountsPanel::new(&state.context))]));
+    let tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true)), Box::new(AccountsPanel::new(&state.context)), Box::new(ContactManager::default())]));
     let window = Entity::from(tabs);
 
     let status_bar = Entity::from(Box::new(StatusBar::new(window)));

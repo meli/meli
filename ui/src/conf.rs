@@ -28,11 +28,13 @@ pub mod pager;
 
 pub mod accounts;
 pub use self::accounts::Account;
+use self::config::{Config, File, FileFormat};
 
 use melib::conf::AccountSettings;
 use melib::error::*;
 use pager::PagerSettings;
 
+use self::serde::{de, Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
@@ -63,7 +65,8 @@ pub struct FileAccount {
     draft_folder: String,
     identity: String,
     display_name: Option<String>,
-    threaded: bool,
+    #[serde(deserialize_with = "index_from_str")]
+    index: IndexStyle,
     folders: Option<HashMap<String, FolderConf>>,
 }
 
@@ -98,11 +101,8 @@ impl FileAccount {
     pub fn folder(&self) -> &str {
         &self.root_folder
     }
-    pub fn threaded(&self) -> bool {
-        self.threaded
-    }
-    pub fn toggle_threaded(&mut self) {
-        self.threaded = !self.threaded;
+    pub fn index(&self) -> IndexStyle {
+        self.index
     }
 }
 
@@ -136,7 +136,6 @@ pub struct Settings {
     pub pager: PagerSettings,
 }
 
-use self::config::{Config, File, FileFormat};
 impl FileSettings {
     pub fn new() -> Result<FileSettings> {
         let config_path = match env::var("MELI_CONFIG") {
@@ -181,5 +180,31 @@ impl Settings {
             accounts: s,
             pager: fs.pager,
         }
+    }
+}
+
+
+#[derive(Copy, Debug, Clone, Deserialize)]
+pub enum IndexStyle {
+    Plain,
+    Threaded,
+    Compact,
+}
+
+impl Default for IndexStyle {
+    fn default() -> Self {
+        IndexStyle::Compact
+    }
+}
+
+fn index_from_str<'de, D>(deserializer: D) -> std::result::Result<IndexStyle, D::Error>
+    where D: Deserializer<'de>
+{
+    let s = <String>::deserialize(deserializer)?;
+    match s.as_str() {
+        "Plain" | "plain" => Ok(IndexStyle::Plain),
+        "Threaded" | "threaded" => Ok(IndexStyle::Threaded),
+        "Compact" | "compact" => Ok(IndexStyle::Compact),
+        _ => Err(de::Error::custom("invalid `index` value")),
     }
 }
