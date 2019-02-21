@@ -141,6 +141,9 @@ impl CellBuffer {
     /// a blank.
     pub fn resize(&mut self, newcols: usize, newrows: usize, blank: Cell) {
         let newlen = newcols * newrows;
+        if self.buf.len() == newlen {
+            return;
+        }
         let mut newbuf: Vec<Cell> = Vec::with_capacity(newlen);
         for y in 0..newrows {
             for x in 0..newcols {
