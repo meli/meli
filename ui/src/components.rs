@@ -75,10 +75,14 @@ const _DOUBLE_DOWN_AND_LEFT: char = '╗';
 const _DOUBLE_UP_AND_LEFT: char = '╝';
 const _DOUBLE_UP_AND_RIGHT: char = '╚';
 
+
+
+type EntityId = Uuid;
+
 /// `Entity` is a container for Components.
 #[derive(Debug)]
 pub struct Entity {
-    id: Uuid,
+    id: EntityId,
     pub component: Box<Component>, // more than one?
 }
 
@@ -128,7 +132,7 @@ impl Deref for Entity {
 }
 
 impl Entity {
-    pub fn uuid(&self) -> &Uuid {
+    pub fn id(&self) -> &EntityId {
         &self.id
     }
     /// Pass events to child component.
@@ -147,8 +151,8 @@ pub trait Component: Display + Debug {
         true
     }
     fn set_dirty(&mut self);
-    fn kill(&mut self, uuid: Uuid) {}
-    fn set_id(&mut self, uuid: Uuid) {}
+    fn kill(&mut self, id: EntityId) {}
+    fn set_id(&mut self, id: EntityId) {}
 }
 
 /*

@@ -24,17 +24,19 @@ use fnv::FnvHashMap;
 
 use std::ops::Deref;
 
+type CardId = Uuid;
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AddressBook {
     display_name: String,
     created: DateTime<Local>,
     last_edited: DateTime<Local>,
-    cards: FnvHashMap<Uuid, Card>
+    cards: FnvHashMap<CardId, Card>
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Card {
-    uuid: Uuid,
+    id: CardId,
     title: String,
     firstname: String,
     lastname: String,
@@ -62,20 +64,20 @@ impl AddressBook {
         }
     }
     pub fn add_card(&mut self, card: Card) {
-        self.cards.insert(card.uuid, card);
+        self.cards.insert(card.id, card);
     }
-    pub fn remove_card(&mut self, card_uuid: Uuid) {
-        self.cards.remove(&card_uuid);
+    pub fn remove_card(&mut self, card_id: CardId) {
+        self.cards.remove(&card_id);
     }
-    pub fn card_exists(&self, card_uuid: Uuid) -> bool {
-        self.cards.contains_key(&card_uuid)
+    pub fn card_exists(&self, card_id: CardId) -> bool {
+        self.cards.contains_key(&card_id)
     }
 }
 
 impl Deref for AddressBook {
-    type Target = FnvHashMap<Uuid, Card>;
+    type Target = FnvHashMap<CardId, Card>;
 
-    fn deref(&self) -> &FnvHashMap<Uuid, Card> {
+    fn deref(&self) -> &FnvHashMap<CardId, Card> {
         &self.cards
     }
 }
@@ -84,7 +86,7 @@ impl Deref for AddressBook {
 impl Card {
     pub fn new() -> Card {
         Card {
-            uuid: Uuid::new_v4(),
+            id: Uuid::new_v4(),
             title: String::new(),
             firstname: String::new(),
             lastname: String::new(),
@@ -103,8 +105,8 @@ impl Card {
         }
     }
 
-    pub fn uuid(&self) -> &Uuid {
-        &self.uuid
+    pub fn id(&self) -> &CardId {
+        &self.id
     }
 
     pub fn title(&self) -> &str {

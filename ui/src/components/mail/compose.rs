@@ -570,7 +570,7 @@ impl Component for Composer {
                     },
                     Cursor::To | Cursor::Cc | Cursor::Bcc => {
                         let account = &context.accounts[self.account_cursor];
-                        let mut entries = account.address_book.values().map(|v| (v.uuid().as_bytes().to_vec(), v.email().to_string())).collect();
+                        let mut entries = account.address_book.values().map(|v| (v.id().as_bytes().to_vec(), v.email().to_string())).collect();
                         self.mode = ViewMode::Selector(Selector::new(entries, true));
                     },
                     Cursor::Attachments => {

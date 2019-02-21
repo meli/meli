@@ -808,20 +808,20 @@ impl Component for Tabbed {
                 return true;
             }
             UIEventType::Action(Tab(Close)) => {
-                let uuid = *self.children[self.cursor_pos].uuid();
-                self.children[self.cursor_pos].kill(uuid);
+                let id = *self.children[self.cursor_pos].id();
+                self.children[self.cursor_pos].kill(id);
                 return true;
             }
-            UIEventType::Action(Tab(Kill(ref uuid))) => {
-                if let Some(c_idx) = self.children.iter().position(|x| x.uuid() == uuid) {
+            UIEventType::Action(Tab(Kill(ref id))) => {
+                if let Some(c_idx) = self.children.iter().position(|x| x.id() == id) {
                     self.children.remove(c_idx);
                     self.cursor_pos = self.cursor_pos.saturating_sub(1);
                     self.set_dirty();
                     return true;
                 } else {
                     eprintln!(
-                        "DEBUG: Child entity with uuid {:?} not found.\nList: {:?}",
-                        uuid, self.children
+                        "DEBUG: Child entity with id {:?} not found.\nList: {:?}",
+                        id, self.children
                     );
                 }
             }

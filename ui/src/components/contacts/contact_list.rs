@@ -5,7 +5,7 @@ const MAX_COLS: usize = 500;
 #[derive(Debug, PartialEq)]
 enum ViewMode {
     List,
-    View(Uuid),
+    View(EntityId),
 }
 
 #[derive(Debug)]
@@ -16,7 +16,7 @@ pub struct ContactList {
     length: usize,
     content: CellBuffer,
 
-    uuid_positions: Vec<Uuid>,
+    id_positions: Vec<EntityId>,
     
     mode: ViewMode,
     initialized: bool,
@@ -44,7 +44,7 @@ impl ContactList {
             new_cursor_pos: 0,
             length: 0,
             account_pos: 0,
-            uuid_positions: Vec::new(),
+            id_positions: Vec::new(),
             mode: ViewMode::List,
             content,
             initialized: false,
@@ -59,13 +59,13 @@ impl ContactList {
         self.content.resize(MAX_COLS, book.len(), Cell::with_char(' '));
         eprintln!("{:?}", book);
 
-        self.uuid_positions.clear();
-        if self.uuid_positions.capacity() < book.len() {
-            self.uuid_positions.reserve(book.len()); 
+        self.id_positions.clear();
+        if self.id_positions.capacity() < book.len() {
+            self.id_positions.reserve(book.len()); 
         }
 
         for (i, c) in book.values().enumerate() {
-            self.uuid_positions.push(*c.uuid());
+            self.id_positions.push(*c.id());
             
             write_string_to_grid(
                 c.email(),
@@ -109,7 +109,7 @@ impl Component for ContactList {
             UIEventType::Input(Key::Char('e')) => {
                 let account = &mut context.accounts[self.account_pos];
                 let book = &mut account.address_book;
-                let card = book[&self.uuid_positions[self.cursor_pos]].clone();
+                let card = book[&self.id_positions[self.cursor_pos]].clone();
                 let mut manager = ContactManager::default();
                 manager.card = card;
 
@@ -117,7 +117,7 @@ impl Component for ContactList {
 
                 let entity = Entity::from(Box::new(manager));
 
-                self.mode = ViewMode::View(*entity.uuid());
+                self.mode = ViewMode::View(*entity.id());
                 self.view = Some(entity);
                 self.set_dirty();
                 
