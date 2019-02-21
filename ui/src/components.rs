@@ -83,9 +83,11 @@ pub struct Entity {
 }
 
 impl From<Box<Component>> for Entity {
-    fn from(kind: Box<Component>) -> Entity {
+    fn from(mut kind: Box<Component>) -> Entity {
+        let id = Uuid::new_v4();
+        kind.set_id(id);
         Entity {
-            id: Uuid::new_v4(),
+            id: id,
             component: kind,
         }
     }
@@ -95,9 +97,11 @@ impl<C: 'static> From<Box<C>> for Entity
 where
     C: Component,
 {
-    fn from(kind: Box<C>) -> Entity {
+    fn from(mut kind: Box<C>) -> Entity {
+        let id = Uuid::new_v4();
+        kind.set_id(id);
         Entity {
-            id: Uuid::new_v4(),
+            id: id,
             component: kind,
         }
     }
@@ -143,7 +147,8 @@ pub trait Component: Display + Debug {
         true
     }
     fn set_dirty(&mut self);
-    fn kill(&mut self, _uuid: Uuid) {}
+    fn kill(&mut self, uuid: Uuid) {}
+    fn set_id(&mut self, uuid: Uuid) {}
 }
 
 /*
