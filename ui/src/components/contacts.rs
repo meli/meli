@@ -21,6 +21,10 @@
 
 use super::*;
 
+mod contact_list;
+
+pub use self::contact_list::*;
+
 macro_rules! write_field {
     ($title:expr, $value:expr, $target_grid:expr, $fg_color:expr, $bg_color:expr, $width:expr, $y:expr) => {{
         let (x, y) = write_string_to_grid(
@@ -44,8 +48,18 @@ macro_rules! write_field {
 }
 
 #[derive(Debug)]
+enum ViewMode {
+    ReadOnly,
+    Read,
+    Edit,
+    New,
+}
+
+#[derive(Debug)]
 pub struct ContactManager {
+    id: Uuid,
     pub card: Card,
+    mode: ViewMode,
     content: CellBuffer,
     dirty: bool,
     initialized: bool,
@@ -54,7 +68,9 @@ pub struct ContactManager {
 impl Default for ContactManager {
     fn default() -> Self {
         ContactManager {
+            id: Uuid::nil(),
             card: Card::new(),
+            mode: ViewMode::Read,
             content: CellBuffer::new(200, 100, Cell::with_char(' ')),
             dirty: true,
             initialized: false,
@@ -133,6 +149,16 @@ impl Component for ContactManager {
     }
 
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+        match event.event_type {
+            UIEventType::Input(Key::Char('\n')) => {
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::EntityKill(self.id),
+                });
+                return true;
+            },
+            _ => {},
+        }
         false
     }
 
@@ -145,6 +171,7 @@ impl Component for ContactManager {
         self.initialized = false;
     }
 
-    fn kill(&mut self, uuid: Uuid) {
+    fn set_id(&mut self, uuid: Uuid) {
+        self.id = uuid;
     }
 }
