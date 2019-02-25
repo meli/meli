@@ -54,8 +54,8 @@ impl ContactList {
     fn initialize(&mut self, context: &mut Context) {
         let account = &mut context.accounts[self.account_pos];
         let book = &mut account.address_book;
+        self.length = book.len();
         self.content.resize(MAX_COLS, book.len(), Cell::with_char(' '));
-        eprintln!("initialize {:?}", book);
 
         self.id_positions.clear();
         if self.id_positions.capacity() < book.len() {
@@ -125,6 +125,27 @@ impl Component for ContactList {
                 self.mode = ViewMode::View(*entity.id());
                 self.view = Some(entity);
                 
+                return true;
+            },
+            UIEventType::Input(Key::Char('n')) => {
+                let card = Card::new();
+                let mut manager = ContactManager::default();
+                manager.card = card;
+                manager.account_pos = self.account_pos;
+                let entity = Entity::from(Box::new(manager));
+                self.mode = ViewMode::View(*entity.id());
+                self.view = Some(entity);
+                
+                return true;
+            },
+            UIEventType::Input(Key::Up) => {
+                self.set_dirty();
+                self.new_cursor_pos = self.cursor_pos.saturating_sub(1);
+                return true;
+            },
+            UIEventType::Input(Key::Down) if self.cursor_pos < self.length.saturating_sub(1) => {
+                self.set_dirty();
+                self.new_cursor_pos += 1;
                 return true;
             },
             UIEventType::EntityKill(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {
