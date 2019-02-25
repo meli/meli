@@ -121,6 +121,9 @@ impl Component for FormWidget {
         }
 
         match event.event_type {
+            UIEventType::Input(Key::Up) if self.focus == FormFocus::Buttons => {
+                self.focus = FormFocus::Fields;
+            },
             UIEventType::Input(Key::Up) => {
                 self.cursor = self.cursor.saturating_sub(1);
             },
@@ -136,9 +139,6 @@ impl Component for FormWidget {
                    id: 0,
                    event_type: UIEventType::ChangeMode(UIMode::Insert),
                    });
-            },
-            UIEventType::Input(Key::Up) if self.focus == FormFocus::Buttons => {
-                self.focus = FormFocus::Fields;
             },
             UIEventType::InsertInput(Key::Right) if self.focus == FormFocus::TextInput => {
                 if self.cursors[self.cursor] < self.fields[&self.layout[self.cursor]].len().saturating_sub(1) {
