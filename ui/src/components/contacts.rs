@@ -25,28 +25,6 @@ mod contact_list;
 
 pub use self::contact_list::*;
 
-macro_rules! write_field {
-    ($title:expr, $value:expr, $target_grid:expr, $fg_color:expr, $bg_color:expr, $width:expr, $y:expr) => {{
-        let (x, y) = write_string_to_grid(
-            $title,
-            &mut $target_grid,
-            $fg_color,
-            $bg_color,
-            ((1, $y + 2), ($width - 1, $y + 2)),
-            false,
-            );
-        write_string_to_grid(
-            &$value,
-            &mut $target_grid,
-            Color::Default,
-            Color::Default,
-            ((x, y), ($width - 1, y)),
-            false,
-            );
-        y
-    }}
-}
-
 #[derive(Debug)]
 enum ViewMode {
     ReadOnly,
@@ -60,6 +38,7 @@ pub struct ContactManager {
     id: Uuid,
     pub card: Card,
     mode: ViewMode,
+    form: FormWidget,
     content: CellBuffer,
     dirty: bool,
     initialized: bool,
@@ -71,6 +50,7 @@ impl Default for ContactManager {
             id: Uuid::nil(),
             card: Card::new(),
             mode: ViewMode::Read,
+            form: FormWidget::default(),
             content: CellBuffer::new(200, 100, Cell::with_char(' ')),
             dirty: true,
             initialized: false,
@@ -112,27 +92,16 @@ impl ContactManager {
             ((x, 0), (width, 0)),
             false,
             );
-        for x in 0..width {
-            set_and_join_box(&mut self.content, (x, 2), HORZ_BOUNDARY);
-            set_and_join_box(&mut self.content, (x, 4), HORZ_BOUNDARY);
-            set_and_join_box(&mut self.content, (x, 6), HORZ_BOUNDARY);
-            set_and_join_box(&mut self.content, (x, 8), HORZ_BOUNDARY);
-            set_and_join_box(&mut self.content, (x, 10), HORZ_BOUNDARY);
-            set_and_join_box(&mut self.content, (x, 12), HORZ_BOUNDARY);
-            set_and_join_box(&mut self.content, (x, 14), HORZ_BOUNDARY);
-            set_and_join_box(&mut self.content, (x, 16), HORZ_BOUNDARY);
-        }
-        for y in 0..height {
-            set_and_join_box(&mut self.content, (width - 1, y), VERT_BOUNDARY);
-        }
-        let mut y = write_field!("First Name: ", self.card.firstname(), self.content, Color::Byte(250), Color::Default, width, 1);
-        y = write_field!("Last Name: ", self.card.lastname(), self.content, Color::Byte(250), Color::Default, width, y);
-        y = write_field!("Additional Name: ", self.card.additionalname(), self.content, Color::Byte(250), Color::Default, width, y);
-        y = write_field!("Name Prefix: ", self.card.name_prefix(), self.content, Color::Byte(250), Color::Default, width, y);
-        y = write_field!("Name Suffix: ", self.card.name_suffix(), self.content, Color::Byte(250), Color::Default, width, y);
-        y = write_field!("E-mail: ", self.card.email(), self.content, Color::Byte(250), Color::Default, width, y);
-        y = write_field!("url: ", self.card.url(), self.content, Color::Byte(250), Color::Default, width, y);
-        y = write_field!("key: ", self.card.key(), self.content, Color::Byte(250), Color::Default, width, y);
+        self.form = FormWidget::new("Save".into());
+        self.form.add_button(("Cancel".into(), false));
+        self.form.push(("First Name".into(), self.card.firstname().to_string()));
+        self.form.push(("Last Name".into(), self.card.lastname().to_string()));
+        self.form.push(("Additional Name".into(), self.card.additionalname().to_string()));
+        self.form.push(("Name Prefix".into(), self.card.name_prefix().to_string()));
+        self.form.push(("Name Suffix".into(), self.card.name_suffix().to_string()));
+        self.form.push(("E-mail".into(), self.card.email().to_string()));
+        self.form.push(("url".into(), self.card.url().to_string()));
+        self.form.push(("key".into(), self.card.key().to_string()));
     }
 }
 
@@ -144,31 +113,62 @@ impl Component for ContactManager {
         }
         clear_area(grid, area);
         let (width, height) = self.content.size();
-        copy_area(grid, &self.content, area, ((0, 0), (width - 1, height -1)));
+        copy_area(grid, &self.content, area, ((0, 0), (width - 1, 0)));
+
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        self.form.draw(grid, (set_y(upper_left, get_y(upper_left) + 1), bottom_right), context);
         context.dirty_areas.push_back(area);
     }
 
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
-        match event.event_type {
-            UIEventType::Input(Key::Char('\n')) => {
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::EntityKill(self.id),
-                });
-                return true;
-            },
-            _ => {},
+        if self.form.process_event(event, context) {
+            match self.form.buttons_result() {
+                None => {},
+                Some(true) => {
+                    eprintln!("fields: {:?}", std::mem::replace(&mut self.form, FormWidget::default()).collect());
+                    context.replies.push_back(UIEvent {
+                        id: 0,
+                        event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage("Saved.".into())),
+                    });
+                    context.replies.push_back(UIEvent {
+                        id: 0,
+                        event_type: UIEventType::EntityKill(self.id),
+                    });
+                },
+                Some(false) => {
+                    context.replies.push_back(UIEvent {
+                        id: 0,
+                        event_type: UIEventType::EntityKill(self.id),
+                    });
+
+                },
+            }
+            return true;
         }
+        /*
+           match event.event_type {
+           UIEventType::Input(Key::Char('\n')) => {
+           context.replies.push_back(UIEvent {
+           id: 0,
+           event_type: UIEventType::EntityKill(self.id),
+           });
+           return true;
+           },
+           _ => {},
+           }
+           */
         false
     }
 
     fn is_dirty(&self) -> bool {
-        self.dirty
+        self.dirty | self.form.is_dirty()
     }
 
     fn set_dirty(&mut self) {
         self.dirty = true;
         self.initialized = false;
+        self.form.set_dirty();
     }
 
     fn set_id(&mut self, uuid: Uuid) {

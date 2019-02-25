@@ -19,7 +19,6 @@ pub struct ContactList {
     id_positions: Vec<EntityId>,
     
     mode: ViewMode,
-    initialized: bool,
     dirty: bool,
     view: Option<Entity>,
 }
@@ -47,7 +46,6 @@ impl ContactList {
             id_positions: Vec::new(),
             mode: ViewMode::List,
             content,
-            initialized: false,
             dirty: true,
             view: None,
         }
@@ -57,7 +55,7 @@ impl ContactList {
         let account = &mut context.accounts[self.account_pos];
         let book = &mut account.address_book;
         self.content.resize(MAX_COLS, book.len(), Cell::with_char(' '));
-        eprintln!("{:?}", book);
+        eprintln!("initialize {:?}", book);
 
         self.id_positions.clear();
         if self.id_positions.capacity() < book.len() {
@@ -81,24 +79,33 @@ impl ContactList {
 
 impl Component for ContactList {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !self.initialized {
-            self.initialize(context);
-            self.initialized = true;
-        }
-
         if let Some(mgr) = self.view.as_mut() {
             mgr.draw(grid, area, context);
-            self.dirty = false;
             return;
         }
 
         if self.dirty {
+            self.initialize(context);
             clear_area(grid, area);
             copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, self.content.size().1 - 1)));
             context.dirty_areas.push_back(area);
             self.dirty = false;
         }
+
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+
+        /* Reset previously highlighted line */
+        let fg_color = Color::Default;
+        let bg_color = Color::Default;
+        change_colors(grid, (pos_inc(upper_left, (0, self.cursor_pos)), set_y(bottom_right, get_y(upper_left) + self.cursor_pos)), fg_color, bg_color);
+
+        /* Highlight current line */
+        let bg_color = Color::Byte(246);
+        change_colors(grid, (pos_inc(upper_left, (0, self.new_cursor_pos)), set_y(bottom_right, get_y(upper_left) + self.new_cursor_pos)), fg_color, bg_color);
+        self.cursor_pos = self.new_cursor_pos;
     }
+
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
         if let Some(ref mut v) = self.view {
             if v.process_event(event, context) {
@@ -112,14 +119,10 @@ impl Component for ContactList {
                 let card = book[&self.id_positions[self.cursor_pos]].clone();
                 let mut manager = ContactManager::default();
                 manager.card = card;
-
-
-
                 let entity = Entity::from(Box::new(manager));
 
                 self.mode = ViewMode::View(*entity.id());
                 self.view = Some(entity);
-                self.set_dirty();
                 
                 return true;
             },
@@ -134,9 +137,11 @@ impl Component for ContactList {
         }
         false
     }
+
     fn is_dirty(&self) -> bool {
-        self.dirty
+        self.dirty || self.view.as_ref().map(|v| v.is_dirty()).unwrap_or(false)
     }
+
     fn set_dirty(&mut self) {
         if let Some(p) = self.view.as_mut() {
             p.set_dirty();

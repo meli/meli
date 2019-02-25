@@ -190,7 +190,7 @@ impl Account {
         }
         None
     }
-    pub fn watch(&self, r: RefreshEventConsumer) -> () {
+    pub fn watch(&self, r: RefreshEventConsumer) {
         self.backend.watch(r).unwrap();
     }
     /* This doesn't represent the number of correctly parsed mailboxes though */

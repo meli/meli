@@ -391,22 +391,19 @@ impl Component for MailView {
 
                 eprintln!("{:?}", new_card);
 
-                */
-                match self.mode {
-                    ViewMode::ContactSelector(_) => {
-                        if let ViewMode::ContactSelector(s) = std::mem::replace(&mut self.mode, ViewMode::Normal) {
-                            for c in s.collect() {
-                                let mut new_card: Card = Card::new();
-                                let email = String::from_utf8(c).unwrap();
-                                new_card.set_email(&email);
-                                new_card.set_firstname("");
-                                context.accounts[self.coordinates.0].address_book.add_card(new_card);
-                            }
-                        //eprintln!("{:?}", s.collect());
+*/
+                if let ViewMode::ContactSelector(_) = self.mode {
+                    if let ViewMode::ContactSelector(s) = std::mem::replace(&mut self.mode, ViewMode::Normal) {
+                        for c in s.collect() {
+                            let mut new_card: Card = Card::new();
+                            let email = String::from_utf8(c).unwrap();
+                            new_card.set_email(&email);
+                            new_card.set_firstname("");
+                            context.accounts[self.coordinates.0].address_book.add_card(new_card);
                         }
-                        return true;
-                    },
-                    _ => {},
+                        //eprintln!("{:?}", s.collect());
+                    }
+                    return true;
                 }
 
                 let accounts = &context.accounts;
@@ -604,7 +601,7 @@ impl Component for MailView {
         true
     }
     fn is_dirty(&self) -> bool {
-        self.dirty || true
+        self.dirty 
             || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }

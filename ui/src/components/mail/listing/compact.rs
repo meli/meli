@@ -209,7 +209,7 @@ impl CompactListing {
             let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
                 .as_ref()
                 .unwrap();
-            if mailbox.len() == 0 {
+            if mailbox.is_empty() {
                 return;
             }
             let threads = &mailbox.collection.threads;

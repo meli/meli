@@ -224,7 +224,7 @@ impl ThreadListing {
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
-        if mailbox.len() == 0 {
+        if mailbox.is_empty() {
             return;
         }
         if self.locations[idx] != 0 {
@@ -255,7 +255,7 @@ impl ThreadListing {
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
-        if mailbox.len() == 0 || mailbox.len() <= idx {
+        if mailbox.is_empty() || mailbox.len() <= idx {
             return;
         }
 

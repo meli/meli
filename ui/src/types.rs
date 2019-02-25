@@ -77,6 +77,7 @@ pub enum ForkType {
 pub enum UIEventType {
     Input(Key),
     ExInput(Key),
+    InsertInput(Key),
     RefreshMailbox((usize, usize)),
     //Quit?
     Resize,
@@ -113,6 +114,7 @@ pub struct UIEvent {
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum UIMode {
     Normal,
+    Insert,
     Execute,
     Fork,
 }
@@ -124,6 +126,7 @@ impl fmt::Display for UIMode {
             "{}",
             match *self {
                 UIMode::Normal => "NORMAL",
+                UIMode::Insert => "INSERT",
                 UIMode::Execute => "EX",
                 UIMode::Fork => "FORK",
             }

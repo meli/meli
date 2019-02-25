@@ -20,7 +20,6 @@
  */
 
 use super::*;
-use std::dbg;
 
 use melib::Draft;
 use std::str::FromStr;

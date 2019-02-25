@@ -133,7 +133,7 @@ impl AccountMenu {
             inc: &mut usize,
             index: usize, //account index
             context: &mut Context,
-        ) -> () {
+        ) {
             let len = s.len();
             match context.accounts[index].status(root) {
                 Ok(_) => {}

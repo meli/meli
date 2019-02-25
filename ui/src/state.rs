@@ -473,7 +473,12 @@ impl State {
                     self.flush();
                 }
                 return;
-            }
+            },
+            UIEventType::ChangeMode(m) => {
+                self.context
+                    .sender
+                    .send(ThreadEvent::UIEvent(UIEventType::ChangeMode(m)));
+            },
             _ => {}
         }
         /* inform each entity */

@@ -91,7 +91,7 @@ impl From<Box<Component>> for Entity {
         let id = Uuid::new_v4();
         kind.set_id(id);
         Entity {
-            id: id,
+            id,
             component: kind,
         }
     }
@@ -105,7 +105,7 @@ where
         let id = Uuid::new_v4();
         kind.set_id(id);
         Entity {
-            id: id,
+            id,
             component: kind,
         }
     }
@@ -151,8 +151,8 @@ pub trait Component: Display + Debug {
         true
     }
     fn set_dirty(&mut self);
-    fn kill(&mut self, id: EntityId) {}
-    fn set_id(&mut self, id: EntityId) {}
+    fn kill(&mut self, _id: EntityId) {}
+    fn set_id(&mut self, _id: EntityId) {}
 }
 
 /*
@@ -218,7 +218,7 @@ fn ch_to_bin(ch: char) -> Option<u32> {
     }
 }
 
-#[allow(never_loop)]
+#[allow(clippy::never_loop)]
 fn set_and_join_vert(grid: &mut CellBuffer, idx: Pos) -> u32 {
     let (x, y) = idx;
     let mut bin_set = 0b1010;
@@ -309,7 +309,7 @@ fn set_and_join_vert(grid: &mut CellBuffer, idx: Pos) -> u32 {
     bin_set
 }
 
-#[allow(never_loop)]
+#[allow(clippy::never_loop)]
 fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
     let (x, y) = idx;
     let mut bin_set = 0b0101;

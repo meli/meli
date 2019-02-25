@@ -658,6 +658,18 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
 
 /// Change foreground and background colors in an `Area`
 pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_color: Color) {
+    let bounds = grid.size();
+    let upper_left = upper_left!(area);
+    let bottom_right = bottom_right!(area);
+    let (x, y) = upper_left;
+    if y > (get_y(bottom_right))
+        || x > get_x(bottom_right)
+        || y >= get_y(bounds)
+        || x >= get_x(bounds)
+    {
+        eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+        return;
+    }
     if !is_valid_area!(area) {
         eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
         return;
@@ -685,8 +697,8 @@ pub fn write_string_to_grid(
     let (mut x, mut y) = upper_left;
     if y > (get_y(bottom_right))
         || x > get_x(bottom_right)
-        || y > get_y(bounds)
-        || x > get_x(bounds)
+        || y >= get_y(bounds)
+        || x >= get_x(bounds)
     {
         eprintln!(" Invalid area with string {} and area {:?}", s, area);
         return (x, y);

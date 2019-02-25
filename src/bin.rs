@@ -66,7 +66,7 @@ fn main() {
     let menu = Entity::from(Box::new(AccountMenu::new(&state.context.accounts)));
     let listing = listing::Listing::from(IndexStyle::Compact);
     let b = Entity::from(Box::new(listing));
-    let tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true)), Box::new(AccountsPanel::new(&state.context)), Box::new(ContactManager::default())]));
+    let tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true)), Box::new(AccountsPanel::new(&state.context)), Box::new(ContactList::default())]));
     let window = Entity::from(tabs);
 
     let status_bar = Entity::from(Box::new(StatusBar::new(window)));
@@ -123,6 +123,19 @@ fn main() {
                                         },
                                     }
                                 },
+                                UIMode::Insert => {
+                                    match k {
+                                        Key::Char('\n') | Key::Esc => {
+                                            state.mode = UIMode::Normal;
+                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Normal)});
+                                            state.redraw();
+                                        },
+                                        k => {
+                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::InsertInput(k)});
+                                            state.redraw();
+                                        },
+                                    }
+                                }
                                 UIMode::Execute => {
                                     match k {
                                         Key::Char('\n') | Key::Esc => {
@@ -147,7 +160,9 @@ fn main() {
                         },
                         ThreadEvent::UIEvent(UIEventType::ChangeMode(f)) => {
                             state.mode = f;
-                            break 'inner; // `goto` 'reap loop, and wait on child.
+                            if f == UIMode::Fork {
+                                break 'inner; // `goto` 'reap loop, and wait on child.
+                            }
                         }
                         ThreadEvent::UIEvent(UIEventType::StartupCheck) => {
                             let mut render_flag = false;

@@ -119,7 +119,7 @@ pub fn get_events(
     mut closure: impl FnMut(Key),
     mut exit: impl FnMut(),
     rx: &chan::Receiver<bool>,
-) -> () {
+) {
     let mut input_mode = InputMode::Normal;
     let mut paste_buf = String::with_capacity(256);
     for c in stdin.events() {

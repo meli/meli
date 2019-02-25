@@ -23,6 +23,10 @@
  */
 use super::*;
 
+mod widgets;
+
+pub use self::widgets::*;
+
 /// A horizontally split in half container.
 #[derive(Debug)]
 pub struct HSplit {
@@ -212,7 +216,7 @@ impl fmt::Display for Pager {
 }
 
 impl Pager {
-    pub fn update_from_str(&mut self, text: &str) -> () {
+    pub fn update_from_str(&mut self, text: &str) {
         let lines: Vec<&str> = text.trim().split('\n').collect();
         let height = lines.len() + 1;
         let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
@@ -673,7 +677,7 @@ impl Progress {
         }
     }
 
-    pub fn add_work(&mut self, n: usize) -> () {
+    pub fn add_work(&mut self, n: usize) {
         if self.finished >= self.total_work {
             return;
         }
