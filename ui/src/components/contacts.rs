@@ -39,6 +39,7 @@ pub struct ContactManager {
     pub card: Card,
     mode: ViewMode,
     form: FormWidget,
+    account_pos: usize,
     content: CellBuffer,
     dirty: bool,
     initialized: bool,
@@ -51,6 +52,7 @@ impl Default for ContactManager {
             card: Card::new(),
             mode: ViewMode::Read,
             form: FormWidget::default(),
+            account_pos: 0,
             content: CellBuffer::new(200, 100, Cell::with_char(' ')),
             dirty: true,
             initialized: false,
@@ -126,7 +128,9 @@ impl Component for ContactManager {
             match self.form.buttons_result() {
                 None => {},
                 Some(true) => {
-                    eprintln!("fields: {:?}", std::mem::replace(&mut self.form, FormWidget::default()).collect());
+                    let mut new_card = Card::from(std::mem::replace(&mut self.form, FormWidget::default()).collect().unwrap());
+                    new_card.set_id(*self.card.id());
+                    context.accounts[self.account_pos].address_book.add_card(new_card);
                     context.replies.push_back(UIEvent {
                         id: 0,
                         event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage("Saved.".into())),

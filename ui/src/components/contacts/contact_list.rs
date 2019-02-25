@@ -119,6 +119,7 @@ impl Component for ContactList {
                 let card = book[&self.id_positions[self.cursor_pos]].clone();
                 let mut manager = ContactManager::default();
                 manager.card = card;
+                manager.account_pos = self.account_pos;
                 let entity = Entity::from(Box::new(manager));
 
                 self.mode = ViewMode::View(*entity.id());

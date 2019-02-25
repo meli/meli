@@ -140,6 +140,9 @@ impl Card {
         self.last_edited.to_rfc2822()
     }
 
+    pub fn set_id(&mut self, new: Uuid) {
+        self.id = new;
+    }
     pub fn set_title(&mut self, new: &str) {
         self.title = new.to_string();()
     }
@@ -175,4 +178,40 @@ impl Card {
         self.extra_properties.get(key).map(|v| v.as_str())
     }
 
+}
+
+impl From<FnvHashMap<String, String>> for Card {
+    fn from(mut map: FnvHashMap<String, String>) -> Card {
+        let mut card = Card::new();
+        if let Some(val) = map.remove("Title") {
+            card.title = val;
+        }
+        if let Some(val) = map.remove("First Name") {
+            card.firstname = val;
+        }
+        if let Some(val) = map.remove("Last Name") {
+            card.lastname = val;
+        }
+        if let Some(val) = map.remove("Additional Name") {
+            card.additionalname = val;
+        }
+        if let Some(val) = map.remove("Name Prefix") {
+            card.name_prefix = val;
+        }
+        if let Some(val) = map.remove("Name Suffix") {
+            card.name_suffix = val;
+        }
+
+        if let Some(val) = map.remove("E-mail") {
+            card.email = val;
+        }
+        if let Some(val) = map.remove("url") {
+            card.url = val;
+        }
+        if let Some(val) = map.remove("key") {
+            card.key = val;
+        }
+        card.extra_properties = map;
+        card
+    }
 }
