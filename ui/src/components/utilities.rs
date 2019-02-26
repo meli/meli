@@ -88,7 +88,7 @@ impl Component for HSplit {
             context,
         );
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         self.top.rcv_event(event, context) || self.bottom.rcv_event(event, context)
     }
     fn is_dirty(&self) -> bool {
@@ -175,7 +175,7 @@ impl Component for VSplit {
             .component
             .draw(grid, ((mid + 1, get_y(upper_left)), bottom_right), context);
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         (self.left.rcv_event(event, context) || self.right.rcv_event(event, context))
     }
     fn is_dirty(&self) -> bool {
@@ -380,7 +380,7 @@ impl Component for Pager {
         }
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::Input(Key::Char('k')) => {
                 if self.cursor_pos > 0 {
@@ -547,7 +547,7 @@ impl Component for StatusBar {
             _ => {}
         }
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.container.rcv_event(event, context) {
             return true;
         }
@@ -655,7 +655,7 @@ impl fmt::Display for TextBox {
 
 impl Component for TextBox {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
         false
     }
     fn set_dirty(&mut self) {}
@@ -708,7 +708,7 @@ impl Component for Progress {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {
         unimplemented!()
     }
-    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
         false
     }
     fn set_dirty(&mut self) {}
@@ -792,7 +792,7 @@ impl Component for Tabbed {
             self.children[self.cursor_pos].draw(grid, area, context);
         }
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::Input(Key::Char('T')) => {
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
@@ -807,6 +807,12 @@ impl Component for Tabbed {
             }
             UIEventType::Action(Tab(Reply(coordinates, msg))) => {
                 self.add_component(Box::new(Composer::with_context(coordinates, msg, context)));
+                self.cursor_pos = self.children.len() - 1;
+                self.children[self.cursor_pos].set_dirty();
+                return true;
+            }
+            UIEventType::Action(Tab(TabOpen(ref mut e))) if e.is_some() => {
+                self.add_component(e.take().unwrap());
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
                 return true;
@@ -874,7 +880,7 @@ impl Component for Selector {
         );
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let (width, height) = self.content.size();
         match event.event_type {
             UIEventType::Input(Key::Char(' ')) => {

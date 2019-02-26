@@ -45,7 +45,7 @@ impl Component for ContactsPanel {
         copy_area(grid, &self.content, area, ((0, 0), (width - 1, height - 1)));
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, _event: &UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
         false
     }
     fn is_dirty(&self) -> bool {

@@ -123,7 +123,7 @@ impl Component for ContactManager {
         context.dirty_areas.push_back(area);
     }
 
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.form.process_event(event, context) {
             match self.form.buttons_result() {
                 None => {},

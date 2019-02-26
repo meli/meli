@@ -417,7 +417,7 @@ impl Component for PlainListing {
             self.dirty = false;
         }
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let Some(ref mut v) = self.view {
             if v.process_event(event, context) {
                 return true;

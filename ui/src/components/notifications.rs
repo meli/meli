@@ -39,7 +39,7 @@ impl fmt::Display for XDGNotifications {
 
 impl Component for XDGNotifications {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         if let UIEventType::Notification(ref title, ref body) = event.event_type {
             notify_Notification::new()
                 .appname("meli")

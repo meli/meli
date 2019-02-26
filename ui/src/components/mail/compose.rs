@@ -387,7 +387,7 @@ impl Component for Composer {
         context.dirty_areas.push_back(area);
     }
 
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match (&mut self.mode, &mut self.reply_context) {
             (ViewMode::Pager, _) => {
                 /* Cannot mutably borrow in pattern guard, pah! */

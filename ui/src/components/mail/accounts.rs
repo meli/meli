@@ -119,7 +119,7 @@ impl Component for AccountsPanel {
         copy_area(grid, &self.content, area, ((0, 0), (width - 1, height - 1)));
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::Input(Key::Up) => {
                 self.cursor = self.cursor.saturating_sub(1);
@@ -131,6 +131,13 @@ impl Component for AccountsPanel {
                     self.cursor += 1;
                     self.dirty = true;
                 }
+                return true;
+            },
+            UIEventType::Input(Key::Char('\n')) => {
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::Action(Tab(TabOpen(Some(Box::new(ContactList::for_account(self.cursor)))
+                    )))});
                 return true;
             },
             _ => {},

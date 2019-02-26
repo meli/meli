@@ -91,7 +91,7 @@ impl Component for Indexer {
         context.dirty_areas.push_back(area);
     }
 
-    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         if !self.entries[self.cursor[0]]
             .index
             .process_event(event, _context)

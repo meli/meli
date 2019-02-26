@@ -1,11 +1,13 @@
 use super::*;
 
+use melib::CardId;
+
 const MAX_COLS: usize = 500;
 
 #[derive(Debug, PartialEq)]
 enum ViewMode {
     List,
-    View(EntityId),
+    View(CardId),
 }
 
 #[derive(Debug)]
@@ -16,7 +18,7 @@ pub struct ContactList {
     length: usize,
     content: CellBuffer,
 
-    id_positions: Vec<EntityId>,
+    id_positions: Vec<CardId>,
     
     mode: ViewMode,
     dirty: bool,
@@ -51,6 +53,13 @@ impl ContactList {
         }
     }
 
+    pub fn for_account(pos: usize) -> Self {
+        ContactList {
+            account_pos: pos,
+            ..Self::new()
+        }
+    }
+        
     fn initialize(&mut self, context: &mut Context) {
         let account = &mut context.accounts[self.account_pos];
         let book = &mut account.address_book;
@@ -106,13 +115,23 @@ impl Component for ContactList {
         self.cursor_pos = self.new_cursor_pos;
     }
 
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let Some(ref mut v) = self.view {
             if v.process_event(event, context) {
                 return true;
             }
         }
         match event.event_type {
+            UIEventType::Input(Key::Char('c')) => {
+                let mut manager = ContactManager::default();
+                manager.account_pos = self.account_pos;
+                let entity = Entity::from(Box::new(manager));
+
+                self.mode = ViewMode::View(*entity.id());
+                self.view = Some(entity);
+                
+                return true;
+            },
             UIEventType::Input(Key::Char('e')) if self.length > 0 => {
                 let account = &mut context.accounts[self.account_pos];
                 let book = &mut account.address_book;

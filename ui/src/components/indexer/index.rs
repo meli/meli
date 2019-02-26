@@ -123,7 +123,7 @@ impl Component for Index {
         return;
     }
 
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.content.process_event(event, context) {
             return true;
         }

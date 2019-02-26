@@ -360,7 +360,7 @@ impl Component for MailView {
         }
     }
 
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match self.mode {
             ViewMode::Subview => {
                 if let Some(s) = self.subview.as_mut() {
@@ -414,7 +414,7 @@ impl Component for MailView {
                 let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
                 let mut entries = Vec::new();
                 entries.push((envelope.from()[0].get_email().into_bytes(), format!("{}", envelope.from()[0])));
-                entries.push((String::from("foo@bar.de").into_bytes(), String::from("Johann de Vir <foo@bar.de>")));
+                entries.push((envelope.to()[0].get_email().into_bytes(), format!("{}", envelope.to()[0])));
                 self.mode = ViewMode::ContactSelector(Selector::new(entries, true));
                 self.dirty = true;
                 //context.accounts.context(self.coordinates.0).address_book.add_card(new_card);

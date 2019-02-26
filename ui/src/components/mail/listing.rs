@@ -61,7 +61,7 @@ impl Component for Listing {
             Listing::Threaded(l) => l.draw(grid, area, context),
         }
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if match self {
             Listing::Plain(l) => l.process_event(event, context),
             Listing::Compact(l) => l.process_event(event, context),

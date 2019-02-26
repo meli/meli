@@ -540,7 +540,7 @@ impl Component for ThreadView {
             self.draw_horz(grid, area, context);
         }
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.mailview.process_event(event, context) {
             return true;
         }

@@ -257,7 +257,7 @@ impl Component for AccountMenu {
 
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::RefreshMailbox(c) => {
                 self.cursor = Some(c);

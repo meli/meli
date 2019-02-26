@@ -453,7 +453,7 @@ impl State {
     }
 
     /// The application's main loop sends `UIEvents` to state via this method.
-    pub fn rcv_event(&mut self, event: UIEvent) {
+    pub fn rcv_event(&mut self, mut event: UIEvent) {
         match event.event_type {
             // Command type is handled only by State.
             UIEventType::Command(cmd) => {
@@ -483,7 +483,7 @@ impl State {
         }
         /* inform each entity */
         for i in 0..self.entities.len() {
-            self.entities[i].rcv_event(&event, &mut self.context);
+            self.entities[i].rcv_event(&mut event, &mut self.context);
         }
 
         if !self.context.replies.is_empty() {

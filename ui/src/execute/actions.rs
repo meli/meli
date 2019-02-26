@@ -24,7 +24,7 @@
  */
 
 pub use melib::mailbox::{SortField, SortOrder};
-use components::Entity;
+use components::Component;
 
 extern crate uuid;
 use uuid::Uuid;
@@ -38,7 +38,7 @@ pub enum ListingAction {
 
 #[derive(Debug, )]
 pub enum TabAction {
-    EntityOpen(Entity),
+    TabOpen(Option<Box<Component>>),
     NewDraft,
     Reply((usize, usize, usize), usize), // thread coordinates (account, mailbox, root_set idx) and message idx
     Close,

@@ -120,7 +120,7 @@ impl Component for FormWidget {
         self.dirty = false;
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.focus == FormFocus::Buttons {
             if self.buttons.process_event(event, context) {
                 return true;
@@ -256,7 +256,7 @@ impl<T> Component for ButtonWidget<T> where T: std::fmt::Debug + Default + Send 
             len += cur_len + 3;
         }
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::Input(Key::Char('\n')) => {
                 self.result = Some(self.buttons.remove(&self.layout[self.cursor]).unwrap_or_default());

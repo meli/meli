@@ -24,7 +24,7 @@ use fnv::FnvHashMap;
 
 use std::ops::Deref;
 
-type CardId = Uuid;
+pub type CardId = Uuid;
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AddressBook {

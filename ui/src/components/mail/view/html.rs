@@ -66,7 +66,7 @@ impl Component for HtmlView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         self.pager.draw(grid, area, context);
     }
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.pager.process_event(event, context) {
             return true;
         }

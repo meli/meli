@@ -136,8 +136,8 @@ impl Entity {
         &self.id
     }
     /// Pass events to child component.
-    pub fn rcv_event(&mut self, event: &UIEvent, context: &mut Context) -> bool {
-        self.component.process_event(&event, context)
+    pub fn rcv_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        self.component.process_event(event, context)
     }
 }
 
@@ -146,7 +146,7 @@ impl Entity {
 /// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
 pub trait Component: Display + Debug + Send {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
-    fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool;
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool;
     fn is_dirty(&self) -> bool {
         true
     }
