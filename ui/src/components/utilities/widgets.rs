@@ -8,6 +8,13 @@ enum FormFocus {
     TextInput,
 }
 
+/*
+enum Field {
+    Text(String),
+    Choice(Vec<String>),
+}
+*/
+
 impl Default for FormFocus {
     fn default() -> FormFocus {
         FormFocus::Fields
@@ -195,7 +202,7 @@ impl Component for FormWidget {
 
 
 #[derive(Debug, Default)]
-pub struct ButtonWidget<T> where T: std::fmt::Debug + Default{
+pub struct ButtonWidget<T> where T: std::fmt::Debug + Default + Send{
     buttons: FnvHashMap<String, T>,
     layout: Vec<String>,
 
@@ -203,13 +210,13 @@ pub struct ButtonWidget<T> where T: std::fmt::Debug + Default{
     cursor: usize,
 }
 
-impl<T> fmt::Display for ButtonWidget<T> where T: std::fmt::Debug + Default {
+impl<T> fmt::Display for ButtonWidget<T> where T: std::fmt::Debug + Default + Send {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt("", f)
     }
 }
 
-impl<T> ButtonWidget<T> where T: std::fmt::Debug + Default {
+impl<T> ButtonWidget<T> where T: std::fmt::Debug + Default + Send {
     pub fn new(init_val: (String, T)) -> ButtonWidget<T> {
         ButtonWidget {
             layout: vec![init_val.0.clone()],
@@ -230,7 +237,7 @@ impl<T> ButtonWidget<T> where T: std::fmt::Debug + Default {
 }
 
 
-impl<T> Component for ButtonWidget<T> where T: std::fmt::Debug + Default {
+impl<T> Component for ButtonWidget<T> where T: std::fmt::Debug + Default + Send {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);

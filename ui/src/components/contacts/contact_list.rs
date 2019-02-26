@@ -87,7 +87,7 @@ impl Component for ContactList {
         if self.dirty {
             self.initialize(context);
             clear_area(grid, area);
-            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, self.content.size().1 - 1)));
+            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, self.content.size().1.saturating_sub(1))));
             context.dirty_areas.push_back(area);
             self.dirty = false;
         }
@@ -113,7 +113,7 @@ impl Component for ContactList {
             }
         }
         match event.event_type {
-            UIEventType::Input(Key::Char('e')) => {
+            UIEventType::Input(Key::Char('e')) if self.length > 0 => {
                 let account = &mut context.accounts[self.account_pos];
                 let book = &mut account.address_book;
                 let card = book[&self.id_positions[self.cursor_pos]].clone();

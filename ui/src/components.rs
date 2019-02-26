@@ -144,7 +144,7 @@ impl Entity {
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
 /// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
-pub trait Component: Display + Debug {
+pub trait Component: Display + Debug + Send {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn process_event(&mut self, event: &UIEvent, context: &mut Context) -> bool;
     fn is_dirty(&self) -> bool {

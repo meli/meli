@@ -24,26 +24,28 @@
  */
 
 pub use melib::mailbox::{SortField, SortOrder};
+use components::Entity;
 
 extern crate uuid;
 use uuid::Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, )]
 pub enum ListingAction {
     SetPlain,
     SetThreaded,
     SetCompact,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, )]
 pub enum TabAction {
+    EntityOpen(Entity),
     NewDraft,
     Reply((usize, usize, usize), usize), // thread coordinates (account, mailbox, root_set idx) and message idx
     Close,
     Kill(Uuid),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, )]
 pub enum Action {
     Listing(ListingAction),
     ViewMailbox(usize),

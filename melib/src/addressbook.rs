@@ -50,8 +50,9 @@ pub struct Card {
     url: String,
     key: String,
 
+    color: u8,
     last_edited: DateTime<Local>,
-    extra_properties: FnvHashMap<String, String>
+    extra_properties: FnvHashMap<String, String>,
 }
 
 impl AddressBook {
@@ -102,6 +103,7 @@ impl Card {
 
             last_edited: Local::now(),
             extra_properties: FnvHashMap::default(),
+            color: 0,
         }
     }
 

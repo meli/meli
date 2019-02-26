@@ -864,6 +864,7 @@ impl fmt::Display for Selector {
 
 impl Component for Selector {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        eprintln!("drawing");
         let (width, height) = self.content.size();
         copy_area_with_break(
             grid,
@@ -897,14 +898,17 @@ impl Component for Selector {
                         false,
                         );
                 }
+                self.dirty = true;
                 return true;
             },
             UIEventType::Input(Key::Up) if self.cursor > 0 => {
                 self.cursor -= 1;
+                self.dirty = true;
                 return true;
             },
             UIEventType::Input(Key::Down) if self.cursor < height.saturating_sub(1) => {
                 self.cursor += 1;
+                self.dirty = true;
                 return true;
             },
             _ => {}

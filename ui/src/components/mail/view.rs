@@ -323,7 +323,7 @@ impl Component for MailView {
                     self.pager = None;
                     self.mode = ViewMode::Subview;
                 }
-                ViewMode::Subview => {}
+                ViewMode::Subview | ViewMode::ContactSelector(_) => {}
                 _ => {
                     let buf = {
                         let text = self.attachment_to_text(&body);
@@ -349,7 +349,8 @@ impl Component for MailView {
                 }
             },
             ViewMode::ContactSelector(ref mut s) => {
-                    s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+                clear_area(grid, (set_y(upper_left, y + 1), bottom_right));
+                s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
             }
             _ => {
                 if let Some(p) = self.pager.as_mut() {
@@ -415,6 +416,7 @@ impl Component for MailView {
                 entries.push((envelope.from()[0].get_email().into_bytes(), format!("{}", envelope.from()[0])));
                 entries.push((String::from("foo@bar.de").into_bytes(), String::from("Johann de Vir <foo@bar.de>")));
                 self.mode = ViewMode::ContactSelector(Selector::new(entries, true));
+                self.dirty = true;
                 //context.accounts.context(self.coordinates.0).address_book.add_card(new_card);
             },
             UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Alt('')) => {
@@ -604,6 +606,11 @@ impl Component for MailView {
         self.dirty 
             || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+            || if let ViewMode::ContactSelector(ref s) = self.mode {
+                s.is_dirty()
+            } else {
+                false
+            }
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
