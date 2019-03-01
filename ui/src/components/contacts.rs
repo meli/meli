@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use fnv::FnvHashMap;
 
 mod contact_list;
 
@@ -128,7 +129,13 @@ impl Component for ContactManager {
             match self.form.buttons_result() {
                 None => {},
                 Some(true) => {
-                    let mut new_card = Card::from(std::mem::replace(&mut self.form, FormWidget::default()).collect().unwrap());
+                    let mut fields = std::mem::replace(&mut self.form, FormWidget::default()).collect().unwrap();
+                    let fields: FnvHashMap<String, String> = fields.into_iter().map(|(s, v)| {
+                        (s, match v {
+                            Field::Text(v, _) => v,
+                            Field::Choice(mut v, c) => v.remove(c),
+                        })}).collect();
+                    let mut new_card = Card::from(fields);
                     new_card.set_id(*self.card.id());
                     context.accounts[self.account_pos].address_book.add_card(new_card);
                     context.replies.push_back(UIEvent {
