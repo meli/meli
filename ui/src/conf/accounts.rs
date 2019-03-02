@@ -167,7 +167,8 @@ impl Account {
                     return Some(Notification(
                         Some("new mail".into()),
                         format!(
-                            "{:<15}:\nSubject: {:<15}\nFrom: {:<15}",
+                            "{} {:.15}:\n\nFrom: {:.15}\nSubject: {:.15}",
+                            self.name,
                             ref_folders[idx].name(),
                             env.subject(),
                             env.field_from_to_string(),
