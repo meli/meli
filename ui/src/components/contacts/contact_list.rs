@@ -8,6 +8,7 @@ const MAX_COLS: usize = 500;
 enum ViewMode {
     List,
     View(CardId),
+    Close(Uuid),
 }
 
 #[derive(Debug)]
@@ -88,6 +89,14 @@ impl ContactList {
 
 impl Component for ContactList {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if let ViewMode::Close(u) = self.mode {
+            context.replies.push_back(UIEvent {
+                id: 0,
+                event_type: UIEventType::Action(Tab(Kill(u))),
+            });
+            return;
+        }
+
         if let Some(mgr) = self.view.as_mut() {
             mgr.draw(grid, area, context);
             return;
@@ -188,5 +197,9 @@ impl Component for ContactList {
             p.set_dirty();
         };
         self.dirty = true;
+    }
+
+    fn kill(&mut self, uuid: Uuid) {
+        self.mode = ViewMode::Close(uuid);
     }
 }
