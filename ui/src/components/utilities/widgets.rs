@@ -20,6 +20,7 @@ impl Default for FormFocus {
 pub enum Field {
     Text(String, Cursor),
     Choice(Vec<String>, Cursor),
+    TextArea(String, Cursor),
 }
 
 use Field::*;
@@ -36,6 +37,9 @@ impl Field {
             Text(ref s, _) => {
                 s
             },
+            TextArea(ref s, _) => {
+                s
+            },
             Choice(ref v, cursor) => {
                 if v.is_empty() {
                     ""
@@ -46,11 +50,27 @@ impl Field {
         }
     }
 
+    pub fn into_string(self) -> String {
+        match self {
+            Text(s, _) => {
+                s
+            },
+            TextArea(s, _) => {
+                s
+            },
+            Choice(mut v, cursor) => {
+                v.remove(cursor)
+            }
+        }
+    }
+
     fn draw_cursor(&self, grid: &mut CellBuffer, area: Area) {
         let upper_left = upper_left!(area);
         match self {
             Text(_, cursor) => {
         change_colors(grid, (pos_inc(upper_left, (*cursor, 0)), (pos_inc(upper_left, (*cursor, 0)))), Color::Default, Color::Byte(248));
+            },
+            TextArea(_, _) => {
             },
             Choice(_, cursor) => {
 
@@ -67,14 +87,14 @@ impl Component for Field {
                 Color::Default,
                 Color::Default,
                 area,
-                false);
+                true);
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::InsertInput(Key::Right) => {
                 match self {
-                    Text(ref s, ref mut cursor) => {
-                        if *cursor < s.len().saturating_sub(1) {
+                    TextArea(ref s, ref mut cursor) | Text(ref s, ref mut cursor) => {
+                        if *cursor < s.len() {
                             *cursor += 1;
                         }
                     },
@@ -89,7 +109,7 @@ impl Component for Field {
             },
             UIEventType::InsertInput(Key::Left) => {
                 match self {
-                    Text(_, ref mut cursor) => {
+                    TextArea(_, ref mut cursor) | Text(_, ref mut cursor) => {
                         if *cursor == 0 {
                             return false;
                         } else {
@@ -106,17 +126,23 @@ impl Component for Field {
                 }
             },
             UIEventType::InsertInput(Key::Char(k)) => {
-                if let Text(ref mut s, ref mut cursor) = self {
-                    s.insert(*cursor, k);
-                    *cursor += 1;
+                match self {
+                    Text(ref mut s, ref mut cursor) | TextArea(ref mut s, ref mut cursor) => {
+                        s.insert(*cursor, k);
+                        *cursor += 1;
+                    },
+                    _ => {}
                 }
             },
             UIEventType::InsertInput(Key::Backspace) => {
-                if let Text(ref mut s, ref mut cursor) = self {
+                match self {
+                    Text(ref mut s, ref mut cursor) | TextArea(ref mut s, ref mut cursor) => {
                         if *cursor > 0 {
                             *cursor -= 1;
-                            s.pop();
+                            s.remove(*cursor);
                         }
+                    },
+                    _ => {}
                 }
             },
             _ => {
@@ -142,13 +168,13 @@ impl fmt::Display for Field {
 #[derive(Debug, Default)]
 pub struct FormWidget {
     fields: FnvHashMap<String, Field>,
-    cursors: Vec<usize>,
     layout: Vec<String>,
     buttons: ButtonWidget<bool>,
 
     field_name_max_length: usize,
     cursor: usize,
     focus: FormFocus,
+    hide_buttons: bool,
     dirty: bool,
 }
 
@@ -163,8 +189,25 @@ impl FormWidget {
         FormWidget {
             buttons: ButtonWidget::new((action, true)),
             focus: FormFocus::Fields,
+            hide_buttons: false,
             ..Default::default()
         }
+    }
+
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    pub fn set_cursor(&mut self, new_cursor: usize) {
+        self.cursor = new_cursor;
+    }
+
+    pub fn hide_buttons(&mut self) {
+        self.hide_buttons = true;
+    }
+
+    pub fn len(&self) -> usize {
+        self.layout.len()
     }
 
     pub fn add_button(&mut self, val: (String, bool)) {
@@ -175,19 +218,25 @@ impl FormWidget {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
         self.fields.insert(value.0, Choice(value.1, 0));
-        self.cursors.push(0);
+    }
+    pub fn push_text_area(&mut self, value: (String, String)) {
+        self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
+        self.layout.push(value.0.clone());
+        self.fields.insert(value.0, TextArea(value.1, 0));
     }
     pub fn push(&mut self, value: (String, String)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
         self.fields.insert(value.0, Text(value.1, 0));
-        self.cursors.push(0);
     }
 
     pub fn insert(&mut self, index: usize, value: (String, Field)) {
         self.layout.insert(index, value.0.clone());
         self.fields.insert(value.0, value.1);
-        self.cursors.insert(index, 0);
+    }
+
+    pub fn values_mut(&mut self) -> &mut FnvHashMap<String, Field> {
+        &mut self.fields
     }
 
     pub fn collect(self) -> Option<FnvHashMap<String, Field>> {
@@ -209,31 +258,38 @@ impl Component for FormWidget {
 
         for (i, k) in self.layout.iter().enumerate() {
             let v = self.fields.get_mut(k).unwrap();
+            /* Write field label */
             write_string_to_grid(
                 k.as_str(),
                 grid,
                 Color::Default,
                 Color::Default,
-                (pos_inc(upper_left, (1, i * 2)), set_y(bottom_right, i * 2 + get_y(upper_left))),
+                (pos_inc(upper_left, (1, i)), set_y(bottom_right, i + get_y(upper_left))),
                 false,
                 );
+            /* draw field */
             v.draw(grid, 
-                (pos_inc(upper_left, (self.field_name_max_length + 3, i * 2)), set_y(bottom_right, i * 2 + get_y(upper_left))), context);
+                (pos_inc(upper_left, (self.field_name_max_length + 3, i)), set_y(bottom_right, i + get_y(upper_left))), context);
+
+            /* Highlight if necessary */
             if i == self.cursor  {
                 if self.focus == FormFocus::Fields {
-                change_colors(grid, (pos_inc(upper_left, (0, i * 2)), set_y(bottom_right, i * 2 + get_y(upper_left))), Color::Default, Color::Byte(246));
+                change_colors(grid, (pos_inc(upper_left, (0, i)), set_y(bottom_right, i + get_y(upper_left))), Color::Default, Color::Byte(246));
                 }
                 if self.focus == FormFocus::TextInput {
                     v.draw_cursor(grid,
-                                  (pos_inc(upper_left, (self.field_name_max_length + 3 , i * 2)),
-                                  (get_x(upper_left) + self.field_name_max_length + 3, i * 2 + get_y(upper_left))));
+                                  (pos_inc(upper_left, (self.field_name_max_length + 3 , i)),
+                                  (get_x(upper_left) + self.field_name_max_length + 3, i + get_y(upper_left))));
                 }
             }
         }
-        let length = self.layout.len();
-        self.buttons.draw(grid, 
-                (pos_inc(upper_left, (1, length * 2 + 3)), set_y(bottom_right, length * 2 + 3 + get_y(upper_left))),
-                context);
+        if !self.hide_buttons {
+            let length = self.layout.len();
+            self.buttons.draw(grid, 
+                              (pos_inc(upper_left, (1, length * 2 + 3)), set_y(bottom_right, length * 2 + 3 + get_y(upper_left))),
+                              context);
+
+        }
         self.dirty = false;
         context.dirty_areas.push_back(area);
     }
@@ -254,8 +310,12 @@ impl Component for FormWidget {
             UIEventType::Input(Key::Down) if self.cursor < self.layout.len().saturating_sub(1) => {
                 self.cursor += 1;
             },
-            UIEventType::Input(Key::Down) => {
+            UIEventType::Input(Key::Down) if self.focus == FormFocus::Fields => {
                 self.focus = FormFocus::Buttons;
+                if self.hide_buttons {
+                    self.set_dirty();
+                    return false;
+                }
             },
             UIEventType::Input(Key::Char('\n')) if self.focus == FormFocus::Fields => {
                 self.focus = FormFocus::TextInput;

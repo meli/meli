@@ -32,10 +32,6 @@ impl Default for Draft {
         headers.insert("To".into(), "".into());
         headers.insert("Cc".into(), "".into());
         headers.insert("Bcc".into(), "".into());
-        header_order.push("From".into());
-        header_order.push("To".into());
-        header_order.push("Cc".into());
-        header_order.push("Bcc".into());
 
         let now: DateTime<Local> = Local::now();
         headers.insert("Date".into(), now.to_rfc2822());
@@ -43,6 +39,10 @@ impl Default for Draft {
         headers.insert("Message-ID".into(), random::gen_message_id());
         headers.insert("User-Agent".into(), "meli".into());
         header_order.push("Date".into());
+        header_order.push("From".into());
+        header_order.push("To".into());
+        header_order.push("Cc".into());
+        header_order.push("Bcc".into());
         header_order.push("Subject".into());
         header_order.push("Message-ID".into());
         header_order.push("User-Agent".into());

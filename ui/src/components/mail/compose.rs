@@ -27,10 +27,7 @@ use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
 enum Cursor {
-    From,
-    To,
-    Cc,
-    Bcc,
+    Headers,
     Body,
     Attachments,
 }
@@ -44,6 +41,7 @@ pub struct Composer {
 
     pager: Pager,
     draft: Draft,
+    form: FormWidget,
 
     mode: ViewMode,
     dirty: bool,
@@ -56,10 +54,11 @@ impl Default for Composer {
             reply_context: None,
             account_cursor: 0,
 
-            cursor: Cursor::To,
+            cursor: Cursor::Headers,
 
             pager: Pager::default(),
             draft: Draft::default(),
+            form: FormWidget::default(),
 
             mode: ViewMode::Overview,
             dirty: true,
@@ -162,6 +161,28 @@ impl Composer {
         ret
     }
 
+    fn update_draft(&mut self) {
+        let header_values = self.form.values_mut();
+        let draft_header_map = self.draft.headers_mut();
+        /* avoid extra allocations by updating values instead of inserting */
+        for (k, v) in draft_header_map.iter_mut() {
+            if let Some(vn) = header_values.remove(k) {
+                std::mem::swap(v, &mut vn.into_string());
+            }
+        }
+    }
+
+    fn update_form(&mut self) {
+        let old_cursor = self.form.cursor();
+        self.form = FormWidget::new("Save".into());
+        self.form.hide_buttons();
+        self.form.set_cursor(old_cursor);
+        let headers = self.draft.headers();
+        for &k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
+            self.form.push((k.into(), headers[k].to_string()));
+        }
+    }
+
     fn draw_header_table(&mut self, grid: &mut CellBuffer, area: Area) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -170,12 +191,7 @@ impl Composer {
         {
             let (mut x, mut y) = upper_left;
             for &k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
-                let bg_color = match self.cursor {
-                    Cursor::Cc if k == "Cc" => Color::Byte(240),
-                    Cursor::Bcc if k == "Bcc" => Color::Byte(240),
-                    Cursor::To if k == "To" => Color::Byte(240),
-                    _ => Color::Default,
-                };
+                let bg_color = Color::Default;
 
 
                 let update = {
@@ -239,6 +255,7 @@ impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.initialized {
             clear_area(grid, area);
+            self.update_form();
             self.initialized = true;
         }
 
@@ -246,7 +263,7 @@ impl Component for Composer {
         let bottom_right = bottom_right!(area);
 
         let upper_left = set_y(upper_left, get_y(upper_left) + 1);
-        let header_height = 5;
+        let header_height = self.form.len() + 1;
         let width = if width!(area) > 80 && self.reply_context.is_some() {
             width!(area) / 2
         } else {
@@ -309,13 +326,16 @@ impl Component for Composer {
                 "From".into(),
                 get_display_name(context, self.account_cursor),
             );
+        clear_area(grid, body_area);
             self.dirty = false;
         }
 
         /* Regardless of view mode, do the following */
         clear_area(grid, header_area);
-        clear_area(grid, body_area);
+        /*
         self.draw_header_table(grid, header_area);
+        */
+        self.form.draw(grid, header_area, context);
 
         match self.mode {
             ViewMode::Overview | ViewMode::Pager => {
@@ -409,54 +429,11 @@ impl Component for Composer {
             },
             _ => {}
         }
+        if self.form.process_event(event, context) {
+            return true;
+        }
 
         match event.event_type {
-            UIEventType::Input(Key::Up) if self.mode.is_overview() => {
-                match self.cursor {
-                    Cursor::From => {},
-                    Cursor::To => {
-                        self.cursor = Cursor::From;
-                        self.dirty = true;
-                    },
-                    Cursor::Cc => {
-                        self.cursor = Cursor::To;
-                        self.dirty = true;
-                    },
-                    Cursor::Bcc => {
-                        self.cursor = Cursor::Cc;
-                        self.dirty = true;
-                    },
-                    Cursor::Body => {
-                        self.cursor = Cursor::Bcc;
-                        self.dirty = true;
-                    },
-                    _ => {},
-                }
-                return true;
-            },
-            UIEventType::Input(Key::Down) if self.mode.is_overview() => {
-                match self.cursor {
-                    Cursor::From => {
-                        self.cursor = Cursor::To;
-                        self.dirty = true;
-                    },
-                    Cursor::To => {
-                        self.cursor = Cursor::Cc;
-                        self.dirty = true;
-                    },
-                    Cursor::Cc => {
-                        self.cursor = Cursor::Bcc;
-                        self.dirty = true;
-                    },
-                    Cursor::Bcc => {
-                        self.cursor = Cursor::Body;
-                        self.dirty = true;
-                    },
-                    Cursor::Body => {},
-                    _ => {},
-                }
-                return true;
-            },
             UIEventType::Input(Key::Esc) if self.mode.is_selector() => {
                 self.mode = ViewMode::Overview;
                 return true;
@@ -473,6 +450,7 @@ impl Component for Composer {
             UIEventType::Resize => {
                 self.set_dirty();
             },
+            /*
             /* Switch e-mail From: field to the `left` configured account. */
             UIEventType::Input(Key::Left) if self.cursor == Cursor::From => {
                 self.account_cursor = self.account_cursor.saturating_sub(1);
@@ -494,7 +472,13 @@ impl Component for Composer {
                     self.dirty = true;
                 }
                 return true;
-            }
+            }*/
+            UIEventType::Input(Key::Up) => {
+                self.cursor = Cursor::Headers;
+            },
+            UIEventType::Input(Key::Down) => {
+                self.cursor = Cursor::Body;
+            },
             UIEventType::Input(Key::Char(key)) if self.mode.is_discard() => {
                 match (key, &self.mode) {
                     ('x', ViewMode::Discard(u)) => {
@@ -537,15 +521,15 @@ impl Component for Composer {
                 self.set_dirty();
                 return true;
             }
-            UIEventType::Input(Key::Char('e')) => {
-                match self.cursor {
-                    Cursor::Body => {
+            UIEventType::Input(Key::Char('e')) if self.cursor == Cursor::Body => {
                         /* Edit draft in $EDITOR */
                         use std::process::{Command, Stdio};
                         /* Kill input thread so that spawned command can be sole receiver of stdin */
                         {
                             context.input_kill();
                         }
+                        /* update Draft's headers based on form values */
+                        self.update_draft();
                         let mut f =
                             create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
                         //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
@@ -561,12 +545,14 @@ impl Component for Composer {
                         let result = f.read_to_string();
                         self.draft = Draft::from_str(result.as_str()).unwrap();
                         self.pager.update_from_str(self.draft.body());
+                        self.update_form();
                         context.replies.push_back(UIEvent {
                             id: 0,
                             event_type: UIEventType::Fork(ForkType::Finished),
                         });
                         context.restore_input();
-                    },
+                    /*
+
                     Cursor::To | Cursor::Cc | Cursor::Bcc => {
                         let account = &context.accounts[self.account_cursor];
                         let mut entries = account.address_book.values().map(|v| (v.id().as_bytes().to_vec(), v.email().to_string())).collect();
@@ -578,7 +564,7 @@ impl Component for Composer {
                     Cursor::From => {
                         return true;
                     }
-                }
+                    */
                 self.dirty = true;
                 return true;
             }
@@ -592,13 +578,13 @@ impl Component for Composer {
             .reply_context
             .as_ref()
             .map(|(_, p)| p.is_dirty())
-            .unwrap_or(false)
+            .unwrap_or(false) || self.form.is_dirty()
     }
 
     fn set_dirty(&mut self) {
         self.dirty = true;
-        self.initialized = false;
         self.pager.set_dirty();
+        self.form.set_dirty();
         if let Some((_, ref mut view)) = self.reply_context {
             view.set_dirty();
         }
