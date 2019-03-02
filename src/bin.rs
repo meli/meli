@@ -75,6 +75,7 @@ fn main() {
     let xdg_notifications =
         Entity::from(Box::new(ui::components::notifications::XDGNotifications {}));
     state.register_entity(xdg_notifications);
+    state.register_entity(Entity::from(Box::new(ui::components::notifications::NotificationFilter {})));
 
     /* Keep track of the input mode. See ui::UIMode for details */
     'main: loop {

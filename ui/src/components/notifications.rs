@@ -23,6 +23,7 @@
   Notification handling components.
   */
 use notify_rust::Notification as notify_Notification;
+use std::process::{Command, Stdio};
 
 use super::*;
 
@@ -103,4 +104,38 @@ mod tests {
             .show()
             .unwrap();
     }
+}
+
+/// Passes notifications to the OS using the XDG specifications.
+#[derive(Debug)]
+pub struct NotificationFilter {}
+
+impl fmt::Display for NotificationFilter {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // TODO display subject/info
+        write!(f, "")
+    }
+}
+
+impl Component for NotificationFilter {
+    fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if let UIEventType::Notification(ref title, ref body) = event.event_type {
+            if let Some(ref bin) = context.runtime_settings.notifications.script {
+                if let Err(v) = Command::new(bin)
+                    .arg(title
+                         .as_ref()
+                         .map(|v| v.as_str())
+                         .unwrap_or("Event"))
+                        .arg(body)
+                        .stdin(Stdio::piped())
+                        .stdout(Stdio::piped())
+                        .spawn() {
+                            eprintln!("{:?}",v);
+                        }
+            }
+        }
+        false
+    }
+    fn set_dirty(&mut self) {}
 }

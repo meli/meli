@@ -25,6 +25,7 @@ extern crate xdg;
 extern crate bincode;
 
 pub mod pager;
+pub mod notifications;
 
 pub mod accounts;
 pub use self::accounts::Account;
@@ -33,6 +34,7 @@ use self::config::{Config, File, FileFormat};
 use melib::conf::AccountSettings;
 use melib::error::*;
 use pager::PagerSettings;
+use self::notifications::NotificationsSettings;
 
 use self::serde::{de, Deserialize, Deserializer};
 use std::collections::HashMap;
@@ -110,6 +112,7 @@ impl FileAccount {
 struct FileSettings {
     accounts: HashMap<String, FileAccount>,
     pager: PagerSettings,
+    notifications: NotificationsSettings,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -134,6 +137,7 @@ impl AccountConf {
 pub struct Settings {
     pub accounts: HashMap<String, AccountConf>,
     pub pager: PagerSettings,
+    pub notifications: NotificationsSettings,
 }
 
 impl FileSettings {
@@ -179,6 +183,7 @@ impl Settings {
         Settings {
             accounts: s,
             pager: fs.pager,
+            notifications: fs.notifications,
         }
     }
 }
