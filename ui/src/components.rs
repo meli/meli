@@ -45,6 +45,7 @@ use std::fmt;
 use std::fmt::{Debug, Display};
 use std::ops::{Deref, DerefMut};
 
+use fnv::FnvHashMap;
 use uuid::Uuid;
 
 use super::{Key, StatusEvent, UIEvent, UIEventType};
@@ -141,6 +142,8 @@ impl Entity {
     }
 }
 
+pub type ShortcutMap = FnvHashMap<Key, String>;
+
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
 /// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
@@ -153,6 +156,8 @@ pub trait Component: Display + Debug + Send {
     fn set_dirty(&mut self);
     fn kill(&mut self, _id: EntityId) {}
     fn set_id(&mut self, _id: EntityId) {}
+
+    fn get_shortcuts(&self) -> ShortcutMap { Default::default() }
 }
 
 /*

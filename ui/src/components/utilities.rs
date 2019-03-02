@@ -91,12 +91,20 @@ impl Component for HSplit {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         self.top.rcv_event(event, context) || self.bottom.rcv_event(event, context)
     }
+
     fn is_dirty(&self) -> bool {
         self.top.component.is_dirty() || self.bottom.component.is_dirty()
     }
+
     fn set_dirty(&mut self) {
         self.top.component.set_dirty();
         self.bottom.component.set_dirty();
+    }
+
+    fn get_shortcuts(&self) -> ShortcutMap {
+        let mut top_map = self.top.get_shortcuts();
+        top_map.extend(self.bottom.get_shortcuts().into_iter());
+        top_map
     }
 }
 
@@ -175,15 +183,24 @@ impl Component for VSplit {
             .component
             .draw(grid, ((mid + 1, get_y(upper_left)), bottom_right), context);
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         (self.left.rcv_event(event, context) || self.right.rcv_event(event, context))
     }
+
     fn is_dirty(&self) -> bool {
         self.left.component.is_dirty() || self.right.component.is_dirty()
     }
+
     fn set_dirty(&mut self) {
         self.left.component.set_dirty();
         self.right.component.set_dirty();
+    }
+
+    fn get_shortcuts(&self) -> ShortcutMap {
+        let mut right_map = self.right.get_shortcuts();
+        right_map.extend(self.left.get_shortcuts().into_iter());
+        right_map
     }
 }
 
@@ -632,6 +649,10 @@ impl Component for StatusBar {
     fn set_dirty(&mut self) {
         self.dirty = true;
     }
+
+    fn get_shortcuts(&self) -> ShortcutMap {
+        self.container.get_shortcuts()
+    }
 }
 
 // A box with a text content.
@@ -718,6 +739,8 @@ impl Component for Progress {
 pub struct Tabbed {
     children: Vec<Entity>,
     cursor_pos: usize,
+
+    show_shortcuts: bool,
 }
 
 impl Tabbed {
@@ -725,6 +748,7 @@ impl Tabbed {
         Tabbed {
             children: children.into_iter().map(Entity::from).collect(),
             cursor_pos: 0,
+            show_shortcuts: false,
         }
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -791,11 +815,44 @@ impl Component for Tabbed {
         } else {
             self.children[self.cursor_pos].draw(grid, area, context);
         }
+
+        if self.show_shortcuts {
+            let area = (
+                pos_inc(upper_left!(area), (2, 1)), set_x(bottom_right!(area), get_x(bottom_right!(area)).saturating_sub(2)));
+            clear_area(grid, area);
+            create_box(grid, area);
+
+            // TODO: print into a pager
+            for (idx, (k, v)) in self.children[self.cursor_pos].get_shortcuts().into_iter().enumerate() {
+                    let (x, y) = write_string_to_grid(
+                        &format!("{:?}", k),
+                        grid,
+                        Color::Byte(29),
+                        Color::Default,
+                        (pos_inc(upper_left!(area), (2, 1 + idx)), set_x(bottom_right!(area), get_x(bottom_right!(area)).saturating_sub(2))),
+                        false,
+                    );
+                    write_string_to_grid(
+                        &v,
+                        grid,
+                        Color::Default,
+                        Color::Default,
+                        ((x + 2, y), set_x(bottom_right!(area), get_x(bottom_right!(area)).saturating_sub(2))),
+                        false,
+                    );
+            };
+            context.dirty_areas.push_back(area);
+        }
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::Input(Key::Char('T')) => {
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
+                self.set_dirty();
+                return true;
+            }
+            UIEventType::Input(Key::Char('?')) => {
+                self.show_shortcuts = !self.show_shortcuts;
                 self.set_dirty();
                 return true;
             }

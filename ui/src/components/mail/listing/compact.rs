@@ -523,4 +523,21 @@ impl Component for CompactListing {
         }
         self.dirty = true;
     }
+
+    fn get_shortcuts(&self) -> ShortcutMap {
+        let mut map = self.view.as_ref().map(|p| p.get_shortcuts()).unwrap_or(ShortcutMap::default());
+
+        map.insert(Key::Char('\n'), "Open thread.".into());
+        map.insert(Key::PageUp, "Go to previous page.".into());
+        map.insert(Key::PageDown, "Go to next page.".into());
+        map.insert(Key::Char('i'), "Exit thread view.".into());
+        map.insert(Key::Char('J'), "Go to previous folder.".into());
+        map.insert(Key::Char('K'), "Go to next folder.".into());
+        map.insert(Key::Char('h'), "Go to previous account.".into());
+        map.insert(Key::Char('l'), "Go to next account.".into());
+        map.insert(Key::Char('m'), "Start new mail draft in new tab.".into());
+
+        map
+    }
+        
 }

@@ -115,6 +115,14 @@ impl Component for Listing {
             Listing::Threaded(l) => l.set_dirty(),
         }
     }
+
+    fn get_shortcuts(&self) -> ShortcutMap {
+        match self {
+            Listing::Compact(l) => l.get_shortcuts(),
+            Listing::Plain(l) => l.get_shortcuts(),
+            Listing::Threaded(l) => l.get_shortcuts(),
+        }
+    }
 }
 
 impl From<IndexStyle> for Listing {

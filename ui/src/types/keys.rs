@@ -26,7 +26,7 @@ use termion::event::Event as TermionEvent;
 use termion::event::Key as TermionKey;
 use termion::input::TermRead;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Key {
     /// Backspace.
     Backspace,
