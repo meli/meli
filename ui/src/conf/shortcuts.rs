@@ -4,9 +4,10 @@ use fnv::FnvHashMap;
 
 #[macro_export]
 macro_rules! key_values {
-    (derive ($($derives:ident),*) : pub struct $name:ident { $($fname:ident : Key),* }) => {
+    ( $cname:expr, derive ($($derives:ident),*) : pub struct $name:ident { $($fname:ident : Key),* }) => {
         #[derive($($derives),*)]
         #[serde(default)]
+        #[serde(rename = $cname)]
         pub struct $name {
             $($fname : Key),*
         }
@@ -21,7 +22,7 @@ macro_rules! key_values {
     }
 }
 
-key_values!{derive (Debug, Clone, Deserialize) :
+key_values!{ "compact-listing", derive (Debug, Clone, Deserialize) :
 pub struct CompactListingShortcuts {
     open_thread: Key,
     exit_thread: Key,
@@ -40,26 +41,14 @@ impl Default for CompactListingShortcuts {
     fn default() -> Self {
         CompactListingShortcuts {
             open_thread: Key::Char('\n'),
-            exit_thread: Key::PageUp,
-            prev_page: Key::PageDown,
-            next_page: Key::Char('i'),
+            exit_thread: Key::Char('i'),
+            prev_page: Key::PageUp,
+            next_page: Key::PageDown,
             prev_folder: Key::Char('J'),
             next_folder: Key::Char('K'),
             prev_account:Key::Char('h'),
             next_account:Key::Char('l'),
             new_mail: Key::Char('m'),
         }
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_macro() {
-        panic!()
-
-
     }
 }
