@@ -146,7 +146,7 @@ impl Card {
         self.id = new;
     }
     pub fn set_title(&mut self, new: &str) {
-        self.title = new.to_string();()
+        self.title = new.to_string();
     }
     pub fn set_firstname(&mut self, new: &str) {
         self.firstname = new.to_string();
@@ -215,5 +215,11 @@ impl From<FnvHashMap<String, String>> for Card {
         }
         card.extra_properties = map;
         card
+    }
+}
+
+impl Default for Card {
+    fn default() -> Self {
+        Self::new()
     }
 }

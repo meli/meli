@@ -48,7 +48,7 @@ pub trait BytesExt {
 impl BytesExt for [u8] {
     fn rtrim(&self) -> &Self {
         if let Some(last) = self.iter().rposition(|b| !is_whitespace!(*b)) {
-            &self[..last + 1]
+            &self[..=last]
         } else {
             &[]
         }
@@ -155,7 +155,7 @@ pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
     }
     for (i, x) in input.iter().enumerate() {
         if *x == b'\n' && i + 1 < input.len() && input[i + 1] == b'\n' {
-            return IResult::Done(&input[(i + 1)..], &input[0..i + 1]);
+            return IResult::Done(&input[(i + 1)..], &input[0..=i]);
         }
     }
     IResult::Error(error_code!(ErrorKind::Custom(43)))
@@ -383,14 +383,14 @@ fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
             IResult::Done(
                 &input[end..],
                 Address::Mailbox(MailboxAddress {
-                    raw: input[0..end + 1].into(),
+                    raw: input[0..=end].into(),
                     display_name: StrBuilder {
                         offset: 0,
                         length: 0,
                     },
                     address_spec: StrBuilder {
                         offset: 0,
-                        length: input[0..end + 1].len(),
+                        length: input[0..=end].len(),
                     },
                 }),
             )
@@ -517,7 +517,7 @@ fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
     } else {
         for (i, &x) in input.iter().take(input_length).enumerate().skip(1) {
             if x == b'>' {
-                return IResult::Done(&input[i + 1..], &input[0..i + 1]);
+                return IResult::Done(&input[i + 1..], &input[0..=i]);
             }
         }
         IResult::Incomplete(Needed::Unknown)

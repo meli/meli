@@ -72,7 +72,7 @@ impl Backends {
         self.map[key]()
     }
 
-    pub fn register(&mut self, key: String, backend: Box<Fn() -> BackendCreator>) -> () {
+    pub fn register(&mut self, key: String, backend: Box<Fn() -> BackendCreator>) {
         if self.map.contains_key(&key) {
             panic!("{} is an already registered backend", key);
         }
@@ -116,7 +116,7 @@ impl RefreshEventConsumer {
     pub fn new(b: Box<Fn(RefreshEvent) -> ()>) -> Self {
         RefreshEventConsumer(b)
     }
-    pub fn send(&self, r: RefreshEvent) -> () {
+    pub fn send(&self, r: RefreshEvent) {
         self.0(r);
     }
 }
@@ -141,7 +141,7 @@ impl NotifyFn {
     pub fn new(b: Box<Fn() -> ()>) -> Self {
         NotifyFn(b)
     }
-    pub fn notify(&self) -> () {
+    pub fn notify(&self) {
         self.0();
     }
 }
@@ -203,7 +203,7 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn fetch_headers(&mut self) -> Result<&[u8]>;
     fn fetch_body(&mut self) -> Result<&[u8]>;
     fn fetch_flags(&self) -> Flag;
-    fn set_flag(&mut self, &mut Envelope, &Flag) -> Result<()>;
+    fn set_flag(&mut self, &mut Envelope, Flag) -> Result<()>;
 }
 
 /// `BackendOpGenerator` is a wrapper for a closure that returns a `BackendOp` object

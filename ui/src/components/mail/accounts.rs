@@ -19,10 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-mod contacts;
-
-pub use contacts::*;
-
 use super::*;
 use std::fmt;
 

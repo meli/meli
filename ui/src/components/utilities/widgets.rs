@@ -72,7 +72,7 @@ impl Field {
             },
             TextArea(_, _) => {
             },
-            Choice(_, cursor) => {
+            Choice(_, _cursor) => {
 
             }
         }
@@ -80,7 +80,7 @@ impl Field {
 }
 
 impl Component for Field {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, _context: &mut Context) {
             write_string_to_grid(
                 self.as_str(),
                 grid,
@@ -89,7 +89,7 @@ impl Component for Field {
                 area,
                 true);
     }
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::InsertInput(Key::Right) => {
                 match self {
@@ -294,10 +294,8 @@ impl Component for FormWidget {
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if self.focus == FormFocus::Buttons {
-            if self.buttons.process_event(event, context) {
-                return true;
-            }
+        if self.focus == FormFocus::Buttons && self.buttons.process_event(event, context) {
+            return true;
         }
 
         match event.event_type {
@@ -341,7 +339,7 @@ impl Component for FormWidget {
             UIEventType::ChangeMode(UIMode::Normal) if self.focus == FormFocus::TextInput => {
                 self.focus = FormFocus::Fields;
             },
-            UIEventType::InsertInput(Key::Char(k)) if self.focus == FormFocus::TextInput => {
+            UIEventType::InsertInput(Key::Char(_)) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
             },
@@ -402,14 +400,13 @@ impl<T> ButtonWidget<T> where T: std::fmt::Debug + Default + Send {
 
 
 impl<T> Component for ButtonWidget<T> where T: std::fmt::Debug + Default + Send {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, _context: &mut Context) {
         let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
 
             let mut len = 0;
         for (i, k) in self.layout.iter().enumerate() {
             let cur_len = k.len();
-            let (x, y) = write_string_to_grid(
+            write_string_to_grid(
                 k.as_str(),
                 grid,
                 Color::Default,
@@ -420,7 +417,7 @@ impl<T> Component for ButtonWidget<T> where T: std::fmt::Debug + Default + Send 
             len += cur_len + 3;
         }
     }
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::Input(Key::Char('\n')) => {
                 self.result = Some(self.buttons.remove(&self.layout[self.cursor]).unwrap_or_default());

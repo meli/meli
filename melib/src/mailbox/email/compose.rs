@@ -6,7 +6,7 @@ use std::str;
 mod random;
 mod mime;
 
-use self::mime::*;
+//use self::mime::*;
 
 use super::parser;
 

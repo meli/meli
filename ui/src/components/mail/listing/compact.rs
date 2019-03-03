@@ -525,7 +525,7 @@ impl Component for CompactListing {
     }
 
     fn get_shortcuts(&self) -> ShortcutMap {
-        let mut map = self.view.as_ref().map(|p| p.get_shortcuts()).unwrap_or(ShortcutMap::default());
+        let mut map = self.view.as_ref().map(|p| p.get_shortcuts()).unwrap_or_default();
 
         map.insert(Key::Char('\n'), "Open thread.".into());
         map.insert(Key::PageUp, "Go to previous page.".into());

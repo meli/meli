@@ -512,16 +512,14 @@ impl Threads {
                     remove_from_parent!(thread_nodes, idx);
                     remove_from_parent!(thread_nodes, child);
                     return true; // Pruned
-                } else {
-                    if let Some(p) = thread_nodes[idx].parent {
-                        let orphans = thread_nodes[idx].children.clone();
-                        for c in orphans {
-                            make!((p) parent of (c), thread_nodes);
-                        }
-                        remove_from_parent!(thread_nodes, idx);
-                        thread_nodes[idx].children.clear();
-                        return true; // Pruned
+                } else if let Some(p) = thread_nodes[idx].parent {
+                    let orphans = thread_nodes[idx].children.clone();
+                    for c in orphans {
+                        make!((p) parent of (c), thread_nodes);
                     }
+                    remove_from_parent!(thread_nodes, idx);
+                    thread_nodes[idx].children.clear();
+                    return true; // Pruned
                 }
             }
 

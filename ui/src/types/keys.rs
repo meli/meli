@@ -201,7 +201,7 @@ derive_csi_sequence!("End Bracketed Paste Mode", BracketModeEnd, "?2003l");
 pub const BRACKET_PASTE_START: &[u8] = b"\x1B[200~";
 pub const BRACKET_PASTE_END: &[u8] = b"\x1B[201~";
 
-const FIELDS: &'static [&'static str] = &[];
+const FIELDS: &[&str] = &[];
 
 
 impl<'de> Deserialize<'de> for Key {

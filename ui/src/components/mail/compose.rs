@@ -29,7 +29,7 @@ use std::str::FromStr;
 enum Cursor {
     Headers,
     Body,
-    Attachments,
+    //Attachments,
 }
 
 #[derive(Debug)]
@@ -71,7 +71,7 @@ impl Default for Composer {
 enum ViewMode {
     Discard(Uuid),
     Pager,
-    Selector(Selector),
+    //Selector(Selector),
     Overview,
 }
 
@@ -94,14 +94,6 @@ impl ViewMode {
 
     fn is_pager(&self) -> bool {
         if let ViewMode::Pager = self {
-            true
-        } else {
-            false
-        }
-    }
-
-    fn is_selector(&self) -> bool {
-        if let ViewMode::Selector(_) = self {
             true
         } else {
             false
@@ -183,34 +175,7 @@ impl Composer {
         }
     }
 
-    fn draw_header_table(&mut self, grid: &mut CellBuffer, area: Area) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-
-        let headers = self.draft.headers();
-        {
-            let (mut x, mut y) = upper_left;
-            for &k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
-                let bg_color = Color::Default;
-
-
-                let update = {
-                    let (x, y) = write_string_to_grid(
-                        k,
-                        grid,
-                        Color::Default,
-                        bg_color,
-                        ((x, y), set_y(bottom_right, y)),
-                        true,
-                    );
-                    let (x, y) = write_string_to_grid(
-                        ": ",
-                        grid,
-                        Color::Default,
-                        bg_color,
-                        ((x, y), set_y(bottom_right, y)),
-                        true,
-                    );
+    /*
                     let (x, y) = if k == "From" {
                         write_string_to_grid(
                             "◀ ",
@@ -240,15 +205,7 @@ impl Composer {
                             ((x, y), set_y(bottom_right, y)),
                             true,
                         )
-                    } else {
-                        (x, y)
-                    }
-                };
-                x = get_x(upper_left);
-                y = update.1 + 1;
-            }
-        }
-    }
+                        */
 }
 
 impl Component for Composer {
@@ -341,9 +298,6 @@ impl Component for Composer {
             ViewMode::Overview | ViewMode::Pager => {
                 self.pager.draw(grid, body_area, context);
             },
-            ViewMode::Selector(ref mut s) => {
-                s.draw(grid, body_area, context);
-            },
             ViewMode::Discard(_) => {
                 /* Let user choose whether to quit with/without saving or cancel */
                 let mid_x = width!(area) / 2;
@@ -421,12 +375,6 @@ impl Component for Composer {
                     return true;
                 }
             },
-            (ViewMode::Selector(ref mut s), _) => {
-                if s.process_event(event, context) {
-                    self.dirty = true;
-                    return true;
-                }
-            },
             _ => {}
         }
         if self.form.process_event(event, context) {
@@ -434,19 +382,6 @@ impl Component for Composer {
         }
 
         match event.event_type {
-            UIEventType::Input(Key::Esc) if self.mode.is_selector() => {
-                self.mode = ViewMode::Overview;
-                return true;
-            },
-            UIEventType::Input(Key::Char('\n')) if self.mode.is_selector() => {
-                let mut old_mode = std::mem::replace(&mut self.mode, ViewMode::Overview);
-                if let ViewMode::Selector(s) = old_mode {
-                    eprintln!("collected {:?}", s.collect());
-                } else {
-                    unreachable!()
-                }
-                return true;
-            },
             UIEventType::Resize => {
                 self.set_dirty();
             },

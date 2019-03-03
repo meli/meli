@@ -397,7 +397,7 @@ impl Component for Pager {
         }
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match event.event_type {
             UIEventType::Input(Key::Char('k')) => {
                 if self.cursor_pos > 0 {
@@ -937,7 +937,7 @@ impl Component for Selector {
         );
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         let (width, height) = self.content.size();
         match event.event_type {
             UIEventType::Input(Key::Char(' ')) => {

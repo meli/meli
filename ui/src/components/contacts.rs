@@ -28,10 +28,10 @@ pub use self::contact_list::*;
 
 #[derive(Debug)]
 enum ViewMode {
-    ReadOnly,
+    //ReadOnly,
     Read,
-    Edit,
-    New,
+    //Edit,
+    //New,
 }
 
 #[derive(Debug)]
@@ -69,9 +69,9 @@ impl fmt::Display for ContactManager {
 
 impl ContactManager {
     fn initialize(&mut self) {
-        let (width, height) = self.content.size();
+        let (width, _) = self.content.size();
 
-        let (x, y) = write_string_to_grid(
+        let (x, _) = write_string_to_grid(
             "Contact Name  ",
             &mut self.content,
             Color::Byte(33),
@@ -79,7 +79,7 @@ impl ContactManager {
             ((0, 0), (width, 0)),
             false,
             );
-        let (x, y) = write_string_to_grid(
+        let (x, _) = write_string_to_grid(
             "Last edited: ",
             &mut self.content,
             Color::Byte(250),
@@ -87,7 +87,7 @@ impl ContactManager {
             ((x, 0), (width, 0)),
             false,
             );
-        let (x, y) = write_string_to_grid(
+        write_string_to_grid(
             &self.card.last_edited(),
             &mut self.content,
             Color::Byte(250),
@@ -115,7 +115,7 @@ impl Component for ContactManager {
             self.initialized = true;
         }
         clear_area(grid, area);
-        let (width, height) = self.content.size();
+        let (width, _height) = self.content.size();
         copy_area(grid, &self.content, area, ((0, 0), (width - 1, 0)));
 
         let upper_left = upper_left!(area);

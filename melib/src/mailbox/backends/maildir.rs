@@ -123,7 +123,7 @@ impl<'a> BackendOp for MaildirOp {
         flag
     }
 
-    fn set_flag(&mut self, envelope: &mut Envelope, f: &Flag) -> Result<()> {
+    fn set_flag(&mut self, envelope: &mut Envelope, f: Flag) -> Result<()> {
         let path = self.path();
         let path = path.to_str().unwrap(); // Assume UTF-8 validity
         let idx: usize = path
@@ -132,10 +132,10 @@ impl<'a> BackendOp for MaildirOp {
             + 3;
         let mut new_name: String = path[..idx].to_string();
         let mut flags = self.fetch_flags();
-        if !(flags & *f).is_empty() {
+        if !(flags & f).is_empty() {
             return Ok(());
         }
-        flags.toggle(*f);
+        flags.toggle(f);
         if !(flags & Flag::DRAFT).is_empty() {
             new_name.push('D');
         }

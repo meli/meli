@@ -616,22 +616,22 @@ impl Envelope {
     pub fn message_id_raw(&self) -> Cow<str> {
         String::from_utf8_lossy(self.message_id.raw())
     }
-    fn set_date(&mut self, new_val: &[u8]) -> () {
+    fn set_date(&mut self, new_val: &[u8])  {
         self.date = String::from_utf8_lossy(new_val).into_owned();
     }
-    fn set_bcc(&mut self, new_val: Vec<Address>) -> () {
+    fn set_bcc(&mut self, new_val: Vec<Address>)  {
         self.bcc = new_val;
     }
-    fn set_cc(&mut self, new_val: Vec<Address>) -> () {
+    fn set_cc(&mut self, new_val: Vec<Address>)  {
         self.cc = new_val;
     }
-    fn set_from(&mut self, new_val: Vec<Address>) -> () {
+    fn set_from(&mut self, new_val: Vec<Address>)  {
         self.from = new_val;
     }
-    fn set_to(&mut self, new_val: Vec<Address>) -> () {
+    fn set_to(&mut self, new_val: Vec<Address>)  {
         self.to = new_val;
     }
-    fn set_in_reply_to(&mut self, new_val: &[u8]) -> () {
+    fn set_in_reply_to(&mut self, new_val: &[u8])  {
         let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
             Err(_) => {
@@ -641,10 +641,10 @@ impl Envelope {
         };
         self.in_reply_to = Some(MessageID::new(new_val, slice));
     }
-    fn set_subject(&mut self, new_val: Vec<u8>) -> () {
+    fn set_subject(&mut self, new_val: Vec<u8>)  {
         self.subject = Some(new_val);
     }
-    fn set_message_id(&mut self, new_val: &[u8]) -> () {
+    fn set_message_id(&mut self, new_val: &[u8])  {
         let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
             Err(_) => {
@@ -653,7 +653,7 @@ impl Envelope {
         };
         self.message_id = MessageID::new(new_val, slice);
     }
-    fn push_references(&mut self, new_val: &[u8]) -> () {
+    fn push_references(&mut self, new_val: &[u8])  {
         let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
             Err(_) => {
@@ -685,7 +685,7 @@ impl Envelope {
             }
         }
     }
-    fn set_references(&mut self, new_val: &[u8]) -> () {
+    fn set_references(&mut self, new_val: &[u8])  {
         match self.references {
             Some(ref mut s) => {
                 s.raw = new_val.into();
@@ -713,14 +713,14 @@ impl Envelope {
     pub fn thread(&self) -> usize {
         self.thread
     }
-    pub fn set_thread(&mut self, new_val: usize) -> () {
+    pub fn set_thread(&mut self, new_val: usize)  {
         self.thread = new_val;
     }
-    pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) -> () {
+    pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>)  {
         self.timestamp = new_val.timestamp() as UnixTimestamp;
     }
     pub fn set_flag(&mut self, f: Flag, mut operation: Box<BackendOp>) -> Result<()> {
-        operation.set_flag(self, &f)?;
+        operation.set_flag(self, f)?;
         self.flags |= f;
         Ok(())
     }
