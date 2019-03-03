@@ -18,7 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-
+extern crate serde;
 #[macro_use]
 mod position;
 #[macro_use]
@@ -39,6 +39,8 @@ use std;
 use std::fmt;
 use std::thread;
 use uuid::Uuid;
+use self::serde::{de, Deserialize, Deserializer, };
+use self::serde::de::Visitor;
 
 #[derive(Debug)]
 pub enum StatusEvent {

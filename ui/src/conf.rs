@@ -26,10 +26,13 @@ extern crate bincode;
 
 pub mod pager;
 pub mod notifications;
+pub mod shortcuts;
 
 pub mod accounts;
 pub use self::accounts::Account;
+pub use self::shortcuts::*;
 use self::config::{Config, File, FileFormat};
+
 
 use melib::conf::AccountSettings;
 use melib::error::*;
@@ -113,6 +116,7 @@ struct FileSettings {
     accounts: HashMap<String, FileAccount>,
     pager: PagerSettings,
     notifications: NotificationsSettings,
+    shortcuts: CompactListingShortcuts,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -138,6 +142,7 @@ pub struct Settings {
     pub accounts: HashMap<String, AccountConf>,
     pub pager: PagerSettings,
     pub notifications: NotificationsSettings,
+    pub shortcuts: CompactListingShortcuts,
 }
 
 impl FileSettings {
@@ -184,6 +189,7 @@ impl Settings {
             accounts: s,
             pager: fs.pager,
             notifications: fs.notifications,
+            shortcuts: fs.shortcuts,
         }
     }
 }
