@@ -67,6 +67,7 @@ pub struct Account {
 
 impl Drop for Account {
     fn drop(&mut self) {
+        //TODO: Avoid panics
         let data_dir =
             xdg::BaseDirectories::with_profile("meli", &self.name)
                 .unwrap();
@@ -79,7 +80,7 @@ impl Drop for Account {
                 }
             };
             let writer = io::BufWriter::new(f);
-            bincode::serialize_into(writer, &self.address_book).unwrap();
+            serde_json::to_writer(writer, &self.address_book).unwrap();
         };
     }
 }
@@ -104,7 +105,7 @@ impl Account {
         let address_book = if let Ok(data) = data_dir.place_data_file("addressbook") {
             if data.exists() {
                 let reader = io::BufReader::new(fs::File::open(data).unwrap());
-                let result: result::Result<AddressBook, _> = bincode::deserialize_from(reader);
+                let result: result::Result<AddressBook, _> = serde_json::from_reader(reader);
                 if let Ok(mut data_t) = result {
                     data_t
                 } else {
