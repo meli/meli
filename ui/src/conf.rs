@@ -116,7 +116,7 @@ struct FileSettings {
     accounts: HashMap<String, FileAccount>,
     pager: PagerSettings,
     notifications: NotificationsSettings,
-    shortcuts: CompactListingShortcuts,
+    shortcuts: Shortcuts,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -142,7 +142,7 @@ pub struct Settings {
     pub accounts: HashMap<String, AccountConf>,
     pub pager: PagerSettings,
     pub notifications: NotificationsSettings,
-    pub shortcuts: CompactListingShortcuts,
+    pub shortcuts: Shortcuts,
 }
 
 impl FileSettings {

@@ -130,8 +130,9 @@ impl Component for ContactList {
                 return true;
             }
         }
+        let shortcuts = self.get_shortcuts(context);
         match event.event_type {
-            UIEventType::Input(Key::Char('c')) => {
+            UIEventType::Input(ref key) if *key == shortcuts["create_contact"] => {
                 let mut manager = ContactManager::default();
                 manager.account_pos = self.account_pos;
                 let entity = Entity::from(Box::new(manager));
@@ -141,7 +142,8 @@ impl Component for ContactList {
                 
                 return true;
             },
-            UIEventType::Input(Key::Char('e')) if self.length > 0 => {
+            
+            UIEventType::Input(ref key) if *key == shortcuts["edit_contact"] && self.length > 0 => {
                 let account = &mut context.accounts[self.account_pos];
                 let book = &mut account.address_book;
                 let card = book[&self.id_positions[self.cursor_pos]].clone();
@@ -201,5 +203,14 @@ impl Component for ContactList {
 
     fn kill(&mut self, uuid: Uuid) {
         self.mode = ViewMode::Close(uuid);
+    }
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        let mut map = self.view.as_ref().map(|p| p.get_shortcuts(context)).unwrap_or_default();
+
+        let config_map = context.settings.shortcuts.contact_list.key_values();
+        map.insert("create_contact", (*config_map["create_contact"]).clone());
+        map.insert("edit_contact", (*config_map["edit_contact"]).clone());
+
+        map
     }
 }

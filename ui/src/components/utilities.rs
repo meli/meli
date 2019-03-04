@@ -101,9 +101,9 @@ impl Component for HSplit {
         self.bottom.component.set_dirty();
     }
 
-    fn get_shortcuts(&self) -> ShortcutMap {
-        let mut top_map = self.top.get_shortcuts();
-        top_map.extend(self.bottom.get_shortcuts().into_iter());
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        let mut top_map = self.top.get_shortcuts(context);
+        top_map.extend(self.bottom.get_shortcuts(context).into_iter());
         top_map
     }
 }
@@ -197,9 +197,9 @@ impl Component for VSplit {
         self.right.component.set_dirty();
     }
 
-    fn get_shortcuts(&self) -> ShortcutMap {
-        let mut right_map = self.right.get_shortcuts();
-        right_map.extend(self.left.get_shortcuts().into_iter());
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        let mut right_map = self.right.get_shortcuts(context);
+        right_map.extend(self.left.get_shortcuts(context).into_iter());
         right_map
     }
 }
@@ -397,25 +397,26 @@ impl Component for Pager {
         }
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        let shortcuts = self.get_shortcuts(context);
         match event.event_type {
-            UIEventType::Input(Key::Char('k')) => {
+            UIEventType::Input(ref key) if *key == shortcuts["scroll_up"] => {
                 if self.cursor_pos > 0 {
                     self.cursor_pos -= 1;
                     self.dirty = true;
                 }
             }
-            UIEventType::Input(Key::Char('j')) => {
+            UIEventType::Input(ref key) if *key == shortcuts["scroll_down"] => {
                 if self.height > 0 && self.cursor_pos + 1 < self.height {
                     self.cursor_pos += 1;
                     self.dirty = true;
                 }
             }
-            UIEventType::Input(Key::PageUp) => {
+            UIEventType::Input(ref key) if *key == shortcuts["page_up"] => {
                 self.movement = Some(PageMovement::PageUp);
                 self.dirty = true;
             }
-            UIEventType::Input(Key::PageDown) => {
+            UIEventType::Input(ref key) if *key == shortcuts["page_down"] => {
                 self.movement = Some(PageMovement::PageDown);
                 self.dirty = true;
             }
@@ -439,6 +440,17 @@ impl Component for Pager {
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
+    }
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        let mut map = FnvHashMap::with_capacity_and_hasher(4, Default::default());
+
+        let config_map = context.settings.shortcuts.pager.key_values();
+        map.insert("scroll_up", (*config_map["scroll_up"]).clone());
+        map.insert("scroll_down", (*config_map["scroll_down"]).clone());
+        map.insert("page_up", (*config_map["page_up"]).clone());
+        map.insert("page_down", (*config_map["page_down"]).clone());
+
+        map
     }
 }
 
@@ -650,8 +662,8 @@ impl Component for StatusBar {
         self.dirty = true;
     }
 
-    fn get_shortcuts(&self) -> ShortcutMap {
-        self.container.get_shortcuts()
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        self.container.get_shortcuts(context)
     }
 }
 
@@ -823,9 +835,9 @@ impl Component for Tabbed {
             create_box(grid, area);
 
             // TODO: print into a pager
-            for (idx, (k, v)) in self.children[self.cursor_pos].get_shortcuts().into_iter().enumerate() {
+            for (idx, (k, v)) in self.children[self.cursor_pos].get_shortcuts(context).into_iter().enumerate() {
                     let (x, y) = write_string_to_grid(
-                        &format!("{:?}", k),
+                        &k,
                         grid,
                         Color::Byte(29),
                         Color::Default,
@@ -833,7 +845,7 @@ impl Component for Tabbed {
                         false,
                     );
                     write_string_to_grid(
-                        &v,
+                        &format!("{:?}", v),
                         grid,
                         Color::Default,
                         Color::Default,

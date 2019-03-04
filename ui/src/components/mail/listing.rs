@@ -116,11 +116,11 @@ impl Component for Listing {
         }
     }
 
-    fn get_shortcuts(&self) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
         match self {
-            Listing::Compact(l) => l.get_shortcuts(),
-            Listing::Plain(l) => l.get_shortcuts(),
-            Listing::Threaded(l) => l.get_shortcuts(),
+            Listing::Compact(l) => l.get_shortcuts(context),
+            Listing::Plain(l) => l.get_shortcuts(context),
+            Listing::Threaded(l) => l.get_shortcuts(context),
         }
     }
 }

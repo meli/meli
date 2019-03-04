@@ -142,7 +142,7 @@ impl Entity {
     }
 }
 
-pub type ShortcutMap = FnvHashMap<Key, String>;
+pub type ShortcutMap = FnvHashMap<&'static str, Key>;
 
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
@@ -157,7 +157,7 @@ pub trait Component: Display + Debug + Send {
     fn kill(&mut self, _id: EntityId) {}
     fn set_id(&mut self, _id: EntityId) {}
 
-    fn get_shortcuts(&self) -> ShortcutMap { Default::default() }
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap { Default::default() }
 }
 
 /*

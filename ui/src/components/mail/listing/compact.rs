@@ -387,6 +387,8 @@ impl Component for CompactListing {
                 return true;
             }
         }
+
+        let shortcuts = self.get_shortcuts(context);
         match event.event_type {
             UIEventType::Input(Key::Up) => {
                 if self.cursor_pos.2 > 0 {
@@ -402,20 +404,20 @@ impl Component for CompactListing {
                 }
                 return true;
             }
-            UIEventType::Input(Key::Char('\n')) if !self.unfocused => {
+            UIEventType::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
                 self.unfocused = true;
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Input(Key::PageUp) => {
+            UIEventType::Input(ref key) if *key == shortcuts["prev_page"] => {
                 self.movement = Some(PageMovement::PageUp);
                 self.set_dirty();
             }
-            UIEventType::Input(Key::PageDown) => {
+            UIEventType::Input(ref key) if *key == shortcuts["next_page"] => {
                 self.movement = Some(PageMovement::PageDown);
                 self.set_dirty();
             }
-            UIEventType::Input(Key::Char('i')) if self.unfocused => {
+            UIEventType::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
                 self.unfocused = false;
                 self.dirty = true;
                 self.view = None;
@@ -524,18 +526,19 @@ impl Component for CompactListing {
         self.dirty = true;
     }
 
-    fn get_shortcuts(&self) -> ShortcutMap {
-        let mut map = self.view.as_ref().map(|p| p.get_shortcuts()).unwrap_or_default();
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        let mut map = self.view.as_ref().map(|p| p.get_shortcuts(context)).unwrap_or_default();
 
-        map.insert(Key::Char('\n'), "Open thread.".into());
-        map.insert(Key::PageUp, "Go to previous page.".into());
-        map.insert(Key::PageDown, "Go to next page.".into());
-        map.insert(Key::Char('i'), "Exit thread view.".into());
-        map.insert(Key::Char('J'), "Go to previous folder.".into());
-        map.insert(Key::Char('K'), "Go to next folder.".into());
-        map.insert(Key::Char('h'), "Go to previous account.".into());
-        map.insert(Key::Char('l'), "Go to next account.".into());
-        map.insert(Key::Char('m'), "Start new mail draft in new tab.".into());
+        let config_map = context.settings.shortcuts.compact_listing.key_values();
+        map.insert("open_thread", if let Some(key) = config_map.get("open_thread") { (*key).clone() } else { Key::Char('\n') });
+        map.insert("prev_page", if let Some(key) = config_map.get("prev_page") { (*key).clone() } else { Key::PageUp });
+        map.insert("next_page", if let Some(key) = config_map.get("next_page") { (*key).clone() } else { Key::PageDown });
+        map.insert("exit_thread", if let Some(key) = config_map.get("exit_thread") { (*key).clone() } else { Key::Char('i') });
+        map.insert("prev_folder", if let Some(key) = config_map.get("prev_folder") { (*key).clone() } else { Key::Char('J') });
+        map.insert("next_folder", if let Some(key) = config_map.get("next_folder") { (*key).clone() } else { Key::Char('K') });
+        map.insert("prev_account", if let Some(key) = config_map.get("prev_account") { (*key).clone() } else { Key::Char('h') });
+        map.insert("next_account", if let Some(key) = config_map.get("next_account") { (*key).clone() } else { Key::Char('l') });
+        map.insert("new_mail", if let Some(key) = config_map.get("new_mail") { (*key).clone() } else { Key::Char('m') });
 
         map
     }
