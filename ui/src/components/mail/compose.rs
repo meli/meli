@@ -170,8 +170,16 @@ impl Composer {
         self.form.hide_buttons();
         self.form.set_cursor(old_cursor);
         let headers = self.draft.headers();
+        let account_cursor = self.account_cursor;
         for &k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
-            self.form.push((k.into(), headers[k].to_string()));
+            if k == "To" {
+                self.form.push_cl((k.into(), headers[k].to_string(), Box::new(move |c, term| {
+                    let book: &AddressBook = &c.accounts[account_cursor].address_book;
+                    let results: Vec<String> = book.search(term);
+                results})));
+            } else {
+                self.form.push((k.into(), headers[k].to_string()));
+            }
         }
     }
 
@@ -211,10 +219,10 @@ impl Composer {
 impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.initialized {
-            clear_area(grid, area);
             self.update_form();
             self.initialized = true;
         }
+        clear_area(grid, area);
 
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);

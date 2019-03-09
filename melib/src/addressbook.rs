@@ -73,6 +73,9 @@ impl AddressBook {
     pub fn card_exists(&self, card_id: CardId) -> bool {
         self.cards.contains_key(&card_id)
     }
+    pub fn search(&self, term: &str) -> Vec<String> {
+        self.cards.values().filter(|c| c.email.contains(term)).map(|c| c.email.clone()).collect()
+    }
 }
 
 impl Deref for AddressBook {

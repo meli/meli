@@ -132,7 +132,7 @@ impl Component for ContactManager {
                     let mut fields = std::mem::replace(&mut self.form, FormWidget::default()).collect().unwrap();
                     let fields: FnvHashMap<String, String> = fields.into_iter().map(|(s, v)| {
                         (s, match v {
-                            Field::Text(v, _) | Field::TextArea(v, _) => v,
+                            Field::Text(v, _, _) | Field::TextArea(v, _) => v,
                             Field::Choice(mut v, c) => v.remove(c),
                         })}).collect();
                     let mut new_card = Card::from(fields);

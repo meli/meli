@@ -177,6 +177,13 @@ impl CellBuffer {
     pub fn is_empty(&self) -> bool {
         self.buf.is_empty()
     }
+
+    pub fn empty(&mut self) {
+        self.buf.clear();
+        self.cols = 0;
+        self.rows = 0;
+    }
+
 }
 
 impl HasSize for CellBuffer {

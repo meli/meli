@@ -161,6 +161,12 @@ pub type Size = (usize, usize);
 
 pub trait HasSize {
     fn size(&self) -> Size;
+    fn cols(&self) -> usize {
+        self.size().0
+    }
+    fn rows(&self) -> usize {
+        self.size().1
+    }
 }
 
 pub trait HasPosition {
