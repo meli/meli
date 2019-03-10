@@ -291,19 +291,15 @@ impl Component for Composer {
                 "From".into(),
                 get_display_name(context, self.account_cursor),
             );
-        clear_area(grid, body_area);
             self.dirty = false;
         }
 
         /* Regardless of view mode, do the following */
-        clear_area(grid, header_area);
-        /*
-        self.draw_header_table(grid, header_area);
-        */
         self.form.draw(grid, header_area, context);
 
         match self.mode {
             ViewMode::Overview | ViewMode::Pager => {
+                self.pager.set_dirty();
                 self.pager.draw(grid, body_area, context);
             },
             ViewMode::Discard(_) => {
