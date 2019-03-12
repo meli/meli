@@ -1,4 +1,4 @@
-use types::Key;
+use terminal::Key;
 //use std::any::TypeId;
 use fnv::FnvHashMap;
 

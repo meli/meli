@@ -730,6 +730,44 @@ pub fn write_string_to_grid(
     (x, y)
 }
 
+// TODO UTF-8 incompatible
+pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
+    let mut ret: Vec<&str> = Vec::with_capacity(16);
+    loop {
+        if s.is_empty() {
+            break;
+        }
+        s = s.trim_start_matches(|c| c == ' ');
+        if s.starts_with("\n") {
+            ret.push(&s[0..0]);
+            s = &s["\n".len()..];
+            continue;
+        }
+        if let Some(next_idx) = s.as_bytes().iter().position(|&c| c == b'\n') {
+            if next_idx <= width {
+                ret.push(&s[..next_idx]);
+                s = &s[next_idx + 1..];
+                continue;
+            }
+        }
+        if s.len() > width {
+            if let Some(next_idx) = s.as_bytes()[..width].iter().rposition(u8::is_ascii_whitespace) {
+                ret.push(&s[..next_idx]);
+                s = &s[next_idx + 1..];
+            } else {
+                ret.push(&s[..width]);
+                s = &s[width..];
+            }
+        } else {
+            ret.push(s);
+            break;
+        }
+
+    }
+
+    ret
+}
+
 /// Completely clear an `Area` with an empty char and the terminal's default colors.
 pub fn clear_area(grid: &mut CellBuffer, area: Area) {
     if !is_valid_area!(area) {

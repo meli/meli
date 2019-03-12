@@ -18,53 +18,18 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-
-/*!
- * This library exports the public types and methods of its modules
- */
-
-extern crate melib;
-extern crate mime_apps;
-extern crate notify_rust;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate chan;
-extern crate chan_signal;
-extern crate linkify;
-extern crate uuid;
-
-extern crate fnv;
-extern crate termion;
+extern crate serde;
+use self::serde::{de, Deserialize, Deserializer, };
+use self::serde::de::Visitor;
 
 #[macro_use]
-extern crate nom;
-
-extern crate serde_json;
-
-use melib::*;
-use std::collections::VecDeque;
-
+mod position;
 #[macro_use]
-mod types;
-pub use types::*;
-
+mod cells;
 #[macro_use]
-mod terminal;
-pub use terminal::*;
-
-#[macro_use]
-mod execute;
-use execute::*;
-
-pub mod state;
-pub use state::*;
-
-pub mod components;
-pub use components::*;
-
-pub mod conf;
-pub use conf::*;
-
-pub mod workers;
-pub use workers::*;
+mod keys;
+mod wcwidth;
+pub use self::cells::*;
+pub use self::keys::*;
+pub use self::position::*;
+pub use self::wcwidth::*;

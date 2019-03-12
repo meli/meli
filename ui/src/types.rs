@@ -20,27 +20,17 @@
  */
 extern crate serde;
 #[macro_use]
-mod position;
-#[macro_use]
-mod cells;
-#[macro_use]
 mod helpers;
-#[macro_use]
-mod keys;
-pub use self::cells::*;
 pub use self::helpers::*;
-pub use self::keys::*;
-pub use self::position::*;
 
 use super::execute::Action;
+use super::terminal::*;
 
 use melib::RefreshEvent;
 use std;
 use std::fmt;
 use std::thread;
 use uuid::Uuid;
-use self::serde::{de, Deserialize, Deserializer, };
-use self::serde::de::Visitor;
 
 #[derive(Debug)]
 pub enum StatusEvent {
