@@ -35,7 +35,6 @@ impl fmt::Display for AccountsPanel {
     }
 }
 
-
 impl Component for AccountsPanel {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
@@ -46,26 +45,26 @@ impl Component for AccountsPanel {
                 Color::Default,
                 ((2, 3), (120 - 1, 3)),
                 true,
-                );
+            );
 
             for (i, a) in context.accounts.iter().enumerate() {
-                create_box(&mut self.content, ((2,5+i*10 ), (120-1, 15+i*10)));
+                create_box(&mut self.content, ((2, 5 + i * 10), (120 - 1, 15 + i * 10)));
                 let (x, y) = write_string_to_grid(
                     a.name(),
                     &mut self.content,
                     Color::Default,
                     Color::Default,
-                    ((3, 5 + i*10), (120 - 2, 5 + i*10)),
+                    ((3, 5 + i * 10), (120 - 2, 5 + i * 10)),
                     true,
-                    );
+                );
                 write_string_to_grid(
                     " ▒██▒ ",
                     &mut self.content,
                     Color::Byte(32),
                     Color::Default,
-                    ((x, y), (120 - 2, 5 + i*10)),
+                    ((x, y), (120 - 2, 5 + i * 10)),
                     true,
-                    );
+                );
                 write_string_to_grid(
                     &a.runtime_settings.account().identity,
                     &mut self.content,
@@ -73,10 +72,10 @@ impl Component for AccountsPanel {
                     Color::Default,
                     ((4, y + 2), (120 - 2, y + 2)),
                     true,
-                    );
+                );
                 if i == self.cursor {
                     for h in 1..8 {
-                        self.content[(2, h+y+1)].set_ch('*');
+                        self.content[(2, h + y + 1)].set_ch('*');
                     }
                 }
                 write_string_to_grid(
@@ -86,7 +85,7 @@ impl Component for AccountsPanel {
                     Color::Default,
                     ((5, y + 3), (120 - 2, y + 3)),
                     true,
-                    );
+                );
                 write_string_to_grid(
                     "- Contacts",
                     &mut self.content,
@@ -94,7 +93,7 @@ impl Component for AccountsPanel {
                     Color::Default,
                     ((5, y + 4), (120 - 2, y + 4)),
                     true,
-                    );
+                );
                 write_string_to_grid(
                     "- Mailing Lists",
                     &mut self.content,
@@ -102,10 +101,7 @@ impl Component for AccountsPanel {
                     Color::Default,
                     ((5, y + 5), (120 - 2, y + 5)),
                     true,
-                    );
-
-                
-
+                );
             }
             self.dirty = false;
         }
@@ -121,22 +117,24 @@ impl Component for AccountsPanel {
                 self.cursor = self.cursor.saturating_sub(1);
                 self.dirty = true;
                 return true;
-            },
+            }
             UIEventType::Input(Key::Down) => {
                 if self.cursor + 1 < context.accounts.len() {
                     self.cursor += 1;
                     self.dirty = true;
                 }
                 return true;
-            },
+            }
             UIEventType::Input(Key::Char('\n')) => {
                 context.replies.push_back(UIEvent {
                     id: 0,
-                    event_type: UIEventType::Action(Tab(TabOpen(Some(Box::new(ContactList::for_account(self.cursor)))
-                    )))});
+                    event_type: UIEventType::Action(Tab(TabOpen(Some(Box::new(
+                        ContactList::for_account(self.cursor),
+                    ))))),
+                });
                 return true;
-            },
-            _ => {},
+            }
+            _ => {}
         }
 
         false

@@ -20,10 +20,10 @@
  */
 
 /*!
-  Simple type definitions and macro helper for a (x,y) position on the terminal and the areas they define.
+Simple type definitions and macro helper for a (x,y) position on the terminal and the areas they define.
 
-  An `Area` consists of two points: the upper left and bottom right corners.
-  */
+An `Area` consists of two points: the upper left and bottom right corners.
+*/
 
 /// A `(x, y)` position on screen.
 pub type Pos = (usize, usize);

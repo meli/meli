@@ -56,24 +56,24 @@ impl Collection {
         let threads = Threads::new(&mut envelopes);
 
         /*let cache_dir =
-            xdg::BaseDirectories::with_profile("meli", format!("{}_Thread", folder.hash()))
-                .unwrap();
-        if let Some(cached) = cache_dir.find_cache_file("threads") {
-            let reader = io::BufReader::new(fs::File::open(cached).unwrap());
-            let result: result::Result<Threads, _> = bincode::deserialize_from(reader);
-            let ret = if let Ok(mut cached_t) = result {
-use std::iter::FromIterator;
-                eprintln!("loaded cache, our hash set is {:?}\n and the cached one is {:?}", FnvHashSet::from_iter(envelopes.keys().cloned()), cached_t.hash_set);
-                cached_t.amend(&mut envelopes);
-                cached_t
-            } else {
-                Threads::new(&mut envelopes)
-            };
-            ret
-        } else {
-            Threads::new(&mut envelopes)
-        };
-        */
+                    xdg::BaseDirectories::with_profile("meli", format!("{}_Thread", folder.hash()))
+                        .unwrap();
+                if let Some(cached) = cache_dir.find_cache_file("threads") {
+                    let reader = io::BufReader::new(fs::File::open(cached).unwrap());
+                    let result: result::Result<Threads, _> = bincode::deserialize_from(reader);
+                    let ret = if let Ok(mut cached_t) = result {
+        use std::iter::FromIterator;
+                        eprintln!("loaded cache, our hash set is {:?}\n and the cached one is {:?}", FnvHashSet::from_iter(envelopes.keys().cloned()), cached_t.hash_set);
+                        cached_t.amend(&mut envelopes);
+                        cached_t
+                    } else {
+                        Threads::new(&mut envelopes)
+                    };
+                    ret
+                } else {
+                    Threads::new(&mut envelopes)
+                };
+                */
 
         Collection {
             folder: folder.clone(),

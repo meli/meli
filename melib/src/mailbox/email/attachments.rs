@@ -71,73 +71,77 @@ impl AttachmentBuilder {
     }
     pub fn content_type(&mut self, value: &[u8]) -> &Self {
         match parser::content_type(value).to_full_result() {
-            Ok((ct, cst, params)) => if ct.eq_ignore_ascii_case(b"multipart") {
-                let mut boundary = None;
-                for (n, v) in params {
-                    if n.eq_ignore_ascii_case(b"boundary") {
-                        boundary = Some(v);
-                        break;
+            Ok((ct, cst, params)) => {
+                if ct.eq_ignore_ascii_case(b"multipart") {
+                    let mut boundary = None;
+                    for (n, v) in params {
+                        if n.eq_ignore_ascii_case(b"boundary") {
+                            boundary = Some(v);
+                            break;
+                        }
                     }
-                }
-                assert!(boundary.is_some());
-                let _boundary = boundary.unwrap();
-                let offset = (_boundary.as_ptr() as usize).wrapping_sub(value.as_ptr() as usize);
-                let boundary = SliceBuild::new(offset, _boundary.len());
-                let subattachments = Self::subattachments(&self.raw, boundary.get(&value));
-                assert!(!subattachments.is_empty());
-                self.content_type = ContentType::Multipart {
-                    boundary,
-                    kind: if cst.eq_ignore_ascii_case(b"mixed") {
-                        MultipartType::Mixed
-                    } else if cst.eq_ignore_ascii_case(b"alternative") {
-                        MultipartType::Alternative
-                    } else if cst.eq_ignore_ascii_case(b"digest") {
-                        MultipartType::Digest
-                    } else {
-                        Default::default()
-                    },
-                    subattachments,
-                };
-            } else if ct.eq_ignore_ascii_case(b"text") {
-                self.content_type = ContentType::Text {
-                    kind: Text::Plain,
-                    charset: Charset::UTF8,
-                };
-                for (n, v) in params {
-                    if n.eq_ignore_ascii_case(b"charset") {
+                    assert!(boundary.is_some());
+                    let _boundary = boundary.unwrap();
+                    let offset =
+                        (_boundary.as_ptr() as usize).wrapping_sub(value.as_ptr() as usize);
+                    let boundary = SliceBuild::new(offset, _boundary.len());
+                    let subattachments = Self::subattachments(&self.raw, boundary.get(&value));
+                    assert!(!subattachments.is_empty());
+                    self.content_type = ContentType::Multipart {
+                        boundary,
+                        kind: if cst.eq_ignore_ascii_case(b"mixed") {
+                            MultipartType::Mixed
+                        } else if cst.eq_ignore_ascii_case(b"alternative") {
+                            MultipartType::Alternative
+                        } else if cst.eq_ignore_ascii_case(b"digest") {
+                            MultipartType::Digest
+                        } else {
+                            Default::default()
+                        },
+                        subattachments,
+                    };
+                } else if ct.eq_ignore_ascii_case(b"text") {
+                    self.content_type = ContentType::Text {
+                        kind: Text::Plain,
+                        charset: Charset::UTF8,
+                    };
+                    for (n, v) in params {
+                        if n.eq_ignore_ascii_case(b"charset") {
+                            if let ContentType::Text {
+                                charset: ref mut c, ..
+                            } = self.content_type
+                            {
+                                *c = Charset::from(v);
+                            }
+                            break;
+                        }
+                    }
+                    if cst.eq_ignore_ascii_case(b"html") {
                         if let ContentType::Text {
-                            charset: ref mut c, ..
+                            kind: ref mut k, ..
                         } = self.content_type
                         {
-                            *c = Charset::from(v);
+                            *k = Text::Html;
                         }
-                        break;
+                    } else if !cst.eq_ignore_ascii_case(b"plain") {
+                        if let ContentType::Text {
+                            kind: ref mut k, ..
+                        } = self.content_type
+                        {
+                            *k = Text::Other { tag: cst.into() };
+                        }
                     }
+                } else if ct.eq_ignore_ascii_case(b"message") && cst.eq_ignore_ascii_case(b"rfc822")
+                {
+                    self.content_type = ContentType::MessageRfc822;
+                } else {
+                    let mut tag: Vec<u8> = Vec::with_capacity(ct.len() + cst.len() + 1);
+                    tag.extend(ct);
+                    tag.push(b'/');
+                    tag.extend(cst);
+                    self.content_type = ContentType::Unsupported { tag };
                 }
-                if cst.eq_ignore_ascii_case(b"html") {
-                    if let ContentType::Text {
-                        kind: ref mut k, ..
-                    } = self.content_type
-                    {
-                        *k = Text::Html;
-                    }
-                } else if !cst.eq_ignore_ascii_case(b"plain") {
-                    if let ContentType::Text {
-                        kind: ref mut k, ..
-                    } = self.content_type
-                    {
-                        *k = Text::Other { tag: cst.into() };
-                    }
-                }
-            } else if ct.eq_ignore_ascii_case(b"message") && cst.eq_ignore_ascii_case(b"rfc822") {
-                self.content_type = ContentType::MessageRfc822;
-            } else {
-                let mut tag: Vec<u8> = Vec::with_capacity(ct.len() + cst.len() + 1);
-                tag.extend(ct);
-                tag.push(b'/');
-                tag.extend(cst);
-                self.content_type = ContentType::Unsupported { tag };
-            },
+            }
             Err(v) => {
                 eprintln!("parsing error in content_type: {:?} {:?}", value, v);
             }
@@ -405,23 +409,25 @@ fn decode_rec_helper(a: &Attachment, filter: &Option<Filter>) -> Vec<u8> {
             kind: ref multipart_type,
             subattachments: ref sub_att_vec,
             ..
-        } => if *multipart_type == MultipartType::Alternative {
-            for a in sub_att_vec {
-                if let ContentType::Text {
-                    kind: Text::Plain, ..
-                } = a.content_type
-                {
-                    return decode_helper(a, filter);
+        } => {
+            if *multipart_type == MultipartType::Alternative {
+                for a in sub_att_vec {
+                    if let ContentType::Text {
+                        kind: Text::Plain, ..
+                    } = a.content_type
+                    {
+                        return decode_helper(a, filter);
+                    }
                 }
+                decode_helper(a, filter)
+            } else {
+                let mut vec = Vec::new();
+                for a in sub_att_vec {
+                    vec.extend(decode_rec_helper(a, filter));
+                }
+                vec
             }
-            decode_helper(a, filter)
-        } else {
-            let mut vec = Vec::new();
-            for a in sub_att_vec {
-                vec.extend(decode_rec_helper(a, filter));
-            }
-            vec
-        },
+        }
     };
     if let Some(filter) = filter {
         filter(a, &mut ret);

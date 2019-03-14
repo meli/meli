@@ -21,12 +21,12 @@
 
 /*! The application's state.
 
-  The UI crate has an Entity-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
+The UI crate has an Entity-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
 
-  `State` owns all the Entities of the UI, which are currently plain Containers for `Component`s. In the application's main event loop, input is handed to the state in the form of `UIEvent` objects which traverse the entity graph. Components decide to handle each input or not.
+`State` owns all the Entities of the UI, which are currently plain Containers for `Component`s. In the application's main event loop, input is handed to the state in the form of `UIEvent` objects which traverse the entity graph. Components decide to handle each input or not.
 
-  Input is received in the main loop from threads which listen on the stdin for user input, observe folders for file changes etc. The relevant struct is `ThreadEvent`.
-  */
+Input is received in the main loop from threads which listen on the stdin for user input, observe folders for file changes etc. The relevant struct is `ThreadEvent`.
+*/
 
 use super::*;
 use melib::backends::{FolderHash, NotifyFn};
@@ -64,7 +64,8 @@ impl InputHandler {
                     },
                     &rx,
                 )
-            }).unwrap();
+            })
+            .unwrap();
     }
     fn kill(&self) {
         self.tx.send(false);
@@ -141,7 +142,8 @@ impl Drop for State {
             cursor::Goto(1, 1),
             cursor::Show,
             BracketModeEnd,
-        ).unwrap();
+        )
+        .unwrap();
         self.flush();
     }
 }
@@ -187,7 +189,8 @@ impl State {
                         sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck))
                     })),
                 )
-            }).collect();
+            })
+            .collect();
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
         let mut s = State {
             cols,
@@ -235,7 +238,8 @@ impl State {
             cursor::Hide,
             clear::All,
             cursor::Goto(1, 1)
-        ).unwrap();
+        )
+        .unwrap();
         s.flush();
         eprintln!("DEBUG: inserting mailbox hashes:");
         for (x, account) in s.context.accounts.iter_mut().enumerate() {
@@ -305,7 +309,8 @@ impl State {
             "{}{}",
             termion::screen::ToMainScreen,
             cursor::Show
-        ).unwrap();
+        )
+        .unwrap();
         self.flush();
         self.stdout = None;
         self.context.input.kill();
@@ -322,7 +327,8 @@ impl State {
             cursor::Hide,
             clear::All,
             cursor::Goto(1, 1)
-        ).unwrap();
+        )
+        .unwrap();
         self.flush();
     }
 
@@ -381,7 +387,8 @@ impl State {
                 self.stdout(),
                 "{}",
                 cursor::Goto(get_x(upper_left) as u16 + 1, (y + 1) as u16)
-            ).unwrap();
+            )
+            .unwrap();
             for x in get_x(upper_left)..=get_x(bottom_right) {
                 let c = self.grid[(x, y)];
 
@@ -397,14 +404,16 @@ impl State {
                         self.stdout(),
                         "{}",
                         termion::color::Bg(termion::color::Reset)
-                    ).unwrap();
+                    )
+                    .unwrap();
                 }
                 if c.fg() != Color::Default {
                     write!(
                         self.stdout(),
                         "{}",
                         termion::color::Fg(termion::color::Reset)
-                    ).unwrap();
+                    )
+                    .unwrap();
                 }
             }
         }
@@ -473,12 +482,12 @@ impl State {
                     self.flush();
                 }
                 return;
-            },
+            }
             UIEventType::ChangeMode(m) => {
                 self.context
                     .sender
                     .send(ThreadEvent::UIEvent(UIEventType::ChangeMode(m)));
-            },
+            }
             _ => {}
         }
         /* inform each entity */

@@ -20,8 +20,8 @@
  */
 
 /*!
-  Notification handling components.
-  */
+Notification handling components.
+*/
 use notify_rust::Notification as notify_Notification;
 use std::process::{Command, Stdio};
 
@@ -45,12 +45,8 @@ impl Component for XDGNotifications {
             notify_Notification::new()
                 .appname("meli")
                 .icon("mail-message-new")
-                .summary(
-                    title
-                        .as_ref()
-                        .map(|v| v.as_str())
-                        .unwrap_or("Event"),
-                ).body(&escape_str(body))
+                .summary(title.as_ref().map(|v| v.as_str()).unwrap_or("Event"))
+                .body(&escape_str(body))
                 .icon("dialog-information")
                 .show()
                 .unwrap();
@@ -59,7 +55,6 @@ impl Component for XDGNotifications {
     }
     fn set_dirty(&mut self) {}
 }
-
 
 fn escape_str(s: &str) -> String {
     let mut ret: String = String::with_capacity(s.len());
@@ -72,16 +67,17 @@ fn escape_str(s: &str) -> String {
             '"' => ret.push_str("&quot;"),
             _ => {
                 let i = c as u32;
-                if (0x1 <= i && i <= 0x8) ||
-                    (0xb <= i && i  <= 0xc) ||
-                    (0xe <= i && i <= 0x1f) ||
-                    (0x7f <= i && i <= 0x84) ||
-                    (0x86 <= i && i <= 0x9f) {
+                if (0x1 <= i && i <= 0x8)
+                    || (0xb <= i && i <= 0xc)
+                    || (0xe <= i && i <= 0x1f)
+                    || (0x7f <= i && i <= 0x84)
+                    || (0x86 <= i && i <= 0x9f)
+                {
                     ret.push_str(&format!("&#{:x}%{:x};", i, i));
                 } else {
                     ret.push(c);
                 }
-            },
+            }
         }
     }
     ret
@@ -123,16 +119,14 @@ impl Component for NotificationFilter {
         if let UIEventType::Notification(ref title, ref body) = event.event_type {
             if let Some(ref bin) = context.runtime_settings.notifications.script {
                 if let Err(v) = Command::new(bin)
-                    .arg(title
-                         .as_ref()
-                         .map(|v| v.as_str())
-                         .unwrap_or("Event"))
-                        .arg(body)
-                        .stdin(Stdio::piped())
-                        .stdout(Stdio::piped())
-                        .spawn() {
-                            eprintln!("{:?}",v);
-                        }
+                    .arg(title.as_ref().map(|v| v.as_str()).unwrap_or("Event"))
+                    .arg(body)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                {
+                    eprintln!("{:?}", v);
+                }
             }
         }
         false

@@ -20,9 +20,9 @@
  */
 
 /*!
-  Define a (x, y) point in the terminal display as a holder of a character, foreground/background
-  colors and attributes.
- */
+ Define a (x, y) point in the terminal display as a holder of a character, foreground/background
+ colors and attributes.
+*/
 use super::position::*;
 use std::convert::From;
 use std::fmt;
@@ -183,7 +183,6 @@ impl CellBuffer {
         self.cols = 0;
         self.rows = 0;
     }
-
 }
 
 impl HasSize for CellBuffer {
@@ -580,7 +579,7 @@ pub fn copy_area_with_break(
         );
         return upper_left!(dest);
     }
-    
+
     if grid_src.is_empty() || grid_dest.is_empty() {
         return upper_left!(dest);
     }
@@ -755,7 +754,10 @@ pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
             }
         }
         if s.len() > width {
-            if let Some(next_idx) = s.as_bytes()[..width].iter().rposition(u8::is_ascii_whitespace) {
+            if let Some(next_idx) = s.as_bytes()[..width]
+                .iter()
+                .rposition(u8::is_ascii_whitespace)
+            {
                 ret.push(&s[..next_idx]);
                 s = &s[next_idx + 1..];
             } else {
@@ -766,7 +768,6 @@ pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
             ret.push(s);
             break;
         }
-
     }
 
     ret

@@ -108,7 +108,8 @@ impl EnvelopeView {
                     v.extend(html_filter.wait_with_output().unwrap().stdout);
                 }
             })),
-        )).into_owned();
+        ))
+        .into_owned();
         match self.mode {
             ViewMode::Normal | ViewMode::Subview => {
                 let mut t = body_text.to_string();
@@ -378,8 +379,10 @@ impl Component for EnvelopeView {
                             ContentType::MessageRfc822 => {
                                 self.mode = ViewMode::Subview;
                                 self.subview = Some(Box::new(Pager::from_string(
-                                    String::from_utf8_lossy(&decode_rec(u, None)).to_string(), context,
-                                    None, None
+                                    String::from_utf8_lossy(&decode_rec(u, None)).to_string(),
+                                    context,
+                                    None,
+                                    None,
                                 )));
                             }
 

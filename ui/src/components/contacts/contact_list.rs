@@ -20,7 +20,7 @@ pub struct ContactList {
     content: CellBuffer,
 
     id_positions: Vec<CardId>,
-    
+
     mode: ViewMode,
     dirty: bool,
     view: Option<Entity>,
@@ -60,29 +60,30 @@ impl ContactList {
             ..Self::new()
         }
     }
-        
+
     fn initialize(&mut self, context: &mut Context) {
         let account = &mut context.accounts[self.account_pos];
         let book = &mut account.address_book;
         self.length = book.len();
-        self.content.resize(MAX_COLS, book.len(), Cell::with_char(' '));
+        self.content
+            .resize(MAX_COLS, book.len(), Cell::with_char(' '));
 
         self.id_positions.clear();
         if self.id_positions.capacity() < book.len() {
-            self.id_positions.reserve(book.len()); 
+            self.id_positions.reserve(book.len());
         }
 
         for (i, c) in book.values().enumerate() {
             self.id_positions.push(*c.id());
-            
+
             write_string_to_grid(
                 c.email(),
                 &mut self.content,
                 Color::Default,
                 Color::Default,
                 ((0, i), (MAX_COLS - 1, book.len() - 1)),
-                false
-                );
+                false,
+            );
         }
     }
 }
@@ -105,7 +106,15 @@ impl Component for ContactList {
         if self.dirty {
             self.initialize(context);
             clear_area(grid, area);
-            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, self.content.size().1.saturating_sub(1))));
+            copy_area(
+                grid,
+                &self.content,
+                area,
+                (
+                    (0, 0),
+                    (MAX_COLS - 1, self.content.size().1.saturating_sub(1)),
+                ),
+            );
             context.dirty_areas.push_back(area);
             self.dirty = false;
         }
@@ -116,11 +125,27 @@ impl Component for ContactList {
         /* Reset previously highlighted line */
         let fg_color = Color::Default;
         let bg_color = Color::Default;
-        change_colors(grid, (pos_inc(upper_left, (0, self.cursor_pos)), set_y(bottom_right, get_y(upper_left) + self.cursor_pos)), fg_color, bg_color);
+        change_colors(
+            grid,
+            (
+                pos_inc(upper_left, (0, self.cursor_pos)),
+                set_y(bottom_right, get_y(upper_left) + self.cursor_pos),
+            ),
+            fg_color,
+            bg_color,
+        );
 
         /* Highlight current line */
         let bg_color = Color::Byte(246);
-        change_colors(grid, (pos_inc(upper_left, (0, self.new_cursor_pos)), set_y(bottom_right, get_y(upper_left) + self.new_cursor_pos)), fg_color, bg_color);
+        change_colors(
+            grid,
+            (
+                pos_inc(upper_left, (0, self.new_cursor_pos)),
+                set_y(bottom_right, get_y(upper_left) + self.new_cursor_pos),
+            ),
+            fg_color,
+            bg_color,
+        );
         self.cursor_pos = self.new_cursor_pos;
     }
 
@@ -139,10 +164,10 @@ impl Component for ContactList {
 
                 self.mode = ViewMode::View(*entity.id());
                 self.view = Some(entity);
-                
+
                 return true;
-            },
-            
+            }
+
             UIEventType::Input(ref key) if *key == shortcuts["edit_contact"] && self.length > 0 => {
                 let account = &mut context.accounts[self.account_pos];
                 let book = &mut account.address_book;
@@ -154,9 +179,9 @@ impl Component for ContactList {
 
                 self.mode = ViewMode::View(*entity.id());
                 self.view = Some(entity);
-                
+
                 return true;
-            },
+            }
             UIEventType::Input(Key::Char('n')) => {
                 let card = Card::new();
                 let mut manager = ContactManager::default();
@@ -165,27 +190,26 @@ impl Component for ContactList {
                 let entity = Entity::from(Box::new(manager));
                 self.mode = ViewMode::View(*entity.id());
                 self.view = Some(entity);
-                
+
                 return true;
-            },
+            }
             UIEventType::Input(Key::Up) => {
                 self.set_dirty();
                 self.new_cursor_pos = self.cursor_pos.saturating_sub(1);
                 return true;
-            },
+            }
             UIEventType::Input(Key::Down) if self.cursor_pos < self.length.saturating_sub(1) => {
                 self.set_dirty();
                 self.new_cursor_pos += 1;
                 return true;
-            },
+            }
             UIEventType::EntityKill(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {
                 self.mode = ViewMode::List;
                 self.view.take();
                 self.set_dirty();
                 return true;
-
-            },
-            _ => {},
+            }
+            _ => {}
         }
         false
     }
@@ -205,7 +229,11 @@ impl Component for ContactList {
         self.mode = ViewMode::Close(uuid);
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
-        let mut map = self.view.as_ref().map(|p| p.get_shortcuts(context)).unwrap_or_default();
+        let mut map = self
+            .view
+            .as_ref()
+            .map(|p| p.get_shortcuts(context))
+            .unwrap_or_default();
 
         let config_map = context.settings.shortcuts.contact_list.key_values();
         map.insert("create_contact", (*config_map["create_contact"]).clone());

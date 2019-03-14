@@ -58,8 +58,7 @@ impl Default for Indexer {
 }
 
 impl Indexer {
-    fn draw_menu(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {
-    }
+    fn draw_menu(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
 }
 
 impl Component for Indexer {

@@ -252,7 +252,12 @@ impl Pager {
         self.cursor_pos = 0;
         self.max_cursor_pos = None;
     }
-    pub fn from_string(mut text: String, context: &mut Context, cursor_pos: Option<usize>, width: Option<usize>) -> Self {
+    pub fn from_string(
+        mut text: String,
+        context: &mut Context,
+        cursor_pos: Option<usize>,
+        width: Option<usize>,
+    ) -> Self {
         let pager_filter: Option<&String> = context.settings.pager.filter.as_ref();
         //let format_flowed: bool = context.settings.pager.format_flowed;
         if let Some(bin) = pager_filter {
@@ -275,9 +280,9 @@ impl Pager {
                     .wait_with_output()
                     .expect("Failed to wait on filter")
                     .stdout,
-            ).to_string();
+            )
+            .to_string();
         }
-
 
         let content = {
             let lines: Vec<&str> = if let Some(width) = width {
@@ -313,7 +318,7 @@ impl Pager {
         let height = lines.len() + 1;
         let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        
+
         Pager::print_string(&mut content, lines);
         Pager {
             text: text.to_string(),
@@ -347,7 +352,7 @@ impl Pager {
                 Color::Default,
                 ((0, i), (width - 1, i)),
                 true,
-                );
+            );
         }
     }
     pub fn cursor_pos(&self) -> usize {
@@ -824,7 +829,10 @@ impl Tabbed {
         let cslice: &mut [Cell] = grid;
         //TODO: bounds check
         let cslice_len = cslice.len();
-        for c in cslice[(y * cols) + x.saturating_sub(1)..std::cmp::min((y * cols) + x.saturating_sub(1), cslice_len)].iter_mut() {
+        for c in cslice[(y * cols) + x.saturating_sub(1)
+            ..std::cmp::min((y * cols) + x.saturating_sub(1), cslice_len)]
+            .iter_mut()
+        {
             c.set_bg(Color::Byte(7));
             c.set_ch(' ');
         }
@@ -846,7 +854,13 @@ impl fmt::Display for Tabbed {
 impl Component for Tabbed {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            clear_area(grid, (upper_left!(area), set_x(upper_left!(area), get_x(bottom_right!(area)))));
+            clear_area(
+                grid,
+                (
+                    upper_left!(area),
+                    set_x(upper_left!(area), get_x(bottom_right!(area))),
+                ),
+            );
             self.dirty = false;
         }
 
@@ -871,29 +885,50 @@ impl Component for Tabbed {
 
         if self.show_shortcuts {
             let area = (
-                pos_inc(upper_left!(area), (2, 1)), set_x(bottom_right!(area), get_x(bottom_right!(area)).saturating_sub(2)));
+                pos_inc(upper_left!(area), (2, 1)),
+                set_x(
+                    bottom_right!(area),
+                    get_x(bottom_right!(area)).saturating_sub(2),
+                ),
+            );
             clear_area(grid, area);
             create_box(grid, area);
 
             // TODO: print into a pager
-            for (idx, (k, v)) in self.children[self.cursor_pos].get_shortcuts(context).into_iter().enumerate() {
-                    let (x, y) = write_string_to_grid(
-                        &k,
-                        grid,
-                        Color::Byte(29),
-                        Color::Default,
-                        (pos_inc(upper_left!(area), (2, 1 + idx)), set_x(bottom_right!(area), get_x(bottom_right!(area)).saturating_sub(2))),
-                        false,
-                    );
-                    write_string_to_grid(
-                        &format!("{:?}", v),
-                        grid,
-                        Color::Default,
-                        Color::Default,
-                        ((x + 2, y), set_x(bottom_right!(area), get_x(bottom_right!(area)).saturating_sub(2))),
-                        false,
-                    );
-            };
+            for (idx, (k, v)) in self.children[self.cursor_pos]
+                .get_shortcuts(context)
+                .into_iter()
+                .enumerate()
+            {
+                let (x, y) = write_string_to_grid(
+                    &k,
+                    grid,
+                    Color::Byte(29),
+                    Color::Default,
+                    (
+                        pos_inc(upper_left!(area), (2, 1 + idx)),
+                        set_x(
+                            bottom_right!(area),
+                            get_x(bottom_right!(area)).saturating_sub(2),
+                        ),
+                    ),
+                    false,
+                );
+                write_string_to_grid(
+                    &format!("{:?}", v),
+                    grid,
+                    Color::Default,
+                    Color::Default,
+                    (
+                        (x + 2, y),
+                        set_x(
+                            bottom_right!(area),
+                            get_x(bottom_right!(area)).saturating_sub(2),
+                        ),
+                    ),
+                    false,
+                );
+            }
             context.dirty_areas.push_back(area);
         }
     }
@@ -959,12 +994,12 @@ impl Component for Tabbed {
     }
 }
 
-
 type EntryIdentifier = Vec<u8>;
 /// Shows selection to user
 #[derive(Debug, PartialEq)]
 pub struct Selector {
-    single_only: bool, /// allow only one selection
+    single_only: bool,
+    /// allow only one selection
     entries: Vec<(EntryIdentifier, bool)>,
     selected_entry_count: u32,
     content: CellBuffer,
@@ -982,21 +1017,15 @@ impl fmt::Display for Selector {
 
 impl Component for Selector {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        eprintln!("drawing");
         let (width, height) = self.content.size();
-        copy_area_with_break(
-            grid,
-            &self.content,
-            area,
-            ((0, 0), (width, height)),
-        );
+        copy_area_with_break(grid, &self.content, area, ((0, 0), (width, height)));
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         let (width, height) = self.content.size();
         match event.event_type {
             UIEventType::Input(Key::Char(' ')) => {
-                self.entries[self.cursor].1 = ! self.entries[self.cursor].1;
+                self.entries[self.cursor].1 = !self.entries[self.cursor].1;
                 if self.entries[self.cursor].1 {
                     write_string_to_grid(
                         "x",
@@ -1005,7 +1034,7 @@ impl Component for Selector {
                         Color::Default,
                         ((1, self.cursor), (width, self.cursor)),
                         false,
-                        );
+                    );
                 } else {
                     write_string_to_grid(
                         " ",
@@ -1014,21 +1043,21 @@ impl Component for Selector {
                         Color::Default,
                         ((1, self.cursor), (width, self.cursor)),
                         false,
-                        );
+                    );
                 }
                 self.dirty = true;
                 return true;
-            },
+            }
             UIEventType::Input(Key::Up) if self.cursor > 0 => {
                 self.cursor -= 1;
                 self.dirty = true;
                 return true;
-            },
+            }
             UIEventType::Input(Key::Down) if self.cursor < height.saturating_sub(1) => {
                 self.cursor += 1;
                 self.dirty = true;
                 return true;
-            },
+            }
             _ => {}
         }
 
@@ -1044,10 +1073,18 @@ impl Component for Selector {
 
 impl Selector {
     pub fn new(mut entries: Vec<(EntryIdentifier, String)>, single_only: bool) -> Selector {
-        let width = entries.iter().max_by_key(|e| e.1.len()).map(|v| v.1.len()).unwrap_or(0) + 4;
+        let width = entries
+            .iter()
+            .max_by_key(|e| e.1.len())
+            .map(|v| v.1.len())
+            .unwrap_or(0)
+            + 4;
         let height = entries.len();
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        let identifiers = entries.iter_mut().map(|(id, _)| (std::mem::replace(&mut *id, Vec::new()), false)).collect();
+        let identifiers = entries
+            .iter_mut()
+            .map(|(id, _)| (std::mem::replace(&mut *id, Vec::new()), false))
+            .collect();
         for (i, e) in entries.into_iter().enumerate() {
             write_string_to_grid(
                 &format!("[ ] {}", e.1),
@@ -1070,6 +1107,10 @@ impl Selector {
     }
 
     pub fn collect(self) -> Vec<EntryIdentifier> {
-        self.entries.into_iter().filter(|v| v.1).map(|(id, _)| id).collect()
+        self.entries
+            .into_iter()
+            .filter(|v| v.1)
+            .map(|(id, _)| id)
+            .collect()
     }
 }

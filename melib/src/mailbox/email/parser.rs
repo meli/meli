@@ -135,16 +135,19 @@ named!(
 
 named!(
     header_no_val<(&[u8], &[u8])>,
-       do_parse!(
-           name: complete!(name) >>
-           tag!(b":") >>
-           opt!(is_a!(" \t")) >>
-           tag!(b"\n") >>
-           ( { (name, b"") } )));
+    do_parse!(
+        name: complete!(name)
+            >> tag!(b":")
+            >> opt!(is_a!(" \t"))
+            >> tag!(b"\n")
+            >> ({ (name, b"") })
+    )
+);
 
 named!(
     header<(&[u8], &[u8])>,
-    alt_complete!(header_no_val | header_has_val));
+    alt_complete!(header_no_val | header_has_val)
+);
 /* Parse all headers -> Vec<(&str, Vec<&str>)> */
 named!(pub headers<std::vec::Vec<(&[u8], &[u8])>>,
        many1!(complete!(header)));

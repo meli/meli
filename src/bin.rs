@@ -48,9 +48,9 @@ fn main() {
     //let _stdout = stdout();
     //let mut _stdout = _stdout.lock();
     /*
-       let _stderr = stderr();
-       let mut _stderr = _stderr.lock();
-       */
+    let _stderr = stderr();
+    let mut _stderr = _stderr.lock();
+    */
 
     /* Catch SIGWINCH to handle terminal resizing */
     let signal = chan_signal::notify(&[Signal::WINCH]);
@@ -66,7 +66,11 @@ fn main() {
     let menu = Entity::from(Box::new(AccountMenu::new(&state.context.accounts)));
     let listing = listing::Listing::from(IndexStyle::Compact);
     let b = Entity::from(Box::new(listing));
-    let tabs = Box::new(Tabbed::new(vec![Box::new(VSplit::new(menu, b, 90, true)), Box::new(AccountsPanel::new(&state.context)), Box::new(ContactList::default())]));
+    let tabs = Box::new(Tabbed::new(vec![
+        Box::new(VSplit::new(menu, b, 90, true)),
+        Box::new(AccountsPanel::new(&state.context)),
+        Box::new(ContactList::default()),
+    ]));
     let window = Entity::from(tabs);
 
     let status_bar = Entity::from(Box::new(StatusBar::new(window)));
@@ -75,7 +79,9 @@ fn main() {
     let xdg_notifications =
         Entity::from(Box::new(ui::components::notifications::XDGNotifications {}));
     state.register_entity(xdg_notifications);
-    state.register_entity(Entity::from(Box::new(ui::components::notifications::NotificationFilter {})));
+    state.register_entity(Entity::from(Box::new(
+        ui::components::notifications::NotificationFilter {},
+    )));
 
     /* Keep track of the input mode. See ui::UIMode for details */
     'main: loop {

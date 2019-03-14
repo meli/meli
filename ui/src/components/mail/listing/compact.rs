@@ -342,7 +342,9 @@ impl CompactListing {
 
     fn format_date(envelope: &Envelope) -> String {
         let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
-        let now: std::time::Duration = std::time::SystemTime::now().duration_since(d).unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
+        let now: std::time::Duration = std::time::SystemTime::now()
+            .duration_since(d)
+            .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
         match now.as_secs() {
             n if n < 10 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(8)),
             n if n < 24 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(7)),
@@ -527,20 +529,86 @@ impl Component for CompactListing {
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
-        let mut map = self.view.as_ref().map(|p| p.get_shortcuts(context)).unwrap_or_default();
+        let mut map = self
+            .view
+            .as_ref()
+            .map(|p| p.get_shortcuts(context))
+            .unwrap_or_default();
 
         let config_map = context.settings.shortcuts.compact_listing.key_values();
-        map.insert("open_thread", if let Some(key) = config_map.get("open_thread") { (*key).clone() } else { Key::Char('\n') });
-        map.insert("prev_page", if let Some(key) = config_map.get("prev_page") { (*key).clone() } else { Key::PageUp });
-        map.insert("next_page", if let Some(key) = config_map.get("next_page") { (*key).clone() } else { Key::PageDown });
-        map.insert("exit_thread", if let Some(key) = config_map.get("exit_thread") { (*key).clone() } else { Key::Char('i') });
-        map.insert("prev_folder", if let Some(key) = config_map.get("prev_folder") { (*key).clone() } else { Key::Char('J') });
-        map.insert("next_folder", if let Some(key) = config_map.get("next_folder") { (*key).clone() } else { Key::Char('K') });
-        map.insert("prev_account", if let Some(key) = config_map.get("prev_account") { (*key).clone() } else { Key::Char('h') });
-        map.insert("next_account", if let Some(key) = config_map.get("next_account") { (*key).clone() } else { Key::Char('l') });
-        map.insert("new_mail", if let Some(key) = config_map.get("new_mail") { (*key).clone() } else { Key::Char('m') });
+        map.insert(
+            "open_thread",
+            if let Some(key) = config_map.get("open_thread") {
+                (*key).clone()
+            } else {
+                Key::Char('\n')
+            },
+        );
+        map.insert(
+            "prev_page",
+            if let Some(key) = config_map.get("prev_page") {
+                (*key).clone()
+            } else {
+                Key::PageUp
+            },
+        );
+        map.insert(
+            "next_page",
+            if let Some(key) = config_map.get("next_page") {
+                (*key).clone()
+            } else {
+                Key::PageDown
+            },
+        );
+        map.insert(
+            "exit_thread",
+            if let Some(key) = config_map.get("exit_thread") {
+                (*key).clone()
+            } else {
+                Key::Char('i')
+            },
+        );
+        map.insert(
+            "prev_folder",
+            if let Some(key) = config_map.get("prev_folder") {
+                (*key).clone()
+            } else {
+                Key::Char('J')
+            },
+        );
+        map.insert(
+            "next_folder",
+            if let Some(key) = config_map.get("next_folder") {
+                (*key).clone()
+            } else {
+                Key::Char('K')
+            },
+        );
+        map.insert(
+            "prev_account",
+            if let Some(key) = config_map.get("prev_account") {
+                (*key).clone()
+            } else {
+                Key::Char('h')
+            },
+        );
+        map.insert(
+            "next_account",
+            if let Some(key) = config_map.get("next_account") {
+                (*key).clone()
+            } else {
+                Key::Char('l')
+            },
+        );
+        map.insert(
+            "new_mail",
+            if let Some(key) = config_map.get("new_mail") {
+                (*key).clone()
+            } else {
+                Key::Char('m')
+            },
+        );
 
         map
     }
-        
 }

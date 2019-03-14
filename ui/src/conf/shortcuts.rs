@@ -31,14 +31,14 @@ macro_rules! key_values {
             }
             pub fn key_values(&self) -> FnvHashMap<&'static str, &Key> {
                 let mut map: FnvHashMap<&'static str, &Key> = Default::default();
-                $(map.insert(stringify!($fname),&(self.$fname));)* 
+                $(map.insert(stringify!($fname),&(self.$fname));)*
                   map
             }
         }
     }
 }
 
-key_values!{ "compact-listing", derive (Debug, Clone, Deserialize) :
+key_values! { "compact-listing", derive (Debug, Clone, Deserialize) :
 pub struct CompactListingShortcuts {
         open_thread: Key |> "Open thread.",
         exit_thread: Key |> "Exit thread view.",
@@ -52,24 +52,23 @@ pub struct CompactListingShortcuts {
 }
 }
 
-
 impl Default for CompactListingShortcuts {
     fn default() -> Self {
-        CompactListingShortcuts {                 
+        CompactListingShortcuts {
             open_thread: Key::Char('\n'),
             exit_thread: Key::Char('i'),
             prev_page: Key::PageUp,
             next_page: Key::PageDown,
             prev_folder: Key::Char('J'),
             next_folder: Key::Char('K'),
-            prev_account:Key::Char('h'),
-            next_account:Key::Char('l'),
+            prev_account: Key::Char('h'),
+            next_account: Key::Char('l'),
             new_mail: Key::Char('m'),
         }
     }
 }
 
-key_values!{ "contact-list", derive (Debug, Clone, Deserialize) :
+key_values! { "contact-list", derive (Debug, Clone, Deserialize) :
 pub struct ContactListShortcuts {
     create_contact: Key |> "Create new contact.",
     edit_contact: Key |> "Edit contact under cursor."
@@ -78,14 +77,14 @@ pub struct ContactListShortcuts {
 
 impl Default for ContactListShortcuts {
     fn default() -> Self {
-        ContactListShortcuts {                 
+        ContactListShortcuts {
             create_contact: Key::Char('c'),
             edit_contact: Key::Char('e'),
         }
     }
 }
 
-key_values!{ "pager", derive (Debug, Clone, Deserialize) :
+key_values! { "pager", derive (Debug, Clone, Deserialize) :
 pub struct PagerShortcuts {
     scroll_up: Key |> "Scroll up pager.",
     scroll_down: Key |> "Scroll down pager.",

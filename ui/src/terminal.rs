@@ -19,8 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 extern crate serde;
-use self::serde::{de, Deserialize, Deserializer, };
 use self::serde::de::Visitor;
+use self::serde::{de, Deserialize, Deserializer};
 
 #[macro_use]
 mod position;

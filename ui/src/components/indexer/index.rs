@@ -42,7 +42,7 @@ impl Index {
         let bg_color = if self.cursor_pos == idx {
             Color::Byte(246)
         /* } else if idx % 2 == 0 {
-                   Color::Byte(236)*/
+        Color::Byte(236)*/
         } else {
             Color::Default
         };

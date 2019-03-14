@@ -19,8 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use chrono::{DateTime, Local};
-use uuid::Uuid;
 use fnv::FnvHashMap;
+use uuid::Uuid;
 
 use std::ops::Deref;
 
@@ -31,7 +31,7 @@ pub struct AddressBook {
     display_name: String,
     created: DateTime<Local>,
     last_edited: DateTime<Local>,
-    cards: FnvHashMap<CardId, Card>
+    cards: FnvHashMap<CardId, Card>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -44,7 +44,6 @@ pub struct Card {
     name_prefix: String,
     name_suffix: String,
     //address
-
     birthday: Option<DateTime<Local>>,
     email: String,
     url: String,
@@ -74,7 +73,11 @@ impl AddressBook {
         self.cards.contains_key(&card_id)
     }
     pub fn search(&self, term: &str) -> Vec<String> {
-        self.cards.values().filter(|c| c.email.contains(term)).map(|c| c.email.clone()).collect()
+        self.cards
+            .values()
+            .filter(|c| c.email.contains(term))
+            .map(|c| c.email.clone())
+            .collect()
     }
 }
 
@@ -85,7 +88,6 @@ impl Deref for AddressBook {
         &self.cards
     }
 }
-
 
 impl Card {
     pub fn new() -> Card {
@@ -98,7 +100,6 @@ impl Card {
             name_prefix: String::new(),
             name_suffix: String::new(),
             //address
-
             birthday: None,
             email: String::new(),
             url: String::new(),
@@ -182,7 +183,6 @@ impl Card {
     pub fn extra_property(&self, key: &str) -> Option<&str> {
         self.extra_properties.get(key).map(|v| v.as_str())
     }
-
 }
 
 impl From<FnvHashMap<String, String>> for Card {

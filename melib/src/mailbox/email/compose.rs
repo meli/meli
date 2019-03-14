@@ -3,8 +3,8 @@ use chrono::{DateTime, Local};
 use data_encoding::BASE64_MIME;
 use std::str;
 
-mod random;
 mod mime;
+mod random;
 
 //use self::mime::*;
 
@@ -70,13 +70,16 @@ impl str::FromStr for Draft {
             if ignore_header(k) {
                 continue;
             }
-            if ret.headers.insert(
-                String::from_utf8(k.to_vec())?,
-                String::from_utf8(v.to_vec())?,
-            ).is_none() {
+            if ret
+                .headers
+                .insert(
+                    String::from_utf8(k.to_vec())?,
+                    String::from_utf8(v.to_vec())?,
+                )
+                .is_none()
+            {
                 ret.header_order.push(String::from_utf8(k.to_vec())?);
             }
-
         }
 
         let body = Envelope::new(0).body_bytes(s.as_bytes());
@@ -191,7 +194,6 @@ impl Draft {
         }
 
         Ok(ret)
-
     }
 }
 

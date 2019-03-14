@@ -413,7 +413,9 @@ impl ThreadListing {
     }
     fn format_date(envelope: &Envelope) -> String {
         let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
-        let now: std::time::Duration = std::time::SystemTime::now().duration_since(d).unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
+        let now: std::time::Duration = std::time::SystemTime::now()
+            .duration_since(d)
+            .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
         match now.as_secs() {
             n if n < 10 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(8)),
             n if n < 24 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(7)),
@@ -486,8 +488,10 @@ impl Component for ThreadListing {
                             backend.operation(hash, folder_hash)
                         };
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        let envelope: &mut Envelope =
-                            mailbox.collection.get_mut(&self.locations[self.cursor_pos.2]).unwrap();
+                        let envelope: &mut Envelope = mailbox
+                            .collection
+                            .get_mut(&self.locations[self.cursor_pos.2])
+                            .unwrap();
                         envelope.set_seen(op).unwrap();
                         true
                     } else {
@@ -538,7 +542,7 @@ impl Component for ThreadListing {
                 self.cursor_pos.0,
                 self.cursor_pos.1,
                 self.locations[self.cursor_pos.2],
-                );
+            );
 
             self.view = Some(MailView::new(coordinates, None, None));
             self.view.as_mut().unwrap().draw(

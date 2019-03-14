@@ -58,7 +58,6 @@ pub struct Account {
 
     pub(crate) workers: Vec<Worker>,
 
-
     pub(crate) settings: AccountConf,
     pub(crate) runtime_settings: AccountConf,
     pub(crate) backend: Box<MailBackend>,
@@ -68,9 +67,7 @@ pub struct Account {
 impl Drop for Account {
     fn drop(&mut self) {
         //TODO: Avoid panics
-        let data_dir =
-            xdg::BaseDirectories::with_profile("meli", &self.name)
-                .unwrap();
+        let data_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
         if let Ok(data) = data_dir.place_data_file("addressbook") {
             /* place result in cache directory */
             let f = match fs::File::create(data) {
@@ -99,9 +96,7 @@ impl Account {
             folders.push(None);
             workers.push(Account::new_worker(f, &mut backend, notify_fn.clone()));
         }
-        let data_dir =
-            xdg::BaseDirectories::with_profile("meli", &name)
-            .unwrap();
+        let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
         let address_book = if let Ok(data) = data_dir.place_data_file("addressbook") {
             if data.exists() {
                 let reader = io::BufReader::new(fs::File::open(data).unwrap());
@@ -229,14 +224,14 @@ impl Account {
         if self.sent_folder.is_some() && self.sent_folder.unwrap() == index {
             self.folders[index] = Some(mailbox);
             /* Add our replies to other folders */
-            for id in (0..self.folders.len()).filter(|i| *i != index) {
-                self.add_replies_to_folder(id);
-            }
+        for id in (0..self.folders.len()).filter(|i| *i != index) {
+        self.add_replies_to_folder(id);
+        }
         } else {
-            self.folders[index] = Some(mailbox);
-            self.add_replies_to_folder(index);
+        self.folders[index] = Some(mailbox);
+        self.add_replies_to_folder(index);
         };
-    */
+         */
     }
 
     /*
@@ -303,7 +298,8 @@ impl Account {
     }
 
     pub fn save_draft(&self, draft: Draft) -> Result<()> {
-        self.backend.save(draft.to_string()?, &self.settings.conf.draft_folder)
+        self.backend
+            .save(draft.to_string()?, &self.settings.conf.draft_folder)
     }
 }
 

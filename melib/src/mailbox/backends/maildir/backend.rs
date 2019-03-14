@@ -27,7 +27,7 @@ extern crate xdg;
 use super::{MaildirFolder, MaildirOp};
 use async::*;
 use conf::AccountSettings;
-use error::{Result, MeliError};
+use error::{MeliError, Result};
 use mailbox::backends::{
     BackendFolder, BackendOp, Folder, FolderHash, MailBackend, RefreshEvent, RefreshEventConsumer,
     RefreshEventKind::*,
@@ -132,16 +132,16 @@ fn get_file_hash(file: &Path) -> EnvelopeHash {
 }
 
 fn move_to_cur(p: PathBuf) -> PathBuf {
-		let mut new = p.clone();
-		{
-			let file_name = p.file_name().unwrap();
-			new.pop();
-			new.pop();
+    let mut new = p.clone();
+    {
+        let file_name = p.file_name().unwrap();
+        new.pop();
+        new.pop();
 
-			new.push("cur");
-			new.push(file_name);
-			new.set_extension(":2,");
-		}
+        new.push("cur");
+        new.push(file_name);
+        new.set_extension(":2,");
+    }
     eprintln!("moved to cur: {}", new.display());
     fs::rename(p, &new).unwrap();
     new
@@ -347,7 +347,10 @@ impl MailBackend for MaildirType {
             }
         }
 
-        Err(MeliError::new(format!("'{}' is not a valid folder.", folder)))
+        Err(MeliError::new(format!(
+            "'{}' is not a valid folder.",
+            folder
+        )))
     }
 }
 
@@ -447,13 +450,13 @@ impl MaildirType {
                 let thunk = move || {
                     let mut path = path.clone();
                     let cache_dir = cache_dir.clone();
-                        path.push("new");
-                        for d in path.read_dir()? {
-                            if let Ok(p) = d {
-                                move_to_cur(p.path());
-                            }
+                    path.push("new");
+                    for d in path.read_dir()? {
+                        if let Ok(p) = d {
+                            move_to_cur(p.path());
                         }
-                        path.pop();
+                    }
+                    path.pop();
 
                     path.push("cur");
                     let iter = path.read_dir()?;

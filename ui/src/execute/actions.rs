@@ -23,20 +23,20 @@
  * User actions that need to be handled by the UI
  */
 
-pub use melib::mailbox::{SortField, SortOrder};
 use components::Component;
+pub use melib::mailbox::{SortField, SortOrder};
 
 extern crate uuid;
 use uuid::Uuid;
 
-#[derive(Debug, )]
+#[derive(Debug)]
 pub enum ListingAction {
     SetPlain,
     SetThreaded,
     SetCompact,
 }
 
-#[derive(Debug, )]
+#[derive(Debug)]
 pub enum TabAction {
     TabOpen(Option<Box<Component>>),
     NewDraft,
@@ -45,7 +45,7 @@ pub enum TabAction {
     Kill(Uuid),
 }
 
-#[derive(Debug, )]
+#[derive(Debug)]
 pub enum Action {
     Listing(ListingAction),
     ViewMailbox(usize),

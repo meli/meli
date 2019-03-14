@@ -19,25 +19,24 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+extern crate bincode;
 extern crate config;
 extern crate serde;
 extern crate xdg;
-extern crate bincode;
 
-pub mod pager;
 pub mod notifications;
+pub mod pager;
 pub mod shortcuts;
 
 pub mod accounts;
 pub use self::accounts::Account;
-pub use self::shortcuts::*;
 use self::config::{Config, File, FileFormat};
+pub use self::shortcuts::*;
 
-
+use self::notifications::NotificationsSettings;
 use melib::conf::AccountSettings;
 use melib::error::*;
 use pager::PagerSettings;
-use self::notifications::NotificationsSettings;
 
 use self::serde::{de, Deserialize, Deserializer};
 use std::collections::HashMap;
@@ -194,7 +193,6 @@ impl Settings {
     }
 }
 
-
 #[derive(Copy, Debug, Clone, Deserialize)]
 pub enum IndexStyle {
     Plain,
@@ -209,7 +207,8 @@ impl Default for IndexStyle {
 }
 
 fn index_from_str<'de, D>(deserializer: D) -> std::result::Result<IndexStyle, D::Error>
-    where D: Deserializer<'de>
+where
+    D: Deserializer<'de>,
 {
     let s = <String>::deserialize(deserializer)?;
     match s.as_str() {

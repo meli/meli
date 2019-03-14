@@ -203,44 +203,43 @@ pub const BRACKET_PASTE_END: &[u8] = b"\x1B[201~";
 
 const FIELDS: &[&str] = &[];
 
-
 impl<'de> Deserialize<'de> for Key {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            struct KeyVisitor;
+    where
+        D: Deserializer<'de>,
+    {
+        struct KeyVisitor;
 
-            impl<'de> Visitor<'de> for KeyVisitor {
-                type Value = Key;
+        impl<'de> Visitor<'de> for KeyVisitor {
+            type Value = Key;
 
-                fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                    formatter.write_str("`secs` or `nanos`")
-                }
-
-                fn visit_str<E>(self, value: &str) -> Result<Key, E>
-                    where
-                        E: de::Error,
-                    {
-                        match value {
-                            "Backspace" => Ok(Key::Backspace),
-                            "Left" => Ok(Key::Left),
-                            "Right" => Ok(Key::Right),
-                            "Up" => Ok(Key::Up),
-                            "Down" => Ok(Key::Down),
-                            "Home" => Ok(Key::Home),
-                            "End" => Ok(Key::End),
-                            "PageUp" => Ok(Key::PageUp),
-                            "PageDown" => Ok(Key::PageDown),
-                            "Delete" => Ok(Key::Delete),
-                            "Insert" => Ok(Key::Insert),
-                            "Esc" => Ok(Key::Esc),
-                            ref s if s.len() == 1 => Ok(Key::Char(s.chars().nth(0).unwrap())),
-                            _ => Err(de::Error::unknown_field(value, FIELDS)),
-                        }
-                    }
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("`secs` or `nanos`")
             }
 
-            deserializer.deserialize_identifier(KeyVisitor)
+            fn visit_str<E>(self, value: &str) -> Result<Key, E>
+            where
+                E: de::Error,
+            {
+                match value {
+                    "Backspace" => Ok(Key::Backspace),
+                    "Left" => Ok(Key::Left),
+                    "Right" => Ok(Key::Right),
+                    "Up" => Ok(Key::Up),
+                    "Down" => Ok(Key::Down),
+                    "Home" => Ok(Key::Home),
+                    "End" => Ok(Key::End),
+                    "PageUp" => Ok(Key::PageUp),
+                    "PageDown" => Ok(Key::PageDown),
+                    "Delete" => Ok(Key::Delete),
+                    "Insert" => Ok(Key::Insert),
+                    "Esc" => Ok(Key::Esc),
+                    ref s if s.len() == 1 => Ok(Key::Char(s.chars().nth(0).unwrap())),
+                    _ => Err(de::Error::unknown_field(value, FIELDS)),
+                }
+            }
         }
+
+        deserializer.deserialize_identifier(KeyVisitor)
+    }
 }

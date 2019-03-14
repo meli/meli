@@ -18,11 +18,11 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+pub mod addressbook;
 pub mod async;
 pub mod conf;
 pub mod error;
 pub mod mailbox;
-pub mod addressbook;
 
 #[macro_use]
 extern crate serde_derive;
@@ -38,8 +38,8 @@ extern crate chan;
 
 #[macro_use]
 extern crate bitflags;
-extern crate uuid;
 extern crate fnv;
+extern crate uuid;
 
 pub use conf::*;
 pub use mailbox::*;

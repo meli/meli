@@ -78,7 +78,7 @@ impl ContactManager {
             Color::Default,
             ((0, 0), (width, 0)),
             false,
-            );
+        );
         let (x, _) = write_string_to_grid(
             "Last edited: ",
             &mut self.content,
@@ -86,7 +86,7 @@ impl ContactManager {
             Color::Default,
             ((x, 0), (width, 0)),
             false,
-            );
+        );
         write_string_to_grid(
             &self.card.last_edited(),
             &mut self.content,
@@ -94,15 +94,23 @@ impl ContactManager {
             Color::Default,
             ((x, 0), (width, 0)),
             false,
-            );
+        );
         self.form = FormWidget::new("Save".into());
         self.form.add_button(("Cancel".into(), false));
-        self.form.push(("First Name".into(), self.card.firstname().to_string()));
-        self.form.push(("Last Name".into(), self.card.lastname().to_string()));
-        self.form.push(("Additional Name".into(), self.card.additionalname().to_string()));
-        self.form.push(("Name Prefix".into(), self.card.name_prefix().to_string()));
-        self.form.push(("Name Suffix".into(), self.card.name_suffix().to_string()));
-        self.form.push(("E-mail".into(), self.card.email().to_string()));
+        self.form
+            .push(("First Name".into(), self.card.firstname().to_string()));
+        self.form
+            .push(("Last Name".into(), self.card.lastname().to_string()));
+        self.form.push((
+            "Additional Name".into(),
+            self.card.additionalname().to_string(),
+        ));
+        self.form
+            .push(("Name Prefix".into(), self.card.name_prefix().to_string()));
+        self.form
+            .push(("Name Suffix".into(), self.card.name_suffix().to_string()));
+        self.form
+            .push(("E-mail".into(), self.card.email().to_string()));
         self.form.push(("url".into(), self.card.url().to_string()));
         self.form.push(("key".into(), self.card.key().to_string()));
     }
@@ -120,55 +128,71 @@ impl Component for ContactManager {
 
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
-        self.form.draw(grid, (set_y(upper_left, get_y(upper_left) + 1), bottom_right), context);
+        self.form.draw(
+            grid,
+            (set_y(upper_left, get_y(upper_left) + 1), bottom_right),
+            context,
+        );
         context.dirty_areas.push_back(area);
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if self.form.process_event(event, context) {
             match self.form.buttons_result() {
-                None => {},
+                None => {}
                 Some(true) => {
-                    let mut fields = std::mem::replace(&mut self.form, FormWidget::default()).collect().unwrap();
-                    let fields: FnvHashMap<String, String> = fields.into_iter().map(|(s, v)| {
-                        (s, match v {
-                            Field::Text(v, _, _) | Field::TextArea(v, _) => v,
-                            Field::Choice(mut v, c) => v.remove(c),
-                        })}).collect();
+                    let mut fields = std::mem::replace(&mut self.form, FormWidget::default())
+                        .collect()
+                        .unwrap();
+                    let fields: FnvHashMap<String, String> = fields
+                        .into_iter()
+                        .map(|(s, v)| {
+                            (
+                                s,
+                                match v {
+                                    Field::Text(v, _, _) | Field::TextArea(v, _) => v,
+                                    Field::Choice(mut v, c) => v.remove(c),
+                                },
+                            )
+                        })
+                        .collect();
                     let mut new_card = Card::from(fields);
                     new_card.set_id(*self.card.id());
-                    context.accounts[self.account_pos].address_book.add_card(new_card);
+                    context.accounts[self.account_pos]
+                        .address_book
+                        .add_card(new_card);
                     context.replies.push_back(UIEvent {
                         id: 0,
-                        event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage("Saved.".into())),
+                        event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage(
+                            "Saved.".into(),
+                        )),
                     });
                     context.replies.push_back(UIEvent {
                         id: 0,
                         event_type: UIEventType::EntityKill(self.id),
                     });
-                },
+                }
                 Some(false) => {
                     context.replies.push_back(UIEvent {
                         id: 0,
                         event_type: UIEventType::EntityKill(self.id),
                     });
-
-                },
+                }
             }
             return true;
         }
         /*
-           match event.event_type {
-           UIEventType::Input(Key::Char('\n')) => {
-           context.replies.push_back(UIEvent {
-           id: 0,
-           event_type: UIEventType::EntityKill(self.id),
-           });
-           return true;
-           },
-           _ => {},
-           }
-           */
+        match event.event_type {
+        UIEventType::Input(Key::Char('\n')) => {
+        context.replies.push_back(UIEvent {
+        id: 0,
+        event_type: UIEventType::EntityKill(self.id),
+        });
+        return true;
+        },
+        _ => {},
+        }
+        */
         false
     }
 

@@ -131,7 +131,6 @@ impl From<IndexStyle> for Listing {
             IndexStyle::Plain => Listing::Plain(Default::default()),
             IndexStyle::Threaded => Listing::Threaded(Default::default()),
             IndexStyle::Compact => Listing::Compact(Default::default()),
-
         }
     }
 }

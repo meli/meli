@@ -20,10 +20,10 @@
  */
 
 /*!
-  Components are ways to handle application data. They can draw on the terminal and receive events, but also do other stuff as well. (For example, see the `notifications` module.)
+Components are ways to handle application data. They can draw on the terminal and receive events, but also do other stuff as well. (For example, see the `notifications` module.)
 
-  See the `Component` Trait for more details.
-  */
+See the `Component` Trait for more details.
+*/
 
 use super::*;
 
@@ -75,8 +75,6 @@ const _DOUBLE_DOWN_AND_RIGHT: char = '╔';
 const _DOUBLE_DOWN_AND_LEFT: char = '╗';
 const _DOUBLE_UP_AND_LEFT: char = '╝';
 const _DOUBLE_UP_AND_RIGHT: char = '╚';
-
-
 
 type EntityId = Uuid;
 
@@ -157,7 +155,9 @@ pub trait Component: Display + Debug + Send {
     fn kill(&mut self, _id: EntityId) {}
     fn set_id(&mut self, _id: EntityId) {}
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap { Default::default() }
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        Default::default()
+    }
 }
 
 /*
@@ -429,20 +429,23 @@ pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: char) {
 }
 
 pub fn create_box(grid: &mut CellBuffer, area: Area) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
+    if !is_valid_area!(area) {
+        return;
+    }
+    let upper_left = upper_left!(area);
+    let bottom_right = bottom_right!(area);
 
-        for x in get_x(upper_left)..get_x(bottom_right) {
-            grid[(x, get_y(upper_left))].set_ch(HORZ_BOUNDARY);
-            grid[(x, get_y(bottom_right))].set_ch(HORZ_BOUNDARY);
-        }
+    for x in get_x(upper_left)..get_x(bottom_right) {
+        grid[(x, get_y(upper_left))].set_ch(HORZ_BOUNDARY);
+        grid[(x, get_y(bottom_right))].set_ch(HORZ_BOUNDARY);
+    }
 
-        for y in get_y(upper_left)..get_y(bottom_right) {
-            grid[(get_x(upper_left), y)].set_ch(VERT_BOUNDARY);
-            grid[(get_x(bottom_right), y)].set_ch(VERT_BOUNDARY);
-        }
-        set_and_join_box(grid, upper_left, HORZ_BOUNDARY);
-        set_and_join_box(grid, set_x(upper_left, get_x(bottom_right)), HORZ_BOUNDARY);
-        set_and_join_box(grid, set_y(upper_left, get_y(bottom_right)), VERT_BOUNDARY);
-        set_and_join_box(grid, bottom_right, VERT_BOUNDARY);
+    for y in get_y(upper_left)..get_y(bottom_right) {
+        grid[(get_x(upper_left), y)].set_ch(VERT_BOUNDARY);
+        grid[(get_x(bottom_right), y)].set_ch(VERT_BOUNDARY);
+    }
+    set_and_join_box(grid, upper_left, HORZ_BOUNDARY);
+    set_and_join_box(grid, set_x(upper_left, get_x(bottom_right)), HORZ_BOUNDARY);
+    set_and_join_box(grid, set_y(upper_left, get_y(bottom_right)), VERT_BOUNDARY);
+    set_and_join_box(grid, bottom_right, VERT_BOUNDARY);
 }
