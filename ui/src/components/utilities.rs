@@ -215,10 +215,10 @@ pub enum PageMovement {
 /// current view of the text. It is responsible for scrolling etc.
 #[derive(Default, Debug)]
 pub struct Pager {
+    text: String,
     cursor_pos: usize,
     max_cursor_pos: Option<usize>,
     height: usize,
-
     width: usize,
     dirty: bool,
     content: CellBuffer,
@@ -233,13 +233,18 @@ impl fmt::Display for Pager {
 }
 
 impl Pager {
-    pub fn update_from_str(&mut self, text: &str) {
-        let lines: Vec<&str> = text.trim().split('\n').collect();
+    pub fn update_from_str(&mut self, text: &str, width: Option<usize>) {
+        let lines: Vec<&str> = if let Some(width) = width {
+            word_break_string(text, width)
+        } else {
+            text.trim().split('\n').collect()
+        };
+
         let height = lines.len() + 1;
-        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+        let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        //interpret_format_flowed(&text);
-        Pager::print_string(&mut content, text);
+        Pager::print_string(&mut content, lines);
+        self.text = text.to_string();
         self.content = content;
         self.height = height;
         self.width = width;
@@ -247,7 +252,7 @@ impl Pager {
         self.cursor_pos = 0;
         self.max_cursor_pos = None;
     }
-    pub fn from_string(mut text: String, context: &mut Context, cursor_pos: Option<usize>) -> Self {
+    pub fn from_string(mut text: String, context: &mut Context, cursor_pos: Option<usize>, width: Option<usize>) -> Self {
         let pager_filter: Option<&String> = context.settings.pager.filter.as_ref();
         //let format_flowed: bool = context.settings.pager.format_flowed;
         if let Some(bin) = pager_filter {
@@ -273,28 +278,45 @@ impl Pager {
             ).to_string();
         }
 
-        let lines: Vec<&str> = text.trim().split('\n').collect();
-        let height = lines.len() + 1;
-        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
-        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        //interpret_format_flowed(&text);
-        Pager::print_string(&mut content, &text);
+
+        let content = {
+            let lines: Vec<&str> = if let Some(width) = width {
+                word_break_string(text.as_str(), width)
+            } else {
+                text.trim().split('\n').collect()
+            };
+
+            let height = lines.len() + 1;
+            let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
+            let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+            //interpret_format_flowed(&text);
+            Pager::print_string(&mut content, lines);
+            content
+        };
         Pager {
+            text: text,
             cursor_pos: cursor_pos.unwrap_or(0),
-            height,
-            width,
+            height: content.size().1,
+            width: content.size().0,
             dirty: true,
             content,
             ..Default::default()
         }
     }
-    pub fn from_str(s: &str, cursor_pos: Option<usize>) -> Self {
-        let lines: Vec<&str> = s.trim().split('\n').collect();
-        let height = lines.len();
-        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
+    pub fn from_str(text: &str, cursor_pos: Option<usize>, width: Option<usize>) -> Self {
+        let lines: Vec<&str> = if let Some(width) = width {
+            word_break_string(text, width)
+        } else {
+            text.trim().split('\n').collect()
+        };
+
+        let height = lines.len() + 1;
+        let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        Pager::print_string(&mut content, s);
+        
+        Pager::print_string(&mut content, lines);
         Pager {
+            text: text.to_string(),
             cursor_pos: cursor_pos.unwrap_or(0),
             height,
             width,
@@ -306,6 +328,7 @@ impl Pager {
     pub fn from_buf(content: CellBuffer, cursor_pos: Option<usize>) -> Self {
         let (width, height) = content.size();
         Pager {
+            text: String::new(),
             cursor_pos: cursor_pos.unwrap_or(0),
             height,
             width,
@@ -314,20 +337,17 @@ impl Pager {
             ..Default::default()
         }
     }
-    pub fn print_string(content: &mut CellBuffer, s: &str) {
-        let lines: Vec<&str> = s.trim().split('\n').collect();
-        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0);
-        if width > 0 {
-            for (i, l) in lines.iter().enumerate() {
-                write_string_to_grid(
-                    l,
-                    content,
-                    Color::Default,
-                    Color::Default,
-                    ((0, i), (width - 1, i)),
-                    true,
+    pub fn print_string(content: &mut CellBuffer, lines: Vec<&str>) {
+        let width = content.size().0;
+        for (i, l) in lines.iter().enumerate() {
+            write_string_to_grid(
+                l,
+                content,
+                Color::Default,
+                Color::Default,
+                ((0, i), (width - 1, i)),
+                true,
                 );
-            }
         }
     }
     pub fn cursor_pos(&self) -> usize {
@@ -386,6 +406,17 @@ impl Component for Pager {
         //let pager_stop: bool = context.settings.pager.pager_stop;
         //let rows = y(bottom_right) - y(upper_left);
         //let page_length = rows / self.height;
+        let width = width!(area);
+        if width != self.width {
+            // Reflow text.
+            let lines: Vec<&str> = word_break_string(self.text.as_str(), width);
+            let height = lines.len() + 1;
+            self.width = width;
+            self.height = height;
+            self.content = CellBuffer::new(width, height, Cell::with_char(' '));
+            Pager::print_string(&mut self.content, lines);
+        }
+
         let pos = copy_area_with_break(
             grid,
             &self.content,
@@ -788,7 +819,9 @@ impl Tabbed {
         }
         let (cols, _) = grid.size();
         let cslice: &mut [Cell] = grid;
-        for c in cslice[(y * cols) + x - 1..(y * cols) + cols].iter_mut() {
+        //TODO: bounds check
+        let cslice_len = cslice.len();
+        for c in cslice[(y * cols) + x.saturating_sub(1)..std::cmp::min((y * cols) + x.saturating_sub(1), cslice_len)].iter_mut() {
             c.set_bg(Color::Byte(7));
             c.set_ch(' ');
         }

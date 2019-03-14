@@ -49,6 +49,11 @@ pub fn pos_inc(p: Pos, inc: (usize, usize)) -> Pos {
     (p.0 + inc.0, p.1 + inc.1)
 }
 
+#[inline(always)]
+pub fn pos_dec(p: Pos, dec: (usize, usize)) -> Pos {
+    (p.0.saturating_sub(dec.0), p.1.saturating_sub(dec.1))
+}
+
 /// An `Area` consists of two points: the upper left and bottom right corners.
 ///
 /// Example:

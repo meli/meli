@@ -702,10 +702,14 @@ pub fn write_string_to_grid(
     let upper_left = upper_left!(area);
     let bottom_right = bottom_right!(area);
     let (mut x, mut y) = upper_left;
+    if y == get_y(bounds) || x == get_x(bounds) {
+        return (x, y);
+    }
+
     if y > (get_y(bottom_right))
         || x > get_x(bottom_right)
-        || y >= get_y(bounds)
-        || x >= get_x(bounds)
+        || y > get_y(bounds)
+        || x > get_x(bounds)
     {
         eprintln!(" Invalid area with string {} and area {:?}", s, area);
         return (x, y);

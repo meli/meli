@@ -377,9 +377,9 @@ impl Component for EnvelopeView {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
                                 self.mode = ViewMode::Subview;
-                                self.subview = Some(Box::new(Pager::from_str(
-                                    &String::from_utf8_lossy(&decode_rec(u, None)).to_string(),
-                                    None,
+                                self.subview = Some(Box::new(Pager::from_string(
+                                    String::from_utf8_lossy(&decode_rec(u, None)).to_string(), context,
+                                    None, None
                                 )));
                             }
 

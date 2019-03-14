@@ -218,22 +218,32 @@ impl Composer {
 
 impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !self.initialized {
-            self.update_form();
-            self.initialized = true;
-        }
         clear_area(grid, area);
-
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
         let upper_left = set_y(upper_left, get_y(upper_left) + 1);
-        let header_height = self.form.len() + 1;
+
+        if self.dirty {
+            self.draft.headers_mut().insert(
+                "From".into(),
+                get_display_name(context, self.account_cursor),
+            );
+            self.dirty = false;
+        }
+
         let width = if width!(area) > 80 && self.reply_context.is_some() {
             width!(area) / 2
         } else {
             width!(area)
         };
+
+        if !self.initialized {
+            self.pager.update_from_str(self.draft.body(), Some(77));
+            self.update_form();
+            self.initialized = true;
+        }
+        let header_height = self.form.len() + 1;
 
         let mid = if width > 80 {
             let width = width - 80;
@@ -273,26 +283,18 @@ impl Component for Composer {
         }
 
         if self.dirty {
-            for i in get_x(upper_left) + mid + 1..=get_x(upper_left) + mid + 79 {
+            for i in get_x(upper_left) + mid + 1..=get_x(upper_left) + mid + width.saturating_sub(0) {
                 //set_and_join_box(grid, (i, header_height), HORZ_BOUNDARY);
-                grid[(i, header_height)].set_fg(Color::Default);
-                grid[(i, header_height)].set_bg(Color::Default);
+                //grid[(i, header_height)].set_fg(Color::Default);
+                //grid[(i, header_height)].set_bg(Color::Default);
             }
         }
 
-        let header_area = (set_x(upper_left, mid + 1), (mid + 78, header_height + 1));
+        let header_area = (pos_inc(upper_left, (mid + 1, 0)), (get_x(bottom_right).saturating_sub(mid), get_y(upper_left) + header_height + 1));
         let body_area = (
-            (mid + 1, header_height + 2),
-            (mid + 78, get_y(bottom_right)),
+            pos_inc(upper_left, (mid + 1, header_height + 2)),
+            pos_dec(bottom_right, ((mid, 0))),
         );
-
-        if self.dirty {
-            self.draft.headers_mut().insert(
-                "From".into(),
-                get_display_name(context, self.account_cursor),
-            );
-            self.dirty = false;
-        }
 
         /* Regardless of view mode, do the following */
         self.form.draw(grid, header_area, context);
@@ -304,27 +306,18 @@ impl Component for Composer {
             },
             ViewMode::Discard(_) => {
                 /* Let user choose whether to quit with/without saving or cancel */
-                let mid_x = width!(area) / 2;
-                let mid_y = height!(area) / 2;
-                for x in mid_x - 40..=mid_x + 40 {
-                    for y in mid_y - 11..=mid_y + 11 {
-                        grid[(x, y)] = Cell::default();
-                    }
-                }
+                let mid_x = {
+                    std::cmp::max(width!(area) / 2, width / 2) - width / 2
+                };
+                let mid_y = {
+                    std::cmp::max(height!(area) / 2, 11) - 11
+                };
 
-                for i in mid_x - 40..=mid_x + 40 {
-                    set_and_join_box(grid, (i, mid_y - 11), HORZ_BOUNDARY);
-
-                    set_and_join_box(grid, (i, mid_y + 11), HORZ_BOUNDARY);
-                }
-
-                for i in mid_y - 11..=mid_y + 11 {
-                    set_and_join_box(grid, (mid_x - 40, i), VERT_BOUNDARY);
-
-                    set_and_join_box(grid, (mid_x + 40, i), VERT_BOUNDARY);
-                }
-
-                let area = ((mid_x - 20, mid_y - 7), (mid_x + 39, mid_y + 10));
+                let upper_left = upper_left!(body_area);
+                let bottom_right = bottom_right!(body_area);
+                let area = (pos_inc(upper_left, (mid_x, mid_y)), pos_dec(bottom_right, (mid_x, mid_y)));
+                create_box(grid, area);
+                let area = (pos_inc(upper_left, (mid_x + 2, mid_y + 2)), pos_dec(bottom_right, (mid_x.saturating_sub(2), mid_y.saturating_sub(2))));
 
                 let (_, y) = write_string_to_grid(
                     &format!("Draft \"{:10}\"", self.draft.headers()["Subject"]),
@@ -483,8 +476,7 @@ impl Component for Composer {
                             .expect("failed to execute process");
                         let result = f.read_to_string();
                         self.draft = Draft::from_str(result.as_str()).unwrap();
-                        self.pager.update_from_str(self.draft.body());
-                        self.update_form();
+                        self.initialized = false;
                         context.replies.push_back(UIEvent {
                             id: 0,
                             event_type: UIEventType::Fork(ForkType::Finished),
