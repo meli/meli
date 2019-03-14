@@ -784,6 +784,8 @@ pub struct Tabbed {
     cursor_pos: usize,
 
     show_shortcuts: bool,
+
+    dirty: bool,
 }
 
 impl Tabbed {
@@ -792,6 +794,7 @@ impl Tabbed {
             children: children.into_iter().map(Entity::from).collect(),
             cursor_pos: 0,
             show_shortcuts: false,
+            dirty: true,
         }
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -842,6 +845,11 @@ impl fmt::Display for Tabbed {
 
 impl Component for Tabbed {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.dirty {
+            clear_area(grid, (upper_left!(area), set_x(upper_left!(area), get_x(bottom_right!(area)))));
+            self.dirty = false;
+        }
+
         if self.children.len() > 1 {
             self.draw_tabs(
                 grid,
@@ -922,6 +930,7 @@ impl Component for Tabbed {
             UIEventType::Action(Tab(Close)) => {
                 let id = *self.children[self.cursor_pos].id();
                 self.children[self.cursor_pos].kill(id);
+                self.set_dirty();
                 return true;
             }
             UIEventType::Action(Tab(Kill(ref id))) => {
@@ -942,9 +951,10 @@ impl Component for Tabbed {
         self.children[self.cursor_pos].process_event(event, context)
     }
     fn is_dirty(&self) -> bool {
-        self.children[self.cursor_pos].is_dirty()
+        self.dirty || self.children[self.cursor_pos].is_dirty()
     }
     fn set_dirty(&mut self) {
+        self.dirty = true;
         self.children[self.cursor_pos].set_dirty();
     }
 }
