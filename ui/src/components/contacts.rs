@@ -150,7 +150,7 @@ impl Component for ContactManager {
                             (
                                 s,
                                 match v {
-                                    Field::Text(v, _, _) | Field::TextArea(v, _) => v,
+                                    Field::Text(v, _) => v.as_str().to_string(),
                                     Field::Choice(mut v, c) => v.remove(c),
                                 },
                             )

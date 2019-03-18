@@ -299,7 +299,7 @@ impl Pager {
             content
         };
         Pager {
-            text: text,
+            text,
             cursor_pos: cursor_pos.unwrap_or(0),
             height: content.size().1,
             width: content.size().0,

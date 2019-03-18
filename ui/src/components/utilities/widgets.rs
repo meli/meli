@@ -18,18 +18,16 @@ impl Default for FormFocus {
 
 pub enum Field {
     Text(
-        String,
-        Cursor,
+        UText,
         Option<(Box<Fn(&Context, &str) -> Vec<String> + Send>, AutoComplete)>,
     ),
     Choice(Vec<String>, Cursor),
-    TextArea(String, Cursor),
 }
 
 impl Debug for Field {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Text(s, c, _) => fmt::Debug::fmt(s, f),
+            Text(s, _) => fmt::Debug::fmt(s, f),
             k => fmt::Debug::fmt(k, f),
         }
     }
@@ -39,15 +37,14 @@ use Field::*;
 
 impl Default for Field {
     fn default() -> Field {
-        Field::Text(String::new(), 0, None)
+        Field::Text(UText::new(String::new()), None)
     }
 }
 
 impl Field {
     fn as_str(&self) -> &str {
         match self {
-            Text(ref s, _, _) => s,
-            TextArea(ref s, _) => s,
+            Text(ref s, _) => s.as_str(),
             Choice(ref v, cursor) => {
                 if v.is_empty() {
                     ""
@@ -60,8 +57,7 @@ impl Field {
 
     pub fn into_string(self) -> String {
         match self {
-            Text(s, _, _) => s,
-            TextArea(s, _) => s,
+            Text(s, _) => s.into_string(),
             Choice(mut v, cursor) => v.remove(cursor),
         }
     }
@@ -75,26 +71,25 @@ impl Field {
     ) {
         let upper_left = upper_left!(area);
         match self {
-            Text(ref term, cursor, auto_complete_fn) => {
+            Text(ref term, auto_complete_fn) => {
                 change_colors(
                     grid,
                     (
-                        pos_inc(upper_left, (*cursor, 0)),
-                        (pos_inc(upper_left, (*cursor, 0))),
+                        pos_inc(upper_left, (term.grapheme_pos(), 0)),
+                        (pos_inc(upper_left, (term.grapheme_pos(), 0))),
                     ),
                     Color::Default,
                     Color::Byte(248),
                 );
-                if term.chars().count() <= 2 {
+                if term.grapheme_len() <= 2 {
                     return;
                 }
                 if let Some((auto_complete_fn, auto_complete)) = auto_complete_fn {
-                    let entries = auto_complete_fn(context, term);
+                    let entries = auto_complete_fn(context, term.as_str());
                     auto_complete.set_suggestions(entries);
                     auto_complete.draw(grid, secondary_area, context);
                 }
             }
-            TextArea(_, _) => {}
             Choice(_, _cursor) => {}
         }
     }
@@ -112,39 +107,35 @@ impl Component for Field {
         );
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
-        if let Text(ref mut s, ref mut cursor, Some((_, auto_complete))) = self {
-            match event.event_type {
-                UIEventType::InsertInput(Key::Char('\t')) => {
-                    if let Some(suggestion) = auto_complete.get_suggestion() {
-                        *s = suggestion;
-                        *cursor = s.chars().count();
-                        return true;
-                    }
+        if let Text(ref mut s, Some((_, auto_complete))) = self {
+            if let UIEventType::InsertInput(Key::Char('\t')) = event.event_type {
+                if let Some(suggestion) = auto_complete.get_suggestion() {
+                    *s = UText::new(suggestion);
+                    let len = s.as_str().len().saturating_sub(1);
+                    s.set_cursor(len);
+                    return true;
                 }
-                _ => {}
             }
         }
 
         match event.event_type {
             UIEventType::InsertInput(Key::Up) => {
-                if let Text(_, _, Some((_, auto_complete))) = self {
+                if let Text(_, Some((_, auto_complete))) = self {
                     auto_complete.dec_cursor();
                 } else {
                     return false;
                 }
             }
             UIEventType::InsertInput(Key::Down) => {
-                if let Text(_, _, Some((_, auto_complete))) = self {
+                if let Text(_, Some((_, auto_complete))) = self {
                     auto_complete.inc_cursor();
                 } else {
                     return false;
                 }
             }
             UIEventType::InsertInput(Key::Right) => match self {
-                TextArea(ref s, ref mut cursor) | Text(ref s, ref mut cursor, _) => {
-                    if *cursor < s.len() {
-                        *cursor += 1;
-                    }
+                Text(ref mut s, _) => {
+                    s.cursor_inc();
                 }
                 Choice(ref vec, ref mut cursor) => {
                     *cursor = if *cursor == vec.len().saturating_sub(1) {
@@ -155,12 +146,8 @@ impl Component for Field {
                 }
             },
             UIEventType::InsertInput(Key::Left) => match self {
-                TextArea(_, ref mut cursor) | Text(_, ref mut cursor, _) => {
-                    if *cursor == 0 {
-                        return false;
-                    } else {
-                        *cursor -= 1;
-                    }
+                Text(ref mut s, _) => {
+                    s.cursor_dec();
                 }
                 Choice(_, ref mut cursor) => {
                     if *cursor == 0 {
@@ -170,27 +157,14 @@ impl Component for Field {
                     }
                 }
             },
-            UIEventType::InsertInput(Key::Char(k)) => match self {
-                Text(ref mut s, ref mut cursor, _) | TextArea(ref mut s, ref mut cursor) => {
-                    s.insert(*cursor, k);
-                    *cursor += 1;
-                }
-                _ => {}
+            UIEventType::InsertInput(Key::Char(k)) => if let Text(ref mut s, _) = self {
+                s.insert_char(k);
             },
             UIEventType::InsertInput(Key::Backspace) => match self {
-                Text(ref mut s, ref mut cursor, ref mut auto_complete) => {
-                    if *cursor > 0 {
-                        *cursor -= 1;
-                        s.remove(*cursor);
-                    }
-                    auto_complete
-                        .as_mut()
-                        .map(|ac| ac.1.set_suggestions(Vec::new()));
-                }
-                TextArea(ref mut s, ref mut cursor) => {
-                    if *cursor > 0 {
-                        *cursor -= 1;
-                        s.remove(*cursor);
+                Text(ref mut s, auto_complete) => {
+                    s.backspace();
+                    if let Some(ac) = auto_complete.as_mut() {
+                        ac.1.set_suggestions(Vec::new());
                     }
                 }
                 _ => {}
@@ -268,11 +242,6 @@ impl FormWidget {
         self.layout.push(value.0.clone());
         self.fields.insert(value.0, Choice(value.1, 0));
     }
-    pub fn push_text_area(&mut self, value: (String, String)) {
-        self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
-        self.layout.push(value.0.clone());
-        self.fields.insert(value.0, TextArea(value.1, 0));
-    }
     pub fn push_cl(
         &mut self,
         value: (
@@ -285,13 +254,16 @@ impl FormWidget {
         self.layout.push(value.0.clone());
         self.fields.insert(
             value.0,
-            Text(value.1, 0, Some((value.2, AutoComplete::new(Vec::new())))),
+            Text(
+                UText::new(value.1),
+                Some((value.2, AutoComplete::new(Vec::new()))),
+            ),
         );
     }
     pub fn push(&mut self, value: (String, String)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
-        self.fields.insert(value.0, Text(value.1, 0, None));
+        self.fields.insert(value.0, Text(UText::new(value.1), None));
     }
 
     pub fn insert(&mut self, index: usize, value: (String, Field)) {
@@ -614,7 +586,7 @@ impl Component for AutoComplete {
         );
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
         false
     }
     fn is_dirty(&self) -> bool {
@@ -649,7 +621,7 @@ impl AutoComplete {
         );
         let width = content.cols();
         for (i, e) in entries.iter().enumerate() {
-            let (x, _) = write_string_to_grid(
+            write_string_to_grid(
                 e,
                 &mut content,
                 Color::Byte(23),

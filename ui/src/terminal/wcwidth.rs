@@ -6,6 +6,9 @@
  * Markus Kuhn -- 2001-09-08 -- public domain
  */
 
+// TODO: Spacing widths
+// Update to Unicode 12
+
 #[macro_export]
 macro_rules! big_if_true {
     ($a:expr) => {
@@ -19,6 +22,76 @@ macro_rules! big_if_true {
 
 type WChar = u32;
 type Interval = (WChar, WChar);
+
+pub struct CodePointsIterator<'a> {
+    rest: &'a [u8],
+}
+
+/*
+ * UTF-8 uses a system of binary prefixes, in which the high bits of each byte mark whether it’s a single byte, the beginning of a multi-byte sequence, or a continuation byte; the remaining bits, concatenated, give the code point index. This table shows how it works:
+ *
+ * UTF-8 (binary) 	                Code point (binary) 	Range
+ * 0xxxxxxx                     	xxxxxxx 	        U+0000–U+007F
+ * 110xxxxx 10yyyyyy 	                xxxxxyyyyyy 	        U+0080–U+07FF
+ * 1110xxxx 10yyyyyy 10zzzzzz 	        xxxxyyyyyyzzzzzz 	U+0800–U+FFFF
+ * 11110xxx 10yyyyyy 10zzzzzz 10wwwwww 	xxxyyyyyyzzzzzzwwwwww 	U+10000–U+10FFFF
+ *
+ */
+impl<'a> Iterator for CodePointsIterator<'a> {
+    type Item = WChar;
+
+    fn next(&mut self) -> Option<WChar> {
+        println!("rest = {:?}", self.rest);
+        if self.rest.is_empty() {
+            return None;
+        }
+        /* Input is UTF-8 valid strings, guaranteed by Rust's std */
+        if self.rest[0] & 0b1000_0000 == 0x0 {
+            let ret: WChar = self.rest[0] as WChar;
+            self.rest = &self.rest[1..];
+            return Some(ret);
+        }
+        if self.rest[0] & 0b1110_0000 == 0b1100_0000 {
+            let ret: WChar = (self.rest[0] as WChar & 0b0001_1111).rotate_left(6)
+                + (self.rest[1] as WChar & 0b0111_1111);
+            self.rest = &self.rest[2..];
+            return Some(ret);
+        }
+
+        if self.rest[0] & 0b1111_0000 == 0b1110_0000 {
+            let ret: WChar = (self.rest[0] as WChar & 0b0000_0111).rotate_left(12)
+                + (self.rest[1] as WChar & 0b0011_1111).rotate_left(6)
+                + (self.rest[2] as WChar & 0b0011_1111);
+            self.rest = &self.rest[3..];
+            return Some(ret);
+        }
+
+        let ret: WChar = (self.rest[0] as WChar & 0b0000_0111).rotate_left(18)
+            + (self.rest[1] as WChar & 0b0011_1111).rotate_left(12)
+            + (self.rest[2] as WChar & 0b0011_1111).rotate_left(6)
+            + (self.rest[3] as WChar & 0b0011_1111);
+        self.rest = &self.rest[4..];
+        Some(ret)
+    }
+}
+pub trait CodePointsIter {
+    fn code_points(&self) -> CodePointsIterator;
+}
+
+impl CodePointsIter for str {
+    fn code_points(&self) -> CodePointsIterator {
+        CodePointsIterator {
+            rest: self.as_bytes(),
+        }
+    }
+}
+impl CodePointsIter for &str {
+    fn code_points(&self) -> CodePointsIterator {
+        CodePointsIterator {
+            rest: self.as_bytes(),
+        }
+    }
+}
 
 /* auxiliary function for binary search in Interval table */
 fn bisearch(ucs: WChar, table: &'static [Interval]) -> bool {
@@ -74,7 +147,7 @@ fn bisearch(ucs: WChar, table: &'static [Interval]) -> bool {
  * in ISO 10646.
  */
 
-fn wcwidth(ucs: WChar) -> Option<usize> {
+pub fn wcwidth(ucs: WChar) -> Option<usize> {
     /* sorted list of non-overlapping intervals of non-spacing characters */
     let combining: &'static [Interval] = &[
         (0x0300, 0x034E),
@@ -235,7 +308,7 @@ fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
  * encodings who want to migrate to UCS. It is not otherwise
  * recommended for general use.
  */
-fn wcwidth_cjk(ucs: WChar) -> Option<usize> {
+pub fn wcwidth_cjk(ucs: WChar) -> Option<usize> {
     /* sorted list of non-overlapping intervals of East Asian Ambiguous
      * characters */
     let ambiguous: &'static [Interval] = &[

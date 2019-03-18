@@ -5,20 +5,21 @@ authors = []
 workspace = ".."
 
 [dependencies]
-xdg = "2.1.0"
+xdg = "2.1.0" # >:c
 serde = "1.0.71"
 serde_derive = "1.0.71"
 serde_json = "1.0"
 config = "0.6"
 chan = "0.1.21"
 chan-signal = "0.3.1"
-fnv = "1.0.3"
-linkify = "0.3.1"
+fnv = "1.0.3" # >:c
+linkify = "0.3.1" # >:c
 melib = { path = "../melib", version = "*" }
 mime_apps = { path = "../../mime_apps", version = "*" }
 nom = "3.2.0"
-notify = "4.0.1"
-notify-rust = "^3"
+notify = "4.0.1" # >:c
+notify-rust = "^3" # >:c
 termion = "1.5.1"
 bincode = "1.0.1"
 uuid = { version = "0.6", features = ["serde", "v4"] }
+unicode-segmentation = "1.1.0" # >:c
