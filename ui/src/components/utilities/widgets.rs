@@ -157,9 +157,11 @@ impl Component for Field {
                     }
                 }
             },
-            UIEventType::InsertInput(Key::Char(k)) => if let Text(ref mut s, _) = self {
-                s.insert_char(k);
-            },
+            UIEventType::InsertInput(Key::Char(k)) => {
+                if let Text(ref mut s, _) = self {
+                    s.insert_char(k);
+                }
+            }
             UIEventType::InsertInput(Key::Backspace) => match self {
                 Text(ref mut s, auto_complete) => {
                     s.backspace();

@@ -326,17 +326,25 @@ impl Component for MailView {
                 }
                 ViewMode::Subview | ViewMode::ContactSelector(_) => {}
                 _ => {
-                    let buf = {
+                    let text = {
+                        self.attachment_to_text(&body)
+                        /*
                         let text = self.attachment_to_text(&body);
                         // URL indexes must be colored (ugh..)
                         MailView::plain_text_to_buf(&text, self.mode == ViewMode::Url)
+                        */
                     };
                     let cursor_pos = if self.mode.is_attachment() {
                         Some(0)
                     } else {
                         self.pager.as_mut().map(|p| p.cursor_pos())
                     };
-                    self.pager = Some(Pager::from_buf(buf.split_newlines(), cursor_pos));
+                    self.pager = Some(Pager::from_string(
+                        text,
+                        Some(context),
+                        cursor_pos,
+                        Some(width!(area)),
+                    ));
                     self.subview = None;
                 }
             };

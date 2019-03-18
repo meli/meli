@@ -254,12 +254,17 @@ impl Pager {
     }
     pub fn from_string(
         mut text: String,
-        context: &mut Context,
+        context: Option<&Context>,
         cursor_pos: Option<usize>,
         width: Option<usize>,
     ) -> Self {
-        let pager_filter: Option<&String> = context.settings.pager.filter.as_ref();
+        let pager_filter: Option<&String> = if let Some(context) = context {
+            context.settings.pager.filter.as_ref()
         //let format_flowed: bool = context.settings.pager.format_flowed;
+        } else {
+            None
+        };
+
         if let Some(bin) = pager_filter {
             use std::io::Write;
             use std::process::{Command, Stdio};

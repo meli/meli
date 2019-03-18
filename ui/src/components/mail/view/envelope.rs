@@ -160,6 +160,9 @@ impl EnvelopeView {
             }
         }
     }
+    /*
+     * TODO: add recolor changes so that this function returns a vector of required highlights
+     * to pass to write_string...
     pub fn plain_text_to_buf(s: &str, highlight_urls: bool) -> CellBuffer {
         let mut buf = CellBuffer::from(s);
 
@@ -192,6 +195,7 @@ impl EnvelopeView {
         }
         buf
     }
+    */
 }
 
 impl Component for EnvelopeView {
@@ -294,17 +298,25 @@ impl Component for EnvelopeView {
                     self.mode = ViewMode::Subview;
                 }
                 _ => {
-                    let buf = {
+                    let text = {
+                        self.attachment_to_text(&body)
+                        /*
                         let text = self.attachment_to_text(&body);
                         // URL indexes must be colored (ugh..)
                         EnvelopeView::plain_text_to_buf(&text, self.mode == ViewMode::Url)
+                        */
                     };
                     let cursor_pos = if self.mode.is_attachment() {
                         Some(0)
                     } else {
                         self.pager.as_mut().map(|p| p.cursor_pos())
                     };
-                    self.pager = Some(Pager::from_buf(buf.split_newlines(), cursor_pos));
+                    self.pager = Some(Pager::from_string(
+                        text,
+                        Some(context),
+                        cursor_pos,
+                        Some(width!(area)),
+                    ));
                 }
             };
             self.dirty = false;
@@ -380,7 +392,7 @@ impl Component for EnvelopeView {
                                 self.mode = ViewMode::Subview;
                                 self.subview = Some(Box::new(Pager::from_string(
                                     String::from_utf8_lossy(&decode_rec(u, None)).to_string(),
-                                    context,
+                                    Some(context),
                                     None,
                                     None,
                                 )));

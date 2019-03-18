@@ -49,8 +49,7 @@ impl HtmlView {
             &html_filter.wait_with_output().unwrap().stdout,
         ));
 
-        let buf = MailView::plain_text_to_buf(&display_text, true);
-        let pager = Pager::from_buf(buf.split_newlines(), None);
+        let pager = Pager::from_string(display_text, None, None, None);
         HtmlView { pager, bytes }
     }
 }
