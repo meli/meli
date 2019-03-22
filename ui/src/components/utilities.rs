@@ -808,6 +808,11 @@ impl Tabbed {
         }
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.children.is_empty() {
+            clear_area(grid, area);
+            return;
+        }
+
         let mut x = get_x(upper_left!(area));
         let mut y: usize = get_y(upper_left!(area));
         for (idx, c) in self.children.iter().enumerate() {
@@ -828,7 +833,6 @@ impl Tabbed {
             if y != _y_ {
                 break;
             }
-            y = _y_;
         }
         let (cols, _) = grid.size();
         let cslice: &mut [Cell] = grid;
@@ -840,6 +844,12 @@ impl Tabbed {
         {
             c.set_bg(Color::Byte(7));
             c.set_ch(' ');
+        }
+
+        if self.cursor_pos == self.children.len() - 1 {
+            cslice[(y * cols) + x].set_ch('▍');
+            cslice[(y * cols) + x].set_fg(Color::Byte(8));
+            cslice[(y * cols) + x].set_bg(Color::Default);
         }
 
         context.dirty_areas.push_back(area);
