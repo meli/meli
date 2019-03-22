@@ -598,4 +598,18 @@ impl Component for ThreadView {
         self.dirty = true;
         self.mailview.set_dirty();
     }
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        let mut map = self
+            .mailview
+            .get_shortcuts(context);
+
+        map.insert(
+            "reply", Key::Char('R')
+        );
+        map.insert(
+            "toggle_mailview", Key::Char('p')
+        );
+
+        map
+    }
 }

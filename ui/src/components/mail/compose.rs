@@ -252,13 +252,13 @@ impl Component for Composer {
         let mid = if width > 80 {
             let width = width - 80;
             let mid = if self.reply_context.is_some() {
-                width!(area) / 2 + width / 2
+                get_x(upper_left) + width!(area) / 2 
             } else {
                 width / 2
             };
 
             if self.reply_context.is_some() {
-                for i in get_y(upper_left)..=get_y(bottom_right) {
+                for i in get_y(upper_left) - 1..=get_y(bottom_right) {
                     set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
                     grid[(mid, i)].set_fg(Color::Default);
                     grid[(mid, i)].set_bg(Color::Default);
@@ -281,39 +281,42 @@ impl Component for Composer {
         };
 
         if width > 80 && self.reply_context.is_some() {
-            let area = (upper_left, set_x(bottom_right, mid - 1));
+            let area = (upper_left, set_x(bottom_right, (mid - 1)));
             let view = &mut self.reply_context.as_mut().unwrap().1;
-            view.draw(grid, area, context);
+            view.set_dirty();
+            view.draw(grid, std::dbg!(area), context);
         }
 
-        if self.dirty {
-            for i in get_x(upper_left) + mid + 1..=get_x(upper_left) + mid + width.saturating_sub(0)
-            {
-                //set_and_join_box(grid, (i, header_height), HORZ_BOUNDARY);
-                //grid[(i, header_height)].set_fg(Color::Default);
-                //grid[(i, header_height)].set_bg(Color::Default);
-            }
-        }
-
-        let header_area = (
-            pos_inc(upper_left, (mid + 1, 0)),
+        let header_area = if self.reply_context.is_some() {
+            (set_x(upper_left, mid + 1), set_y(bottom_right, get_y(upper_left) + header_height + 1))
+        } else {
+            (set_x(upper_left, mid + 1), (get_x(bottom_right).saturating_sub(mid), get_y(upper_left) + header_height + 1),)
+        };
+        let body_area = if self.reply_context.is_some() {
+            ((mid + 1, get_y(upper_left) + header_height + 1), bottom_right)
+        } else {
             (
-                get_x(bottom_right).saturating_sub(mid),
-                get_y(upper_left) + header_height + 1,
-            ),
-        );
-        let body_area = (
             pos_inc(upper_left, (mid + 1, header_height + 2)),
             pos_dec(bottom_right, ((mid, 0))),
-        );
+        )
+        };
 
+        let (x, y) = write_string_to_grid(
+                             if self.reply_context.is_some() { "COMPOSING REPLY" } else { "COMPOSING MESSAGE" },
+                             grid,
+                             Color::Byte(189),
+                             Color::Byte(167),
+                             (pos_dec(upper_left!(header_area), (0, 1)), bottom_right!(header_area)),
+                             false);
+        change_colors(grid, (set_x(pos_dec(upper_left!(header_area), (0, 1)), x), set_y(bottom_right!(header_area), y)), Color::Byte(189), Color::Byte(167));
+        
         /* Regardless of view mode, do the following */
-        self.form.draw(grid, header_area, context);
+        self.form.draw(grid, std::dbg!(header_area), context);
 
         match self.mode {
             ViewMode::Overview | ViewMode::Pager => {
                 self.pager.set_dirty();
-                self.pager.draw(grid, body_area, context);
+                self.pager.draw(grid, std::dbg!(body_area), context);
             }
             ViewMode::Discard(_) => {
                 /* Let user choose whether to quit with/without saving or cancel */
@@ -382,10 +385,10 @@ impl Component for Composer {
                 }
             }
             (ViewMode::Overview, Some((_, ref mut view))) => {
-                if view.process_event(event, context) {
-                    self.dirty = true;
-                    return true;
-                }
+                //if view.process_event(event, context) {
+                //    self.dirty = true;
+                //    return true;
+                //}
             }
             _ => {}
         }
