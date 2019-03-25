@@ -22,7 +22,7 @@ impl UText {
         }
 
         let (first, _) = self.content.split_at(cursor_pos);
-        self.grapheme_cursor_pos = split_graphemes(first).len();
+        self.grapheme_cursor_pos = first.split_graphemes().len();
         self.cursor_pos = cursor_pos;
     }
 
@@ -34,7 +34,7 @@ impl UText {
         self.content
     }
     pub fn grapheme_len(&self) -> usize {
-        split_graphemes(&self.content).len()
+        self.content.split_graphemes().len()
     }
 
     pub fn cursor_inc(&mut self) {
@@ -42,8 +42,8 @@ impl UText {
             return;
         }
 
-        let (_, right) = std::dbg!(self.content.split_at(self.cursor_pos));
-        if let Some((_, graph)) = std::dbg!(next_grapheme(right)) {
+        let (_, right) = self.content.split_at(self.cursor_pos);
+        if let Some((_, graph)) = right.next_grapheme() {
             self.cursor_pos += graph.len();
             self.grapheme_cursor_pos += 1;
         }
@@ -52,8 +52,8 @@ impl UText {
         if self.cursor_pos == 0 {
             return;
         }
-        let (left, _) = std::dbg!(self.content.split_at(self.cursor_pos));
-        if let Some((_, graph)) = std::dbg!(last_grapheme(left)) {
+        let (left, _) = self.content.split_at(self.cursor_pos);
+        if let Some((_, graph)) = left.last_grapheme() {
             self.cursor_pos -= graph.len();
             self.grapheme_cursor_pos -= 1;
         }
@@ -116,7 +116,7 @@ impl UText {
              * left = xxxxxx....xxgg;
              * right = xxx;
              */
-            if let Some((offset, graph)) = std::dbg!(last_grapheme(left)) {
+            if let Some((offset, graph)) = left.last_grapheme() {
                 (offset, graph.len())
             } else {
                 return;

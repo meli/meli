@@ -24,6 +24,7 @@
  colors and attributes.
 */
 use super::position::*;
+use super::grapheme_clusters::*;
 use std::convert::From;
 use std::fmt;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
@@ -733,7 +734,6 @@ pub fn write_string_to_grid(
     (x, y)
 }
 
-// TODO UTF-8 incompatible
 pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
     let mut ret: Vec<&str> = Vec::with_capacity(16);
     loop {
@@ -753,12 +753,16 @@ pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
                 continue;
             }
         }
-        if s.len() > width {
-            if let Some(next_idx) = s.as_bytes()[..width]
+        let graphemes = s.graphemes_indices();
+        if graphemes.len() > width {
+            // use grapheme indices and find position of " " graphemes
+            if let Some(next_idx) = graphemes[..width]
                 .iter()
-                .rposition(u8::is_ascii_whitespace)
+                .rposition(|(_, g)| *g == " ")
             {
+                let next_idx = graphemes[next_idx].0;
                 ret.push(&s[..next_idx]);
+                eprintln!("width = {} w = {} l = {:?}\n\n", width, ret.last().unwrap().grapheme_width(), ret.last().unwrap());
                 s = &s[next_idx + 1..];
             } else {
                 ret.push(&s[..width]);

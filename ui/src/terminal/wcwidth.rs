@@ -41,7 +41,6 @@ impl<'a> Iterator for CodePointsIterator<'a> {
     type Item = WChar;
 
     fn next(&mut self) -> Option<WChar> {
-        println!("rest = {:?}", self.rest);
         if self.rest.is_empty() {
             return None;
         }

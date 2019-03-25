@@ -8,33 +8,41 @@
 
 */
 
-use super::wcwidth::{wcwidth, CodePointsIter};
 use super::*;
 
-pub fn split_graphemes(s: &str) -> Vec<&str> {
-    UnicodeSegmentation::graphemes(s, true).collect::<Vec<&str>>()
-}
 
-pub fn next_grapheme(s: &str) -> Option<(usize, &str)> {
-    UnicodeSegmentation::grapheme_indices(s, true).next()
-}
-
-pub fn last_grapheme(s: &str) -> Option<(usize, &str)> {
-    UnicodeSegmentation::grapheme_indices(s, true).next_back()
-}
-
-pub fn grapheme_width(grapheme: &str) -> i32 {
-    let mut count = 0;
-    for c in grapheme.code_points() {
-        count += if let Some(c) = wcwidth(c) {
-            c as i32
-        } else {
-            -1
-        };
+pub trait Graphemes: UnicodeSegmentation + CodePointsIter {
+    fn split_graphemes<'a>(&'a self) -> Vec<&'a str> {
+        UnicodeSegmentation::graphemes(self, true).collect::<Vec<&str>>()
     }
 
-    count
+    fn graphemes_indices<'a>(&'a self) -> Vec<(usize, &'a str)> {
+        UnicodeSegmentation::grapheme_indices(self, true).collect::<Vec<(usize, &str)>>()
+    }
+
+    fn next_grapheme<'a>(&'a self) -> Option<(usize, &'a str)> {
+        UnicodeSegmentation::grapheme_indices(self, true).next()
+    }
+
+    fn last_grapheme<'a>(&'a self) -> Option<(usize, &'a str)> {
+        UnicodeSegmentation::grapheme_indices(self, true).next_back()
+    }
+
+    fn grapheme_width(&self) -> i32 {
+        let mut count = 0;
+        for c in self.code_points() {
+            count += if let Some(c) = wcwidth(c) {
+                c as i32
+            } else {
+                -1
+            };
+        }
+
+        count
+    }
 }
+
+impl Graphemes for str {}
 
 //#[derive(PartialEq)]
 //enum Property {
