@@ -119,7 +119,7 @@ fn main() {
                                             drop(state);
                                             break 'main;
                                         },
-                                        Key::Char(';') => {
+                                        Key::Char(' ') => {
                                             state.mode = UIMode::Execute;
                                             state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Execute)});
                                             state.redraw();
