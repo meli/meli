@@ -1054,7 +1054,7 @@ impl Component for Selector {
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         let (width, height) = self.content.size();
         match event.event_type {
-            UIEventType::Input(Key::Char(' ')) => {
+            UIEventType::Input(Key::Char('\t')) => {
                 self.entries[self.cursor].1 = !self.entries[self.cursor].1;
                 if self.entries[self.cursor].1 {
                     write_string_to_grid(

@@ -571,6 +571,9 @@ impl Component for ThreadView {
                 return true;
             }
             UIEventType::Input(Key::Char('\n')) => {
+                if self.entries.len() < 2 {
+                    return true;
+                }
                 self.new_expanded_pos = self.cursor_pos;
                 self.show_mailview = true;
                 self.initiated = false;

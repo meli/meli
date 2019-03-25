@@ -171,7 +171,7 @@ impl Composer {
         let headers = self.draft.headers();
         let account_cursor = self.account_cursor;
         for &k in &["Date", "From", "To", "Cc", "Bcc", "Subject"] {
-            if k == "To" {
+            if k == "To" || k == "Cc" || k == "Bcc" {
                 self.form.push_cl((
                     k.into(),
                     headers[k].to_string(),
@@ -281,7 +281,7 @@ impl Component for Composer {
         };
 
         if width > 80 && self.reply_context.is_some() {
-            let area = (upper_left, set_x(bottom_right, (mid - 1)));
+            let area = (upper_left, set_x(bottom_right, mid - 1));
             let view = &mut self.reply_context.as_mut().unwrap().1;
             view.set_dirty();
             view.draw(grid, std::dbg!(area), context);
@@ -297,7 +297,7 @@ impl Component for Composer {
         } else {
             (
             pos_inc(upper_left, (mid + 1, header_height + 2)),
-            pos_dec(bottom_right, ((mid, 0))),
+            pos_dec(bottom_right, (mid, 0)),
         )
         };
 
@@ -384,7 +384,7 @@ impl Component for Composer {
                     return true;
                 }
             }
-            (ViewMode::Overview, Some((_, ref mut view))) => {
+            (ViewMode::Overview, Some((_, ref mut _view))) => {
                 //if view.process_event(event, context) {
                 //    self.dirty = true;
                 //    return true;
