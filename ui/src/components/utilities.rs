@@ -790,6 +790,7 @@ impl Component for Progress {
 
 #[derive(Debug)]
 pub struct Tabbed {
+    pinned: usize,
     children: Vec<Entity>,
     cursor_pos: usize,
 
@@ -800,7 +801,9 @@ pub struct Tabbed {
 
 impl Tabbed {
     pub fn new(children: Vec<Box<Component>>) -> Self {
+        let pinned = children.len();
         Tabbed {
+            pinned, 
             children: children.into_iter().map(Entity::from).collect(),
             cursor_pos: 0,
             show_shortcuts: false,
@@ -808,13 +811,16 @@ impl Tabbed {
         }
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+
         if self.children.is_empty() {
             clear_area(grid, area);
             return;
         }
 
-        let mut x = get_x(upper_left!(area));
-        let mut y: usize = get_y(upper_left!(area));
+        let mut x = get_x(upper_left);
+        let y: usize = get_y(upper_left);
         for (idx, c) in self.children.iter().enumerate() {
             let (fg, bg) = if idx == self.cursor_pos {
                 (Color::Default, Color::Default)
@@ -826,10 +832,13 @@ impl Tabbed {
                 grid,
                 fg,
                 bg,
-                (set_x(upper_left!(area), x), bottom_right!(area)),
+                (set_x(upper_left, x), bottom_right!(area)),
                 false,
             );
             x = x_ + 1;
+            if idx == self.pinned.saturating_sub(1) {
+                x += 2;
+            }
             if y != _y_ {
                 break;
             }
@@ -978,12 +987,18 @@ impl Component for Tabbed {
                 return true;
             }
             UIEventType::Action(Tab(Close)) => {
+                if self.pinned > self.cursor_pos {
+                    return true;
+                }
                 let id = *self.children[self.cursor_pos].id();
                 self.children[self.cursor_pos].kill(id);
                 self.set_dirty();
                 return true;
             }
             UIEventType::Action(Tab(Kill(ref id))) => {
+                if self.pinned > self.cursor_pos {
+                    return true;
+                }
                 if let Some(c_idx) = self.children.iter().position(|x| x.id() == id) {
                     self.children.remove(c_idx);
                     self.cursor_pos = self.cursor_pos.saturating_sub(1);
