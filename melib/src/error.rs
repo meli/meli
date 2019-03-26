@@ -29,6 +29,7 @@ use std::fmt;
 use std::io;
 use std::result;
 use std::string;
+use std::str;
 
 use nom;
 
@@ -90,6 +91,12 @@ impl From<string::FromUtf8Error> for MeliError {
     }
 }
 
+impl From<str::Utf8Error> for MeliError {
+    #[inline]
+    fn from(kind: str::Utf8Error) -> MeliError {
+        MeliError::new(format!("{:?}", kind))
+    }
+}
 //use std::option;
 //impl From<option::NoneError> for MeliError {
 //    #[inline]

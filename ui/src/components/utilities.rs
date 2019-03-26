@@ -980,6 +980,12 @@ impl Component for Tabbed {
                 self.children[self.cursor_pos].set_dirty();
                 return true;
             }
+            UIEventType::Action(Tab(Edit(coordinates, msg))) => {
+                self.add_component(Box::new(Composer::edit(coordinates, msg, context)));
+                self.cursor_pos = self.children.len() - 1;
+                self.children[self.cursor_pos].set_dirty();
+                return true;
+            }
             UIEventType::Action(Tab(TabOpen(ref mut e))) if e.is_some() => {
                 self.add_component(e.take().unwrap());
                 self.cursor_pos = self.children.len() - 1;

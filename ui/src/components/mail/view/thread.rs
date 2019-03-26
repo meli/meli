@@ -555,6 +555,35 @@ impl Component for ThreadView {
                 });
                 return true;
             }
+            UIEventType::Input(Key::Char('e')) => {
+                {
+                    let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
+                        .as_ref()
+                        .unwrap();
+                    let threads = &mailbox.collection.threads;
+                    let thread_node = &threads.thread_nodes()[threads.root_set(self.coordinates.2)];
+                    let i = if let Some(i) = thread_node.message() {
+                        i
+                    } else {
+                        threads.thread_nodes()[thread_node.children()[0]]
+                            .message()
+                            .unwrap()
+                    };
+                    let envelope: &Envelope = &mailbox.collection[&i];
+                    let op = context.accounts[self.coordinates.0]
+                        .backend
+                        .operation(envelope.hash(), mailbox.folder.hash());
+                    eprintln!("sending action edit for {}, {}", envelope.message_id(), op.description());
+                }
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::Action(Tab(Edit(
+                        self.coordinates,
+                        self.entries[self.expanded_pos].index.1,
+                    ))),
+                });
+                return true;
+            }
             UIEventType::Input(Key::Up) => {
                 if self.cursor_pos > 0 {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);

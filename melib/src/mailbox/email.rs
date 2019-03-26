@@ -557,6 +557,11 @@ impl Envelope {
         }
         builder.build()
     }
+    pub fn headers<'a>(&self, bytes: &'a [u8]) -> Result<Vec<(&'a str, &'a str)>> {
+        let ret = parser::headers(bytes).to_full_result()?;
+        let len = ret.len();
+        ret.into_iter().try_fold(Vec::with_capacity(len), |mut acc, (a, b)| Ok({acc.push((std::str::from_utf8(a)?, std::str::from_utf8(b)?)); acc }))
+    }
     pub fn body(&self, mut operation: Box<BackendOp>) -> Attachment {
         let file = operation.as_bytes();
         self.body_bytes(file.unwrap())
