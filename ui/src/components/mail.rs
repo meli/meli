@@ -48,6 +48,7 @@ struct AccountMenuEntry {
 pub struct AccountMenu {
     accounts: Vec<AccountMenuEntry>,
     dirty: bool,
+    visible: bool,
     cursor: Option<(usize, usize)>,
 }
 
@@ -77,6 +78,7 @@ impl AccountMenu {
             .collect();
         AccountMenu {
             accounts,
+            visible: true,
             dirty: true,
             cursor: None,
         }
@@ -270,6 +272,10 @@ impl Component for AccountMenu {
             UIEventType::Resize => {
                 self.dirty = true;
             }
+            UIEventType::Input(Key::Char('\t')) => {
+                self.visible = !self.visible;
+                self.dirty = true;
+            }
             _ => {}
         }
         false
@@ -277,7 +283,13 @@ impl Component for AccountMenu {
     fn is_dirty(&self) -> bool {
         self.dirty
     }
+    fn is_visible(&self) -> bool {
+        self.visible
+    }
     fn set_dirty(&mut self) {
         self.dirty = true;
+    }
+    fn get_shortcuts(&self, _context: &Context) -> ShortcutMap {
+        [("Toggle account menu visibility", Key::Char('\t'))].iter().cloned().collect()
     }
 }

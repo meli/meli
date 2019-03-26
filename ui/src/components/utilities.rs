@@ -114,6 +114,7 @@ pub struct VSplit {
     left: Entity,
     right: Entity,
     show_divider: bool,
+    prev_visibility: (bool, bool),
     /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
 }
@@ -131,6 +132,7 @@ impl VSplit {
             left,
             right,
             show_divider,
+            prev_visibility: (true, true),
             ratio,
         }
     }
@@ -144,7 +146,21 @@ impl Component for VSplit {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         let total_cols = get_x(bottom_right) - get_x(upper_left);
-        let right_entity_width = (self.ratio * total_cols) / 100;
+        let visibility = (self.left.is_visible(), self.right.is_visible());
+        if visibility != self.prev_visibility {
+            self.set_dirty();
+            self.prev_visibility = visibility;
+        }
+        let right_entity_width = match visibility {
+            (true, true) => (self.ratio * total_cols) / 100,
+            (false, true) => total_cols,
+            (true, false) => 0,
+            (false, false) => {
+                clear_area(grid, area);
+                return;
+            }
+        };
+            
         let mid = get_x(bottom_right) - right_entity_width;
 
         if get_y(upper_left) > 1 {
@@ -157,7 +173,7 @@ impl Component for VSplit {
             }
         }
 
-        if self.show_divider {
+        if self.show_divider && mid != get_x(upper_left) {
             for i in get_y(upper_left)..=get_y(bottom_right) {
                 grid[(mid, i)].set_ch(VERT_BOUNDARY);
                 grid[(mid, i)].set_fg(Color::Default);
@@ -176,12 +192,23 @@ impl Component for VSplit {
                 .dirty_areas
                 .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
         }
-        self.left
-            .component
-            .draw(grid, (upper_left, (mid - 1, get_y(bottom_right))), context);
-        self.right
-            .component
-            .draw(grid, ((mid + 1, get_y(upper_left)), bottom_right), context);
+
+        if right_entity_width == total_cols {
+            self.right
+                .component
+                .draw(grid, area, context);
+        } else if right_entity_width == 0 {
+            self.left
+                .component
+                .draw(grid, area, context);
+        } else {
+            self.left
+                .component
+                .draw(grid, (upper_left, ((mid - 1), get_y(bottom_right))), context);
+            self.right
+                .component
+                .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+        }
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {

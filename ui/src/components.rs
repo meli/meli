@@ -151,11 +151,14 @@ pub trait Component: Display + Debug + Send {
     fn is_dirty(&self) -> bool {
         true
     }
+    fn is_visible(&self) -> bool {
+        true
+    }
     fn set_dirty(&mut self);
     fn kill(&mut self, _id: EntityId) {}
     fn set_id(&mut self, _id: EntityId) {}
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, _context: &Context) -> ShortcutMap {
         Default::default()
     }
 }
