@@ -1,7 +1,7 @@
 use super::*;
-use mailbox::backends::BackendOp;
 use chrono::{DateTime, Local};
 use data_encoding::BASE64_MIME;
+use mailbox::backends::BackendOp;
 use std::str;
 
 mod mime;
@@ -95,18 +95,16 @@ impl str::FromStr for Draft {
 
 impl Draft {
     pub fn edit(envelope: &Envelope, mut op: Box<BackendOp>) -> Self {
-
         let mut ret = Draft::default();
         //TODO: Inform user if error
         {
             let bytes = op.as_bytes().unwrap_or(&[]);
             for (h, v) in envelope.headers(bytes).unwrap_or_else(|_| Vec::new()) {
                 ret.header_order.push(h.into());
-                ret.headers_mut()
-                    .insert(h.into(), v.into());
+                ret.headers_mut().insert(h.into(), v.into());
             }
         }
-        
+
         ret.body = envelope.body(op).text();
 
         ret

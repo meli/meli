@@ -578,23 +578,39 @@ impl Threads {
         t.create_root_set(collection);
         t.build_collection(collection);
         for (i, _t) in t.thread_nodes.iter().enumerate() {
-            eprintln!("Thread #{}, children {}", i, _t.children.len());
+            if cfg!(feature = "debug_log") {
+                eprintln!("Thread #{}, children {}", i, _t.children.len());
+            }
             if !_t.children.is_empty() {
-                eprintln!("{:?}", _t.children);
+                if cfg!(feature = "debug_log") {
+                    eprintln!("{:?}", _t.children);
+                }
             }
             if let Some(m) = _t.message {
-                eprintln!("\tmessage: {}", collection[&m].subject());
+                if cfg!(feature = "debug_log") {
+                    eprintln!("\tmessage: {}", collection[&m].subject());
+                }
             } else {
-                eprintln!("\tNo message");
+                if cfg!(feature = "debug_log") {
+                    eprintln!("\tNo message");
+                }
             }
         }
-        eprintln!("\n");
+        if cfg!(feature = "debug_log") {
+            eprintln!("\n");
+        }
         for (i, _t) in t.tree.borrow().iter().enumerate() {
-            eprintln!("Tree #{} id {}, children {}", i, _t.id, _t.children.len());
+            if cfg!(feature = "debug_log") {
+                eprintln!("Tree #{} id {}, children {}", i, _t.id, _t.children.len());
+            }
             if let Some(m) = t.thread_nodes[_t.id].message {
-                eprintln!("\tmessage: {}", collection[&m].subject());
+                if cfg!(feature = "debug_log") {
+                    eprintln!("\tmessage: {}", collection[&m].subject());
+                }
             } else {
-                eprintln!("\tNo message");
+                if cfg!(feature = "debug_log") {
+                    eprintln!("\tNo message");
+                }
             }
         }
         t
@@ -834,7 +850,9 @@ impl Threads {
         //        .iter()
         //        .position(|n| n.message.map(|n| n == envelope_hash).unwrap_or(false))
         //        .unwrap();
-        //    eprintln!("DEBUG: {} in threads is idx= {}", envelope_hash, pos);
+        //    if cfg!(feature = "debug_log") {
+        // eprintln!("DEBUG: {} in threads is idx= {}", envelope_hash, pos);
+        // }
         //}
 
         let t_id: usize;
@@ -893,7 +911,9 @@ impl Threads {
         let difference: Vec<EnvelopeHash> =
             new_hash_set.difference(&self.hash_set).cloned().collect();
         for h in difference {
-            eprintln!("inserting {}", collection[&h].subject());
+            if cfg!(feature = "debug_log") {
+                eprintln!("inserting {}", collection[&h].subject());
+            }
             let env = collection.entry(h).or_default() as *mut Envelope;
             unsafe {
                 // `collection` is borrowed immutably and `insert` only changes the envelope's

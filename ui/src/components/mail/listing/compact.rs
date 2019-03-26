@@ -165,13 +165,17 @@ impl CompactListing {
                 threads.thread_nodes()[iter_ptr].message().unwrap()
             };
             if !mailbox.collection.contains_key(&i) {
-                eprintln!("key = {}", i);
+                if cfg!(feature = "debug_log") {
+                    eprintln!("key = {}", i);
+                }
                 eprintln!(
                     "name = {} {}",
                     mailbox.name(),
                     context.accounts[self.cursor_pos.0].name()
                 );
-                eprintln!("{:#?}", context.accounts);
+                if cfg!(feature = "debug_log") {
+                    eprintln!("{:#?}", context.accounts);
+                }
 
                 panic!();
             }
@@ -494,13 +498,17 @@ impl Component for CompactListing {
                     return true;
                 }
                 Action::SubSort(field, order) => {
-                    eprintln!("SubSort {:?} , {:?}", field, order);
+                    if cfg!(feature = "debug_log") {
+                        eprintln!("SubSort {:?} , {:?}", field, order);
+                    }
                     self.subsort = (*field, *order);
                     self.refresh_mailbox(context);
                     return true;
                 }
                 Action::Sort(field, order) => {
-                    eprintln!("Sort {:?} , {:?}", field, order);
+                    if cfg!(feature = "debug_log") {
+                        eprintln!("Sort {:?} , {:?}", field, order);
+                    }
                     self.sort = (*field, *order);
                     self.refresh_mailbox(context);
                     return true;

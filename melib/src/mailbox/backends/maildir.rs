@@ -67,11 +67,17 @@ impl MaildirOp {
     fn path(&self) -> PathBuf {
         let map = self.hash_index.lock().unwrap();
         let map = &map[&self.folder_hash];
-        eprintln!("looking for {} in {} map", self.hash, self.folder_hash);
+        if cfg!(feature = "debug_log") {
+            eprintln!("looking for {} in {} map", self.hash, self.folder_hash);
+        }
         if !map.contains_key(&self.hash) {
-            eprintln!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
+            if cfg!(feature = "debug_log") {
+                eprintln!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
+            }
             for e in map.iter() {
-                eprintln!("{:#?}", e);
+                if cfg!(feature = "debug_log") {
+                    eprintln!("{:#?}", e);
+                }
             }
         }
         map.get(&self.hash).unwrap().clone()

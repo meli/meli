@@ -23,8 +23,8 @@
  Define a (x, y) point in the terminal display as a holder of a character, foreground/background
  colors and attributes.
 */
-use super::position::*;
 use super::grapheme_clusters::*;
+use super::position::*;
 use std::convert::From;
 use std::fmt;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
@@ -637,7 +637,9 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
     let mut src_y = get_y(upper_left!(src));
     let (cols, rows) = grid_src.size();
     if src_x >= cols || src_y >= rows {
-        eprintln!("DEBUG: src area outside of grid_src in copy_area",);
+        if cfg!(feature = "debug_log") {
+            eprintln!("DEBUG: src area outside of grid_src in copy_area",);
+        }
         return upper_left!(dest);
     }
 
@@ -674,11 +676,15 @@ pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_colo
         || y >= get_y(bounds)
         || x >= get_x(bounds)
     {
-        eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+        if cfg!(feature = "debug_log") {
+            eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+        }
         return;
     }
     if !is_valid_area!(area) {
-        eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+        if cfg!(feature = "debug_log") {
+            eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+        }
         return;
     }
     for y in get_y(upper_left!(area))..=get_y(bottom_right!(area)) {
@@ -711,7 +717,9 @@ pub fn write_string_to_grid(
         || y > get_y(bounds)
         || x > get_x(bounds)
     {
-        eprintln!(" Invalid area with string {} and area {:?}", s, area);
+        if cfg!(feature = "debug_log") {
+            eprintln!(" Invalid area with string {} and area {:?}", s, area);
+        }
         return (x, y);
     }
     'char: for c in s.chars() {
@@ -756,10 +764,7 @@ pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
         let graphemes = s.graphemes_indices();
         if graphemes.len() > width {
             // use grapheme indices and find position of " " graphemes
-            if let Some(next_idx) = graphemes[..width]
-                .iter()
-                .rposition(|(_, g)| *g == " ")
-            {
+            if let Some(next_idx) = graphemes[..width].iter().rposition(|(_, g)| *g == " ") {
                 let next_idx = graphemes[next_idx].0;
                 ret.push(&s[..next_idx]);
                 s = &s[next_idx + 1..];

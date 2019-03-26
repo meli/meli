@@ -45,7 +45,7 @@ macro_rules! shortcut_key_values {
     }
 }
 
-shortcut_key_values! { "compact-listing", 
+shortcut_key_values! { "compact-listing",
 /// Shortcut listing for a mail listing in compact mode.
 pub struct CompactListingShortcuts {
         open_thread: Key |> "Open thread.",

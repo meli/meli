@@ -28,8 +28,8 @@ use std::error::Error;
 use std::fmt;
 use std::io;
 use std::result;
-use std::string;
 use std::str;
+use std::string;
 
 use nom;
 

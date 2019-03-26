@@ -142,7 +142,9 @@ fn move_to_cur(p: PathBuf) -> PathBuf {
         new.push(file_name);
         new.set_extension(":2,");
     }
-    eprintln!("moved to cur: {}", new.display());
+    if cfg!(feature = "debug_log") {
+        eprintln!("moved to cur: {}", new.display());
+    }
     fs::rename(p, &new).unwrap();
     new
 }
@@ -163,7 +165,9 @@ impl MailBackend for MaildirType {
             if f.is_valid().is_err() {
                 continue;
             }
-            eprintln!("watching {:?}", f);
+            if cfg!(feature = "debug_log") {
+                eprintln!("watching {:?}", f);
+            }
             let mut p = PathBuf::from(&f.path);
             p.push("cur");
             watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
@@ -208,7 +212,9 @@ impl MailBackend for MaildirType {
                                     &cache_dir,
                                     file_name,
                                 ) {
-                                    eprintln!("Create event {} {} {}", env.hash(), env.subject(), pathbuf.display());
+                                    if cfg!(feature = "debug_log") {
+eprintln!("Create event {} {} {}", env.hash(), env.subject(), pathbuf.display());
+}
                                     sender.send(RefreshEvent {
                                         hash: folder_hash,
                                         kind: Create(Box::new(env)),
@@ -257,7 +263,9 @@ impl MailBackend for MaildirType {
                                 if index_lock.get_mut(&new_hash).is_none() {
                                     let op = Box::new(MaildirOp::new(new_hash, hash_indexes.clone(), folder_hash));
                                     if let Some(env) = Envelope::from_token(op, new_hash) {
-                                        eprintln!("{}\t{}", new_hash, pathbuf.display());
+                                        if cfg!(feature = "debug_log") {
+eprintln!("{}\t{}", new_hash, pathbuf.display());
+}
                                         index_lock.insert(new_hash, pathbuf);
 
                                         /* Send Write notice */
@@ -267,7 +275,9 @@ impl MailBackend for MaildirType {
                                             kind: Update(old_hash, Box::new(env)),
                                         });
                                     } else {
-                                        eprintln!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", new_hash, pathbuf.as_path().display());
+                                        if cfg!(feature = "debug_log") {
+eprintln!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", new_hash, pathbuf.as_path().display());
+}
                                     }
                                 }
                             }
@@ -339,7 +349,9 @@ impl MailBackend for MaildirType {
                 let mut path = f.path.clone();
                 path.push("cur");
                 path.push("draft:2,");
-                eprintln!("saving at {}", path.display());
+                if cfg!(feature = "debug_log") {
+                    eprintln!("saving at {}", path.display());
+                }
                 let file = fs::File::create(path)?;
                 let mut writer = io::BufWriter::new(file);
                 writer.write_all(&message.into_bytes())?;
@@ -545,7 +557,9 @@ impl MaildirType {
                                                     }
                                                 local_r.push(e);
                                             } else {
-                                                eprintln!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", hash, file.as_path().display());
+                                                if cfg!(feature = "debug_log") {
+eprintln!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", hash, file.as_path().display());
+}
                                                 continue;
                                             }
                                         }
@@ -592,12 +606,16 @@ fn add_path_to_index(
             map.len()
         );
         for e in map.iter() {
-            eprintln!("{:#?}", e);
+            if cfg!(feature = "debug_log") {
+                eprintln!("{:#?}", e);
+            }
         }
     }
     let op = Box::new(MaildirOp::new(hash, hash_index.clone(), folder_hash));
     if let Some(e) = Envelope::from_token(op, hash) {
-        eprintln!("add_path_to_index gen {}\t{}", hash, file_name.display());
+        if cfg!(feature = "debug_log") {
+            eprintln!("add_path_to_index gen {}\t{}", hash, file_name.display());
+        }
         if let Ok(cached) = cache_dir.place_cache_file(file_name) {
             /* place result in cache directory */
             let f = match fs::File::create(cached) {

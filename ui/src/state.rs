@@ -241,10 +241,14 @@ impl State {
         )
         .unwrap();
         s.flush();
-        eprintln!("DEBUG: inserting mailbox hashes:");
+        if cfg!(feature = "debug_log") {
+            eprintln!("DEBUG: inserting mailbox hashes:");
+        }
         for (x, account) in s.context.accounts.iter_mut().enumerate() {
             for (y, folder) in account.backend.folders().iter().enumerate() {
-                eprintln!("{:?}", folder);
+                if cfg!(feature = "debug_log") {
+                    eprintln!("{:?}", folder);
+                }
                 s.context.mailbox_hashes.insert(folder.hash(), (x, y));
             }
             let sender = s.context.sender.clone();
@@ -507,7 +511,9 @@ impl State {
         let flag = match &mut self.context.accounts[account_idx][folder_idx] {
             Ok(_) => true,
             Err(e) => {
-                eprintln!("error {:?}", e);
+                if cfg!(feature = "debug_log") {
+                    eprintln!("error {:?}", e);
+                }
                 false
             }
         };

@@ -94,7 +94,9 @@ impl AccountMenu {
         context: &mut Context,
     ) -> usize {
         if !is_valid_area!(area) {
-            eprintln!("BUG: invalid area in print_account");
+            if cfg!(feature = "debug_log") {
+                eprintln!("BUG: invalid area in print_account");
+            }
         }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -290,6 +292,9 @@ impl Component for AccountMenu {
         self.dirty = true;
     }
     fn get_shortcuts(&self, _context: &Context) -> ShortcutMap {
-        [("Toggle account menu visibility", Key::Char('\t'))].iter().cloned().collect()
+        [("Toggle account menu visibility", Key::Char('\t'))]
+            .iter()
+            .cloned()
+            .collect()
     }
 }

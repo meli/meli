@@ -125,7 +125,9 @@ impl Component for NotificationFilter {
                     .stdout(Stdio::piped())
                     .spawn()
                 {
-                    eprintln!("{:?}", v);
+                    if cfg!(feature = "debug_log") {
+                        eprintln!("{:?}", v);
+                    }
                 }
             }
         }

@@ -573,7 +573,13 @@ impl Component for ThreadView {
                     let op = context.accounts[self.coordinates.0]
                         .backend
                         .operation(envelope.hash(), mailbox.folder.hash());
-                    eprintln!("sending action edit for {}, {}", envelope.message_id(), op.description());
+                    if cfg!(feature = "debug_log") {
+                        eprintln!(
+                            "sending action edit for {}, {}",
+                            envelope.message_id(),
+                            op.description()
+                        );
+                    }
                 }
                 context.replies.push_back(UIEvent {
                     id: 0,
@@ -631,16 +637,10 @@ impl Component for ThreadView {
         self.mailview.set_dirty();
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
-        let mut map = self
-            .mailview
-            .get_shortcuts(context);
+        let mut map = self.mailview.get_shortcuts(context);
 
-        map.insert(
-            "reply", Key::Char('R')
-        );
-        map.insert(
-            "toggle_mailview", Key::Char('p')
-        );
+        map.insert("reply", Key::Char('R'));
+        map.insert("toggle_mailview", Key::Char('p'));
 
         map
     }

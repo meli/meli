@@ -160,7 +160,7 @@ impl Component for VSplit {
                 return;
             }
         };
-            
+
         let mid = get_x(bottom_right) - right_entity_width;
 
         if get_y(upper_left) > 1 {
@@ -194,17 +194,15 @@ impl Component for VSplit {
         }
 
         if right_entity_width == total_cols {
-            self.right
-                .component
-                .draw(grid, area, context);
+            self.right.component.draw(grid, area, context);
         } else if right_entity_width == 0 {
-            self.left
-                .component
-                .draw(grid, area, context);
+            self.left.component.draw(grid, area, context);
         } else {
-            self.left
-                .component
-                .draw(grid, (upper_left, ((mid - 1), get_y(bottom_right))), context);
+            self.left.component.draw(
+                grid,
+                (upper_left, ((mid - 1), get_y(bottom_right))),
+                context,
+            );
             self.right
                 .component
                 .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
@@ -830,7 +828,7 @@ impl Tabbed {
     pub fn new(children: Vec<Box<Component>>) -> Self {
         let pinned = children.len();
         Tabbed {
-            pinned, 
+            pinned,
             children: children.into_iter().map(Entity::from).collect(),
             cursor_pos: 0,
             show_shortcuts: false,

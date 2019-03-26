@@ -226,7 +226,9 @@ impl WorkController {
                 }
 
                 // Report the amount of work done.
-                eprintln!("Thread {} did {} jobs.", thread_num, work_done);
+                if cfg!(feature = "debug_log") {
+                    eprintln!("Thread {} did {} jobs.", thread_num, work_done);
+                }
             });
 
             // Add the handle for the newly spawned thread to the list of handles

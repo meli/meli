@@ -473,7 +473,9 @@ impl Component for ThreadListing {
                     let account = &mut context.accounts[self.cursor_pos.0];
                     let (hash, is_seen) = {
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        eprintln!("key is {}", self.locations[dbg!(self.cursor_pos).2]);
+                        if cfg!(feature = "debug_log") {
+                            eprintln!("key is {}", self.locations[dbg!(self.cursor_pos).2]);
+                        }
                         let envelope: &Envelope =
                             &mailbox.collection[&self.locations[self.cursor_pos.2]];
                         (envelope.hash(), envelope.is_seen())
@@ -653,7 +655,9 @@ impl Component for ThreadListing {
                 if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 {
                     self.dirty = true;
                     self.refresh_mailbox(context);
-                    eprintln!("mailboxupdate");
+                    if cfg!(feature = "debug_log") {
+                        eprintln!("mailboxupdate");
+                    }
                 }
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
@@ -670,14 +674,18 @@ impl Component for ThreadListing {
                     return true;
                 }
                 Action::SubSort(field, order) => {
-                    eprintln!("SubSort {:?} , {:?}", field, order);
+                    if cfg!(feature = "debug_log") {
+                        eprintln!("SubSort {:?} , {:?}", field, order);
+                    }
                     self.subsort = (*field, *order);
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;
                 }
                 Action::Sort(field, order) => {
-                    eprintln!("Sort {:?} , {:?}", field, order);
+                    if cfg!(feature = "debug_log") {
+                        eprintln!("Sort {:?} , {:?}", field, order);
+                    }
                     self.sort = (*field, *order);
                     self.dirty = true;
                     self.refresh_mailbox(context);
@@ -699,8 +707,7 @@ impl Component for ThreadListing {
         self.dirty = true;
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
-        self
-            .view
+        self.view
             .as_ref()
             .map(|p| p.get_shortcuts(context))
             .unwrap_or_default()

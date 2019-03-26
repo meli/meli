@@ -269,7 +269,7 @@ impl Component for Composer {
         let mid = if width > 80 {
             let width = width - 80;
             let mid = if self.reply_context.is_some() {
-                get_x(upper_left) + width!(area) / 2 
+                get_x(upper_left) + width!(area) / 2
             } else {
                 width / 2
             };
@@ -305,28 +305,56 @@ impl Component for Composer {
         }
 
         let header_area = if self.reply_context.is_some() {
-            (set_x(upper_left, mid + 1), set_y(bottom_right, get_y(upper_left) + header_height + 1))
-        } else {
-            (set_x(upper_left, mid + 1), (get_x(bottom_right).saturating_sub(mid), get_y(upper_left) + header_height + 1),)
-        };
-        let body_area = if self.reply_context.is_some() {
-            ((mid + 1, get_y(upper_left) + header_height + 1), bottom_right)
+            (
+                set_x(upper_left, mid + 1),
+                set_y(bottom_right, get_y(upper_left) + header_height + 1),
+            )
         } else {
             (
-            pos_inc(upper_left, (mid + 1, header_height + 2)),
-            pos_dec(bottom_right, (mid, 0)),
-        )
+                set_x(upper_left, mid + 1),
+                (
+                    get_x(bottom_right).saturating_sub(mid),
+                    get_y(upper_left) + header_height + 1,
+                ),
+            )
+        };
+        let body_area = if self.reply_context.is_some() {
+            (
+                (mid + 1, get_y(upper_left) + header_height + 1),
+                bottom_right,
+            )
+        } else {
+            (
+                pos_inc(upper_left, (mid + 1, header_height + 2)),
+                pos_dec(bottom_right, (mid, 0)),
+            )
         };
 
         let (x, y) = write_string_to_grid(
-                             if self.reply_context.is_some() { "COMPOSING REPLY" } else { "COMPOSING MESSAGE" },
-                             grid,
-                             Color::Byte(189),
-                             Color::Byte(167),
-                             (pos_dec(upper_left!(header_area), (0, 1)), bottom_right!(header_area)),
-                             false);
-        change_colors(grid, (set_x(pos_dec(upper_left!(header_area), (0, 1)), x), set_y(bottom_right!(header_area), y)), Color::Byte(189), Color::Byte(167));
-        
+            if self.reply_context.is_some() {
+                "COMPOSING REPLY"
+            } else {
+                "COMPOSING MESSAGE"
+            },
+            grid,
+            Color::Byte(189),
+            Color::Byte(167),
+            (
+                pos_dec(upper_left!(header_area), (0, 1)),
+                bottom_right!(header_area),
+            ),
+            false,
+        );
+        change_colors(
+            grid,
+            (
+                set_x(pos_dec(upper_left!(header_area), (0, 1)), x),
+                set_y(bottom_right!(header_area), y),
+            ),
+            Color::Byte(189),
+            Color::Byte(167),
+        );
+
         /* Regardless of view mode, do the following */
         self.form.draw(grid, header_area, context);
 
@@ -459,9 +487,13 @@ impl Component for Composer {
                     ('y', ViewMode::Discard(u)) => {
                         let account = &context.accounts[self.account_cursor];
                         let draft = std::mem::replace(&mut self.draft, Draft::default());
-                        eprintln!("{:?}", account.save_draft(draft));
+                        if cfg!(feature = "debug_log") {
+                            eprintln!("{:?}", account.save_draft(draft));
+                        }
 
+                        //if cfg!(feature = "debug_log") {
                         //eprintln!("{:?}", self.draft.to_string());
+                        //}
                         context.replies.push_back(UIEvent {
                             id: 0,
                             event_type: UIEventType::Action(Tab(Kill(*u))),

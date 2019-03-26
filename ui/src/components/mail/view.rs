@@ -395,13 +395,15 @@ impl Component for MailView {
         match event.event_type {
             UIEventType::Input(Key::Char('c')) => {
                 /*
-                                let mut new_card: Card = Card::new();
-                                new_card.set_email(&envelope.from()[0].get_email());
-                                new_card.set_firstname(&envelope.from()[0].get_display_name());
+                                                let mut new_card: Card = Card::new();
+                                                new_card.set_email(&envelope.from()[0].get_email());
+                                                new_card.set_firstname(&envelope.from()[0].get_display_name());
 
-                                eprintln!("{:?}", new_card);
+                                                if cfg!(feature = "debug_log") {
+                eprintln!("{:?}", new_card);
+                }
 
-                */
+                                */
                 if let ViewMode::ContactSelector(_) = self.mode {
                     if let ViewMode::ContactSelector(s) =
                         std::mem::replace(&mut self.mode, ViewMode::Normal)
@@ -415,7 +417,9 @@ impl Component for MailView {
                                 .address_book
                                 .add_card(new_card);
                         }
+                        //if cfg!(feature = "debug_log") {
                         //eprintln!("{:?}", s.collect());
+                        //}
                     }
                     return true;
                 }

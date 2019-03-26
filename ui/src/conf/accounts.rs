@@ -157,7 +157,9 @@ impl Account {
                     mailbox!(idx, self.folders).rename(old_hash, new_hash);
                 }
                 RefreshEventKind::Create(envelope) => {
-                    eprintln!("create {}", envelope.hash());
+                    if cfg!(feature = "debug_log") {
+                        eprintln!("create {}", envelope.hash());
+                    }
                     let env: &Envelope = mailbox!(idx, self.folders).insert(*envelope);
                     let ref_folders: Vec<Folder> = self.backend.folders();
                     return Some(Notification(
@@ -200,7 +202,9 @@ impl Account {
     pub fn list_folders(&self) -> Vec<Folder> {
         let mut folders = self.backend.folders();
         if let Some(folder_confs) = self.settings.conf().folders() {
+            //if cfg!(feature = "debug_log") {
             //eprintln!("folder renames: {:?}", folder_renames);
+            //}
             for f in &mut folders {
                 if let Some(r) = folder_confs.get(&f.name().to_ascii_lowercase()) {
                     if let Some(rename) = r.rename() {

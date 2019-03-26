@@ -10,7 +10,6 @@
 
 use super::*;
 
-
 pub trait Graphemes: UnicodeSegmentation + CodePointsIter {
     fn split_graphemes<'a>(&'a self) -> Vec<&'a str> {
         UnicodeSegmentation::graphemes(self, true).collect::<Vec<&str>>()

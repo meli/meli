@@ -143,7 +143,9 @@ impl AttachmentBuilder {
                 }
             }
             Err(v) => {
-                eprintln!("parsing error in content_type: {:?} {:?}", value, v);
+                if cfg!(feature = "debug_log") {
+                    eprintln!("parsing error in content_type: {:?} {:?}", value, v);
+                }
             }
         }
         self
@@ -209,10 +211,18 @@ impl AttachmentBuilder {
                     let (headers, body) = match parser::attachment(&a).to_full_result() {
                         Ok(v) => v,
                         Err(_) => {
-                            eprintln!("error in parsing attachment");
-                            eprintln!("\n-------------------------------");
-                            eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
-                            eprintln!("-------------------------------\n");
+                            if cfg!(feature = "debug_log") {
+                                eprintln!("error in parsing attachment");
+                            }
+                            if cfg!(feature = "debug_log") {
+                                eprintln!("\n-------------------------------");
+                            }
+                            if cfg!(feature = "debug_log") {
+                                eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
+                            }
+                            if cfg!(feature = "debug_log") {
+                                eprintln!("-------------------------------\n");
+                            }
 
                             continue;
                         }
@@ -384,18 +394,22 @@ fn decode_rfc822(_raw: &[u8]) -> Attachment {
     builder.build()
 
     /*
+        if cfg!(feature = "debug_log") {
     eprintln!("raw is\n{:?}", str::from_utf8(raw).unwrap());
-    let e = match Envelope::from_bytes(raw) {
-        Some(e) => e,
-        None => {
-            eprintln!("error in parsing mail");
-            let error_msg = b"Mail cannot be shown because of errors.";
-            let mut builder = AttachmentBuilder::new(error_msg);
-            return builder.build();
-        }
-    };
-    e.body(None)
-    */
+    }
+        let e = match Envelope::from_bytes(raw) {
+            Some(e) => e,
+            None => {
+                if cfg!(feature = "debug_log") {
+    eprintln!("error in parsing mail");
+    }
+                let error_msg = b"Mail cannot be shown because of errors.";
+                let mut builder = AttachmentBuilder::new(error_msg);
+                return builder.build();
+            }
+        };
+        e.body(None)
+        */
 }
 
 type Filter = Box<Fn(&Attachment, &mut Vec<u8>) -> ()>;
