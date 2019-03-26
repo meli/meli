@@ -762,7 +762,6 @@ pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
             {
                 let next_idx = graphemes[next_idx].0;
                 ret.push(&s[..next_idx]);
-                eprintln!("width = {} w = {} l = {:?}\n\n", width, ret.last().unwrap().grapheme_width(), ret.last().unwrap());
                 s = &s[next_idx + 1..];
             } else {
                 ret.push(&s[..width]);

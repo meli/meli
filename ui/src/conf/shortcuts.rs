@@ -12,10 +12,15 @@ pub struct Shortcuts {
     pub pager: PagerShortcuts,
 }
 
+/// Create a struct holding all of a Component's shortcuts.
 #[macro_export]
-macro_rules! key_values {
-    ( $cname:expr, derive ($($derives:ident),*) : pub struct $name:ident { $($fname:ident : Key |> $fdesc:expr),* }) => {
-        #[derive($($derives),*)]
+macro_rules! shortcut_key_values {
+    (
+        $cname:expr,
+        $(#[$outer:meta])*
+        pub struct $name:ident { $($fname:ident : Key |> $fdesc:expr),* }) => {
+        $(#[$outer])*
+        #[derive(Debug, Clone, Deserialize)]
         #[serde(default)]
         #[serde(rename = $cname)]
         pub struct $name {
@@ -23,12 +28,14 @@ macro_rules! key_values {
         }
 
         impl $name {
+            /// Returns a shortcut's description
             pub fn key_desc(&self, key: &str) -> &'static str {
                 match key {
                     $(stringify!($fname) => $fdesc),*,
                         _ => unreachable!()
                 }
             }
+            /// Returns a hashmap of all shortcuts and their values
             pub fn key_values(&self) -> FnvHashMap<&'static str, &Key> {
                 let mut map: FnvHashMap<&'static str, &Key> = Default::default();
                 $(map.insert(stringify!($fname),&(self.$fname));)*
@@ -38,7 +45,8 @@ macro_rules! key_values {
     }
 }
 
-key_values! { "compact-listing", derive (Debug, Clone, Deserialize) :
+shortcut_key_values! { "compact-listing", 
+/// Shortcut listing for a mail listing in compact mode.
 pub struct CompactListingShortcuts {
         open_thread: Key |> "Open thread.",
         exit_thread: Key |> "Exit thread view.",
@@ -68,7 +76,8 @@ impl Default for CompactListingShortcuts {
     }
 }
 
-key_values! { "contact-list", derive (Debug, Clone, Deserialize) :
+shortcut_key_values! { "contact-list",
+/// Shortcut listing for the contact list view
 pub struct ContactListShortcuts {
     create_contact: Key |> "Create new contact.",
     edit_contact: Key |> "Edit contact under cursor."
@@ -84,7 +93,8 @@ impl Default for ContactListShortcuts {
     }
 }
 
-key_values! { "pager", derive (Debug, Clone, Deserialize) :
+shortcut_key_values! { "pager",
+/// Shortcut listing for the text pager
 pub struct PagerShortcuts {
     scroll_up: Key |> "Scroll up pager.",
     scroll_down: Key |> "Scroll down pager.",

@@ -301,7 +301,7 @@ impl Component for Composer {
             let area = (upper_left, set_x(bottom_right, mid - 1));
             let view = &mut self.reply_context.as_mut().unwrap().1;
             view.set_dirty();
-            view.draw(grid, std::dbg!(area), context);
+            view.draw(grid, area, context);
         }
 
         let header_area = if self.reply_context.is_some() {
@@ -328,12 +328,12 @@ impl Component for Composer {
         change_colors(grid, (set_x(pos_dec(upper_left!(header_area), (0, 1)), x), set_y(bottom_right!(header_area), y)), Color::Byte(189), Color::Byte(167));
         
         /* Regardless of view mode, do the following */
-        self.form.draw(grid, std::dbg!(header_area), context);
+        self.form.draw(grid, header_area, context);
 
         match self.mode {
             ViewMode::Overview | ViewMode::Pager => {
                 self.pager.set_dirty();
-                self.pager.draw(grid, std::dbg!(body_area), context);
+                self.pager.draw(grid, body_area, context);
             }
             ViewMode::Discard(_) => {
                 /* Let user choose whether to quit with/without saving or cancel */

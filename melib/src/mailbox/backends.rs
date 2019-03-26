@@ -163,6 +163,13 @@ pub trait MailBackend: ::std::fmt::Debug {
 /// We need a way to do various operations on individual mails regardless of what backend they come
 /// from (eg local or imap).
 ///
+/// # Creation
+/// ```no_run
+/// /* Create operation from Backend */
+///
+/// let op = backend.operation(message.hash(), mailbox.folder.hash());
+/// ```
+///
 /// # Example
 /// ```
 /// use melib::mailbox::backends::{BackendOp, BackendOpGenerator};
@@ -193,7 +200,6 @@ pub trait MailBackend: ::std::fmt::Debug {
 /// let foogen = BackendOpGenerator::new(Box::new(|| Box::new(FooOp {})));
 /// let operation = foogen.generate();
 /// assert_eq!("Foobar", &operation.description());
-///
 /// ```
 pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn description(&self) -> String;

@@ -170,8 +170,9 @@ macro_rules! csi {
 
 /// Derive a CSI sequence struct.
 macro_rules! derive_csi_sequence {
-    ($doc:expr, $name:ident, $value:expr) => {
-        ///$doc
+    ($(#[$outer:meta])*
+    ($name:ident, $value:expr)) => {
+        $(#[$outer])*
         #[derive(Copy, Clone)]
         pub struct $name;
 
@@ -195,8 +196,9 @@ macro_rules! derive_csi_sequence {
     };
 }
 
-derive_csi_sequence!("Start Bracketed Paste Mode", BracketModeStart, "?2004h"); //
-derive_csi_sequence!("End Bracketed Paste Mode", BracketModeEnd, "?2003l");
+derive_csi_sequence!(#[doc="Empty struct with a Display implementation that returns the byte sequence to start [Bracketed Paste Mode](http://www.xfree86.org/current/ctlseqs.html#Bracketed%20Paste%20Mode)"] (BracketModeStart, "?2004h"));
+
+derive_csi_sequence!(#[doc="Empty struct with a Display implementation that returns the byte sequence to end [Bracketed Paste Mode](http://www.xfree86.org/current/ctlseqs.html#Bracketed%20Paste%20Mode)"] (BracketModeEnd, "?2003l"));
 
 pub const BRACKET_PASTE_START: &[u8] = b"\x1B[200~";
 pub const BRACKET_PASTE_END: &[u8] = b"\x1B[201~";

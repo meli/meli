@@ -406,7 +406,7 @@ impl ThreadView {
 
         /* First draw the thread subject on the first row */
         let y = {
-            let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
+            let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
                 .unwrap();
             let threads = &mailbox.collection.threads;
