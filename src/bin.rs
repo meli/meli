@@ -67,7 +67,7 @@ fn main() {
     let listing = listing::Listing::from(IndexStyle::Compact);
     let b = Entity::from(Box::new(listing));
     let tabs = Box::new(Tabbed::new(vec![
-        Box::new(VSplit::new(menu, b, 90, true)),
+        Box::new(VSplit::new(menu, b, 90, false)),
         Box::new(AccountsPanel::new(&state.context)),
         Box::new(ContactList::default()),
     ]));

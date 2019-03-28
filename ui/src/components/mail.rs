@@ -253,9 +253,6 @@ impl Component for AccountMenu {
         self.dirty = false;
         let mut y = get_y(upper_left);
         for a in &self.accounts {
-            for x in x..=x_max {
-                grid[(x, y)].set_ch('━');
-            }
             y += 1;
             y += self.print_account(grid, (set_y(upper_left, y), bottom_right), &a, context);
         }
