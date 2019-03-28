@@ -162,6 +162,13 @@ impl Component for Field {
                     s.insert_char(k);
                 }
             }
+            UIEventType::InsertInput(Key::Paste(ref p)) => {
+                if let Text(ref mut s, _) = self {
+                    for c in p.chars() {
+                        s.insert_char(c);
+                    }
+                }
+            }
             UIEventType::InsertInput(Key::Backspace) => match self {
                 Text(ref mut s, auto_complete) => {
                     s.backspace();
@@ -422,11 +429,11 @@ impl Component for FormWidget {
             UIEventType::ChangeMode(UIMode::Normal) if self.focus == FormFocus::TextInput => {
                 self.focus = FormFocus::Fields;
             }
-            UIEventType::InsertInput(Key::Char(_)) if self.focus == FormFocus::TextInput => {
+            UIEventType::InsertInput(Key::Backspace) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
             }
-            UIEventType::InsertInput(Key::Backspace) if self.focus == FormFocus::TextInput => {
+            UIEventType::InsertInput(_) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
             }
