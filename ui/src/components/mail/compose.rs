@@ -487,13 +487,15 @@ impl Component for Composer {
                     ('y', ViewMode::Discard(u)) => {
                         let account = &context.accounts[self.account_cursor];
                         let draft = std::mem::replace(&mut self.draft, Draft::default());
-                        if cfg!(feature = "debug_log") {
-                            eprintln!("{:?}", account.save_draft(draft));
+                        if let Err(e) = account.save_draft(draft) {
+                            if cfg!(feature = "debug_log") {
+                                eprintln!("{:?} could not save draft", e);
+                            }
+                            context.replies.push_back(UIEvent {
+                                id: 0,
+                                event_type: UIEventType::Notification(Some("Could not save draft.".into()), e.into())
+                            });
                         }
-
-                        //if cfg!(feature = "debug_log") {
-                        //eprintln!("{:?}", self.draft.to_string());
-                        //}
                         context.replies.push_back(UIEvent {
                             id: 0,
                             event_type: UIEventType::Action(Tab(Kill(*u))),

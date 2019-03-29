@@ -302,8 +302,9 @@ impl Account {
     }
 
     pub fn save_draft(&self, draft: Draft) -> Result<()> {
+        let finalize = draft.finalise()?;
         self.backend
-            .save(draft.to_string()?, &self.settings.conf.draft_folder)
+            .save(&finalize.as_bytes(), &self.settings.conf.draft_folder)
     }
 }
 

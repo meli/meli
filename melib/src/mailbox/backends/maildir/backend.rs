@@ -48,8 +48,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::io;
-use std::io::Write;
+use std::io::{self, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::{Component, Path, PathBuf};
 use std::result;
@@ -343,25 +342,34 @@ eprintln!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", 
         Box::new(MaildirOp::new(hash, self.hash_indexes.clone(), folder_hash))
     }
 
-    fn save(&self, message: String, folder: &str) -> Result<()> {
+    fn save(&self, bytes: &[u8], folder: &str) -> Result<()> {
         for f in &self.folders {
             if f.name == folder {
                 let mut path = f.path.clone();
                 path.push("cur");
-                path.push("draft:2,");
+                {
+                    let mut rand_buf = [0u8; 16];
+                    let mut f = fs::File::open("/dev/urandom").expect("Could not open /dev/urandom for reading");
+                    f.read_exact(&mut rand_buf).expect("Could not read from /dev/urandom/");
+                    let mut hostn_buf = String::with_capacity(256);
+                    let mut f = fs::File::open("/etc/hostname").expect("Could not open /etc/hostname for reading");
+                    f.read_to_string(&mut hostn_buf).expect("Could not read from /etc/hostname");
+                    let timestamp = std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_millis();
+                    path.push(&format!("{}.{:x}_{}.{}:2,", timestamp, u128::from_be_bytes(rand_buf), std::process::id(), hostn_buf.trim()));
+                }
                 if cfg!(feature = "debug_log") {
                     eprintln!("saving at {}", path.display());
                 }
-                let file = fs::File::create(path)?;
+                let file = fs::File::create(path).unwrap();
                 let mut writer = io::BufWriter::new(file);
-                writer.write_all(&message.into_bytes())?;
+                writer.write_all(bytes).unwrap();
                 return Ok(());
             }
         }
 
         Err(MeliError::new(format!(
-            "'{}' is not a valid folder.",
-            folder
+                    "'{}' is not a valid folder.",
+                    folder
         )))
     }
 }

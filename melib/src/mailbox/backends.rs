@@ -151,7 +151,7 @@ pub trait MailBackend: ::std::fmt::Debug {
     fn folders(&self) -> Vec<Folder>;
     fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp>;
 
-    fn save(&self, message: String, folder: &str) -> Result<()>;
+    fn save(&self, bytes: &[u8], folder: &str) -> Result<()>;
     //login function
 }
 

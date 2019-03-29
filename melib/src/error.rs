@@ -57,6 +57,13 @@ impl fmt::Display for MeliError {
     }
 }
 
+impl Into<String> for MeliError {
+    fn into(self) -> String {
+        format!("{}", self)
+    }
+}
+
+
 impl Error for MeliError {
     fn description(&self) -> &str {
         &self.details

@@ -184,6 +184,7 @@ impl Draft {
 
         Ok(ret)
     }
+
     pub fn finalise(self) -> Result<String> {
         let mut ret = String::new();
 
