@@ -59,7 +59,7 @@ impl Default for Composer {
             draft: Draft::default(),
             form: FormWidget::default(),
 
-            mode: ViewMode::Overview,
+            mode: ViewMode::Edit,
             dirty: true,
             initialized: false,
         }
@@ -69,7 +69,7 @@ impl Default for Composer {
 #[derive(Debug)]
 enum ViewMode {
     Discard(Uuid),
-    Pager,
+    Edit,
     //Selector(Selector),
     Overview,
 }
@@ -83,16 +83,16 @@ impl ViewMode {
         }
     }
 
-    fn is_overview(&self) -> bool {
-        if let ViewMode::Overview = self {
+    fn is_edit(&self) -> bool {
+        if let ViewMode::Edit = self {
             true
         } else {
             false
         }
     }
 
-    fn is_pager(&self) -> bool {
-        if let ViewMode::Pager = self {
+    fn is_overview(&self) -> bool {
+        if let ViewMode::Overview = self {
             true
         } else {
             false
@@ -361,7 +361,7 @@ impl Component for Composer {
         self.form.draw(grid, header_area, context);
 
         match self.mode {
-            ViewMode::Overview | ViewMode::Pager => {
+            ViewMode::Overview | ViewMode::Edit => {
                 self.pager.set_dirty();
                 self.pager.draw(grid, body_area, context);
             }
@@ -424,18 +424,24 @@ impl Component for Composer {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        match (&mut self.mode, &mut self.reply_context) {
-            (ViewMode::Pager, _) => {
+        match (&mut self.mode, &mut self.reply_context, &event.event_type) {
+            // don't pass Reply command to thread view in reply_context
+            (_, _, UIEventType::Input(Key::Char('R'))) => {},
+            (ViewMode::Overview, Some((_, ref mut view)), _) => {
+                if view.process_event(event, context) {
+                    self.dirty = true;
+                    return true;
+                }
                 /* Cannot mutably borrow in pattern guard, pah! */
                 if self.pager.process_event(event, context) {
                     return true;
                 }
             }
-            (ViewMode::Overview, Some((_, ref mut _view))) => {
-                //if view.process_event(event, context) {
-                //    self.dirty = true;
-                //    return true;
-                //}
+            (ViewMode::Overview, _, _) => {
+                /* Cannot mutably borrow in pattern guard, pah! */
+                if self.pager.process_event(event, context) {
+                    return true;
+                }
             }
             _ => {}
         }
@@ -512,15 +518,15 @@ impl Component for Composer {
                 self.set_dirty();
                 return true;
             }
-            /* Switch to Overview mode if we're on Pager mode */
-            UIEventType::Input(Key::Char('o')) if self.mode.is_pager() => {
+            /* Switch to Overview mode if we're on Edit mode */
+            UIEventType::Input(Key::Char('v')) if self.mode.is_edit() => {
                 self.mode = ViewMode::Overview;
                 self.set_dirty();
                 return true;
             }
-            /* Switch to Pager mode if we're on Overview mode */
-            UIEventType::Input(Key::Char('v')) if self.mode.is_overview() => {
-                self.mode = ViewMode::Pager;
+            /* Switch to Edit mode if we're on Overview mode */
+            UIEventType::Input(Key::Char('o')) if self.mode.is_overview() => {
+                self.mode = ViewMode::Edit;
                 self.set_dirty();
                 return true;
             }
@@ -597,6 +603,39 @@ impl Component for Composer {
 
     fn kill(&mut self, uuid: Uuid) {
         self.mode = ViewMode::Discard(uuid);
+    }
+
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        let mut map = if self.mode.is_overview() {
+            self.pager
+                .get_shortcuts(context)
+        } else {
+            Default::default()
+        };
+
+        if let Some((_, ref view)) = self.reply_context {
+            map.extend(view.get_shortcuts(context));
+            map.remove("reply");
+        }
+
+        if self.mode.is_overview() {
+            map.insert(
+                "Switch to edit mode",
+                Key::Char('o')
+            );
+        }
+        if self.mode.is_edit() {
+            map.insert(
+                "Switch to overview",
+                Key::Char('v')
+            );
+        }
+        map.insert(
+            "Edit in $EDITOR",
+            Key::Char('e')
+        );
+
+        map
     }
 }
 
