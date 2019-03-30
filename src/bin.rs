@@ -171,24 +171,6 @@ fn main() {
                                 break 'inner; // `goto` 'reap loop, and wait on child.
                             }
                         }
-                        ThreadEvent::UIEvent(UIEventType::StartupCheck) => {
-                            let mut render_flag = false;
-                            for idx_a in 0..state.context.accounts.len() {
-                                let len = state.context.accounts[idx_a].len();
-                                for idx_m in 0..len {
-
-                                    match state.context.account_status(idx_a, idx_m) {
-                                        Ok(_) => {
-                                            render_flag = true;
-                                        },
-                                        Err(_) => {}
-                                    }
-                                }
-                            }
-                            if render_flag {
-                                state.render();
-                            }
-                        }
                         ThreadEvent::UIEvent(e) => {
                             state.rcv_event(UIEvent { id: 0, event_type: e});
                             state.render();

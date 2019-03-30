@@ -479,11 +479,13 @@ impl Component for CompactListing {
                 self.view = None;
                 self.dirty = true;
             }
-            UIEventType::MailboxUpdate((ref idxa, ref idxf)) => {
-                if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 {
-                    self.refresh_mailbox(context);
-                    self.set_dirty();
-                }
+            UIEventType::MailboxUpdate((ref idxa, ref idxf)) if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 => {
+                self.refresh_mailbox(context);
+                self.set_dirty();
+            }
+            UIEventType::StartupCheck(ref f) if context.mailbox_hashes[f] == (self.new_cursor_pos.0, self.new_cursor_pos.1) => {
+                self.refresh_mailbox(context);
+                self.set_dirty();
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;

@@ -247,9 +247,7 @@ impl Component for AccountMenu {
         }
         clear_area(grid, area);
         let upper_left = upper_left!(area);
-        let x = get_x(upper_left);
         let bottom_right = bottom_right!(area);
-        let x_max = get_x(bottom_right);
         self.dirty = false;
         let mut y = get_y(upper_left);
         for a in &self.accounts {
@@ -273,6 +271,9 @@ impl Component for AccountMenu {
             }
             UIEventType::Input(Key::Char('\t')) => {
                 self.visible = !self.visible;
+                self.dirty = true;
+            }
+            UIEventType::StartupCheck(_) => {
                 self.dirty = true;
             }
             _ => {}

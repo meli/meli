@@ -140,9 +140,10 @@ impl Account {
             work.compute();
             handle.join();
             let envelopes = handle.extract();
+            let hash = folder.hash();
             let ret = Mailbox::new(folder, envelopes);
             tx.send(AsyncStatus::Payload(ret));
-            notify_fn.notify();
+            notify_fn.notify(hash);
         })))
     }
     pub fn reload(&mut self, event: RefreshEvent, idx: usize) -> Option<UIEventType> {

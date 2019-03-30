@@ -75,7 +75,7 @@ impl InputHandler {
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: Vec<Account>,
-    mailbox_hashes: FnvHashMap<FolderHash, (usize, usize)>,
+    pub mailbox_hashes: FnvHashMap<FolderHash, (usize, usize)>,
     pub settings: Settings,
 
     pub runtime_settings: Settings,
@@ -185,8 +185,8 @@ impl State {
                     n.to_string(),
                     a_s.clone(),
                     &backends,
-                    NotifyFn::new(Box::new(move || {
-                        sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck))
+                    NotifyFn::new(Box::new(move |f: FolderHash| {
+                        sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck(f)))
                     })),
                 )
             })
@@ -279,7 +279,7 @@ impl State {
             if let Some(notification) = self.context.accounts[idxa].reload(event, idxm) {
                 self.context
                     .sender
-                    .send(ThreadEvent::UIEvent(UIEventType::StartupCheck));
+                    .send(ThreadEvent::UIEvent(UIEventType::StartupCheck(hash)));
                 self.context.replies.push_back(UIEvent {
                     id: 0,
                     event_type: notification,

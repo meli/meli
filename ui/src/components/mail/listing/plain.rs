@@ -512,11 +512,13 @@ impl Component for PlainListing {
                 self.dirty = true;
                 self.view = None;
             }
-            UIEventType::MailboxUpdate((ref idxa, ref idxf)) => {
-                if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 {
-                    self.dirty = true;
-                    self.refresh_mailbox(context);
-                }
+            UIEventType::MailboxUpdate((ref idxa, ref idxf)) if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 => {
+                self.refresh_mailbox(context);
+                self.set_dirty();
+            }
+            UIEventType::StartupCheck(ref f) if context.mailbox_hashes[f] == (self.new_cursor_pos.0, self.new_cursor_pos.1) => {
+                self.refresh_mailbox(context);
+                self.set_dirty();
             }
             UIEventType::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;

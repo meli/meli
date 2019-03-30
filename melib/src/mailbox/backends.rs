@@ -121,7 +121,7 @@ impl RefreshEventConsumer {
     }
 }
 
-pub struct NotifyFn(Box<Fn() -> ()>);
+pub struct NotifyFn(Box<Fn(FolderHash) -> ()>);
 unsafe impl Send for NotifyFn {}
 unsafe impl Sync for NotifyFn {}
 
@@ -131,18 +131,18 @@ impl fmt::Debug for NotifyFn {
     }
 }
 
-impl From<Box<Fn() -> ()>> for NotifyFn {
-    fn from(kind: Box<Fn() -> ()>) -> Self {
+impl From<Box<Fn(FolderHash) -> ()>> for NotifyFn {
+    fn from(kind: Box<Fn(FolderHash) -> ()>) -> Self {
         NotifyFn(kind)
     }
 }
 
 impl NotifyFn {
-    pub fn new(b: Box<Fn() -> ()>) -> Self {
+    pub fn new(b: Box<Fn(FolderHash) -> ()>) -> Self {
         NotifyFn(b)
     }
-    pub fn notify(&self) {
-        self.0();
+    pub fn notify(&self, f: FolderHash) {
+        self.0(f);
     }
 }
 pub trait MailBackend: ::std::fmt::Debug {

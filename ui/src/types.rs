@@ -27,6 +27,7 @@ use super::execute::Action;
 use super::terminal::*;
 
 use melib::RefreshEvent;
+use melib::backends::FolderHash;
 use std;
 use std::fmt;
 use std::thread;
@@ -83,7 +84,7 @@ pub enum UIEventType {
     StatusEvent(StatusEvent),
     MailboxUpdate((usize, usize)), // (account_idx, mailbox_idx)
     EntityKill(Uuid),
-    StartupCheck,
+    StartupCheck(FolderHash),
     RefreshEvent(Box<RefreshEvent>),
 }
 
