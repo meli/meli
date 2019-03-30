@@ -280,6 +280,8 @@ impl Component for Composer {
                     grid[(mid, i)].set_fg(Color::Default);
                     grid[(mid, i)].set_bg(Color::Default);
                 }
+                grid[set_x(bottom_right, mid)].set_ch(VERT_BOUNDARY); // Enforce full vert bar at the bottom
+                grid[set_x(bottom_right, mid)].set_fg(Color::Byte(240));
             }
 
             if self.dirty {
@@ -298,7 +300,7 @@ impl Component for Composer {
         };
 
         if width > 80 && self.reply_context.is_some() {
-            let area = (upper_left, set_x(bottom_right, mid - 1));
+            let area = (pos_dec(upper_left, (0, 1)), set_x(bottom_right, mid - 1));
             let view = &mut self.reply_context.as_mut().unwrap().1;
             view.set_dirty();
             view.draw(grid, area, context);

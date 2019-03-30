@@ -245,6 +245,7 @@ fn set_and_join_vert(grid: &mut CellBuffer, idx: Pos) -> u32 {
                         break;
                     } else if adj == 0b0100 {
                         cell.set_ch(bin_to_ch(0b0101));
+                        cell.set_fg(Color::Byte(240));
                         bin_set |= 0b0100;
                         break;
                     }
@@ -285,11 +286,12 @@ fn set_and_join_vert(grid: &mut CellBuffer, idx: Pos) -> u32 {
             if let Some(cell) = grid.get_mut(x, y - 1) {
                 if let Some(adj) = ch_to_bin(cell.ch()) {
                     cell.set_ch(bin_to_ch(adj | 0b1000));
-                    break;
+                    cell.set_fg(Color::Byte(240));
+                } else {
+                    bin_set &= 0b1101;
                 }
             }
         }
-        bin_set &= 0b1101;
         break;
     }
 
@@ -303,10 +305,11 @@ fn set_and_join_vert(grid: &mut CellBuffer, idx: Pos) -> u32 {
         if let Some(cell) = grid.get_mut(x, y + 1) {
             if let Some(adj) = ch_to_bin(cell.ch()) {
                 cell.set_ch(bin_to_ch(adj | 0b0010));
-                break;
+                cell.set_fg(Color::Byte(240));
+            } else {
+                bin_set &= 0b0111;
             }
         }
-        bin_set &= 0b0111;
         break;
     }
 
@@ -337,6 +340,7 @@ fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
                     } else if adj == 0b0010 {
                         bin_set |= 0b0010;
                         cell.set_ch(bin_to_ch(0b1010));
+                        cell.set_fg(Color::Byte(240));
                         break;
                     }
                 }
@@ -359,7 +363,9 @@ fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
                     bin_set |= 0b1000;
                     break;
                 } else if adj == 0b1000 {
+                    bin_set |= 0b1000;
                     cell.set_ch(bin_to_ch(0b1010));
+                    cell.set_fg(Color::Byte(240));
                     break;
                 }
             }
@@ -379,11 +385,12 @@ fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
             if let Some(cell) = grid.get_mut(x - 1, y) {
                 if let Some(adj) = ch_to_bin(cell.ch()) {
                     cell.set_ch(bin_to_ch(adj | 0b0001));
-                    break;
+                    cell.set_fg(Color::Byte(240));
+                } else {
+                    bin_set &= 0b1011;
                 }
             }
         }
-        bin_set &= 0b1011;
         break;
     }
 
@@ -397,10 +404,11 @@ fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
         if let Some(cell) = grid.get_mut(x + 1, y) {
             if let Some(adj) = ch_to_bin(cell.ch()) {
                 cell.set_ch(bin_to_ch(adj | 0b0100));
-                break;
+                cell.set_fg(Color::Byte(240));
+            } else {
+                bin_set &= 0b1110;
             }
         }
-        bin_set &= 0b1110;
         break;
     }
 
@@ -429,6 +437,7 @@ pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: char) {
     };
 
     grid[idx].set_ch(bin_to_ch(bin_set));
+    grid[idx].set_fg(Color::Byte(240));
 }
 
 pub fn create_box(grid: &mut CellBuffer, area: Area) {
@@ -441,11 +450,13 @@ pub fn create_box(grid: &mut CellBuffer, area: Area) {
     for x in get_x(upper_left)..get_x(bottom_right) {
         grid[(x, get_y(upper_left))].set_ch(HORZ_BOUNDARY);
         grid[(x, get_y(bottom_right))].set_ch(HORZ_BOUNDARY);
+        grid[(x, get_y(bottom_right))].set_fg(Color::Byte(240));
     }
 
     for y in get_y(upper_left)..get_y(bottom_right) {
         grid[(get_x(upper_left), y)].set_ch(VERT_BOUNDARY);
         grid[(get_x(bottom_right), y)].set_ch(VERT_BOUNDARY);
+        grid[(get_x(bottom_right), y)].set_fg(Color::Byte(240));
     }
     set_and_join_box(grid, upper_left, HORZ_BOUNDARY);
     set_and_join_box(grid, set_x(upper_left, get_x(bottom_right)), HORZ_BOUNDARY);

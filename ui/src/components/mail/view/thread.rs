@@ -168,6 +168,7 @@ impl ThreadView {
             for i in ((e.index.0 * 4) + 1)..width - 1 {
                 set_and_join_box(&mut content, (i, 2 * y + 1), HORZ_BOUNDARY);
             }
+            set_and_join_box(&mut content, (width - 1, 2 * y), VERT_BOUNDARY);
             set_and_join_box(&mut content, (width - 1, 2 * y + 1), VERT_BOUNDARY);
         }
 
@@ -343,9 +344,6 @@ impl ThreadView {
                     area,
                     ((0, 2 * top_idx), (width - 1, height - 1)),
                 );
-                for y in get_y(upper_left)..=get_y(bottom_right) {
-                    set_and_join_box(grid, (mid, y), VERT_BOUNDARY);
-                }
             } else {
                 let area = (set_y(upper_left, y), bottom_right);
                 let upper_left = upper_left!(area);
@@ -377,6 +375,10 @@ impl ThreadView {
         } else {
             self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
         }
+        for x in get_x(upper_left)..=get_x(bottom_right) {
+            set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
+        }
+
     }
     fn draw_horz(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
@@ -486,6 +488,8 @@ impl ThreadView {
             context.dirty_areas.push_back(area);
             self.initiated = true;
         }
+
+
         if self.show_mailview {
             self.draw_list(
                 grid,
@@ -496,6 +500,10 @@ impl ThreadView {
                 .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
         } else {
             self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
+        }
+
+        for x in get_x(upper_left)..=get_x(bottom_right) {
+            set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
         }
     }
 }
