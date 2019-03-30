@@ -964,7 +964,7 @@ impl Component for Tabbed {
                     false,
                 );
                 write_string_to_grid(
-                    &format!("{:?}", v),
+                    &format!("{}", v),
                     grid,
                     Color::Default,
                     Color::Default,

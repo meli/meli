@@ -70,6 +70,22 @@ pub enum Key {
     Paste(String),
 }
 
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use Key::*;
+        match self {
+            F(n) => write!(f, "F{}", n),
+            Char('\t') => write!(f, "Tab"),
+            Char('\n') => write!(f, "Enter"),
+            Char(c) => write!(f, "{}", c),
+            Alt(c) => write!(f, "M-{}", c),
+            Ctrl(c) => write!(f, "C-{}", c),
+            Paste(_) => write!(f, "Pasted buf"),
+            a => write!(f, "{}", stringify!(a)),
+        }
+    }
+}
+
 impl<'a> From<&'a String> for Key {
     fn from(v: &'a String) -> Self {
         Key::Paste(v.to_string())
