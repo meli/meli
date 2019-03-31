@@ -66,22 +66,91 @@ impl ContactList {
         let book = &mut account.address_book;
         self.length = book.len();
         self.content
-            .resize(MAX_COLS, book.len(), Cell::with_char(' '));
+            .resize(MAX_COLS, book.len() + 1, Cell::with_char(' '));
+
+        clear_area(&mut self.content, ((0, 0), (MAX_COLS - 1, self.length)));
 
         self.id_positions.clear();
         if self.id_positions.capacity() < book.len() {
             self.id_positions.reserve(book.len());
         }
+        let mut maxima = ("First Name".len(), "Last Name".len(), "E-mail".len(), "URL".len());
 
+        for c in book.values() {
+            self.id_positions.push(*c.id());
+            maxima.0 = std::cmp::max(maxima.0, c.firstname().split_graphemes().len());
+            maxima.1 = std::cmp::max(maxima.1, c.lastname().split_graphemes().len());
+            maxima.2 = std::cmp::max(maxima.2, c.email().split_graphemes().len());
+            maxima.3 = std::cmp::max(maxima.3, c.url().split_graphemes().len());
+            eprintln!("card = {:?}", c);
+        }
+        maxima.0 += 5;
+        maxima.1 += maxima.0 + 5;
+        maxima.2 += maxima.1 + 5;
+        write_string_to_grid(
+            "First Name",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            ((0, 0), (MAX_COLS - 1, self.length)),
+            false,
+            );
+        write_string_to_grid(
+            "Last Name",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            ((maxima.0, 0), (MAX_COLS - 1, self.length)),
+            false,
+            );
+        write_string_to_grid(
+            "E-mail",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            (( maxima.1, 0), (MAX_COLS - 1, self.length)),
+            false,
+            );
+        write_string_to_grid(
+            "URL",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            ((maxima.2, 0), (MAX_COLS - 1, self.length)),
+            false,
+            );
         for (i, c) in book.values().enumerate() {
             self.id_positions.push(*c.id());
 
+            write_string_to_grid(
+                c.firstname(),
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                ((0, i + 1), (MAX_COLS - 1, self.length)),
+                false,
+            );
+            write_string_to_grid(
+                c.lastname(),
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                ((maxima.0, i + 1), (MAX_COLS - 1, self.length)),
+                false,
+            );
             write_string_to_grid(
                 c.email(),
                 &mut self.content,
                 Color::Default,
                 Color::Default,
-                ((0, i), (MAX_COLS - 1, book.len() - 1)),
+                (( maxima.1, i + 1), (MAX_COLS - 1, self.length)),
+                false,
+            );
+            write_string_to_grid(
+                c.url(),
+                &mut self.content, Color::Default,
+                Color::Default,
+                ((maxima.2, i + 1), (MAX_COLS - 1, self.length)),
                 false,
             );
         }
@@ -105,7 +174,6 @@ impl Component for ContactList {
 
         if self.dirty {
             self.initialize(context);
-            clear_area(grid, area);
             copy_area(
                 grid,
                 &self.content,
@@ -128,8 +196,8 @@ impl Component for ContactList {
         change_colors(
             grid,
             (
-                pos_inc(upper_left, (0, self.cursor_pos)),
-                set_y(bottom_right, get_y(upper_left) + self.cursor_pos),
+                pos_inc(upper_left, (0, self.cursor_pos + 1)),
+                set_y(bottom_right, get_y(upper_left) + self.cursor_pos + 1),
             ),
             fg_color,
             bg_color,
@@ -140,8 +208,8 @@ impl Component for ContactList {
         change_colors(
             grid,
             (
-                pos_inc(upper_left, (0, self.new_cursor_pos)),
-                set_y(bottom_right, get_y(upper_left) + self.new_cursor_pos),
+                pos_inc(upper_left, (0, self.new_cursor_pos + 1)),
+                set_y(bottom_right, get_y(upper_left) + self.new_cursor_pos + 1),
             ),
             fg_color,
             bg_color,
