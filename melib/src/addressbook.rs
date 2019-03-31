@@ -149,32 +149,32 @@ impl Card {
     pub fn set_id(&mut self, new: Uuid) {
         self.id = new;
     }
-    pub fn set_title(&mut self, new: &str) {
-        self.title = new.to_string();
+    pub fn set_title(&mut self, new: String) {
+        self.title = new;
     }
-    pub fn set_firstname(&mut self, new: &str) {
-        self.firstname = new.to_string();
+    pub fn set_firstname(&mut self, new: String) {
+        self.firstname = new;
     }
-    pub fn set_lastname(&mut self, new: &str) {
-        self.lastname = new.to_string();
+    pub fn set_lastname(&mut self, new: String) {
+        self.lastname = new;
     }
-    pub fn set_additionalname(&mut self, new: &str) {
-        self.additionalname = new.to_string();
+    pub fn set_additionalname(&mut self, new: String) {
+        self.additionalname = new;
     }
-    pub fn set_name_prefix(&mut self, new: &str) {
-        self.name_prefix = new.to_string();
+    pub fn set_name_prefix(&mut self, new: String) {
+        self.name_prefix = new;
     }
-    pub fn set_name_suffix(&mut self, new: &str) {
-        self.name_suffix = new.to_string();
+    pub fn set_name_suffix(&mut self, new: String) {
+        self.name_suffix = new;
     }
-    pub fn set_email(&mut self, new: &str) {
-        self.email = new.to_string();
+    pub fn set_email(&mut self, new: String) {
+        self.email = new;
     }
-    pub fn set_url(&mut self, new: &str) {
-        self.url = new.to_string();
+    pub fn set_url(&mut self, new: String) {
+        self.url = new;
     }
-    pub fn set_key(&mut self, new: &str) {
-        self.key = new.to_string();
+    pub fn set_key(&mut self, new: String) {
+        self.key = new;
     }
 
     pub fn set_extra_property(&mut self, key: &str, value: String) {

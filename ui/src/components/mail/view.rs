@@ -394,53 +394,54 @@ impl Component for MailView {
 
         match event.event_type {
             UIEventType::Input(Key::Char('c')) => {
-                /*
-                                                let mut new_card: Card = Card::new();
-                                                new_card.set_email(&envelope.from()[0].get_email());
-                                                new_card.set_firstname(&envelope.from()[0].get_display_name());
-
-                                                if cfg!(feature = "debug_log") {
-                eprintln!("{:?}", new_card);
-                }
-
-                                */
                 if let ViewMode::ContactSelector(_) = self.mode {
                     if let ViewMode::ContactSelector(s) =
                         std::mem::replace(&mut self.mode, ViewMode::Normal)
-                    {
-                        for c in s.collect() {
-                            let mut new_card: Card = Card::new();
-                            let email = String::from_utf8(c).unwrap();
-                            new_card.set_email(&email);
-                            new_card.set_firstname("");
-                            context.accounts[self.coordinates.0]
-                                .address_book
-                                .add_card(new_card);
+                        {
+                            let account = &mut context.accounts[self.coordinates.0];
+                            let mut results = Vec::new();
+                            {
+                                let mailbox = &account[self.coordinates.1]
+                                    .as_ref()
+                                    .unwrap();
+                                let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
+                                for c in s.collect() {
+                                    let c = usize::from_ne_bytes({
+                                        [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]
+                                    });
+                                    for (idx, env) in envelope.from().iter().chain(envelope.to().iter()).enumerate() {
+                                        if idx != c {
+                                            continue;
+                                        }
+
+                                        let mut new_card: Card = Card::new();
+                                        new_card.set_email(env.get_email());
+                                        new_card.set_lastname(env.get_display_name());
+                                        results.push(new_card);
+                                    }
+                                }
+                            }
+                            for c in results {
+                                account.address_book.add_card(c);
+                            }
                         }
-                        //if cfg!(feature = "debug_log") {
-                        //eprintln!("{:?}", s.collect());
-                        //}
-                    }
                     return true;
                 }
-
                 let accounts = &context.accounts;
                 let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
                     .as_ref()
                     .unwrap();
                 let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
+
                 let mut entries = Vec::new();
-                entries.push((
-                    envelope.from()[0].get_email().into_bytes(),
-                    format!("{}", envelope.from()[0]),
-                ));
-                entries.push((
-                    envelope.to()[0].get_email().into_bytes(),
-                    format!("{}", envelope.to()[0]),
-                ));
+                for (idx, env) in envelope.from().iter().chain(envelope.to().iter()).enumerate() {
+                    entries.push((
+                            idx.to_ne_bytes().to_vec(),
+                            format!("{}", env),
+                            ));
+                }
                 self.mode = ViewMode::ContactSelector(Selector::new(entries, true));
                 self.dirty = true;
-                //context.accounts.context(self.coordinates.0).address_book.add_card(new_card);
             }
             UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Alt('')) => {
                 self.cmd_buf.clear();
