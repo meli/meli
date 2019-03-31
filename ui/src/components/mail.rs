@@ -269,7 +269,7 @@ impl Component for AccountMenu {
             UIEventType::Resize => {
                 self.dirty = true;
             }
-            UIEventType::Input(Key::Char('\t')) => {
+            UIEventType::Input(Key::Char('`')) => {
                 self.visible = !self.visible;
                 self.dirty = true;
             }
@@ -290,7 +290,7 @@ impl Component for AccountMenu {
         self.dirty = true;
     }
     fn get_shortcuts(&self, _context: &Context) -> ShortcutMap {
-        [("Toggle account menu visibility", Key::Char('\t'))]
+        [("Toggle account menu visibility", Key::Char('`'))]
             .iter()
             .cloned()
             .collect()
