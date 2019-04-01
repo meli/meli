@@ -36,6 +36,7 @@ pub struct ThreadView {
     cursor_pos: usize,
     expanded_pos: usize,
     new_expanded_pos: usize,
+    reversed: bool,
     dirty: bool,
     coordinates: (usize, usize, usize),
     mailview: MailView,
@@ -57,14 +58,8 @@ impl ThreadView {
         expanded_idx: Option<usize>,
         context: &Context,
     ) -> Self {
-        /* stack to push thread messages in order in order to pop and print them later */
-        let mailbox = &context.accounts[coordinates.0][coordinates.1]
-            .as_ref()
-            .unwrap();
-        let threads = &mailbox.collection.threads;
-
-        let thread_iter = threads.thread_iter(coordinates.2);
         let mut view = ThreadView {
+            reversed: false,
             dirty: true,
             initiated: false,
             coordinates,
@@ -75,34 +70,47 @@ impl ThreadView {
             new_cursor_pos: 0,
             ..Default::default()
         };
+        view.initiate(expanded_idx, context);
+        view.new_cursor_pos = view.new_expanded_pos;
+        view
+    }
+    fn initiate(&mut self, expanded_idx: Option<usize>, context: &Context) {
+        /* stack to push thread messages in order in order to pop and print them later */
+        let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
+            .as_ref()
+            .unwrap();
+        let threads = &mailbox.collection.threads;
+
+        let thread_iter = threads.thread_iter(self.coordinates.2);
+        self.entries.clear();
         for (line, (ind, idx)) in thread_iter.enumerate() {
             let entry = if let Some(msg_idx) = threads.thread_nodes()[idx].message() {
-                view.make_entry((ind, idx, line), msg_idx)
+                self.make_entry((ind, idx, line), msg_idx)
             } else {
                 continue;
             };
-            view.entries.push(entry);
+            self.entries.push(entry);
             match expanded_idx {
                 Some(expanded_idx) if expanded_idx == idx => {
-                    view.new_expanded_pos = view.entries.len().saturating_sub(1);
-                    view.expanded_pos = view.new_expanded_pos + 1;
+                    self.new_expanded_pos = self.entries.len().saturating_sub(1);
+                    self.expanded_pos = self.new_expanded_pos + 1;
                 }
                 _ => {}
             }
         }
         if expanded_idx.is_none() {
-            view.new_expanded_pos = view.entries.len().saturating_sub(1);
-            view.expanded_pos = view.new_expanded_pos + 1;
+            self.new_expanded_pos = self.entries.len().saturating_sub(1);
+            self.expanded_pos = self.new_expanded_pos + 1;
         }
 
-        let height = 2 * view.entries.len() + 1;
+        let height = 2 * self.entries.len() + 1;
         let mut width = 0;
 
-        let mut strings: Vec<String> = Vec::with_capacity(view.entries.len());
+        let mut strings: Vec<String> = Vec::with_capacity(self.entries.len());
 
         let mut highlight_reply_subjects: Vec<Option<usize>> =
-            Vec::with_capacity(view.entries.len());
-        for e in &view.entries {
+            Vec::with_capacity(self.entries.len());
+        for e in &self.entries {
             let envelope: &Envelope = &mailbox.collection[&e.msg_idx];
             let thread_node = &threads.thread_nodes()[e.index.1];
             let string = if thread_node.show_subject() {
@@ -131,53 +139,96 @@ impl ThreadView {
             );
         }
         let mut content = CellBuffer::new(width, height, Cell::default());
-        for (y, e) in view.entries.iter().enumerate() {
-            /* Box character drawing stuff */
-            if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
-                let index = (e.index.0 * 4, 2 * y - 1);
-                if content[index].ch() == ' ' {
-                    let mut ctr = 1;
-                    while content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() == ' ' {
-                        set_and_join_box(
-                            &mut content,
-                            (e.index.0 * 4 + ctr, 2 * y - 1),
-                            HORZ_BOUNDARY,
-                        );
-                        ctr += 1;
+        if self.reversed {
+            for (y, e) in self.entries.iter().rev().enumerate() {
+                /* Box character drawing stuff */
+                if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
+                    let index = (e.index.0 * 4, 2 * y - 1);
+                    if content[index].ch() == ' ' {
+                        let mut ctr = 1;
+                        while content.get(e.index.0 * 4 + ctr, 2 * y - 1).is_some() {
+                            if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' { break; }
+                            set_and_join_box(
+                                &mut content,
+                                (e.index.0 * 4 + ctr, 2 * y - 1),
+                                HORZ_BOUNDARY,
+                                );
+                            ctr += 1;
+                        }
+                        set_and_join_box(&mut content, index, HORZ_BOUNDARY);
                     }
-                    set_and_join_box(&mut content, index, HORZ_BOUNDARY);
                 }
+                write_string_to_grid(
+                    &strings[y],
+                    &mut content,
+                    Color::Default,
+                    Color::Default,
+                    ((e.index.0 * 4 + 1, 2 * y), (width - 1, height - 1)),
+                    true,
+                    );
+                if let Some(len) = highlight_reply_subjects[y] {
+                    let index = e.index.0 * 4 + 1 + strings[y].len() - len;
+                    let area = ((index, 2 * y), (width - 2, 2 * y));
+                    let fg_color = Color::Byte(33);
+                    let bg_color = Color::Default;
+                    change_colors(&mut content, area, fg_color, bg_color);
+                }
+                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), VERT_BOUNDARY);
+                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y + 1), VERT_BOUNDARY);
+                for i in ((e.index.0 * 4) + 1)..width - 1 {
+                    set_and_join_box(&mut content, (i, 2 * y + 1), HORZ_BOUNDARY);
+                }
+                set_and_join_box(&mut content, (width - 1, 2 * y), VERT_BOUNDARY);
+                set_and_join_box(&mut content, (width - 1, 2 * y + 1), VERT_BOUNDARY);
             }
-            write_string_to_grid(
-                &strings[y],
-                &mut content,
-                Color::Default,
-                Color::Default,
-                ((e.index.0 * 4 + 1, 2 * y), (width - 1, height - 1)),
-                true,
-            );
-            if let Some(len) = highlight_reply_subjects[y] {
-                let index = e.index.0 * 4 + 1 + strings[y].len() - len;
-                let area = ((index, 2 * y), (width - 2, 2 * y));
-                let fg_color = Color::Byte(33);
-                let bg_color = Color::Default;
-                change_colors(&mut content, area, fg_color, bg_color);
+        } else {
+            for (y, e) in self.entries.iter().enumerate() {
+                /* Box character drawing stuff */
+                if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
+                    let index = (e.index.0 * 4, 2 * y - 1);
+                    if content[index].ch() == ' ' {
+                        let mut ctr = 1;
+                        while content.get(e.index.0 * 4 + ctr, 2 * y - 1).is_some() {
+                            if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' { break; }
+                            set_and_join_box(
+                                &mut content,
+                                (e.index.0 * 4 + ctr, 2 * y - 1),
+                                HORZ_BOUNDARY,
+                                );
+                            ctr += 1;
+                        }
+                        set_and_join_box(&mut content, index, HORZ_BOUNDARY);
+                    }
+                }
+                write_string_to_grid(
+                    &strings[y],
+                    &mut content,
+                    Color::Default,
+                    Color::Default,
+                    ((e.index.0 * 4 + 1, 2 * y), (width - 1, height - 1)),
+                    true,
+                    );
+                if let Some(len) = highlight_reply_subjects[y] {
+                    let index = e.index.0 * 4 + 1 + strings[y].len() - len;
+                    let area = ((index, 2 * y), (width - 2, 2 * y));
+                    let fg_color = Color::Byte(33);
+                    let bg_color = Color::Default;
+                    change_colors(&mut content, area, fg_color, bg_color);
+                }
+                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), VERT_BOUNDARY);
+                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y + 1), VERT_BOUNDARY);
+                for i in ((e.index.0 * 4) + 1)..width - 1 {
+                    set_and_join_box(&mut content, (i, 2 * y + 1), HORZ_BOUNDARY);
+                }
+                set_and_join_box(&mut content, (width - 1, 2 * y), VERT_BOUNDARY);
+                set_and_join_box(&mut content, (width - 1, 2 * y + 1), VERT_BOUNDARY);
             }
-            set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), VERT_BOUNDARY);
-            set_and_join_box(&mut content, (e.index.0 * 4, 2 * y + 1), VERT_BOUNDARY);
-            for i in ((e.index.0 * 4) + 1)..width - 1 {
-                set_and_join_box(&mut content, (i, 2 * y + 1), HORZ_BOUNDARY);
-            }
-            set_and_join_box(&mut content, (width - 1, 2 * y), VERT_BOUNDARY);
-            set_and_join_box(&mut content, (width - 1, 2 * y + 1), VERT_BOUNDARY);
-        }
 
-        for y in 0..height - 1 {
-            set_and_join_box(&mut content, (width - 1, y), VERT_BOUNDARY);
+            for y in 0..height - 1 {
+                set_and_join_box(&mut content, (width - 1, y), VERT_BOUNDARY);
+            }
         }
-        view.content = content;
-        view.new_cursor_pos = view.new_expanded_pos;
-        view
+        self.content = content;
     }
 
     fn make_entry(&mut self, i: (usize, usize, usize), msg_idx: EnvelopeHash) -> ThreadEntry {
@@ -629,6 +680,14 @@ impl Component for ThreadView {
                 self.set_dirty();
                 return true;
             }
+            UIEventType::Input(Key::Ctrl('r')) => {
+                self.reversed = !self.reversed;
+                let expanded_pos = self.expanded_pos;
+                self.initiate(Some(expanded_pos), context);
+                self.initiated = false;
+                self.set_dirty();
+                return true;
+            }
             UIEventType::Resize => {
                 self.set_dirty();
             }
@@ -648,6 +707,7 @@ impl Component for ThreadView {
         let mut map = self.mailview.get_shortcuts(context);
 
         map.insert("reply", Key::Char('R'));
+        map.insert("reverse thread order", Key::Char('r'));
         map.insert("toggle_mailview", Key::Char('p'));
 
         map
