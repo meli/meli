@@ -546,7 +546,7 @@ impl Component for ThreadListing {
                 self.locations[self.cursor_pos.2],
             );
 
-            self.view = Some(MailView::new(coordinates, None, None));
+            self.view = Some(MailView::new(coordinates, None, None, context));
             self.view.as_mut().unwrap().draw(
                 grid,
                 (set_y(upper_left, mid + 1), bottom_right),

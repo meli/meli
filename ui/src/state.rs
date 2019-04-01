@@ -280,6 +280,9 @@ impl State {
                 self.context
                     .sender
                     .send(ThreadEvent::UIEvent(UIEventType::StartupCheck(hash)));
+                self.context
+                    .sender
+                    .send(ThreadEvent::UIEvent(UIEventType::MailboxUpdate((idxa, idxm))));
                 self.context.replies.push_back(UIEvent {
                     id: 0,
                     event_type: notification,

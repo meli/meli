@@ -38,7 +38,7 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 use std::result;
 use std::sync::Arc;
-use types::UIEventType::{self, Notification};
+use types::UIEventType::{self, Notification, EnvelopeUpdate, EnvelopeRename, EnvelopeRemove};
 
 pub type Worker = Option<Async<Result<Mailbox>>>;
 
@@ -153,9 +153,14 @@ impl Account {
             match kind {
                 RefreshEventKind::Update(old_hash, envelope) => {
                     mailbox!(idx, self.folders).update(old_hash, *envelope);
+                    return Some(EnvelopeUpdate(old_hash));
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
+                    if cfg!(feature = "debug_log") {
+                        eprintln!("rename {} to {}", old_hash, new_hash);
+                    }
                     mailbox!(idx, self.folders).rename(old_hash, new_hash);
+                    return Some(EnvelopeRename(idx, old_hash, new_hash));
                 }
                 RefreshEventKind::Create(envelope) => {
                     if cfg!(feature = "debug_log") {
@@ -176,6 +181,7 @@ impl Account {
                 }
                 RefreshEventKind::Remove(envelope_hash) => {
                     mailbox!(idx, self.folders).remove(envelope_hash);
+                    return Some(EnvelopeRemove(envelope_hash));
                 }
                 RefreshEventKind::Rescan => {
                     let ref_folders: Vec<Folder> = self.backend.folders();

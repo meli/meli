@@ -86,10 +86,12 @@ impl PlainListing {
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context) {
         self.dirty = true;
-        self.cursor_pos.2 = 0;
-        self.new_cursor_pos.2 = 0;
-        self.cursor_pos.1 = self.new_cursor_pos.1;
-        self.cursor_pos.0 = self.new_cursor_pos.0;
+        if !(self.cursor_pos.0 == self.new_cursor_pos.0
+            && self.cursor_pos.1 == self.new_cursor_pos.1)
+        {
+            self.cursor_pos.2 = 0;
+            self.new_cursor_pos.2 = 0;
+        }
 
         // Inform State that we changed the current folder view.
         context.replies.push_back(UIEvent {
@@ -98,13 +100,22 @@ impl PlainListing {
         });
         // Get mailbox as a reference.
         //
-        loop {
-            // TODO: Show progress visually
-            if context.accounts[self.cursor_pos.0]
-                .status(self.cursor_pos.1)
-                .is_ok()
-            {
-                break;
+        // Get mailbox as a reference.
+        //
+        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+            Ok(_) => {}
+            Err(_) => {
+                self.content = CellBuffer::new(MAX_COLS, 1, Cell::with_char(' '));
+                self.length = 0;
+                write_string_to_grid(
+                    "Loading.",
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    ((0, 0), (MAX_COLS - 1, 0)),
+                    false,
+                );
+                return;
             }
         }
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
@@ -407,7 +418,7 @@ impl Component for PlainListing {
                     coordinates.1,
                     self.local_collection[self.cursor_pos.2],
                 );
-                self.view = Some(MailView::new(coordinates, None, None));
+                self.view = Some(MailView::new(coordinates, None, None, context));
             }
             self.view.as_mut().unwrap().draw(
                 grid,

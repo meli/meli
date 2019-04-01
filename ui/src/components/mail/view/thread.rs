@@ -585,6 +585,7 @@ impl Component for ThreadView {
                 ),
                 None,
                 None,
+                context,
             );
         }
 

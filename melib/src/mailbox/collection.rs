@@ -107,7 +107,7 @@ impl Collection {
         env.set_hash(new_hash);
         self.envelopes.insert(new_hash, env);
         {
-            if self.threads.update_envelope(old_hash, new_hash).is_ok() {
+            if self.threads.update_envelope(old_hash, new_hash, &self.envelopes).is_ok() {
                 return;
             }
         }
@@ -123,7 +123,7 @@ impl Collection {
         let new_hash = envelope.hash();
         self.envelopes.insert(new_hash, envelope);
         {
-            if self.threads.update_envelope(old_hash, new_hash).is_ok() {
+            if self.threads.update_envelope(old_hash, new_hash, &self.envelopes).is_ok() {
                 return;
             }
         }

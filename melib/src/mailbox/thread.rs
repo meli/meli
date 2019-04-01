@@ -822,22 +822,26 @@ impl Threads {
         &mut self,
         old_hash: EnvelopeHash,
         new_hash: EnvelopeHash,
+        collection: &Envelopes,
     ) -> Result<(), ()> {
         /* must update:
          * - hash_set
          * - message fields in thread_nodes
          */
-        self.hash_set.remove(&old_hash);
-        if let Some(node) = self
+        let idx = if let Some((idx, node)) = self
             .thread_nodes
             .iter_mut()
-            .find(|n| n.message.map(|n| n == old_hash).unwrap_or(false))
+            .enumerate()
+            .find(|(_, n)| n.message.map(|n| n == old_hash).unwrap_or(false))
         {
             node.message = Some(new_hash);
+            idx
         } else {
             return Err(());
-        }
+        };
+        self.hash_set.remove(&old_hash);
         self.hash_set.insert(new_hash);
+        self.rebuild_thread(idx, collection);
         Ok(())
     }
 
@@ -970,6 +974,26 @@ impl Threads {
     fn rebuild_thread(&mut self, id: usize, collection: &Envelopes) {
         let mut node_idx = id;
         let mut stack = Vec::with_capacity(32);
+
+        let no_parent: bool = if let Some(node) = self.thread_nodes.get(node_idx) {
+            if node.parent.is_none() {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if no_parent {
+            let tree = self.tree.get_mut();
+            if let Some(tree) = tree.iter_mut().find(|t| t.id == id) {
+                *tree = ThreadTree::new(id);
+                node_build(tree, id, &mut self.thread_nodes, 1, collection);
+                return;
+            }
+            unreachable!();
+        }
 
         /* Trace path back to root ThreadNode */
         while let Some(p) = &self.thread_nodes[node_idx].parent {
@@ -1310,7 +1334,7 @@ fn node_build(
         indentation + 1
     };
 
-    let mut has_unseen = thread_nodes[idx].has_unseen;
+    let mut has_unseen = !collection[&thread_nodes[idx].message.unwrap()].is_seen();
     let mut child_vec: Vec<ThreadTree> = Vec::new();
 
     thread_nodes[idx].len = thread_nodes[idx].children.len();

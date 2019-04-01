@@ -83,7 +83,33 @@ impl MailView {
         coordinates: (usize, usize, EnvelopeHash),
         pager: Option<Pager>,
         subview: Option<Box<Component>>,
+        context: &mut Context,
     ) -> Self {
+        let account = &mut context.accounts[coordinates.0];
+        let (hash, is_seen) = {
+            let mailbox = &mut account[coordinates.1].as_mut().unwrap();
+            let envelope: &mut Envelope = &mut mailbox
+                .collection
+                .entry(coordinates.2)
+                .or_default();
+            (envelope.hash(), envelope.is_seen())
+        };
+        if !is_seen {
+            let folder_hash = {
+                let mailbox = &mut account[coordinates.1].as_mut().unwrap();
+                mailbox.folder.hash()
+            };
+            let op = {
+                let backend = &account.backend;
+                backend.operation(hash, folder_hash)
+            };
+            let mailbox = &mut account[coordinates.1].as_mut().unwrap();
+            let envelope: &mut Envelope = &mut mailbox
+                .collection
+                .entry(coordinates.2)
+                .or_default();
+            envelope.set_seen(op).unwrap();
+        }
         MailView {
             coordinates,
             pager,
@@ -220,6 +246,11 @@ impl Component for MailView {
             let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
                 .as_ref()
                 .unwrap();
+            if !mailbox.collection.contains_key(&self.coordinates.2) {
+                /* The envelope has been renamed or removed, so wait for the appropriate event to
+                 * arrive */
+                return;
+            }
             let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
 
             if self.mode == ViewMode::Raw {
@@ -619,6 +650,10 @@ impl Component for MailView {
                     _ => {}
                 }
                 self.dirty = true;
+            }
+            UIEventType::EnvelopeRename(_, old_hash, new_hash) if old_hash == self.coordinates.2 => {
+                self.coordinates.2 = new_hash;
+                self.set_dirty();
             }
             _ => {
                 return false;
