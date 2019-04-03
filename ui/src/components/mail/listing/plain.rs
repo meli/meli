@@ -212,20 +212,9 @@ impl PlainListing {
         }
     }
 
-    fn highlight_line_self(&mut self, idx: usize, context: &Context) {
-        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap();
-        let envelope: &Envelope = &mailbox.collection[&self.local_collection[idx]];
-
-        let fg_color = if !envelope.is_seen() {
-            Color::Byte(0)
-        } else {
-            Color::Default
-        };
-        let bg_color = if !envelope.is_seen() {
-            Color::Byte(251)
-        } else if idx % 2 == 0 {
+    fn unhighlight_line(&mut self, idx: usize) {
+        let fg_color = Color::Default;
+        let bg_color = if idx % 2 == 0 {
             Color::Byte(236)
         } else {
             Color::Default
@@ -350,42 +339,21 @@ impl Component for PlainListing {
             }
             /* Mark message as read */
             let idx = self.cursor_pos.2;
-            let must_highlight = {
+            let must_unhighlight = {
                 if self.length == 0 {
                     false
                 } else {
                     let account = &mut context.accounts[self.cursor_pos.0];
-                    let (hash, is_seen) = {
-                        let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        let envelope: &mut Envelope = &mut mailbox
-                            .collection
-                            .entry(self.local_collection[idx])
-                            .or_default();
-                        (envelope.hash(), envelope.is_seen())
-                    };
-                    if !is_seen {
-                        let folder_hash = {
-                            let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                            mailbox.folder.hash()
-                        };
-                        let op = {
-                            let backend = &account.backend;
-                            backend.operation(hash, folder_hash)
-                        };
-                        let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        let envelope: &mut Envelope = &mut mailbox
-                            .collection
-                            .entry(self.local_collection[idx])
-                            .or_default();
-                        envelope.set_seen(op).unwrap();
-                        true
-                    } else {
-                        false
-                    }
+                    let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
+                    let envelope: &mut Envelope = &mut mailbox
+                        .collection
+                        .entry(self.local_collection[idx])
+                        .or_default();
+                    !envelope.is_seen()
                 }
             };
-            if must_highlight {
-                self.highlight_line_self(idx, context);
+            if must_unhighlight {
+                self.unhighlight_line(idx);
             }
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
             self.draw_list(
