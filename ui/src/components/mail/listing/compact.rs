@@ -42,7 +42,7 @@ pub struct CompactListing {
     dirty: bool,
     /// If `self.view` exists or not.
     unfocused: bool,
-    view: Option<ThreadView>,
+    view: ThreadView,
 
     movement: Option<PageMovement>,
 }
@@ -101,7 +101,7 @@ impl CompactListing {
             content,
             dirty: true,
             unfocused: false,
-            view: None,
+            view: ThreadView::default(),
 
             movement: None,
         }
@@ -110,6 +110,12 @@ impl CompactListing {
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context) {
         self.dirty = true;
+        if self.cursor_pos == self.new_cursor_pos {
+            self.view.update(context);
+        } else {
+            self.view = ThreadView::new(self.cursor_pos, None, context);
+        }
+
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
         {
@@ -384,23 +390,13 @@ impl Component for CompactListing {
                 return;
             }
 
-            /* Render the mail body in a pager */
-            if !self.dirty {
-                if let Some(v) = self.view.as_mut() {
-                    v.draw(grid, area, context);
-                }
-                return;
-            }
-            self.view = Some(ThreadView::new(self.cursor_pos, None, context));
-            self.view.as_mut().unwrap().draw(grid, area, context);
+            self.view.draw(grid, area, context);
         }
         self.dirty = false;
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if let Some(ref mut v) = self.view {
-            if v.process_event(event, context) {
-                return true;
-            }
+        if self.unfocused && self.view.process_event(event, context) {
+            return true;
         }
 
         let shortcuts = self.get_shortcuts(context);
@@ -420,6 +416,7 @@ impl Component for CompactListing {
                 return true;
             }
             UIEventType::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
+                self.view = ThreadView::new(self.cursor_pos, None, context);
                 self.unfocused = true;
                 self.dirty = true;
                 return true;
@@ -435,7 +432,6 @@ impl Component for CompactListing {
             UIEventType::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
                 self.unfocused = false;
                 self.dirty = true;
-                self.view = None;
                 return true;
             }
             UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
@@ -485,7 +481,6 @@ impl Component for CompactListing {
                 return true;
             }
             UIEventType::RefreshMailbox(_) => {
-                self.view = None;
                 self.dirty = true;
             }
             UIEventType::MailboxUpdate((ref idxa, ref idxf)) if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 => {
@@ -538,21 +533,21 @@ impl Component for CompactListing {
         false
     }
     fn is_dirty(&self) -> bool {
-        self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+        self.dirty || if self.unfocused { self.view.is_dirty() } else { false }
     }
     fn set_dirty(&mut self) {
-        if let Some(p) = self.view.as_mut() {
-            p.set_dirty();
+        if self.unfocused {
+            self.view.set_dirty();
         }
         self.dirty = true;
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
-        let mut map = self
-            .view
-            .as_ref()
-            .map(|p| p.get_shortcuts(context))
-            .unwrap_or_default();
+        let mut map = if self.unfocused {
+            self.view.get_shortcuts(context)
+        } else {
+            ShortcutMap::default()
+        };
 
         let config_map = context.settings.shortcuts.compact_listing.key_values();
         map.insert(

@@ -75,6 +75,40 @@ impl ThreadView {
         view.new_cursor_pos = view.new_expanded_pos;
         view
     }
+    pub fn update(&mut self, context: &Context) {
+        if self.entries.is_empty() {
+            return;
+        }
+        let old_focused_entry = if self.entries.len() > self.cursor_pos { 
+            Some(self.entries.remove(self.cursor_pos))
+        } else { None };
+
+        let old_expanded_entry = if self.entries.len() > self.expanded_pos {
+            Some(self.entries.remove(self.expanded_pos))
+        } else {
+            None
+        };
+
+        // FIXME 2018
+        let expanded_pos = self.expanded_pos;
+        self.initiate(Some(expanded_pos), context);
+        if let Some(old_focused_entry) = old_focused_entry {
+            if let Some(new_entry_idx) = self.entries.iter().position(
+                |e| e.msg_idx == old_focused_entry.msg_idx ||
+                (e.index.1 == old_focused_entry.index.1 && e.index.2 == old_focused_entry.index.2)) {
+                self.cursor_pos = new_entry_idx;
+            }
+        }
+        if let Some(old_expanded_entry) = old_expanded_entry {
+            if let Some(new_entry_idx) = self.entries.iter().position(
+                |e| e.msg_idx == old_expanded_entry.msg_idx ||
+                (e.index.1 == old_expanded_entry.index.1 && e.index.2 == old_expanded_entry.index.2)) {
+                self.expanded_pos = new_entry_idx;
+            }
+        }
+        self.set_dirty();
+
+    }
     fn initiate(&mut self, expanded_idx: Option<usize>, context: &Context) {
         /* stack to push thread messages in order in order to pop and print them later */
         let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
