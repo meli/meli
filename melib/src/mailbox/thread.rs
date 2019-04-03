@@ -1020,11 +1020,15 @@ impl Threads {
                     tree = &mut temp_tree[new_id].children;
                 }
             }
-            /* Add new child */
-            let tree_node = ThreadTree::new(id);
-            tree.push(tree_node);
-            let new_id = tree.len() - 1;
-            node_build(&mut tree[new_id], id, &mut self.thread_nodes, 1, collection);
+            let pos = if let Some(pos) = tree.iter().position(|v| v.id == id) {
+                pos
+            } else {
+                /* Add new child */
+                let tree_node = ThreadTree::new(id);
+                tree.push(tree_node);
+                tree.len() - 1
+            };
+            node_build(&mut tree[pos], id, &mut self.thread_nodes, 1, collection);
         }
         // FIXME: use insertion according to self.sort etc instead of sorting everytime
         self.inner_sort_by(*self.sort.borrow(), collection);
