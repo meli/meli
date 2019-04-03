@@ -1338,7 +1338,9 @@ fn node_build(
         indentation + 1
     };
 
-    let mut has_unseen = !collection[&thread_nodes[idx].message.unwrap()].is_seen();
+    let mut has_unseen = if let Some(msg) = thread_nodes[idx].message {
+        !collection[&msg].is_seen()
+    } else { false };
     let mut child_vec: Vec<ThreadTree> = Vec::new();
 
     thread_nodes[idx].len = thread_nodes[idx].children.len();
