@@ -43,6 +43,15 @@ pub struct PlainListing {
     view: Option<MailView>,
 }
 
+impl ListingTrait for PlainListing {
+    fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
+        (self.cursor_pos.0, self.cursor_pos.1, None)
+    }
+    fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
+        self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
+    }
+}
+
 impl Default for PlainListing {
     fn default() -> Self {
         Self::new()

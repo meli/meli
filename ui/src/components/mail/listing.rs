@@ -30,6 +30,11 @@ pub use self::thread::*;
 mod plain;
 pub use self::plain::*;
 
+trait ListingTrait {
+    fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>);
+    fn set_coordinates(&mut self, (usize, usize, Option<EnvelopeHash>));
+}
+
 #[derive(Debug)]
 pub enum Listing {
     Plain(PlainListing),
@@ -74,25 +79,60 @@ impl Component for Listing {
             UIEventType::Resize => self.set_dirty(),
             UIEventType::Action(ref action) => match action {
                 Action::Listing(ListingAction::SetPlain) => {
-                    if let Listing::Plain(_) = self {
-                        return true;
-                    }
-                    *self = Listing::Plain(PlainListing::default());
+                    let new_l = match self {
+                        Listing::Plain(_) => {
+                            return true;
+                        }
+                        Listing::Threaded(l)  => {
+                            let mut new_l = PlainListing::default();
+                            new_l.set_coordinates(l.coordinates());
+                            new_l
+                        }
+                        Listing::Compact(l) => {
+                            let mut new_l = PlainListing::default();
+                            new_l.set_coordinates(l.coordinates());
+                            new_l
+                        }
+                    };
+                    *self = Listing::Plain(new_l);
                     return true;
                 }
                 Action::Listing(ListingAction::SetThreaded) => {
-                    if let Listing::Threaded(_) = self {
-                        return true;
-                    }
-                    self.set_dirty();
-                    *self = Listing::Threaded(ThreadListing::default());
+                    let new_l = match self {
+                        Listing::Threaded(_) => {
+                            return true;
+                        }
+                        Listing::Plain(l)  => {
+                            let mut new_l = ThreadListing::default();
+                            new_l.set_coordinates(l.coordinates());
+                            new_l
+                        }
+                        Listing::Compact(l) => {
+                            let mut new_l = ThreadListing::default();
+                            new_l.set_coordinates(l.coordinates());
+                            new_l
+                        }
+                    };
+                    *self = Listing::Threaded(new_l);
                     return true;
                 }
                 Action::Listing(ListingAction::SetCompact) => {
-                    if let Listing::Compact(_) = self {
-                        return true;
-                    }
-                    *self = Listing::Compact(CompactListing::default());
+                    let new_l = match self {
+                        Listing::Compact(_) => {
+                            return true;
+                        }
+                        Listing::Threaded(l)  => {
+                            let mut new_l = CompactListing::default();
+                            new_l.set_coordinates(l.coordinates());
+                            new_l
+                        }
+                        Listing::Plain(l) => {
+                            let mut new_l = CompactListing::default();
+                            new_l.set_coordinates(l.coordinates());
+                            new_l
+                        }
+                    };
+                    *self = Listing::Compact(new_l);
                     return true;
                 }
                 _ => {}
