@@ -28,6 +28,7 @@ struct ThreadEntry {
     /// (indentation, thread_node index, line number in listing)
     indentation: usize,
     msg_idx: EnvelopeHash,
+    seen: bool,
 }
 
 #[derive(Debug, Default)]
@@ -85,7 +86,8 @@ impl ThreadView {
         self.entries.clear();
         for (line, (ind, idx)) in thread_iter.enumerate() {
             let entry = if let Some(msg_idx) = threads.thread_nodes()[idx].message() {
-                self.make_entry((ind, idx, line), msg_idx)
+                let seen: bool = mailbox.collection[&msg_idx].is_seen();
+                self.make_entry((ind, idx, line), msg_idx, seen)
             } else {
                 continue;
             };
@@ -161,8 +163,8 @@ impl ThreadView {
                 write_string_to_grid(
                     &strings[y],
                     &mut content,
-                    Color::Default,
-                    Color::Default,
+                    if e.seen { Color::Default } else { Color::Byte(0) },
+                    if e.seen { Color::Default } else { Color::Byte(251) },
                     ((e.index.0 * 4 + 1, 2 * y), (width - 1, height - 1)),
                     true,
                     );
@@ -203,8 +205,8 @@ impl ThreadView {
                 write_string_to_grid(
                     &strings[y],
                     &mut content,
-                    Color::Default,
-                    Color::Default,
+                    if e.seen { Color::Default } else { Color::Byte(0) },
+                    if e.seen { Color::Default } else { Color::Byte(251) },
                     ((e.index.0 * 4 + 1, 2 * y), (width - 1, height - 1)),
                     true,
                     );
@@ -231,12 +233,13 @@ impl ThreadView {
         self.content = content;
     }
 
-    fn make_entry(&mut self, i: (usize, usize, usize), msg_idx: EnvelopeHash) -> ThreadEntry {
+    fn make_entry(&mut self, i: (usize, usize, usize), msg_idx: EnvelopeHash, seen: bool) -> ThreadEntry {
         let (ind, _, _) = i;
         ThreadEntry {
             index: i,
             indentation: ind,
             msg_idx,
+            seen,
         }
     }
 
