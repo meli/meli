@@ -110,12 +110,7 @@ impl CompactListing {
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context) {
         self.dirty = true;
-        if self.cursor_pos == self.new_cursor_pos {
-            self.view.update(context);
-        } else {
-            self.view = ThreadView::new(self.cursor_pos, None, context);
-        }
-
+        let old_cursor_pos = self.cursor_pos;
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
         {
@@ -149,6 +144,12 @@ impl CompactListing {
                 return;
             }
         }
+        if old_cursor_pos == self.new_cursor_pos {
+            self.view.update(context);
+        } else {
+            self.view = ThreadView::new(self.new_cursor_pos, None, context);
+        }
+
         let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .as_ref()
             .unwrap();
