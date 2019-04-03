@@ -323,7 +323,7 @@ impl Component for MailView {
                     grid[(x, y)].set_bg(Color::Default);
                     grid[(x, y)].set_fg(Color::Default);
                 }
-                clear_area(grid, (set_y(upper_left, y + 1), set_y(bottom_right, y + 2)));
+                clear_area(grid, (set_y(upper_left, y + 1), set_y(bottom_right, y + 1)));
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 1)));
