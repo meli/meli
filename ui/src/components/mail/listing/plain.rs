@@ -92,6 +92,8 @@ impl PlainListing {
             self.cursor_pos.2 = 0;
             self.new_cursor_pos.2 = 0;
         }
+        self.cursor_pos.0 = self.new_cursor_pos.0;
+        self.cursor_pos.1 = self.new_cursor_pos.1;
 
         // Inform State that we changed the current folder view.
         context.replies.push_back(UIEvent {
@@ -252,7 +254,7 @@ impl PlainListing {
 
     /// Draw the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if self.cursor_pos.1 != self.new_cursor_pos.1 {
+        if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0 {
             self.refresh_mailbox(context);
         }
         let upper_left = upper_left!(area);

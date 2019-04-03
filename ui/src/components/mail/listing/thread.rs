@@ -282,7 +282,7 @@ impl ThreadListing {
 
     /// Draw the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if self.cursor_pos.1 != self.new_cursor_pos.1 {
+        if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0 {
             self.refresh_mailbox(context);
         }
         let upper_left = upper_left!(area);
