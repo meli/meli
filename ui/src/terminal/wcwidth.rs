@@ -46,29 +46,29 @@ impl<'a> Iterator for CodePointsIterator<'a> {
         }
         /* Input is UTF-8 valid strings, guaranteed by Rust's std */
         if self.rest[0] & 0b1000_0000 == 0x0 {
-            let ret: WChar = self.rest[0] as WChar;
+            let ret: WChar = WChar::from(self.rest[0]);
             self.rest = &self.rest[1..];
             return Some(ret);
         }
         if self.rest[0] & 0b1110_0000 == 0b1100_0000 {
-            let ret: WChar = (self.rest[0] as WChar & 0b0001_1111).rotate_left(6)
-                + (self.rest[1] as WChar & 0b0111_1111);
+            let ret: WChar = (WChar::from(self.rest[0]) & 0b0001_1111).rotate_left(6)
+                + (WChar::from(self.rest[1]) & 0b0111_1111);
             self.rest = &self.rest[2..];
             return Some(ret);
         }
 
         if self.rest[0] & 0b1111_0000 == 0b1110_0000 {
-            let ret: WChar = (self.rest[0] as WChar & 0b0000_0111).rotate_left(12)
-                + (self.rest[1] as WChar & 0b0011_1111).rotate_left(6)
-                + (self.rest[2] as WChar & 0b0011_1111);
+            let ret: WChar = (WChar::from(self.rest[0]) & 0b0000_0111).rotate_left(12)
+                + (WChar::from(self.rest[1]) & 0b0011_1111).rotate_left(6)
+                + (WChar::from(self.rest[2]) & 0b0011_1111);
             self.rest = &self.rest[3..];
             return Some(ret);
         }
 
-        let ret: WChar = (self.rest[0] as WChar & 0b0000_0111).rotate_left(18)
-            + (self.rest[1] as WChar & 0b0011_1111).rotate_left(12)
-            + (self.rest[2] as WChar & 0b0011_1111).rotate_left(6)
-            + (self.rest[3] as WChar & 0b0011_1111);
+        let ret: WChar = (WChar::from(self.rest[0]) & 0b0000_0111).rotate_left(18)
+            + (WChar::from(self.rest[1]) & 0b0011_1111).rotate_left(12)
+            + (WChar::from(self.rest[2]) & 0b0011_1111).rotate_left(6)
+            + (WChar::from(self.rest[3]) & 0b0011_1111);
         self.rest = &self.rest[4..];
         Some(ret)
     }
@@ -113,7 +113,7 @@ fn bisearch(ucs: WChar, table: &'static [Interval]) -> bool {
         }
     }
 
-    return false;
+    false
 }
 
 /* The following functions define the column width of an ISO 10646
@@ -266,7 +266,7 @@ pub fn wcwidth(ucs: WChar) -> Option<usize> {
 
     /* if we arrive here, ucs is not a combining or C0/C1 control character */
 
-    return Some(
+    Some(
         1 + big_if_true!(
             ucs >= 0x1100
                 && (ucs <= 0x115f ||                    /* Hangul Jamo init. consonants */
@@ -279,7 +279,7 @@ pub fn wcwidth(ucs: WChar) -> Option<usize> {
       (ucs >= 0xffe0 && ucs <= 0xffe6) ||
       (ucs >= 0x20000 && ucs <= 0x2ffff))
         ),
-    );
+    )
 }
 
 fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
@@ -296,7 +296,7 @@ fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
         n -= 1;
     }
 
-    return Some(width);
+    Some(width)
 }
 
 /*
@@ -476,7 +476,7 @@ pub fn wcwidth_cjk(ucs: WChar) -> Option<usize> {
         return Some(2);
     }
 
-    return wcwidth(ucs);
+    wcwidth(ucs)
 }
 
 fn wcswidth_cjk(mut pwcs: WChar, mut n: WChar) -> Option<usize> {
@@ -493,5 +493,5 @@ fn wcswidth_cjk(mut pwcs: WChar, mut n: WChar) -> Option<usize> {
         n -= 1;
     }
 
-    return Some(width);
+    Some(width)
 }

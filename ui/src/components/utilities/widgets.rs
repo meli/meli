@@ -1,6 +1,8 @@
 use super::*;
 use fnv::FnvHashMap;
 
+type AutoCompleteFn = Box<Fn(&Context, &str) -> Vec<String> + Send>;
+
 #[derive(Debug, PartialEq)]
 enum FormFocus {
     Fields,
@@ -17,10 +19,7 @@ impl Default for FormFocus {
 }
 
 pub enum Field {
-    Text(
-        UText,
-        Option<(Box<Fn(&Context, &str) -> Vec<String> + Send>, AutoComplete)>,
-    ),
+    Text(UText, Option<(AutoCompleteFn, AutoComplete)>),
     Choice(Vec<String>, Cursor),
 }
 
@@ -169,15 +168,14 @@ impl Component for Field {
                     }
                 }
             }
-            UIEventType::InsertInput(Key::Backspace) => match self {
-                Text(ref mut s, auto_complete) => {
+            UIEventType::InsertInput(Key::Backspace) => {
+                if let Text(ref mut s, auto_complete) = self {
                     s.backspace();
                     if let Some(ac) = auto_complete.as_mut() {
                         ac.1.set_suggestions(Vec::new());
                     }
                 }
-                _ => {}
-            },
+            }
             _ => {
                 return false;
             }
@@ -251,14 +249,7 @@ impl FormWidget {
         self.layout.push(value.0.clone());
         self.fields.insert(value.0, Choice(value.1, 0));
     }
-    pub fn push_cl(
-        &mut self,
-        value: (
-            String,
-            String,
-            Box<Fn(&Context, &str) -> Vec<String> + Send>,
-        ),
-    ) {
+    pub fn push_cl(&mut self, value: (String, String, AutoCompleteFn)) {
         self.field_name_max_length = std::cmp::max(self.field_name_max_length, value.0.len());
         self.layout.push(value.0.clone());
         self.fields.insert(

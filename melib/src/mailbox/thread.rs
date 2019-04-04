@@ -93,27 +93,29 @@ macro_rules! make {
 }
 
 /* Strip common prefixes from subjects */
-trait SubjectPrefix<'a> {
-    fn strip_prefixes(&'a mut self) -> bool;
+trait SubjectPrefix {
+    fn is_a_reply(&self) -> bool;
+    fn strip_prefixes(&mut self);
 }
 
-impl<'a> SubjectPrefix<'a> for &'a [u8] {
-    fn strip_prefixes(&'a mut self) -> bool {
-        let mut ret: bool = false;
+impl SubjectPrefix for &[u8] {
+    fn is_a_reply(&self) -> bool {
+        self.starts_with(b"RE: ")
+            || self.starts_with(b"Re: ")
+            || self.starts_with(b"FW: ")
+            || self.starts_with(b"Fw: ")
+    }
+
+    fn strip_prefixes(&mut self) {
         let result = {
             let mut slice = self.trim();
-            let mut end_prefix_idx = 0;
             loop {
                 if slice.starts_with(b"RE: ")
                     || slice.starts_with(b"Re: ")
                     || slice.starts_with(b"FW: ")
                     || slice.starts_with(b"Fw: ")
                 {
-                    if end_prefix_idx == 0 {
-                        ret = true;
-                    }
                     slice = &slice[3..];
-                    end_prefix_idx += 3;
                     continue;
                 }
                 if slice.starts_with(b"FWD: ")
@@ -121,24 +123,21 @@ impl<'a> SubjectPrefix<'a> for &'a [u8] {
                     || slice.starts_with(b"fwd: ")
                 {
                     slice = &slice[4..];
-                    end_prefix_idx += 4;
                     continue;
                 }
                 if slice.starts_with(b" ") || slice.starts_with(b"\t") || slice.starts_with(b"\r") {
+                    //FIXME just trim whitespace
                     slice = &slice[1..];
-                    end_prefix_idx += 1;
                     continue;
                 }
                 if slice.starts_with(b"[")
                     && !(slice.starts_with(b"[PATCH") || slice.starts_with(b"[RFC"))
                 {
                     if let Some(pos) = slice.find(b"]") {
-                        end_prefix_idx += pos;
                         slice = &slice[pos..];
                         continue;
                     }
                     slice = &slice[1..];
-                    end_prefix_idx += 1;
                     continue;
                 }
                 break;
@@ -146,7 +145,6 @@ impl<'a> SubjectPrefix<'a> for &'a [u8] {
             slice
         };
         *self = result;
-        ret
     }
 }
 
@@ -576,38 +574,24 @@ impl Threads {
 
         t.create_root_set(collection);
         t.build_collection(collection);
-        for (i, _t) in t.thread_nodes.iter().enumerate() {
-            if cfg!(feature = "debug_log") {
+        if cfg!(feature = "debug_log") {
+            for (i, _t) in t.thread_nodes.iter().enumerate() {
                 eprintln!("Thread #{}, children {}", i, _t.children.len());
-            }
-            if !_t.children.is_empty() {
-                if cfg!(feature = "debug_log") {
+                if !_t.children.is_empty() {
                     eprintln!("{:?}", _t.children);
                 }
-            }
-            if let Some(m) = _t.message {
-                if cfg!(feature = "debug_log") {
+                if let Some(m) = _t.message {
                     eprintln!("\tmessage: {}", collection[&m].subject());
-                }
-            } else {
-                if cfg!(feature = "debug_log") {
+                } else {
                     eprintln!("\tNo message");
                 }
             }
-        }
-        if cfg!(feature = "debug_log") {
             eprintln!("\n");
-        }
-        for (i, _t) in t.tree.borrow().iter().enumerate() {
-            if cfg!(feature = "debug_log") {
+            for (i, _t) in t.tree.borrow().iter().enumerate() {
                 eprintln!("Tree #{} id {}, children {}", i, _t.id, _t.children.len());
-            }
-            if let Some(m) = t.thread_nodes[_t.id].message {
-                if cfg!(feature = "debug_log") {
+                if let Some(m) = t.thread_nodes[_t.id].message {
                     eprintln!("\tmessage: {}", collection[&m].subject());
-                }
-            } else {
-                if cfg!(feature = "debug_log") {
+                } else {
                     eprintln!("\tNo message");
                 }
             }
@@ -621,7 +605,7 @@ impl Threads {
         let mut root_set: Vec<usize> = Vec::with_capacity(collection.len());
 
         /* Find the root set */
-        'root_set: for v in self.message_ids.values() {
+        for v in self.message_ids.values() {
             if self.thread_nodes[*v].parent.is_none() {
                 root_set.push(*v);
             }
@@ -652,7 +636,7 @@ impl Threads {
                 /* "If there is no message in the Container, then the Container will have at least
                  * one child Container, and that Container will have a message. Use the subject of
                  * that message instead." */
-                let mut msg_idx = self.thread_nodes[self.thread_nodes[r].children[0]]
+                let msg_idx = self.thread_nodes[self.thread_nodes[r].children[0]]
                     .message
                     .unwrap();
                 let envelope = &collection[&msg_idx];
@@ -663,7 +647,8 @@ impl Threads {
             /* References of this envelope can be empty but if the subject contains a ``Re:``
              * prefix, it's a reply */
             let mut stripped_subj = subject.to_mut().as_bytes();
-            is_re |= stripped_subj.strip_prefixes();
+            is_re |= stripped_subj.is_a_reply();
+            stripped_subj.strip_prefixes();
 
             if stripped_subj.is_empty() {
                 continue;
@@ -711,7 +696,8 @@ impl Threads {
             };
 
             let mut subject = subject.to_mut().as_bytes();
-            is_re |= subject.strip_prefixes();
+            is_re |= subject.is_a_reply();
+            subject.strip_prefixes();
             if subject.is_empty() {
                 continue;
             }
@@ -975,11 +961,7 @@ impl Threads {
         let mut stack = Vec::with_capacity(32);
 
         let no_parent: bool = if let Some(node) = self.thread_nodes.get(node_idx) {
-            if node.parent.is_none() {
-                true
-            } else {
-                false
-            }
+            node.parent.is_none()
         } else {
             false
         };
@@ -1058,7 +1040,7 @@ impl Threads {
 
     fn inner_subsort_by(&self, subsort: (SortField, SortOrder), collection: &Envelopes) {
         let tree = &mut self.tree.borrow_mut();
-        for mut t in tree.iter_mut() {
+        for t in tree.iter_mut() {
             t.children.sort_by(|a, b| match subsort {
                 (SortField::Date, SortOrder::Desc) => {
                     let a = &self.thread_nodes[a.id];
@@ -1316,10 +1298,10 @@ fn node_build(
                      */
                     let mut subject = collection[&hash].subject();
                     let mut subject = subject.to_mut().as_bytes();
-                    let subject = subject.strip_prefixes();
+                    subject.strip_prefixes();
                     let mut parent_subject = collection[&parent_hash].subject();
                     let mut parent_subject = parent_subject.to_mut().as_bytes();
-                    let parent_subject = parent_subject.strip_prefixes();
+                    parent_subject.strip_prefixes();
                     if subject == parent_subject {
                         thread_nodes[idx].show_subject = false;
                     }

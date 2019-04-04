@@ -749,7 +749,7 @@ pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
             break;
         }
         s = s.trim_start_matches(|c| c == ' ');
-        if s.starts_with("\n") {
+        if s.starts_with('\n') {
             ret.push(&s[0..0]);
             s = &s["\n".len()..];
             continue;

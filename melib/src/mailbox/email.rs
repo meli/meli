@@ -544,7 +544,7 @@ impl Envelope {
                     eprintln!("error in parsing mail\n");
                 }
                 let error_msg = b"Mail cannot be shown because of errors.";
-                let mut builder = AttachmentBuilder::new(error_msg);
+                let builder = AttachmentBuilder::new(error_msg);
                 return builder.build();
             }
         };

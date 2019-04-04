@@ -19,11 +19,11 @@ pub trait Graphemes: UnicodeSegmentation + CodePointsIter {
         UnicodeSegmentation::grapheme_indices(self, true).collect::<Vec<(usize, &str)>>()
     }
 
-    fn next_grapheme<'a>(&'a self) -> Option<(usize, &'a str)> {
+    fn next_grapheme(&self) -> Option<(usize, &str)> {
         UnicodeSegmentation::grapheme_indices(self, true).next()
     }
 
-    fn last_grapheme<'a>(&'a self) -> Option<(usize, &'a str)> {
+    fn last_grapheme(&self) -> Option<(usize, &str)> {
         UnicodeSegmentation::grapheme_indices(self, true).next_back()
     }
 
