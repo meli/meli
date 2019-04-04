@@ -723,6 +723,9 @@ pub fn write_string_to_grid(
         return (x, y);
     }
     'char: for c in s.chars() {
+        if c == '\r' {
+            continue;
+        }
         grid[(x, y)].set_ch(c);
         grid[(x, y)].set_fg(fg_color);
         grid[(x, y)].set_bg(bg_color);
