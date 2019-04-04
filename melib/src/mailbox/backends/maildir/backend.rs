@@ -212,8 +212,8 @@ impl MailBackend for MaildirType {
                                     file_name,
                                 ) {
                                     if cfg!(feature = "debug_log") {
-eprintln!("Create event {} {} {}", env.hash(), env.subject(), pathbuf.display());
-}
+                                        eprintln!("Create event {} {} {}", env.hash(), env.subject(), pathbuf.display());
+                                    }
                                     sender.send(RefreshEvent {
                                         hash: folder_hash,
                                         kind: Create(Box::new(env)),
@@ -238,6 +238,7 @@ eprintln!("Create event {} {} {}", env.hash(), env.subject(), pathbuf.display())
                                     if let Some((k, v)) =
                                         index_lock.iter_mut().find(|(_, v)| **v == pathbuf)
                                     {
+                                        //TODO FIXME This doesn't make sense?
                                         *v = pathbuf.clone();
                                         *k
                                     } else {
@@ -409,10 +410,18 @@ impl MaildirType {
                 path.file_name().unwrap().to_str().unwrap().to_string(),
                 Vec::with_capacity(0),
             ) {
-                folders.push(f);
+                if f.is_valid().is_ok() {
+                    folders.push(f);
+                }
             }
         }
-        folders[0].children = recurse_folders(&mut folders, &path);
+        
+        if folders.is_empty() {
+            recurse_folders(&mut folders, &path);
+        } else {
+            folders[0].children = recurse_folders(&mut folders, &path);
+        }
+
         let hash_indexes = Arc::new(Mutex::new(FnvHashMap::with_capacity_and_hasher(
             folders.len(),
             Default::default(),
