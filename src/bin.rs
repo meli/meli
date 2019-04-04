@@ -29,19 +29,19 @@ use std::alloc::System;
 #[global_allocator]
 static GLOBAL: System = System;
 
-extern crate melib;
-extern crate ui;
+
+use ui;
 
 pub use melib::*;
 pub use ui::*;
 
 #[macro_use]
 extern crate chan;
-extern crate chan_signal;
+use chan_signal;
 
 use chan_signal::Signal;
 
-extern crate nix;
+use nix;
 
 fn main() {
     /* Lock all stdio outs */

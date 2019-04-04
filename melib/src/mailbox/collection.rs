@@ -1,14 +1,10 @@
-extern crate bincode;
-extern crate xdg;
-
 use super::*;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::ops::{Deref, DerefMut};
 
-extern crate fnv;
-use self::fnv::FnvHashMap;
+use fnv::FnvHashMap;
 
 /// `Mailbox` represents a folder of mail.
 #[derive(Debug, Clone, Default)]

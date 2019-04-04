@@ -1,5 +1,5 @@
 use chan;
-use melib::async::Work;
+use melib::async_workers::Work;
 use std;
 use std::mem;
 use std::thread;

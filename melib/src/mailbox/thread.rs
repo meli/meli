@@ -32,11 +32,10 @@
  * user having mutable ownership.
  */
 
-use mailbox::email::parser::BytesExt;
-use mailbox::email::*;
+use crate::mailbox::email::parser::BytesExt;
+use crate::mailbox::email::*;
 
-extern crate fnv;
-use self::fnv::{FnvHashMap, FnvHashSet};
+use fnv::{FnvHashMap, FnvHashSet};
 use std::cell::{Ref, RefCell};
 use std::cmp;
 use std::cmp::Ordering;

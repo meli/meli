@@ -1,7 +1,7 @@
 use super::*;
 use chrono::{DateTime, Local};
 use data_encoding::BASE64_MIME;
-use mailbox::backends::BackendOp;
+use crate::mailbox::backends::BackendOp;
 use std::str;
 
 mod mime;
@@ -10,9 +10,7 @@ mod random;
 //use self::mime::*;
 
 use super::parser;
-
-extern crate fnv;
-use self::fnv::FnvHashMap;
+use fnv::FnvHashMap;
 
 #[derive(Debug, PartialEq)]
 pub struct Draft {

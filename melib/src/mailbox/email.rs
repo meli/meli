@@ -28,12 +28,12 @@ pub use self::compose::*;
 
 mod attachment_types;
 pub mod attachments;
-pub use self::attachments::*;
+pub use crate::attachments::*;
 pub mod parser;
 use parser::BytesExt;
 
-use error::{MeliError, Result};
-use mailbox::backends::BackendOp;
+use crate::error::{MeliError, Result};
+use super::backends::BackendOp;
 
 use std::borrow::Cow;
 use std::cmp::Ordering;

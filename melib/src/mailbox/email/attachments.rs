@@ -19,13 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use data_encoding::BASE64_MIME;
-use mailbox::email::parser;
-use mailbox::email::parser::BytesExt;
-use mailbox::email::EnvelopeWrapper;
+use crate::mailbox::email::parser;
+use crate::mailbox::email::parser::BytesExt;
+use crate::mailbox::email::EnvelopeWrapper;
 use std::fmt;
 use std::str;
 
-pub use mailbox::email::attachment_types::*;
+pub use crate::mailbox::email::attachment_types::*;
 
 /*
  *

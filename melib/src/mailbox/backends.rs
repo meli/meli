@@ -22,19 +22,18 @@ pub mod imap;
 pub mod maildir;
 pub mod mbox;
 
-use async::*;
-use conf::AccountSettings;
-use error::Result;
+use crate::async_workers::*;
+use crate::conf::AccountSettings;
+use crate::error::Result;
 //use mailbox::backends::imap::ImapType;
 //use mailbox::backends::mbox::MboxType;
-use mailbox::backends::maildir::MaildirType;
-use mailbox::email::{Envelope, EnvelopeHash, Flag};
+use self::maildir::MaildirType;
+use super::email::{Envelope, EnvelopeHash, Flag};
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
 
-extern crate fnv;
-use self::fnv::FnvHashMap;
+use fnv::FnvHashMap;
 use std;
 
 pub type BackendCreator = Box<Fn(&AccountSettings) -> Box<MailBackend>>;
@@ -209,7 +208,7 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn fetch_headers(&mut self) -> Result<&[u8]>;
     fn fetch_body(&mut self) -> Result<&[u8]>;
     fn fetch_flags(&self) -> Flag;
-    fn set_flag(&mut self, &mut Envelope, Flag) -> Result<()>;
+    fn set_flag(&mut self, envelope: &mut Envelope, flag: Flag) -> Result<()>;
 }
 
 /// `BackendOpGenerator` is a wrapper for a closure that returns a `BackendOp` object
@@ -238,7 +237,7 @@ impl fmt::Debug for BackendOpGenerator {
 pub trait BackendFolder: Debug {
     fn hash(&self) -> FolderHash;
     fn name(&self) -> &str;
-    fn change_name(&mut self, &str);
+    fn change_name(&mut self, new_name: &str);
     fn clone(&self) -> Folder;
     fn children(&self) -> &Vec<usize>;
 }

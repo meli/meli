@@ -23,12 +23,12 @@
  * Account management from user configuration.
  */
 
-use async::*;
-use conf::AccountConf;
-use mailbox::backends::{
+use melib::async_workers::{Async, AsyncStatus, AsyncBuilder};
+use super::AccountConf;
+use melib::mailbox::backends::{
     Backends, Folder, MailBackend, NotifyFn, RefreshEvent, RefreshEventConsumer, RefreshEventKind,
 };
-use mailbox::*;
+use melib::mailbox::*;
 use melib::error::Result;
 use melib::AddressBook;
 

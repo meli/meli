@@ -19,22 +19,17 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern crate bincode;
-extern crate fnv;
-extern crate notify;
-extern crate xdg;
-
 use super::{MaildirFolder, MaildirOp};
-use async::*;
-use conf::AccountSettings;
-use error::{MeliError, Result};
-use mailbox::backends::{
+use crate::async_workers::*;
+use crate::conf::AccountSettings;
+use crate::error::{MeliError, Result};
+use super::{
     BackendFolder, BackendOp, Folder, FolderHash, MailBackend, RefreshEvent, RefreshEventConsumer,
     RefreshEventKind::*,
 };
-use mailbox::email::{Envelope, EnvelopeHash};
+use crate::mailbox::email::{Envelope, EnvelopeHash};
 
-use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
+use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::time::Duration;
 
 use std::sync::mpsc::channel;
@@ -42,8 +37,7 @@ use std::sync::mpsc::channel;
 //use std::sync::mpsc::SyncSender;
 //use std::time::Duration;
 use std::thread;
-extern crate crossbeam;
-use self::fnv::{FnvHashMap, FnvHasher};
+use fnv::{FnvHashMap, FnvHasher};
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
 use std::fs;

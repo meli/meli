@@ -19,15 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-extern crate fnv;
-
 mod backend;
 pub use self::backend::*;
 
-use error::{MeliError, Result};
-use mailbox::backends::*;
-use mailbox::email::parser;
-use mailbox::email::{Envelope, Flag};
+use crate::error::{MeliError, Result};
+use crate::mailbox::backends::*;
+use crate::mailbox::email::parser;
+use crate::mailbox::email::{Envelope, Flag};
 
 use memmap::{Mmap, Protection};
 use std::collections::hash_map::DefaultHasher;

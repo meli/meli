@@ -29,10 +29,10 @@ pub mod email;
 pub use self::email::*;
 /* Mail backends. Currently only maildir is supported */
 pub mod backends;
-use error::Result;
-use mailbox::backends::Folder;
+use crate::error::Result;
+use self::backends::Folder;
 pub mod thread;
-pub use mailbox::thread::{SortField, SortOrder, ThreadNode, Threads};
+pub use self::thread::{SortField, SortOrder, ThreadNode, Threads};
 
 mod collection;
 pub use self::collection::*;
