@@ -81,7 +81,19 @@ impl fmt::Display for Key {
             Alt(c) => write!(f, "M-{}", c),
             Ctrl(c) => write!(f, "C-{}", c),
             Paste(_) => write!(f, "Pasted buf"),
-            a => write!(f, "{}", stringify!(a)),
+            Null => write!(f, "Null byte"),
+            Esc => write!(f, "Esc"),
+            Backspace => write!(f, "Backspace"),
+            Left => write!(f, "Left"),
+            Right => write!(f, "Right"),
+            Up => write!(f, "Up"),
+            Down => write!(f, "Down"),
+            Home => write!(f, "Home"),
+            End => write!(f, "End"),
+            PageUp => write!(f, "PageUp"),
+            PageDown => write!(f, "PageDown"),
+            Delete => write!(f, "Delete"),
+            Insert => write!(f, "Insert"),
         }
     }
 }
