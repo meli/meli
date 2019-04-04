@@ -79,9 +79,11 @@ impl ThreadView {
         if self.entries.is_empty() {
             return;
         }
-        let old_focused_entry = if self.entries.len() > self.cursor_pos { 
+        let old_focused_entry = if self.entries.len() > self.cursor_pos {
             Some(self.entries.remove(self.cursor_pos))
-        } else { None };
+        } else {
+            None
+        };
 
         let old_expanded_entry = if self.entries.len() > self.expanded_pos {
             Some(self.entries.remove(self.expanded_pos))
@@ -93,21 +95,24 @@ impl ThreadView {
         let expanded_pos = self.expanded_pos;
         self.initiate(Some(expanded_pos), context);
         if let Some(old_focused_entry) = old_focused_entry {
-            if let Some(new_entry_idx) = self.entries.iter().position(
-                |e| e.msg_idx == old_focused_entry.msg_idx ||
-                (e.index.1 == old_focused_entry.index.1 && e.index.2 == old_focused_entry.index.2)) {
+            if let Some(new_entry_idx) = self.entries.iter().position(|e| {
+                e.msg_idx == old_focused_entry.msg_idx
+                    || (e.index.1 == old_focused_entry.index.1
+                        && e.index.2 == old_focused_entry.index.2)
+            }) {
                 self.cursor_pos = new_entry_idx;
             }
         }
         if let Some(old_expanded_entry) = old_expanded_entry {
-            if let Some(new_entry_idx) = self.entries.iter().position(
-                |e| e.msg_idx == old_expanded_entry.msg_idx ||
-                (e.index.1 == old_expanded_entry.index.1 && e.index.2 == old_expanded_entry.index.2)) {
+            if let Some(new_entry_idx) = self.entries.iter().position(|e| {
+                e.msg_idx == old_expanded_entry.msg_idx
+                    || (e.index.1 == old_expanded_entry.index.1
+                        && e.index.2 == old_expanded_entry.index.2)
+            }) {
                 self.expanded_pos = new_entry_idx;
             }
         }
         self.set_dirty();
-
     }
     fn initiate(&mut self, expanded_idx: Option<usize>, context: &Context) {
         /* stack to push thread messages in order in order to pop and print them later */
@@ -183,12 +188,14 @@ impl ThreadView {
                     if content[index].ch() == ' ' {
                         let mut ctr = 1;
                         while content.get(e.index.0 * 4 + ctr, 2 * y - 1).is_some() {
-                            if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' { break; }
+                            if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' {
+                                break;
+                            }
                             set_and_join_box(
                                 &mut content,
                                 (e.index.0 * 4 + ctr, 2 * y - 1),
                                 HORZ_BOUNDARY,
-                                );
+                            );
                             ctr += 1;
                         }
                         set_and_join_box(&mut content, index, HORZ_BOUNDARY);
@@ -197,11 +204,19 @@ impl ThreadView {
                 write_string_to_grid(
                     &strings[y],
                     &mut content,
-                    if e.seen { Color::Default } else { Color::Byte(0) },
-                    if e.seen { Color::Default } else { Color::Byte(251) },
+                    if e.seen {
+                        Color::Default
+                    } else {
+                        Color::Byte(0)
+                    },
+                    if e.seen {
+                        Color::Default
+                    } else {
+                        Color::Byte(251)
+                    },
                     ((e.index.0 * 4 + 1, 2 * y), (width - 1, height - 1)),
                     true,
-                    );
+                );
                 if let Some(len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1 + strings[y].len() - len;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
@@ -225,12 +240,14 @@ impl ThreadView {
                     if content[index].ch() == ' ' {
                         let mut ctr = 1;
                         while content.get(e.index.0 * 4 + ctr, 2 * y - 1).is_some() {
-                            if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' { break; }
+                            if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' {
+                                break;
+                            }
                             set_and_join_box(
                                 &mut content,
                                 (e.index.0 * 4 + ctr, 2 * y - 1),
                                 HORZ_BOUNDARY,
-                                );
+                            );
                             ctr += 1;
                         }
                         set_and_join_box(&mut content, index, HORZ_BOUNDARY);
@@ -239,11 +256,19 @@ impl ThreadView {
                 write_string_to_grid(
                     &strings[y],
                     &mut content,
-                    if e.seen { Color::Default } else { Color::Byte(0) },
-                    if e.seen { Color::Default } else { Color::Byte(251) },
+                    if e.seen {
+                        Color::Default
+                    } else {
+                        Color::Byte(0)
+                    },
+                    if e.seen {
+                        Color::Default
+                    } else {
+                        Color::Byte(251)
+                    },
                     ((e.index.0 * 4 + 1, 2 * y), (width - 1, height - 1)),
                     true,
-                    );
+                );
                 if let Some(len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1 + strings[y].len() - len;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
@@ -267,7 +292,12 @@ impl ThreadView {
         self.content = content;
     }
 
-    fn make_entry(&mut self, i: (usize, usize, usize), msg_idx: EnvelopeHash, seen: bool) -> ThreadEntry {
+    fn make_entry(
+        &mut self,
+        i: (usize, usize, usize),
+        msg_idx: EnvelopeHash,
+        seen: bool,
+    ) -> ThreadEntry {
         let (ind, _, _) = i;
         ThreadEntry {
             index: i,
@@ -466,7 +496,6 @@ impl ThreadView {
         for x in get_x(upper_left)..=get_x(bottom_right) {
             set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
         }
-
     }
     fn draw_horz(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
@@ -576,7 +605,6 @@ impl ThreadView {
             context.dirty_areas.push_back(area);
             self.initiated = true;
         }
-
 
         if self.show_mailview {
             self.draw_list(

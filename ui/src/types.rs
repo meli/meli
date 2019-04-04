@@ -26,9 +26,9 @@ pub use self::helpers::*;
 use super::execute::Action;
 use super::terminal::*;
 
-use melib::RefreshEvent;
-use melib::EnvelopeHash;
 use melib::backends::FolderHash;
+use melib::EnvelopeHash;
+use melib::RefreshEvent;
 use std;
 use std::fmt;
 use std::thread;

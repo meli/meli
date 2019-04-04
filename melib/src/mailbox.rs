@@ -29,8 +29,8 @@ pub mod email;
 pub use self::email::*;
 /* Mail backends. Currently only maildir is supported */
 pub mod backends;
-use crate::error::Result;
 use self::backends::Folder;
+use crate::error::Result;
 pub mod thread;
 pub use self::thread::{SortField, SortOrder, ThreadNode, Threads};
 

@@ -1,7 +1,7 @@
 use super::*;
+use crate::mailbox::backends::BackendOp;
 use chrono::{DateTime, Local};
 use data_encoding::BASE64_MIME;
-use crate::mailbox::backends::BackendOp;
 use std::str;
 
 mod mime;

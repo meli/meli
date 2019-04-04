@@ -48,7 +48,11 @@ pub struct ThreadListing {
 
 impl ListingTrait for ThreadListing {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
-        (self.cursor_pos.0, self.cursor_pos.1, Some(self.locations[self.cursor_pos.2]))
+        (
+            self.cursor_pos.0,
+            self.cursor_pos.1,
+            Some(self.locations[self.cursor_pos.2]),
+        )
     }
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
@@ -291,7 +295,8 @@ impl ThreadListing {
 
     /// Draw the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0 {
+        if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
+        {
             self.refresh_mailbox(context);
         }
         let upper_left = upper_left!(area);
@@ -660,11 +665,15 @@ impl Component for ThreadListing {
                 self.dirty = true;
                 self.view = None;
             }
-            UIEventType::MailboxUpdate((ref idxa, ref idxf)) if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 => {
+            UIEventType::MailboxUpdate((ref idxa, ref idxf))
+                if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 =>
+            {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
-            UIEventType::StartupCheck(ref f) if context.mailbox_hashes[f] == (self.new_cursor_pos.0, self.new_cursor_pos.1) => {
+            UIEventType::StartupCheck(ref f)
+                if context.mailbox_hashes[f] == (self.new_cursor_pos.0, self.new_cursor_pos.1) =>
+            {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }

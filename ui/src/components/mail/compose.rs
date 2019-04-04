@@ -426,7 +426,7 @@ impl Component for Composer {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match (&mut self.mode, &mut self.reply_context, &event.event_type) {
             // don't pass Reply command to thread view in reply_context
-            (_, _, UIEventType::Input(Key::Char('R'))) => {},
+            (_, _, UIEventType::Input(Key::Char('R'))) => {}
             (ViewMode::Overview, Some((_, ref mut view)), _) => {
                 if view.process_event(event, context) {
                     self.dirty = true;
@@ -501,7 +501,10 @@ impl Component for Composer {
                             }
                             context.replies.push_back(UIEvent {
                                 id: 0,
-                                event_type: UIEventType::Notification(Some("Could not save draft.".into()), e.into())
+                                event_type: UIEventType::Notification(
+                                    Some("Could not save draft.".into()),
+                                    e.into(),
+                                ),
                             });
                         }
                         context.replies.push_back(UIEvent {
@@ -607,8 +610,7 @@ impl Component for Composer {
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
         let mut map = if self.mode.is_overview() {
-            self.pager
-                .get_shortcuts(context)
+            self.pager.get_shortcuts(context)
         } else {
             Default::default()
         };
@@ -619,21 +621,12 @@ impl Component for Composer {
         }
 
         if self.mode.is_overview() {
-            map.insert(
-                "Switch to edit mode",
-                Key::Char('o')
-            );
+            map.insert("Switch to edit mode", Key::Char('o'));
         }
         if self.mode.is_edit() {
-            map.insert(
-                "Switch to overview",
-                Key::Char('v')
-            );
+            map.insert("Switch to overview", Key::Char('v'));
         }
-        map.insert(
-            "Edit in $EDITOR",
-            Key::Char('e')
-        );
+        map.insert("Edit in $EDITOR", Key::Char('e'));
 
         map
     }

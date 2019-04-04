@@ -63,7 +63,6 @@ impl Into<String> for MeliError {
     }
 }
 
-
 impl Error for MeliError {
     fn description(&self) -> &str {
         &self.details

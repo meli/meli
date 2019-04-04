@@ -83,7 +83,7 @@ impl Component for Listing {
                         Listing::Plain(_) => {
                             return true;
                         }
-                        Listing::Threaded(l)  => {
+                        Listing::Threaded(l) => {
                             let mut new_l = PlainListing::default();
                             new_l.set_coordinates(l.coordinates());
                             new_l
@@ -102,7 +102,7 @@ impl Component for Listing {
                         Listing::Threaded(_) => {
                             return true;
                         }
-                        Listing::Plain(l)  => {
+                        Listing::Plain(l) => {
                             let mut new_l = ThreadListing::default();
                             new_l.set_coordinates(l.coordinates());
                             new_l
@@ -121,7 +121,7 @@ impl Component for Listing {
                         Listing::Compact(_) => {
                             return true;
                         }
-                        Listing::Threaded(l)  => {
+                        Listing::Threaded(l) => {
                             let mut new_l = CompactListing::default();
                             new_l.set_coordinates(l.coordinates());
                             new_l

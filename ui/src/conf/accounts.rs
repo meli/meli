@@ -23,13 +23,13 @@
  * Account management from user configuration.
  */
 
-use melib::async_workers::{Async, AsyncStatus, AsyncBuilder};
 use super::AccountConf;
+use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
+use melib::error::Result;
 use melib::mailbox::backends::{
     Backends, Folder, MailBackend, NotifyFn, RefreshEvent, RefreshEventConsumer, RefreshEventKind,
 };
 use melib::mailbox::*;
-use melib::error::Result;
 use melib::AddressBook;
 
 use std::fs;
@@ -38,7 +38,7 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 use std::result;
 use std::sync::Arc;
-use types::UIEventType::{self, Notification, EnvelopeUpdate, EnvelopeRename, EnvelopeRemove};
+use types::UIEventType::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 
 pub type Worker = Option<Async<Result<Mailbox>>>;
 

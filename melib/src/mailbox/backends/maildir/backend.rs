@@ -19,14 +19,14 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::{MaildirFolder, MaildirOp};
-use crate::async_workers::*;
-use crate::conf::AccountSettings;
-use crate::error::{MeliError, Result};
 use super::{
     BackendFolder, BackendOp, Folder, FolderHash, MailBackend, RefreshEvent, RefreshEventConsumer,
     RefreshEventKind::*,
 };
+use super::{MaildirFolder, MaildirOp};
+use crate::async_workers::*;
+use crate::conf::AccountSettings;
+use crate::error::{MeliError, Result};
 use crate::mailbox::email::{Envelope, EnvelopeHash};
 
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
@@ -36,7 +36,6 @@ use std::sync::mpsc::channel;
 //use std::sync::mpsc::sync_channel;
 //use std::sync::mpsc::SyncSender;
 //use std::time::Duration;
-use std::thread;
 use fnv::{FnvHashMap, FnvHasher};
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
@@ -47,6 +46,7 @@ use std::ops::{Deref, DerefMut};
 use std::path::{Component, Path, PathBuf};
 use std::result;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 #[derive(Debug, Default)]
 pub struct HashIndex {
@@ -344,13 +344,26 @@ eprintln!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", 
                 path.push("cur");
                 {
                     let mut rand_buf = [0u8; 16];
-                    let mut f = fs::File::open("/dev/urandom").expect("Could not open /dev/urandom for reading");
-                    f.read_exact(&mut rand_buf).expect("Could not read from /dev/urandom/");
+                    let mut f = fs::File::open("/dev/urandom")
+                        .expect("Could not open /dev/urandom for reading");
+                    f.read_exact(&mut rand_buf)
+                        .expect("Could not read from /dev/urandom/");
                     let mut hostn_buf = String::with_capacity(256);
-                    let mut f = fs::File::open("/etc/hostname").expect("Could not open /etc/hostname for reading");
-                    f.read_to_string(&mut hostn_buf).expect("Could not read from /etc/hostname");
-                    let timestamp = std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_millis();
-                    path.push(&format!("{}.{:x}_{}.{}:2,", timestamp, u128::from_be_bytes(rand_buf), std::process::id(), hostn_buf.trim()));
+                    let mut f = fs::File::open("/etc/hostname")
+                        .expect("Could not open /etc/hostname for reading");
+                    f.read_to_string(&mut hostn_buf)
+                        .expect("Could not read from /etc/hostname");
+                    let timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis();
+                    path.push(&format!(
+                        "{}.{:x}_{}.{}:2,",
+                        timestamp,
+                        u128::from_be_bytes(rand_buf),
+                        std::process::id(),
+                        hostn_buf.trim()
+                    ));
                 }
                 if cfg!(feature = "debug_log") {
                     eprintln!("saving at {}", path.display());
@@ -363,8 +376,8 @@ eprintln!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", 
         }
 
         Err(MeliError::new(format!(
-                    "'{}' is not a valid folder.",
-                    folder
+            "'{}' is not a valid folder.",
+            folder
         )))
     }
 }
@@ -409,7 +422,7 @@ impl MaildirType {
                 }
             }
         }
-        
+
         if folders.is_empty() {
             recurse_folders(&mut folders, &path);
         } else {

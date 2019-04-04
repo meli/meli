@@ -275,7 +275,8 @@ impl CompactListing {
 
     /// Draw the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0 {
+        if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
+        {
             self.refresh_mailbox(context);
         }
         let upper_left = upper_left!(area);
@@ -484,11 +485,15 @@ impl Component for CompactListing {
             UIEventType::RefreshMailbox(_) => {
                 self.dirty = true;
             }
-            UIEventType::MailboxUpdate((ref idxa, ref idxf)) if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 => {
+            UIEventType::MailboxUpdate((ref idxa, ref idxf))
+                if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 =>
+            {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
-            UIEventType::StartupCheck(ref f) if context.mailbox_hashes[f] == (self.new_cursor_pos.0, self.new_cursor_pos.1) => {
+            UIEventType::StartupCheck(ref f)
+                if context.mailbox_hashes[f] == (self.new_cursor_pos.0, self.new_cursor_pos.1) =>
+            {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
@@ -534,7 +539,12 @@ impl Component for CompactListing {
         false
     }
     fn is_dirty(&self) -> bool {
-        self.dirty || if self.unfocused { self.view.is_dirty() } else { false }
+        self.dirty
+            || if self.unfocused {
+                self.view.is_dirty()
+            } else {
+                false
+            }
     }
     fn set_dirty(&mut self) {
         if self.unfocused {

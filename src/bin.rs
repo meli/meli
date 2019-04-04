@@ -29,7 +29,6 @@ use std::alloc::System;
 #[global_allocator]
 static GLOBAL: System = System;
 
-
 use ui;
 
 pub use melib::*;

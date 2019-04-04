@@ -88,10 +88,7 @@ impl MailView {
         let account = &mut context.accounts[coordinates.0];
         let (hash, is_seen) = {
             let mailbox = &mut account[coordinates.1].as_mut().unwrap();
-            let envelope: &mut Envelope = &mut mailbox
-                .collection
-                .entry(coordinates.2)
-                .or_default();
+            let envelope: &mut Envelope = &mut mailbox.collection.entry(coordinates.2).or_default();
             (envelope.hash(), envelope.is_seen())
         };
         if !is_seen {
@@ -104,10 +101,7 @@ impl MailView {
                 backend.operation(hash, folder_hash)
             };
             let mailbox = &mut account[coordinates.1].as_mut().unwrap();
-            let envelope: &mut Envelope = &mut mailbox
-                .collection
-                .entry(coordinates.2)
-                .or_default();
+            let envelope: &mut Envelope = &mut mailbox.collection.entry(coordinates.2).or_default();
             envelope.set_seen(op).unwrap();
         }
         MailView {
@@ -428,34 +422,37 @@ impl Component for MailView {
                 if let ViewMode::ContactSelector(_) = self.mode {
                     if let ViewMode::ContactSelector(s) =
                         std::mem::replace(&mut self.mode, ViewMode::Normal)
+                    {
+                        let account = &mut context.accounts[self.coordinates.0];
+                        let mut results = Vec::new();
                         {
-                            let account = &mut context.accounts[self.coordinates.0];
-                            let mut results = Vec::new();
-                            {
-                                let mailbox = &account[self.coordinates.1]
-                                    .as_ref()
-                                    .unwrap();
-                                let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
-                                for c in s.collect() {
-                                    let c = usize::from_ne_bytes({
-                                        [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]
-                                    });
-                                    for (idx, env) in envelope.from().iter().chain(envelope.to().iter()).enumerate() {
-                                        if idx != c {
-                                            continue;
-                                        }
-
-                                        let mut new_card: Card = Card::new();
-                                        new_card.set_email(env.get_email());
-                                        new_card.set_lastname(env.get_display_name());
-                                        results.push(new_card);
+                            let mailbox = &account[self.coordinates.1].as_ref().unwrap();
+                            let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
+                            for c in s.collect() {
+                                let c = usize::from_ne_bytes({
+                                    [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]
+                                });
+                                for (idx, env) in envelope
+                                    .from()
+                                    .iter()
+                                    .chain(envelope.to().iter())
+                                    .enumerate()
+                                {
+                                    if idx != c {
+                                        continue;
                                     }
+
+                                    let mut new_card: Card = Card::new();
+                                    new_card.set_email(env.get_email());
+                                    new_card.set_lastname(env.get_display_name());
+                                    results.push(new_card);
                                 }
                             }
-                            for c in results {
-                                account.address_book.add_card(c);
-                            }
                         }
+                        for c in results {
+                            account.address_book.add_card(c);
+                        }
+                    }
                     return true;
                 }
                 let accounts = &context.accounts;
@@ -465,11 +462,13 @@ impl Component for MailView {
                 let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
 
                 let mut entries = Vec::new();
-                for (idx, env) in envelope.from().iter().chain(envelope.to().iter()).enumerate() {
-                    entries.push((
-                            idx.to_ne_bytes().to_vec(),
-                            format!("{}", env),
-                            ));
+                for (idx, env) in envelope
+                    .from()
+                    .iter()
+                    .chain(envelope.to().iter())
+                    .enumerate()
+                {
+                    entries.push((idx.to_ne_bytes().to_vec(), format!("{}", env)));
                 }
                 self.mode = ViewMode::ContactSelector(Selector::new(entries, true));
                 self.dirty = true;
@@ -651,7 +650,9 @@ impl Component for MailView {
                 }
                 self.dirty = true;
             }
-            UIEventType::EnvelopeRename(_, old_hash, new_hash) if old_hash == self.coordinates.2 => {
+            UIEventType::EnvelopeRename(_, old_hash, new_hash)
+                if old_hash == self.coordinates.2 =>
+            {
                 self.coordinates.2 = new_hash;
                 self.set_dirty();
             }

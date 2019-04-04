@@ -1339,7 +1339,9 @@ fn node_build(
 
     let mut has_unseen = if let Some(msg) = thread_nodes[idx].message {
         !collection[&msg].is_seen()
-    } else { false };
+    } else {
+        false
+    };
     let mut child_vec: Vec<ThreadTree> = Vec::new();
 
     thread_nodes[idx].len = thread_nodes[idx].children.len();

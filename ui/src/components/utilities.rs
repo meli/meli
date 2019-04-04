@@ -200,7 +200,13 @@ impl Component for VSplit {
         } else {
             self.left.component.draw(
                 grid,
-                (upper_left, (if self.show_divider { mid - 1 } else { mid }, get_y(bottom_right))),
+                (
+                    upper_left,
+                    (
+                        if self.show_divider { mid - 1 } else { mid },
+                        get_y(bottom_right),
+                    ),
+                ),
                 context,
             );
             self.right

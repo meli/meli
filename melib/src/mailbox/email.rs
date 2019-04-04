@@ -32,8 +32,8 @@ pub use crate::attachments::*;
 pub mod parser;
 use parser::BytesExt;
 
-use crate::error::{MeliError, Result};
 use super::backends::BackendOp;
+use crate::error::{MeliError, Result};
 
 use std::borrow::Cow;
 use std::cmp::Ordering;

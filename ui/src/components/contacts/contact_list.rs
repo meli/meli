@@ -74,7 +74,12 @@ impl ContactList {
         if self.id_positions.capacity() < book.len() {
             self.id_positions.reserve(book.len());
         }
-        let mut maxima = ("First Name".len(), "Last Name".len(), "E-mail".len(), "URL".len());
+        let mut maxima = (
+            "First Name".len(),
+            "Last Name".len(),
+            "E-mail".len(),
+            "URL".len(),
+        );
 
         for c in book.values() {
             self.id_positions.push(*c.id());
@@ -94,7 +99,7 @@ impl ContactList {
             Color::Default,
             ((0, 0), (MAX_COLS - 1, self.length)),
             false,
-            );
+        );
         write_string_to_grid(
             "Last Name",
             &mut self.content,
@@ -102,15 +107,15 @@ impl ContactList {
             Color::Default,
             ((maxima.0, 0), (MAX_COLS - 1, self.length)),
             false,
-            );
+        );
         write_string_to_grid(
             "E-mail",
             &mut self.content,
             Color::Default,
             Color::Default,
-            (( maxima.1, 0), (MAX_COLS - 1, self.length)),
+            ((maxima.1, 0), (MAX_COLS - 1, self.length)),
             false,
-            );
+        );
         write_string_to_grid(
             "URL",
             &mut self.content,
@@ -118,7 +123,7 @@ impl ContactList {
             Color::Default,
             ((maxima.2, 0), (MAX_COLS - 1, self.length)),
             false,
-            );
+        );
         for (i, c) in book.values().enumerate() {
             self.id_positions.push(*c.id());
 
@@ -143,12 +148,13 @@ impl ContactList {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
-                (( maxima.1, i + 1), (MAX_COLS - 1, self.length)),
+                ((maxima.1, i + 1), (MAX_COLS - 1, self.length)),
                 false,
             );
             write_string_to_grid(
                 c.url(),
-                &mut self.content, Color::Default,
+                &mut self.content,
+                Color::Default,
                 Color::Default,
                 ((maxima.2, i + 1), (MAX_COLS - 1, self.length)),
                 false,
