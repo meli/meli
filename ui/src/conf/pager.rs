@@ -19,25 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-fn false_val() -> bool {
-    true
-}
-
-fn true_val() -> bool {
-    true
-}
-
-fn zero_val() -> usize {
-    0
-}
-fn eighty_percent() -> usize {
-    80
-}
-
-fn none() -> Option<String> {
-    None
-}
-
+use super::default_vals::*;
 /// Settings for the pager function.
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct PagerSettings {

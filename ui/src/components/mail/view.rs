@@ -116,31 +116,52 @@ impl MailView {
     }
 
     /// Returns the string to be displayed in the Viewer
-    fn attachment_to_text(&self, body: &Attachment) -> String {
+    fn attachment_to_text<'closure, 's: 'closure, 'context: 's>(
+        &'s self,
+        body: &'context Attachment,
+        context: &'context mut Context,
+    ) -> String {
         let finder = LinkFinder::new();
         let body_text = String::from_utf8_lossy(&decode_rec(
-            &body,
-            Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
+            body,
+            Some(Box::new(move |a: &'closure Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
                     use std::io::Write;
                     use std::process::{Command, Stdio};
+                    let settings = context.accounts[self.coordinates.0].runtime_settings.conf();
+                    if let Some(filter_invocation) = settings.html_filter() {
+                        let parts = split_command!(filter_invocation);
+                        let (cmd, args) = (parts[0], &parts[1..]);
+                        let command_obj = Command::new(cmd)
+                            .args(args)
+                            .stdin(Stdio::piped())
+                            .stdout(Stdio::piped())
+                            .spawn();
+                        if command_obj.is_err() {
+                            context.replies.push_back(UIEvent {
+                                id: 0,
+                                event_type: UIEventType::Notification(
+                                    Some(format!(
+                                        "Failed to start html filter process: {}",
+                                        filter_invocation,
+                                    )),
+                                    String::new(),
+                                ),
+                            });
+                            return;
+                        }
 
-                    let mut html_filter = Command::new("w3m")
-                        .args(&["-I", "utf-8", "-T", "text/html"])
-                        .stdin(Stdio::piped())
-                        .stdout(Stdio::piped())
-                        .spawn()
-                        .expect("Failed to start html filter process");
-
-                    html_filter
-                        .stdin
-                        .as_mut()
-                        .unwrap()
-                        .write_all(&v)
-                        .expect("Failed to write to w3m stdin");
-                    *v = b"Text piped through `w3m`. Press `v` to open in web browser. \n\n"
-                        .to_vec();
-                    v.extend(html_filter.wait_with_output().unwrap().stdout);
+                        let mut html_filter = command_obj.unwrap();
+                        html_filter
+                            .stdin
+                            .as_mut()
+                            .unwrap()
+                            .write_all(&v)
+                            .expect("Failed to write to stdin");
+                        *v = format!("Text piped through `{}`. Press `v` to open in web browser. \n\n",
+                                     filter_invocation).into_bytes();
+                        v.extend(html_filter.wait_with_output().unwrap().stdout);
+                    }
                 }
             })),
         ))
@@ -326,35 +347,42 @@ impl Component for MailView {
         };
 
         if self.dirty {
-            let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
-            let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
-                .as_ref()
-                .unwrap();
-            let envelope: &Envelope = &mailbox.collection[&mailbox_idx.2];
-            let op = context.accounts[mailbox_idx.0]
-                .backend
-                .operation(envelope.hash(), mailbox.folder.hash());
-            let body = envelope.body(op);
+            let body = {
+                let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
+                let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
+                    .as_ref()
+                    .unwrap();
+                let envelope: &Envelope = &mailbox.collection[&mailbox_idx.2];
+                let op = context.accounts[mailbox_idx.0]
+                    .backend
+                    .operation(envelope.hash(), mailbox.folder.hash());
+                envelope.body(op)
+            };
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
                     self.pager = None;
-                    self.subview = Some(Box::new(HtmlView::new(decode(
-                        &body.attachments()[aidx],
-                        None,
-                    ))));
+                    let attachment = &body.attachments()[aidx];
+                    self.subview = Some(Box::new(HtmlView::new(
+                        decode(&attachment, None),
+                        context,
+                        self.coordinates.0,
+                    )));
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Normal if body.is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(decode(&body, None))));
+                    self.subview = Some(Box::new(HtmlView::new(
+                        decode(&body, None),
+                        context,
+                        self.coordinates.0,
+                    )));
                     self.pager = None;
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Subview | ViewMode::ContactSelector(_) => {}
                 _ => {
                     let text = {
-                        self.attachment_to_text(&body)
+                        self.attachment_to_text(&body, context)
                         /*
-                        let text = self.attachment_to_text(&body);
                         // URL indexes must be colored (ugh..)
                         MailView::plain_text_to_buf(&text, self.mode == ViewMode::Url)
                         */
@@ -530,8 +558,12 @@ impl Component for MailView {
                                 self.mode = ViewMode::Subview;
                                 match EnvelopeWrapper::new(u.bytes().to_vec()) {
                                     Ok(wrapper) => {
-                                        self.subview =
-                                            Some(Box::new(EnvelopeView::new(wrapper, None, None)));
+                                        self.subview = Some(Box::new(EnvelopeView::new(
+                                            wrapper,
+                                            None,
+                                            None,
+                                            self.coordinates.0,
+                                        )));
                                     }
                                     Err(e) => {
                                         context.replies.push_back(UIEvent {

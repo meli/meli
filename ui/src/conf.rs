@@ -33,6 +33,7 @@ pub use self::accounts::Account;
 use self::config::{Config, File, FileFormat};
 pub use self::shortcuts::*;
 
+use self::default_vals::*;
 use self::notifications::NotificationsSettings;
 use melib::conf::AccountSettings;
 use melib::error::*;
@@ -43,8 +44,11 @@ use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
 
-fn true_val() -> bool {
-    true
+#[macro_export]
+macro_rules! split_command {
+    ($cmd:expr) => {{
+        $cmd.split_whitespace().collect::<Vec<&str>>()
+    }};
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -68,9 +72,17 @@ pub struct FileAccount {
     sent_folder: String,
     draft_folder: String,
     identity: String,
+
+    #[serde(default = "none")]
     display_name: Option<String>,
     #[serde(deserialize_with = "index_from_str")]
     index: IndexStyle,
+
+    /// A command to pipe html output before displaying it in a pager
+    /// Default: None
+    #[serde(default = "none", deserialize_with = "non_empty_string")]
+    html_filter: Option<String>,
+
     folders: Option<HashMap<String, FolderConf>>,
 }
 
@@ -107,6 +119,9 @@ impl FileAccount {
     }
     pub fn index(&self) -> IndexStyle {
         self.index
+    }
+    pub fn html_filter(&self) -> Option<&str> {
+        self.html_filter.as_ref().map(|f| f.as_str())
     }
 }
 
@@ -216,5 +231,43 @@ where
         "Threaded" | "threaded" => Ok(IndexStyle::Threaded),
         "Compact" | "compact" => Ok(IndexStyle::Compact),
         _ => Err(de::Error::custom("invalid `index` value")),
+    }
+}
+
+fn non_empty_string<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = <String>::deserialize(deserializer)?;
+    if s.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(s))
+    }
+}
+
+/*
+ * Deserialize default functions
+ */
+
+mod default_vals {
+    pub(in conf) fn false_val() -> bool {
+        true
+    }
+
+    pub(in conf) fn true_val() -> bool {
+        true
+    }
+
+    pub(in conf) fn zero_val() -> usize {
+        0
+    }
+
+    pub(in conf) fn eighty_percent() -> usize {
+        80
+    }
+
+    pub(in conf) fn none() -> Option<String> {
+        None
     }
 }

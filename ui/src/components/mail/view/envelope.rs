@@ -53,6 +53,7 @@ pub struct EnvelopeView {
     mode: ViewMode,
     wrapper: EnvelopeWrapper,
 
+    account_pos: usize,
     cmd_buf: String,
 }
 
@@ -68,6 +69,7 @@ impl EnvelopeView {
         wrapper: EnvelopeWrapper,
         pager: Option<Pager>,
         subview: Option<Box<Component>>,
+        account_pos: usize,
     ) -> Self {
         EnvelopeView {
             pager,
@@ -75,13 +77,17 @@ impl EnvelopeView {
             dirty: true,
             mode: ViewMode::Normal,
             wrapper,
-
+            account_pos,
             cmd_buf: String::with_capacity(4),
         }
     }
 
     /// Returns the string to be displayed in the Viewer
-    fn attachment_to_text(&self, body: &Attachment) -> String {
+    fn attachment_to_text<'closure, 's: 'closure, 'context: 's>(
+        &'s self,
+        body: &'context Attachment,
+        context: &'context mut Context,
+    ) -> String {
         let finder = LinkFinder::new();
         let body_text = String::from_utf8_lossy(&decode_rec(
             &body,
@@ -89,23 +95,40 @@ impl EnvelopeView {
                 if a.content_type().is_text_html() {
                     use std::io::Write;
                     use std::process::{Command, Stdio};
+                    let settings = context.accounts[self.account_pos].runtime_settings.conf();
+                    if let Some(filter_invocation) = settings.html_filter() {
+                        let parts = split_command!(filter_invocation);
+                        let (cmd, args) = (parts[0], &parts[1..]);
+                        let command_obj = Command::new(cmd)
+                            .args(args)
+                            .stdin(Stdio::piped())
+                            .stdout(Stdio::piped())
+                            .spawn();
+                        if command_obj.is_err() {
+                            context.replies.push_back(UIEvent {
+                                id: 0,
+                                event_type: UIEventType::Notification(
+                                    Some(format!(
+                                        "Failed to start html filter process: {}",
+                                        filter_invocation,
+                                    )),
+                                    String::new(),
+                                ),
+                            });
+                            return;
+                        }
 
-                    let mut html_filter = Command::new("w3m")
-                        .args(&["-I", "utf-8", "-T", "text/html"])
-                        .stdin(Stdio::piped())
-                        .stdout(Stdio::piped())
-                        .spawn()
-                        .expect("Failed to start html filter process");
-
-                    html_filter
-                        .stdin
-                        .as_mut()
-                        .unwrap()
-                        .write_all(&v)
-                        .expect("Failed to write to w3m stdin");
-                    *v = b"Text piped through `w3m`. Press `v` to open in web browser. \n\n"
-                        .to_vec();
-                    v.extend(html_filter.wait_with_output().unwrap().stdout);
+                        let mut html_filter = command_obj.unwrap();
+                        html_filter
+                            .stdin
+                            .as_mut()
+                            .unwrap()
+                            .write_all(&v)
+                            .expect("Failed to write to stdin");
+                        *v = format!("Text piped through `{}`. Press `v` to open in web browser. \n\n",
+                                     filter_invocation).into_bytes();
+                        v.extend(html_filter.wait_with_output().unwrap().stdout);
+                    }
                 }
             })),
         ))
@@ -288,18 +311,24 @@ impl Component for EnvelopeView {
             let body = self.wrapper.body_bytes(self.wrapper.buffer());
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(decode(
-                        &body.attachments()[aidx],
-                        None,
-                    ))));
+                    let attachment = &body.attachments()[aidx];
+                    self.subview = Some(Box::new(HtmlView::new(
+                        decode(&attachment, None),
+                        context,
+                        self.account_pos,
+                    )));
                 }
                 ViewMode::Normal if body.is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(decode(&body, None))));
+                    self.subview = Some(Box::new(HtmlView::new(
+                        decode(&body, None),
+                        context,
+                        self.account_pos,
+                    )));
                     self.mode = ViewMode::Subview;
                 }
                 _ => {
                     let text = {
-                        self.attachment_to_text(&body)
+                        self.attachment_to_text(&body, context)
                         /*
                         let text = self.attachment_to_text(&body);
                         // URL indexes must be colored (ugh..)

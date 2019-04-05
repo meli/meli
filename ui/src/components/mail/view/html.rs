@@ -30,27 +30,94 @@ pub struct HtmlView {
 }
 
 impl HtmlView {
-    pub fn new(bytes: Vec<u8>) -> Self {
-        let mut html_filter = Command::new("w3m")
-            .args(&["-I", "utf-8", "-T", "text/html"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .expect("Failed to start html filter process");
-        html_filter
-            .stdin
-            .as_mut()
-            .unwrap()
-            .write_all(&bytes)
-            .expect("Failed to write to w3m stdin");
-        let mut display_text =
-            String::from("Text piped through `w3m`. Press `v` to open in web browser. \n\n");
-        display_text.push_str(&String::from_utf8_lossy(
-            &html_filter.wait_with_output().unwrap().stdout,
-        ));
+    pub fn new(bytes: Vec<u8>, context: &mut Context, account_pos: usize) -> Self {
+        let settings = context.accounts[account_pos].runtime_settings.conf();
+        if let Some(filter_invocation) = settings.html_filter() {
+            let parts = split_command!(filter_invocation);
+            let (cmd, args) = (parts[0], &parts[1..]);
+            let command_obj = Command::new(cmd)
+                .args(args)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn();
+            if command_obj.is_err() {
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::Notification(
+                        Some(format!(
+                            "Failed to start html filter process: {}",
+                            filter_invocation
+                        )),
+                        String::new(),
+                    ),
+                });
+                let pager = Pager::from_string(
+                    String::from_utf8_lossy(&bytes).to_string(),
+                    None,
+                    None,
+                    None,
+                );
+                HtmlView { pager, bytes }
+            } else {
+                let mut html_filter = command_obj.unwrap();
+                html_filter
+                    .stdin
+                    .as_mut()
+                    .unwrap()
+                    .write_all(&bytes)
+                    .expect("Failed to write to html filter stdin");
+                let mut display_text = format!(
+                    "Text piped through `{}`. Press `v` to open in web browser. \n\n",
+                    filter_invocation
+                );
+                display_text.push_str(&String::from_utf8_lossy(
+                    &html_filter.wait_with_output().unwrap().stdout,
+                ));
 
-        let pager = Pager::from_string(display_text, None, None, None);
-        HtmlView { pager, bytes }
+                let pager = Pager::from_string(display_text, None, None, None);
+                HtmlView { pager, bytes }
+            }
+        } else {
+            if let Ok(mut html_filter) = Command::new("w3m")
+                .args(&["-I", "utf-8", "-T", "text/html"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+            {
+                html_filter
+                    .stdin
+                    .as_mut()
+                    .unwrap()
+                    .write_all(&bytes)
+                    .expect("Failed to write to html filter stdin");
+                let mut display_text = String::from(
+                    "Text piped through `w3m`. Press `v` to open in web browser. \n\n",
+                );
+                display_text.push_str(&String::from_utf8_lossy(
+                    &html_filter.wait_with_output().unwrap().stdout,
+                ));
+
+                let pager = Pager::from_string(display_text, None, None, None);
+                HtmlView { pager, bytes }
+            } else {
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::Notification(
+                        Some(format!(
+                            "Failed to find any application to use as html filter"
+                        )),
+                        String::new(),
+                    ),
+                });
+                let pager = Pager::from_string(
+                    String::from_utf8_lossy(&bytes).to_string(),
+                    None,
+                    None,
+                    None,
+                );
+                HtmlView { pager, bytes }
+            }
+        }
     }
 }
 
