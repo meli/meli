@@ -973,7 +973,7 @@ impl Threads {
                 node_build(tree, id, &mut self.thread_nodes, 1, collection);
                 return;
             }
-            unreachable!();
+            tree.push(ThreadTree::new(id));
         }
 
         /* Trace path back to root ThreadNode */
