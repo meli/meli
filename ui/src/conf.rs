@@ -24,6 +24,7 @@ extern crate config;
 extern crate serde;
 extern crate xdg;
 
+pub mod mailer;
 pub mod notifications;
 pub mod pager;
 pub mod shortcuts;
@@ -31,6 +32,7 @@ pub mod shortcuts;
 pub mod accounts;
 pub use self::accounts::Account;
 use self::config::{Config, File, FileFormat};
+pub use self::mailer::*;
 pub use self::shortcuts::*;
 
 use self::default_vals::*;
@@ -131,6 +133,7 @@ struct FileSettings {
     pager: PagerSettings,
     notifications: NotificationsSettings,
     shortcuts: Shortcuts,
+    mailer: MailerSettings,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -157,6 +160,7 @@ pub struct Settings {
     pub pager: PagerSettings,
     pub notifications: NotificationsSettings,
     pub shortcuts: Shortcuts,
+    pub mailer: MailerSettings,
 }
 
 impl FileSettings {
@@ -204,6 +208,7 @@ impl Settings {
             pager: fs.pager,
             notifications: fs.notifications,
             shortcuts: fs.shortcuts,
+            mailer: fs.mailer,
         }
     }
 }

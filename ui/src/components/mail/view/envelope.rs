@@ -125,8 +125,11 @@ impl EnvelopeView {
                             .unwrap()
                             .write_all(&v)
                             .expect("Failed to write to stdin");
-                        *v = format!("Text piped through `{}`. Press `v` to open in web browser. \n\n",
-                                     filter_invocation).into_bytes();
+                        *v = format!(
+                            "Text piped through `{}`. Press `v` to open in web browser. \n\n",
+                            filter_invocation
+                        )
+                        .into_bytes();
                         v.extend(html_filter.wait_with_output().unwrap().stdout);
                     }
                 }

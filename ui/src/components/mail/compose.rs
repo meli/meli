@@ -539,6 +539,40 @@ impl Component for Composer {
                 self.set_dirty();
                 return true;
             }
+            UIEventType::Input(Key::Char('s')) if self.mode.is_overview() => {
+                use std::io::Write;
+                use std::process::{Command, Stdio};
+                let settings = &context.settings;
+                let parts = split_command!(settings.mailer.mailer_cmd);
+                let (cmd, args) = (parts[0], &parts[1..]);
+                let mut msmtp = Command::new(cmd)
+                    .args(args)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect("Failed to start mailer command");
+                {
+                    let mut stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
+                    let draft = self.draft.clone().finalise().unwrap();
+                    stdin
+                        .write_all(draft.as_bytes())
+                        .expect("Failed to write to stdin");
+                }
+                context.replies.push_back(UIEvent {
+                    id: 0,
+                    event_type: UIEventType::Notification(
+                        Some("Sent.".into()),
+                        format!(
+                            "Mailer output: {:#?}",
+                            msmtp
+                                .wait_with_output()
+                                .expect("Failed to wait on filter")
+                                .stdout
+                        ),
+                    ),
+                });
+                return true;
+            }
             UIEventType::Input(Key::Char('e')) if self.cursor == Cursor::Body => {
                 /* Edit draft in $EDITOR */
                 use std::process::{Command, Stdio};
@@ -627,7 +661,8 @@ impl Component for Composer {
         }
 
         if self.mode.is_overview() {
-            map.insert("Switch to edit mode", Key::Char('o'));
+            map.insert("Switch to edit mode.", Key::Char('o'));
+            map.insert("Deliver draft to mailer.", Key::Char('s'));
         }
         if self.mode.is_edit() {
             map.insert("Switch to overview", Key::Char('v'));
