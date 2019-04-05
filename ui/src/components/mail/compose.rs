@@ -112,6 +112,12 @@ impl fmt::Display for Composer {
 }
 
 impl Composer {
+    pub fn new(account_cursor: usize) -> Self {
+        Composer {
+            account_cursor,
+            ..Default::default()
+        }
+    }
     /*
      * coordinates: (account index, mailbox index, root set thread_node index)
      * msg: index of message we reply to in thread_nodes

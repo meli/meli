@@ -530,7 +530,7 @@ impl Component for CompactListing {
             UIEventType::Input(Key::Char('m')) if !self.unfocused => {
                 context.replies.push_back(UIEvent {
                     id: 0,
-                    event_type: UIEventType::Action(Tab(NewDraft)),
+                    event_type: UIEventType::Action(Tab(NewDraft(self.cursor_pos.0))),
                 });
                 return true;
             }

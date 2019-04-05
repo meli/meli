@@ -999,8 +999,8 @@ impl Component for Tabbed {
                 self.set_dirty();
                 return true;
             }
-            UIEventType::Action(Tab(NewDraft)) => {
-                self.add_component(Box::new(Composer::default()));
+            UIEventType::Action(Tab(NewDraft(account_idx))) => {
+                self.add_component(Box::new(Composer::new(account_idx)));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
                 return true;

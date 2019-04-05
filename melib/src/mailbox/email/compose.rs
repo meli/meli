@@ -12,7 +12,7 @@ mod random;
 use super::parser;
 use fnv::FnvHashMap;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Draft {
     // FIXME: Preserve header order
     // FIXME: Validate headers, allow custom ones
