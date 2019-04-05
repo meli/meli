@@ -695,6 +695,23 @@ pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_colo
     }
 }
 
+macro_rules! inspect_bounds {
+    ($grid:ident, $area:ident, $x: ident, $y: ident, $line_break:ident) => {
+        let bounds = $grid.size();
+        let (upper_left, bottom_right) = $area;
+        if $x == (get_x(bottom_right)) + 1 || $x > get_x(bounds) {
+            $x = get_x(upper_left);
+            $y += 1;
+            if $y > (get_y(bottom_right)) || $y > get_y(bounds) {
+                return ($x, $y - 1);
+            }
+            if !$line_break {
+                break;
+            }
+        }
+    };
+}
+
 /// Write an `&str` to a `CellBuffer` in a specified `Area` with the passed colors.
 pub fn write_string_to_grid(
     s: &str,
@@ -722,25 +739,27 @@ pub fn write_string_to_grid(
         }
         return (x, y);
     }
-    'char: for c in s.chars() {
+    for c in s.chars() {
         if c == '\r' {
             continue;
         }
-        grid[(x, y)].set_ch(c);
-        grid[(x, y)].set_fg(fg_color);
-        grid[(x, y)].set_bg(bg_color);
+        if c == '\t' {
+            grid[(x, y)].set_ch(' ');
+            grid[(x, y)].set_fg(fg_color);
+            grid[(x, y)].set_bg(bg_color);
+            x += 1;
+            inspect_bounds!(grid, area, x, y, line_break);
+            grid[(x, y)].set_ch(' ');
+            grid[(x, y)].set_fg(fg_color);
+            grid[(x, y)].set_bg(bg_color);
+        } else {
+            grid[(x, y)].set_ch(c);
+            grid[(x, y)].set_fg(fg_color);
+            grid[(x, y)].set_bg(bg_color);
+        }
         x += 1;
 
-        if x == (get_x(bottom_right)) + 1 || x > get_x(bounds) {
-            x = get_x(upper_left);
-            y += 1;
-            if y > (get_y(bottom_right)) || y > get_y(bounds) {
-                return (x, y - 1);
-            }
-            if !line_break {
-                break 'char;
-            }
-        }
+        inspect_bounds!(grid, area, x, y, line_break);
     }
     (x, y)
 }
