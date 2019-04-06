@@ -21,14 +21,18 @@
 
 use super::*;
 use std::cmp;
+use std::ops::Index;
 
 #[derive(Debug, Clone)]
 struct ThreadEntry {
     index: (usize, usize, usize),
     /// (indentation, thread_node index, line number in listing)
     indentation: usize,
-    msg_idx: EnvelopeHash,
+    msg_hash: EnvelopeHash,
     seen: bool,
+
+    hidden: bool,
+    dirty: bool,
 }
 
 #[derive(Debug, Default)]
@@ -43,8 +47,63 @@ pub struct ThreadView {
     mailview: MailView,
     show_mailview: bool,
     entries: Vec<ThreadEntry>,
+    visible_entries: Vec<Vec<usize>>,
     content: CellBuffer,
     initiated: bool,
+}
+
+#[derive(Debug)]
+struct StackVec {
+    len: usize,
+    array: [usize; 8],
+    heap_vec: Vec<usize>,
+}
+
+impl StackVec {
+    fn new() -> Self {
+        StackVec {
+            len: 0,
+            array: [0, 0, 0, 0, 0, 0, 0, 0],
+            heap_vec: Vec::new(),
+        }
+    }
+    fn push(&mut self, ind: usize) {
+        if self.len == self.array.len() {
+            self.heap_vec.clear();
+            self.heap_vec.reserve(16);
+            self.heap_vec.copy_from_slice(&self.array);
+            self.heap_vec.push(ind);
+        } else if self.len > self.array.len() {
+            self.heap_vec.push(ind);
+        } else {
+            self.array[self.len] = ind;
+        }
+        self.len += 1;
+    }
+    fn pop(&mut self) -> usize {
+        if self.len >= self.array.len() {
+            self.heap_vec.pop().unwrap()
+        } else {
+            let ret = self.array[self.len];
+            self.len = self.len.saturating_sub(1);
+            ret
+        }
+    }
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl Index<usize> for StackVec {
+    type Output = usize;
+
+    fn index(&self, idx: usize) -> &usize {
+        if self.len >= self.array.len() {
+            &self.heap_vec[idx]
+        } else {
+            &self.array[idx]
+        }
+    }
 }
 
 impl ThreadView {
@@ -91,12 +150,11 @@ impl ThreadView {
             None
         };
 
-        // FIXME 2018
         let expanded_pos = self.expanded_pos;
         self.initiate(Some(expanded_pos), context);
         if let Some(old_focused_entry) = old_focused_entry {
             if let Some(new_entry_idx) = self.entries.iter().position(|e| {
-                e.msg_idx == old_focused_entry.msg_idx
+                e.msg_hash == old_focused_entry.msg_hash
                     || (e.index.1 == old_focused_entry.index.1
                         && e.index.2 == old_focused_entry.index.2)
             }) {
@@ -105,7 +163,7 @@ impl ThreadView {
         }
         if let Some(old_expanded_entry) = old_expanded_entry {
             if let Some(new_entry_idx) = self.entries.iter().position(|e| {
-                e.msg_idx == old_expanded_entry.msg_idx
+                e.msg_hash == old_expanded_entry.msg_hash
                     || (e.index.1 == old_expanded_entry.index.1
                         && e.index.2 == old_expanded_entry.index.2)
             }) {
@@ -124,9 +182,9 @@ impl ThreadView {
         let thread_iter = threads.thread_iter(self.coordinates.2);
         self.entries.clear();
         for (line, (ind, idx)) in thread_iter.enumerate() {
-            let entry = if let Some(msg_idx) = threads.thread_nodes()[idx].message() {
-                let seen: bool = mailbox.collection[&msg_idx].is_seen();
-                self.make_entry((ind, idx, line), msg_idx, seen)
+            let entry = if let Some(msg_hash) = threads.thread_nodes()[idx].message() {
+                let seen: bool = mailbox.collection[&msg_hash].is_seen();
+                self.make_entry((ind, idx, line), msg_hash, seen)
             } else {
                 continue;
             };
@@ -152,7 +210,7 @@ impl ThreadView {
         let mut highlight_reply_subjects: Vec<Option<usize>> =
             Vec::with_capacity(self.entries.len());
         for e in &self.entries {
-            let envelope: &Envelope = &mailbox.collection[&e.msg_idx];
+            let envelope: &Envelope = &mailbox.collection[&e.msg_hash];
             let thread_node = &threads.thread_nodes()[e.index.1];
             let string = if thread_node.show_subject() {
                 let subject = envelope.subject();
@@ -290,41 +348,36 @@ impl ThreadView {
             }
         }
         self.content = content;
+        self.visible_entries = vec![(0..self.entries.len()).collect()];
     }
 
     fn make_entry(
         &mut self,
         i: (usize, usize, usize),
-        msg_idx: EnvelopeHash,
+        msg_hash: EnvelopeHash,
         seen: bool,
     ) -> ThreadEntry {
         let (ind, _, _) = i;
         ThreadEntry {
             index: i,
             indentation: ind,
-            msg_idx,
+            msg_hash,
             seen,
+            hidden: false,
+            dirty: true,
         }
     }
 
-    fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize) {
-        if idx == self.cursor_pos {
+    fn highlight_line(&self, grid: &mut CellBuffer, dest_area: Area, src_area: Area, idx: usize) {
+        if idx == self.current_pos() {
             let fg_color = Color::Default;
             let bg_color = Color::Byte(246);
-            change_colors(grid, area, fg_color, bg_color);
+            change_colors(grid, dest_area, fg_color, bg_color);
             return;
         }
 
         let (width, height) = self.content.size();
-        copy_area(
-            grid,
-            &self.content,
-            area,
-            (
-                (self.entries[idx].index.0 * 4 + 1, 2 * idx),
-                (width - 1, height - 1),
-            ),
-        );
+        copy_area(grid, &self.content, dest_area, src_area);
     }
 
     /// Draw the list
@@ -344,33 +397,76 @@ impl ThreadView {
         let top_idx = page_no * rows;
 
         /* This closure (written for code clarity, should be inlined by the compiler) returns the
-         * **line** of an entry in the grid. */
-        let entries = &self.entries;
-        let get_entry_area = |idx: usize| {
+         * **line** of an entry in the ThreadView grid. */
+        let get_entry_area = |idx: usize, entries: &[ThreadEntry]| {
+            let entries = &entries;
             (
-                (
-                    entries[idx].index.0 * 4 + 1 + get_x(upper_left),
-                    get_y(upper_left) + 2 * (idx % rows),
-                ),
-                (
-                    cmp::min(get_x(upper_left) + width - 2, get_x(bottom_right)),
-                    get_y(upper_left) + 2 * (idx % rows),
-                ),
+                (entries[idx].index.0 * 4 + 1, 2 * (idx % rows)),
+                (width - 1, 2 * (idx % rows)),
             )
         };
 
-        /* If cursor position has changed, remove the highlight from the previous position and
-         * apply it in the new one. */
         if prev_page_no == page_no {
+            if self.entries.iter_mut().fold(false, |flag, e| {
+                std::mem::replace(&mut e.dirty, false) || flag
+            }) {
+                let visibles = self.visible_entries();
+                let mut visible_entry_counter = 0;
+
+                for v in visibles {
+                    if v.len() == 1 {
+                        let idx = v[0];
+                        copy_area(
+                            grid,
+                            &self.content,
+                            (
+                                pos_inc(upper_left, (0, 2 * visible_entry_counter)),
+                                bottom_right,
+                            ),
+                            (
+                                (self.entries[idx].index.0 * 4 + 1, 2 * idx),
+                                (width - 1, 2 * idx + 1),
+                            ),
+                        );
+                    } else {
+                        copy_area(
+                            grid,
+                            &self.content,
+                            (
+                                pos_inc(upper_left, (0, 2 * visible_entry_counter)),
+                                bottom_right,
+                            ),
+                            ((0, 2 * v[0]), (width - 1, 2 * v[v.len() - 1] + 1)),
+                        );
+                    }
+                    visible_entry_counter += v.len();
+                }
+                context.dirty_areas.push_back(area);
+            }
+            /* If cursor position has changed, remove the highlight from the previous position and
+             * apply it in the new one. */
+            let visibles: Vec<&usize> = self
+                .visible_entries
+                .iter()
+                .flat_map(|ref v| v.iter())
+                .collect();
             let old_cursor_pos = self.cursor_pos;
             self.cursor_pos = self.new_cursor_pos;
-            for &idx in &[old_cursor_pos, self.new_cursor_pos] {
-                if idx >= self.entries.len() {
+            for &visual_idx in &[old_cursor_pos, self.new_cursor_pos] {
+                if std::dbg!(visual_idx >= visibles.len()) {
                     continue;
                 }
-                let new_area = get_entry_area(idx);
-                self.highlight_line(grid, new_area, idx);
-                context.dirty_areas.push_back(new_area);
+                let idx = *visibles[visual_idx];
+                let src_area = get_entry_area(idx, &self.entries);
+                let dest_area = (
+                    pos_inc(
+                        upper_left,
+                        (self.entries[idx].indentation * 4 + 1, 2 * visual_idx),
+                    ),
+                    (get_x(bottom_right), get_y(upper_left) + 2 * visual_idx),
+                );
+                self.highlight_line(grid, dest_area, src_area, idx);
+                context.dirty_areas.push_back(dest_area);
             }
             return;
         }
@@ -383,7 +479,24 @@ impl ThreadView {
             area,
             ((0, 2 * top_idx), (width - 1, height - 1)),
         );
-        self.highlight_line(grid, get_entry_area(self.cursor_pos), self.cursor_pos);
+        self.highlight_line(
+            grid,
+            (
+                pos_inc(
+                    upper_left,
+                    (
+                        self.entries[self.current_pos()].indentation * 4 + 1,
+                        2 * self.current_pos(),
+                    ),
+                ),
+                (
+                    get_x(bottom_right),
+                    get_y(upper_left) + 2 * self.current_pos(),
+                ),
+            ),
+            get_entry_area(self.current_pos(), &self.entries),
+            self.current_pos(),
+        );
         context.dirty_areas.push_back(area);
     }
 
@@ -394,7 +507,7 @@ impl ThreadView {
         let mid = get_x(upper_left) + self.content.size().0;
 
         if !self.dirty {
-            let upper_left = (mid + 1, get_y(upper_left) + 1);
+            let upper_left = (mid + 1, get_y(upper_left) + 2);
             if self.show_mailview {
                 self.mailview
                     .draw(grid, (upper_left, bottom_right), context);
@@ -481,18 +594,14 @@ impl ThreadView {
             self.initiated = true;
         }
 
-        if self.show_mailview {
-            self.draw_list(
-                grid,
-                (set_y(upper_left, y), set_x(bottom_right, mid - 1)),
-                context,
-            );
-            let upper_left = (mid + 1, get_y(upper_left) + 1);
-            self.mailview
-                .draw(grid, (upper_left, bottom_right), context);
-        } else {
-            self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
-        }
+        self.draw_list(
+            grid,
+            (set_y(upper_left, y), set_x(bottom_right, mid - 1)),
+            context,
+        );
+        let upper_left = (mid + 1, get_y(upper_left) + y - 1);
+        self.mailview
+            .draw(grid, (upper_left, bottom_right), context);
         for x in get_x(upper_left)..=get_x(bottom_right) {
             set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
         }
@@ -622,6 +731,66 @@ impl ThreadView {
             set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
         }
     }
+
+    fn visible_entries(&self) -> Vec<Vec<usize>> {
+        self.visible_entries.clone()
+    }
+    fn recalc_visible_entries(&mut self) {
+        if self
+            .entries
+            .iter_mut()
+            .fold(false, |flag, e| e.dirty || flag)
+        {
+            self.visible_entries = self
+                .entries
+                .iter()
+                .enumerate()
+                .fold(
+                    (vec![Vec::new()], StackVec::new(), false),
+                    |(mut visies, mut stack, is_prev_hidden), (idx, e)| {
+                        match (e.hidden, is_prev_hidden) {
+                            (true, false) => {
+                                visies.last_mut().unwrap().push(idx);
+                                stack.push(e.indentation);
+                                (visies, stack, e.hidden)
+                            }
+                            (true, true) => (visies, stack, e.hidden),
+                            (false, true)
+                                if stack[stack.len() - 1] >= e.indentation
+                                    && stack.len() > 1
+                                    && stack[stack.len() - 2] >= e.indentation =>
+                            {
+                                //FIXME pop all until e.indentation
+                                visies.push(vec![idx]);
+                                stack.pop();
+                                (visies, stack, e.hidden)
+                            }
+                            (false, true) if stack[stack.len() - 1] >= e.indentation => {
+                                visies.push(vec![idx]);
+                                stack.pop();
+                                (visies, stack, e.hidden)
+                            }
+                            (false, true) => (visies, stack, is_prev_hidden),
+                            (false, false) => {
+                                visies.last_mut().unwrap().push(idx);
+                                (visies, stack, e.hidden)
+                            }
+                        }
+                    },
+                )
+                .0;
+        }
+    }
+
+    /// Current position in self.entries (not in drawn entries which might exclude nonvisible ones)
+    fn current_pos(&self) -> usize {
+        let visibles: Vec<&usize> = self
+            .visible_entries
+            .iter()
+            .flat_map(|ref v| v.iter())
+            .collect();
+        *visibles[self.new_cursor_pos]
+    }
 }
 
 impl fmt::Display for ThreadView {
@@ -646,7 +815,7 @@ impl Component for ThreadView {
                 (
                     self.coordinates.0,
                     self.coordinates.1,
-                    self.entries[self.expanded_pos].msg_idx,
+                    self.entries[self.current_pos()].msg_hash,
                 ),
                 None,
                 None,
@@ -723,7 +892,7 @@ impl Component for ThreadView {
                 return true;
             }
             UIEventType::Input(Key::Down) => {
-                let height = self.entries.len();
+                let height = self.visible_entries.iter().flat_map(|v| v.iter()).count();
                 if height > 0 && self.cursor_pos + 1 < height {
                     self.new_cursor_pos += 1;
                     self.dirty = true;
@@ -734,9 +903,9 @@ impl Component for ThreadView {
                 if self.entries.len() < 2 {
                     return true;
                 }
-                self.new_expanded_pos = self.cursor_pos;
+                self.new_expanded_pos = self.current_pos();
                 self.show_mailview = true;
-                self.initiated = false;
+                //self.initiated = false;
                 self.set_dirty();
                 return true;
             }
@@ -752,6 +921,36 @@ impl Component for ThreadView {
                 self.initiate(Some(expanded_pos), context);
                 self.initiated = false;
                 self.set_dirty();
+                return true;
+            }
+            UIEventType::Input(Key::Char('h')) => {
+                let current_pos = self.current_pos();
+                self.entries[current_pos].hidden = !self.entries[current_pos].hidden;
+                self.entries[current_pos].dirty = true;
+                {
+                    let visible_entries: Vec<&usize> =
+                        self.visible_entries.iter().flat_map(|v| v.iter()).collect();
+                    let search_old_cursor_pos = |entries: Vec<&usize>, x: usize| {
+                        let mut low = 0;
+                        let mut high = entries.len() - 1;
+                        while low <= high {
+                            let mid = low + (high - low) / 2;
+                            if *entries[mid] == x {
+                                return mid;
+                            }
+                            if x > *entries[mid] {
+                                low = mid + 1;
+                            } else {
+                                high = mid - 1;
+                            }
+                        }
+                        return high;
+                    };
+                    self.new_cursor_pos = search_old_cursor_pos(visible_entries, self.cursor_pos);
+                }
+                self.cursor_pos = self.new_cursor_pos;
+                self.recalc_visible_entries();
+                self.dirty = true;
                 return true;
             }
             UIEventType::Resize => {
@@ -773,8 +972,9 @@ impl Component for ThreadView {
         let mut map = self.mailview.get_shortcuts(context);
 
         map.insert("reply", Key::Char('R'));
-        map.insert("reverse thread order", Key::Char('r'));
+        map.insert("reverse thread order", Key::Ctrl('r'));
         map.insert("toggle_mailview", Key::Char('p'));
+        map.insert("toggle_subthread visibility", Key::Char('h'));
 
         map
     }
