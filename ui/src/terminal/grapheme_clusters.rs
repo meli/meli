@@ -27,14 +27,10 @@ pub trait Graphemes: UnicodeSegmentation + CodePointsIter {
         UnicodeSegmentation::grapheme_indices(self, true).next_back()
     }
 
-    fn grapheme_width(&self) -> i32 {
+    fn grapheme_width(&self) -> usize {
         let mut count = 0;
         for c in self.code_points() {
-            count += if let Some(c) = wcwidth(c) {
-                c as i32
-            } else {
-                -1
-            };
+            count += if let Some(c) = wcwidth(c) { c } else { 0 };
         }
 
         count
