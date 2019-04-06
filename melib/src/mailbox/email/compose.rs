@@ -14,8 +14,6 @@ use fnv::FnvHashMap;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Draft {
-    // FIXME: Preserve header order
-    // FIXME: Validate headers, allow custom ones
     headers: FnvHashMap<String, String>,
     header_order: Vec<String>,
     body: String,
@@ -97,9 +95,13 @@ impl Draft {
         //TODO: Inform user if error
         {
             let bytes = op.as_bytes().unwrap_or(&[]);
-            for (h, v) in envelope.headers(bytes).unwrap_or_else(|_| Vec::new()) {
-                ret.header_order.push(h.into());
-                ret.headers_mut().insert(h.into(), v.into());
+            for (k, v) in envelope.headers(bytes).unwrap_or_else(|_| Vec::new()) {
+                if ignore_header(k.as_bytes()) {
+                    continue;
+                }
+                if ret.headers.insert(k.into(), v.into()).is_none() {
+                    ret.header_order.push(k.into());
+                }
             }
         }
 
@@ -226,6 +228,7 @@ fn ignore_header(header: &[u8]) -> bool {
         b"Bcc" => false,
         b"In-Reply-To" => false,
         b"References" => false,
+        b"MIME-Version" => true,
         h if h.starts_with(b"X-") => false,
         _ => true,
     }
