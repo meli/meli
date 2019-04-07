@@ -785,6 +785,9 @@ impl ThreadView {
                 )
                 .0;
         }
+        if self.reversed {
+            self.visible_entries.reverse()
+        }
     }
 
     /// Current position in self.entries (not in drawn entries which might exclude nonvisible ones)
