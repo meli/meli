@@ -143,6 +143,8 @@ impl ThreadView {
             return;
         }
 
+        let old_entries = self.entries.clone();
+
         let old_focused_entry = if self.entries.len() > self.cursor_pos {
             Some(self.entries.remove(self.cursor_pos))
         } else {
@@ -157,6 +159,25 @@ impl ThreadView {
 
         let expanded_pos = self.expanded_pos;
         self.initiate(Some(expanded_pos), context);
+
+        let mut old_cursor = 0;
+        let mut new_cursor = 0;
+        loop {
+            if old_cursor >= old_entries.len() || new_cursor >= self.entries.len() {
+                break;
+            }
+            if old_entries[old_cursor].msg_hash == self.entries[new_cursor].msg_hash
+                || old_entries[old_cursor].index == self.entries[new_cursor].index
+                || old_entries[old_cursor].heading == self.entries[new_cursor].heading
+            {
+                self.entries[new_cursor].hidden = old_entries[old_cursor].hidden;
+                old_cursor += 1;
+                new_cursor += 1;
+            } else {
+                new_cursor += 1;
+            }
+            self.recalc_visible_entries();
+        }
 
         if let Some(old_focused_entry) = old_focused_entry {
             if let Some(new_entry_idx) = self.entries.iter().position(|e| {
