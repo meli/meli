@@ -44,6 +44,7 @@ pub struct ThreadListing {
     unfocused: bool,
     initialised: bool,
     view: Option<MailView>,
+    id: ComponentId,
 }
 
 impl ListingTrait for ThreadListing {
@@ -86,6 +87,7 @@ impl ThreadListing {
             unfocused: false,
             view: None,
             initialised: false,
+            id: ComponentId::default(),
         }
     }
     /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
@@ -728,5 +730,12 @@ impl Component for ThreadListing {
             .as_ref()
             .map(|p| p.get_shortcuts(context))
             .unwrap_or_default()
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

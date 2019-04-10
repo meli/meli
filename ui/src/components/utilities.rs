@@ -30,10 +30,11 @@ pub use self::widgets::*;
 /// A horizontally split in half container.
 #[derive(Debug)]
 pub struct HSplit {
-    top: Entity,
-    bottom: Entity,
+    top: Box<Component>,
+    bottom: Box<Component>,
     show_divider: bool,
     ratio: usize, // bottom/whole height * 100
+    id: ComponentId,
 }
 
 impl fmt::Display for HSplit {
@@ -44,12 +45,18 @@ impl fmt::Display for HSplit {
 }
 
 impl HSplit {
-    pub fn new(top: Entity, bottom: Entity, ratio: usize, show_divider: bool) -> Self {
+    pub fn new(
+        top: Box<Component>,
+        bottom: Box<Component>,
+        ratio: usize,
+        show_divider: bool,
+    ) -> Self {
         HSplit {
             top,
             bottom,
             show_divider,
             ratio,
+            id: ComponentId::default(),
         }
     }
 }
@@ -62,8 +69,8 @@ impl Component for HSplit {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         let total_rows = get_y(bottom_right) - get_y(upper_left);
-        let bottom_entity_height = (self.ratio * total_rows) / 100;
-        let mid = get_y(upper_left) + total_rows - bottom_entity_height;
+        let bottom_component_height = (self.ratio * total_rows) / 100;
+        let mid = get_y(upper_left) + total_rows - bottom_component_height;
 
         if self.show_divider {
             for i in get_x(upper_left)..=get_x(bottom_right) {
@@ -74,7 +81,7 @@ impl Component for HSplit {
                 .push_back(((get_x(upper_left), mid), (get_x(bottom_right), mid)));
         }
 
-        self.top.component.draw(
+        self.top.draw(
             grid,
             (
                 upper_left,
@@ -82,23 +89,23 @@ impl Component for HSplit {
             ),
             context,
         );
-        self.bottom.component.draw(
+        self.bottom.draw(
             grid,
             ((get_x(upper_left), get_y(upper_left) + mid), bottom_right),
             context,
         );
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        self.top.rcv_event(event, context) || self.bottom.rcv_event(event, context)
+        self.top.process_event(event, context) || self.bottom.process_event(event, context)
     }
 
     fn is_dirty(&self) -> bool {
-        self.top.component.is_dirty() || self.bottom.component.is_dirty()
+        self.top.is_dirty() || self.bottom.is_dirty()
     }
 
     fn set_dirty(&mut self) {
-        self.top.component.set_dirty();
-        self.bottom.component.set_dirty();
+        self.top.set_dirty();
+        self.bottom.set_dirty();
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
@@ -106,34 +113,48 @@ impl Component for HSplit {
         top_map.extend(self.bottom.get_shortcuts(context).into_iter());
         top_map
     }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 /// A vertically split in half container.
 #[derive(Debug)]
 pub struct VSplit {
-    left: Entity,
-    right: Entity,
+    left: Box<Component>,
+    right: Box<Component>,
     show_divider: bool,
     prev_visibility: (bool, bool),
     /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
+    id: ComponentId,
 }
 
 impl fmt::Display for VSplit {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display focused entity
+        // TODO display focused component
         Display::fmt(&self.right, f)
     }
 }
 
 impl VSplit {
-    pub fn new(left: Entity, right: Entity, ratio: usize, show_divider: bool) -> Self {
+    pub fn new(
+        left: Box<Component>,
+        right: Box<Component>,
+        ratio: usize,
+        show_divider: bool,
+    ) -> Self {
         VSplit {
             left,
             right,
             show_divider,
             prev_visibility: (true, true),
             ratio,
+            id: ComponentId::default(),
         }
     }
 }
@@ -151,7 +172,7 @@ impl Component for VSplit {
             self.set_dirty();
             self.prev_visibility = visibility;
         }
-        let right_entity_width = match visibility {
+        let right_component_width = match visibility {
             (true, true) => (self.ratio * total_cols) / 100,
             (false, true) => total_cols,
             (true, false) => 0,
@@ -161,7 +182,7 @@ impl Component for VSplit {
             }
         };
 
-        let mid = get_x(bottom_right) - right_entity_width;
+        let mid = get_x(bottom_right) - right_component_width;
 
         if get_y(upper_left) > 1 {
             let c = grid
@@ -193,12 +214,12 @@ impl Component for VSplit {
                 .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
         }
 
-        if right_entity_width == total_cols {
-            self.right.component.draw(grid, area, context);
-        } else if right_entity_width == 0 {
-            self.left.component.draw(grid, area, context);
+        if right_component_width == total_cols {
+            self.right.draw(grid, area, context);
+        } else if right_component_width == 0 {
+            self.left.draw(grid, area, context);
         } else {
-            self.left.component.draw(
+            self.left.draw(
                 grid,
                 (
                     upper_left,
@@ -210,28 +231,34 @@ impl Component for VSplit {
                 context,
             );
             self.right
-                .component
                 .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
         }
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        (self.left.rcv_event(event, context) || self.right.rcv_event(event, context))
+        (self.left.process_event(event, context) || self.right.process_event(event, context))
     }
 
     fn is_dirty(&self) -> bool {
-        self.left.component.is_dirty() || self.right.component.is_dirty()
+        self.left.is_dirty() || self.right.is_dirty()
     }
 
     fn set_dirty(&mut self) {
-        self.left.component.set_dirty();
-        self.right.component.set_dirty();
+        self.left.set_dirty();
+        self.right.set_dirty();
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
         let mut right_map = self.right.get_shortcuts(context);
         right_map.extend(self.left.get_shortcuts(context).into_iter());
         right_map
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }
 
@@ -254,6 +281,7 @@ pub struct Pager {
     dirty: bool,
     content: CellBuffer,
     movement: Option<PageMovement>,
+    id: ComponentId,
 }
 
 impl fmt::Display for Pager {
@@ -524,12 +552,19 @@ impl Component for Pager {
 
         map
     }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 /// Status bar.
 #[derive(Debug)]
 pub struct StatusBar {
-    container: Entity,
+    container: Box<Component>,
     status: String,
     notifications: VecDeque<String>,
     ex_buffer: String,
@@ -537,6 +572,7 @@ pub struct StatusBar {
     mode: UIMode,
     height: usize,
     dirty: bool,
+    id: ComponentId,
 }
 
 impl fmt::Display for StatusBar {
@@ -547,7 +583,7 @@ impl fmt::Display for StatusBar {
 }
 
 impl StatusBar {
-    pub fn new(container: Entity) -> Self {
+    pub fn new(container: Box<Component>) -> Self {
         StatusBar {
             container,
             status: String::with_capacity(256),
@@ -557,6 +593,7 @@ impl StatusBar {
             dirty: true,
             mode: UIMode::Normal,
             height: 1,
+            id: ComponentId::default(),
         }
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -615,7 +652,7 @@ impl Component for StatusBar {
         }
         let height = self.height;
 
-        self.container.component.draw(
+        self.container.draw(
             grid,
             (
                 upper_left,
@@ -649,7 +686,7 @@ impl Component for StatusBar {
         }
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if self.container.rcv_event(event, context) {
+        if self.container.process_event(event, context) {
             return true;
         }
 
@@ -728,7 +765,7 @@ impl Component for StatusBar {
         false
     }
     fn is_dirty(&self) -> bool {
-        self.dirty || self.container.component.is_dirty()
+        self.dirty || self.container.is_dirty()
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
@@ -737,33 +774,13 @@ impl Component for StatusBar {
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
         self.container.get_shortcuts(context)
     }
-}
 
-// A box with a text content.
-#[derive(Debug)]
-pub struct TextBox {
-    _content: String,
-}
-
-impl TextBox {
-    pub fn new(s: String) -> Self {
-        TextBox { _content: s }
+    fn id(&self) -> ComponentId {
+        self.id
     }
-}
-
-impl fmt::Display for TextBox {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // TODO display info
-        write!(f, "text box")
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
-}
-
-impl Component for TextBox {
-    fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
-        false
-    }
-    fn set_dirty(&mut self) {}
 }
 
 #[derive(Debug)]
@@ -771,6 +788,7 @@ pub struct Progress {
     description: String,
     total_work: usize,
     finished: usize,
+    id: ComponentId,
 }
 
 impl Progress {
@@ -779,6 +797,7 @@ impl Progress {
             description: s,
             total_work,
             finished: 0,
+            id: ComponentId::default(),
         }
     }
 
@@ -817,17 +836,25 @@ impl Component for Progress {
         false
     }
     fn set_dirty(&mut self) {}
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 #[derive(Debug)]
 pub struct Tabbed {
     pinned: usize,
-    children: Vec<Entity>,
+    children: Vec<Box<Component>>,
     cursor_pos: usize,
 
     show_shortcuts: bool,
 
     dirty: bool,
+    id: ComponentId,
 }
 
 impl Tabbed {
@@ -835,10 +862,11 @@ impl Tabbed {
         let pinned = children.len();
         Tabbed {
             pinned,
-            children: children.into_iter().map(Entity::from).collect(),
+            children,
             cursor_pos: 0,
             show_shortcuts: false,
             dirty: true,
+            id: ComponentId::default(),
         }
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -895,7 +923,7 @@ impl Tabbed {
         context.dirty_areas.push_back(area);
     }
     pub fn add_component(&mut self, new: Box<Component>) {
-        self.children.push(Entity::from(new));
+        self.children.push(new);
     }
 }
 
@@ -1027,7 +1055,7 @@ impl Component for Tabbed {
                 if self.pinned > self.cursor_pos {
                     return true;
                 }
-                let id = *self.children[self.cursor_pos].id();
+                let id = self.children[self.cursor_pos].id();
                 self.children[self.cursor_pos].kill(id);
                 self.set_dirty();
                 return true;
@@ -1036,14 +1064,14 @@ impl Component for Tabbed {
                 if self.pinned > self.cursor_pos {
                     return true;
                 }
-                if let Some(c_idx) = self.children.iter().position(|x| x.id() == id) {
+                if let Some(c_idx) = self.children.iter().position(|x| x.id() == *id) {
                     self.children.remove(c_idx);
                     self.cursor_pos = self.cursor_pos.saturating_sub(1);
                     self.set_dirty();
                     return true;
                 } else {
                     eprintln!(
-                        "DEBUG: Child entity with id {:?} not found.\nList: {:?}",
+                        "DEBUG: Child component with id {:?} not found.\nList: {:?}",
                         id, self.children
                     );
                 }
@@ -1058,6 +1086,13 @@ impl Component for Tabbed {
     fn set_dirty(&mut self) {
         self.dirty = true;
         self.children[self.cursor_pos].set_dirty();
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }
 
@@ -1074,6 +1109,7 @@ pub struct Selector {
     cursor: usize,
 
     dirty: bool,
+    id: ComponentId,
 }
 
 impl fmt::Display for Selector {
@@ -1136,6 +1172,13 @@ impl Component for Selector {
     fn set_dirty(&mut self) {
         self.dirty = true;
     }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 impl Selector {
@@ -1170,6 +1213,7 @@ impl Selector {
             content,
             cursor: 0,
             dirty: true,
+            id: ComponentId::default(),
         }
     }
 

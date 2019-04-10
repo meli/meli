@@ -84,7 +84,7 @@ pub enum UIEventType {
     Action(Action),
     StatusEvent(StatusEvent),
     MailboxUpdate((usize, usize)), // (account_idx, mailbox_idx)
-    EntityKill(Uuid),
+    ComponentKill(Uuid),
     StartupCheck(FolderHash),
     RefreshEvent(Box<RefreshEvent>),
     EnvelopeUpdate(EnvelopeHash),

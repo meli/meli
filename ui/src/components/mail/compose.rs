@@ -45,6 +45,7 @@ pub struct Composer {
     mode: ViewMode,
     dirty: bool,
     initialized: bool,
+    id: ComponentId,
 }
 
 impl Default for Composer {
@@ -62,6 +63,7 @@ impl Default for Composer {
             mode: ViewMode::Edit,
             dirty: true,
             initialized: false,
+            id: ComponentId::default(),
         }
     }
 }
@@ -687,6 +689,13 @@ impl Component for Composer {
         map.insert("Edit in $EDITOR", Key::Char('e'));
 
         map
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }
 

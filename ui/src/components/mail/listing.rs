@@ -163,6 +163,21 @@ impl Component for Listing {
             Listing::Threaded(l) => l.get_shortcuts(context),
         }
     }
+
+    fn id(&self) -> ComponentId {
+        match self {
+            Listing::Compact(l) => l.id(),
+            Listing::Plain(l) => l.id(),
+            Listing::Threaded(l) => l.id(),
+        }
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        match self {
+            Listing::Compact(l) => l.set_id(id),
+            Listing::Plain(l) => l.set_id(id),
+            Listing::Threaded(l) => l.set_id(id),
+        }
+    }
 }
 
 impl From<IndexStyle> for Listing {

@@ -41,6 +41,7 @@ pub struct PlainListing {
     /// If `self.view` exists or not.
     unfocused: bool,
     view: Option<MailView>,
+    id: ComponentId,
 }
 
 impl ListingTrait for PlainListing {
@@ -89,6 +90,7 @@ impl PlainListing {
             dirty: true,
             unfocused: false,
             view: None,
+            id: ComponentId::default(),
         }
     }
     /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
@@ -560,5 +562,12 @@ impl Component for PlainListing {
             p.set_dirty();
         };
         self.dirty = true;
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

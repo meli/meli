@@ -69,6 +69,7 @@ pub struct MailView {
     mode: ViewMode,
 
     cmd_buf: String,
+    id: ComponentId,
 }
 
 impl fmt::Display for MailView {
@@ -112,6 +113,7 @@ impl MailView {
             mode: ViewMode::Normal,
 
             cmd_buf: String::with_capacity(4),
+            id: ComponentId::default(),
         }
     }
 
@@ -722,5 +724,12 @@ impl Component for MailView {
             }
             _ => {}
         }
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

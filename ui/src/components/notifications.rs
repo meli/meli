@@ -54,6 +54,11 @@ impl Component for XDGNotifications {
         false
     }
     fn set_dirty(&mut self) {}
+
+    fn id(&self) -> ComponentId {
+        ComponentId::nil()
+    }
+    fn set_id(&mut self, _id: ComponentId) {}
 }
 
 fn escape_str(s: &str) -> String {
@@ -133,5 +138,9 @@ impl Component for NotificationFilter {
         }
         false
     }
+    fn id(&self) -> ComponentId {
+        ComponentId::nil()
+    }
     fn set_dirty(&mut self) {}
+    fn set_id(&mut self, _id: ComponentId) {}
 }

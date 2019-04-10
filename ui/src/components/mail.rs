@@ -48,6 +48,7 @@ pub struct AccountMenu {
     dirty: bool,
     visible: bool,
     cursor: Option<(usize, usize)>,
+    id: ComponentId,
 }
 
 impl fmt::Display for AccountMenu {
@@ -72,6 +73,7 @@ impl AccountMenu {
             visible: true,
             dirty: true,
             cursor: None,
+            id: ComponentId::default(),
         }
     }
     /*
@@ -300,5 +302,12 @@ impl Component for AccountMenu {
             .iter()
             .cloned()
             .collect()
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

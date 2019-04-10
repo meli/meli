@@ -27,10 +27,12 @@ use std::process::{Command, Stdio};
 pub struct HtmlView {
     pager: Pager,
     bytes: Vec<u8>,
+    id: ComponentId,
 }
 
 impl HtmlView {
     pub fn new(bytes: Vec<u8>, context: &mut Context, account_pos: usize) -> Self {
+        let id = ComponentId::default();
         let settings = context.accounts[account_pos].runtime_settings.conf();
         if let Some(filter_invocation) = settings.html_filter() {
             let parts = split_command!(filter_invocation);
@@ -57,7 +59,7 @@ impl HtmlView {
                     None,
                     None,
                 );
-                HtmlView { pager, bytes }
+                HtmlView { pager, bytes, id }
             } else {
                 let mut html_filter = command_obj.unwrap();
                 html_filter
@@ -75,7 +77,7 @@ impl HtmlView {
                 ));
 
                 let pager = Pager::from_string(display_text, None, None, None);
-                HtmlView { pager, bytes }
+                HtmlView { pager, bytes, id }
             }
         } else {
             if let Ok(mut html_filter) = Command::new("w3m")
@@ -98,7 +100,7 @@ impl HtmlView {
                 ));
 
                 let pager = Pager::from_string(display_text, None, None, None);
-                HtmlView { pager, bytes }
+                HtmlView { pager, bytes, id }
             } else {
                 context.replies.push_back(UIEvent {
                     id: 0,
@@ -115,7 +117,7 @@ impl HtmlView {
                     None,
                     None,
                 );
-                HtmlView { pager, bytes }
+                HtmlView { pager, bytes, id }
             }
         }
     }
@@ -167,5 +169,12 @@ impl Component for HtmlView {
     }
     fn set_dirty(&mut self) {
         self.pager.set_dirty();
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

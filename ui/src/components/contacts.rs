@@ -36,7 +36,7 @@ enum ViewMode {
 
 #[derive(Debug)]
 pub struct ContactManager {
-    id: Uuid,
+    id: ComponentId,
     pub card: Card,
     mode: ViewMode,
     form: FormWidget,
@@ -169,13 +169,13 @@ impl Component for ContactManager {
                     });
                     context.replies.push_back(UIEvent {
                         id: 0,
-                        event_type: UIEventType::EntityKill(self.id),
+                        event_type: UIEventType::ComponentKill(self.id),
                     });
                 }
                 Some(false) => {
                     context.replies.push_back(UIEvent {
                         id: 0,
-                        event_type: UIEventType::EntityKill(self.id),
+                        event_type: UIEventType::ComponentKill(self.id),
                     });
                 }
             }
@@ -186,7 +186,7 @@ impl Component for ContactManager {
         UIEventType::Input(Key::Char('\n')) => {
         context.replies.push_back(UIEvent {
         id: 0,
-        event_type: UIEventType::EntityKill(self.id),
+        event_type: UIEventType::ComponentKill(self.id),
         });
         return true;
         },
@@ -206,7 +206,10 @@ impl Component for ContactManager {
         self.form.set_dirty();
     }
 
-    fn set_id(&mut self, uuid: Uuid) {
-        self.id = uuid;
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

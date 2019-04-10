@@ -55,6 +55,7 @@ pub struct EnvelopeView {
 
     account_pos: usize,
     cmd_buf: String,
+    id: ComponentId,
 }
 
 impl fmt::Display for EnvelopeView {
@@ -79,6 +80,7 @@ impl EnvelopeView {
             wrapper,
             account_pos,
             cmd_buf: String::with_capacity(4),
+            id: ComponentId::default(),
         }
     }
 
@@ -544,5 +546,12 @@ impl Component for EnvelopeView {
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

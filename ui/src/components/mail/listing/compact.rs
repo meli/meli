@@ -43,6 +43,7 @@ struct MailboxView {
     view: ThreadView,
 
     movement: Option<PageMovement>,
+    id: ComponentId,
 }
 
 impl fmt::Display for MailboxView {
@@ -87,6 +88,7 @@ impl MailboxView {
             view: ThreadView::default(),
 
             movement: None,
+            id: ComponentId::default(),
         }
     }
     /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
@@ -587,6 +589,13 @@ impl Component for MailboxView {
 
         map
     }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
@@ -597,6 +606,7 @@ pub struct CompactListing {
     cursor: usize,
     dirty: bool,
     populated: bool,
+    id: ComponentId,
 }
 
 impl ListingTrait for CompactListing {
@@ -627,6 +637,7 @@ impl CompactListing {
             cursor: 0,
             dirty: true,
             populated: false,
+            id: ComponentId::default(),
         }
     }
 }
@@ -761,5 +772,12 @@ impl Component for CompactListing {
         );
 
         map
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

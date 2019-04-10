@@ -38,6 +38,7 @@ pub struct Indexer {
     entries: Vec<MenuEntry>,
     dirty: bool,
     cursor: Vec<usize>,
+    id: ComponentId,
 }
 
 impl fmt::Display for Indexer {
@@ -53,6 +54,7 @@ impl Default for Indexer {
             entries: Vec::with_capacity(8),
             dirty: true,
             cursor: Vec::with_capacity(8),
+            id: ComponentId::default(),
         }
     }
 }
@@ -124,5 +126,12 @@ impl Component for Indexer {
 
     fn set_dirty(&mut self) {
         self.dirty = true;
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

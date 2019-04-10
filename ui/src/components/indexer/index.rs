@@ -34,6 +34,7 @@ pub struct Index {
     state: IndexState,
 
     content: Box<IndexContent>,
+    id: ComponentId,
 }
 
 impl Index {
@@ -168,6 +169,13 @@ impl Component for Index {
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }
 

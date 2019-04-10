@@ -21,9 +21,9 @@
 
 /*! The application's state.
 
-The UI crate has an Entity-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
+The UI crate has an Box<Component>-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
 
-`State` owns all the Entities of the UI, which are currently plain Containers for `Component`s. In the application's main event loop, input is handed to the state in the form of `UIEvent` objects which traverse the entity graph. Components decide to handle each input or not.
+`State` owns all the Components of the UI. In the application's main event loop, input is handed to the state in the form of `UIEvent` objects which traverse the component graph. Components decide to handle each input or not.
 
 Input is received in the main loop from threads which listen on the stdin for user input, observe folders for file changes etc. The relevant struct is `ThreadEvent`.
 */
@@ -115,7 +115,7 @@ impl Context {
     }
 }
 
-/// A State object to manage and own components and entities of the UI. `State` is responsible for
+/// A State object to manage and own components and components of the UI. `State` is responsible for
 /// managing the terminal and interfacing with `melib`
 pub struct State {
     cols: usize,
@@ -125,7 +125,7 @@ pub struct State {
     stdout: Option<StateStdout>,
     child: Option<ForkType>,
     pub mode: UIMode,
-    entities: Vec<Entity>,
+    components: Vec<Box<Component>>,
     pub context: Context,
     threads: FnvHashMap<thread::ThreadId, (chan::Sender<bool>, thread::JoinHandle<()>)>,
     work_controller: WorkController,
@@ -199,7 +199,7 @@ impl State {
             stdout: Some(stdout),
             child: None,
             mode: UIMode::Normal,
-            entities: Vec::with_capacity(1),
+            components: Vec::with_capacity(1),
 
             context: Context {
                 accounts,
@@ -376,8 +376,8 @@ impl State {
 
     /// Force a redraw for all dirty components.
     pub fn redraw(&mut self) {
-        for i in 0..self.entities.len() {
-            self.draw_entity(i);
+        for i in 0..self.components.len() {
+            self.draw_component(i);
         }
         let areas: Vec<Area> = self.context.dirty_areas.drain(0..).collect();
         /* draw each dirty area */
@@ -433,30 +433,30 @@ impl State {
     pub fn render(&mut self) {
         self.update_size();
 
-        /* draw each entity */
-        for i in 0..self.entities.len() {
-            self.draw_entity(i);
+        /* draw each component */
+        for i in 0..self.components.len() {
+            self.draw_component(i);
         }
         let cols = self.cols;
         let rows = self.rows;
 
         self.draw_area(((0, 0), (cols - 1, rows - 1)));
     }
-    pub fn draw_entity(&mut self, idx: usize) {
-        let entity = &mut self.entities[idx];
+    pub fn draw_component(&mut self, idx: usize) {
+        let component = &mut self.components[idx];
         let upper_left = (0, 0);
         let bottom_right = (self.cols - 1, self.rows - 1);
 
-        if entity.component.is_dirty() {
-            entity.component.draw(
+        if component.is_dirty() {
+            component.draw(
                 &mut self.grid,
                 (upper_left, bottom_right),
                 &mut self.context,
             );
         }
     }
-    pub fn register_entity(&mut self, entity: Entity) {
-        self.entities.push(entity);
+    pub fn register_component(&mut self, component: Box<Component>) {
+        self.components.push(component);
     }
     /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: &str) {
@@ -499,9 +499,9 @@ impl State {
             }
             _ => {}
         }
-        /* inform each entity */
-        for i in 0..self.entities.len() {
-            self.entities[i].rcv_event(&mut event, &mut self.context);
+        /* inform each component */
+        for i in 0..self.components.len() {
+            self.components[i].process_event(&mut event, &mut self.context);
         }
 
         if !self.context.replies.is_empty() {

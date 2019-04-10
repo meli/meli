@@ -23,7 +23,8 @@ pub struct ContactList {
 
     mode: ViewMode,
     dirty: bool,
-    view: Option<Entity>,
+    view: Option<Box<Component>>,
+    id: ComponentId,
 }
 
 impl Default for ContactList {
@@ -51,6 +52,7 @@ impl ContactList {
             content,
             dirty: true,
             view: None,
+            id: ComponentId::default(),
         }
     }
 
@@ -234,10 +236,10 @@ impl Component for ContactList {
             UIEventType::Input(ref key) if *key == shortcuts["create_contact"] => {
                 let mut manager = ContactManager::default();
                 manager.account_pos = self.account_pos;
-                let entity = Entity::from(Box::new(manager));
+                let component = Box::new(manager);
 
-                self.mode = ViewMode::View(*entity.id());
-                self.view = Some(entity);
+                self.mode = ViewMode::View(component.id());
+                self.view = Some(component);
 
                 return true;
             }
@@ -249,10 +251,10 @@ impl Component for ContactList {
                 let mut manager = ContactManager::default();
                 manager.card = card;
                 manager.account_pos = self.account_pos;
-                let entity = Entity::from(Box::new(manager));
+                let component = Box::new(manager);
 
-                self.mode = ViewMode::View(*entity.id());
-                self.view = Some(entity);
+                self.mode = ViewMode::View(component.id());
+                self.view = Some(component);
 
                 return true;
             }
@@ -261,9 +263,9 @@ impl Component for ContactList {
                 let mut manager = ContactManager::default();
                 manager.card = card;
                 manager.account_pos = self.account_pos;
-                let entity = Entity::from(Box::new(manager));
-                self.mode = ViewMode::View(*entity.id());
-                self.view = Some(entity);
+                let component = Box::new(manager);
+                self.mode = ViewMode::View(component.id());
+                self.view = Some(component);
 
                 return true;
             }
@@ -277,7 +279,7 @@ impl Component for ContactList {
                 self.new_cursor_pos += 1;
                 return true;
             }
-            UIEventType::EntityKill(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {
+            UIEventType::ComponentKill(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {
                 self.mode = ViewMode::List;
                 self.view.take();
                 self.set_dirty();
@@ -314,5 +316,12 @@ impl Component for ContactList {
         map.insert("edit_contact", (*config_map["edit_contact"]).clone());
 
         map
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

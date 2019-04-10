@@ -27,6 +27,7 @@ pub struct AccountsPanel {
     cursor: usize,
     content: CellBuffer,
     dirty: bool,
+    id: ComponentId,
 }
 
 impl fmt::Display for AccountsPanel {
@@ -84,6 +85,13 @@ impl Component for AccountsPanel {
     fn set_dirty(&mut self) {
         self.dirty = true;
     }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 impl AccountsPanel {
@@ -94,6 +102,7 @@ impl AccountsPanel {
             cursor: 0,
             content,
             dirty: true,
+            id: ComponentId::default(),
         }
     }
     fn initialize(&mut self, context: &Context) {

@@ -76,69 +76,7 @@ const _DOUBLE_DOWN_AND_LEFT: char = '╗';
 const _DOUBLE_UP_AND_LEFT: char = '╝';
 const _DOUBLE_UP_AND_RIGHT: char = '╚';
 
-type EntityId = Uuid;
-
-/// `Entity` is a container for Components.
-#[derive(Debug)]
-pub struct Entity {
-    id: EntityId,
-    pub component: Box<Component>, // more than one?
-}
-
-impl From<Box<Component>> for Entity {
-    fn from(mut kind: Box<Component>) -> Entity {
-        let id = Uuid::new_v4();
-        kind.set_id(id);
-        Entity {
-            id,
-            component: kind,
-        }
-    }
-}
-
-impl<C: 'static> From<Box<C>> for Entity
-where
-    C: Component,
-{
-    fn from(mut kind: Box<C>) -> Entity {
-        let id = Uuid::new_v4();
-        kind.set_id(id);
-        Entity {
-            id,
-            component: kind,
-        }
-    }
-}
-
-impl Display for Entity {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt(&self.component, f)
-    }
-}
-
-impl DerefMut for Entity {
-    fn deref_mut(&mut self) -> &mut Box<Component> {
-        &mut self.component
-    }
-}
-
-impl Deref for Entity {
-    type Target = Box<Component>;
-
-    fn deref(&self) -> &Box<Component> {
-        &self.component
-    }
-}
-
-impl Entity {
-    pub fn id(&self) -> &EntityId {
-        &self.id
-    }
-    /// Pass events to child component.
-    pub fn rcv_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        self.component.process_event(event, context)
-    }
-}
+type ComponentId = Uuid;
 
 pub type ShortcutMap = FnvHashMap<&'static str, Key>;
 
@@ -155,8 +93,9 @@ pub trait Component: Display + Debug + Send {
         true
     }
     fn set_dirty(&mut self);
-    fn kill(&mut self, _id: EntityId) {}
-    fn set_id(&mut self, _id: EntityId) {}
+    fn kill(&mut self, _id: ComponentId) {}
+    fn set_id(&mut self, _id: ComponentId) {}
+    fn id(&self) -> ComponentId;
 
     fn get_shortcuts(&self, _context: &Context) -> ShortcutMap {
         Default::default()

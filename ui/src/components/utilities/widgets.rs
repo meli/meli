@@ -187,6 +187,11 @@ impl Component for Field {
         true
     }
     fn set_dirty(&mut self) {}
+
+    fn id(&self) -> ComponentId {
+        ComponentId::nil()
+    }
+    fn set_id(&mut self, _id: ComponentId) {}
 }
 
 impl fmt::Display for Field {
@@ -206,6 +211,7 @@ pub struct FormWidget {
     focus: FormFocus,
     hide_buttons: bool,
     dirty: bool,
+    id: ComponentId,
 }
 
 impl fmt::Display for FormWidget {
@@ -441,6 +447,13 @@ impl Component for FormWidget {
     fn set_dirty(&mut self) {
         self.dirty = true;
     }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 #[derive(Debug, Default)]
@@ -453,6 +466,7 @@ where
 
     result: Option<T>,
     cursor: usize,
+    id: ComponentId,
 }
 
 impl<T> fmt::Display for ButtonWidget<T>
@@ -474,6 +488,7 @@ where
             buttons: vec![init_val].into_iter().collect(),
             result: None,
             cursor: 0,
+            id: ComponentId::default(),
         }
     }
 
@@ -542,6 +557,13 @@ where
         true
     }
     fn set_dirty(&mut self) {}
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -551,6 +573,7 @@ pub struct AutoComplete {
     cursor: usize,
 
     dirty: bool,
+    id: ComponentId,
 }
 
 impl fmt::Display for AutoComplete {
@@ -595,6 +618,13 @@ impl Component for AutoComplete {
     fn set_dirty(&mut self) {
         self.dirty = true;
     }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
 }
 
 impl AutoComplete {
@@ -604,6 +634,7 @@ impl AutoComplete {
             content: CellBuffer::default(),
             cursor: 0,
             dirty: true,
+            id: ComponentId::default(),
         };
         ret.set_suggestions(entries);
         ret

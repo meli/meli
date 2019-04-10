@@ -51,6 +51,7 @@ pub struct ThreadView {
     dirty: bool,
     content: CellBuffer,
     initiated: bool,
+    id: ComponentId,
 }
 
 #[derive(Debug)]
@@ -984,5 +985,12 @@ impl Component for ThreadView {
         map.insert("toggle_subthread visibility", Key::Char('h'));
 
         map
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
     }
 }

@@ -62,32 +62,30 @@ fn main() {
     let worker_receiver = state.worker_receiver();
 
     /* Register some reasonably useful interfaces */
-    let menu = Entity::from(Box::new(AccountMenu::new(&state.context.accounts)));
+    let menu = Box::new(AccountMenu::new(&state.context.accounts));
     let listing = listing::Listing::from(IndexStyle::Compact);
-    let b = Entity::from(Box::new(listing));
-    let tabs = Box::new(Tabbed::new(vec![
+    let b = Box::new(listing);
+    let window = Box::new(Tabbed::new(vec![
         Box::new(VSplit::new(menu, b, 90, false)),
         Box::new(AccountsPanel::new(&state.context)),
         Box::new(ContactList::default()),
     ]));
-    let window = Entity::from(tabs);
 
-    let status_bar = Entity::from(Box::new(StatusBar::new(window)));
-    state.register_entity(status_bar);
+    let status_bar = Box::new(StatusBar::new(window));
+    state.register_component(status_bar);
 
-    let xdg_notifications =
-        Entity::from(Box::new(ui::components::notifications::XDGNotifications {}));
-    state.register_entity(xdg_notifications);
-    state.register_entity(Entity::from(Box::new(
+    let xdg_notifications = Box::new(ui::components::notifications::XDGNotifications {});
+    state.register_component(xdg_notifications);
+    state.register_component(Box::new(
         ui::components::notifications::NotificationFilter {},
-    )));
+    ));
 
     /* Keep track of the input mode. See ui::UIMode for details */
     'main: loop {
         state.render();
 
         'inner: loop {
-            /* Check if any entities have sent reply events to State. */
+            /* Check if any components have sent reply events to State. */
             let events: Vec<UIEvent> = state.context.replies();
             for e in events {
                 state.rcv_event(e);
