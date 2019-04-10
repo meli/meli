@@ -140,16 +140,13 @@ impl MailView {
                             .stdout(Stdio::piped())
                             .spawn();
                         if command_obj.is_err() {
-                            context.replies.push_back(UIEvent {
-                                id: 0,
-                                event_type: UIEventType::Notification(
-                                    Some(format!(
-                                        "Failed to start html filter process: {}",
-                                        filter_invocation,
-                                    )),
-                                    String::new(),
-                                ),
-                            });
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(format!(
+                                    "Failed to start html filter process: {}",
+                                    filter_invocation,
+                                )),
+                                String::new(),
+                            ));
                             return;
                         }
 
@@ -450,8 +447,8 @@ impl Component for MailView {
             }
         }
 
-        match event.event_type {
-            UIEventType::Input(Key::Char('c')) => {
+        match *event {
+            UIEvent::Input(Key::Char('c')) => {
                 if let ViewMode::ContactSelector(_) = self.mode {
                     if let ViewMode::ContactSelector(s) =
                         std::mem::replace(&mut self.mode, ViewMode::Normal)
@@ -506,21 +503,21 @@ impl Component for MailView {
                 self.mode = ViewMode::ContactSelector(Selector::new(entries, true));
                 self.dirty = true;
             }
-            UIEventType::Input(Key::Esc) | UIEventType::Input(Key::Alt('')) => {
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) => {
                 self.cmd_buf.clear();
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::StatusEvent(StatusEvent::BufClear),
-                });
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
             }
-            UIEventType::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
+            UIEvent::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
                 self.cmd_buf.push(c);
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::StatusEvent(StatusEvent::BufSet(self.cmd_buf.clone())),
-                });
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                        self.cmd_buf.clone(),
+                    )));
             }
-            UIEventType::Input(Key::Char('r'))
+            UIEvent::Input(Key::Char('r'))
                 if self.mode == ViewMode::Normal || self.mode == ViewMode::Raw =>
             {
                 self.mode = if self.mode == ViewMode::Raw {
@@ -530,22 +527,21 @@ impl Component for MailView {
                 };
                 self.dirty = true;
             }
-            UIEventType::Input(Key::Char('r'))
+            UIEvent::Input(Key::Char('r'))
                 if self.mode.is_attachment() || self.mode == ViewMode::Subview =>
             {
                 self.mode = ViewMode::Normal;
                 self.subview.take();
                 self.dirty = true;
             }
-            UIEventType::Input(Key::Char('a'))
+            UIEvent::Input(Key::Char('a'))
                 if !self.cmd_buf.is_empty() && self.mode == ViewMode::Normal =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::StatusEvent(StatusEvent::BufClear),
-                });
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
 
                 {
                     let accounts = &context.accounts;
@@ -571,12 +567,9 @@ impl Component for MailView {
                                         )));
                                     }
                                     Err(e) => {
-                                        context.replies.push_back(UIEvent {
-                                            id: 0,
-                                            event_type: UIEventType::StatusEvent(
-                                                StatusEvent::DisplayMessage(format!("{}", e)),
-                                            ),
-                                        });
+                                        context.replies.push_back(UIEvent::StatusEvent(
+                                            StatusEvent::DisplayMessage(format!("{}", e)),
+                                        ));
                                     }
                                 }
                                 return true;
@@ -587,15 +580,11 @@ impl Component for MailView {
                                 self.dirty = true;
                             }
                             ContentType::Multipart { .. } => {
-                                context.replies.push_back(UIEvent {
-                                    id: 0,
-                                    event_type: UIEventType::StatusEvent(
-                                        StatusEvent::DisplayMessage(
-                                            "Multipart attachments are not supported yet."
-                                                .to_string(),
-                                        ),
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(
+                                        "Multipart attachments are not supported yet.".to_string(),
                                     ),
-                                });
+                                ));
                                 return true;
                             }
                             ContentType::Unsupported { .. } => {
@@ -613,39 +602,35 @@ impl Component for MailView {
                                         });
                                     context.temp_files.push(p);
                                 } else {
-                                    context.replies.push_back(UIEvent {
-                                        id: 0,
-                                        event_type: UIEventType::StatusEvent(
-                                            StatusEvent::DisplayMessage(format!(
-                                                "Couldn't find a default application for type {}",
-                                                attachment_type
-                                            )),
-                                        ),
-                                    });
+                                    context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(format!(
+                                            "Couldn't find a default application for type {}",
+                                            attachment_type
+                                        )),
+                                    ));
                                     return true;
                                 }
                             }
                         }
                     } else {
-                        context.replies.push_back(UIEvent {
-                            id: 0,
-                            event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage(
-                                format!("Attachment `{}` not found.", lidx),
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!(
+                                "Attachment `{}` not found.",
+                                lidx
                             )),
-                        });
+                        ));
                         return true;
                     }
                 };
             }
-            UIEventType::Input(Key::Char('g'))
+            UIEvent::Input(Key::Char('g'))
                 if !self.cmd_buf.is_empty() && self.mode == ViewMode::Url =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::StatusEvent(StatusEvent::BufClear),
-                });
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 let url = {
                     let accounts = &context.accounts;
                     let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
@@ -662,12 +647,9 @@ impl Component for MailView {
                     if let Some(u) = links.get(lidx) {
                         u.as_str().to_string()
                     } else {
-                        context.replies.push_back(UIEvent {
-                            id: 0,
-                            event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage(
-                                format!("Link `{}` not found.", lidx),
-                            )),
-                        });
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!("Link `{}` not found.", lidx)),
+                        ));
                         return true;
                     }
                 };
@@ -679,7 +661,7 @@ impl Component for MailView {
                     .spawn()
                     .expect("Failed to start xdg_open");
             }
-            UIEventType::Input(Key::Char('u')) => {
+            UIEvent::Input(Key::Char('u')) => {
                 match self.mode {
                     ViewMode::Normal => self.mode = ViewMode::Url,
                     ViewMode::Url => self.mode = ViewMode::Normal,
@@ -687,9 +669,7 @@ impl Component for MailView {
                 }
                 self.dirty = true;
             }
-            UIEventType::EnvelopeRename(_, old_hash, new_hash)
-                if old_hash == self.coordinates.2 =>
-            {
+            UIEvent::EnvelopeRename(_, old_hash, new_hash) if old_hash == self.coordinates.2 => {
                 self.coordinates.2 = new_hash;
                 self.set_dirty();
             }

@@ -60,7 +60,7 @@ impl InputHandler {
                         tx.send(ThreadEvent::Input(k));
                     },
                     || {
-                        tx.send(ThreadEvent::UIEvent(UIEventType::ChangeMode(UIMode::Fork)));
+                        tx.send(ThreadEvent::UIEvent(UIEvent::ChangeMode(UIMode::Fork)));
                     },
                     &rx,
                 )
@@ -104,10 +104,8 @@ impl Context {
     pub fn account_status(&mut self, idx_a: usize, idx_m: usize) -> result::Result<(), usize> {
         match self.accounts[idx_a].status(idx_m) {
             Ok(()) => {
-                self.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::MailboxUpdate((idx_a, idx_m)),
-                });
+                self.replies
+                    .push_back(UIEvent::MailboxUpdate((idx_a, idx_m)));
                 Ok(())
             }
             Err(n) => Err(n),
@@ -186,7 +184,7 @@ impl State {
                     a_s.clone(),
                     &backends,
                     NotifyFn::new(Box::new(move |f: FolderHash| {
-                        sender.send(ThreadEvent::UIEvent(UIEventType::StartupCheck(f)))
+                        sender.send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
                     })),
                 )
             })
@@ -279,21 +277,15 @@ impl State {
             if let Some(notification) = self.context.accounts[idxa].reload(event, idxm) {
                 self.context
                     .sender
-                    .send(ThreadEvent::UIEvent(UIEventType::StartupCheck(hash)));
+                    .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(hash)));
                 self.context
                     .sender
-                    .send(ThreadEvent::UIEvent(UIEventType::MailboxUpdate((
-                        idxa, idxm,
-                    ))));
-                self.context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: notification,
-                });
+                    .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((idxa, idxm))));
+                self.context.replies.push_back(notification);
             }
-            self.context.replies.push_back(UIEvent {
-                id: 0,
-                event_type: UIEventType::MailboxUpdate((idxa, idxm)),
-            });
+            self.context
+                .replies
+                .push_back(UIEvent::MailboxUpdate((idxa, idxm)));
         } else {
             eprintln!(
                 "BUG: mailbox with hash {} not found in mailbox_hashes.",
@@ -365,10 +357,7 @@ impl State {
         self.rows = termrows.unwrap_or(120) as usize;
         self.grid.resize(self.cols, self.rows, Cell::with_char(' '));
 
-        self.rcv_event(UIEvent {
-            id: 0,
-            event_type: UIEventType::Resize,
-        });
+        self.rcv_event(UIEvent::Resize);
 
         // Invalidate dirty areas.
         self.context.dirty_areas.clear();
@@ -463,22 +452,19 @@ impl State {
         let result = parse_command(&cmd.as_bytes()).to_full_result();
 
         if let Ok(v) = result {
-            self.rcv_event(UIEvent {
-                id: 0,
-                event_type: UIEventType::Action(v),
-            });
+            self.rcv_event(UIEvent::Action(v));
         }
     }
 
     /// The application's main loop sends `UIEvents` to state via this method.
     pub fn rcv_event(&mut self, mut event: UIEvent) {
-        match event.event_type {
+        match event {
             // Command type is handled only by State.
-            UIEventType::Command(cmd) => {
+            UIEvent::Command(cmd) => {
                 self.parse_command(&cmd);
                 return;
             }
-            UIEventType::Fork(child) => {
+            UIEvent::Fork(child) => {
                 self.mode = UIMode::Fork;
                 self.child = Some(child);
                 if let Some(ForkType::Finished) = self.child {
@@ -492,10 +478,10 @@ impl State {
                 }
                 return;
             }
-            UIEventType::ChangeMode(m) => {
+            UIEvent::ChangeMode(m) => {
                 self.context
                     .sender
-                    .send(ThreadEvent::UIEvent(UIEventType::ChangeMode(m)));
+                    .send(ThreadEvent::UIEvent(UIEvent::ChangeMode(m)));
             }
             _ => {}
         }
@@ -523,10 +509,7 @@ impl State {
             }
         };
         if flag {
-            self.rcv_event(UIEvent {
-                id: 0,
-                event_type: UIEventType::RefreshMailbox((account_idx, folder_idx)),
-            });
+            self.rcv_event(UIEvent::RefreshMailbox((account_idx, folder_idx)));
         }
     }
 

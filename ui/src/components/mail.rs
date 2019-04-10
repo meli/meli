@@ -263,25 +263,25 @@ impl Component for AccountMenu {
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
-        match event.event_type {
-            UIEventType::RefreshMailbox(c) => {
+        match *event {
+            UIEvent::RefreshMailbox(c) => {
                 self.cursor = Some(c);
                 self.dirty = true;
             }
-            UIEventType::ChangeMode(UIMode::Normal) => {
+            UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }
-            UIEventType::Resize => {
+            UIEvent::Resize => {
                 self.dirty = true;
             }
-            UIEventType::Input(Key::Char('`')) => {
+            UIEvent::Input(Key::Char('`')) => {
                 self.visible = !self.visible;
                 self.dirty = true;
             }
-            UIEventType::StartupCheck(_) => {
+            UIEvent::StartupCheck(_) => {
                 self.dirty = true;
             }
-            UIEventType::MailboxUpdate(_) => {
+            UIEvent::MailboxUpdate(_) => {
                 self.dirty = true;
             }
             _ => {}

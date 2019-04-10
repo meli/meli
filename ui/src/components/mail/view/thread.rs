@@ -847,18 +847,15 @@ impl Component for ThreadView {
         if self.mailview.process_event(event, context) {
             return true;
         }
-        match event.event_type {
-            UIEventType::Input(Key::Char('R')) => {
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Action(Tab(Reply(
-                        self.coordinates,
-                        self.entries[self.expanded_pos].index.1,
-                    ))),
-                });
+        match *event {
+            UIEvent::Input(Key::Char('R')) => {
+                context.replies.push_back(UIEvent::Action(Tab(Reply(
+                    self.coordinates,
+                    self.entries[self.expanded_pos].index.1,
+                ))));
                 return true;
             }
-            UIEventType::Input(Key::Char('e')) => {
+            UIEvent::Input(Key::Char('e')) => {
                 {
                     let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
                         .as_ref()
@@ -884,29 +881,26 @@ impl Component for ThreadView {
                         );
                     }
                 }
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Action(Tab(Edit(
-                        self.coordinates,
-                        self.entries[self.expanded_pos].index.1,
-                    ))),
-                });
+                context.replies.push_back(UIEvent::Action(Tab(Edit(
+                    self.coordinates,
+                    self.entries[self.expanded_pos].index.1,
+                ))));
                 return true;
             }
-            UIEventType::Input(Key::Up) => {
+            UIEvent::Input(Key::Up) => {
                 if self.cursor_pos > 0 {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
                 }
                 return true;
             }
-            UIEventType::Input(Key::Down) => {
+            UIEvent::Input(Key::Down) => {
                 let height = self.visible_entries.iter().flat_map(|v| v.iter()).count();
                 if height > 0 && self.new_cursor_pos + 1 < height {
                     self.new_cursor_pos += 1;
                 }
                 return true;
             }
-            UIEventType::Input(Key::Char('\n')) => {
+            UIEvent::Input(Key::Char('\n')) => {
                 if self.entries.len() < 2 {
                     return true;
                 }
@@ -916,13 +910,13 @@ impl Component for ThreadView {
                 self.set_dirty();
                 return true;
             }
-            UIEventType::Input(Key::Char('p')) => {
+            UIEvent::Input(Key::Char('p')) => {
                 self.show_mailview = !self.show_mailview;
                 self.initiated = false;
                 self.mailview.set_dirty();
                 return true;
             }
-            UIEventType::Input(Key::Ctrl('r')) => {
+            UIEvent::Input(Key::Ctrl('r')) => {
                 self.reversed = !self.reversed;
                 let expanded_pos = self.expanded_pos;
                 self.initiate(Some(expanded_pos), context);
@@ -930,7 +924,7 @@ impl Component for ThreadView {
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Input(Key::Char('h')) => {
+            UIEvent::Input(Key::Char('h')) => {
                 let current_pos = self.current_pos();
                 self.entries[current_pos].hidden = !self.entries[current_pos].hidden;
                 self.entries[current_pos].dirty = true;
@@ -960,7 +954,7 @@ impl Component for ThreadView {
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Resize => {
+            UIEvent::Resize => {
                 self.set_dirty();
             }
             _ => {}

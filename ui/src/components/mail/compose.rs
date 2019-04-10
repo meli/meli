@@ -431,9 +431,9 @@ impl Component for Composer {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        match (&mut self.mode, &mut self.reply_context, &event.event_type) {
+        match (&mut self.mode, &mut self.reply_context, &event) {
             // don't pass Reply command to thread view in reply_context
-            (_, _, UIEventType::Input(Key::Char('R'))) => {}
+            (_, _, UIEvent::Input(Key::Char('R'))) => {}
             (ViewMode::Overview, Some((_, ref mut view)), _) => {
                 if view.process_event(event, context) {
                     self.dirty = true;
@@ -456,13 +456,13 @@ impl Component for Composer {
             return true;
         }
 
-        match event.event_type {
-            UIEventType::Resize => {
+        match *event {
+            UIEvent::Resize => {
                 self.set_dirty();
             }
             /*
             /* Switch e-mail From: field to the `left` configured account. */
-            UIEventType::Input(Key::Left) if self.cursor == Cursor::From => {
+            UIEvent::Input(Key::Left) if self.cursor == Cursor::From => {
             self.account_cursor = self.account_cursor.saturating_sub(1);
             self.draft.headers_mut().insert(
             "From".into(),
@@ -472,7 +472,7 @@ impl Component for Composer {
             return true;
             }
             /* Switch e-mail From: field to the `right` configured account. */
-            UIEventType::Input(Key::Right) if self.cursor == Cursor::From => {
+            UIEvent::Input(Key::Right) if self.cursor == Cursor::From => {
             if self.account_cursor + 1 < context.accounts.len() {
             self.account_cursor += 1;
             self.draft.headers_mut().insert(
@@ -483,19 +483,16 @@ impl Component for Composer {
             }
             return true;
             }*/
-            UIEventType::Input(Key::Up) => {
+            UIEvent::Input(Key::Up) => {
                 self.cursor = Cursor::Headers;
             }
-            UIEventType::Input(Key::Down) => {
+            UIEvent::Input(Key::Down) => {
                 self.cursor = Cursor::Body;
             }
-            UIEventType::Input(Key::Char(key)) if self.mode.is_discard() => {
+            UIEvent::Input(Key::Char(key)) if self.mode.is_discard() => {
                 match (key, &self.mode) {
                     ('x', ViewMode::Discard(u)) => {
-                        context.replies.push_back(UIEvent {
-                            id: 0,
-                            event_type: UIEventType::Action(Tab(Kill(*u))),
-                        });
+                        context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
                         return true;
                     }
                     ('n', _) => {}
@@ -506,18 +503,12 @@ impl Component for Composer {
                             if cfg!(feature = "debug_log") {
                                 eprintln!("{:?} could not save draft", e);
                             }
-                            context.replies.push_back(UIEvent {
-                                id: 0,
-                                event_type: UIEventType::Notification(
-                                    Some("Could not save draft.".into()),
-                                    e.into(),
-                                ),
-                            });
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Could not save draft.".into()),
+                                e.into(),
+                            ));
                         }
-                        context.replies.push_back(UIEvent {
-                            id: 0,
-                            event_type: UIEventType::Action(Tab(Kill(*u))),
-                        });
+                        context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
                         return true;
                     }
                     _ => {
@@ -529,18 +520,18 @@ impl Component for Composer {
                 return true;
             }
             /* Switch to Overview mode if we're on Edit mode */
-            UIEventType::Input(Key::Char('v')) if self.mode.is_edit() => {
+            UIEvent::Input(Key::Char('v')) if self.mode.is_edit() => {
                 self.mode = ViewMode::Overview;
                 self.set_dirty();
                 return true;
             }
             /* Switch to Edit mode if we're on Overview mode */
-            UIEventType::Input(Key::Char('o')) if self.mode.is_overview() => {
+            UIEvent::Input(Key::Char('o')) if self.mode.is_overview() => {
                 self.mode = ViewMode::Edit;
                 self.set_dirty();
                 return true;
             }
-            UIEventType::Input(Key::Char('s')) if self.mode.is_overview() => {
+            UIEvent::Input(Key::Char('s')) if self.mode.is_overview() => {
                 use std::io::Write;
                 use std::process::{Command, Stdio};
                 let settings = &context.settings;
@@ -568,31 +559,25 @@ impl Component for Composer {
                         if cfg!(feature = "debug_log") {
                             eprintln!("{:?} could not save sent msg", e);
                         }
-                        context.replies.push_back(UIEvent {
-                            id: 0,
-                            event_type: UIEventType::Notification(
-                                Some("Could not save in 'Sent' folder.".into()),
-                                e.into(),
-                            ),
-                        });
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not save in 'Sent' folder.".into()),
+                            e.into(),
+                        ));
                     }
                 }
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Notification(
-                        Some("Sent.".into()),
-                        format!(
-                            "Mailer output: {:#?}",
-                            msmtp
-                                .wait_with_output()
-                                .expect("Failed to wait on filter")
-                                .stdout
-                        ),
+                context.replies.push_back(UIEvent::Notification(
+                    Some("Sent.".into()),
+                    format!(
+                        "Mailer output: {:#?}",
+                        msmtp
+                            .wait_with_output()
+                            .expect("Failed to wait on filter")
+                            .stdout
                     ),
-                });
+                ));
                 return true;
             }
-            UIEventType::Input(Key::Char('e')) if self.cursor == Cursor::Body => {
+            UIEvent::Input(Key::Char('e')) if self.cursor == Cursor::Body => {
                 /* Edit draft in $EDITOR */
                 use std::process::{Command, Stdio};
                 /* Kill input thread so that spawned command can be sole receiver of stdin */
@@ -616,10 +601,7 @@ impl Component for Composer {
                 let result = f.read_to_string();
                 self.draft = Draft::from_str(result.as_str()).unwrap();
                 self.initialized = false;
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Fork(ForkType::Finished),
-                });
+                context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                 context.restore_input();
                 /*
 

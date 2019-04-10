@@ -161,32 +161,25 @@ impl Component for ContactManager {
                     context.accounts[self.account_pos]
                         .address_book
                         .add_card(new_card);
-                    context.replies.push_back(UIEvent {
-                        id: 0,
-                        event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage(
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
                             "Saved.".into(),
-                        )),
-                    });
-                    context.replies.push_back(UIEvent {
-                        id: 0,
-                        event_type: UIEventType::ComponentKill(self.id),
-                    });
+                        )));
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
                 Some(false) => {
-                    context.replies.push_back(UIEvent {
-                        id: 0,
-                        event_type: UIEventType::ComponentKill(self.id),
-                    });
+                    context.replies.push_back(UIEvent::ComponentKill(self.id));
                 }
             }
             return true;
         }
         /*
-        match event.event_type {
-        UIEventType::Input(Key::Char('\n')) => {
+        match *event {
+        UIEvent::Input(Key::Char('\n')) => {
         context.replies.push_back(UIEvent {
         id: 0,
-        event_type: UIEventType::ComponentKill(self.id),
+        event_type: UIEvent::ComponentKill(self.id),
         });
         return true;
         },

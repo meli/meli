@@ -43,16 +43,13 @@ impl HtmlView {
                 .stdout(Stdio::piped())
                 .spawn();
             if command_obj.is_err() {
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Notification(
-                        Some(format!(
-                            "Failed to start html filter process: {}",
-                            filter_invocation
-                        )),
-                        String::new(),
-                    ),
-                });
+                context.replies.push_back(UIEvent::Notification(
+                    Some(format!(
+                        "Failed to start html filter process: {}",
+                        filter_invocation
+                    )),
+                    String::new(),
+                ));
                 let pager = Pager::from_string(
                     String::from_utf8_lossy(&bytes).to_string(),
                     None,
@@ -102,15 +99,12 @@ impl HtmlView {
                 let pager = Pager::from_string(display_text, None, None, None);
                 HtmlView { pager, bytes, id }
             } else {
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Notification(
-                        Some(format!(
-                            "Failed to find any application to use as html filter"
-                        )),
-                        String::new(),
-                    ),
-                });
+                context.replies.push_back(UIEvent::Notification(
+                    Some(format!(
+                        "Failed to find any application to use as html filter"
+                    )),
+                    String::new(),
+                ));
                 let pager = Pager::from_string(
                     String::from_utf8_lossy(&bytes).to_string(),
                     None,
@@ -139,7 +133,7 @@ impl Component for HtmlView {
             return true;
         }
 
-        if let UIEventType::Input(Key::Char('v')) = event.event_type {
+        if let UIEvent::Input(Key::Char('v')) = event {
             // TODO: Optional filter that removes outgoing resource requests (images and
             // scripts)
             let binary = query_default_app("text/html");
@@ -153,12 +147,11 @@ impl Component for HtmlView {
                     .unwrap_or_else(|_| panic!("Failed to start {}", binary.display()));
                 context.temp_files.push(p);
             } else {
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::StatusEvent(StatusEvent::DisplayMessage(
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
                         "Couldn't find a default application for html files.".to_string(),
-                    )),
-                });
+                    )));
             }
             return true;
         }

@@ -48,7 +48,7 @@ use std::ops::{Deref, DerefMut};
 use fnv::FnvHashMap;
 use uuid::Uuid;
 
-use super::{Key, StatusEvent, UIEvent, UIEventType};
+use super::{Key, StatusEvent, UIEvent};
 /// The upper and lower boundary char.
 const HORZ_BOUNDARY: char = '─';
 /// The left and right boundary char.

@@ -105,14 +105,14 @@ impl Component for Indexer {
             }
         }
 
-        match event.event_type {
-            UIEventType::RefreshMailbox(_) => {
+        match *event {
+            UIEvent::RefreshMailbox(_) => {
                 self.dirty = true;
             }
-            UIEventType::ChangeMode(UIMode::Normal) => {
+            UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }
-            UIEventType::Resize => {
+            UIEvent::Resize => {
                 self.dirty = true;
             }
             _ => {}

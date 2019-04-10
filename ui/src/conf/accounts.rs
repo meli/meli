@@ -38,7 +38,7 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 use std::result;
 use std::sync::Arc;
-use types::UIEventType::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
+use types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 
 pub type Worker = Option<Async<Result<Mailbox>>>;
 
@@ -203,7 +203,7 @@ impl Account {
             notify_fn.notify(hash);
         })))
     }
-    pub fn reload(&mut self, event: RefreshEvent, idx: usize) -> Option<UIEventType> {
+    pub fn reload(&mut self, event: RefreshEvent, idx: usize) -> Option<UIEvent> {
         let kind = event.kind();
         {
             //let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();

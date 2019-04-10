@@ -107,10 +107,10 @@ impl PlainListing {
         self.cursor_pos.1 = self.new_cursor_pos.1;
 
         // Inform State that we changed the current folder view.
-        context.replies.push_back(UIEvent {
-            id: 0,
-            event_type: UIEventType::RefreshMailbox((self.cursor_pos.0, self.cursor_pos.1)),
-        });
+        context.replies.push_back(UIEvent::RefreshMailbox((
+            self.cursor_pos.0,
+            self.cursor_pos.1,
+        )));
         // Get mailbox as a reference.
         //
         // Get mailbox as a reference.
@@ -416,40 +416,39 @@ impl Component for PlainListing {
                 return true;
             }
         }
-        match event.event_type {
-            UIEventType::Input(Key::Up) => {
+        match *event {
+            UIEvent::Input(Key::Up) => {
                 if self.cursor_pos.2 > 0 {
                     self.new_cursor_pos.2 -= 1;
                     self.dirty = true;
                 }
                 return true;
             }
-            UIEventType::Input(Key::Down) => {
+            UIEvent::Input(Key::Down) => {
                 if self.length > 0 && self.new_cursor_pos.2 < self.length - 1 {
                     self.new_cursor_pos.2 += 1;
                     self.dirty = true;
                 }
                 return true;
             }
-            UIEventType::Input(Key::Char('\n')) if !self.unfocused => {
+            UIEvent::Input(Key::Char('\n')) if !self.unfocused => {
                 self.unfocused = true;
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Input(Key::Char('m')) if !self.unfocused => {
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Action(Tab(NewDraft(self.cursor_pos.0))),
-                });
+            UIEvent::Input(Key::Char('m')) if !self.unfocused => {
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0))));
                 return true;
             }
-            UIEventType::Input(Key::Char('i')) if self.unfocused => {
+            UIEvent::Input(Key::Char('i')) if self.unfocused => {
                 self.unfocused = false;
                 self.dirty = true;
                 self.view = None;
                 return true;
             }
-            UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
+            UIEvent::Input(Key::Char(k @ 'J')) | UIEvent::Input(Key::Char(k @ 'K')) => {
                 let folder_length = context.accounts[self.cursor_pos.0].len();
                 let accounts_length = context.accounts.len();
                 match k {
@@ -482,7 +481,7 @@ impl Component for PlainListing {
                 }
                 return true;
             }
-            UIEventType::Input(Key::Char(k @ 'h')) | UIEventType::Input(Key::Char(k @ 'l')) => {
+            UIEvent::Input(Key::Char(k @ 'h')) | UIEvent::Input(Key::Char(k @ 'l')) => {
                 let accounts_length = context.accounts.len();
                 match k {
                     'h' if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1 => {
@@ -501,29 +500,29 @@ impl Component for PlainListing {
                 }
                 return true;
             }
-            UIEventType::RefreshMailbox(_) => {
+            UIEvent::RefreshMailbox(_) => {
                 self.dirty = true;
                 self.view = None;
             }
-            UIEventType::MailboxUpdate((ref idxa, ref idxf))
+            UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
-            UIEventType::StartupCheck(ref f)
+            UIEvent::StartupCheck(ref f)
                 if context.mailbox_hashes[f] == (self.new_cursor_pos.0, self.new_cursor_pos.1) =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
-            UIEventType::ChangeMode(UIMode::Normal) => {
+            UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }
-            UIEventType::Resize => {
+            UIEvent::Resize => {
                 self.dirty = true;
             }
-            UIEventType::Action(ref action) => match action {
+            UIEvent::Action(ref action) => match action {
                 Action::ViewMailbox(idx) => {
                     self.new_cursor_pos.1 = *idx;
                     self.dirty = true;

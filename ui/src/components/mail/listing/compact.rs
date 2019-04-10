@@ -106,10 +106,10 @@ impl MailboxView {
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
         // Inform State that we changed the current folder view.
-        context.replies.push_back(UIEvent {
-            id: 0,
-            event_type: UIEventType::RefreshMailbox((self.cursor_pos.0, self.cursor_pos.1)),
-        });
+        context.replies.push_back(UIEvent::RefreshMailbox((
+            self.cursor_pos.0,
+            self.cursor_pos.1,
+        )));
         // Get mailbox as a reference.
         //
         match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
@@ -386,41 +386,41 @@ impl Component for MailboxView {
         }
 
         let shortcuts = self.get_shortcuts(context);
-        match event.event_type {
-            UIEventType::Input(Key::Up) => {
+        match *event {
+            UIEvent::Input(Key::Up) => {
                 if self.cursor_pos.2 > 0 {
                     self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(1);
                     self.dirty = true;
                 }
                 return true;
             }
-            UIEventType::Input(Key::Down) => {
+            UIEvent::Input(Key::Down) => {
                 if self.length > 0 && self.new_cursor_pos.2 < self.length - 1 {
                     self.new_cursor_pos.2 += 1;
                     self.dirty = true;
                 }
                 return true;
             }
-            UIEventType::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
+            UIEvent::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
                 self.view = ThreadView::new(self.cursor_pos, None, context);
                 self.unfocused = true;
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Input(ref key) if *key == shortcuts["prev_page"] => {
+            UIEvent::Input(ref key) if *key == shortcuts["prev_page"] => {
                 self.movement = Some(PageMovement::PageUp);
                 self.set_dirty();
             }
-            UIEventType::Input(ref key) if *key == shortcuts["next_page"] => {
+            UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
                 self.movement = Some(PageMovement::PageDown);
                 self.set_dirty();
             }
-            UIEventType::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
+            UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
                 self.unfocused = false;
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
+            UIEvent::Input(Key::Char(k @ 'J')) | UIEvent::Input(Key::Char(k @ 'K')) => {
                 let folder_length = context.accounts[self.cursor_pos.0].len();
                 match k {
                     'J' if folder_length > 0 && self.new_cursor_pos.1 < folder_length - 1 => {
@@ -435,28 +435,28 @@ impl Component for MailboxView {
                 }
                 return true;
             }
-            UIEventType::RefreshMailbox(_) => {
+            UIEvent::RefreshMailbox(_) => {
                 self.dirty = true;
             }
-            UIEventType::MailboxUpdate((ref idxa, ref idxf))
+            UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
-            UIEventType::StartupCheck(ref f)
+            UIEvent::StartupCheck(ref f)
                 if context.mailbox_hashes[f] == (self.new_cursor_pos.0, self.new_cursor_pos.1) =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
-            UIEventType::ChangeMode(UIMode::Normal) => {
+            UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }
-            UIEventType::Resize => {
+            UIEvent::Resize => {
                 self.dirty = true;
             }
-            UIEventType::Action(ref action) => match action {
+            UIEvent::Action(ref action) => match action {
                 Action::ViewMailbox(idx) => {
                     self.new_cursor_pos.1 = *idx;
                     self.refresh_mailbox(context);
@@ -480,11 +480,10 @@ impl Component for MailboxView {
                 }
                 _ => {}
             },
-            UIEventType::Input(Key::Char('m')) if !self.unfocused => {
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Action(Tab(NewDraft(self.cursor_pos.0))),
-                });
+            UIEvent::Input(Key::Char('m')) if !self.unfocused => {
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0))));
                 return true;
             }
             _ => {}
@@ -665,8 +664,8 @@ impl Component for CompactListing {
         if self.views.is_empty() {
             return false;
         }
-        match event.event_type {
-            UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
+        match *event {
+            UIEvent::Input(Key::Char(k @ 'J')) | UIEvent::Input(Key::Char(k @ 'K')) => {
                 let folder_length = context.accounts[self.views[self.cursor].cursor_pos.0].len();
                 match k {
                     'J' if folder_length > 0 => {
@@ -684,7 +683,7 @@ impl Component for CompactListing {
                 self.views[self.cursor].refresh_mailbox(context);
                 return true;
             }
-            UIEventType::Input(Key::Char(k @ 'h')) | UIEventType::Input(Key::Char(k @ 'l')) => {
+            UIEvent::Input(Key::Char(k @ 'h')) | UIEvent::Input(Key::Char(k @ 'l')) => {
                 let binary_search_account = |entries: &[MailboxView], x: usize| -> Option<usize> {
                     if entries.is_empty() {
                         return None;

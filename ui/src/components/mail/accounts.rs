@@ -49,29 +49,28 @@ impl Component for AccountsPanel {
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        match event.event_type {
-            UIEventType::Input(Key::Up) => {
+        match *event {
+            UIEvent::Input(Key::Up) => {
                 self.cursor = self.cursor.saturating_sub(1);
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Input(Key::Down) => {
+            UIEvent::Input(Key::Down) => {
                 if self.cursor + 1 < context.accounts.len() {
                     self.cursor += 1;
                     self.dirty = true;
                 }
                 return true;
             }
-            UIEventType::Input(Key::Char('\n')) => {
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::Action(Tab(TabOpen(Some(Box::new(
+            UIEvent::Input(Key::Char('\n')) => {
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(TabOpen(Some(Box::new(
                         ContactList::for_account(self.cursor),
-                    ))))),
-                });
+                    ))))));
                 return true;
             }
-            UIEventType::MailboxUpdate(_) => {
+            UIEvent::MailboxUpdate(_) => {
                 self.dirty = true;
             }
             _ => {}

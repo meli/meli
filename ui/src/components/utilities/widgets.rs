@@ -107,7 +107,7 @@ impl Component for Field {
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         if let Text(ref mut s, Some((_, auto_complete))) = self {
-            if let UIEventType::InsertInput(Key::Char('\t')) = event.event_type {
+            if let UIEvent::InsertInput(Key::Char('\t')) = event {
                 if let Some(suggestion) = auto_complete.get_suggestion() {
                     *s = UText::new(suggestion);
                     let len = s.as_str().len().saturating_sub(1);
@@ -117,22 +117,22 @@ impl Component for Field {
             }
         }
 
-        match event.event_type {
-            UIEventType::InsertInput(Key::Up) => {
+        match *event {
+            UIEvent::InsertInput(Key::Up) => {
                 if let Text(_, Some((_, auto_complete))) = self {
                     auto_complete.dec_cursor();
                 } else {
                     return false;
                 }
             }
-            UIEventType::InsertInput(Key::Down) => {
+            UIEvent::InsertInput(Key::Down) => {
                 if let Text(_, Some((_, auto_complete))) = self {
                     auto_complete.inc_cursor();
                 } else {
                     return false;
                 }
             }
-            UIEventType::InsertInput(Key::Right) => match self {
+            UIEvent::InsertInput(Key::Right) => match self {
                 Text(ref mut s, _) => {
                     s.cursor_inc();
                 }
@@ -144,7 +144,7 @@ impl Component for Field {
                     };
                 }
             },
-            UIEventType::InsertInput(Key::Left) => match self {
+            UIEvent::InsertInput(Key::Left) => match self {
                 Text(ref mut s, _) => {
                     s.cursor_dec();
                 }
@@ -156,19 +156,19 @@ impl Component for Field {
                     }
                 }
             },
-            UIEventType::InsertInput(Key::Char(k)) => {
+            UIEvent::InsertInput(Key::Char(k)) => {
                 if let Text(ref mut s, _) = self {
                     s.insert_char(k);
                 }
             }
-            UIEventType::InsertInput(Key::Paste(ref p)) => {
+            UIEvent::InsertInput(Key::Paste(ref p)) => {
                 if let Text(ref mut s, _) = self {
                     for c in p.chars() {
                         s.insert_char(c);
                     }
                 }
             }
-            UIEventType::InsertInput(Key::Backspace) => {
+            UIEvent::InsertInput(Key::Backspace) => {
                 if let Text(ref mut s, auto_complete) = self {
                     s.backspace();
                     if let Some(ac) = auto_complete.as_mut() {
@@ -373,64 +373,62 @@ impl Component for FormWidget {
             return true;
         }
 
-        match event.event_type {
-            UIEventType::Input(Key::Up) if self.focus == FormFocus::Buttons => {
+        match *event {
+            UIEvent::Input(Key::Up) if self.focus == FormFocus::Buttons => {
                 self.focus = FormFocus::Fields;
             }
-            UIEventType::InsertInput(Key::Up) if self.focus == FormFocus::TextInput => {
+            UIEvent::InsertInput(Key::Up) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
             }
-            UIEventType::Input(Key::Up) => {
+            UIEvent::Input(Key::Up) => {
                 self.cursor = self.cursor.saturating_sub(1);
             }
-            UIEventType::InsertInput(Key::Down) if self.focus == FormFocus::TextInput => {
+            UIEvent::InsertInput(Key::Down) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
             }
-            UIEventType::Input(Key::Down) if self.cursor < self.layout.len().saturating_sub(1) => {
+            UIEvent::Input(Key::Down) if self.cursor < self.layout.len().saturating_sub(1) => {
                 self.cursor += 1;
             }
-            UIEventType::Input(Key::Down) if self.focus == FormFocus::Fields => {
+            UIEvent::Input(Key::Down) if self.focus == FormFocus::Fields => {
                 self.focus = FormFocus::Buttons;
                 if self.hide_buttons {
                     self.set_dirty();
                     return false;
                 }
             }
-            UIEventType::InsertInput(Key::Char('\t')) if self.focus == FormFocus::TextInput => {
+            UIEvent::InsertInput(Key::Char('\t')) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
             }
-            UIEventType::Input(Key::Char('\n')) if self.focus == FormFocus::Fields => {
+            UIEvent::Input(Key::Char('\n')) if self.focus == FormFocus::Fields => {
                 self.focus = FormFocus::TextInput;
-                context.replies.push_back(UIEvent {
-                    id: 0,
-                    event_type: UIEventType::ChangeMode(UIMode::Insert),
-                });
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Insert));
             }
-            UIEventType::InsertInput(Key::Right) if self.focus == FormFocus::TextInput => {
+            UIEvent::InsertInput(Key::Right) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
             }
-            UIEventType::InsertInput(Key::Left) if self.focus == FormFocus::TextInput => {
+            UIEvent::InsertInput(Key::Left) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 if !field.process_event(event, context) {
                     self.focus = FormFocus::Fields;
-                    context.replies.push_back(UIEvent {
-                        id: 0,
-                        event_type: UIEventType::ChangeMode(UIMode::Normal),
-                    });
+                    context
+                        .replies
+                        .push_back(UIEvent::ChangeMode(UIMode::Normal));
                 }
             }
-            UIEventType::ChangeMode(UIMode::Normal) if self.focus == FormFocus::TextInput => {
+            UIEvent::ChangeMode(UIMode::Normal) if self.focus == FormFocus::TextInput => {
                 self.focus = FormFocus::Fields;
             }
-            UIEventType::InsertInput(Key::Backspace) if self.focus == FormFocus::TextInput => {
+            UIEvent::InsertInput(Key::Backspace) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
             }
-            UIEventType::InsertInput(_) if self.focus == FormFocus::TextInput => {
+            UIEvent::InsertInput(_) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
                 field.process_event(event, context);
             }
@@ -531,8 +529,8 @@ where
         }
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
-        match event.event_type {
-            UIEventType::Input(Key::Char('\n')) => {
+        match *event {
+            UIEvent::Input(Key::Char('\n')) => {
                 self.result = Some(
                     self.buttons
                         .remove(&self.layout[self.cursor])
@@ -540,11 +538,11 @@ where
                 );
                 return true;
             }
-            UIEventType::Input(Key::Left) => {
+            UIEvent::Input(Key::Left) => {
                 self.cursor = self.cursor.saturating_sub(1);
                 return true;
             }
-            UIEventType::Input(Key::Right) if self.cursor < self.layout.len().saturating_sub(1) => {
+            UIEvent::Input(Key::Right) if self.cursor < self.layout.len().saturating_sub(1) => {
                 self.cursor += 1;
                 return true;
             }

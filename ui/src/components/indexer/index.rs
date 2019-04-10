@@ -128,35 +128,35 @@ impl Component for Index {
         if self.content.process_event(event, context) {
             return true;
         }
-        match event.event_type {
-            UIEventType::Input(Key::Up) => {
+        match *event {
+            UIEvent::Input(Key::Up) => {
                 if self.cursor_pos > 0 {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
                     self.set_dirty();
                 }
                 return true;
             }
-            UIEventType::Input(Key::Down) => {
+            UIEvent::Input(Key::Down) => {
                 if self.length > 0 && self.new_cursor_pos < self.length - 1 {
                     self.new_cursor_pos += 1;
                     self.set_dirty();
                 }
                 return true;
             }
-            UIEventType::Input(Key::Char('\n')) if self.state == IndexState::Listing => {
+            UIEvent::Input(Key::Char('\n')) if self.state == IndexState::Listing => {
                 self.state = IndexState::Unfocused;
                 self.set_dirty();
                 return true;
             }
-            UIEventType::Input(Key::Char('i')) if self.state == IndexState::Unfocused => {
+            UIEvent::Input(Key::Char('i')) if self.state == IndexState::Unfocused => {
                 self.state = IndexState::Listing;
                 self.set_dirty();
                 return true;
             }
-            UIEventType::ChangeMode(UIMode::Normal) => {
+            UIEvent::ChangeMode(UIMode::Normal) => {
                 self.set_dirty();
             }
-            UIEventType::Resize => {
+            UIEvent::Resize => {
                 self.set_dirty();
             }
             _ => {}

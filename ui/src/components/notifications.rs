@@ -41,7 +41,7 @@ impl fmt::Display for XDGNotifications {
 impl Component for XDGNotifications {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
-        if let UIEventType::Notification(ref title, ref body) = event.event_type {
+        if let UIEvent::Notification(ref title, ref body) = event {
             notify_Notification::new()
                 .appname("meli")
                 .icon("mail-message-new")
@@ -121,7 +121,7 @@ impl fmt::Display for NotificationFilter {
 impl Component for NotificationFilter {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if let UIEventType::Notification(ref title, ref body) = event.event_type {
+        if let UIEvent::Notification(ref title, ref body) = event {
             if let Some(ref bin) = context.runtime_settings.notifications.script {
                 if let Err(v) = Command::new(bin)
                     .arg(title.as_ref().map(|v| v.as_str()).unwrap_or("Event"))

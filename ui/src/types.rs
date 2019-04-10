@@ -50,7 +50,7 @@ pub enum ThreadEvent {
     Input(Key),
     /// A watched folder has been refreshed.
     RefreshMailbox(Box<RefreshEvent>),
-    UIEvent(UIEventType),
+    UIEvent(UIEvent),
     //Decode { _ }, // For gpg2 signature check
 }
 
@@ -68,7 +68,7 @@ pub enum ForkType {
 }
 
 #[derive(Debug)]
-pub enum UIEventType {
+pub enum UIEvent {
     Input(Key),
     ExInput(Key),
     InsertInput(Key),
@@ -94,18 +94,8 @@ pub enum UIEventType {
 
 impl From<RefreshEvent> for UIEvent {
     fn from(event: RefreshEvent) -> Self {
-        UIEvent {
-            id: 0,
-            event_type: UIEventType::RefreshEvent(Box::new(event)),
-        }
+        UIEvent::RefreshEvent(Box::new(event))
     }
-}
-
-/// An event passed from `State` to its Entities.
-#[derive(Debug)]
-pub struct UIEvent {
-    pub id: u64,
-    pub event_type: UIEventType,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]

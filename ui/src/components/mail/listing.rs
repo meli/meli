@@ -75,9 +75,9 @@ impl Component for Listing {
             return true;
         }
 
-        match event.event_type {
-            UIEventType::Resize => self.set_dirty(),
-            UIEventType::Action(ref action) => match action {
+        match *event {
+            UIEvent::Resize => self.set_dirty(),
+            UIEvent::Action(ref action) => match action {
                 Action::Listing(ListingAction::SetPlain) => {
                     let new_l = match self {
                         Listing::Plain(_) => {

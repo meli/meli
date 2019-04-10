@@ -118,11 +118,11 @@ fn main() {
                                         },
                                         Key::Char(' ') => {
                                             state.mode = UIMode::Execute;
-                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Execute)});
+                                            state.rcv_event(UIEvent::ChangeMode(UIMode::Execute));
                                             state.redraw();
                                         }
                                         key  => {
-                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::Input(key)});
+                                            state.rcv_event(UIEvent::Input(key));
                                             state.redraw();
                                         },
                                     }
@@ -131,11 +131,11 @@ fn main() {
                                     match k {
                                         Key::Char('\n') | Key::Esc => {
                                             state.mode = UIMode::Normal;
-                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Normal)});
+                                            state.rcv_event(UIEvent::ChangeMode(UIMode::Normal));
                                             state.redraw();
                                         },
                                         k => {
-                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::InsertInput(k)});
+                                            state.rcv_event(UIEvent::InsertInput(k));
                                             state.redraw();
                                         },
                                     }
@@ -144,11 +144,11 @@ fn main() {
                                     match k {
                                         Key::Char('\n') | Key::Esc => {
                                             state.mode = UIMode::Normal;
-                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ChangeMode(UIMode::Normal)});
+                                            state.rcv_event(UIEvent::ChangeMode(UIMode::Normal));
                                             state.redraw();
                                         },
                                         k => {
-                                            state.rcv_event(UIEvent { id: 0, event_type: UIEventType::ExInput(k)});
+                                            state.rcv_event(UIEvent::ExInput(k));
                                             state.redraw();
                                         },
                                     }
@@ -162,14 +162,14 @@ fn main() {
                             state.refresh_event(*event);
                             state.redraw();
                         },
-                        ThreadEvent::UIEvent(UIEventType::ChangeMode(f)) => {
+                        ThreadEvent::UIEvent(UIEvent::ChangeMode(f)) => {
                             state.mode = f;
                             if f == UIMode::Fork {
                                 break 'inner; // `goto` 'reap loop, and wait on child.
                             }
                         }
                         ThreadEvent::UIEvent(e) => {
-                            state.rcv_event(UIEvent { id: 0, event_type: e});
+                            state.rcv_event(e);
                             state.render();
                         },
                         ThreadEvent::ThreadJoin(id) => {

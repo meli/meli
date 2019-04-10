@@ -499,32 +499,32 @@ impl Component for Pager {
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
-        match event.event_type {
-            UIEventType::Input(ref key) if *key == shortcuts["scroll_up"] => {
+        match *event {
+            UIEvent::Input(ref key) if *key == shortcuts["scroll_up"] => {
                 if self.cursor_pos > 0 {
                     self.cursor_pos -= 1;
                     self.dirty = true;
                 }
             }
-            UIEventType::Input(ref key) if *key == shortcuts["scroll_down"] => {
+            UIEvent::Input(ref key) if *key == shortcuts["scroll_down"] => {
                 if self.height > 0 && self.cursor_pos + 1 < self.height {
                     self.cursor_pos += 1;
                     self.dirty = true;
                 }
             }
-            UIEventType::Input(ref key) if *key == shortcuts["page_up"] => {
+            UIEvent::Input(ref key) if *key == shortcuts["page_up"] => {
                 self.movement = Some(PageMovement::PageUp);
                 self.dirty = true;
             }
-            UIEventType::Input(ref key) if *key == shortcuts["page_down"] => {
+            UIEvent::Input(ref key) if *key == shortcuts["page_down"] => {
                 self.movement = Some(PageMovement::PageDown);
                 self.dirty = true;
             }
-            UIEventType::ChangeMode(UIMode::Normal) => {
+            UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
                 return false;
             }
-            UIEventType::Resize => {
+            UIEvent::Resize => {
                 self.dirty = true;
                 self.max_cursor_pos = None;
                 return false;
@@ -690,8 +690,8 @@ impl Component for StatusBar {
             return true;
         }
 
-        match &event.event_type {
-            UIEventType::RefreshMailbox((ref idx_a, ref idx_f)) => {
+        match &event {
+            UIEvent::RefreshMailbox((ref idx_a, ref idx_f)) => {
                 match context.accounts[*idx_a].status(*idx_f) {
                     Ok(_) => {}
                     Err(_) => {
@@ -708,7 +708,7 @@ impl Component for StatusBar {
                 );
                 self.dirty = true;
             }
-            UIEventType::ChangeMode(m) => {
+            UIEvent::ChangeMode(m) => {
                 let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
                 self.status.replace_range(..offset, &format!("{} ", m));
                 self.dirty = true;
@@ -717,10 +717,9 @@ impl Component for StatusBar {
                     UIMode::Normal => {
                         self.height = 1;
                         if !self.ex_buffer.is_empty() {
-                            context.replies.push_back(UIEvent {
-                                id: 0,
-                                event_type: UIEventType::Command(self.ex_buffer.clone()),
-                            });
+                            context
+                                .replies
+                                .push_back(UIEvent::Command(self.ex_buffer.clone()));
                         }
                         self.ex_buffer.clear()
                     }
@@ -730,33 +729,33 @@ impl Component for StatusBar {
                     _ => {}
                 };
             }
-            UIEventType::ExInput(Key::Char(c)) => {
+            UIEvent::ExInput(Key::Char(c)) => {
                 self.dirty = true;
                 self.ex_buffer.push(*c);
                 return true;
             }
-            UIEventType::ExInput(Key::Ctrl('u')) => {
+            UIEvent::ExInput(Key::Ctrl('u')) => {
                 self.dirty = true;
                 self.ex_buffer.clear();
                 return true;
             }
-            UIEventType::ExInput(Key::Backspace) | UIEventType::ExInput(Key::Ctrl('h')) => {
+            UIEvent::ExInput(Key::Backspace) | UIEvent::ExInput(Key::Ctrl('h')) => {
                 self.dirty = true;
                 self.ex_buffer.pop();
                 return true;
             }
-            UIEventType::Resize => {
+            UIEvent::Resize => {
                 self.dirty = true;
             }
-            UIEventType::StatusEvent(StatusEvent::DisplayMessage(s)) => {
+            UIEvent::StatusEvent(StatusEvent::DisplayMessage(s)) => {
                 self.notifications.push_back(s.clone());
                 self.dirty = true;
             }
-            UIEventType::StatusEvent(StatusEvent::BufClear) => {
+            UIEvent::StatusEvent(StatusEvent::BufClear) => {
                 self.display_buffer.clear();
                 self.dirty = true;
             }
-            UIEventType::StatusEvent(StatusEvent::BufSet(s)) => {
+            UIEvent::StatusEvent(StatusEvent::BufSet(s)) => {
                 self.display_buffer = s.clone();
                 self.dirty = true;
             }
@@ -1016,42 +1015,42 @@ impl Component for Tabbed {
         }
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        match event.event_type {
-            UIEventType::Input(Key::Char('T')) => {
+        match *event {
+            UIEvent::Input(Key::Char('T')) => {
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
                 self.set_dirty();
                 return true;
             }
-            UIEventType::Input(Key::Char('?')) => {
+            UIEvent::Input(Key::Char('?')) => {
                 self.show_shortcuts = !self.show_shortcuts;
                 self.set_dirty();
                 return true;
             }
-            UIEventType::Action(Tab(NewDraft(account_idx))) => {
+            UIEvent::Action(Tab(NewDraft(account_idx))) => {
                 self.add_component(Box::new(Composer::new(account_idx)));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
                 return true;
             }
-            UIEventType::Action(Tab(Reply(coordinates, msg))) => {
+            UIEvent::Action(Tab(Reply(coordinates, msg))) => {
                 self.add_component(Box::new(Composer::with_context(coordinates, msg, context)));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
                 return true;
             }
-            UIEventType::Action(Tab(Edit(coordinates, msg))) => {
+            UIEvent::Action(Tab(Edit(coordinates, msg))) => {
                 self.add_component(Box::new(Composer::edit(coordinates, msg, context)));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
                 return true;
             }
-            UIEventType::Action(Tab(TabOpen(ref mut e))) if e.is_some() => {
+            UIEvent::Action(Tab(TabOpen(ref mut e))) if e.is_some() => {
                 self.add_component(e.take().unwrap());
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
                 return true;
             }
-            UIEventType::Action(Tab(Close)) => {
+            UIEvent::Action(Tab(Close)) => {
                 if self.pinned > self.cursor_pos {
                     return true;
                 }
@@ -1060,11 +1059,11 @@ impl Component for Tabbed {
                 self.set_dirty();
                 return true;
             }
-            UIEventType::Action(Tab(Kill(ref id))) => {
+            UIEvent::Action(Tab(Kill(id))) => {
                 if self.pinned > self.cursor_pos {
                     return true;
                 }
-                if let Some(c_idx) = self.children.iter().position(|x| x.id() == *id) {
+                if let Some(c_idx) = self.children.iter().position(|x| x.id() == id) {
                     self.children.remove(c_idx);
                     self.cursor_pos = self.cursor_pos.saturating_sub(1);
                     self.set_dirty();
@@ -1126,8 +1125,8 @@ impl Component for Selector {
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         let (width, height) = self.content.size();
-        match event.event_type {
-            UIEventType::Input(Key::Char('\t')) => {
+        match *event {
+            UIEvent::Input(Key::Char('\t')) => {
                 self.entries[self.cursor].1 = !self.entries[self.cursor].1;
                 if self.entries[self.cursor].1 {
                     write_string_to_grid(
@@ -1151,12 +1150,12 @@ impl Component for Selector {
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Input(Key::Up) if self.cursor > 0 => {
+            UIEvent::Input(Key::Up) if self.cursor > 0 => {
                 self.cursor -= 1;
                 self.dirty = true;
                 return true;
             }
-            UIEventType::Input(Key::Down) if self.cursor < height.saturating_sub(1) => {
+            UIEvent::Input(Key::Down) if self.cursor < height.saturating_sub(1) => {
                 self.cursor += 1;
                 self.dirty = true;
                 return true;

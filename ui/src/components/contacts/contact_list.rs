@@ -168,10 +168,7 @@ impl ContactList {
 impl Component for ContactList {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if let ViewMode::Close(u) = self.mode {
-            context.replies.push_back(UIEvent {
-                id: 0,
-                event_type: UIEventType::Action(Tab(Kill(u))),
-            });
+            context.replies.push_back(UIEvent::Action(Tab(Kill(u))));
             return;
         }
 
@@ -232,8 +229,8 @@ impl Component for ContactList {
             }
         }
         let shortcuts = self.get_shortcuts(context);
-        match event.event_type {
-            UIEventType::Input(ref key) if *key == shortcuts["create_contact"] => {
+        match *event {
+            UIEvent::Input(ref key) if *key == shortcuts["create_contact"] => {
                 let mut manager = ContactManager::default();
                 manager.account_pos = self.account_pos;
                 let component = Box::new(manager);
@@ -244,7 +241,7 @@ impl Component for ContactList {
                 return true;
             }
 
-            UIEventType::Input(ref key) if *key == shortcuts["edit_contact"] && self.length > 0 => {
+            UIEvent::Input(ref key) if *key == shortcuts["edit_contact"] && self.length > 0 => {
                 let account = &mut context.accounts[self.account_pos];
                 let book = &mut account.address_book;
                 let card = book[&self.id_positions[self.cursor_pos]].clone();
@@ -258,7 +255,7 @@ impl Component for ContactList {
 
                 return true;
             }
-            UIEventType::Input(Key::Char('n')) => {
+            UIEvent::Input(Key::Char('n')) => {
                 let card = Card::new();
                 let mut manager = ContactManager::default();
                 manager.card = card;
@@ -269,17 +266,17 @@ impl Component for ContactList {
 
                 return true;
             }
-            UIEventType::Input(Key::Up) => {
+            UIEvent::Input(Key::Up) => {
                 self.set_dirty();
                 self.new_cursor_pos = self.cursor_pos.saturating_sub(1);
                 return true;
             }
-            UIEventType::Input(Key::Down) if self.cursor_pos < self.length.saturating_sub(1) => {
+            UIEvent::Input(Key::Down) if self.cursor_pos < self.length.saturating_sub(1) => {
                 self.set_dirty();
                 self.new_cursor_pos += 1;
                 return true;
             }
-            UIEventType::ComponentKill(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {
+            UIEvent::ComponentKill(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {
                 self.mode = ViewMode::List;
                 self.view.take();
                 self.set_dirty();
