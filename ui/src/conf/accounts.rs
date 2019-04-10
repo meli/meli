@@ -82,6 +82,44 @@ impl Drop for Account {
     }
 }
 
+pub struct MailboxIterator<'a> {
+    folders: &'a [Option<Result<Mailbox>>],
+    pos: usize,
+}
+
+impl<'a> Iterator for MailboxIterator<'a> {
+    type Item = Option<&'a Mailbox>;
+
+    fn next(&mut self) -> Option<Option<&'a Mailbox>> {
+        eprintln!(
+            "self.pos = {}, iter.len {}",
+            self.pos,
+            self.folders[self.pos..]
+                .iter()
+                .collect::<Vec<&Option<Result<Mailbox>>>>()
+                .len()
+        );
+        if self.pos == self.folders.len() {
+            return None;
+        }
+        for f in self.folders[self.pos..].iter() {
+            if self.pos == self.folders.len() {
+                return None;
+            }
+
+            self.pos += 1;
+            if let Some(Err(_)) = f {
+                return Some(None);
+            }
+            if let None = f {
+                return Some(None);
+            }
+            return Some(Some(f.as_ref().unwrap().as_ref().unwrap()));
+        }
+        return None;
+    }
+}
+
 impl Account {
     pub fn new(name: String, settings: AccountConf, map: &Backends, notify_fn: NotifyFn) -> Self {
         let mut backend = map.get(settings.account().format())(settings.account());
@@ -312,6 +350,12 @@ impl Account {
         let finalize = draft.finalise()?;
         self.backend
             .save(&finalize.as_bytes(), &self.settings.conf.draft_folder)
+    }
+    pub fn iter_mailboxes<'a>(&'a self) -> MailboxIterator<'a> {
+        MailboxIterator {
+            folders: &self.folders,
+            pos: 0,
+        }
     }
 }
 

@@ -38,71 +38,7 @@ impl fmt::Display for AccountsPanel {
 impl Component for AccountsPanel {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            write_string_to_grid(
-                "Accounts",
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                ((2, 3), (120 - 1, 3)),
-                true,
-            );
-
-            for (i, a) in context.accounts.iter().enumerate() {
-                create_box(&mut self.content, ((2, 5 + i * 10), (120 - 1, 15 + i * 10)));
-                let (x, y) = write_string_to_grid(
-                    a.name(),
-                    &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    ((3, 5 + i * 10), (120 - 2, 5 + i * 10)),
-                    true,
-                );
-                write_string_to_grid(
-                    " ▒██▒ ",
-                    &mut self.content,
-                    Color::Byte(32),
-                    Color::Default,
-                    ((x, y), (120 - 2, 5 + i * 10)),
-                    true,
-                );
-                write_string_to_grid(
-                    &a.runtime_settings.account().identity,
-                    &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    ((4, y + 2), (120 - 2, y + 2)),
-                    true,
-                );
-                if i == self.cursor {
-                    for h in 1..8 {
-                        self.content[(2, h + y + 1)].set_ch('*');
-                    }
-                }
-                write_string_to_grid(
-                    "- Settings",
-                    &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    ((5, y + 3), (120 - 2, y + 3)),
-                    true,
-                );
-                write_string_to_grid(
-                    "- Contacts",
-                    &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    ((5, y + 4), (120 - 2, y + 4)),
-                    true,
-                );
-                write_string_to_grid(
-                    "- Mailing Lists",
-                    &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    ((5, y + 5), (120 - 2, y + 5)),
-                    true,
-                );
-            }
+            self.initialize(context);
             self.dirty = false;
         }
         clear_area(grid, area);
@@ -134,6 +70,9 @@ impl Component for AccountsPanel {
                 });
                 return true;
             }
+            UIEventType::MailboxUpdate(_) => {
+                self.dirty = true;
+            }
             _ => {}
         }
 
@@ -155,6 +94,96 @@ impl AccountsPanel {
             cursor: 0,
             content,
             dirty: true,
+        }
+    }
+    fn initialize(&mut self, context: &Context) {
+        write_string_to_grid(
+            "Accounts",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            ((2, 3), (120 - 1, 3)),
+            true,
+        );
+
+        for (i, a) in context.accounts.iter().enumerate() {
+            for x in 2..(120 - 1) {
+                set_and_join_box(&mut self.content, (x, 5 + i * 10), HORZ_BOUNDARY);
+            }
+            //create_box(&mut self.content, ((2, 5 + i * 10), (120 - 1, 15 + i * 10)));
+            let (x, y) = write_string_to_grid(
+                a.name(),
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                ((3, 5 + i * 10), (120 - 2, 5 + i * 10)),
+                true,
+            );
+            write_string_to_grid(
+                " ▒██▒ ",
+                &mut self.content,
+                Color::Byte(32),
+                Color::Default,
+                ((x, y), (120 - 2, 5 + i * 10)),
+                true,
+            );
+            write_string_to_grid(
+                &a.runtime_settings.account().identity,
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                ((4, y + 2), (120 - 2, y + 2)),
+                true,
+            );
+            if i == self.cursor {
+                for h in 1..8 {
+                    self.content[(2, h + y + 1)].set_ch('*');
+                }
+            } else {
+                for h in 1..8 {
+                    self.content[(2, h + y + 1)].set_ch(' ');
+                }
+            }
+            let (x, _) = write_string_to_grid(
+                "- Settings",
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                ((5, y + 3), (120 - 2, y + 3)),
+                true,
+            );
+            write_string_to_grid(
+                &format!(
+                    "total {}",
+                    a.iter_mailboxes().fold(0, |mut acc, m| {
+                        acc += m
+                            .map(|m| m.collection.values().filter(|e| !e.is_seen()).count())
+                            .unwrap_or(0);
+                        acc
+                    })
+                ),
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                ((10 + x, y + 3), (120 - 2, y + 3)),
+                true,
+            );
+            write_string_to_grid(
+                "- Contacts",
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                ((5, y + 4), (120 - 2, y + 4)),
+                true,
+            );
+            write_string_to_grid(
+                "- Mailing Lists",
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                ((5, y + 5), (120 - 2, y + 5)),
+                true,
+            );
         }
     }
 }
