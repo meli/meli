@@ -39,8 +39,6 @@ struct AccountMenuEntry {
     name: String,
     // Index in the config account vector.
     index: usize,
-    // Each entry and its index in the account
-    entries: Vec<(usize, Folder)>,
 }
 
 /// The account sidebar.
@@ -67,13 +65,6 @@ impl AccountMenu {
             .map(|(i, a)| AccountMenuEntry {
                 name: a.name().to_string(),
                 index: i,
-                entries: {
-                    let mut entries = Vec::with_capacity(a.len());
-                    for (idx, acc) in a.list_folders().into_iter().enumerate() {
-                        entries.push((idx, acc));
-                    }
-                    entries
-                },
             })
             .collect();
         AccountMenu {
@@ -96,16 +87,27 @@ impl AccountMenu {
         if cfg!(feature = "debug_log") && !is_valid_area!(area) {
             eprintln!("BUG: invalid area in print_account");
         }
+        // Each entry and its index in the account
+        let entries: Vec<(usize, Folder)> = {
+            let a = &context.accounts[a.index];
+            let mut entries = Vec::with_capacity(a.len());
+            for (idx, acc) in a.list_folders().into_iter().enumerate() {
+                entries.push((idx, acc));
+            }
+            entries
+        };
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
         let highlight = self.cursor.map(|(x, _)| x == a.index).unwrap_or(false);
 
-        let mut parents: Vec<Option<usize>> = vec![None; a.entries.len()];
+        let mut parents: Vec<Option<usize>> = vec![None; entries.len()];
 
-        for (idx, e) in a.entries.iter().enumerate() {
-            for c in e.1.children() {
-                parents[*c] = Some(idx);
+        for (idx, e) in entries.iter().enumerate() {
+            for &c in e.1.children() {
+                if c < parents.len() {
+                    parents[c] = Some(idx);
+                }
             }
         }
         let mut roots = Vec::new();
@@ -137,6 +139,9 @@ impl AccountMenu {
             index: usize, //account index
             context: &mut Context,
         ) {
+            if root >= entries.len() {
+                return;
+            }
             let len = s.len();
             match context.accounts[index].status(root) {
                 Ok(_) => {}
@@ -167,7 +172,7 @@ impl AccountMenu {
         }
         for r in roots {
             print(
-                r, &parents, &mut depth, &a.entries, &mut s, &mut inc, a.index, context,
+                r, &parents, &mut depth, &entries, &mut s, &mut inc, a.index, context,
             );
         }
 
@@ -272,6 +277,9 @@ impl Component for AccountMenu {
                 self.dirty = true;
             }
             UIEventType::StartupCheck(_) => {
+                self.dirty = true;
+            }
+            UIEventType::MailboxUpdate(_) => {
                 self.dirty = true;
             }
             _ => {}

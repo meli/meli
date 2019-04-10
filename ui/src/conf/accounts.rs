@@ -123,13 +123,32 @@ impl<'a> Iterator for MailboxIterator<'a> {
 impl Account {
     pub fn new(name: String, settings: AccountConf, map: &Backends, notify_fn: NotifyFn) -> Self {
         let mut backend = map.get(settings.account().format())(settings.account());
-        let ref_folders: Vec<Folder> = backend.folders();
+        let mut ref_folders: Vec<Folder> = backend.folders();
         let mut folders: Vec<Option<Result<Mailbox>>> = Vec::with_capacity(ref_folders.len());
         let mut workers: Vec<Worker> = Vec::new();
+        let notify_fn = Arc::new(notify_fn);
+
+        if let Some(pos) = ref_folders
+            .iter()
+            .position(|f| f.name().eq_ignore_ascii_case("INBOX"))
+        {
+            ref_folders.swap(pos, 0);
+        }
         let sent_folder = ref_folders
             .iter()
             .position(|x: &Folder| x.name() == settings.account().sent_folder);
-        let notify_fn = Arc::new(notify_fn);
+        if let Some(folder_confs) = settings.conf().folders() {
+            //if cfg!(feature = "debug_log") {
+            //eprintln!("folder renames: {:?}", folder_renames);
+            //}
+            for f in &mut ref_folders {
+                if let Some(r) = folder_confs.get(&f.name().to_ascii_lowercase()) {
+                    if let Some(rename) = r.rename() {
+                        f.change_name(rename);
+                    }
+                }
+            }
+        }
         for f in ref_folders {
             folders.push(None);
             workers.push(Account::new_worker(f, &mut backend, notify_fn.clone()));
@@ -257,6 +276,12 @@ impl Account {
                     }
                 }
             }
+        }
+        if let Some(pos) = folders
+            .iter()
+            .position(|f| f.name().eq_ignore_ascii_case("INBOX"))
+        {
+            folders.swap(pos, 0);
         }
         folders
     }
