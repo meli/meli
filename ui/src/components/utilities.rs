@@ -1068,7 +1068,7 @@ impl Component for Tabbed {
                 }
                 if let Some(c_idx) = self.children.iter().position(|x| x.id() == id) {
                     self.children.remove(c_idx);
-                    self.cursor_pos = self.cursor_pos.saturating_sub(1);
+                    self.cursor_pos = 0;
                     self.set_dirty();
                     return true;
                 } else {
