@@ -351,6 +351,9 @@ impl Account {
         self.backend
             .save(&finalize.as_bytes(), &self.settings.conf.draft_folder)
     }
+    pub fn save(&self, bytes: &[u8], folder: &str) -> Result<()> {
+        self.backend.save(bytes, folder)
+    }
     pub fn iter_mailboxes<'a>(&'a self) -> MailboxIterator<'a> {
         MailboxIterator {
             folders: &self.folders,

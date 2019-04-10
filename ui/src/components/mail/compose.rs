@@ -258,7 +258,8 @@ impl Component for Composer {
         };
 
         if !self.initialized {
-            if !self.draft.headers().contains_key("From") {
+            if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
+            {
                 self.draft.headers_mut().insert(
                     "From".into(),
                     get_display_name(context, self.account_cursor),
@@ -555,6 +556,24 @@ impl Component for Composer {
                     stdin
                         .write_all(draft.as_bytes())
                         .expect("Failed to write to stdin");
+                    if let Err(e) = context.accounts[self.account_cursor].save(
+                        draft.as_bytes(),
+                        &context.accounts[self.account_cursor]
+                            .settings
+                            .conf()
+                            .sent_folder(),
+                    ) {
+                        if cfg!(feature = "debug_log") {
+                            eprintln!("{:?} could not save sent msg", e);
+                        }
+                        context.replies.push_back(UIEvent {
+                            id: 0,
+                            event_type: UIEventType::Notification(
+                                Some("Could not save in 'Sent' folder.".into()),
+                                e.into(),
+                            ),
+                        });
+                    }
                 }
                 context.replies.push_back(UIEvent {
                     id: 0,

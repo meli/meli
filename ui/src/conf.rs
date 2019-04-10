@@ -122,6 +122,9 @@ impl FileAccount {
     pub fn index(&self) -> IndexStyle {
         self.index
     }
+    pub fn sent_folder(&self) -> &str {
+        self.sent_folder.as_str()
+    }
     pub fn html_filter(&self) -> Option<&str> {
         self.html_filter.as_ref().map(|f| f.as_str())
     }
