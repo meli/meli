@@ -251,14 +251,6 @@ impl Component for Composer {
 
         let upper_left = set_y(upper_left, get_y(upper_left) + 1);
 
-        if self.dirty {
-            self.draft.headers_mut().insert(
-                "From".into(),
-                get_display_name(context, self.account_cursor),
-            );
-            self.dirty = false;
-        }
-
         let width = if width!(area) > 80 && self.reply_context.is_some() {
             width!(area) / 2
         } else {
@@ -266,6 +258,12 @@ impl Component for Composer {
         };
 
         if !self.initialized {
+            if !self.draft.headers().contains_key("From") {
+                self.draft.headers_mut().insert(
+                    "From".into(),
+                    get_display_name(context, self.account_cursor),
+                );
+            }
             self.pager.update_from_str(self.draft.body(), Some(77));
             self.update_form();
             self.initialized = true;
