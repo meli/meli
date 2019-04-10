@@ -87,7 +87,7 @@ impl ThreadListing {
             unfocused: false,
             view: None,
             initialised: false,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
     /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has

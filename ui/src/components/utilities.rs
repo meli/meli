@@ -56,7 +56,7 @@ impl HSplit {
             bottom,
             show_divider,
             ratio,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
 }
@@ -154,7 +154,7 @@ impl VSplit {
             show_divider,
             prev_visibility: (true, true),
             ratio,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
 }
@@ -369,6 +369,7 @@ impl Pager {
             width: content.size().0,
             dirty: true,
             content,
+            id: ComponentId::new_v4(),
             ..Default::default()
         }
     }
@@ -391,6 +392,7 @@ impl Pager {
             width,
             dirty: true,
             content,
+            id: ComponentId::new_v4(),
             ..Default::default()
         }
     }
@@ -403,6 +405,7 @@ impl Pager {
             width,
             dirty: true,
             content,
+            id: ComponentId::new_v4(),
             ..Default::default()
         }
     }
@@ -593,7 +596,7 @@ impl StatusBar {
             dirty: true,
             mode: UIMode::Normal,
             height: 1,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -796,7 +799,7 @@ impl Progress {
             description: s,
             total_work,
             finished: 0,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
 
@@ -865,7 +868,7 @@ impl Tabbed {
             cursor_pos: 0,
             show_shortcuts: false,
             dirty: true,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -1212,7 +1215,7 @@ impl Selector {
             content,
             cursor: 0,
             dirty: true,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
 

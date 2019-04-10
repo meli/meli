@@ -32,7 +32,7 @@ pub struct HtmlView {
 
 impl HtmlView {
     pub fn new(bytes: Vec<u8>, context: &mut Context, account_pos: usize) -> Self {
-        let id = ComponentId::default();
+        let id = ComponentId::new_v4();
         let settings = context.accounts[account_pos].runtime_settings.conf();
         if let Some(filter_invocation) = settings.html_filter() {
             let parts = split_command!(filter_invocation);

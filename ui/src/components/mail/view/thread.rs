@@ -133,7 +133,7 @@ impl ThreadView {
             cursor_pos: 1,
             new_cursor_pos: 0,
             dirty: true,
-            ..Default::default()
+            id: ComponentId::new_v4(), ..Default::default()
         };
         view.initiate(expanded_idx, context);
         view.new_cursor_pos = view.new_expanded_pos;

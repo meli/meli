@@ -113,7 +113,7 @@ impl MailView {
             mode: ViewMode::Normal,
 
             cmd_buf: String::with_capacity(4),
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
 

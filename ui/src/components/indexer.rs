@@ -54,7 +54,7 @@ impl Default for Indexer {
             entries: Vec::with_capacity(8),
             dirty: true,
             cursor: Vec::with_capacity(8),
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
 }

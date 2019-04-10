@@ -226,7 +226,7 @@ impl FormWidget {
             buttons: ButtonWidget::new((action, true)),
             focus: FormFocus::Fields,
             hide_buttons: false,
-            ..Default::default()
+            id: ComponentId::new_v4(), ..Default::default()
         }
     }
 
@@ -486,7 +486,7 @@ where
             buttons: vec![init_val].into_iter().collect(),
             result: None,
             cursor: 0,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
 
@@ -632,7 +632,7 @@ impl AutoComplete {
             content: CellBuffer::default(),
             cursor: 0,
             dirty: true,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         };
         ret.set_suggestions(entries);
         ret

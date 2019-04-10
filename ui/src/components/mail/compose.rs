@@ -63,7 +63,7 @@ impl Default for Composer {
             mode: ViewMode::Edit,
             dirty: true,
             initialized: false,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
 }
@@ -117,6 +117,7 @@ impl Composer {
     pub fn new(account_cursor: usize) -> Self {
         Composer {
             account_cursor,
+            id: ComponentId::new_v4(),
             ..Default::default()
         }
     }
@@ -575,6 +576,9 @@ impl Component for Composer {
                             .stdout
                     ),
                 ));
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(Kill(self.id))));
                 return true;
             }
             UIEvent::Input(Key::Char('e')) if self.cursor == Cursor::Body => {

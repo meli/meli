@@ -73,7 +73,7 @@ impl AccountMenu {
             visible: true,
             dirty: true,
             cursor: None,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
     /*

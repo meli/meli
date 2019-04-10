@@ -52,7 +52,7 @@ impl ContactList {
             content,
             dirty: true,
             view: None,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
 

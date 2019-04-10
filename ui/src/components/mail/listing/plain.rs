@@ -90,7 +90,7 @@ impl PlainListing {
             dirty: true,
             unfocused: false,
             view: None,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
     /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has

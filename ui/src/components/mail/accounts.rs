@@ -101,7 +101,7 @@ impl AccountsPanel {
             cursor: 0,
             content,
             dirty: true,
-            id: ComponentId::default(),
+            id: ComponentId::new_v4(),
         }
     }
     fn initialize(&mut self, context: &Context) {
