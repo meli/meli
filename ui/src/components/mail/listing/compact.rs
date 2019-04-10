@@ -26,10 +26,8 @@ use components::utilities::PageMovement;
 
 const MAX_COLS: usize = 500;
 
-/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
-/// `ThreadView`.
 #[derive(Debug)]
-pub struct CompactListing {
+struct MailboxView {
     /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
     cursor_pos: (usize, usize, usize),
     new_cursor_pos: (usize, usize, usize),
@@ -47,28 +45,13 @@ pub struct CompactListing {
     movement: Option<PageMovement>,
 }
 
-impl ListingTrait for CompactListing {
-    fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
-        (self.cursor_pos.0, self.cursor_pos.1, None)
-    }
-    fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
-        self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
-    }
-}
-
-impl Default for CompactListing {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl fmt::Display for CompactListing {
+impl fmt::Display for MailboxView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "mail")
+        write!(f, "")
     }
 }
 
-impl CompactListing {
+impl MailboxView {
     /// Helper function to format entry strings for CompactListing */
     /* TODO: Make this configurable */
     fn make_entry_string(e: &Envelope, len: usize, idx: usize) -> String {
@@ -76,7 +59,7 @@ impl CompactListing {
             format!(
                 "{}    {}    {:.85} ({})",
                 idx,
-                &CompactListing::format_date(e),
+                &MailboxView::format_date(e),
                 e.subject(),
                 len
             )
@@ -84,15 +67,15 @@ impl CompactListing {
             format!(
                 "{}    {}    {:.85}",
                 idx,
-                &CompactListing::format_date(e),
+                &MailboxView::format_date(e),
                 e.subject(),
             )
         }
     }
 
-    pub fn new() -> Self {
+    fn new() -> Self {
         let content = CellBuffer::new(0, 0, Cell::with_char(' '));
-        CompactListing {
+        MailboxView {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (0, 0, 0),
             length: 0,
@@ -114,7 +97,6 @@ impl CompactListing {
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
         {
-            //TODO: store cursor_pos in each folder
             self.cursor_pos.2 = 0;
             self.new_cursor_pos.2 = 0;
         }
@@ -209,7 +191,7 @@ impl CompactListing {
                 Color::Default
             };
             let (x, _) = write_string_to_grid(
-                &CompactListing::make_entry_string(root_envelope, thread_node.len(), idx),
+                &MailboxView::make_entry_string(root_envelope, thread_node.len(), idx),
                 &mut self.content,
                 fg_color,
                 bg_color,
@@ -377,7 +359,7 @@ impl CompactListing {
     }
 }
 
-impl Component for CompactListing {
+impl Component for MailboxView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.unfocused {
             if !self.is_dirty() {
@@ -438,47 +420,16 @@ impl Component for CompactListing {
             }
             UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
                 let folder_length = context.accounts[self.cursor_pos.0].len();
-                let accounts_length = context.accounts.len();
                 match k {
-                    'J' if folder_length > 0 => {
-                        if self.new_cursor_pos.1 < folder_length - 1 {
-                            self.new_cursor_pos.1 = self.cursor_pos.1 + 1;
-                            self.refresh_mailbox(context);
-                        } else if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1
-                        {
-                            self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
-                            self.new_cursor_pos.1 = 0;
-                            self.refresh_mailbox(context);
-                        }
-                    }
-                    'K' => {
-                        if self.cursor_pos.1 > 0 {
-                            self.new_cursor_pos.1 = self.cursor_pos.1 - 1;
-                            self.refresh_mailbox(context);
-                        } else if self.cursor_pos.0 > 0 {
-                            self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
-                            self.new_cursor_pos.1 = 0;
-                            self.refresh_mailbox(context);
-                        }
-                    }
-                    _ => {}
-                }
-                return true;
-            }
-            UIEventType::Input(Key::Char(k @ 'h')) | UIEventType::Input(Key::Char(k @ 'l')) => {
-                let accounts_length = context.accounts.len();
-                match k {
-                    'h' if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1 => {
-                        self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
-                        self.new_cursor_pos.1 = 0;
+                    'J' if folder_length > 0 && self.new_cursor_pos.1 < folder_length - 1 => {
+                        self.new_cursor_pos.1 = self.cursor_pos.1 + 1;
                         self.refresh_mailbox(context);
                     }
-                    'l' if self.cursor_pos.0 > 0 => {
-                        self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
-                        self.new_cursor_pos.1 = 0;
+                    'K' if self.cursor_pos.1 > 0 => {
+                        self.new_cursor_pos.1 = self.cursor_pos.1 - 1;
                         self.refresh_mailbox(context);
                     }
-                    _ => {}
+                    _ => return false,
                 }
                 return true;
             }
@@ -631,6 +582,181 @@ impl Component for CompactListing {
                 (*key).clone()
             } else {
                 Key::Char('m')
+            },
+        );
+
+        map
+    }
+}
+
+/// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
+/// `ThreadView`.
+#[derive(Debug)]
+pub struct CompactListing {
+    views: Vec<MailboxView>,
+    cursor: usize,
+    dirty: bool,
+    populated: bool,
+}
+
+impl ListingTrait for CompactListing {
+    fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
+        (self.cursor, self.views[self.cursor].cursor_pos.1, None)
+    }
+    fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
+        self.views[self.cursor].new_cursor_pos = (coordinates.0, coordinates.1, 0);
+    }
+}
+
+impl fmt::Display for CompactListing {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "mail")
+    }
+}
+
+impl Default for CompactListing {
+    fn default() -> Self {
+        CompactListing::new()
+    }
+}
+
+impl CompactListing {
+    pub fn new() -> Self {
+        CompactListing {
+            views: Vec::with_capacity(8),
+            cursor: 0,
+            dirty: true,
+            populated: false,
+        }
+    }
+}
+
+impl Component for CompactListing {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !self.populated {
+            eprintln!("populating");
+            for (idx, a) in context.accounts.iter().enumerate() {
+                for (fidx, _) in a.iter_mailboxes().enumerate() {
+                    let mut m = MailboxView::new();
+                    m.new_cursor_pos = (idx, fidx, 0);
+                    self.views.push(m);
+                }
+            }
+            self.populated = true;
+        }
+
+        if self.views.is_empty() {
+            return;
+        }
+        self.views[self.cursor].draw(grid, area, context);
+    }
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if self.views.is_empty() {
+            return false;
+        }
+        match event.event_type {
+            UIEventType::Input(Key::Char(k @ 'J')) | UIEventType::Input(Key::Char(k @ 'K')) => {
+                let folder_length = context.accounts[self.views[self.cursor].cursor_pos.0].len();
+                match k {
+                    'J' if folder_length > 0 => {
+                        if self.cursor < self.views.len() - 1 {
+                            self.cursor += 1;
+                            self.dirty = true;
+                        }
+                    }
+                    'K' if self.cursor > 0 => {
+                        self.cursor -= 1;
+                        self.dirty = true;
+                    }
+                    _ => return false,
+                }
+                self.views[self.cursor].refresh_mailbox(context);
+                return true;
+            }
+            UIEventType::Input(Key::Char(k @ 'h')) | UIEventType::Input(Key::Char(k @ 'l')) => {
+                let binary_search_account = |entries: &[MailboxView], x: usize| -> Option<usize> {
+                    if entries.is_empty() {
+                        return None;
+                    }
+
+                    let mut low = 0;
+                    let mut high = entries.len() - 1;
+                    while low < high {
+                        let mid = low + (high - low) / 2;
+                        if x > entries[mid].new_cursor_pos.0 {
+                            low = mid + 1;
+                        } else {
+                            high = mid;
+                        }
+                    }
+                    return Some(low);
+                };
+                match k {
+                    'h' => {
+                        if let Some(next) = binary_search_account(
+                            &self.views.as_slice()[self.cursor..],
+                            self.views[self.cursor].new_cursor_pos.0 + 1,
+                        ) {
+                            self.cursor += next;
+                            self.dirty = true;
+                        }
+                    }
+                    'l' if self.views[self.cursor].cursor_pos.0 > 0 => {
+                        if let Some(next) = binary_search_account(
+                            &self.views.as_slice()[..self.cursor],
+                            self.views[self.cursor].new_cursor_pos.0 - 1,
+                        ) {
+                            self.cursor = next;
+                            self.dirty = true;
+                        }
+                    }
+                    _ => return false,
+                }
+                self.views[self.cursor].refresh_mailbox(context);
+                return true;
+            }
+            _ => {
+                return self.views[self.cursor].process_event(event, context);
+            }
+        }
+    }
+
+    fn is_dirty(&self) -> bool {
+        if self.views.is_empty() {
+            return self.dirty;
+        }
+        self.dirty || self.views[self.cursor].is_dirty()
+    }
+    fn set_dirty(&mut self) {
+        if self.views.is_empty() {
+            return;
+        }
+
+        self.views[self.cursor].set_dirty();
+        self.dirty = true;
+    }
+
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        if self.views.is_empty() {
+            return Default::default();
+        }
+        let mut map = self.views[self.cursor].get_shortcuts(context);
+
+        let config_map = context.settings.shortcuts.compact_listing.key_values();
+        map.insert(
+            "prev_account",
+            if let Some(key) = config_map.get("prev_account") {
+                (*key).clone()
+            } else {
+                Key::Char('h')
+            },
+        );
+        map.insert(
+            "next_account",
+            if let Some(key) = config_map.get("next_account") {
+                (*key).clone()
+            } else {
+                Key::Char('l')
             },
         );
 
