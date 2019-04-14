@@ -81,6 +81,16 @@ impl Address {
             Address::Group(_) => String::new(),
         }
     }
+    pub fn get_fqdn(&self) -> Option<String> {
+        match self {
+            Address::Mailbox(m) => {
+                let raw_address = m.address_spec.display_bytes(&m.raw);
+                let fqdn_pos = raw_address.iter().position(|&b| b == b'@')? + 1;
+                Some(String::from_utf8_lossy(&raw_address[fqdn_pos..]).into())
+            }
+            Address::Group(_) => None,
+        }
+    }
 }
 
 impl Eq for Address {}
@@ -157,7 +167,6 @@ impl StrBuilder {
         let length = self.length;
         String::from_utf8(s[offset..offset + length].to_vec()).unwrap()
     }
-    #[cfg(test)]
     fn display_bytes<'a>(&self, b: &'a [u8]) -> &'a [u8] {
         &b[self.offset..(self.offset + self.length)]
     }
@@ -190,7 +199,7 @@ impl StrBuild for MessageID {
 
 #[test]
 fn test_strbuilder() {
-    let m_id = b"<20170825132332.6734-1-el13635@mail.ntua.gr>";
+    let m_id = b"<20170825132332.6734-1@el13635@mail.ntua.gr>";
     let (_, slice) = parser::message_id(m_id).unwrap();
     assert_eq!(
         MessageID::new(m_id, slice),

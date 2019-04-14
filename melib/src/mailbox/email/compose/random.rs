@@ -43,9 +43,9 @@ fn base36(mut m: u64) -> String {
     ret
 }
 
-pub fn gen_message_id() -> String {
+pub fn gen_message_id(fqdn: &str) -> String {
     let clock = base36(clock());
     let rand = base36(random_u64());
 
-    format!("<{}.{}@meli>", clock, rand)
+    format!("<{}.{}@{}>", clock, rand, fqdn)
 }

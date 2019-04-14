@@ -33,15 +33,13 @@ impl Default for Draft {
         let now: DateTime<Local> = Local::now();
         headers.insert("Date".into(), now.to_rfc2822());
         headers.insert("Subject".into(), "".into());
-        headers.insert("Message-ID".into(), random::gen_message_id());
-        headers.insert("User-Agent".into(), "meli".into());
+        headers.insert("User-Agent".into(), "meli 0.0".into());
         header_order.push("Date".into());
         header_order.push("From".into());
         header_order.push("To".into());
         header_order.push("Cc".into());
         header_order.push("Bcc".into());
         header_order.push("Subject".into());
-        header_order.push("Message-ID".into());
         header_order.push("User-Agent".into());
         Draft {
             headers,
@@ -76,6 +74,26 @@ impl str::FromStr for Draft {
                 .is_none()
             {
                 ret.header_order.push(String::from_utf8(k.to_vec())?);
+            }
+        }
+        if ret.headers.contains_key("From") && !ret.headers.contains_key("Message-ID") {
+            if let super::parser::IResult::Done(_, addr) =
+                super::parser::mailbox(ret.headers["From"].as_bytes())
+            {
+                if let Some(fqdn) = addr.get_fqdn() {
+                    if ret
+                        .headers
+                        .insert("Message-ID".into(), random::gen_message_id(&fqdn))
+                        .is_none()
+                    {
+                        let pos = ret
+                            .header_order
+                            .iter()
+                            .position(|h| h == "Subject")
+                            .unwrap();
+                        ret.header_order.insert(pos, "Message-ID".into());
+                    }
+                }
             }
         }
 
@@ -192,6 +210,7 @@ impl Draft {
             let v = &self.headers[k];
             ret.extend(format!("{}: {}\n", k, v).chars());
         }
+        ret.push_str("MIME-Version: 1.0\n");
 
         if self.body.is_ascii() {
             ret.push('\n');

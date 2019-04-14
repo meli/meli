@@ -23,7 +23,7 @@ use chrono;
 use data_encoding::BASE64_MIME;
 use encoding::{DecoderTrap, Encoding};
 use nom::{is_hex_digit, le_u8};
-use nom::{ErrorKind, IResult, Needed};
+pub(super) use nom::{ErrorKind, IResult, Needed};
 
 use encoding::all::*;
 use std;
@@ -406,7 +406,7 @@ fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
 }
 
 named!(
-    mailbox<Address>,
+    pub mailbox<Address>,
     ws!(alt_complete!(display_addr | addr_spec))
 );
 named!(mailbox_list<Vec<Address>>, many0!(mailbox));
