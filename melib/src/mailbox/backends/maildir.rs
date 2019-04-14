@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#[macro_use]
 mod backend;
 pub use self::backend::*;
 
@@ -165,14 +166,24 @@ impl<'a> BackendOp for MaildirOp {
             new_name.push('T');
         }
 
-        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-        eprintln!("renaming {:?} to {:?}", path, new_name);
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+            eprintln!("renaming {:?} to {:?}", path, new_name);
+        }
         fs::rename(&path, &new_name)?;
-        let hash = envelope.hash();
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+            eprintln!("success in rename");
+        }
+        let old_hash = envelope.hash();
+        let new_name: PathBuf = new_name.into();
+        let new_hash = get_file_hash(&new_name);
+        envelope.set_hash(new_hash);
         let hash_index = self.hash_index.clone();
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(self.folder_hash).or_default();
-        *map.get_mut(&hash).unwrap() = PathBuf::from(new_name);
+        map.remove(&old_hash);
+        map.insert(new_hash, new_name);
         Ok(())
     }
 }

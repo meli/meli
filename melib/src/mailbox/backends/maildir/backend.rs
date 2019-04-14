@@ -91,6 +91,7 @@ macro_rules! path_is_new {
     };
 }
 
+#[macro_export]
 macro_rules! get_path_hash {
     ($path:expr) => {{
         let mut path = $path.clone();
@@ -109,7 +110,7 @@ macro_rules! get_path_hash {
     }};
 }
 
-fn get_file_hash(file: &Path) -> EnvelopeHash {
+pub(super) fn get_file_hash(file: &Path) -> EnvelopeHash {
     /*
     let mut buf = Vec::with_capacity(2048);
     let mut f = fs::File::open(&file).unwrap_or_else(|_| panic!("Can't open {}", file.display()));
@@ -126,15 +127,13 @@ fn get_file_hash(file: &Path) -> EnvelopeHash {
 
 fn move_to_cur(p: PathBuf) -> PathBuf {
     let mut new = p.clone();
-    {
-        let file_name = p.file_name().unwrap();
-        new.pop();
-        new.pop();
+    let file_name = p.file_name().unwrap();
+    new.pop();
+    new.pop();
 
-        new.push("cur");
-        new.push(file_name);
-        new.set_extension(":2,");
-    }
+    new.push("cur");
+    new.push(file_name);
+    new.set_extension(":2,");
     if cfg!(debug_assertions) {
         eprint!("{}:{}_{}:	", file!(), line!(), column!());
         eprintln!("moved to cur: {}", new.display());
@@ -144,15 +143,15 @@ fn move_to_cur(p: PathBuf) -> PathBuf {
 }
 
 impl MailBackend for MaildirType {
-    fn folders(&self) -> Vec<Folder> {
-        self.folders.iter().map(|f| f.clone()).collect()
+    fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
+        self.folders.iter().map(|f| (f.hash(), f.clone())).collect()
     }
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         self.multicore(4, folder)
     }
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()> {
         let (tx, rx) = channel();
-        let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
+        let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
         let root_path = self.path.to_path_buf();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
         for f in &self.folders {
@@ -315,7 +314,7 @@ eprintln!("removed but not contained in index");
                                     kind: Remove(hash),
                                 });
                             }
-                            /* Envelope hasn't changed, so handle this here */
+                            /* Envelope hasn't changed */
                             DebouncedEvent::Rename(src, dest) => {
                                 eprint!("{}:{}_{}:	", file!(), line!(), column!());
 eprintln!("DebouncedEvent::Rename(src = {:?}, dest = {:?})", src, dest);
@@ -335,13 +334,43 @@ eprintln!("contains_key");
                                     });
                                     index_lock.remove(&old_hash);
                                     index_lock.insert(new_hash, dest);
-                                } else {
-                                    /* Maybe a re-read should be triggered here just to be safe. */
-                                    sender.send(RefreshEvent {
-                                        hash: get_path_hash!(dest),
-                                        kind: Rescan,
-                                    });
+                                    continue;
+                                } else if !index_lock.contains_key(&new_hash) {
+                                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                    eprintln!("not contains_key");
+                                    let file_name = dest
+                                        .as_path()
+                                        .strip_prefix(&root_path)
+                                        .unwrap()
+                                        .to_path_buf();
+                                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                    eprintln!("filename = {:?}", file_name);
+                                    if let Some(env) = add_path_to_index(
+                                        &hash_indexes,
+                                        folder_hash,
+                                        dest.as_path(),
+                                        &cache_dir,
+                                        file_name,
+                                        ) {
+                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                        eprintln!("Create event {} {} {}", env.hash(), env.subject(), dest.display());
+                                        if cfg!(debug_assertions) {
+                                        }
+                                        sender.send(RefreshEvent {
+                                            hash: folder_hash,
+                                            kind: Create(Box::new(env)),
+                                        });
+                                        continue;
+                                    } else {
+                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                        eprintln!("not valid email");
+                                    }
                                 }
+                                /* Maybe a re-read should be triggered here just to be safe. */
+                                sender.send(RefreshEvent {
+                                    hash: get_path_hash!(dest),
+                                    kind: Rescan,
+                                });
                             }
                             /* Trigger rescan of folder */
                             DebouncedEvent::Rescan => {

@@ -75,7 +75,7 @@ impl InputHandler {
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: Vec<Account>,
-    pub mailbox_hashes: FnvHashMap<FolderHash, (usize, usize)>,
+    pub mailbox_hashes: FnvHashMap<FolderHash, usize>,
     pub settings: Settings,
 
     pub runtime_settings: Settings,
@@ -101,11 +101,15 @@ impl Context {
     pub fn restore_input(&self) {
         self.input.restore(self.sender.clone());
     }
-    pub fn account_status(&mut self, idx_a: usize, idx_m: usize) -> result::Result<(), usize> {
-        match self.accounts[idx_a].status(idx_m) {
+    pub fn account_status(
+        &mut self,
+        idx_a: usize,
+        folder_hash: FolderHash,
+    ) -> result::Result<(), usize> {
+        match self.accounts[idx_a].status(folder_hash) {
             Ok(()) => {
                 self.replies
-                    .push_back(UIEvent::MailboxUpdate((idx_a, idx_m)));
+                    .push_back(UIEvent::MailboxUpdate((idx_a, folder_hash)));
                 Ok(())
             }
             Err(n) => Err(n),
@@ -220,7 +224,7 @@ impl State {
             work_controller: WorkController::new(),
         };
         for a in s.context.accounts.iter_mut() {
-            for worker in a.workers.iter_mut() {
+            for worker in a.workers.values_mut() {
                 if let Some(worker) = worker.as_mut() {
                     if let Some(w) = worker.work() {
                         s.work_controller.queue.add_work(w);
@@ -249,7 +253,7 @@ impl State {
                     eprint!("{}:{}_{}:	", file!(), line!(), column!());
                     eprintln!("hash & folder: {:?} {}", folder.hash(), folder.name());
                 }
-                s.context.mailbox_hashes.insert(folder.hash(), (x, y));
+                s.context.mailbox_hashes.insert(folder.hash(), x);
             }
             let sender = s.context.sender.clone();
             account.watch(RefreshEventConsumer::new(Box::new(move |r| {
@@ -271,24 +275,25 @@ impl State {
      */
     pub fn refresh_event(&mut self, event: RefreshEvent) {
         let hash = event.hash();
-        if let Some(&(idxa, idxm)) = self.context.mailbox_hashes.get(&hash) {
-            if self.context.accounts[idxa].status(idxm).is_err() {
+        if let Some(&idxa) = self.context.mailbox_hashes.get(&hash) {
+            if self.context.accounts[idxa].status(hash).is_err() {
                 self.context.replies.push_back(UIEvent::from(event));
                 return;
             }
-            if let Some(notification) = self.context.accounts[idxa].reload(event, idxm) {
+            if let Some(notification) = self.context.accounts[idxa].reload(event, hash) {
                 self.context
                     .sender
                     .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(hash)));
                 self.context
                     .sender
-                    .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((idxa, idxm))));
+                    .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((idxa, hash))));
                 self.context.replies.push_back(notification);
             }
             self.context
                 .replies
-                .push_back(UIEvent::MailboxUpdate((idxa, idxm)));
+                .push_back(UIEvent::MailboxUpdate((idxa, hash)));
         } else {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
             eprintln!(
                 "BUG: mailbox with hash {} not found in mailbox_hashes.",
                 hash

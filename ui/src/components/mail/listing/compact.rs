@@ -104,15 +104,15 @@ impl MailboxView {
         }
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
+        let folder_hash = context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
 
         // Inform State that we changed the current folder view.
-        context.replies.push_back(UIEvent::RefreshMailbox((
-            self.cursor_pos.0,
-            self.cursor_pos.1,
-        )));
+        context
+            .replies
+            .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+        match context.accounts[self.cursor_pos.0].status(folder_hash) {
             Ok(_) => {}
             Err(_) => {
                 self.content = CellBuffer::new(MAX_COLS, 1, Cell::with_char(' '));
@@ -442,16 +442,31 @@ impl Component for MailboxView {
                 self.dirty = true;
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
-                if *idxa == self.new_cursor_pos.0 && *idxf == self.new_cursor_pos.1 =>
+                if (*idxa, *idxf)
+                    == (
+                        self.new_cursor_pos.0,
+                        context.accounts[self.new_cursor_pos.0].folders_order
+                            [self.new_cursor_pos.1],
+                    ) =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
             UIEvent::StartupCheck(ref f)
-                if context.mailbox_hashes[f] == (self.new_cursor_pos.0, self.new_cursor_pos.1) =>
+                if *f
+                    == context.accounts[self.new_cursor_pos.0].folders_order
+                        [self.new_cursor_pos.1] =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty();
+            }
+            UIEvent::EnvelopeRename(ref folder_hash, _, _) => {
+                if *folder_hash
+                    == context.accounts[self.cursor_pos.0].folders_order[self.new_cursor_pos.1]
+                {
+                    self.refresh_mailbox(context);
+                    self.set_dirty();
+                }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
@@ -649,6 +664,7 @@ impl CompactListing {
 impl Component for CompactListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.populated {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
             eprintln!("populating");
             for (idx, a) in context.accounts.iter().enumerate() {
                 for (fidx, _) in a.iter_mailboxes().enumerate() {

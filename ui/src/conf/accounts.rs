@@ -24,7 +24,9 @@
  */
 
 use super::AccountConf;
+use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
+use melib::backends::FolderHash;
 use melib::error::Result;
 use melib::mailbox::backends::{
     Backends, Folder, MailBackend, NotifyFn, RefreshEvent, RefreshEventConsumer, RefreshEventKind,
@@ -44,19 +46,26 @@ pub type Worker = Option<Async<Result<Mailbox>>>;
 
 macro_rules! mailbox {
     ($idx:expr, $folders:expr) => {
-        $folders[$idx].as_mut().unwrap().as_mut().unwrap()
+        $folders
+            .get_mut(&$idx)
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .as_mut()
+            .unwrap()
     };
 }
 
 #[derive(Debug)]
 pub struct Account {
     name: String,
-    folders: Vec<Option<Result<Mailbox>>>,
+    pub(crate) folders: FnvHashMap<FolderHash, Option<Result<Mailbox>>>,
+    pub(crate) folders_order: Vec<FolderHash>,
     sent_folder: Option<usize>,
 
     pub(crate) address_book: AddressBook,
 
-    pub(crate) workers: Vec<Worker>,
+    pub(crate) workers: FnvHashMap<FolderHash, Worker>,
 
     pub(crate) settings: AccountConf,
     pub(crate) runtime_settings: AccountConf,
@@ -83,7 +92,8 @@ impl Drop for Account {
 }
 
 pub struct MailboxIterator<'a> {
-    folders: &'a [Option<Result<Mailbox>>],
+    folders_order: &'a [FolderHash],
+    folders: &'a FnvHashMap<FolderHash, Option<Result<Mailbox>>>,
     pos: usize,
 }
 
@@ -94,19 +104,19 @@ impl<'a> Iterator for MailboxIterator<'a> {
         if self.pos == self.folders.len() {
             return None;
         }
-        for f in self.folders[self.pos..].iter() {
+        for fh in self.folders_order[self.pos..].iter() {
             if self.pos == self.folders.len() {
                 return None;
             }
 
             self.pos += 1;
-            if let Some(Err(_)) = f {
+            if self.folders[&fh].is_none() {
                 return Some(None);
             }
-            if let None = f {
+            if let Some(Err(_)) = self.folders[&fh] {
                 return Some(None);
             }
-            return Some(Some(f.as_ref().unwrap().as_ref().unwrap()));
+            return Some(Some(self.folders[&fh].as_ref().unwrap().as_ref().unwrap()));
         }
         return None;
     }
@@ -115,26 +125,28 @@ impl<'a> Iterator for MailboxIterator<'a> {
 impl Account {
     pub fn new(name: String, settings: AccountConf, map: &Backends, notify_fn: NotifyFn) -> Self {
         let mut backend = map.get(settings.account().format())(settings.account());
-        let mut ref_folders: Vec<Folder> = backend.folders();
-        let mut folders: Vec<Option<Result<Mailbox>>> = Vec::with_capacity(ref_folders.len());
-        let mut workers: Vec<Worker> = Vec::new();
+        let mut ref_folders: FnvHashMap<FolderHash, Folder> = backend.folders();
+        let mut folders: FnvHashMap<FolderHash, Option<Result<Mailbox>>> =
+            FnvHashMap::with_capacity_and_hasher(ref_folders.len(), Default::default());
+        let mut folders_order: Vec<FolderHash> = ref_folders.values().map(|f| f.hash()).collect();
+        let mut workers: FnvHashMap<FolderHash, Worker> = FnvHashMap::default();
         let notify_fn = Arc::new(notify_fn);
 
         if let Some(pos) = ref_folders
-            .iter()
+            .values()
             .position(|f| f.name().eq_ignore_ascii_case("INBOX"))
         {
-            ref_folders.swap(pos, 0);
+            folders_order.swap(pos, 0);
         }
         let sent_folder = ref_folders
-            .iter()
+            .values()
             .position(|x: &Folder| x.name() == settings.account().sent_folder);
         if let Some(folder_confs) = settings.conf().folders() {
             //if cfg!(debug_assertions) {
             //eprint!("{}:{}_{}:	", file!(), line!(), column!());
             //eprintln!("folder renames: {:?}", folder_renames);
             //}
-            for f in &mut ref_folders {
+            for f in ref_folders.values_mut() {
                 if let Some(r) = folder_confs.get(&f.name().to_ascii_lowercase()) {
                     if let Some(rename) = r.rename() {
                         f.change_name(rename);
@@ -142,9 +154,9 @@ impl Account {
                 }
             }
         }
-        for f in ref_folders {
-            folders.push(None);
-            workers.push(Account::new_worker(f, &mut backend, notify_fn.clone()));
+        for (h, f) in ref_folders.into_iter() {
+            folders.insert(h, None);
+            workers.insert(h, Account::new_worker(f, &mut backend, notify_fn.clone()));
         }
         let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
         let address_book = if let Ok(data) = data_dir.place_data_file("addressbook") {
@@ -166,6 +178,7 @@ impl Account {
         Account {
             name,
             folders,
+            folders_order,
             address_book,
             sent_folder,
             workers,
@@ -196,13 +209,13 @@ impl Account {
             notify_fn.notify(hash);
         })))
     }
-    pub fn reload(&mut self, event: RefreshEvent, idx: usize) -> Option<UIEvent> {
+    pub fn reload(&mut self, event: RefreshEvent, folder_hash: FolderHash) -> Option<UIEvent> {
         let kind = event.kind();
         {
             //let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
             match kind {
                 RefreshEventKind::Update(old_hash, envelope) => {
-                    mailbox!(idx, self.folders).update(old_hash, *envelope);
+                    mailbox!(&folder_hash, self.folders).update(old_hash, *envelope);
                     return Some(EnvelopeUpdate(old_hash));
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
@@ -210,39 +223,40 @@ impl Account {
                         eprint!("{}:{}_{}:	", file!(), line!(), column!());
                         eprintln!("rename {} to {}", old_hash, new_hash);
                     }
-                    mailbox!(idx, self.folders).rename(old_hash, new_hash);
-                    return Some(EnvelopeRename(idx, old_hash, new_hash));
+                    let mailbox = mailbox!(&folder_hash, self.folders);
+                    mailbox.rename(old_hash, new_hash);
+                    return Some(EnvelopeRename(mailbox.folder.hash(), old_hash, new_hash));
                 }
                 RefreshEventKind::Create(envelope) => {
                     if cfg!(debug_assertions) {
                         eprint!("{}:{}_{}:	", file!(), line!(), column!());
                         eprintln!("create {}", envelope.hash());
                     }
-                    let env: &Envelope = mailbox!(idx, self.folders).insert(*envelope);
-                    let ref_folders: Vec<Folder> = self.backend.folders();
+                    let env: &Envelope = mailbox!(&folder_hash, self.folders).insert(*envelope);
+                    let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
                     return Some(Notification(
                         Some("new mail".into()),
                         format!(
                             "{} {:.15}:\n\nFrom: {:.15}\nSubject: {:.15}",
                             self.name,
-                            ref_folders[idx].name(),
+                            ref_folders[&folder_hash].name(),
                             env.subject(),
                             env.field_from_to_string(),
                         ),
                     ));
                 }
                 RefreshEventKind::Remove(envelope_hash) => {
-                    mailbox!(idx, self.folders).remove(envelope_hash);
+                    mailbox!(&folder_hash, self.folders).remove(envelope_hash);
                     return Some(EnvelopeRemove(envelope_hash));
                 }
                 RefreshEventKind::Rescan => {
-                    let ref_folders: Vec<Folder> = self.backend.folders();
+                    let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
                     let handle = Account::new_worker(
-                        ref_folders[idx].clone(),
+                        ref_folders[&folder_hash].clone(),
                         &mut self.backend,
                         self.notify_fn.clone(),
                     );
-                    self.workers[idx] = handle;
+                    self.workers.insert(folder_hash, handle);
                 }
             }
         }
@@ -265,7 +279,7 @@ impl Account {
             //eprint!("{}:{}_{}:	", file!(), line!(), column!());
             //eprintln!("folder renames: {:?}", folder_renames);
             //}
-            for f in &mut folders {
+            for f in folders.values_mut() {
                 if let Some(r) = folder_confs.get(&f.name().to_ascii_lowercase()) {
                     if let Some(rename) = r.rename() {
                         f.change_name(rename);
@@ -273,23 +287,28 @@ impl Account {
                 }
             }
         }
+        /*
         if let Some(pos) = folders
             .iter()
             .position(|f| f.name().eq_ignore_ascii_case("INBOX"))
         {
             folders.swap(pos, 0);
         }
-        folders
+        */
+        self.folders_order
+            .iter()
+            .map(|ref h| folders.remove(&h).unwrap())
+            .collect()
     }
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn workers(&mut self) -> &mut Vec<Worker> {
+    pub fn workers(&mut self) -> &mut FnvHashMap<FolderHash, Worker> {
         &mut self.workers
     }
 
-    fn load_mailbox(&mut self, index: usize, mailbox: Result<Mailbox>) {
-        self.folders[index] = Some(mailbox);
+    fn load_mailbox(&mut self, folder_hash: FolderHash, mailbox: Result<Mailbox>) {
+        self.folders.insert(folder_hash, Some(mailbox));
         /*
         if self.sent_folder.is_some() && self.sent_folder.unwrap() == index {
             self.folders[index] = Some(mailbox);
@@ -340,12 +359,12 @@ impl Account {
     }
     */
 
-    pub fn status(&mut self, index: usize) -> result::Result<(), usize> {
-        match self.workers[index].as_mut() {
+    pub fn status(&mut self, folder_hash: FolderHash) -> result::Result<(), usize> {
+        match self.workers.get_mut(&folder_hash).unwrap() {
             None => {
                 return Ok(());
             }
-            Some(ref mut w) if self.folders[index].is_none() => match w.poll() {
+            Some(ref mut w) if self.folders[&folder_hash].is_none() => match w.poll() {
                 Ok(AsyncStatus::NoUpdate) => {
                     return Err(0);
                 }
@@ -359,11 +378,11 @@ impl Account {
             },
             Some(_) => return Ok(()),
         };
-        let m = mem::replace(&mut self.workers[index], None)
+        let m = mem::replace(self.workers.get_mut(&folder_hash).unwrap(), None)
             .unwrap()
             .extract();
-        self.workers[index] = None;
-        self.load_mailbox(index, m);
+        self.workers.insert(folder_hash, None);
+        self.load_mailbox(folder_hash, m);
         Ok(())
     }
 
@@ -377,16 +396,36 @@ impl Account {
     }
     pub fn iter_mailboxes<'a>(&'a self) -> MailboxIterator<'a> {
         MailboxIterator {
+            folders_order: &self.folders_order,
             folders: &self.folders,
             pos: 0,
         }
+    }
+}
+impl Index<FolderHash> for Account {
+    type Output = Result<Mailbox>;
+    fn index(&self, index: FolderHash) -> &Result<Mailbox> {
+        &self.folders[&index]
+            .as_ref()
+            .expect("BUG: Requested mailbox that is not yet available.")
+    }
+}
+
+/// Will panic if mailbox hasn't loaded, ask `status()` first.
+impl IndexMut<FolderHash> for Account {
+    fn index_mut(&mut self, index: FolderHash) -> &mut Result<Mailbox> {
+        self.folders
+            .get_mut(&index)
+            .unwrap()
+            .as_mut()
+            .expect("BUG: Requested mailbox that is not yet available.")
     }
 }
 
 impl Index<usize> for Account {
     type Output = Result<Mailbox>;
     fn index(&self, index: usize) -> &Result<Mailbox> {
-        &self.folders[index]
+        &self.folders[&self.folders_order[index]]
             .as_ref()
             .expect("BUG: Requested mailbox that is not yet available.")
     }
@@ -395,7 +434,9 @@ impl Index<usize> for Account {
 /// Will panic if mailbox hasn't loaded, ask `status()` first.
 impl IndexMut<usize> for Account {
     fn index_mut(&mut self, index: usize) -> &mut Result<Mailbox> {
-        self.folders[index]
+        self.folders
+            .get_mut(&self.folders_order[index])
+            .unwrap()
             .as_mut()
             .expect("BUG: Requested mailbox that is not yet available.")
     }

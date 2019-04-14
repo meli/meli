@@ -101,6 +101,9 @@ eprintln!("DEBUG: Removing {}", envelope_hash);
     }
 
     pub fn rename(&mut self, old_hash: EnvelopeHash, new_hash: EnvelopeHash) {
+        if !self.envelopes.contains_key(&old_hash) {
+            return;
+        }
         let mut env = self.envelopes.remove(&old_hash).unwrap();
         env.set_hash(new_hash);
         self.envelopes.insert(new_hash, env);

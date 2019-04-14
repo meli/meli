@@ -147,7 +147,7 @@ impl NotifyFn {
 pub trait MailBackend: ::std::fmt::Debug {
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
-    fn folders(&self) -> Vec<Folder>;
+    fn folders(&self) -> FnvHashMap<FolderHash, Folder>;
     fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp>;
 
     fn save(&self, bytes: &[u8], folder: &str) -> Result<()>;

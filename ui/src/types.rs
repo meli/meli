@@ -72,7 +72,7 @@ pub enum UIEvent {
     Input(Key),
     ExInput(Key),
     InsertInput(Key),
-    RefreshMailbox((usize, usize)),
+    RefreshMailbox((usize, FolderHash)), //view has changed to FolderHash mailbox
     //Quit?
     Resize,
     /// Force redraw.
@@ -83,12 +83,12 @@ pub enum UIEvent {
     Notification(Option<String>, String),
     Action(Action),
     StatusEvent(StatusEvent),
-    MailboxUpdate((usize, usize)), // (account_idx, mailbox_idx)
+    MailboxUpdate((usize, FolderHash)), // (account_idx, mailbox_idx)
     ComponentKill(Uuid),
     StartupCheck(FolderHash),
     RefreshEvent(Box<RefreshEvent>),
     EnvelopeUpdate(EnvelopeHash),
-    EnvelopeRename(usize, EnvelopeHash, EnvelopeHash),
+    EnvelopeRename(FolderHash, EnvelopeHash, EnvelopeHash),
     EnvelopeRemove(EnvelopeHash),
 }
 

@@ -146,7 +146,7 @@ impl AccountMenu {
                 return;
             }
             let len = s.len();
-            match context.accounts[index].status(root) {
+            match context.accounts[index].status(entries[root].1.hash()) {
                 Ok(_) => {}
                 Err(_) => {
                     return;
@@ -263,10 +263,17 @@ impl Component for AccountMenu {
 
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match *event {
-            UIEvent::RefreshMailbox(c) => {
-                self.cursor = Some(c);
+            UIEvent::RefreshMailbox((idxa, folder_hash)) => {
+                self.cursor = Some((
+                    idxa,
+                    context.accounts[idxa]
+                        .folders_order
+                        .iter()
+                        .position(|&h| h == folder_hash)
+                        .unwrap_or(0),
+                ));
                 self.dirty = true;
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
