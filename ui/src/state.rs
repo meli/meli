@@ -239,13 +239,15 @@ impl State {
         )
         .unwrap();
         s.flush();
-        if cfg!(feature = "debug_log") {
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
             eprintln!("DEBUG: inserting mailbox hashes:");
         }
         for (x, account) in s.context.accounts.iter_mut().enumerate() {
-            for (y, folder) in account.backend.folders().iter().enumerate() {
-                if cfg!(feature = "debug_log") {
-                    eprintln!("{:?}", folder);
+            for folder in account.backend.folders().values() {
+                if cfg!(debug_assertions) {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                    eprintln!("hash & folder: {:?} {}", folder.hash(), folder.name());
                 }
                 s.context.mailbox_hashes.insert(folder.hash(), (x, y));
             }
@@ -348,6 +350,7 @@ impl State {
         if termcols.unwrap_or(72) as usize != self.cols
             || termrows.unwrap_or(120) as usize != self.rows
         {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
             eprintln!(
                 "Size updated, from ({}, {}) -> ({:?}, {:?})",
                 self.cols, self.rows, termcols, termrows
@@ -494,22 +497,6 @@ impl State {
             let replies: Vec<UIEvent> = self.context.replies.drain(0..).collect();
             // Pass replies to self and call count on the map iterator to force evaluation
             replies.into_iter().map(|r| self.rcv_event(r)).count();
-        }
-    }
-
-    /// Tries to load a mailbox's content
-    pub fn refresh_mailbox(&mut self, account_idx: usize, folder_idx: usize) {
-        let flag = match &mut self.context.accounts[account_idx][folder_idx] {
-            Ok(_) => true,
-            Err(e) => {
-                if cfg!(feature = "debug_log") {
-                    eprintln!("error {:?}", e);
-                }
-                false
-            }
-        };
-        if flag {
-            self.rcv_event(UIEvent::RefreshMailbox((account_idx, folder_idx)));
         }
     }
 

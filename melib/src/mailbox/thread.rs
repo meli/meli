@@ -574,28 +574,36 @@ impl Threads {
 
         t.create_root_set(collection);
         t.build_collection(collection);
-        if cfg!(feature = "debug_log") {
-            for (i, _t) in t.thread_nodes.iter().enumerate() {
-                eprintln!("Thread #{}, children {}", i, _t.children.len());
-                if !_t.children.is_empty() {
-                    eprintln!("{:?}", _t.children);
-                }
-                if let Some(m) = _t.message {
-                    eprintln!("\tmessage: {}", collection[&m].subject());
-                } else {
-                    eprintln!("\tNo message");
-                }
-            }
-            eprintln!("\n");
-            for (i, _t) in t.tree.borrow().iter().enumerate() {
-                eprintln!("Tree #{} id {}, children {}", i, _t.id, _t.children.len());
-                if let Some(m) = t.thread_nodes[_t.id].message {
-                    eprintln!("\tmessage: {}", collection[&m].subject());
-                } else {
-                    eprintln!("\tNo message");
-                }
-            }
-        }
+        //if cfg!(debug_assertions) {
+        //    for (i, _t) in t.thread_nodes.iter().enumerate() {
+        //        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        // eprintln!("Thread #{}, children {}", i, _t.children.len());
+        //        if !_t.children.is_empty() {
+        //            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        //   eprintln!("{:?}", _t.children);
+        //        }
+        //        if let Some(m) = _t.message {
+        //            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        //  eprintln!("\tmessage: {}", collection[&m].subject());
+        //        } else {
+        //            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        //  eprintln!("\tNo message");
+        //        }
+        //    }
+        //    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        //eprintln!("\n");
+        //    for (i, _t) in t.tree.borrow().iter().enumerate() {
+        //        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        //eprintln!("Tree #{} id {}, children {}", i, _t.id, _t.children.len());
+        //        if let Some(m) = t.thread_nodes[_t.id].message {
+        //            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        //eprintln!("\tmessage: {}", collection[&m].subject());
+        //        } else {
+        //            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        //eprintln!("\tNo message");
+        //        }
+        //    }
+        //}
         t
     }
 
@@ -839,7 +847,8 @@ impl Threads {
         //        .iter()
         //        .position(|n| n.message.map(|n| n == envelope_hash).unwrap_or(false))
         //        .unwrap();
-        //    if cfg!(feature = "debug_log") {
+        //    if cfg!(debug_assertions) {
+        // eprint!("{}:{}_{}:	", file!(), line!(), column!());
         // eprintln!("DEBUG: {} in threads is idx= {}", envelope_hash, pos);
         // }
         //}
@@ -900,7 +909,8 @@ impl Threads {
         let difference: Vec<EnvelopeHash> =
             new_hash_set.difference(&self.hash_set).cloned().collect();
         for h in difference {
-            if cfg!(feature = "debug_log") {
+            if cfg!(debug_assertions) {
+                eprint!("{}:{}_{}:	", file!(), line!(), column!());
                 eprintln!("inserting {}", collection[&h].subject());
             }
             let env = collection.entry(h).or_default() as *mut Envelope;

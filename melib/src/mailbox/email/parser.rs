@@ -766,11 +766,13 @@ mod tests {
         let s = b"Thu, 31 Aug 2017 13:43:37 +0000 (UTC)";
         let _s = b"Thu, 31 Aug 2017 13:43:37 +0000";
         let __s = b"=?utf-8?q?Thu=2C_31_Aug_2017_13=3A43=3A37_-0000?=";
-        if cfg!(feature = "debug_log") {
-            eprintln!("{:?}, {:?}", date(s), date(_s));
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("{:?}, {:?}", date(s), date(_s));
         }
-        if cfg!(feature = "debug_log") {
-            eprintln!("{:?}", date(__s));
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("{:?}", date(__s));
         }
         assert_eq!(date(s).unwrap(), date(_s).unwrap());
         assert_eq!(date(_s).unwrap(), date(__s).unwrap());

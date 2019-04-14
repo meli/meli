@@ -65,15 +65,18 @@ impl MaildirOp {
     fn path(&self) -> PathBuf {
         let map = self.hash_index.lock().unwrap();
         let map = &map[&self.folder_hash];
-        if cfg!(feature = "debug_log") {
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
             eprintln!("looking for {} in {} map", self.hash, self.folder_hash);
         }
         if !map.contains_key(&self.hash) {
-            if cfg!(feature = "debug_log") {
+            if cfg!(debug_assertions) {
+                eprint!("{}:{}_{}:	", file!(), line!(), column!());
                 eprintln!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
             }
             for e in map.iter() {
-                if cfg!(feature = "debug_log") {
+                if cfg!(debug_assertions) {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
                     eprintln!("{:#?}", e);
                 }
             }
@@ -120,7 +123,10 @@ impl<'a> BackendOp for MaildirOp {
                 'R' => flag |= Flag::REPLIED,
                 'S' => flag |= Flag::SEEN,
                 'T' => flag |= Flag::TRASHED,
-                _ => eprintln!("DEBUG: in fetch_flags, path is {}", path),
+                _ => {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                    eprintln!("DEBUG: in fetch_flags, path is {}", path);
+                }
             }
         }
 
@@ -159,6 +165,8 @@ impl<'a> BackendOp for MaildirOp {
             new_name.push('T');
         }
 
+        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        eprintln!("renaming {:?} to {:?}", path, new_name);
         fs::rename(&path, &new_name)?;
         let hash = envelope.hash();
         let hash_index = self.hash_index.clone();

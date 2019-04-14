@@ -22,7 +22,3 @@ lto = true
 
 [workspace]
 members = ["melib", "ui"]
-
-[features]
-default = []
-debug_log = []

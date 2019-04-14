@@ -130,8 +130,9 @@ impl Component for NotificationFilter {
                     .stdout(Stdio::piped())
                     .spawn()
                 {
-                    if cfg!(feature = "debug_log") {
-                        eprintln!("{:?}", v);
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("{:?}", v);
                     }
                 }
             }

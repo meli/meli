@@ -120,7 +120,8 @@ impl Mailbox {
     }
 
     pub fn insert_reply(&mut self, envelope: &Envelope) {
-        if cfg!(feature = "debug_log") {
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
             eprintln!("mailbox insert reply {}", self.name);
         }
         self.collection.insert_reply(envelope);
@@ -128,6 +129,7 @@ impl Mailbox {
 
     pub fn remove(&mut self, envelope_hash: EnvelopeHash) {
         self.collection.remove(envelope_hash);
-        //   if cfg!(feature = "debug_log") { eprintln!("envelope_hash: {}\ncollection:\n{:?}", envelope_hash, self.collection); }
+        //   if cfg!(debug_assertions) { eprint!("{}:{}_{}:	", file!(), line!(), column!());
+        //    eprintln!("envelope_hash: {}\ncollection:\n{:?}", envelope_hash, self.collection); }
     }
 }

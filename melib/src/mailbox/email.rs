@@ -385,8 +385,9 @@ impl Envelope {
         let (headers, _) = match parser::mail(bytes).to_full_result() {
             Ok(v) => v,
             Err(e) => {
-                if cfg!(feature = "debug_log") {
-                    eprintln!("error in parsing mail\n{:?}\n", e);
+                if cfg!(debug_assertions) {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("error in parsing mail\n{:?}\n", e);
                 }
                 let error_msg = String::from("Mail cannot be shown because of errors.");
                 return Err(MeliError::new(error_msg));
@@ -540,8 +541,9 @@ impl Envelope {
         let (headers, body) = match parser::mail(bytes).to_full_result() {
             Ok(v) => v,
             Err(_) => {
-                if cfg!(feature = "debug_log") {
-                    eprintln!("error in parsing mail\n");
+                if cfg!(debug_assertions) {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("error in parsing mail\n");
                 }
                 let error_msg = b"Mail cannot be shown because of errors.";
                 let builder = AttachmentBuilder::new(error_msg);
@@ -573,14 +575,17 @@ impl Envelope {
             })
     }
     pub fn body(&self, mut operation: Box<BackendOp>) -> Attachment {
+        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("searching body for {:?}", self.message_id_display());
         let file = operation.as_bytes();
         self.body_bytes(file.unwrap())
         /*
                 let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
                     Ok(v) => v,
                     Err(_) => {
-                        if cfg!(feature = "debug_log") {
-        eprintln!("2error in parsing mail\n");
+                        if cfg!(debug_assertions) {
+        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("2error in parsing mail\n");
         }
                         let error_msg = b"Mail cannot be shown because of errors.";
                         let mut builder = AttachmentBuilder::new(error_msg);

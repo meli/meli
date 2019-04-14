@@ -91,14 +91,6 @@ impl<'a> Iterator for MailboxIterator<'a> {
     type Item = Option<&'a Mailbox>;
 
     fn next(&mut self) -> Option<Option<&'a Mailbox>> {
-        eprintln!(
-            "self.pos = {}, iter.len {}",
-            self.pos,
-            self.folders[self.pos..]
-                .iter()
-                .collect::<Vec<&Option<Result<Mailbox>>>>()
-                .len()
-        );
         if self.pos == self.folders.len() {
             return None;
         }
@@ -138,7 +130,8 @@ impl Account {
             .iter()
             .position(|x: &Folder| x.name() == settings.account().sent_folder);
         if let Some(folder_confs) = settings.conf().folders() {
-            //if cfg!(feature = "debug_log") {
+            //if cfg!(debug_assertions) {
+            //eprint!("{}:{}_{}:	", file!(), line!(), column!());
             //eprintln!("folder renames: {:?}", folder_renames);
             //}
             for f in &mut ref_folders {
@@ -213,14 +206,16 @@ impl Account {
                     return Some(EnvelopeUpdate(old_hash));
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
-                    if cfg!(feature = "debug_log") {
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
                         eprintln!("rename {} to {}", old_hash, new_hash);
                     }
                     mailbox!(idx, self.folders).rename(old_hash, new_hash);
                     return Some(EnvelopeRename(idx, old_hash, new_hash));
                 }
                 RefreshEventKind::Create(envelope) => {
-                    if cfg!(feature = "debug_log") {
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
                         eprintln!("create {}", envelope.hash());
                     }
                     let env: &Envelope = mailbox!(idx, self.folders).insert(*envelope);
@@ -266,7 +261,8 @@ impl Account {
     pub fn list_folders(&self) -> Vec<Folder> {
         let mut folders = self.backend.folders();
         if let Some(folder_confs) = self.settings.conf().folders() {
-            //if cfg!(feature = "debug_log") {
+            //if cfg!(debug_assertions) {
+            //eprint!("{}:{}_{}:	", file!(), line!(), column!());
             //eprintln!("folder renames: {:?}", folder_renames);
             //}
             for f in &mut folders {

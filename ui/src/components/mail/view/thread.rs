@@ -873,8 +873,9 @@ impl Component for ThreadView {
                     let op = context.accounts[self.coordinates.0]
                         .backend
                         .operation(envelope.hash(), mailbox.folder.hash());
-                    if cfg!(feature = "debug_log") {
-                        eprintln!(
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!(
                             "sending action edit for {}, {}",
                             envelope.message_id(),
                             op.description()

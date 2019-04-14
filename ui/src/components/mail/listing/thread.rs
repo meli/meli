@@ -489,7 +489,8 @@ impl Component for ThreadListing {
                     let account = &mut context.accounts[self.cursor_pos.0];
                     let (hash, is_seen) = {
                         let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        if cfg!(feature = "debug_log") {
+                        if cfg!(debug_assertions) {
+                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
                             eprintln!("key is {}", self.locations[dbg!(self.cursor_pos).2]);
                         }
                         let envelope: &Envelope =
@@ -692,7 +693,8 @@ impl Component for ThreadListing {
                     return true;
                 }
                 Action::SubSort(field, order) => {
-                    if cfg!(feature = "debug_log") {
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
                         eprintln!("SubSort {:?} , {:?}", field, order);
                     }
                     self.subsort = (*field, *order);
@@ -701,7 +703,8 @@ impl Component for ThreadListing {
                     return true;
                 }
                 Action::Sort(field, order) => {
-                    if cfg!(feature = "debug_log") {
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
                         eprintln!("Sort {:?} , {:?}", field, order);
                     }
                     self.sort = (*field, *order);

@@ -226,8 +226,9 @@ impl WorkController {
                 }
 
                 // Report the amount of work done.
-                if cfg!(feature = "debug_log") {
-                    eprintln!("Thread {} did {} jobs.", thread_num, work_done);
+                if cfg!(debug_assertions) {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("Thread {} did {} jobs.", thread_num, work_done);
                 }
             });
 

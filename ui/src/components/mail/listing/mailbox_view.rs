@@ -160,16 +160,19 @@ impl MailboxView {
                 threads.thread_nodes()[iter_ptr].message().unwrap()
             };
             if !mailbox.collection.contains_key(&i) {
-                if cfg!(feature = "debug_log") {
-                    eprintln!("key = {}", i);
+                if cfg!(debug_assertions) {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("key = {}", i);
                 }
-                eprintln!(
+                eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!(
                     "name = {} {}",
                     mailbox.name(),
                     context.accounts[self.cursor_pos.0].name()
                 );
-                if cfg!(feature = "debug_log") {
-                    eprintln!("{:#?}", context.accounts);
+                if cfg!(debug_assertions) {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("{:#?}", context.accounts);
                 }
 
                 panic!();
@@ -459,16 +462,18 @@ impl Component for MailboxView {
                     return true;
                 }
                 Action::SubSort(field, order) => {
-                    if cfg!(feature = "debug_log") {
-                        eprintln!("SubSort {:?} , {:?}", field, order);
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("SubSort {:?} , {:?}", field, order);
                     }
                     self.subsort = (*field, *order);
                     self.refresh_mailbox(context);
                     return true;
                 }
                 Action::Sort(field, order) => {
-                    if cfg!(feature = "debug_log") {
-                        eprintln!("Sort {:?} , {:?}", field, order);
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("Sort {:?} , {:?}", field, order);
                     }
                     self.sort = (*field, *order);
                     self.refresh_mailbox(context);

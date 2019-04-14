@@ -1072,7 +1072,8 @@ impl Component for Tabbed {
                     self.set_dirty();
                     return true;
                 } else {
-                    eprintln!(
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!(
                         "DEBUG: Child component with id {:?} not found.\nList: {:?}",
                         id, self.children
                     );

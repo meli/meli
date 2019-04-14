@@ -530,7 +530,8 @@ impl Component for PlainListing {
                     return true;
                 }
                 Action::SubSort(field, order) => {
-                    if cfg!(feature = "debug_log") {
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
                         eprintln!("SubSort {:?} , {:?}", field, order);
                     }
                     self.subsort = (*field, *order);
@@ -539,7 +540,8 @@ impl Component for PlainListing {
                     return true;
                 }
                 Action::Sort(field, order) => {
-                    if cfg!(feature = "debug_log") {
+                    if cfg!(debug_assertions) {
+                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
                         eprintln!("Sort {:?} , {:?}", field, order);
                     }
                     self.sort = (*field, *order);

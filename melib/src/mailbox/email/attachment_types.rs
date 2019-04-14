@@ -68,8 +68,9 @@ impl<'a> From<&'a [u8]> for Charset {
             b"BIG5" | b"big5" => Charset::BIG5,
             b"ISO-2022-JP" | b"iso-2022-JP" => Charset::ISO2022JP,
             _ => {
-                if cfg!(feature = "debug_log") {
-                    eprintln!("unknown tag is {:?}", str::from_utf8(b));
+                if cfg!(debug_assertions) {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("unknown tag is {:?}", str::from_utf8(b));
                 }
                 Charset::Ascii
             }

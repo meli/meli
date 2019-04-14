@@ -574,7 +574,8 @@ pub fn copy_area_with_break(
     src: Area,
 ) -> Pos {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
-        eprintln!(
+        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!(
             "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
             src, dest
         );
@@ -621,7 +622,8 @@ pub fn copy_area_with_break(
 /// Copy a source `Area` to a destination.
 pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) -> Pos {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
-        eprintln!(
+        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!(
             "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
             src, dest
         );
@@ -637,8 +639,9 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
     let mut src_y = get_y(upper_left!(src));
     let (cols, rows) = grid_src.size();
     if src_x >= cols || src_y >= rows {
-        if cfg!(feature = "debug_log") {
-            eprintln!("DEBUG: src area outside of grid_src in copy_area",);
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("DEBUG: src area outside of grid_src in copy_area",);
         }
         return upper_left!(dest);
     }
@@ -676,14 +679,16 @@ pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_colo
         || y >= get_y(bounds)
         || x >= get_x(bounds)
     {
-        if cfg!(feature = "debug_log") {
-            eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
         }
         return;
     }
     if !is_valid_area!(area) {
-        if cfg!(feature = "debug_log") {
-            eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
         }
         return;
     }
@@ -734,8 +739,9 @@ pub fn write_string_to_grid(
         || y > get_y(bounds)
         || x > get_x(bounds)
     {
-        if cfg!(feature = "debug_log") {
-            eprintln!(" Invalid area with string {} and area {:?}", s, area);
+        if cfg!(debug_assertions) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!(" Invalid area with string {} and area {:?}", s, area);
         }
         return (x, y);
     }

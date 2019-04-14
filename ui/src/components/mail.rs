@@ -86,7 +86,8 @@ impl AccountMenu {
         a: &AccountMenuEntry,
         context: &mut Context,
     ) -> usize {
-        if cfg!(feature = "debug_log") && !is_valid_area!(area) {
+        if cfg!(debug_assertions) && !is_valid_area!(area) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
             eprintln!("BUG: invalid area in print_account");
         }
         // Each entry and its index in the account

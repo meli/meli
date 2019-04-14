@@ -143,8 +143,9 @@ impl AttachmentBuilder {
                 }
             }
             Err(v) => {
-                if cfg!(feature = "debug_log") {
-                    eprintln!("parsing error in content_type: {:?} {:?}", value, v);
+                if cfg!(debug_assertions) {
+                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("parsing error in content_type: {:?} {:?}", value, v);
                 }
             }
         }
@@ -211,17 +212,21 @@ impl AttachmentBuilder {
                     let (headers, body) = match parser::attachment(&a).to_full_result() {
                         Ok(v) => v,
                         Err(_) => {
-                            if cfg!(feature = "debug_log") {
-                                eprintln!("error in parsing attachment");
+                            if cfg!(debug_assertions) {
+                                eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("error in parsing attachment");
                             }
-                            if cfg!(feature = "debug_log") {
-                                eprintln!("\n-------------------------------");
+                            if cfg!(debug_assertions) {
+                                eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("\n-------------------------------");
                             }
-                            if cfg!(feature = "debug_log") {
-                                eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
+                            if cfg!(debug_assertions) {
+                                eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("{}\n", ::std::string::String::from_utf8_lossy(a));
                             }
-                            if cfg!(feature = "debug_log") {
-                                eprintln!("-------------------------------\n");
+                            if cfg!(debug_assertions) {
+                                eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("-------------------------------\n");
                             }
 
                             continue;
@@ -245,7 +250,8 @@ impl AttachmentBuilder {
                 vec
             }
             a => {
-                eprintln!(
+                eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!(
                     "error {:?}\n\traw: {:?}\n\tboundary: {:?}",
                     a,
                     str::from_utf8(raw).unwrap(),
@@ -394,14 +400,16 @@ fn decode_rfc822(_raw: &[u8]) -> Attachment {
     builder.build()
 
     /*
-        if cfg!(feature = "debug_log") {
-    eprintln!("raw is\n{:?}", str::from_utf8(raw).unwrap());
+        if cfg!(debug_assertions) {
+    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("raw is\n{:?}", str::from_utf8(raw).unwrap());
     }
         let e = match Envelope::from_bytes(raw) {
             Some(e) => e,
             None => {
-                if cfg!(feature = "debug_log") {
-    eprintln!("error in parsing mail");
+                if cfg!(debug_assertions) {
+    eprint!("{}:{}_{}:	", file!(), line!(), column!());
+eprintln!("error in parsing mail");
     }
                 let error_msg = b"Mail cannot be shown because of errors.";
                 let mut builder = AttachmentBuilder::new(error_msg);
