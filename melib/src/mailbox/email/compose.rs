@@ -203,12 +203,36 @@ impl Draft {
         Ok(ret)
     }
 
-    pub fn finalise(self) -> Result<String> {
+    pub fn finalise(mut self) -> Result<String> {
         let mut ret = String::new();
 
+        if self.headers.contains_key("From") && !self.headers.contains_key("Message-ID") {
+            if let super::parser::IResult::Done(_, addr) =
+                super::parser::mailbox(self.headers["From"].as_bytes())
+            {
+                if let Some(fqdn) = addr.get_fqdn() {
+                    if self
+                        .headers
+                        .insert("Message-ID".into(), random::gen_message_id(&fqdn))
+                        .is_none()
+                    {
+                        let pos = self
+                            .header_order
+                            .iter()
+                            .position(|h| h == "Subject")
+                            .unwrap();
+                        self.header_order.insert(pos, "Message-ID".into());
+                    }
+                }
+            }
+        }
         for k in &self.header_order {
             let v = &self.headers[k];
-            ret.extend(format!("{}: {}\n", k, v).chars());
+            if v.is_ascii() {
+                ret.extend(format!("{}: {}\n", k, v).chars());
+            } else {
+                ret.extend(format!("{}: {}\n", k, mime::encode_header(v)).chars());
+            }
         }
         ret.push_str("MIME-Version: 1.0\n");
 

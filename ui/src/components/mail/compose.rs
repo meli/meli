@@ -503,7 +503,7 @@ impl Component for Composer {
                         if let Err(e) = account.save_draft(draft) {
                             if cfg!(debug_assertions) {
                                 eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("{:?} could not save draft", e);
+                                eprintln!("{:?} could not save draft", e);
                             }
                             context.replies.push_back(UIEvent::Notification(
                                 Some("Could not save draft.".into()),
@@ -547,6 +547,7 @@ eprintln!("{:?} could not save draft", e);
                     .expect("Failed to start mailer command");
                 {
                     let mut stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
+                    self.update_draft();
                     let draft = self.draft.clone().finalise().unwrap();
                     stdin
                         .write_all(draft.as_bytes())
@@ -560,7 +561,7 @@ eprintln!("{:?} could not save draft", e);
                     ) {
                         if cfg!(debug_assertions) {
                             eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("{:?} could not save sent msg", e);
+                            eprintln!("{:?} could not save sent msg", e);
                         }
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not save in 'Sent' folder.".into()),
