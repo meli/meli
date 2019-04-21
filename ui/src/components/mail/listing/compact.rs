@@ -746,9 +746,19 @@ impl Component for CompactListing {
                 self.views[self.cursor].refresh_mailbox(context);
                 return true;
             }
-            _ => {
-                return self.views[self.cursor].process_event(event, context);
+            UIEvent::Resize
+            | UIEvent::MailboxUpdate(_)
+            | UIEvent::ComponentKill(_)
+            | UIEvent::StartupCheck(_)
+            | UIEvent::EnvelopeUpdate(_)
+            | UIEvent::EnvelopeRename(_, _, _)
+            | UIEvent::EnvelopeRemove(_) => {
+                return self
+                    .views
+                    .iter_mut()
+                    .fold(false, |acc, v| acc || v.process_event(event, context));
             }
+            _ => return self.views[self.cursor].process_event(event, context),
         }
     }
 
