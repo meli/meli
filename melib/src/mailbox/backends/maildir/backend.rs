@@ -316,8 +316,10 @@ eprintln!("removed but not contained in index");
                             }
                             /* Envelope hasn't changed */
                             DebouncedEvent::Rename(src, dest) => {
-                                eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("DebouncedEvent::Rename(src = {:?}, dest = {:?})", src, dest);
+                                    if cfg!(debug_assertions) {
+                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                        eprintln!("DebouncedEvent::Rename(src = {:?}, dest = {:?})", src, dest);
+                                    }
                                 let folder_hash = get_path_hash!(src);
                                 let old_hash: EnvelopeHash = get_file_hash(src.as_path());
                                 let new_hash: EnvelopeHash = get_file_hash(dest.as_path());
@@ -326,8 +328,10 @@ eprintln!("DebouncedEvent::Rename(src = {:?}, dest = {:?})", src, dest);
                                 let index_lock = hash_indexes_lock.entry(folder_hash).or_default();
 
                                 if index_lock.contains_key(&old_hash) {
-                                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("contains_key");
+                                    if cfg!(debug_assertions) {
+                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                        eprintln!("contains_old_key");
+                                    }
                                     sender.send(RefreshEvent {
                                         hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
@@ -336,15 +340,19 @@ eprintln!("contains_key");
                                     index_lock.insert(new_hash, dest);
                                     continue;
                                 } else if !index_lock.contains_key(&new_hash) {
-                                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                    eprintln!("not contains_key");
+                                    if cfg!(debug_assertions) {
+                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                        eprintln!("not contains_new_key");
+                                    }
                                     let file_name = dest
                                         .as_path()
                                         .strip_prefix(&root_path)
                                         .unwrap()
                                         .to_path_buf();
-                                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                    eprintln!("filename = {:?}", file_name);
+                                        if cfg!(debug_assertions) {
+                                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                            eprintln!("filename = {:?}", file_name);
+                                        }
                                     if let Some(env) = add_path_to_index(
                                         &hash_indexes,
                                         folder_hash,
@@ -352,9 +360,9 @@ eprintln!("contains_key");
                                         &cache_dir,
                                         file_name,
                                         ) {
-                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                        eprintln!("Create event {} {} {}", env.hash(), env.subject(), dest.display());
                                         if cfg!(debug_assertions) {
+                                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                            eprintln!("Create event {} {} {}", env.hash(), env.subject(), dest.display());
                                         }
                                         sender.send(RefreshEvent {
                                             hash: folder_hash,
@@ -362,15 +370,28 @@ eprintln!("contains_key");
                                         });
                                         continue;
                                     } else {
+                                        if cfg!(debug_assertions) {
+                                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                            eprintln!("not valid email");
+                                        }
+                                    }
+                                } else {
+                                    sender.send(RefreshEvent {
+                                        hash: get_path_hash!(dest),
+                                        kind: Rename(old_hash, new_hash),
+                                    });
+                                    if cfg!(debug_assertions) {
                                         eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                        eprintln!("not valid email");
+                                        eprintln!("contains_new_key");
                                     }
                                 }
-                                /* Maybe a re-read should be triggered here just to be safe. */
+
+                                /* Maybe a re-read should be triggered here just to be safe.
                                 sender.send(RefreshEvent {
                                     hash: get_path_hash!(dest),
                                     kind: Rescan,
                                 });
+                                */
                             }
                             /* Trigger rescan of folder */
                             DebouncedEvent::Rescan => {
@@ -379,8 +400,11 @@ eprintln!("contains_key");
                             }
                             _ => {}
                         },
-                        Err(e) => {eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("watch error: {:?}", e)
+                        Err(e) => {
+                            if cfg!(debug_assertions) {
+                                eprint!("{}:{}_{}:	", file!(), line!(), column!());
+                                eprintln!("watch error: {:?}", e)
+                            }
                         }
                     }
                 }
