@@ -127,13 +127,16 @@ pub(super) fn get_file_hash(file: &Path) -> EnvelopeHash {
 
 fn move_to_cur(p: PathBuf) -> PathBuf {
     let mut new = p.clone();
-    let file_name = p.file_name().unwrap();
+    let file_name = p.to_string_lossy();
+    let slash_pos = file_name.bytes().rposition(|c| c == b'/').unwrap() + 1;
     new.pop();
     new.pop();
 
     new.push("cur");
-    new.push(file_name);
-    new.set_extension(":2,");
+    new.push(&file_name[slash_pos..]);
+    if !file_name.ends_with(":2,") {
+        new.set_extension(":2,");
+    }
     if cfg!(debug_assertions) {
         eprint!("{}:{}_{}:	", file!(), line!(), column!());
         eprintln!("moved to cur: {}", new.display());
