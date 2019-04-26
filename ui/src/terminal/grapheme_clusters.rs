@@ -39,6 +39,58 @@ pub trait Graphemes: UnicodeSegmentation + CodePointsIter {
 
 impl Graphemes for str {}
 
+pub struct WordBreakIter<'s> {
+    input: &'s str,
+    width: usize,
+}
+impl<'s> Iterator for WordBreakIter<'s> {
+    type Item = &'s str;
+
+    fn next(&mut self) -> Option<&'s str> {
+        if self.input.is_empty() {
+            return None;
+        }
+        self.input = self.input.trim_start_matches(|c| c == ' ');
+        if self.input.starts_with('\n') {
+            let ret = &self.input[0..];
+            self.input = &self.input["\n".len()..];
+            return Some(ret);
+        }
+        if let Some(next_idx) = self.input.as_bytes().iter().position(|&c| c == b'\n') {
+            if next_idx <= self.width {
+                let ret = &self.input[..next_idx];
+                self.input = &self.input[next_idx + 1..];
+                return Some(ret);
+            }
+        }
+        let graphemes = UnicodeSegmentation::grapheme_indices(self.input, true)
+            .take(self.width)
+            .collect::<Vec<(usize, &str)>>();
+        if graphemes.len() == self.width {
+            // use grapheme indices and find position of " " graphemes
+            if let Some(next_idx) = graphemes.iter().rposition(|(_, g)| *g == " ") {
+                let next_idx = graphemes[next_idx].0;
+                let ret = &self.input[..next_idx];
+                self.input = &self.input[next_idx + 1..];
+                return Some(&self.input[..next_idx]);
+            } else {
+                let ret = &self.input[..self.width];
+                self.input = &self.input[self.width..];
+                return Some(ret);
+            }
+        } else {
+            let ret = self.input;
+            self.input = &self.input[self.input.len() - 1..];
+            return Some(ret);
+        }
+    }
+}
+
+pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
+    let iter = WordBreakIter { input: s, width };
+    iter.collect()
+}
+
 //#[derive(PartialEq)]
 //enum Property {
 //    CR,

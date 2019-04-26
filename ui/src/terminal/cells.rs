@@ -575,7 +575,7 @@ pub fn copy_area_with_break(
 ) -> Pos {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
         eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!(
+        eprintln!(
             "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
             src, dest
         );
@@ -623,7 +623,7 @@ eprintln!(
 pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, src: Area) -> Pos {
     if !is_valid_area!(dest) || !is_valid_area!(src) {
         eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!(
+        eprintln!(
             "BUG: Invalid areas in copy_area:\n src: {:?}\n dest: {:?}",
             src, dest
         );
@@ -641,7 +641,7 @@ eprintln!(
     if src_x >= cols || src_y >= rows {
         if cfg!(debug_assertions) {
             eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("DEBUG: src area outside of grid_src in copy_area",);
+            eprintln!("DEBUG: src area outside of grid_src in copy_area",);
         }
         return upper_left!(dest);
     }
@@ -681,14 +681,14 @@ pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_colo
     {
         if cfg!(debug_assertions) {
             eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+            eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
         }
         return;
     }
     if !is_valid_area!(area) {
         if cfg!(debug_assertions) {
             eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+            eprintln!("BUG: Invalid area in change_colors:\n area: {:?}", area);
         }
         return;
     }
@@ -741,7 +741,7 @@ pub fn write_string_to_grid(
     {
         if cfg!(debug_assertions) {
             eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!(" Invalid area with string {} and area {:?}", s, area);
+            eprintln!(" Invalid area with string {} and area {:?}", s, area);
         }
         return (x, y);
     }
@@ -768,45 +768,6 @@ eprintln!(" Invalid area with string {} and area {:?}", s, area);
         inspect_bounds!(grid, area, x, y, line_break);
     }
     (x, y)
-}
-
-pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
-    let mut ret: Vec<&str> = Vec::with_capacity(16);
-    loop {
-        if s.is_empty() {
-            break;
-        }
-        s = s.trim_start_matches(|c| c == ' ');
-        if s.starts_with('\n') {
-            ret.push(&s[0..0]);
-            s = &s["\n".len()..];
-            continue;
-        }
-        if let Some(next_idx) = s.as_bytes().iter().position(|&c| c == b'\n') {
-            if next_idx <= width {
-                ret.push(&s[..next_idx]);
-                s = &s[next_idx + 1..];
-                continue;
-            }
-        }
-        let graphemes = s.graphemes_indices();
-        if graphemes.len() > width {
-            // use grapheme indices and find position of " " graphemes
-            if let Some(next_idx) = graphemes[..width].iter().rposition(|(_, g)| *g == " ") {
-                let next_idx = graphemes[next_idx].0;
-                ret.push(&s[..next_idx]);
-                s = &s[next_idx + 1..];
-            } else {
-                ret.push(&s[..width]);
-                s = &s[width..];
-            }
-        } else {
-            ret.push(s);
-            break;
-        }
-    }
-
-    ret
 }
 
 /// Completely clear an `Area` with an empty char and the terminal's default colors.
