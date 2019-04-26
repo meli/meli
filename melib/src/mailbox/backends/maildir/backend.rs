@@ -159,25 +159,11 @@ impl MailBackend for MaildirType {
         let (tx, rx) = channel();
         let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
         let root_path = self.path.to_path_buf();
+        watcher.watch(&root_path, RecursiveMode::Recursive).unwrap();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
-        for f in &self.folders {
-            if f.is_valid().is_err() {
-                continue;
-            }
-            if cfg!(debug_assertions) {
-                eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                eprintln!("watching {:?}", f);
-            }
-            let mut p = PathBuf::from(&f.path);
-            p.push("cur");
+        if cfg!(debug_assertions) {
             eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("watching {:?}", p);
-            watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
-            p.pop();
-            p.push("new");
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("watching {:?}", p);
-            watcher.watch(&p, RecursiveMode::NonRecursive).unwrap();
+            eprintln!("watching {:?}", root_path);
         }
         let hash_indexes = self.hash_indexes.clone();
         thread::Builder::new()
