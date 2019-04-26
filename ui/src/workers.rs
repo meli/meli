@@ -19,6 +19,7 @@ impl WorkController {
     }
 }
 
+/*
 impl Drop for WorkController {
     fn drop(&mut self) {
         for _ in 0..self.threads.len() {
@@ -30,6 +31,7 @@ impl Drop for WorkController {
         }
     }
 }
+*/
 
 // We need a way to keep track of what work needs to be done.
 // This is a multi-source, multi-consumer queue which we call a
@@ -228,7 +230,7 @@ impl WorkController {
                 // Report the amount of work done.
                 if cfg!(debug_assertions) {
                     eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("Thread {} did {} jobs.", thread_num, work_done);
+                    eprintln!("Thread {} did {} jobs.", thread_num, work_done);
                 }
             });
 
