@@ -301,7 +301,7 @@ impl ThreadView {
                     false,
                 );
                 if let Some(len) = highlight_reply_subjects[y] {
-                    let index = e.index.0 * 4 + 1 + e.heading.grapheme_width() - len;
+                    let index = e.index.0 * 4 + 1;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
                     let fg_color = Color::Byte(33);
                     let bg_color = Color::Default;
@@ -437,11 +437,17 @@ impl ThreadView {
                     (visual_indentation, 2 * (self.cursor_pos - top_idx)),
                 ),
                 (
-                    get_x(upper_left)
-                        + visual_indentation
-                        + self.entries[idx].heading.grapheme_width()
-                        + 1,
-                    get_y(upper_left) + 2 * (self.cursor_pos - top_idx),
+                    cmp::min(
+                        get_x(bottom_right),
+                        get_x(upper_left)
+                            + visual_indentation
+                            + self.entries[idx].heading.grapheme_width()
+                            + 1,
+                    ),
+                    cmp::min(
+                        get_y(bottom_right),
+                        get_y(upper_left) + 2 * (self.cursor_pos - top_idx),
+                    ),
                 ),
             );
 
@@ -468,11 +474,17 @@ impl ThreadView {
                         (visual_indentation, 2 * (visibles[..idx].len() - top_idx)),
                     ),
                     (
-                        get_x(upper_left)
-                            + visual_indentation
-                            + self.entries[entry_idx].heading.grapheme_width()
-                            + 1,
-                        get_y(upper_left) + 2 * (visibles[..idx].len() - top_idx),
+                        cmp::min(
+                            get_x(bottom_right),
+                            get_x(upper_left)
+                                + visual_indentation
+                                + self.entries[entry_idx].heading.grapheme_width()
+                                + 1,
+                        ),
+                        cmp::min(
+                            get_y(bottom_right),
+                            get_y(upper_left) + 2 * (visibles[..idx].len() - top_idx),
+                        ),
                     ),
                 );
 
