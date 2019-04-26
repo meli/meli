@@ -43,7 +43,6 @@ pub use contacts::*;
 
 use std::fmt;
 use std::fmt::{Debug, Display};
-use std::ops::{Deref, DerefMut};
 
 use fnv::FnvHashMap;
 use uuid::Uuid;

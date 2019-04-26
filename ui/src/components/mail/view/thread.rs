@@ -54,63 +54,6 @@ pub struct ThreadView {
     id: ComponentId,
 }
 
-#[derive(Debug)]
-struct StackVec {
-    len: usize,
-    array: [usize; 8],
-    heap_vec: Vec<usize>,
-}
-
-impl StackVec {
-    fn new() -> Self {
-        StackVec {
-            len: 0,
-            array: [0, 0, 0, 0, 0, 0, 0, 0],
-            heap_vec: Vec::new(),
-        }
-    }
-    fn push(&mut self, ind: usize) {
-        if self.len == self.array.len() {
-            self.heap_vec.clear();
-            self.heap_vec.reserve(16);
-            self.heap_vec.copy_from_slice(&self.array);
-            self.heap_vec.push(ind);
-        } else if self.len > self.array.len() {
-            self.heap_vec.push(ind);
-        } else {
-            self.array[self.len] = ind;
-        }
-        self.len += 1;
-    }
-    fn pop(&mut self) -> usize {
-        if self.len >= self.array.len() {
-            self.heap_vec.pop().unwrap()
-        } else {
-            let ret = self.array[self.len];
-            self.len = self.len.saturating_sub(1);
-            ret
-        }
-    }
-    fn len(&self) -> usize {
-        self.len
-    }
-    fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
-impl Index<usize> for StackVec {
-    type Output = usize;
-
-    fn index(&self, idx: usize) -> &usize {
-        if self.len >= self.array.len() {
-            &self.heap_vec[idx]
-        } else {
-            &self.array[idx]
-        }
-    }
-}
-
 impl ThreadView {
     /*
      * coordinates: (account index, mailbox index, root set thread_node index)
@@ -133,7 +76,8 @@ impl ThreadView {
             cursor_pos: 1,
             new_cursor_pos: 0,
             dirty: true,
-            id: ComponentId::new_v4(), ..Default::default()
+            id: ComponentId::new_v4(),
+            ..Default::default()
         };
         view.initiate(expanded_idx, context);
         view.new_cursor_pos = view.new_expanded_pos;
@@ -875,7 +819,7 @@ impl Component for ThreadView {
                         .operation(envelope.hash(), mailbox.folder.hash());
                     if cfg!(debug_assertions) {
                         eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!(
+                        eprintln!(
                             "sending action edit for {}, {}",
                             envelope.message_id(),
                             op.description()

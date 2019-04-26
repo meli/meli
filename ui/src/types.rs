@@ -31,6 +31,7 @@ use melib::EnvelopeHash;
 use melib::RefreshEvent;
 use std;
 use std::fmt;
+use std::ops::Index;
 use std::thread;
 use uuid::Uuid;
 
@@ -127,4 +128,66 @@ pub struct Notification {
     _content: String,
 
     _timestamp: std::time::Instant,
+}
+
+#[derive(Debug)]
+pub(crate) struct StackVec<T: Default + Copy + std::fmt::Debug> {
+    len: usize,
+    array: [T; 8],
+    heap_vec: Vec<T>,
+}
+
+impl<T: Default + Copy + std::fmt::Debug> StackVec<T> {
+    pub(crate) fn new() -> Self {
+        StackVec {
+            len: 0,
+            array: [T::default(); 8],
+            heap_vec: Vec::new(),
+        }
+    }
+    pub(crate) fn push(&mut self, ind: T) {
+        if self.len == self.array.len() {
+            if self.heap_vec.is_empty() {
+                self.heap_vec.reserve(16);
+                for _ in 0..8 {
+                    self.heap_vec.push(T::default());
+                }
+            }
+            self.heap_vec[0..8].copy_from_slice(&self.array);
+            self.heap_vec.push(ind);
+        } else if self.len > self.array.len() {
+            self.heap_vec.push(ind);
+        } else {
+            self.array[self.len] = ind;
+        }
+        self.len += 1;
+    }
+    pub(crate) fn pop(&mut self) -> T {
+        if self.len >= self.array.len() {
+            self.len -= 1;
+            self.heap_vec.pop().unwrap()
+        } else {
+            let ret = self.array[self.len - 1];
+            self.len = self.len - 1;
+            ret
+        }
+    }
+    pub(crate) fn len(&self) -> usize {
+        self.len
+    }
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<T: Default + Copy + std::fmt::Debug> Index<usize> for StackVec<T> {
+    type Output = T;
+
+    fn index(&self, idx: usize) -> &T {
+        if self.len >= self.array.len() {
+            &self.heap_vec[idx]
+        } else {
+            &self.array[idx]
+        }
+    }
 }

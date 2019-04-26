@@ -193,11 +193,17 @@ pub struct MaildirFolder {
     hash: FolderHash,
     name: String,
     path: PathBuf,
-    children: Vec<usize>,
+    parent: Option<FolderHash>,
+    children: Vec<FolderHash>,
 }
 
 impl MaildirFolder {
-    pub fn new(path: String, file_name: String, children: Vec<usize>) -> Result<Self> {
+    pub fn new(
+        path: String,
+        file_name: String,
+        parent: Option<FolderHash>,
+        children: Vec<FolderHash>,
+    ) -> Result<Self> {
         let pathbuf = PathBuf::from(path);
         let mut h = DefaultHasher::new();
         pathbuf.hash(&mut h);
@@ -206,6 +212,7 @@ impl MaildirFolder {
             hash: h.finish(),
             name: file_name,
             path: pathbuf,
+            parent,
             children,
         };
         ret.is_valid()?;
@@ -243,7 +250,7 @@ impl BackendFolder for MaildirFolder {
         self.name = s.to_string();
     }
 
-    fn children(&self) -> &Vec<usize> {
+    fn children(&self) -> &Vec<FolderHash> {
         &self.children
     }
 
@@ -253,6 +260,11 @@ impl BackendFolder for MaildirFolder {
             name: self.name.clone(),
             path: self.path.clone(),
             children: self.children.clone(),
+            parent: self.parent.clone(),
         })
+    }
+
+    fn parent(&self) -> Option<FolderHash> {
+        self.parent.clone()
     }
 }

@@ -73,7 +73,7 @@ pub type HashIndexes = Arc<Mutex<FnvHashMap<FolderHash, HashIndex>>>;
 #[derive(Debug)]
 pub struct MaildirType {
     name: String,
-    folders: Vec<MaildirFolder>,
+    folders: FnvHashMap<FolderHash, MaildirFolder>,
     //folder_index: FnvHashMap<FolderHash, usize>,
     hash_indexes: HashIndexes,
     path: PathBuf,
@@ -144,7 +144,10 @@ fn move_to_cur(p: PathBuf) -> PathBuf {
 
 impl MailBackend for MaildirType {
     fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
-        self.folders.iter().map(|f| (f.hash(), f.clone())).collect()
+        self.folders
+            .iter()
+            .map(|(h, f)| (*h, f.clone() as Folder))
+            .collect()
     }
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         self.multicore(4, folder)
@@ -417,7 +420,7 @@ eprintln!("removed but not contained in index");
     }
 
     fn save(&self, bytes: &[u8], folder: &str) -> Result<()> {
-        for f in &self.folders {
+        for f in self.folders.values() {
             if f.name == folder {
                 let mut path = f.path.clone();
                 path.push("cur");
@@ -464,25 +467,34 @@ eprintln!("removed but not contained in index");
 
 impl MaildirType {
     pub fn new(f: &AccountSettings) -> Self {
-        let mut folders: Vec<MaildirFolder> = Vec::new();
-        fn recurse_folders<P: AsRef<Path>>(folders: &mut Vec<MaildirFolder>, p: P) -> Vec<usize> {
+        let name = f.name.clone();
+        let mut folders: FnvHashMap<FolderHash, MaildirFolder> = Default::default();
+        fn recurse_folders<P: AsRef<Path>>(
+            folders: &mut FnvHashMap<FolderHash, MaildirFolder>,
+            p: P,
+        ) -> Vec<FolderHash> {
             let mut children = Vec::new();
             for mut f in fs::read_dir(p).unwrap() {
-                for f in f.iter_mut() {
+                'entries: for f in f.iter_mut() {
                     {
                         let path = f.path();
                         if path.ends_with("cur") || path.ends_with("new") || path.ends_with("tmp") {
-                            continue;
+                            continue 'entries;
                         }
                         if path.is_dir() {
-                            let path_children = recurse_folders(folders, &path);
+                            let path_children = std::dbg!(recurse_folders(folders, &path));
                             if let Ok(f) = MaildirFolder::new(
                                 path.to_str().unwrap().to_string(),
                                 path.file_name().unwrap().to_str().unwrap().to_string(),
+                                None,
                                 path_children,
                             ) {
-                                folders.push(f);
-                                children.push(folders.len() - 1);
+                                f.children
+                                    .iter()
+                                    .map(|c| folders.get_mut(c).map(|f| f.parent = Some(f.hash)))
+                                    .count();
+                                children.push(f.hash);
+                                folders.insert(f.hash, f);
                             }
                         }
                     }
@@ -495,18 +507,28 @@ impl MaildirType {
             if let Ok(f) = MaildirFolder::new(
                 path.to_str().unwrap().to_string(),
                 path.file_name().unwrap().to_str().unwrap().to_string(),
+                None,
                 Vec::with_capacity(0),
             ) {
-                if f.is_valid().is_ok() {
-                    folders.push(f);
-                }
+                let l: MaildirFolder = f;
+                folders.insert(l.hash, l);
             }
         }
 
         if folders.is_empty() {
-            recurse_folders(&mut folders, &path);
+            let children = recurse_folders(&mut folders, &path);
+            children
+                .iter()
+                .map(|c| folders.get_mut(c).map(|f| f.parent = None))
+                .count();
         } else {
-            folders[0].children = recurse_folders(&mut folders, &path);
+            let root_hash = *folders.keys().nth(0).unwrap();
+            let children = recurse_folders(&mut folders, &path);
+            children
+                .iter()
+                .map(|c| folders.get_mut(c).map(|f| f.parent = Some(root_hash)))
+                .count();
+            folders.get_mut(&root_hash).map(|f| f.children = children);
         }
 
         let hash_indexes = Arc::new(Mutex::new(FnvHashMap::with_capacity_and_hasher(
@@ -515,12 +537,12 @@ impl MaildirType {
         )));
         {
             let mut hash_indexes = hash_indexes.lock().unwrap();
-            for f in &folders {
+            for &fh in folders.keys() {
                 hash_indexes.insert(
-                    f.hash(),
+                    fh,
                     HashIndex {
                         index: FnvHashMap::with_capacity_and_hasher(0, Default::default()),
-                        hash: f.hash(),
+                        hash: fh,
                     },
                 );
             }
@@ -532,10 +554,10 @@ impl MaildirType {
             path: PathBuf::from(f.root_folder()),
         }
     }
-    fn owned_folder_idx(&self, folder: &Folder) -> usize {
-        self.folders
+    fn owned_folder_idx(&self, folder: &Folder) -> FolderHash {
+        *self
+            .folders
             .iter()
-            .enumerate()
             .find(|(_, f)| f.hash() == folder.hash())
             .unwrap()
             .0
@@ -548,7 +570,7 @@ impl MaildirType {
         let handle = {
             let tx = w.tx();
             // TODO: Avoid clone
-            let folder: &MaildirFolder = &self.folders[self.owned_folder_idx(folder)];
+            let folder: &MaildirFolder = &self.folders[&self.owned_folder_idx(folder)];
             let folder_hash = folder.hash();
             let tx_final = w.tx();
             let path: PathBuf = folder.path().into();

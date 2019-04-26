@@ -24,6 +24,7 @@
  */
 
 use super::AccountConf;
+use crate::StackVec;
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
 use melib::backends::FolderHash;
@@ -69,7 +70,7 @@ pub struct Account {
 
     pub(crate) settings: AccountConf,
     pub(crate) runtime_settings: AccountConf,
-    pub(crate) backend: Box<MailBackend>,
+    pub(crate) backend: Box<dyn MailBackend>,
     notify_fn: Arc<NotifyFn>,
 }
 
@@ -128,19 +129,10 @@ impl Account {
         let mut ref_folders: FnvHashMap<FolderHash, Folder> = backend.folders();
         let mut folders: FnvHashMap<FolderHash, Option<Result<Mailbox>>> =
             FnvHashMap::with_capacity_and_hasher(ref_folders.len(), Default::default());
-        let mut folders_order: Vec<FolderHash> = ref_folders.values().map(|f| f.hash()).collect();
+        let mut folders_order: Vec<FolderHash> = Vec::with_capacity(folders.len());
         let mut workers: FnvHashMap<FolderHash, Worker> = FnvHashMap::default();
         let notify_fn = Arc::new(notify_fn);
 
-        if let Some(pos) = ref_folders
-            .values()
-            .position(|f| f.name().eq_ignore_ascii_case("INBOX"))
-        {
-            folders_order.swap(pos, 0);
-        }
-        let sent_folder = ref_folders
-            .values()
-            .position(|x: &Folder| x.name() == settings.account().sent_folder);
         if let Some(folder_confs) = settings.conf().folders() {
             //if cfg!(debug_assertions) {
             //eprint!("{}:{}_{}:	", file!(), line!(), column!());
@@ -154,10 +146,28 @@ impl Account {
                 }
             }
         }
-        for (h, f) in ref_folders.into_iter() {
-            folders.insert(h, None);
-            workers.insert(h, Account::new_worker(f, &mut backend, notify_fn.clone()));
+        let mut stack: StackVec<FolderHash> = StackVec::new();
+        for (h, f) in ref_folders.iter() {
+            if f.parent().is_none() {
+                folders_order.push(f.hash());
+                for &c in f.children() {
+                    stack.push(c);
+                }
+                while !stack.is_empty() {
+                    let next = stack.pop();
+                    folders_order.push(next);
+                    for c in ref_folders[&next].children() {
+                        stack.push(*c);
+                    }
+                }
+            }
+            folders.insert(*h, None);
+            workers.insert(
+                *h,
+                Account::new_worker(f.clone(), &mut backend, notify_fn.clone()),
+            );
         }
+
         let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
         let address_book = if let Ok(data) = data_dir.place_data_file("addressbook") {
             if data.exists() {
@@ -180,7 +190,7 @@ impl Account {
             folders,
             folders_order,
             address_book,
-            sent_folder,
+            sent_folder: None,
             workers,
             settings: settings.clone(),
             runtime_settings: settings,
@@ -295,10 +305,18 @@ impl Account {
             folders.swap(pos, 0);
         }
         */
-        self.folders_order
+        let order: FnvHashMap<FolderHash, usize> = self
+            .folders_order
             .iter()
-            .map(|ref h| folders.remove(&h).unwrap())
-            .collect()
+            .enumerate()
+            .map(|(i, &fh)| (fh, i))
+            .collect();
+        let mut folders: Vec<Folder> = folders.drain().map(|(_, f)| f).collect();
+        folders.sort_unstable_by(|a, b| order[&a.hash()].partial_cmp(&order[&b.hash()]).unwrap());
+        folders
+    }
+    pub fn folders_order(&self) -> &Vec<FolderHash> {
+        &self.folders_order
     }
     pub fn name(&self) -> &str {
         &self.name

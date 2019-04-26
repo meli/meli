@@ -23,6 +23,7 @@
  */
 use super::*;
 use melib::backends::Folder;
+use melib::backends::FolderHash;
 
 pub mod listing;
 pub use listing::*;
@@ -91,34 +92,22 @@ impl AccountMenu {
             eprintln!("BUG: invalid area in print_account");
         }
         // Each entry and its index in the account
-        let entries: Vec<(usize, Folder)> = {
-            let a = &context.accounts[a.index];
-            let mut entries = Vec::with_capacity(a.len());
-            for (idx, acc) in a.list_folders().into_iter().enumerate() {
-                entries.push((idx, acc));
-            }
-            entries
-        };
+        let entries: FnvHashMap<FolderHash, Folder> = context.accounts[a.index]
+            .list_folders()
+            .into_iter()
+            .map(|f| (f.hash(), f))
+            .collect();
+        let folders_order: FnvHashMap<FolderHash, usize> = context.accounts[a.index]
+            .folders_order()
+            .iter()
+            .enumerate()
+            .map(|(i, &fh)| (fh, i))
+            .collect();
+
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
         let highlight = self.cursor.map(|(x, _)| x == a.index).unwrap_or(false);
-
-        let mut parents: Vec<Option<usize>> = vec![None; entries.len()];
-
-        for (idx, e) in entries.iter().enumerate() {
-            for &c in e.1.children() {
-                if c < parents.len() {
-                    parents[c] = Some(idx);
-                }
-            }
-        }
-        let mut roots = Vec::new();
-        for (idx, c) in parents.iter().enumerate() {
-            if c.is_none() {
-                roots.push(idx);
-            }
-        }
 
         let mut inc = 0;
         let mut depth = String::from("");
@@ -133,50 +122,72 @@ impl AccountMenu {
         }
 
         fn print(
-            root: usize,
-            parents: &[Option<usize>],
+            folder_idx: FolderHash,
             depth: &mut String,
-            entries: &[(usize, Folder)],
-            s: &mut String,
             inc: &mut usize,
+            entries: &FnvHashMap<FolderHash, Folder>,
+            folders_order: &FnvHashMap<FolderHash, usize>,
+            s: &mut String,
             index: usize, //account index
             context: &mut Context,
         ) {
-            if root >= entries.len() {
-                return;
-            }
-            let len = s.len();
-            match context.accounts[index].status(entries[root].1.hash()) {
-                Ok(_) => {}
+            match context.accounts[index].status(entries[&folder_idx].hash()) {
+                Ok(_) => {
+                    let count = context.accounts[index][entries[&folder_idx].hash()]
+                        .as_ref()
+                        .unwrap()
+                        .collection
+                        .values()
+                        .filter(|e| !e.is_seen())
+                        .count();
+                    let len = s.len();
+                    s.insert_str(
+                        len,
+                        &format!("{} {}   {}\n  ", *inc, &entries[&folder_idx].name(), count),
+                    );
+                }
                 Err(_) => {
-                    return;
-                    // TODO: Show progress visually
+                    let len = s.len();
+                    s.insert_str(
+                        len,
+                        &format!("{} {}   ...\n  ", *inc, &entries[&folder_idx].name()),
+                    );
                 }
             }
-            let count = context.accounts[index][root]
-                .as_ref()
-                .unwrap()
-                .collection
-                .values()
-                .filter(|e| !e.is_seen())
-                .count();
-            s.insert_str(
-                len,
-                &format!("{} {}   {}\n  ", *inc, &entries[root].1.name(), count),
-            );
             *inc += 1;
-            for child in entries[root].1.children().iter() {
+            let mut children: Vec<FolderHash> = entries[&folder_idx].children().to_vec();
+            children
+                .sort_unstable_by(|a, b| folders_order[a].partial_cmp(&folders_order[b]).unwrap());
+            for child in entries[&folder_idx].children().iter() {
                 let len = s.len();
                 s.insert_str(len, &format!("{} ", depth));
                 push(depth, ' ');
-                print(*child, parents, depth, entries, s, inc, index, context);
+                print(
+                    *child,
+                    depth,
+                    inc,
+                    entries,
+                    folders_order,
+                    s,
+                    index,
+                    context,
+                );
                 pop(depth);
             }
         }
-        for r in roots {
-            print(
-                r, &parents, &mut depth, &entries, &mut s, &mut inc, a.index, context,
-            );
+        for f in entries.keys() {
+            if entries[f].parent().is_none() {
+                print(
+                    *f,
+                    &mut depth,
+                    &mut inc,
+                    &entries,
+                    &folders_order,
+                    &mut s,
+                    a.index,
+                    context,
+                );
+            }
         }
 
         let lines: Vec<&str> = s.lines().collect();
