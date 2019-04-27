@@ -73,7 +73,7 @@ impl AccountMenu {
             accounts,
             visible: true,
             dirty: true,
-            cursor: None,
+            cursor: Some((0, 0)),
             id: ComponentId::new_v4(),
         }
     }
@@ -277,14 +277,6 @@ impl Component for AccountMenu {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match *event {
             UIEvent::RefreshMailbox((idxa, folder_hash)) => {
-                self.cursor = Some((
-                    idxa,
-                    context.accounts[idxa]
-                        .folders_order
-                        .iter()
-                        .position(|&h| h == folder_hash)
-                        .unwrap_or(0),
-                ));
                 self.dirty = true;
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
