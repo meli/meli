@@ -106,10 +106,6 @@ impl MailboxView {
         self.cursor_pos.0 = self.new_cursor_pos.0;
         let folder_hash = context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
 
-        // Inform State that we changed the current folder view.
-        context
-            .replies
-            .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
         // Get mailbox as a reference.
         //
         match context.accounts[self.cursor_pos.0].status(folder_hash) {
@@ -423,21 +419,6 @@ impl Component for MailboxView {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char(k @ 'J')) | UIEvent::Input(Key::Char(k @ 'K')) => {
-                let folder_length = context.accounts[self.cursor_pos.0].len();
-                match k {
-                    'J' if folder_length > 0 && self.new_cursor_pos.1 < folder_length - 1 => {
-                        self.new_cursor_pos.1 = self.cursor_pos.1 + 1;
-                        self.refresh_mailbox(context);
-                    }
-                    'K' if self.cursor_pos.1 > 0 => {
-                        self.new_cursor_pos.1 = self.cursor_pos.1 - 1;
-                        self.refresh_mailbox(context);
-                    }
-                    _ => return false,
-                }
-                return true;
-            }
             UIEvent::RefreshMailbox(_) => {
                 self.dirty = true;
             }
@@ -675,6 +656,7 @@ impl Component for CompactListing {
             }
             self.populated = true;
         }
+        self.dirty = false;
 
         if self.views.is_empty() {
             return;
@@ -686,66 +668,6 @@ impl Component for CompactListing {
             return false;
         }
         match *event {
-            UIEvent::Input(Key::Char(k @ 'J')) | UIEvent::Input(Key::Char(k @ 'K')) => {
-                let folder_length = context.accounts[self.views[self.cursor].cursor_pos.0].len();
-                match k {
-                    'J' if folder_length > 0 => {
-                        if self.cursor < self.views.len() - 1 {
-                            self.cursor += 1;
-                            self.dirty = true;
-                        }
-                    }
-                    'K' if self.cursor > 0 => {
-                        self.cursor -= 1;
-                        self.dirty = true;
-                    }
-                    _ => return false,
-                }
-                self.views[self.cursor].refresh_mailbox(context);
-                return true;
-            }
-            UIEvent::Input(Key::Char(k @ 'h')) | UIEvent::Input(Key::Char(k @ 'l')) => {
-                let binary_search_account = |entries: &[MailboxView], x: usize| -> Option<usize> {
-                    if entries.is_empty() {
-                        return None;
-                    }
-
-                    let mut low = 0;
-                    let mut high = entries.len() - 1;
-                    while low < high {
-                        let mid = low + (high - low) / 2;
-                        if x > entries[mid].new_cursor_pos.0 {
-                            low = mid + 1;
-                        } else {
-                            high = mid;
-                        }
-                    }
-                    return Some(low);
-                };
-                match k {
-                    'h' => {
-                        if let Some(next) = binary_search_account(
-                            &self.views.as_slice()[self.cursor..],
-                            self.views[self.cursor].new_cursor_pos.0 + 1,
-                        ) {
-                            self.cursor += next;
-                            self.dirty = true;
-                        }
-                    }
-                    'l' if self.views[self.cursor].cursor_pos.0 > 0 => {
-                        if let Some(next) = binary_search_account(
-                            &self.views.as_slice()[..self.cursor],
-                            self.views[self.cursor].new_cursor_pos.0 - 1,
-                        ) {
-                            self.cursor = next;
-                            self.dirty = true;
-                        }
-                    }
-                    _ => return false,
-                }
-                self.views[self.cursor].refresh_mailbox(context);
-                return true;
-            }
             UIEvent::Resize
             | UIEvent::MailboxUpdate(_)
             | UIEvent::ComponentKill(_)

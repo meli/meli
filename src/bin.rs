@@ -62,11 +62,8 @@ fn main() {
     let worker_receiver = state.worker_receiver();
 
     /* Register some reasonably useful interfaces */
-    let menu = Box::new(AccountMenu::new(&state.context.accounts));
-    let listing = listing::Listing::from(IndexStyle::Compact);
-    let b = Box::new(listing);
     let window = Box::new(Tabbed::new(vec![
-        Box::new(VSplit::new(menu, b, 90, false)),
+        Box::new(listing::Listing::new(&state.context.accounts)),
         Box::new(AccountsPanel::new(&state.context)),
         Box::new(ContactList::default()),
     ]));

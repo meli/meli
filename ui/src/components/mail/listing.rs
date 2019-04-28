@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use std::ops::{Deref, DerefMut};
 
 mod compact;
 pub use self::compact::*;
@@ -30,162 +31,556 @@ pub use self::thread::*;
 mod plain;
 pub use self::plain::*;
 
+#[derive(Debug)]
+struct AccountMenuEntry {
+    name: String,
+    // Index in the config account vector.
+    index: usize,
+}
+
 trait ListingTrait {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>);
     fn set_coordinates(&mut self, (usize, usize, Option<EnvelopeHash>));
 }
 
 #[derive(Debug)]
-pub enum Listing {
+pub enum ListingComponent {
     Plain(PlainListing),
     Threaded(ThreadListing),
     Compact(CompactListing),
 }
+use ListingComponent::*;
 
-impl fmt::Display for Listing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl ListingTrait for ListingComponent {
+    fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
+        match &self {
+            Compact(ref l) => l.coordinates(),
+            Plain(ref l) => l.coordinates(),
+            Threaded(ref l) => l.coordinates(),
+        }
+    }
+    fn set_coordinates(&mut self, c: (usize, usize, Option<EnvelopeHash>)) {
         match self {
-            Listing::Compact(l) => write!(f, "{}", l),
-            Listing::Plain(l) => write!(f, "{}", l),
-            Listing::Threaded(l) => write!(f, "{}", l),
+            Compact(ref mut l) => l.set_coordinates(c),
+            Plain(ref mut l) => l.set_coordinates(c),
+            Threaded(ref mut l) => l.set_coordinates(c),
         }
     }
 }
 
-impl Default for Listing {
-    fn default() -> Self {
-        Listing::Threaded(Default::default())
+#[derive(Debug)]
+pub struct Listing {
+    component: ListingComponent,
+    accounts: Vec<AccountMenuEntry>,
+    dirty: bool,
+    visible: bool,
+    cursor: (usize, usize),
+    id: ComponentId,
+
+    show_divider: bool,
+    menu_visibility: bool,
+    /// This is the width of the right container to the entire width.
+    ratio: usize, // right/(container width) * 100
+}
+
+impl fmt::Display for Listing {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.component {
+            Compact(ref l) => write!(f, "{}", l),
+            Plain(ref l) => write!(f, "{}", l),
+            Threaded(ref l) => write!(f, "{}", l),
+        }
     }
 }
 
 impl Component for Listing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        match self {
-            Listing::Compact(l) => l.draw(grid, area, context),
-            Listing::Plain(l) => l.draw(grid, area, context),
-            Listing::Threaded(l) => l.draw(grid, area, context),
+        if !self.is_dirty() {
+            return;
+        }
+        if !is_valid_area!(area) {
+            return;
+        }
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        let total_cols = get_x(bottom_right) - get_x(upper_left);
+
+        let right_component_width = match self.menu_visibility {
+            true => (self.ratio * total_cols) / 100,
+            false => total_cols,
+        };
+        let mid = get_x(bottom_right) - right_component_width;
+        if self.dirty && self.show_divider && mid != get_x(upper_left) {
+            for i in get_y(upper_left)..=get_y(bottom_right) {
+                grid[(mid, i)].set_ch(VERT_BOUNDARY);
+                grid[(mid, i)].set_fg(Color::Default);
+                grid[(mid, i)].set_bg(Color::Default);
+            }
+            context
+                .dirty_areas
+                .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
+        }
+        if right_component_width == total_cols {
+            match self.component {
+                Compact(ref mut l) => l.draw(grid, area, context),
+                Plain(ref mut l) => l.draw(grid, area, context),
+                Threaded(ref mut l) => l.draw(grid, area, context),
+            }
+        } else if right_component_width == 0 {
+            self.draw_menu(grid, area, context);
+        } else {
+            self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
+            match self.component {
+                Compact(ref mut l) => {
+                    l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
+                }
+                Plain(ref mut l) => {
+                    l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
+                }
+                Threaded(ref mut l) => {
+                    l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
+                }
+            }
         }
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if match self {
-            Listing::Plain(l) => l.process_event(event, context),
-            Listing::Compact(l) => l.process_event(event, context),
-            Listing::Threaded(l) => l.process_event(event, context),
+        if match self.component {
+            Plain(ref mut l) => l.process_event(event, context),
+            Compact(ref mut l) => l.process_event(event, context),
+            Threaded(ref mut l) => l.process_event(event, context),
         } {
             return true;
         }
 
         match *event {
-            UIEvent::Resize => self.set_dirty(),
-            UIEvent::Action(ref action) => match action {
-                Action::Listing(ListingAction::SetPlain) => {
-                    let new_l = match self {
-                        Listing::Plain(_) => {
+            UIEvent::Input(Key::Char(k @ 'J')) | UIEvent::Input(Key::Char(k @ 'K')) => {
+                let folder_length = context.accounts[self.cursor.0].len();
+                match k {
+                    'J' if folder_length > 0 => {
+                        if self.cursor.1 < folder_length - 1 {
+                            self.cursor.1 += 1;
+                            self.component
+                                .set_coordinates((self.cursor.0, self.cursor.1, None));
+                            self.set_dirty();
+                        } else {
                             return true;
                         }
-                        Listing::Threaded(l) => {
+                    }
+                    'K' => {
+                        if self.cursor.1 > 0 {
+                            self.cursor.1 -= 1;
+                            let coors = self.component.coordinates();
+                            self.component
+                                .set_coordinates((self.cursor.0, self.cursor.1, None));
+                            self.set_dirty();
+                        } else {
+                            return true;
+                        }
+                    }
+                    _ => return false,
+                }
+                let folder_hash = context.accounts[self.cursor.0].folders_order[self.cursor.1];
+                // Inform State that we changed the current folder view.
+                context
+                    .replies
+                    .push_back(UIEvent::RefreshMailbox((self.cursor.0, folder_hash)));
+                return true;
+            }
+            UIEvent::Input(Key::Char(k @ 'h')) | UIEvent::Input(Key::Char(k @ 'l')) => {
+                match k {
+                    'h' => {
+                        if self.cursor.0 < self.accounts.len() - 1 {
+                            self.cursor = (self.cursor.0 + 1, 0);
+                            self.component.set_coordinates((self.cursor.0, 0, None));
+                            self.set_dirty();
+                        } else {
+                            return true;
+                        }
+                    }
+                    'l' => {
+                        if self.cursor.0 > 0 {
+                            self.cursor = (self.cursor.0 - 1, 0);
+                            self.component.set_coordinates((self.cursor.0, 0, None));
+                            self.set_dirty();
+                        } else {
+                            return true;
+                        }
+                    }
+                    _ => return false,
+                }
+                let folder_hash = context.accounts[self.cursor.0].folders_order[self.cursor.1];
+                // Inform State that we changed the current folder view.
+                context.replies.push_back(UIEvent::RefreshMailbox((
+                    self.cursor.0,
+                    std::dbg!(folder_hash),
+                )));
+                return true;
+            }
+            UIEvent::Action(ref action) => match action {
+                Action::Listing(ListingAction::SetPlain) => {
+                    let new_l = match self.component {
+                        Plain(_) => {
+                            return true;
+                        }
+                        Threaded(ref mut l) => {
                             let mut new_l = PlainListing::default();
                             new_l.set_coordinates(l.coordinates());
                             new_l
                         }
-                        Listing::Compact(l) => {
+                        Compact(ref mut l) => {
                             let mut new_l = PlainListing::default();
                             new_l.set_coordinates(l.coordinates());
                             new_l
                         }
                     };
-                    *self = Listing::Plain(new_l);
+                    self.component = Plain(new_l);
                     return true;
                 }
                 Action::Listing(ListingAction::SetThreaded) => {
-                    let new_l = match self {
-                        Listing::Threaded(_) => {
+                    let new_l = match self.component {
+                        Threaded(_) => {
                             return true;
                         }
-                        Listing::Plain(l) => {
+                        Plain(ref mut l) => {
                             let mut new_l = ThreadListing::default();
                             new_l.set_coordinates(l.coordinates());
                             new_l
                         }
-                        Listing::Compact(l) => {
+                        Compact(ref mut l) => {
                             let mut new_l = ThreadListing::default();
                             new_l.set_coordinates(l.coordinates());
                             new_l
                         }
                     };
-                    *self = Listing::Threaded(new_l);
+                    self.component = Threaded(new_l);
                     return true;
                 }
                 Action::Listing(ListingAction::SetCompact) => {
-                    let new_l = match self {
-                        Listing::Compact(_) => {
+                    let new_l = match self.component {
+                        Compact(_) => {
                             return true;
                         }
-                        Listing::Threaded(l) => {
+                        Threaded(ref mut l) => {
                             let mut new_l = CompactListing::default();
                             new_l.set_coordinates(l.coordinates());
                             new_l
                         }
-                        Listing::Plain(l) => {
+                        Plain(ref mut l) => {
                             let mut new_l = CompactListing::default();
                             new_l.set_coordinates(l.coordinates());
                             new_l
                         }
                     };
-                    *self = Listing::Compact(new_l);
+                    self.component = Compact(new_l);
                     return true;
                 }
                 _ => {}
             },
+            UIEvent::RefreshMailbox((idxa, folder_hash)) => {
+                self.cursor = (
+                    idxa,
+                    context.accounts[idxa]
+                        .folders_order
+                        .iter()
+                        .position(|&h| h == folder_hash)
+                        .unwrap_or(0),
+                );
+                self.dirty = true;
+            }
+            UIEvent::ChangeMode(UIMode::Normal) => {
+                self.dirty = true;
+            }
+            UIEvent::Resize => {
+                self.dirty = true;
+            }
+            UIEvent::Input(Key::Char('`')) => {
+                self.menu_visibility = !self.menu_visibility;
+                self.set_dirty();
+            }
+            UIEvent::StartupCheck(_) => {
+                self.dirty = true;
+            }
+            UIEvent::MailboxUpdate(_) => {
+                self.dirty = true;
+            }
             _ => {}
         }
         false
     }
     fn is_dirty(&self) -> bool {
-        match self {
-            Listing::Compact(l) => l.is_dirty(),
-            Listing::Plain(l) => l.is_dirty(),
-            Listing::Threaded(l) => l.is_dirty(),
-        }
+        self.dirty
+            || match self.component {
+                Compact(ref l) => l.is_dirty(),
+                Plain(ref l) => l.is_dirty(),
+                Threaded(ref l) => l.is_dirty(),
+            }
     }
     fn set_dirty(&mut self) {
-        match self {
-            Listing::Compact(l) => l.set_dirty(),
-            Listing::Plain(l) => l.set_dirty(),
-            Listing::Threaded(l) => l.set_dirty(),
+        self.dirty = true;
+        match self.component {
+            Compact(ref mut l) => l.set_dirty(),
+            Plain(ref mut l) => l.set_dirty(),
+            Threaded(ref mut l) => l.set_dirty(),
         }
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
-        match self {
-            Listing::Compact(l) => l.get_shortcuts(context),
-            Listing::Plain(l) => l.get_shortcuts(context),
-            Listing::Threaded(l) => l.get_shortcuts(context),
-        }
+        let mut map = match self.component {
+            Compact(ref l) => l.get_shortcuts(context),
+            Plain(ref l) => l.get_shortcuts(context),
+            Threaded(ref l) => l.get_shortcuts(context),
+        };
+        map.insert("Toggle account menu visibility", Key::Char('`'));
+        map.insert("prev_account", Key::Char('h'));
+        map.insert("next_account", Key::Char('l'));
+
+        map
     }
 
     fn id(&self) -> ComponentId {
-        match self {
-            Listing::Compact(l) => l.id(),
-            Listing::Plain(l) => l.id(),
-            Listing::Threaded(l) => l.id(),
+        match self.component {
+            Compact(ref l) => l.id(),
+            Plain(ref l) => l.id(),
+            Threaded(ref l) => l.id(),
         }
     }
     fn set_id(&mut self, id: ComponentId) {
-        match self {
-            Listing::Compact(l) => l.set_id(id),
-            Listing::Plain(l) => l.set_id(id),
-            Listing::Threaded(l) => l.set_id(id),
+        match self.component {
+            Compact(ref mut l) => l.set_id(id),
+            Plain(ref mut l) => l.set_id(id),
+            Threaded(ref mut l) => l.set_id(id),
         }
     }
 }
 
-impl From<IndexStyle> for Listing {
+impl From<IndexStyle> for ListingComponent {
     fn from(index_style: IndexStyle) -> Self {
         match index_style {
-            IndexStyle::Plain => Listing::Plain(Default::default()),
-            IndexStyle::Threaded => Listing::Threaded(Default::default()),
-            IndexStyle::Compact => Listing::Compact(Default::default()),
+            IndexStyle::Plain => Plain(Default::default()),
+            IndexStyle::Threaded => Threaded(Default::default()),
+            IndexStyle::Compact => Compact(Default::default()),
+        }
+    }
+}
+
+impl Listing {
+    pub fn new(accounts: &[Account]) -> Self {
+        let accounts = accounts
+            .iter()
+            .enumerate()
+            .map(|(i, a)| AccountMenuEntry {
+                name: a.name().to_string(),
+                index: i,
+            })
+            .collect();
+        Listing {
+            component: Compact(Default::default()),
+            accounts,
+            visible: true,
+            dirty: true,
+            cursor: (0, 0),
+            id: ComponentId::new_v4(),
+            show_divider: false,
+            menu_visibility: true,
+            ratio: 90,
+        }
+    }
+
+    fn draw_menu(&mut self, grid: &mut CellBuffer, mut area: Area, context: &mut Context) {
+        if !self.is_dirty() {
+            return;
+        }
+        if self.show_divider {
+            area = (area.0, pos_dec(area.1, (1, 0)));
+        }
+        clear_area(grid, area);
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        self.dirty = false;
+        let mut y = get_y(upper_left);
+        for a in &self.accounts {
+            y += 1;
+            y += self.print_account(grid, (set_y(upper_left, y), bottom_right), &a, context);
+        }
+
+        context.dirty_areas.push_back(area);
+    }
+    /*
+     * Print a single account in the menu area.
+     */
+    fn print_account(
+        &self,
+        grid: &mut CellBuffer,
+        area: Area,
+        a: &AccountMenuEntry,
+        context: &mut Context,
+    ) -> usize {
+        if cfg!(debug_assertions) && !is_valid_area!(area) {
+            eprint!("{}:{}_{}:	", file!(), line!(), column!());
+            eprintln!("BUG: invalid area in print_account");
+        }
+        // Each entry and its index in the account
+        let entries: FnvHashMap<FolderHash, Folder> = context.accounts[a.index]
+            .list_folders()
+            .into_iter()
+            .map(|f| (f.hash(), f))
+            .collect();
+        let folders_order: FnvHashMap<FolderHash, usize> = context.accounts[a.index]
+            .folders_order()
+            .iter()
+            .enumerate()
+            .map(|(i, &fh)| (fh, i))
+            .collect();
+
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+
+        let highlight = self.cursor.0 == a.index;
+
+        let mut inc = 0;
+        let mut depth = String::from("");
+        let mut s = format!("{}\n", a.name);
+        fn pop(depth: &mut String) {
+            depth.pop();
+            depth.pop();
+        }
+
+        fn push(depth: &mut String, c: char) {
+            depth.push(c);
+        }
+
+        fn print(
+            folder_idx: FolderHash,
+            depth: &mut String,
+            inc: &mut usize,
+            entries: &FnvHashMap<FolderHash, Folder>,
+            folders_order: &FnvHashMap<FolderHash, usize>,
+            s: &mut String,
+            index: usize, //account index
+            context: &mut Context,
+        ) {
+            match context.accounts[index].status(entries[&folder_idx].hash()) {
+                Ok(_) => {
+                    let count = context.accounts[index][entries[&folder_idx].hash()]
+                        .as_ref()
+                        .unwrap()
+                        .collection
+                        .values()
+                        .filter(|e| !e.is_seen())
+                        .count();
+                    let len = s.len();
+                    s.insert_str(
+                        len,
+                        &format!("{} {}   {}\n  ", *inc, &entries[&folder_idx].name(), count),
+                    );
+                }
+                Err(_) => {
+                    let len = s.len();
+                    s.insert_str(
+                        len,
+                        &format!("{} {}   ...\n  ", *inc, &entries[&folder_idx].name()),
+                    );
+                }
+            }
+            *inc += 1;
+            let mut children: Vec<FolderHash> = entries[&folder_idx].children().to_vec();
+            children
+                .sort_unstable_by(|a, b| folders_order[a].partial_cmp(&folders_order[b]).unwrap());
+            for child in entries[&folder_idx].children().iter() {
+                let len = s.len();
+                s.insert_str(len, &format!("{} ", depth));
+                push(depth, ' ');
+                print(
+                    *child,
+                    depth,
+                    inc,
+                    entries,
+                    folders_order,
+                    s,
+                    index,
+                    context,
+                );
+                pop(depth);
+            }
+        }
+        for f in entries.keys() {
+            if entries[f].parent().is_none() {
+                print(
+                    *f,
+                    &mut depth,
+                    &mut inc,
+                    &entries,
+                    &folders_order,
+                    &mut s,
+                    a.index,
+                    context,
+                );
+            }
+        }
+
+        let lines: Vec<&str> = s.lines().collect();
+        let lines_len = lines.len();
+        if lines_len < 2 {
+            return 0;
+        }
+        let mut idx = 0;
+        for y in get_y(upper_left)..get_y(bottom_right) {
+            if idx == lines_len {
+                break;
+            }
+            let s = lines[idx].to_string();
+            let (color_fg, color_bg) = if highlight {
+                if self.cursor.1 + 1 == idx {
+                    (Color::Byte(233), Color::Byte(15))
+                } else {
+                    (Color::Byte(15), Color::Byte(233))
+                }
+            } else {
+                (Color::Default, Color::Default)
+            };
+
+            let (x, _) = write_string_to_grid(
+                &s,
+                grid,
+                color_fg,
+                color_bg,
+                (set_y(upper_left, y), bottom_right),
+                false,
+            );
+            {
+                let mut x = get_x(upper_left);
+                while let Some(cell) = grid.get_mut(x, y) {
+                    if x == get_x(bottom_right) {
+                        break;
+                    }
+                    match cell.ch() {
+                        c if c.is_numeric() => {
+                            cell.set_fg(Color::Byte(243));
+                            x += 1;
+                            continue;
+                        }
+                        c if c.is_whitespace() => {
+                            x += 1;
+                            continue;
+                        }
+                        _ => {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if highlight && idx > 1 && self.cursor.1 == idx - 1 {
+                change_colors(grid, ((x, y), (get_x(bottom_right), y)), color_fg, color_bg);
+            } else {
+                change_colors(grid, ((x, y), set_y(bottom_right, y)), color_fg, color_bg);
+            }
+            idx += 1;
+        }
+        if idx == 0 {
+            0
+        } else {
+            idx - 1
         }
     }
 }
