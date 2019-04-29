@@ -20,7 +20,6 @@
  */
 
 use super::*;
-use std::ops::{Deref, DerefMut};
 
 mod compact;
 pub use self::compact::*;
@@ -74,7 +73,7 @@ pub struct Listing {
     accounts: Vec<AccountMenuEntry>,
     dirty: bool,
     visible: bool,
-    cursor: (usize, usize),
+    cursor_pos: (usize, usize),
     id: ComponentId,
 
     show_divider: bool,
@@ -152,26 +151,34 @@ impl Component for Listing {
             return true;
         }
 
+        let shortcuts = self.get_shortcuts(context);
         match *event {
-            UIEvent::Input(Key::Char(k @ 'J')) | UIEvent::Input(Key::Char(k @ 'K')) => {
-                let folder_length = context.accounts[self.cursor.0].len();
+            UIEvent::Input(ref k)
+                if k == shortcuts["next_folder"] || k == shortcuts["prev_folder"] =>
+            {
+                let folder_length = context.accounts[self.cursor_pos.0].len();
                 match k {
-                    'J' if folder_length > 0 => {
-                        if self.cursor.1 < folder_length - 1 {
-                            self.cursor.1 += 1;
-                            self.component
-                                .set_coordinates((self.cursor.0, self.cursor.1, None));
+                    k if k == shortcuts["next_folder"] && folder_length > 0 => {
+                        if self.cursor_pos.1 < folder_length - 1 {
+                            self.cursor_pos.1 += 1;
+                            self.component.set_coordinates((
+                                self.cursor_pos.0,
+                                self.cursor_pos.1,
+                                None,
+                            ));
                             self.set_dirty();
                         } else {
                             return true;
                         }
                     }
-                    'K' => {
-                        if self.cursor.1 > 0 {
-                            self.cursor.1 -= 1;
-                            let coors = self.component.coordinates();
-                            self.component
-                                .set_coordinates((self.cursor.0, self.cursor.1, None));
+                    k if k == shortcuts["prev_folder"] => {
+                        if self.cursor_pos.1 > 0 {
+                            self.cursor_pos.1 -= 1;
+                            self.component.set_coordinates((
+                                self.cursor_pos.0,
+                                self.cursor_pos.1,
+                                None,
+                            ));
                             self.set_dirty();
                         } else {
                             return true;
@@ -179,28 +186,31 @@ impl Component for Listing {
                     }
                     _ => return false,
                 }
-                let folder_hash = context.accounts[self.cursor.0].folders_order[self.cursor.1];
+                let folder_hash =
+                    context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
                 // Inform State that we changed the current folder view.
                 context
                     .replies
-                    .push_back(UIEvent::RefreshMailbox((self.cursor.0, folder_hash)));
+                    .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
                 return true;
             }
-            UIEvent::Input(Key::Char(k @ 'h')) | UIEvent::Input(Key::Char(k @ 'l')) => {
+            UIEvent::Input(ref k)
+                if k == shortcuts["next_account"] || k == shortcuts["prev_account"] =>
+            {
                 match k {
-                    'h' => {
-                        if self.cursor.0 < self.accounts.len() - 1 {
-                            self.cursor = (self.cursor.0 + 1, 0);
-                            self.component.set_coordinates((self.cursor.0, 0, None));
+                    k if k == shortcuts["next_account"] => {
+                        if self.cursor_pos.0 < self.accounts.len() - 1 {
+                            self.cursor_pos = (self.cursor_pos.0 + 1, 0);
+                            self.component.set_coordinates((self.cursor_pos.0, 0, None));
                             self.set_dirty();
                         } else {
                             return true;
                         }
                     }
-                    'l' => {
-                        if self.cursor.0 > 0 {
-                            self.cursor = (self.cursor.0 - 1, 0);
-                            self.component.set_coordinates((self.cursor.0, 0, None));
+                    k if k == shortcuts["prev_account"] => {
+                        if self.cursor_pos.0 > 0 {
+                            self.cursor_pos = (self.cursor_pos.0 - 1, 0);
+                            self.component.set_coordinates((self.cursor_pos.0, 0, None));
                             self.set_dirty();
                         } else {
                             return true;
@@ -208,12 +218,12 @@ impl Component for Listing {
                     }
                     _ => return false,
                 }
-                let folder_hash = context.accounts[self.cursor.0].folders_order[self.cursor.1];
+                let folder_hash =
+                    context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
                 // Inform State that we changed the current folder view.
-                context.replies.push_back(UIEvent::RefreshMailbox((
-                    self.cursor.0,
-                    std::dbg!(folder_hash),
-                )));
+                context
+                    .replies
+                    .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
                 return true;
             }
             UIEvent::Action(ref action) => match action {
@@ -277,7 +287,7 @@ impl Component for Listing {
                 _ => {}
             },
             UIEvent::RefreshMailbox((idxa, folder_hash)) => {
-                self.cursor = (
+                self.cursor_pos = (
                     idxa,
                     context.accounts[idxa]
                         .folders_order
@@ -293,9 +303,15 @@ impl Component for Listing {
             UIEvent::Resize => {
                 self.dirty = true;
             }
-            UIEvent::Input(Key::Char('`')) => {
+            UIEvent::Input(ref k) if k == shortcuts["toggle-menu-visibility"] => {
                 self.menu_visibility = !self.menu_visibility;
                 self.set_dirty();
+            }
+            UIEvent::Input(ref k) if k == shortcuts["new_mail"] => {
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0))));
+                return true;
             }
             UIEvent::StartupCheck(_) => {
                 self.dirty = true;
@@ -330,9 +346,48 @@ impl Component for Listing {
             Plain(ref l) => l.get_shortcuts(context),
             Threaded(ref l) => l.get_shortcuts(context),
         };
-        map.insert("Toggle account menu visibility", Key::Char('`'));
-        map.insert("prev_account", Key::Char('h'));
-        map.insert("next_account", Key::Char('l'));
+        let config_map = context.settings.shortcuts.listing.key_values();
+        map.insert(
+            "new_mail",
+            if let Some(key) = config_map.get("new_mail") {
+                (*key).clone()
+            } else {
+                Key::Char('m')
+            },
+        );
+        map.insert(
+            "prev_folder",
+            if let Some(key) = config_map.get("prev_folder") {
+                (*key).clone()
+            } else {
+                Key::Char('J')
+            },
+        );
+        map.insert(
+            "next_folder",
+            if let Some(key) = config_map.get("next_folder") {
+                (*key).clone()
+            } else {
+                Key::Char('K')
+            },
+        );
+        map.insert(
+            "prev_account",
+            if let Some(key) = config_map.get("prev_account") {
+                (*key).clone()
+            } else {
+                Key::Char('h')
+            },
+        );
+        map.insert(
+            "next_account",
+            if let Some(key) = config_map.get("next_account") {
+                (*key).clone()
+            } else {
+                Key::Char('l')
+            },
+        );
+        map.insert("toggle-menu-visibility", Key::Char('`'));
 
         map
     }
@@ -378,7 +433,7 @@ impl Listing {
             accounts,
             visible: true,
             dirty: true,
-            cursor: (0, 0),
+            cursor_pos: (0, 0),
             id: ComponentId::new_v4(),
             show_divider: false,
             menu_visibility: true,
@@ -435,7 +490,7 @@ impl Listing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        let highlight = self.cursor.0 == a.index;
+        let highlight = self.cursor_pos.0 == a.index;
 
         let mut inc = 0;
         let mut depth = String::from("");
@@ -530,7 +585,7 @@ impl Listing {
             }
             let s = lines[idx].to_string();
             let (color_fg, color_bg) = if highlight {
-                if self.cursor.1 + 1 == idx {
+                if self.cursor_pos.1 + 1 == idx {
                     (Color::Byte(233), Color::Byte(15))
                 } else {
                     (Color::Byte(15), Color::Byte(233))
@@ -570,7 +625,7 @@ impl Listing {
                 }
             }
 
-            if highlight && idx > 1 && self.cursor.1 == idx - 1 {
+            if highlight && idx > 1 && self.cursor_pos.1 == idx - 1 {
                 change_colors(grid, ((x, y), (get_x(bottom_right), y)), color_fg, color_bg);
             } else {
                 change_colors(grid, ((x, y), set_y(bottom_right, y)), color_fg, color_bg);

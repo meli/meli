@@ -5,6 +5,8 @@ use fnv::FnvHashMap;
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Shortcuts {
     #[serde(flatten)]
+    pub listing: ListingShortcuts,
+    #[serde(flatten)]
     pub compact_listing: CompactListingShortcuts,
     #[serde(flatten)]
     pub contact_list: ContactListShortcuts,
@@ -45,19 +47,12 @@ macro_rules! shortcut_key_values {
     }
 }
 
-shortcut_key_values! { "compact-listing",
-/// Shortcut listing for a mail listing in compact mode.
-pub struct CompactListingShortcuts {
-        open_thread: Key |> "Open thread.",
-        exit_thread: Key |> "Exit thread view.",
-        prev_page: Key |> "Go to previous page.",
-        next_page: Key |> "Go to next page.",
-        prev_folder: Key |> "Go to previous folder.",
-        next_folder: Key |> "Go to next folder.",
-        prev_account: Key |> "Go to previous account.",
-        next_account: Key |> "Go to next account.",
-        new_mail: Key |> "Start new mail draft in new tab."
-}
+shortcut_key_values! { "compact_listing",
+    /// Shortcut listing for a mail listing in compact mode.
+    pub struct CompactListingShortcuts {
+            open_thread: Key |> "Open thread.",
+            exit_thread: Key |> "Exit thread view."
+    }
 }
 
 impl Default for CompactListingShortcuts {
@@ -65,6 +60,26 @@ impl Default for CompactListingShortcuts {
         CompactListingShortcuts {
             open_thread: Key::Char('\n'),
             exit_thread: Key::Char('i'),
+        }
+    }
+}
+
+shortcut_key_values! { "listing",
+    /// Shortcut listing for a mail listing.
+    pub struct ListingShortcuts {
+            prev_page: Key |> "Go to previous page.",
+            next_page: Key |> "Go to next page.",
+            prev_folder: Key |> "Go to previous folder.",
+            next_folder: Key |> "Go to next folder.",
+            prev_account: Key |> "Go to previous account.",
+            next_account: Key |> "Go to next account.",
+            new_mail: Key |> "Start new mail draft in new tab."
+    }
+}
+
+impl Default for ListingShortcuts {
+    fn default() -> Self {
+        ListingShortcuts {
             prev_page: Key::PageUp,
             next_page: Key::PageDown,
             prev_folder: Key::Char('J'),

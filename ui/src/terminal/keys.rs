@@ -129,6 +129,12 @@ impl From<TermionKey> for Key {
     }
 }
 
+impl PartialEq<Key> for &Key {
+    fn eq(&self, other: &Key) -> bool {
+        **self == *other
+    }
+}
+
 #[derive(PartialEq)]
 enum InputMode {
     Normal,

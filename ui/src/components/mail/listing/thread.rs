@@ -599,68 +599,10 @@ impl Component for ThreadListing {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('m')) if !self.unfocused => {
-                context
-                    .replies
-                    .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0))));
-                return true;
-            }
             UIEvent::Input(Key::Char('i')) if self.unfocused => {
                 self.unfocused = false;
                 self.dirty = true;
                 self.view = None;
-                return true;
-            }
-            UIEvent::Input(Key::Char(k @ 'J')) | UIEvent::Input(Key::Char(k @ 'K')) => {
-                let folder_length = context.accounts[self.cursor_pos.0].len();
-                let accounts_length = context.accounts.len();
-                match k {
-                    'J' if folder_length > 0 => {
-                        if self.new_cursor_pos.1 < folder_length - 1 {
-                            self.new_cursor_pos.1 = self.cursor_pos.1 + 1;
-                            self.dirty = true;
-                            self.refresh_mailbox(context);
-                        } else if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1
-                        {
-                            self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
-                            self.new_cursor_pos.1 = 0;
-                            self.dirty = true;
-                            self.refresh_mailbox(context);
-                        }
-                    }
-                    'K' => {
-                        if self.cursor_pos.1 > 0 {
-                            self.new_cursor_pos.1 = self.cursor_pos.1 - 1;
-                            self.dirty = true;
-                            self.refresh_mailbox(context);
-                        } else if self.cursor_pos.0 > 0 {
-                            self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
-                            self.new_cursor_pos.1 = 0;
-                            self.dirty = true;
-                            self.refresh_mailbox(context);
-                        }
-                    }
-                    _ => {}
-                }
-                return true;
-            }
-            UIEvent::Input(Key::Char(k @ 'h')) | UIEvent::Input(Key::Char(k @ 'l')) => {
-                let accounts_length = context.accounts.len();
-                match k {
-                    'h' if accounts_length > 0 && self.new_cursor_pos.0 < accounts_length - 1 => {
-                        self.new_cursor_pos.0 = self.cursor_pos.0 + 1;
-                        self.new_cursor_pos.1 = 0;
-                        self.dirty = true;
-                        self.refresh_mailbox(context);
-                    }
-                    'l' if self.cursor_pos.0 > 0 => {
-                        self.new_cursor_pos.0 = self.cursor_pos.0 - 1;
-                        self.new_cursor_pos.1 = 0;
-                        self.dirty = true;
-                        self.refresh_mailbox(context);
-                    }
-                    _ => {}
-                }
                 return true;
             }
             UIEvent::RefreshMailbox(_) => {

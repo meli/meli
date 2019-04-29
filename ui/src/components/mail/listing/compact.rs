@@ -481,12 +481,6 @@ impl Component for MailboxView {
                 }
                 _ => {}
             },
-            UIEvent::Input(Key::Char('m')) if !self.unfocused => {
-                context
-                    .replies
-                    .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0))));
-                return true;
-            }
             _ => {}
         }
         false
@@ -544,46 +538,6 @@ impl Component for MailboxView {
                 (*key).clone()
             } else {
                 Key::Char('i')
-            },
-        );
-        map.insert(
-            "prev_folder",
-            if let Some(key) = config_map.get("prev_folder") {
-                (*key).clone()
-            } else {
-                Key::Char('J')
-            },
-        );
-        map.insert(
-            "next_folder",
-            if let Some(key) = config_map.get("next_folder") {
-                (*key).clone()
-            } else {
-                Key::Char('K')
-            },
-        );
-        map.insert(
-            "prev_account",
-            if let Some(key) = config_map.get("prev_account") {
-                (*key).clone()
-            } else {
-                Key::Char('h')
-            },
-        );
-        map.insert(
-            "next_account",
-            if let Some(key) = config_map.get("next_account") {
-                (*key).clone()
-            } else {
-                Key::Char('l')
-            },
-        );
-        map.insert(
-            "new_mail",
-            if let Some(key) = config_map.get("new_mail") {
-                (*key).clone()
-            } else {
-                Key::Char('m')
             },
         );
 
@@ -703,27 +657,7 @@ impl Component for CompactListing {
         if self.views.is_empty() {
             return Default::default();
         }
-        let mut map = self.views[self.cursor].get_shortcuts(context);
-
-        let config_map = context.settings.shortcuts.compact_listing.key_values();
-        map.insert(
-            "prev_account",
-            if let Some(key) = config_map.get("prev_account") {
-                (*key).clone()
-            } else {
-                Key::Char('h')
-            },
-        );
-        map.insert(
-            "next_account",
-            if let Some(key) = config_map.get("next_account") {
-                (*key).clone()
-            } else {
-                Key::Char('l')
-            },
-        );
-
-        map
+        self.views[self.cursor].get_shortcuts(context)
     }
 
     fn id(&self) -> ComponentId {
