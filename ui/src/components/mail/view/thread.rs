@@ -428,6 +428,9 @@ impl ThreadView {
                 .flat_map(|ref v| v.iter())
                 .collect();
             self.cursor_pos = self.new_cursor_pos;
+            if self.cursor_pos + 1 > visibles.len() {
+                self.cursor_pos = visibles.len().saturating_sub(1);
+            }
             let idx = *visibles[self.cursor_pos];
             let src_area = { get_entry_area(idx, &self.entries) };
             let visual_indentation = self.entries[idx].indentation * 4;
