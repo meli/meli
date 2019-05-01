@@ -27,8 +27,7 @@ use super::execute::Action;
 use super::terminal::*;
 
 use melib::backends::FolderHash;
-use melib::EnvelopeHash;
-use melib::RefreshEvent;
+use melib::{EnvelopeHash, RefreshEvent};
 use std;
 use std::fmt;
 use std::ops::Index;
@@ -89,7 +88,7 @@ pub enum UIEvent {
     StartupCheck(FolderHash),
     RefreshEvent(Box<RefreshEvent>),
     EnvelopeUpdate(EnvelopeHash),
-    EnvelopeRename(FolderHash, EnvelopeHash, EnvelopeHash),
+    EnvelopeRename(FolderHash, EnvelopeHash, EnvelopeHash), // folder_hash, old_hash, new_hash
     EnvelopeRemove(EnvelopeHash),
 }
 

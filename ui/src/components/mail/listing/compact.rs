@@ -34,6 +34,7 @@ struct MailboxView {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
+    order: FnvHashMap<EnvelopeHash, usize>,
     /// Cache current view.
     content: CellBuffer,
     /// If we must redraw on next redraw event
@@ -41,6 +42,7 @@ struct MailboxView {
     /// If `self.view` exists or not.
     unfocused: bool,
     view: ThreadView,
+    row_updates: StackVec<EnvelopeHash>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
@@ -82,6 +84,8 @@ impl MailboxView {
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (SortField::Date, SortOrder::Desc),
+            order: FnvHashMap::default(),
+            row_updates: StackVec::new(),
             content,
             dirty: true,
             unfocused: false,
@@ -136,6 +140,7 @@ impl MailboxView {
 
         self.length = mailbox.collection.threads.root_len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
+        self.order.clear();
         if self.length == 0 {
             write_string_to_grid(
                 &format!("Folder `{}` is empty.", mailbox.folder.name()),
@@ -199,6 +204,7 @@ impl MailboxView {
                 ((0, idx), (MAX_COLS - 1, idx)),
                 false,
             );
+            self.order.insert(i, idx);
 
             for x in x..MAX_COLS {
                 self.content[(x, idx)].set_ch(' ');
@@ -207,8 +213,14 @@ impl MailboxView {
         }
     }
 
-    fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        if idx == self.cursor_pos.2 {
+    fn highlight_line(
+        &mut self,
+        grid: Option<&mut CellBuffer>,
+        area: Area,
+        idx: usize,
+        context: &Context,
+    ) {
+        if idx == self.cursor_pos.2 || grid.is_none() {
             let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
                 .as_ref()
                 .unwrap();
@@ -243,13 +255,17 @@ impl MailboxView {
             } else {
                 Color::Default
             };
-            change_colors(grid, area, fg_color, bg_color);
+            if let Some(grid) = grid {
+                change_colors(grid, area, fg_color, bg_color);
+            } else {
+                change_colors(&mut self.content, area, fg_color, bg_color);
+            }
             return;
         }
 
         let (width, height) = self.content.size();
         copy_area(
-            grid,
+            grid.unwrap(), /* grid == None is covered in the if above */
             &self.content,
             area,
             ((0, idx), (width - 1, height - 1)),
@@ -313,7 +329,7 @@ impl MailboxView {
                     set_y(upper_left, get_y(upper_left) + (*idx % rows)),
                     set_y(bottom_right, get_y(upper_left) + (*idx % rows)),
                 );
-                self.highlight_line(grid, new_area, *idx, context);
+                self.highlight_line(Some(grid), new_area, *idx, context);
                 context.dirty_areas.push_back(new_area);
             }
             return;
@@ -332,13 +348,14 @@ impl MailboxView {
             area,
             ((0, top_idx), (MAX_COLS - 1, self.length)),
         );
+        let temp = self.cursor_pos.2; // FIXME when NLL
         self.highlight_line(
-            grid,
+            Some(grid),
             (
-                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+                set_y(upper_left, get_y(upper_left) + (temp % rows)),
+                set_y(bottom_right, get_y(upper_left) + (temp % rows)),
             ),
-            self.cursor_pos.2,
+            temp,
             context,
         );
         context.dirty_areas.push_back(area);
@@ -366,8 +383,30 @@ impl Component for MailboxView {
             if !self.is_dirty() {
                 return;
             }
-            /* Draw the entire list */
-            self.draw_list(grid, area, context);
+            if !self.row_updates.is_empty() {
+                let (upper_left, bottom_right) = area;
+                while let Some(row) = self.row_updates.pop() {
+                    let row: usize = self.order[&row];
+                    let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+                    let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
+
+                    let top_idx = page_no * rows;
+                    if row >= top_idx && row <= top_idx + rows {
+                        self.highlight_line(
+                            Some(grid),
+                            (
+                                set_y(upper_left, get_y(upper_left) + (row % rows)),
+                                set_y(bottom_right, get_y(upper_left) + (row % rows)),
+                            ),
+                            row,
+                            context,
+                        );
+                    }
+                }
+            } else {
+                /* Draw the entire list */
+                self.draw_list(grid, area, context);
+            }
         } else {
             if self.length == 0 && self.dirty {
                 clear_area(grid, area);
@@ -441,12 +480,17 @@ impl Component for MailboxView {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
-            UIEvent::EnvelopeRename(ref folder_hash, _, _) => {
+            UIEvent::EnvelopeRename(ref folder_hash, ref old_hash, ref new_hash)
                 if *folder_hash
-                    == context.accounts[self.cursor_pos.0].folders_order[self.new_cursor_pos.1]
-                {
-                    self.refresh_mailbox(context);
-                    self.set_dirty();
+                    == context.accounts[self.cursor_pos.0].folders_order[self.new_cursor_pos.1] =>
+            {
+                if let Some(row) = self.order.remove(old_hash) {
+                    self.order.insert(*new_hash, row);
+                    self.highlight_line(None, ((0, row), (MAX_COLS - 1, row)), row, context);
+                    self.row_updates.push(*new_hash);
+                    self.dirty = true;
+                } else {
+                    /* Listing has was updated in time before the event */
                 }
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
