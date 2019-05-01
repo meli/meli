@@ -82,10 +82,10 @@ impl Default for ListingShortcuts {
         ListingShortcuts {
             prev_page: Key::PageUp,
             next_page: Key::PageDown,
-            prev_folder: Key::Char('J'),
-            next_folder: Key::Char('K'),
-            prev_account: Key::Char('h'),
-            next_account: Key::Char('l'),
+            prev_folder: Key::Char('K'),
+            next_folder: Key::Char('J'),
+            prev_account: Key::Char('l'),
+            next_account: Key::Char('h'),
             new_mail: Key::Char('m'),
         }
     }

@@ -360,7 +360,7 @@ impl Component for Listing {
             if let Some(key) = config_map.get("prev_folder") {
                 (*key).clone()
             } else {
-                Key::Char('J')
+                Key::Char('K')
             },
         );
         map.insert(
@@ -368,7 +368,7 @@ impl Component for Listing {
             if let Some(key) = config_map.get("next_folder") {
                 (*key).clone()
             } else {
-                Key::Char('K')
+                Key::Char('J')
             },
         );
         map.insert(
@@ -376,7 +376,7 @@ impl Component for Listing {
             if let Some(key) = config_map.get("prev_account") {
                 (*key).clone()
             } else {
-                Key::Char('h')
+                Key::Char('l')
             },
         );
         map.insert(
@@ -384,7 +384,7 @@ impl Component for Listing {
             if let Some(key) = config_map.get("next_account") {
                 (*key).clone()
             } else {
-                Key::Char('l')
+                Key::Char('h')
             },
         );
         map.insert("toggle-menu-visibility", Key::Char('`'));
