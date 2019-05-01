@@ -153,8 +153,7 @@ impl Account {
                 for &c in f.children() {
                     stack.push(c);
                 }
-                while !stack.is_empty() {
-                    let next = stack.pop();
+                while let Some(next) = stack.pop() {
                     folders_order.push(next);
                     for c in ref_folders[&next].children() {
                         stack.push(*c);

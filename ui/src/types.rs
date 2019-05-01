@@ -162,14 +162,17 @@ impl<T: Default + Copy + std::fmt::Debug> StackVec<T> {
         }
         self.len += 1;
     }
-    pub(crate) fn pop(&mut self) -> T {
+    pub(crate) fn pop(&mut self) -> Option<T> {
+        if self.len == 0 {
+            return None;
+        }
         if self.len >= self.array.len() {
             self.len -= 1;
-            self.heap_vec.pop().unwrap()
+            self.heap_vec.pop()
         } else {
             let ret = self.array[self.len - 1];
             self.len = self.len - 1;
-            ret
+            Some(ret)
         }
     }
     pub(crate) fn len(&self) -> usize {
