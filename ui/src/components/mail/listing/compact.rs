@@ -166,20 +166,13 @@ impl MailboxView {
                 threads.thread_nodes()[iter_ptr].message().unwrap()
             };
             if !mailbox.collection.contains_key(&i) {
-                if cfg!(debug_assertions) {
-                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                    eprintln!("key = {}", i);
-                }
-                eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                eprintln!(
+                debug!("key = {}", i);
+                debug!(
                     "name = {} {}",
                     mailbox.name(),
                     context.accounts[self.cursor_pos.0].name()
                 );
-                if cfg!(debug_assertions) {
-                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                    eprintln!("{:#?}", context.accounts);
-                }
+                debug!("{:#?}", context.accounts);
 
                 panic!();
             }
@@ -506,19 +499,13 @@ impl Component for MailboxView {
                     return true;
                 }
                 Action::SubSort(field, order) => {
-                    if cfg!(debug_assertions) {
-                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                        eprintln!("SubSort {:?} , {:?}", field, order);
-                    }
+                    debug!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
                     self.refresh_mailbox(context);
                     return true;
                 }
                 Action::Sort(field, order) => {
-                    if cfg!(debug_assertions) {
-                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                        eprintln!("Sort {:?} , {:?}", field, order);
-                    }
+                    debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
                     self.refresh_mailbox(context);
                     return true;
@@ -643,8 +630,7 @@ impl CompactListing {
 impl Component for CompactListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.populated {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("populating");
+            debug!("populating");
             for (idx, a) in context.accounts.iter().enumerate() {
                 for (fidx, _) in a.iter_mailboxes().enumerate() {
                     let mut m = MailboxView::new();

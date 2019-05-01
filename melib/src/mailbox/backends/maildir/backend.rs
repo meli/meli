@@ -137,10 +137,7 @@ fn move_to_cur(p: PathBuf) -> PathBuf {
     if !file_name.ends_with(":2,") {
         new.set_extension(":2,");
     }
-    if cfg!(debug_assertions) {
-        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-        eprintln!("moved to cur: {}", new.display());
-    }
+    debug!("moved to cur: {}", new.display());
     fs::rename(p, &new).unwrap();
     new
 }
@@ -161,10 +158,7 @@ impl MailBackend for MaildirType {
         let root_path = self.path.to_path_buf();
         watcher.watch(&root_path, RecursiveMode::Recursive).unwrap();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
-        if cfg!(debug_assertions) {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("watching {:?}", root_path);
-        }
+        debug!("watching {:?}", root_path);
         let hash_indexes = self.hash_indexes.clone();
         thread::Builder::new()
             .name("folder watch".to_string())
@@ -186,11 +180,9 @@ impl MailBackend for MaildirType {
                         Ok(event) => match event {
                             /* Create */
                             DebouncedEvent::Create(mut pathbuf) => {
-                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("DebouncedEvent::Create(path = {:?}", pathbuf);
+                                debug!("DebouncedEvent::Create(path = {:?}", pathbuf);
                                 if path_is_new!(pathbuf) {
-                                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("path_is_new");
+                                    debug!("path_is_new");
                                 /* This creates a Rename event that we will receive later */
                                     pathbuf = move_to_cur(pathbuf);
                                 }
@@ -200,8 +192,6 @@ eprintln!("path_is_new");
                                     .strip_prefix(&root_path)
                                     .unwrap()
                                     .to_path_buf();
-                                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("cilename is {:?}", file_name);
                                 if let Some(env) = add_path_to_index(
                                     &hash_indexes,
                                     folder_hash,
@@ -209,10 +199,7 @@ eprintln!("cilename is {:?}", file_name);
                                     &cache_dir,
                                     file_name,
                                 ) {
-                                    if cfg!(debug_assertions) {
-                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("Create event {} {} {}", env.hash(), env.subject(), pathbuf.display());
-                                    }
+                                    debug!("Create event {} {} {}", env.hash(), env.subject(), pathbuf.display());
                                     sender.send(RefreshEvent {
                                         hash: folder_hash,
                                         kind: Create(Box::new(env)),
@@ -222,8 +209,7 @@ eprintln!("Create event {} {} {}", env.hash(), env.subject(), pathbuf.display())
                             /* Update */
                             DebouncedEvent::NoticeWrite(pathbuf)
                             | DebouncedEvent::Write(pathbuf) => {
-                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("DebouncedEvent::Write(path = {:?}", pathbuf);
+                                debug!("DebouncedEvent::Write(path = {:?}", &pathbuf);
                                 let folder_hash = get_path_hash!(pathbuf);
                                 let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                                 let index_lock = &mut hash_indexes_lock.entry(folder_hash).or_default();
@@ -260,14 +246,11 @@ eprintln!("DebouncedEvent::Write(path = {:?}", pathbuf);
                                 };
                                 let new_hash: EnvelopeHash = get_file_hash(pathbuf.as_path());
                                 if index_lock.get_mut(&new_hash).is_none() {
-                                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("write notice");
+                                    debug!("write notice");
                                     let op = Box::new(MaildirOp::new(new_hash, hash_indexes.clone(), folder_hash));
                                     if let Some(env) = Envelope::from_token(op, new_hash) {
-                                        if cfg!(debug_assertions) {
-                                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("{}\t{}", new_hash, pathbuf.display());
-                                        }
+                                        debug!("{}\t{:?}", new_hash, &pathbuf);
+                                        debug!("hash {}, path: {:?} couldn't be parsed in `add_path_to_index`", new_hash, &pathbuf);
                                         index_lock.insert(new_hash, pathbuf);
 
                                         /* Send Write notice */
@@ -276,17 +259,13 @@ eprintln!("{}\t{}", new_hash, pathbuf.display());
                                             hash: folder_hash,
                                             kind: Update(old_hash, Box::new(env)),
                                         });
-                                    } else if cfg!(debug_assertions) {
-                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", new_hash, pathbuf.as_path().display());
                                     }
                                 }
                             }
                             /* Remove */
                             DebouncedEvent::NoticeRemove(pathbuf)
                             | DebouncedEvent::Remove(pathbuf) => {
-                                eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("DebouncedEvent::Remove(path = {:?}", pathbuf);
+                                debug!("DebouncedEvent::Remove(path = {:?}", pathbuf);
                                 let folder_hash = get_path_hash!(pathbuf);
                                 let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                                 let index_lock = hash_indexes_lock.entry(folder_hash).or_default();
@@ -295,8 +274,7 @@ eprintln!("DebouncedEvent::Remove(path = {:?}", pathbuf);
                                 {
                                     *k
                                 } else {
-                                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("removed but not contained in index");
+                                    debug!("removed but not contained in index");
                                     continue;
                                 };
                                 index_lock.remove(&hash);
@@ -308,10 +286,7 @@ eprintln!("removed but not contained in index");
                             }
                             /* Envelope hasn't changed */
                             DebouncedEvent::Rename(src, dest) => {
-                                    if cfg!(debug_assertions) {
-                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                        eprintln!("DebouncedEvent::Rename(src = {:?}, dest = {:?})", src, dest);
-                                    }
+                                debug!("DebouncedEvent::Rename(src = {:?}, dest = {:?})", src, dest);
                                 let folder_hash = get_path_hash!(src);
                                 let old_hash: EnvelopeHash = get_file_hash(src.as_path());
                                 let new_hash: EnvelopeHash = get_file_hash(dest.as_path());
@@ -320,10 +295,7 @@ eprintln!("removed but not contained in index");
                                 let index_lock = hash_indexes_lock.entry(folder_hash).or_default();
 
                                 if index_lock.contains_key(&old_hash) {
-                                    if cfg!(debug_assertions) {
-                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                        eprintln!("contains_old_key");
-                                    }
+                                    debug!("contains_old_key");
                                     sender.send(RefreshEvent {
                                         hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
@@ -332,19 +304,13 @@ eprintln!("removed but not contained in index");
                                     index_lock.insert(new_hash, dest);
                                     continue;
                                 } else if !index_lock.contains_key(&new_hash) {
-                                    if cfg!(debug_assertions) {
-                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                        eprintln!("not contains_new_key");
-                                    }
+                                    debug!("not contains_new_key");
                                     let file_name = dest
                                         .as_path()
                                         .strip_prefix(&root_path)
                                         .unwrap()
                                         .to_path_buf();
-                                        if cfg!(debug_assertions) {
-                                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                            eprintln!("filename = {:?}", file_name);
-                                        }
+                                    debug!("filename = {:?}", file_name);
                                     if let Some(env) = add_path_to_index(
                                         &hash_indexes,
                                         folder_hash,
@@ -352,30 +318,21 @@ eprintln!("removed but not contained in index");
                                         &cache_dir,
                                         file_name,
                                         ) {
-                                        if cfg!(debug_assertions) {
-                                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                            eprintln!("Create event {} {} {}", env.hash(), env.subject(), dest.display());
-                                        }
+                                        debug!("Create event {} {} {}", env.hash(), env.subject(), dest.display());
                                         sender.send(RefreshEvent {
                                             hash: folder_hash,
                                             kind: Create(Box::new(env)),
                                         });
                                         continue;
                                     } else {
-                                        if cfg!(debug_assertions) {
-                                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                            eprintln!("not valid email");
-                                        }
+                                        debug!("not valid email");
                                     }
                                 } else {
                                     sender.send(RefreshEvent {
                                         hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
                                     });
-                                    if cfg!(debug_assertions) {
-                                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                        eprintln!("contains_new_key");
-                                    }
+                                    debug!("contains_new_key");
                                 }
 
                                 /* Maybe a re-read should be triggered here just to be safe.
@@ -393,10 +350,7 @@ eprintln!("removed but not contained in index");
                             _ => {}
                         },
                         Err(e) => {
-                            if cfg!(debug_assertions) {
-                                eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                eprintln!("watch error: {:?}", e)
-                            }
+                            debug!("watch error: {:?}", e)
                         }
                     }
                 }
@@ -436,10 +390,7 @@ eprintln!("removed but not contained in index");
                         hostn_buf.trim()
                     ));
                 }
-                if cfg!(debug_assertions) {
-                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                    eprintln!("saving at {}", path.display());
-                }
+                debug!("saving at {}", path.display());
                 let file = fs::File::create(path).unwrap();
                 let mut writer = io::BufWriter::new(file);
                 writer.write_all(bytes).unwrap();
@@ -672,10 +623,7 @@ impl MaildirType {
                                                     }
                                                 local_r.push(e);
                                             } else {
-                                                if cfg!(debug_assertions) {
-eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", hash, file.as_path().display());
-}
+                                                debug!("DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`", hash, file.as_path().display());
                                                 continue;
                                             }
                                         }
@@ -710,15 +658,13 @@ fn add_path_to_index(
     file_name: PathBuf,
 ) -> Option<Envelope> {
     let env: Envelope;
-    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-    eprintln!("add_path_to_index path {:?} filename{:?}", path, file_name);
+    debug!("add_path_to_index path {:?} filename{:?}", path, file_name);
     let hash = get_file_hash(path);
     {
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(folder_hash).or_default();;
         map.insert(hash, path.to_path_buf());
-        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-        eprintln!(
+        debug!(
             "inserted {} in {} map, len={}",
             hash,
             folder_hash,
@@ -727,11 +673,9 @@ fn add_path_to_index(
     }
     let op = Box::new(MaildirOp::new(hash, hash_index.clone(), folder_hash));
     if let Some(e) = Envelope::from_token(op, hash) {
-        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-        eprintln!("add_path_to_index gen {}\t{}", hash, file_name.display());
+        debug!("add_path_to_index gen {}\t{}", hash, file_name.display());
         if let Ok(cached) = cache_dir.place_cache_file(file_name) {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("putting in cache");
+            debug!("putting in cache");
             /* place result in cache directory */
             let f = match fs::File::create(cached) {
                 Ok(f) => f,
@@ -744,8 +688,7 @@ fn add_path_to_index(
         }
         env = e;
     } else {
-        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-        eprintln!(
+        debug!(
             "DEBUG: hash {}, path: {} couldn't be parsed in `add_path_to_index`",
             hash,
             path.display()

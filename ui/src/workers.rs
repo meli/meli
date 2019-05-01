@@ -228,10 +228,7 @@ impl WorkController {
                 }
 
                 // Report the amount of work done.
-                if cfg!(debug_assertions) {
-                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                    eprintln!("Thread {} did {} jobs.", thread_num, work_done);
-                }
+                debug!("Thread {} did {} jobs.", thread_num, work_done);
             });
 
             // Add the handle for the newly spawned thread to the list of handles

@@ -243,16 +243,10 @@ impl State {
         )
         .unwrap();
         s.flush();
-        if cfg!(debug_assertions) {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("DEBUG: inserting mailbox hashes:");
-        }
+        debug!("inserting mailbox hashes:");
         for (x, account) in s.context.accounts.iter_mut().enumerate() {
             for folder in account.backend.folders().values() {
-                if cfg!(debug_assertions) {
-                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                    eprintln!("hash & folder: {:?} {}", folder.hash(), folder.name());
-                }
+                debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
                 s.context.mailbox_hashes.insert(folder.hash(), x);
             }
             let sender = s.context.sender.clone();
@@ -293,8 +287,7 @@ impl State {
                 .replies
                 .push_back(UIEvent::MailboxUpdate((idxa, hash)));
         } else {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!(
+            debug!(
                 "BUG: mailbox with hash {} not found in mailbox_hashes.",
                 hash
             );
@@ -355,8 +348,7 @@ impl State {
         if termcols.unwrap_or(72) as usize != self.cols
             || termrows.unwrap_or(120) as usize != self.rows
         {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!(
+            debug!(
                 "Size updated, from ({}, {}) -> ({:?}, {:?})",
                 self.cols, self.rows, termcols, termrows
             );

@@ -394,10 +394,7 @@ impl Envelope {
         let (headers, _) = match parser::mail(bytes).to_full_result() {
             Ok(v) => v,
             Err(e) => {
-                if cfg!(debug_assertions) {
-                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("error in parsing mail\n{:?}\n", e);
-                }
+                debug!("error in parsing mail\n{:?}\n", e);
                 let error_msg = String::from("Mail cannot be shown because of errors.");
                 return Err(MeliError::new(error_msg));
             }
@@ -550,10 +547,7 @@ eprintln!("error in parsing mail\n{:?}\n", e);
         let (headers, body) = match parser::mail(bytes).to_full_result() {
             Ok(v) => v,
             Err(_) => {
-                if cfg!(debug_assertions) {
-                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("error in parsing mail\n");
-                }
+                debug!("error in parsing mail\n");
                 let error_msg = b"Mail cannot be shown because of errors.";
                 let builder = AttachmentBuilder::new(error_msg);
                 return builder.build();
@@ -584,36 +578,32 @@ eprintln!("error in parsing mail\n");
             })
     }
     pub fn body(&self, mut operation: Box<BackendOp>) -> Attachment {
-        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("searching body for {:?}", self.message_id_display());
+        debug!("searching body for {:?}", self.message_id_display());
         let file = operation.as_bytes();
         self.body_bytes(file.unwrap())
         /*
-                let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
-                    Ok(v) => v,
-                    Err(_) => {
-                        if cfg!(debug_assertions) {
-        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("2error in parsing mail\n");
+        let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
+            Ok(v) => v,
+            Err(_) => {
+            debug!("2error in parsing mail\n");
+                let error_msg = b"Mail cannot be shown because of errors.";
+                let mut builder = AttachmentBuilder::new(error_msg);
+                return builder.build();
+            }
+        };
+        let mut builder = AttachmentBuilder::new(body);
+        for (name, value) in headers {
+            if value.len() == 1 && value.is_empty() {
+                continue;
+            }
+            if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
+                builder.content_transfer_encoding(value);
+            } else if name.eq_ignore_ascii_case(b"content-type") {
+                builder.content_type(value);
+            }
         }
-                        let error_msg = b"Mail cannot be shown because of errors.";
-                        let mut builder = AttachmentBuilder::new(error_msg);
-                        return builder.build();
-                    }
-                };
-                let mut builder = AttachmentBuilder::new(body);
-                for (name, value) in headers {
-                    if value.len() == 1 && value.is_empty() {
-                        continue;
-                    }
-                    if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
-                        builder.content_transfer_encoding(value);
-                    } else if name.eq_ignore_ascii_case(b"content-type") {
-                        builder.content_type(value);
-                    }
-                }
-                builder.build()
-                */
+        builder.build()
+        */
     }
     pub fn subject(&self) -> Cow<str> {
         match self.subject {

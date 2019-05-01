@@ -501,10 +501,7 @@ impl Component for Composer {
                         let account = &context.accounts[self.account_cursor];
                         let draft = std::mem::replace(&mut self.draft, Draft::default());
                         if let Err(e) = account.save_draft(draft) {
-                            if cfg!(debug_assertions) {
-                                eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                                eprintln!("{:?} could not save draft", e);
-                            }
+                            debug!("{:?} could not save draft", e);
                             context.replies.push_back(UIEvent::Notification(
                                 Some("Could not save draft.".into()),
                                 e.into(),
@@ -559,10 +556,7 @@ impl Component for Composer {
                             .conf()
                             .sent_folder(),
                     ) {
-                        if cfg!(debug_assertions) {
-                            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                            eprintln!("{:?} could not save sent msg", e);
-                        }
+                        debug!("{:?} could not save sent msg", e);
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not save in 'Sent' folder.".into()),
                             e.into(),

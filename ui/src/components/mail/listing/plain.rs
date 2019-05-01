@@ -477,20 +477,14 @@ impl Component for PlainListing {
                     return true;
                 }
                 Action::SubSort(field, order) => {
-                    if cfg!(debug_assertions) {
-                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                        eprintln!("SubSort {:?} , {:?}", field, order);
-                    }
+                    debug!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
                     self.dirty = true;
                     self.refresh_mailbox(context);
                     return true;
                 }
                 Action::Sort(field, order) => {
-                    if cfg!(debug_assertions) {
-                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                        eprintln!("Sort {:?} , {:?}", field, order);
-                    }
+                    debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
                     self.dirty = true;
                     self.refresh_mailbox(context);

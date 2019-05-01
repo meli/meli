@@ -134,10 +134,7 @@ impl Account {
         let notify_fn = Arc::new(notify_fn);
 
         if let Some(folder_confs) = settings.conf().folders() {
-            //if cfg!(debug_assertions) {
-            //eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            //eprintln!("folder renames: {:?}", folder_renames);
-            //}
+            //debug!("folder renames: {:?}", folder_renames);
             for f in ref_folders.values_mut() {
                 if let Some(r) = folder_confs.get(&f.name().to_ascii_lowercase()) {
                     if let Some(rename) = r.rename() {
@@ -228,19 +225,13 @@ impl Account {
                     return Some(EnvelopeUpdate(old_hash));
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
-                    if cfg!(debug_assertions) {
-                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                        eprintln!("rename {} to {}", old_hash, new_hash);
-                    }
+                    debug!("rename {} to {}", old_hash, new_hash);
                     let mailbox = mailbox!(&folder_hash, self.folders);
                     mailbox.rename(old_hash, new_hash);
                     return Some(EnvelopeRename(mailbox.folder.hash(), old_hash, new_hash));
                 }
                 RefreshEventKind::Create(envelope) => {
-                    if cfg!(debug_assertions) {
-                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                        eprintln!("create {}", envelope.hash());
-                    }
+                    debug!("create {}", envelope.hash());
                     let env: &Envelope = mailbox!(&folder_hash, self.folders).insert(*envelope);
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
                     return Some(Notification(
@@ -284,10 +275,7 @@ impl Account {
     pub fn list_folders(&self) -> Vec<Folder> {
         let mut folders = self.backend.folders();
         if let Some(folder_confs) = self.settings.conf().folders() {
-            //if cfg!(debug_assertions) {
-            //eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            //eprintln!("folder renames: {:?}", folder_renames);
-            //}
+            //debug!("folder renames: {:?}", folder_renames);
             for f in folders.values_mut() {
                 if let Some(r) = folder_confs.get(&f.name().to_ascii_lowercase()) {
                     if let Some(rename) = r.rename() {

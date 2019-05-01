@@ -470,9 +470,8 @@ impl Listing {
         a: &AccountMenuEntry,
         context: &mut Context,
     ) -> usize {
-        if cfg!(debug_assertions) && !is_valid_area!(area) {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("BUG: invalid area in print_account");
+        if !is_valid_area!(area) {
+            debug!("BUG: invalid area in print_account");
         }
         // Each entry and its index in the account
         let entries: FnvHashMap<FolderHash, Folder> = context.accounts[a.index]

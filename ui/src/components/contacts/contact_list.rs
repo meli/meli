@@ -89,8 +89,6 @@ impl ContactList {
             maxima.1 = std::cmp::max(maxima.1, c.lastname().split_graphemes().len());
             maxima.2 = std::cmp::max(maxima.2, c.email().split_graphemes().len());
             maxima.3 = std::cmp::max(maxima.3, c.url().split_graphemes().len());
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("card = {:?}", c);
         }
         maxima.0 += 5;
         maxima.1 += maxima.0 + 5;

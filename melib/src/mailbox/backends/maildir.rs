@@ -66,20 +66,11 @@ impl MaildirOp {
     fn path(&self) -> PathBuf {
         let map = self.hash_index.lock().unwrap();
         let map = &map[&self.folder_hash];
-        if cfg!(debug_assertions) {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("looking for {} in {} map", self.hash, self.folder_hash);
-        }
+        debug!("looking for {} in {} map", self.hash, self.folder_hash);
         if !map.contains_key(&self.hash) {
-            if cfg!(debug_assertions) {
-                eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                eprintln!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
-            }
+            debug!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
             for e in map.iter() {
-                if cfg!(debug_assertions) {
-                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                    eprintln!("{:#?}", e);
-                }
+                debug!("{:#?}", e);
             }
         }
         map.get(&self.hash).unwrap().clone()
@@ -125,8 +116,7 @@ impl<'a> BackendOp for MaildirOp {
                 'S' => flag |= Flag::SEEN,
                 'T' => flag |= Flag::TRASHED,
                 _ => {
-                    eprint!("{}:{}_{}:	", file!(), line!(), column!());
-                    eprintln!("DEBUG: in fetch_flags, path is {}", path);
+                    debug!("DEBUG: in fetch_flags, path is {}", path);
                 }
             }
         }
@@ -166,15 +156,9 @@ impl<'a> BackendOp for MaildirOp {
             new_name.push('T');
         }
 
-        if cfg!(debug_assertions) {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("renaming {:?} to {:?}", path, new_name);
-        }
+        debug!("renaming {:?} to {:?}", path, new_name);
         fs::rename(&path, &new_name)?;
-        if cfg!(debug_assertions) {
-            eprint!("{}:{}_{}:	", file!(), line!(), column!());
-            eprintln!("success in rename");
-        }
+        debug!("success in rename");
         let old_hash = envelope.hash();
         let new_name: PathBuf = new_name.into();
         let new_hash = get_file_hash(&new_name);

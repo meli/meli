@@ -18,6 +18,43 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+#[macro_use]
+pub mod dbg {
+    #[macro_export]
+    macro_rules! debug {
+        ($val:expr) => {
+            if cfg!(debug_assertions) {
+                eprint!(
+                    "[{:?}] {}:{}_{}:	",
+                    std::thread::current()
+                    .name()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
+                    file!(),
+                    line!(),
+                    column!()
+                );
+                eprintln!("{}", $val);
+            }
+        };
+        ($fmt:literal, $($arg:tt)*) => {
+            if cfg!(debug_assertions) {
+                eprint!(
+                    "[{:?}] {}:{}_{}:	",
+                    std::thread::current()
+                    .name()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
+                    file!(),
+                    line!(),
+                    column!()
+                );
+                eprintln!($fmt, $($arg)*);
+            }
+        };
+    }
+}
+
 pub mod addressbook;
 pub mod async_workers;
 pub mod conf;

@@ -23,6 +23,7 @@
  * This library exports the public types and methods of its modules
  */
 
+#[macro_use]
 extern crate melib;
 extern crate mime_apps;
 extern crate notify_rust;

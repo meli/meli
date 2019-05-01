@@ -130,10 +130,7 @@ impl Component for NotificationFilter {
                     .stdout(Stdio::piped())
                     .spawn()
                 {
-                    if cfg!(debug_assertions) {
-                        eprint!("{}:{}_{}:	", file!(), line!(), column!());
-eprintln!("{:?}", v);
-                    }
+                    debug!("{:?}", v);
                 }
             }
         }
