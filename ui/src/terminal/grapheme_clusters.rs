@@ -72,7 +72,7 @@ impl<'s> Iterator for WordBreakIter<'s> {
                 let next_idx = graphemes[next_idx].0;
                 let ret = &self.input[..next_idx];
                 self.input = &self.input[next_idx + 1..];
-                return Some(&self.input[..next_idx]);
+                return Some(ret);
             } else {
                 let ret = &self.input[..self.width];
                 self.input = &self.input[self.width..];

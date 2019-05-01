@@ -22,4 +22,4 @@ notify-rust = "^3" # >:c
 termion = "1.5.1"
 bincode = "1.0.1"
 uuid = { version = "0.6", features = ["serde", "v4"] }
-unicode-segmentation = "1.1.0" # >:c
+unicode-segmentation = "1.2.1" # >:c
