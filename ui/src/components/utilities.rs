@@ -496,7 +496,7 @@ impl Component for Pager {
             ((0, self.cursor_pos), (self.width - 1, self.height - 1)),
         );
         if pos.1 < get_y(bottom_right!(area)) {
-            self.max_cursor_pos = Some(self.cursor_pos + 1);
+            self.max_cursor_pos = Some(self.height + 1);
         }
         context.dirty_areas.push_back(area);
     }
