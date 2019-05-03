@@ -131,6 +131,7 @@ impl MailView {
                     use std::io::Write;
                     use std::process::{Command, Stdio};
                     let settings = context.accounts[self.coordinates.0].runtime_settings.conf();
+                    /* FIXME: duplication with view/html.rs */
                     if let Some(filter_invocation) = settings.html_filter() {
                         let parts = split_command!(filter_invocation);
                         let (cmd, args) = (parts[0], &parts[1..]);
@@ -163,6 +164,33 @@ impl MailView {
                         )
                         .into_bytes();
                         v.extend(html_filter.wait_with_output().unwrap().stdout);
+                    } else {
+                        if let Ok(mut html_filter) = Command::new("w3m")
+                            .args(&["-I", "utf-8", "-T", "text/html"])
+                            .stdin(Stdio::piped())
+                            .stdout(Stdio::piped())
+                            .spawn()
+                        {
+                            html_filter
+                                .stdin
+                                .as_mut()
+                                .unwrap()
+                                .write_all(&v)
+                                .expect("Failed to write to html filter stdin");
+                            *v = String::from(
+                                "Text piped through `w3m`. Press `v` to open in web browser. \n\n",
+                            )
+                            .into_bytes();
+                            v.extend(html_filter.wait_with_output().unwrap().stdout);
+                        } else {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(format!(
+                                    "Failed to find any application to use as html filter"
+                                )),
+                                String::new(),
+                            ));
+                            return;
+                        }
                     }
                 }
             })),
@@ -194,7 +222,7 @@ impl MailView {
                     } else if lidx < 1000 {
                         385 + (lidx - 99) * 5
                     } else {
-                        panic!("BUG: Message body with more than 100 urls, fix this");
+                        panic!("FIXME: Message body with more than 100 urls, fix this");
                     };
                     t.insert_str(l.start() + offset, &format!("[{}]", lidx));
                 }
@@ -261,97 +289,97 @@ impl Component for MailView {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
+        let y: usize = {
+            let accounts = &mut context.accounts;
+            let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
+                .as_ref()
+                .unwrap();
+            if !mailbox.collection.contains_key(&self.coordinates.2) {
+                /* The envelope has been renamed or removed, so wait for the appropriate event to
+                 * arrive */
+                return;
+            }
+            let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
+
+            if self.mode == ViewMode::Raw {
+                clear_area(grid, area);
+                context.dirty_areas.push_back(area);
+                get_y(upper_left) - 1
+            } else {
+                let (x, y) = write_string_to_grid(
+                    &format!("Date: {}", envelope.date_as_str()),
+                    grid,
+                    Color::Byte(33),
+                    Color::Default,
+                    area,
+                    true,
+                );
+                for x in x..=get_x(bottom_right) {
+                    grid[(x, y)].set_ch(' ');
+                    grid[(x, y)].set_bg(Color::Default);
+                    grid[(x, y)].set_fg(Color::Default);
+                }
+                let (x, y) = write_string_to_grid(
+                    &format!("From: {}", envelope.field_from_to_string()),
+                    grid,
+                    Color::Byte(33),
+                    Color::Default,
+                    (set_y(upper_left, y + 1), bottom_right),
+                    true,
+                );
+                for x in x..=get_x(bottom_right) {
+                    grid[(x, y)].set_ch(' ');
+                    grid[(x, y)].set_bg(Color::Default);
+                    grid[(x, y)].set_fg(Color::Default);
+                }
+                let (x, y) = write_string_to_grid(
+                    &format!("To: {}", envelope.field_to_to_string()),
+                    grid,
+                    Color::Byte(33),
+                    Color::Default,
+                    (set_y(upper_left, y + 1), bottom_right),
+                    true,
+                );
+                for x in x..=get_x(bottom_right) {
+                    grid[(x, y)].set_ch(' ');
+                    grid[(x, y)].set_bg(Color::Default);
+                    grid[(x, y)].set_fg(Color::Default);
+                }
+                let (x, y) = write_string_to_grid(
+                    &format!("Subject: {}", envelope.subject()),
+                    grid,
+                    Color::Byte(33),
+                    Color::Default,
+                    (set_y(upper_left, y + 1), bottom_right),
+                    true,
+                );
+                for x in x..=get_x(bottom_right) {
+                    grid[(x, y)].set_ch(' ');
+                    grid[(x, y)].set_bg(Color::Default);
+                    grid[(x, y)].set_fg(Color::Default);
+                }
+                let (x, y) = write_string_to_grid(
+                    &format!("Message-ID: <{}>", envelope.message_id_raw()),
+                    grid,
+                    Color::Byte(33),
+                    Color::Default,
+                    (set_y(upper_left, y + 1), bottom_right),
+                    true,
+                );
+                for x in x..=get_x(bottom_right) {
+                    grid[(x, y)].set_ch(' ');
+                    grid[(x, y)].set_bg(Color::Default);
+                    grid[(x, y)].set_fg(Color::Default);
+                }
+                clear_area(grid, (set_y(upper_left, y + 1), set_y(bottom_right, y + 1)));
+                context
+                    .dirty_areas
+                    .push_back((upper_left, set_y(bottom_right, y + 1)));
+                y + 1
+            }
+        };
+
         if self.dirty {
-            let y: usize = {
-                let accounts = &mut context.accounts;
-                let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
-                    .as_ref()
-                    .unwrap();
-                if !mailbox.collection.contains_key(&self.coordinates.2) {
-                    /* The envelope has been renamed or removed, so wait for the appropriate event to
-                     * arrive */
-                    return;
-                }
-                let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
-
-                if self.mode == ViewMode::Raw {
-                    clear_area(grid, area);
-                    context.dirty_areas.push_back(area);
-                    get_y(upper_left) - 1
-                } else {
-                    let (x, y) = write_string_to_grid(
-                        &format!("Date: {}", envelope.date_as_str()),
-                        grid,
-                        Color::Byte(33),
-                        Color::Default,
-                        area,
-                        true,
-                    );
-                    for x in x..=get_x(bottom_right) {
-                        grid[(x, y)].set_ch(' ');
-                        grid[(x, y)].set_bg(Color::Default);
-                        grid[(x, y)].set_fg(Color::Default);
-                    }
-                    let (x, y) = write_string_to_grid(
-                        &format!("From: {}", envelope.field_from_to_string()),
-                        grid,
-                        Color::Byte(33),
-                        Color::Default,
-                        (set_y(upper_left, y + 1), bottom_right),
-                        true,
-                    );
-                    for x in x..=get_x(bottom_right) {
-                        grid[(x, y)].set_ch(' ');
-                        grid[(x, y)].set_bg(Color::Default);
-                        grid[(x, y)].set_fg(Color::Default);
-                    }
-                    let (x, y) = write_string_to_grid(
-                        &format!("To: {}", envelope.field_to_to_string()),
-                        grid,
-                        Color::Byte(33),
-                        Color::Default,
-                        (set_y(upper_left, y + 1), bottom_right),
-                        true,
-                    );
-                    for x in x..=get_x(bottom_right) {
-                        grid[(x, y)].set_ch(' ');
-                        grid[(x, y)].set_bg(Color::Default);
-                        grid[(x, y)].set_fg(Color::Default);
-                    }
-                    let (x, y) = write_string_to_grid(
-                        &format!("Subject: {}", envelope.subject()),
-                        grid,
-                        Color::Byte(33),
-                        Color::Default,
-                        (set_y(upper_left, y + 1), bottom_right),
-                        true,
-                    );
-                    for x in x..=get_x(bottom_right) {
-                        grid[(x, y)].set_ch(' ');
-                        grid[(x, y)].set_bg(Color::Default);
-                        grid[(x, y)].set_fg(Color::Default);
-                    }
-                    let (x, y) = write_string_to_grid(
-                        &format!("Message-ID: <{}>", envelope.message_id_raw()),
-                        grid,
-                        Color::Byte(33),
-                        Color::Default,
-                        (set_y(upper_left, y + 1), bottom_right),
-                        true,
-                    );
-                    for x in x..=get_x(bottom_right) {
-                        grid[(x, y)].set_ch(' ');
-                        grid[(x, y)].set_bg(Color::Default);
-                        grid[(x, y)].set_fg(Color::Default);
-                    }
-                    clear_area(grid, (set_y(upper_left, y + 1), set_y(bottom_right, y + 1)));
-                    context
-                        .dirty_areas
-                        .push_back((upper_left, set_y(bottom_right, y + 1)));
-                    y + 1
-                }
-            };
-
             let body = {
                 let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
                 let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
@@ -407,21 +435,20 @@ impl Component for MailView {
                 }
             };
             self.dirty = false;
-
-            match self.mode {
-                ViewMode::Subview => {
-                    if let Some(s) = self.subview.as_mut() {
-                        s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-                    }
-                }
-                ViewMode::ContactSelector(ref mut s) => {
-                    clear_area(grid, (set_y(upper_left, y + 1), bottom_right));
+        }
+        match self.mode {
+            ViewMode::Subview if self.subview.is_some() => {
+                if let Some(s) = self.subview.as_mut() {
                     s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
                 }
-                _ => {
-                    if let Some(p) = self.pager.as_mut() {
-                        p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-                    }
+            }
+            ViewMode::ContactSelector(ref mut s) => {
+                clear_area(grid, (set_y(upper_left, y + 1), bottom_right));
+                s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+            }
+            _ => {
+                if let Some(p) = self.pager.as_mut() {
+                    p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
                 }
             }
         }

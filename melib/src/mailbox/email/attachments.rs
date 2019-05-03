@@ -299,12 +299,12 @@ impl Attachment {
                 text.extend(decode(self, None));
             }
             ContentType::Multipart {
-                kind: ref multipart_type,
-                subattachments: ref sub_att_vec,
+                ref kind,
+                ref subattachments,
                 ..
-            } => match *multipart_type {
+            } => match kind {
                 MultipartType::Alternative => {
-                    for a in sub_att_vec {
+                    for a in subattachments {
                         if let ContentType::Text {
                             kind: Text::Plain, ..
                         } = a.content_type
@@ -314,9 +314,9 @@ impl Attachment {
                         }
                     }
                 }
-                MultipartType::Mixed | MultipartType::Digest => {
-                    for a in sub_att_vec {
-                        a.get_text_recursive(text);
+                _ => {
+                    for a in subattachments {
+                        a.get_text_recursive(text)
                     }
                 }
             },
@@ -369,6 +369,19 @@ impl Attachment {
             ContentType::Text {
                 kind: Text::Html, ..
             } => true,
+            ContentType::Multipart {
+                ref subattachments, ..
+            } => subattachments
+                .iter()
+                .fold(true, |acc, a| match &a.content_type {
+                    ContentType::Text {
+                        kind: Text::Plain, ..
+                    } => false,
+                    ContentType::Text {
+                        kind: Text::Html, ..
+                    } => acc,
+                    _ => acc,
+                }),
             _ => false,
         }
     }
@@ -401,17 +414,17 @@ fn decode_rfc822(_raw: &[u8]) -> Attachment {
 type Filter<'a> = Box<FnMut(&'a Attachment, &mut Vec<u8>) -> () + 'a>;
 
 fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> Vec<u8> {
-    let mut ret = match a.content_type {
+    let ret = match a.content_type {
         ContentType::Unsupported { .. } => Vec::new(),
         ContentType::Text { .. } => decode_helper(a, filter),
         ContentType::MessageRfc822 => decode_rec(&decode_rfc822(&a.raw), None),
         ContentType::Multipart {
-            kind: ref multipart_type,
-            subattachments: ref sub_att_vec,
+            ref kind,
+            ref subattachments,
             ..
-        } => {
-            if *multipart_type == MultipartType::Alternative {
-                for a in sub_att_vec {
+        } => match kind {
+            MultipartType::Alternative => {
+                for a in subattachments {
                     if let ContentType::Text {
                         kind: Text::Plain, ..
                     } = a.content_type
@@ -420,18 +433,16 @@ fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> 
                     }
                 }
                 decode_helper(a, filter)
-            } else {
+            }
+            _ => {
                 let mut vec = Vec::new();
-                for a in sub_att_vec {
+                for a in subattachments {
                     vec.extend(decode_rec_helper(a, filter));
                 }
                 vec
             }
-        }
+        },
     };
-    if let Some(filter) = filter {
-        filter(a, &mut ret);
-    }
     ret
 }
 
