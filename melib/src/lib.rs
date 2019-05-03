@@ -34,7 +34,7 @@ pub mod dbg {
                     line!(),
                     column!()
                 );
-                eprintln!("{}", $val);
+                eprintln!("{} = {:?}", stringify!($val), $val);
             }
         };
         ($fmt:literal, $($arg:tt)*) => {
