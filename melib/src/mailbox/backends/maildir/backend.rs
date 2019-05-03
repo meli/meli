@@ -407,7 +407,6 @@ impl MailBackend for MaildirType {
 
 impl MaildirType {
     pub fn new(f: &AccountSettings) -> Self {
-        let name = f.name.clone();
         let mut folders: FnvHashMap<FolderHash, MaildirFolder> = Default::default();
         fn recurse_folders<P: AsRef<Path>>(
             folders: &mut FnvHashMap<FolderHash, MaildirFolder>,
@@ -590,7 +589,7 @@ impl MaildirType {
                                                     let result: result::Result<Envelope, _> = bincode::deserialize_from(reader);
                                                     if let Ok(env) = result {
                                                         let mut map = map.lock().unwrap();
-                                                        let map = map.entry(folder_hash).or_default();;
+                                                        let map = map.entry(folder_hash).or_default();
                                                         let hash = env.hash();
                                                         map.insert(hash, file.clone());
                                                         local_r.push(env);
