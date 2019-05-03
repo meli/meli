@@ -21,6 +21,7 @@
 
 use super::*;
 use components::utilities::PageMovement;
+use std::cmp;
 
 //use melib::mailbox::backends::BackendOp;
 
@@ -57,21 +58,18 @@ impl fmt::Display for MailboxView {
 impl MailboxView {
     /// Helper function to format entry strings for CompactListing */
     /* TODO: Make this configurable */
-    fn make_entry_string(e: &Envelope, len: usize, idx: usize) -> String {
+    fn make_entry_string(e: &Envelope, len: usize, idx: usize) -> (String, String, String) {
         if len > 0 {
-            format!(
-                "{}    {}    {:.85} ({})",
-                idx,
-                &MailboxView::format_date(e),
-                e.subject(),
-                len
+            (
+                idx.to_string(),
+                MailboxView::format_date(e),
+                format!("{} ({})", e.subject(), len),
             )
         } else {
-            format!(
-                "{}    {}    {:.85}",
-                idx,
-                &MailboxView::format_date(e),
-                e.subject(),
+            (
+                idx.to_string(),
+                MailboxView::format_date(e),
+                e.subject().to_string(),
             )
         }
     }
@@ -153,6 +151,9 @@ impl MailboxView {
             return;
         }
         let threads = &mailbox.collection.threads;
+        let mut rows = Vec::with_capacity(1024);
+        let mut min_width = (0, 0, 0);
+
         threads.sort_by(self.sort, self.subsort, &mailbox.collection);
         for (idx, root_idx) in threads.root_iter().enumerate() {
             let thread_node = &threads.thread_nodes()[root_idx];
@@ -177,6 +178,51 @@ impl MailboxView {
                 panic!();
             }
             let root_envelope: &Envelope = &mailbox.collection[&i];
+            let strings = MailboxView::make_entry_string(root_envelope, thread_node.len(), idx);
+            min_width.0 = cmp::max(min_width.0, strings.0.len()); /* index */
+            min_width.1 = cmp::max(min_width.1, strings.1.split_graphemes().len()); /* date */
+            min_width.2 = cmp::max(min_width.2, strings.2.split_graphemes().len()); /* subject */
+            rows.push(strings);
+            self.order.insert(i, idx);
+        }
+        let widths: (usize, usize, usize);
+        let column_sep: usize;
+
+        if MAX_COLS >= min_width.0 + min_width.1 + min_width.2 {
+            widths = min_width;
+            column_sep = 2;
+        } else {
+            let width = MAX_COLS - 3 - min_width.0;
+            widths = (
+                min_width.0,
+                cmp::min(min_width.1, width / 3),
+                cmp::min(min_width.2, (2 * width) / 3),
+            );
+            column_sep = 1;
+        }
+
+        for ((idx, root_idx), strings) in threads.root_iter().enumerate().zip(rows) {
+            let thread_node = &threads.thread_nodes()[root_idx];
+            let i = if let Some(i) = thread_node.message() {
+                i
+            } else {
+                let mut iter_ptr = thread_node.children()[0];
+                while threads.thread_nodes()[iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[iter_ptr].children()[0];
+                }
+                threads.thread_nodes()[iter_ptr].message().unwrap()
+            };
+            if !mailbox.collection.contains_key(&i) {
+                debug!("key = {}", i);
+                debug!(
+                    "name = {} {}",
+                    mailbox.name(),
+                    context.accounts[self.cursor_pos.0].name()
+                );
+                debug!("{:#?}", context.accounts);
+
+                panic!();
+            }
             let fg_color = if thread_node.has_unseen() {
                 Color::Byte(0)
             } else {
@@ -189,14 +235,39 @@ impl MailboxView {
             } else {
                 Color::Default
             };
-            let (x, _) = write_string_to_grid(
-                &MailboxView::make_entry_string(root_envelope, thread_node.len(), idx),
+            write_string_to_grid(
+                &strings.0,
                 &mut self.content,
                 fg_color,
                 bg_color,
-                ((0, idx), (MAX_COLS - 1, idx)),
+                ((0, idx), (widths.0, idx)),
                 false,
             );
+            let mut x = widths.0 + column_sep;
+            for x in widths.0..x {
+                self.content[(x, idx)].set_bg(bg_color);
+            }
+            write_string_to_grid(
+                &strings.1,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                ((x, idx), (widths.1 + x, idx)),
+                false,
+            );
+            for x in widths.1 + x..widths.1 + column_sep + 1 {
+                self.content[(x, idx)].set_bg(bg_color);
+            }
+            x += widths.1 + column_sep + 1;
+            let (x, _) = write_string_to_grid(
+                &strings.2,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                ((x, idx), (widths.2 + x, idx)),
+                false,
+            );
+
             self.order.insert(i, idx);
 
             for x in x..MAX_COLS {
