@@ -22,6 +22,7 @@
 use super::*;
 use components::utilities::PageMovement;
 use std::cmp;
+use std::ops::{Deref, DerefMut};
 
 //use melib::mailbox::backends::BackendOp;
 
@@ -49,6 +50,30 @@ struct MailboxView {
     id: ComponentId,
 }
 
+macro_rules! column_str {
+    (
+        struct $name:ident(String)) => {
+        pub struct $name(String);
+
+        impl Deref for $name {
+            type Target = String;
+            fn deref(&self) -> &String {
+                &self.0
+            }
+        }
+        impl DerefMut for $name {
+            fn deref_mut(&mut self) -> &mut String {
+                &mut self.0
+            }
+        }
+    };
+}
+
+column_str!(struct IndexNoString(String));
+column_str!(struct DateString(String));
+column_str!(struct FromString(String));
+column_str!(struct SubjectString(String));
+
 impl fmt::Display for MailboxView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "")
@@ -58,18 +83,24 @@ impl fmt::Display for MailboxView {
 impl MailboxView {
     /// Helper function to format entry strings for CompactListing */
     /* TODO: Make this configurable */
-    fn make_entry_string(e: &Envelope, len: usize, idx: usize) -> (String, String, String) {
+    fn make_entry_string(
+        e: &Envelope,
+        len: usize,
+        idx: usize,
+    ) -> (IndexNoString, FromString, DateString, SubjectString) {
         if len > 0 {
             (
-                idx.to_string(),
-                MailboxView::format_date(e),
-                format!("{} ({})", e.subject(), len),
+                IndexNoString(idx.to_string()),
+                FromString(format!("{:?}", e.from())),
+                DateString(MailboxView::format_date(e)),
+                SubjectString(format!("{} ({})", e.subject(), len)),
             )
         } else {
             (
-                idx.to_string(),
-                MailboxView::format_date(e),
-                e.subject().to_string(),
+                IndexNoString(idx.to_string()),
+                FromString(format!("{:?}", e.from())),
+                DateString(MailboxView::format_date(e)),
+                SubjectString(e.subject().to_string()),
             )
         }
     }
@@ -180,8 +211,8 @@ impl MailboxView {
             let root_envelope: &Envelope = &mailbox.collection[&i];
             let strings = MailboxView::make_entry_string(root_envelope, thread_node.len(), idx);
             min_width.0 = cmp::max(min_width.0, strings.0.len()); /* index */
-            min_width.1 = cmp::max(min_width.1, strings.1.split_graphemes().len()); /* date */
-            min_width.2 = cmp::max(min_width.2, strings.2.split_graphemes().len()); /* subject */
+            min_width.1 = cmp::max(min_width.1, strings.2.split_graphemes().len()); /* date */
+            min_width.2 = cmp::max(min_width.2, strings.3.split_graphemes().len()); /* subject */
             rows.push(strings);
             self.order.insert(i, idx);
         }
@@ -196,7 +227,7 @@ impl MailboxView {
             widths = (
                 min_width.0,
                 cmp::min(min_width.1, width / 3),
-                cmp::min(min_width.2, (2 * width) / 3),
+                cmp::min(min_width.2, width / 3),
             );
             column_sep = 1;
         }
@@ -235,7 +266,7 @@ impl MailboxView {
             } else {
                 Color::Default
             };
-            write_string_to_grid(
+            let (x, _) = write_string_to_grid(
                 &strings.0,
                 &mut self.content,
                 fg_color,
@@ -243,28 +274,40 @@ impl MailboxView {
                 ((0, idx), (widths.0, idx)),
                 false,
             );
-            let mut x = widths.0 + column_sep;
-            for x in widths.0..x {
+            for x in x..=widths.0 + column_sep {
                 self.content[(x, idx)].set_bg(bg_color);
             }
-            write_string_to_grid(
-                &strings.1,
-                &mut self.content,
-                fg_color,
-                bg_color,
-                ((x, idx), (widths.1 + x, idx)),
-                false,
-            );
-            for x in widths.1 + x..widths.1 + column_sep + 1 {
-                self.content[(x, idx)].set_bg(bg_color);
-            }
-            x += widths.1 + column_sep + 1;
-            let (x, _) = write_string_to_grid(
+            let mut _x = widths.0 + column_sep;
+            let (mut x, _) = write_string_to_grid(
                 &strings.2,
                 &mut self.content,
                 fg_color,
                 bg_color,
-                ((x, idx), (widths.2 + x, idx)),
+                ((_x, idx), (widths.1 + _x, idx)),
+                false,
+            );
+            _x += widths.1 + column_sep + 1;
+            for x in x.._x {
+                self.content[(x, idx)].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.1,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                ((_x, idx), (widths.1 + _x, idx)),
+                false,
+            );
+            _x += widths.1 + column_sep + 2;
+            for x in x.._x {
+                self.content[(x, idx)].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.3,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                ((_x, idx), (widths.2 + _x, idx)),
                 false,
             );
 
