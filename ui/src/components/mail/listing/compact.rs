@@ -50,6 +50,22 @@ struct MailboxView {
     id: ComponentId,
 }
 
+macro_rules! address_list {
+    (($name:expr) as comma_sep_list) => {{
+        let mut ret: String =
+            $name
+                .into_iter()
+                .fold(String::new(), |mut s: String, n: &Address| {
+                    s.extend(n.to_string().chars());
+                    s.push_str(", ");
+                    s
+                });
+        ret.pop();
+        ret.pop();
+        ret
+    }};
+}
+
 macro_rules! column_str {
     (
         struct $name:ident(String)) => {
@@ -91,14 +107,14 @@ impl MailboxView {
         if len > 0 {
             (
                 IndexNoString(idx.to_string()),
-                FromString(format!("{:?}", e.from())),
+                FromString(address_list!((e.from()) as comma_sep_list)),
                 DateString(MailboxView::format_date(e)),
                 SubjectString(format!("{} ({})", e.subject(), len)),
             )
         } else {
             (
                 IndexNoString(idx.to_string()),
-                FromString(format!("{:?}", e.from())),
+                FromString(address_list!((e.from()) as comma_sep_list)),
                 DateString(MailboxView::format_date(e)),
                 SubjectString(e.subject().to_string()),
             )
