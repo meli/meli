@@ -52,8 +52,8 @@ impl<'s> Iterator for WordBreakIter<'s> {
         }
         self.input = self.input.trim_start_matches(|c| c == ' ');
         if self.input.starts_with('\n') {
-            let ret = &self.input[0..];
-            self.input = &self.input["\n".len()..];
+            let ret = &self.input[0..0];
+            self.input = &self.input[1..];
             return Some(ret);
         }
         if let Some(next_idx) = self.input.as_bytes().iter().position(|&c| c == b'\n') {
@@ -71,7 +71,7 @@ impl<'s> Iterator for WordBreakIter<'s> {
             if let Some(next_idx) = graphemes.iter().rposition(|(_, g)| *g == " ") {
                 let next_idx = graphemes[next_idx].0;
                 let ret = &self.input[..next_idx];
-                self.input = &self.input[next_idx + 1..];
+                self.input = &self.input[next_idx..];
                 return Some(ret);
             } else {
                 let ret = &self.input[..self.width];
@@ -79,8 +79,9 @@ impl<'s> Iterator for WordBreakIter<'s> {
                 return Some(ret);
             }
         } else {
+            /* graphemes.len() < width */
             let ret = self.input;
-            self.input = &self.input[self.input.len() - 1..];
+            self.input = &self.input[0..0];
             return Some(ret);
         }
     }
