@@ -31,10 +31,12 @@ pub struct HtmlView {
 }
 
 impl HtmlView {
-    pub fn new(bytes: Vec<u8>, context: &mut Context, account_pos: usize) -> Self {
+    pub fn new(body: &Attachment, context: &mut Context, account_pos: usize) -> Self {
         let id = ComponentId::new_v4();
+        let bytes: Vec<u8> = decode_rec(body, None);
+
         let settings = context.accounts[account_pos].runtime_settings.conf();
-        if let Some(filter_invocation) = settings.html_filter() {
+        let mut display_text = if let Some(filter_invocation) = settings.html_filter() {
             let parts = split_command!(filter_invocation);
             let (cmd, args) = (parts[0], &parts[1..]);
             let command_obj = Command::new(cmd)
@@ -50,13 +52,7 @@ impl HtmlView {
                     )),
                     String::new(),
                 ));
-                let pager = Pager::from_string(
-                    String::from_utf8_lossy(&bytes).to_string(),
-                    None,
-                    None,
-                    None,
-                );
-                HtmlView { pager, bytes, id }
+                String::from_utf8_lossy(&bytes).to_string()
             } else {
                 let mut html_filter = command_obj.unwrap();
                 html_filter
@@ -72,9 +68,7 @@ impl HtmlView {
                 display_text.push_str(&String::from_utf8_lossy(
                     &html_filter.wait_with_output().unwrap().stdout,
                 ));
-
-                let pager = Pager::from_string(display_text, None, None, None);
-                HtmlView { pager, bytes, id }
+                display_text
             }
         } else {
             if let Ok(mut html_filter) = Command::new("w3m")
@@ -96,8 +90,7 @@ impl HtmlView {
                     &html_filter.wait_with_output().unwrap().stdout,
                 ));
 
-                let pager = Pager::from_string(display_text, None, None, None);
-                HtmlView { pager, bytes, id }
+                display_text
             } else {
                 context.replies.push_back(UIEvent::Notification(
                     Some(format!(
@@ -105,15 +98,21 @@ impl HtmlView {
                     )),
                     String::new(),
                 ));
-                let pager = Pager::from_string(
-                    String::from_utf8_lossy(&bytes).to_string(),
-                    None,
-                    None,
-                    None,
-                );
-                HtmlView { pager, bytes, id }
+                String::from_utf8_lossy(&bytes).to_string()
             }
+        };
+        if body.count_attachments() > 1 {
+            display_text =
+                body.attachments()
+                    .iter()
+                    .enumerate()
+                    .fold(display_text, |mut s, (idx, a)| {
+                        s.push_str(&format!("[{}] {}\n\n\n", idx, a));
+                        s
+                    });
         }
+        let pager = Pager::from_string(display_text, None, None, None);
+        HtmlView { pager, bytes, id }
     }
 }
 

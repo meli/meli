@@ -315,17 +315,13 @@ impl Component for EnvelopeView {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
                     let attachment = &body.attachments()[aidx];
                     self.subview = Some(Box::new(HtmlView::new(
-                        decode(&attachment, None),
+                        &attachment,
                         context,
                         self.account_pos,
                     )));
                 }
                 ViewMode::Normal if body.is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(
-                        decode(&body, None),
-                        context,
-                        self.account_pos,
-                    )));
+                    self.subview = Some(Box::new(HtmlView::new(&body, context, self.account_pos)));
                     self.mode = ViewMode::Subview;
                 }
                 _ => {

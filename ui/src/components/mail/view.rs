@@ -396,18 +396,15 @@ impl Component for MailView {
                     self.pager = None;
                     let attachment = &body.attachments()[aidx];
                     self.subview = Some(Box::new(HtmlView::new(
-                        decode(&attachment, None),
+                        &attachment,
                         context,
                         self.coordinates.0,
                     )));
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Normal if body.is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(
-                        decode(&body, None),
-                        context,
-                        self.coordinates.0,
-                    )));
+                    self.subview =
+                        Some(Box::new(HtmlView::new(&body, context, self.coordinates.0)));
                     self.pager = None;
                     self.mode = ViewMode::Subview;
                 }
@@ -547,25 +544,24 @@ impl Component for MailView {
                         self.cmd_buf.clone(),
                     )));
             }
-            UIEvent::Input(Key::Char('r'))
-                if self.mode == ViewMode::Normal || self.mode == ViewMode::Raw =>
+            UIEvent::Input(Key::Alt('r'))
+                if self.mode == ViewMode::Normal || self.mode == ViewMode::Subview =>
             {
-                self.mode = if self.mode == ViewMode::Raw {
-                    ViewMode::Normal
-                } else {
-                    ViewMode::Raw
-                };
-                self.dirty = true;
+                self.mode = ViewMode::Raw;
+                self.set_dirty();
             }
             UIEvent::Input(Key::Char('r'))
-                if self.mode.is_attachment() || self.mode == ViewMode::Subview =>
+                if self.mode.is_attachment()
+                    || self.mode == ViewMode::Subview
+                    || self.mode == ViewMode::Url
+                    || self.mode == ViewMode::Raw =>
             {
                 self.mode = ViewMode::Normal;
-                self.subview.take();
-                self.dirty = true;
+                self.set_dirty();
             }
             UIEvent::Input(Key::Char('a'))
-                if !self.cmd_buf.is_empty() && self.mode == ViewMode::Normal =>
+                if !self.cmd_buf.is_empty()
+                    && (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview) =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -733,6 +729,31 @@ impl Component for MailView {
             }
             _ => {}
         }
+    }
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+        let mut map = if let Some(ref sbv) = self.subview {
+            sbv.get_shortcuts(context)
+        } else if let Some(ref pgr) = self.pager {
+            pgr.get_shortcuts(context)
+        } else {
+            FnvHashMap::with_capacity_and_hasher(4, Default::default())
+        };
+
+        map.insert("add_addresses_to_contacts", Key::Char('c'));
+        map.insert("view_raw_source", Key::Alt('r'));
+        if self.mode.is_attachment() || self.mode == ViewMode::Subview || self.mode == ViewMode::Raw
+        {
+            map.insert("return_to_normal_view", Key::Char('r'));
+        }
+        map.insert("open_attachment", Key::Char('a'));
+        if self.mode == ViewMode::Url {
+            map.insert("go_to_url", Key::Char('g'));
+        }
+        if self.mode == ViewMode::Normal || self.mode == ViewMode::Url {
+            map.insert("toggle_url_mode", Key::Char('u'));
+        }
+
+        map
     }
 
     fn id(&self) -> ComponentId {
