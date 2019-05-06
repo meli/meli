@@ -22,6 +22,21 @@
 pub mod dbg {
     #[macro_export]
     macro_rules! debug {
+        ($val:literal) => {
+            if cfg!(debug_assertions) {
+                eprint!(
+                    "[{:?}] {}:{}_{}:	",
+                    std::thread::current()
+                    .name()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
+                    file!(),
+                    line!(),
+                    column!()
+                );
+                eprintln!($val);
+            }
+        };
         ($val:expr) => {
             if cfg!(debug_assertions) {
                 eprint!(
