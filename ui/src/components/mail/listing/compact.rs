@@ -730,6 +730,7 @@ impl ListingTrait for CompactListing {
     }
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
         self.views[self.cursor].new_cursor_pos = (coordinates.0, coordinates.1, 0);
+        self.views[self.cursor].unfocused = false;
     }
 }
 
@@ -789,10 +790,7 @@ impl Component for CompactListing {
             | UIEvent::EnvelopeUpdate(_)
             | UIEvent::EnvelopeRename(_, _, _)
             | UIEvent::EnvelopeRemove(_) => {
-                return self
-                    .views
-                    .iter_mut()
-                    .fold(false, |acc, v| acc || v.process_event(event, context));
+                return self.views[self.cursor].process_event(event, context)
             }
             _ => return self.views[self.cursor].process_event(event, context),
         }
