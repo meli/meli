@@ -109,11 +109,18 @@ impl Component for Listing {
             false => total_cols,
         };
         let mid = get_x(bottom_right) - right_component_width;
-        if self.dirty && self.show_divider && mid != get_x(upper_left) {
-            for i in get_y(upper_left)..=get_y(bottom_right) {
-                grid[(mid, i)].set_ch(VERT_BOUNDARY);
-                grid[(mid, i)].set_fg(Color::Default);
-                grid[(mid, i)].set_bg(Color::Default);
+        if self.dirty && mid != get_x(upper_left) {
+            if self.show_divider {
+                for i in get_y(upper_left)..=get_y(bottom_right) {
+                    grid[(mid, i)].set_ch(VERT_BOUNDARY);
+                    grid[(mid, i)].set_fg(Color::Default);
+                    grid[(mid, i)].set_bg(Color::Default);
+                }
+            } else {
+                for i in get_y(upper_left)..=get_y(bottom_right) {
+                    grid[(mid, i)].set_fg(Color::Default);
+                    grid[(mid, i)].set_bg(Color::Default);
+                }
             }
             context
                 .dirty_areas
@@ -445,10 +452,9 @@ impl Listing {
         if !self.is_dirty() {
             return;
         }
-        if self.show_divider {
-            area = (area.0, pos_dec(area.1, (1, 0)));
-        }
         clear_area(grid, area);
+        /* visually divide menu and listing */
+        area = (area.0, pos_dec(area.1, (1, 0)));
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         self.dirty = false;
