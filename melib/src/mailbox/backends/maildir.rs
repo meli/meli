@@ -166,7 +166,7 @@ impl<'a> BackendOp for MaildirOp {
         let hash_index = self.hash_index.clone();
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(self.folder_hash).or_default();
-        map.remove(&old_hash);
+        map.insert(old_hash, new_name.clone());
         map.insert(new_hash, new_name);
         Ok(())
     }
