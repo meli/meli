@@ -546,20 +546,11 @@ impl Listing {
             let mut children: Vec<FolderHash> = entries[&folder_idx].children().to_vec();
             children
                 .sort_unstable_by(|a, b| folders_order[a].partial_cmp(&folders_order[b]).unwrap());
-            for child in entries[&folder_idx].children().iter() {
+            for child in children {
                 let len = s.len();
                 s.insert_str(len, &format!("{} ", depth));
                 push(depth, ' ');
-                print(
-                    *child,
-                    depth,
-                    inc,
-                    entries,
-                    folders_order,
-                    s,
-                    index,
-                    context,
-                );
+                print(child, depth, inc, entries, folders_order, s, index, context);
                 pop(depth);
             }
         }

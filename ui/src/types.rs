@@ -30,6 +30,7 @@ use melib::backends::FolderHash;
 use melib::{EnvelopeHash, RefreshEvent};
 use std;
 use std::fmt;
+use std::iter::Extend;
 use std::ops::Index;
 use std::thread;
 use uuid::Uuid;
@@ -132,7 +133,7 @@ pub struct Notification {
 #[derive(Debug)]
 pub(crate) struct StackVec<T: Default + Copy + std::fmt::Debug> {
     len: usize,
-    array: [T; 8],
+    array: [T; 32],
     heap_vec: Vec<T>,
 }
 
@@ -140,14 +141,14 @@ impl<T: Default + Copy + std::fmt::Debug> StackVec<T> {
     pub(crate) fn new() -> Self {
         StackVec {
             len: 0,
-            array: [T::default(); 8],
+            array: [T::default(); 32],
             heap_vec: Vec::new(),
         }
     }
     pub(crate) fn push(&mut self, ind: T) {
         if self.len == self.array.len() {
             if self.heap_vec.is_empty() {
-                self.heap_vec.reserve(16);
+                self.heap_vec.reserve(32);
                 for _ in 0..8 {
                     self.heap_vec.push(T::default());
                 }
@@ -190,6 +191,17 @@ impl<T: Default + Copy + std::fmt::Debug> Index<usize> for StackVec<T> {
             &self.heap_vec[idx]
         } else {
             &self.array[idx]
+        }
+    }
+}
+
+impl<T: Default + Copy + std::fmt::Debug> Extend<T> for StackVec<T> {
+    fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = T>,
+    {
+        for elem in iter {
+            self.push(elem);
         }
     }
 }

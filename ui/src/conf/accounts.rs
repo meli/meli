@@ -62,6 +62,7 @@ pub struct Account {
     name: String,
     pub(crate) folders: FnvHashMap<FolderHash, Option<Result<Mailbox>>>,
     pub(crate) folders_order: Vec<FolderHash>,
+    tree: Vec<FolderNode>,
     sent_folder: Option<usize>,
 
     pub(crate) address_book: AddressBook,
@@ -123,13 +124,19 @@ impl<'a> Iterator for MailboxIterator<'a> {
     }
 }
 
+#[derive(Debug, Default)]
+struct FolderNode {
+    hash: FolderHash,
+    kids: Vec<FolderNode>,
+}
+
 impl Account {
     pub fn new(name: String, settings: AccountConf, map: &Backends, notify_fn: NotifyFn) -> Self {
         let mut backend = map.get(settings.account().format())(settings.account());
         let mut ref_folders: FnvHashMap<FolderHash, Folder> = backend.folders();
         let mut folders: FnvHashMap<FolderHash, Option<Result<Mailbox>>> =
             FnvHashMap::with_capacity_and_hasher(ref_folders.len(), Default::default());
-        let mut folders_order: Vec<FolderHash> = Vec::with_capacity(folders.len());
+        let mut folders_order: Vec<FolderHash> = Vec::with_capacity(ref_folders.len());
         let mut workers: FnvHashMap<FolderHash, Worker> = FnvHashMap::default();
         let notify_fn = Arc::new(notify_fn);
 
@@ -144,14 +151,29 @@ impl Account {
             }
         }
         let mut stack: StackVec<FolderHash> = StackVec::new();
+        let mut tree: Vec<FolderNode> = Vec::new();
         for (h, f) in ref_folders.iter() {
             if f.parent().is_none() {
-                folders_order.push(f.hash());
+                fn rec(h: FolderHash, ref_folders: &FnvHashMap<FolderHash, Folder>) -> FolderNode {
+                    let mut node = FolderNode {
+                        hash: h,
+                        kids: Vec::new(),
+                    };
+                    for &c in ref_folders[&h].children() {
+                        node.kids.push(rec(c, ref_folders));
+                    }
+                    node
+                };
+
+                tree.push(rec(*h, &ref_folders));
                 for &c in f.children() {
+                    let k = FolderNode {
+                        hash: c,
+                        kids: Vec::new(),
+                    };
                     stack.push(c);
                 }
                 while let Some(next) = stack.pop() {
-                    folders_order.push(next);
                     for c in ref_folders[&next].children() {
                         stack.push(*c);
                     }
@@ -162,6 +184,20 @@ impl Account {
                 *h,
                 Account::new_worker(f.clone(), &mut backend, notify_fn.clone()),
             );
+        }
+        tree.sort_unstable_by_key(|f| ref_folders[&f.hash].name());
+        {
+            //FIXME: NLL
+            let mut stack: StackVec<Option<&FolderNode>> = StackVec::new();
+            for n in tree.iter_mut() {
+                folders_order.push(n.hash);
+                n.kids.sort_unstable_by_key(|f| ref_folders[&f.hash].name());
+                stack.extend(n.kids.iter().rev().map(|r| Some(r)));
+                while let Some(Some(next)) = stack.pop() {
+                    folders_order.push(next.hash);
+                    stack.extend(next.kids.iter().rev().map(|r| Some(r)));
+                }
+            }
         }
 
         let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
@@ -185,6 +221,7 @@ impl Account {
             name,
             folders,
             folders_order,
+            tree,
             address_book,
             sent_folder: None,
             workers,
