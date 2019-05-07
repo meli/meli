@@ -409,6 +409,28 @@ impl Component for MailView {
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Subview | ViewMode::ContactSelector(_) => {}
+                ViewMode::Raw => {
+                    let text = {
+                        let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
+                        let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
+                            .as_ref()
+                            .unwrap();
+                        let envelope: &Envelope = &mailbox.collection[&mailbox_idx.2];
+                        let mut op = context.accounts[mailbox_idx.0]
+                            .backend
+                            .operation(envelope.hash(), mailbox.folder.hash());
+                        op.as_bytes()
+                            .map(|v| String::from_utf8_lossy(v).into_owned())
+                            .unwrap_or_else(|e| e.to_string())
+                    };
+                    self.pager = Some(Pager::from_string(
+                        text,
+                        Some(context),
+                        None,
+                        Some(width!(area)),
+                    ));
+                    self.subview = None;
+                }
                 _ => {
                     let text = {
                         self.attachment_to_text(&body, context)
