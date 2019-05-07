@@ -56,7 +56,7 @@ named!(
 named!(close<Action>, map!(ws!(tag!("close")), |_| Tab(Close)));
 named!(
     goto<Action>,
-    preceded!(tag!("b "), map!(call!(usize_c), Action::ViewMailbox))
+    preceded!(tag!("go "), map!(call!(usize_c), Action::ViewMailbox))
 );
 
 named!(
