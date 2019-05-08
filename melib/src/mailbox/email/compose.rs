@@ -279,8 +279,8 @@ fn ignore_header(header: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_new() {

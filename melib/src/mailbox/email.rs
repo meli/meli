@@ -101,10 +101,10 @@ impl PartialEq for Address {
                 false
             }
             (Address::Mailbox(s), Address::Mailbox(o)) => {
-                s.address_spec.display(&s.raw) == o.address_spec.display(&o.raw)
+                s.address_spec.display_bytes(&s.raw) == o.address_spec.display_bytes(&o.raw)
             }
             (Address::Group(s), Address::Group(o)) => {
-                s.display_name.display(&s.raw) == o.display_name.display(&o.raw)
+                s.display_name.display_bytes(&s.raw) == o.display_name.display_bytes(&o.raw)
                     && s.mailbox_list
                         .iter()
                         .zip(o.mailbox_list.iter())
