@@ -355,7 +355,6 @@ impl ThreadView {
             return;
         }
 
-        let (width, height) = self.content.size();
         copy_area(grid, &self.content, dest_area, src_area);
     }
 
@@ -555,24 +554,24 @@ impl ThreadView {
         if height == 0 || width == 0 {
             return;
         }
-        let was_dirty = self.dirty;
-
-        self.draw_list(
-            grid,
-            (set_y(upper_left, y), set_x(bottom_right, mid - 1)),
-            context,
-        );
-        if was_dirty {
-            for x in get_x(upper_left)..=get_x(bottom_right) {
-                set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
-                grid[(x, y - 1)].set_fg(Color::Byte(33));
-                grid[(x, y - 1)].set_bg(Color::Default);
-            }
+        for x in get_x(upper_left)..=get_x(bottom_right) {
+            set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
+            grid[(x, y - 1)].set_fg(Color::Byte(33));
+            grid[(x, y - 1)].set_bg(Color::Default);
         }
-        {
+
+        if self.show_mailview {
+            self.draw_list(
+                grid,
+                (set_y(upper_left, y), set_x(bottom_right, mid - 1)),
+                context,
+            );
             let upper_left = (mid + 1, get_y(upper_left) + y - 1);
             self.mailview
                 .draw(grid, (upper_left, bottom_right), context);
+        } else {
+            clear_area(grid, ((mid + 1, get_y(upper_left) + y - 1), bottom_right));
+            self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
         }
     }
     fn draw_horz(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -658,7 +657,6 @@ impl ThreadView {
             } else {
                 let area = (set_y(upper_left, y), bottom_right);
                 let upper_left = upper_left!(area);
-                let bottom_right = bottom_right!(area);
 
                 let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 2;
                 let page_no = (self.new_cursor_pos).wrapping_div(rows);
@@ -683,6 +681,7 @@ impl ThreadView {
             self.mailview
                 .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
         } else {
+            self.dirty = true;
             self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
         }
 
@@ -870,7 +869,7 @@ impl Component for ThreadView {
             UIEvent::Input(Key::Char('p')) => {
                 self.show_mailview = !self.show_mailview;
                 self.initiated = false;
-                self.mailview.set_dirty();
+                self.set_dirty();
                 return true;
             }
             UIEvent::Input(Key::Ctrl('r')) => {
