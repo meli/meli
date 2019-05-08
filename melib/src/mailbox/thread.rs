@@ -499,17 +499,17 @@ impl Threads {
                 return true;
             }
 
-            if !thread_nodes[idx].has_message() {
+            if !thread_nodes[idx].has_message() && !thread_nodes[idx].has_parent() {
                 if thread_nodes[idx].children.len() == 1 {
                     /* "Do not promote the children if doing so would promote them to the root set
                      * -- unless there is only one child, in which case, do." */
                     let child = thread_nodes[idx].children[0];
                     root_set.push(child);
-                    thread_nodes[idx].children.clear();
-                    remove_from_parent!(thread_nodes, idx);
                     remove_from_parent!(thread_nodes, child);
                     return true; // Pruned
-                } else if let Some(p) = thread_nodes[idx].parent {
+                }
+            } else if let Some(p) = thread_nodes[idx].parent {
+                if !thread_nodes[idx].has_message() {
                     let orphans = thread_nodes[idx].children.clone();
                     for c in orphans {
                         make!((p) parent of (c), thread_nodes);
@@ -574,25 +574,38 @@ impl Threads {
 
         t.create_root_set(collection);
         t.build_collection(collection);
-        // for (i, _t) in t.thread_nodes.iter().enumerate() {
-        //     debug!("Thread #{}, children {}", i, _t.children.len());
-        //     if !_t.children.is_empty() {
-        //         debug!("{:?}", _t.children);
-        //     }
-        //     if let Some(m) = _t.message {
-        //         debug!("\tmessage: {}", collection[&m].subject());
-        //     } else {
-        //         debug!("\tNo message");
-        //     }
-        // }
-        // for (i, _t) in t.tree.borrow().iter().enumerate() {
-        //     debug!("Tree #{} id {}, children {}", i, _t.id, _t.children.len());
-        //     if let Some(m) = t.thread_nodes[_t.id].message {
-        //         debug!("\tmessage: {}", collection[&m].subject());
-        //     } else {
-        //         debug!("\tNo message");
-        //     }
-        // }
+        //for (i, _t) in t.thread_nodes.iter().enumerate() {
+        //    if !_t.has_parent() && _t.children.is_empty() && !_t.has_message() {
+        //        continue;
+        //    }
+        //    debug!("--------------------------");
+        //    if let Some(m) = _t.message {
+        //        debug!(
+        //            "\tmessage: {}\t{}",
+        //            collection[&m].subject(),
+        //            collection[&m].message_id()
+        //        );
+        //    } else {
+        //        debug!("\tNo message");
+        //    }
+        //    debug!(
+        //        "Thread #{}, children {}:\n\t{:#?}",
+        //        i,
+        //        _t.children.len(),
+        //        _t
+        //    );
+        //    if !_t.children.is_empty() {
+        //        debug!("{:?}", _t.children);
+        //    }
+        //}
+        //for (i, _t) in t.tree.borrow().iter().enumerate() {
+        //    debug!("Tree #{} id {}, children {}", i, _t.id, _t.children.len());
+        //    if let Some(m) = t.thread_nodes[_t.id].message {
+        //        debug!("\tmessage: {}", collection[&m].subject());
+        //    } else {
+        //        debug!("\tNo message");
+        //    }
+        //}
         t
     }
 
@@ -1215,9 +1228,6 @@ impl Threads {
 
         /* The index of the reference we are currently examining, start from current message */
         let mut ref_ptr = t_idx;
-        if self.thread_nodes[t_idx].has_parent() {
-            remove_from_parent!(&mut self.thread_nodes, t_idx);
-        }
 
         for &refn in envelope.references().iter().rev() {
             let r_id = refn.raw();
@@ -1234,7 +1244,9 @@ impl Threads {
                 new_id
             };
             /* If they are already linked, don't change the existing links. */
-            if self.thread_nodes[ref_ptr].has_parent() {
+            if self.thread_nodes[ref_ptr].has_parent()
+                && self.thread_nodes[ref_ptr].parent.unwrap() != parent_id
+            {
                 ref_ptr = parent_id;
                 continue;
             }
@@ -1248,6 +1260,7 @@ impl Threads {
                 self.union(ref_ptr, parent_id);
                 make!((parent_id) parent of (ref_ptr), &mut self.thread_nodes);
             }
+            ref_ptr = parent_id;
         }
     }
 
