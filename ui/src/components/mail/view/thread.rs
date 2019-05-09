@@ -360,7 +360,7 @@ impl ThreadView {
 
     /// draw the list
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let upper_left = upper_left!(area);
+        let mut upper_left = pos_inc(upper_left!(area), (1, 0));
         let bottom_right = bottom_right!(area);
         let (width, height) = self.content.size();
         if height == 0 {
@@ -373,7 +373,9 @@ impl ThreadView {
         let page_no = (self.new_cursor_pos).wrapping_div(rows);
 
         let top_idx = page_no * rows;
-
+        if (rows >= height!(self.content.area())) {
+            upper_left = pos_dec(upper_left!(area), (1, 0));
+        }
         /* This closure (written for code clarity, should be inlined by the compiler) returns the
          * **line** of an entry in the ThreadView grid. */
         let get_entry_area = |idx: usize, entries: &[ThreadEntry]| {
@@ -454,6 +456,18 @@ impl ThreadView {
             );
 
             self.highlight_line(grid, dest_area, src_area, idx);
+            if (rows < height!(self.content.area())) {
+                ScrollBar::draw(
+                    grid,
+                    (
+                        upper_left!(area),
+                        set_x(bottom_right, get_x(upper_left!(area)) + 1),
+                    ),
+                    self.cursor_pos,
+                    rows,
+                    visibles.len(),
+                );
+            }
             self.dirty = false;
             context.dirty_areas.push_back(area);
         } else {
@@ -491,6 +505,22 @@ impl ThreadView {
                 );
 
                 self.highlight_line(grid, dest_area, src_area, entry_idx);
+                if (rows < height!(self.content.area())) {
+                    ScrollBar::draw(
+                        grid,
+                        (
+                            upper_left!(area),
+                            set_x(bottom_right, get_x(upper_left!(area)) + 1),
+                        ),
+                        self.cursor_pos,
+                        rows,
+                        visibles.len(),
+                    );
+                    context.dirty_areas.push_back((
+                        upper_left!(area),
+                        set_x(bottom_right, get_x(upper_left!(area)) + 1),
+                    ));
+                }
 
                 let (upper_left, bottom_right) = dest_area;
                 context

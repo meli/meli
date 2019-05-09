@@ -226,7 +226,8 @@ impl FormWidget {
             buttons: ButtonWidget::new((action, true)),
             focus: FormFocus::Fields,
             hide_buttons: false,
-            id: ComponentId::new_v4(), ..Default::default()
+            id: ComponentId::new_v4(),
+            ..Default::default()
         }
     }
 
@@ -692,5 +693,39 @@ impl AutoComplete {
         self.cursor = 0;
         self.content.empty();
         Some(ret)
+    }
+}
+
+pub struct ScrollBar();
+
+impl ScrollBar {
+    pub fn draw(grid: &mut CellBuffer, area: Area, pos: usize, visible_rows: usize, length: usize) {
+        if length == 0 {
+            return;
+        }
+        let height = height!(area);
+        if height < 3 {
+            return;
+        }
+        let visible_ratio: f32 = (std::cmp::min(visible_rows, length) as f32) / (length as f32);
+        let scrollbar_height = std::cmp::max((visible_ratio * (length as f32)) as usize, 1);
+        let scrollbar_offset = (visible_ratio * (pos as f32)) as usize + 1;
+
+        let (upper_left, bottom_right) = area;
+
+        grid[upper_left].set_ch('▴');
+        for y in get_y(upper_left) + 1..(get_y(upper_left) + scrollbar_offset) {
+            grid[set_y(upper_left, y)].set_ch(' ');
+        }
+        for y in (get_y(upper_left) + scrollbar_offset)
+            ..(get_y(upper_left) + scrollbar_offset + scrollbar_height)
+        {
+            grid[set_y(upper_left, y)].set_ch('█');
+        }
+        for y in (get_y(upper_left) + scrollbar_offset + scrollbar_height)..get_y(bottom_right) - 1
+        {
+            grid[set_y(upper_left, y)].set_ch(' ');
+        }
+        grid[set_x(bottom_right, get_x(upper_left))].set_ch('▾');
     }
 }
