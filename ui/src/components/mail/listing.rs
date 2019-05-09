@@ -502,7 +502,6 @@ impl Listing {
         let mut s = format!("{}\n", a.name);
         fn pop(depth: &mut String) {
             depth.pop();
-            depth.pop();
         }
 
         fn push(depth: &mut String, c: char) {
@@ -546,13 +545,13 @@ impl Listing {
             let mut children: Vec<FolderHash> = entries[&folder_idx].children().to_vec();
             children
                 .sort_unstable_by(|a, b| folders_order[a].partial_cmp(&folders_order[b]).unwrap());
+            push(depth, ' ');
             for child in children {
                 let len = s.len();
                 s.insert_str(len, &format!("{} ", depth));
-                push(depth, ' ');
                 print(child, depth, inc, entries, folders_order, s, index, context);
-                pop(depth);
             }
+            pop(depth);
         }
         for f in entries.keys() {
             if entries[f].parent().is_none() {
@@ -599,18 +598,25 @@ impl Listing {
                 false,
             );
             {
+                enum CellPos {
+                    BeforeIndex,
+                    Index,
+                    //AfterIndex,
+                }
+                let mut pos = CellPos::BeforeIndex;
                 let mut x = get_x(upper_left);
                 while let Some(cell) = grid.get_mut(x, y) {
                     if x == get_x(bottom_right) {
                         break;
                     }
-                    match cell.ch() {
-                        c if c.is_numeric() => {
+                    match (cell.ch(), &pos) {
+                        (c, CellPos::Index) | (c, CellPos::BeforeIndex) if c.is_numeric() => {
+                            pos = CellPos::Index;
                             cell.set_fg(Color::Byte(243));
                             x += 1;
                             continue;
                         }
-                        c if c.is_whitespace() => {
+                        (c, CellPos::BeforeIndex) if c.is_whitespace() => {
                             x += 1;
                             continue;
                         }
@@ -619,12 +625,6 @@ impl Listing {
                         }
                     }
                 }
-            }
-
-            if highlight && idx > 1 && self.cursor_pos.1 == idx - 1 {
-                change_colors(grid, ((x, y), (get_x(bottom_right), y)), color_fg, color_bg);
-            } else {
-                change_colors(grid, ((x, y), set_y(bottom_right, y)), color_fg, color_bg);
             }
             idx += 1;
         }
