@@ -369,6 +369,24 @@ impl Attachment {
             ContentType::Text {
                 kind: Text::Html, ..
             } => true,
+            ContentType::Text {
+                kind: Text::Plain, ..
+            } => false,
+            ContentType::Multipart {
+                kind: MultipartType::Alternative,
+                ref subattachments,
+                ..
+            } => {
+                for a in subattachments.iter() {
+                    if let ContentType::Text {
+                        kind: Text::Plain, ..
+                    } = a.content_type
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
             ContentType::Multipart {
                 ref subattachments, ..
             } => subattachments
@@ -380,6 +398,10 @@ impl Attachment {
                     ContentType::Text {
                         kind: Text::Html, ..
                     } => acc,
+                    ContentType::Multipart {
+                        kind: MultipartType::Alternative,
+                        ..
+                    } => a.is_html(),
                     _ => acc,
                 }),
             _ => false,
