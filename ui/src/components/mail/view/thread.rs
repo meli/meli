@@ -187,8 +187,7 @@ impl ThreadView {
                 let subject = envelope.subject();
                 highlight_reply_subjects.push(Some(subject.grapheme_width()));
                 format!(
-                    " {}{} - {} {}",
-                    " ".repeat(e.index.0 * 4),
+                    "  {} - {} {}",
                     envelope.date_as_str(),
                     envelope.field_from_to_string(),
                     envelope.subject(),
@@ -196,8 +195,7 @@ impl ThreadView {
             } else {
                 highlight_reply_subjects.push(None);
                 format!(
-                    " {}{} - {}",
-                    " ".repeat(e.index.0 * 4),
+                    "  {} - {}",
                     envelope.date_as_str(),
                     envelope.field_from_to_string(),
                 )
