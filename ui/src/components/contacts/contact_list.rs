@@ -35,11 +35,12 @@ impl Default for ContactList {
 
 impl fmt::Display for ContactList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "contacts")
+        write!(f, "{}", ContactList::DESCRIPTION)
     }
 }
 
 impl ContactList {
+    const DESCRIPTION: &'static str = "contact list";
     pub fn new() -> Self {
         let content = CellBuffer::new(0, 0, Cell::with_char(' '));
         ContactList {
@@ -227,7 +228,7 @@ impl Component for ContactList {
                 return true;
             }
         }
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = &self.get_shortcuts(context)[Self::DESCRIPTION];
         match *event {
             UIEvent::Input(ref key) if *key == shortcuts["create_contact"] => {
                 let mut manager = ContactManager::default();
@@ -300,7 +301,7 @@ impl Component for ContactList {
     fn kill(&mut self, uuid: Uuid) {
         self.mode = ViewMode::Close(uuid);
     }
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self
             .view
             .as_ref()
@@ -308,8 +309,16 @@ impl Component for ContactList {
             .unwrap_or_default();
 
         let config_map = context.settings.shortcuts.contact_list.key_values();
-        map.insert("create_contact", (*config_map["create_contact"]).clone());
-        map.insert("edit_contact", (*config_map["edit_contact"]).clone());
+        map.insert(
+            self.to_string(),
+            [
+                ("create_contact", (*config_map["create_contact"]).clone()),
+                ("edit_contact", (*config_map["edit_contact"]).clone()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        );
 
         map
     }

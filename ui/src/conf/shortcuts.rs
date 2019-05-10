@@ -39,9 +39,9 @@ macro_rules! shortcut_key_values {
             }
             /// Returns a hashmap of all shortcuts and their values
             pub fn key_values(&self) -> FnvHashMap<&'static str, &Key> {
-                let mut map: FnvHashMap<&'static str, &Key> = Default::default();
-                $(map.insert(stringify!($fname),&(self.$fname));)*
-                  map
+                [
+                $((stringify!($fname),&(self.$fname)),)*
+                ].iter().cloned().collect()
             }
         }
     }

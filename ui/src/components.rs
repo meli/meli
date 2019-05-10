@@ -78,6 +78,7 @@ const _DOUBLE_UP_AND_RIGHT: char = '╚';
 type ComponentId = Uuid;
 
 pub type ShortcutMap = FnvHashMap<&'static str, Key>;
+pub type ShortcutMaps = FnvHashMap<String, ShortcutMap>;
 
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
@@ -96,7 +97,7 @@ pub trait Component: Display + Debug + Send {
     fn set_id(&mut self, _id: ComponentId) {}
     fn id(&self) -> ComponentId;
 
-    fn get_shortcuts(&self, _context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, _context: &Context) -> ShortcutMaps {
         Default::default()
     }
 }

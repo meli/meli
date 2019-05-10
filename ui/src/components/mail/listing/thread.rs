@@ -667,7 +667,7 @@ impl Component for ThreadListing {
         };
         self.dirty = true;
     }
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         self.view
             .as_ref()
             .map(|p| p.get_shortcuts(context))

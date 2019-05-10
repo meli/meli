@@ -108,7 +108,7 @@ impl Component for HSplit {
         self.bottom.set_dirty();
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut top_map = self.top.get_shortcuts(context);
         top_map.extend(self.bottom.get_shortcuts(context).into_iter());
         top_map
@@ -248,7 +248,7 @@ impl Component for VSplit {
         self.right.set_dirty();
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut right_map = self.right.get_shortcuts(context);
         right_map.extend(self.left.get_shortcuts(context).into_iter());
         right_map
@@ -287,11 +287,12 @@ pub struct Pager {
 impl fmt::Display for Pager {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display info
-        write!(f, "pager")
+        write!(f, "{}", Pager::DESCRIPTION)
     }
 }
 
 impl Pager {
+    const DESCRIPTION: &'static str = "pager";
     pub fn update_from_str(&mut self, text: &str, width: Option<usize>) {
         let lines: Vec<&str> = if let Some(width) = width {
             word_break_string(text, width)
@@ -501,7 +502,7 @@ impl Component for Pager {
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = &self.get_shortcuts(context)[Self::DESCRIPTION];
         match *event {
             UIEvent::Input(ref key) if *key == shortcuts["scroll_up"] => {
                 if self.cursor_pos > 0 {
@@ -544,16 +545,24 @@ impl Component for Pager {
     fn set_dirty(&mut self) {
         self.dirty = true;
     }
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
-        let mut map = FnvHashMap::with_capacity_and_hasher(4, Default::default());
-
-        let config_map = context.settings.shortcuts.pager.key_values();
-        map.insert("scroll_up", (*config_map["scroll_up"]).clone());
-        map.insert("scroll_down", (*config_map["scroll_down"]).clone());
-        map.insert("page_up", (*config_map["page_up"]).clone());
-        map.insert("page_down", (*config_map["page_down"]).clone());
-
-        map
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let config_map: FnvHashMap<&'static str, &Key> =
+            context.settings.shortcuts.pager.key_values();
+        [(
+            Pager::DESCRIPTION.to_string(),
+            [
+                ("scroll_up", (*config_map["scroll_up"]).clone()),
+                ("scroll_down", (*config_map["scroll_down"]).clone()),
+                ("page_up", (*config_map["page_up"]).clone()),
+                ("page_down", (*config_map["page_down"]).clone()),
+            ]
+            .iter()
+            .cloned()
+            .collect::<ShortcutMap>(),
+        )]
+        .iter()
+        .cloned()
+        .collect()
     }
 
     fn id(&self) -> ComponentId {
@@ -773,7 +782,7 @@ impl Component for StatusBar {
         self.dirty = true;
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         self.container.get_shortcuts(context)
     }
 
@@ -979,16 +988,16 @@ impl Component for Tabbed {
             clear_area(grid, area);
             create_box(grid, area);
 
+            let mut idx = 0;
             // TODO: print into a pager
-            for (idx, (k, v)) in self.children[self.cursor_pos]
+            for (desc, shortcuts) in self.children[self.cursor_pos]
                 .get_shortcuts(context)
                 .into_iter()
-                .enumerate()
             {
-                let (x, y) = write_string_to_grid(
-                    &k,
+                write_string_to_grid(
+                    &desc,
                     grid,
-                    Color::Byte(29),
+                    Color::Default,
                     Color::Default,
                     (
                         pos_inc(upper_left!(area), (2, 1 + idx)),
@@ -999,20 +1008,41 @@ impl Component for Tabbed {
                     ),
                     false,
                 );
-                write_string_to_grid(
-                    &format!("{}", v),
-                    grid,
-                    Color::Default,
-                    Color::Default,
-                    (
-                        (x + 2, y),
-                        set_x(
-                            bottom_right!(area),
-                            get_x(bottom_right!(area)).saturating_sub(2),
+                idx += 2;
+                let mut shortcuts = shortcuts.into_iter().collect::<Vec<_>>();
+                shortcuts.sort_unstable_by_key(|(ref k, _)| *k);
+                for (k, v) in shortcuts {
+                    let (x, y) = write_string_to_grid(
+                        &k,
+                        grid,
+                        Color::Byte(29),
+                        Color::Default,
+                        (
+                            pos_inc(upper_left!(area), (2, 1 + idx)),
+                            set_x(
+                                bottom_right!(area),
+                                get_x(bottom_right!(area)).saturating_sub(2),
+                            ),
                         ),
-                    ),
-                    false,
-                );
+                        false,
+                    );
+                    write_string_to_grid(
+                        &format!("{}", v),
+                        grid,
+                        Color::Default,
+                        Color::Default,
+                        (
+                            (x + 2, y),
+                            set_x(
+                                bottom_right!(area),
+                                get_x(bottom_right!(area)).saturating_sub(2),
+                            ),
+                        ),
+                        false,
+                    );
+                    idx += 1;
+                }
+                idx += 1;
             }
             context.dirty_areas.push_back(area);
         }

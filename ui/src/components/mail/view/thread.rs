@@ -55,6 +55,7 @@ pub struct ThreadView {
 }
 
 impl ThreadView {
+    const DESCRIPTION: &'static str = "thread view";
     /*
      * coordinates: (account index, mailbox index, root set thread_node index)
      * expanded_idx: optional position of expanded entry when we render the threadview. Default
@@ -956,13 +957,21 @@ impl Component for ThreadView {
         self.dirty = true;
         self.mailview.set_dirty();
     }
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self.mailview.get_shortcuts(context);
 
-        map.insert("reply", Key::Char('R'));
-        map.insert("reverse thread order", Key::Ctrl('r'));
-        map.insert("toggle_mailview", Key::Char('p'));
-        map.insert("toggle_subthread visibility", Key::Char('h'));
+        map.insert(
+            ThreadView::DESCRIPTION.to_string(),
+            [
+                ("reply", Key::Char('R')),
+                ("reverse thread order", Key::Ctrl('r')),
+                ("toggle_mailview", Key::Char('p')),
+                ("toggle_subthread visibility", Key::Char('h')),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+        );
 
         map
     }

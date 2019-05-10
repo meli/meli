@@ -114,6 +114,7 @@ impl fmt::Display for Composer {
 }
 
 impl Composer {
+    const DESCRIPTION: &'static str = "compose";
     pub fn new(account_cursor: usize) -> Self {
         Composer {
             account_cursor,
@@ -650,7 +651,7 @@ impl Component for Composer {
         self.mode = ViewMode::Discard(uuid);
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if self.mode.is_overview() {
             self.pager.get_shortcuts(context)
         } else {
@@ -659,17 +660,18 @@ impl Component for Composer {
 
         if let Some((_, ref view)) = self.reply_context {
             map.extend(view.get_shortcuts(context));
-            map.remove("reply");
         }
 
+        let mut our_map: ShortcutMap = Default::default();
         if self.mode.is_overview() {
-            map.insert("Switch to edit mode.", Key::Char('o'));
-            map.insert("Deliver draft to mailer.", Key::Char('s'));
+            our_map.insert("Switch to edit mode.", Key::Char('o'));
+            our_map.insert("Deliver draft to mailer.", Key::Char('s'));
         }
         if self.mode.is_edit() {
-            map.insert("Switch to overview", Key::Char('v'));
+            our_map.insert("Switch to overview", Key::Char('v'));
         }
-        map.insert("Edit in $EDITOR", Key::Char('e'));
+        our_map.insert("Edit in $EDITOR", Key::Char('e'));
+        map.insert(Composer::DESCRIPTION.to_string(), our_map);
 
         map
     }

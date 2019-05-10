@@ -158,7 +158,7 @@ impl Component for Listing {
             return true;
         }
 
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = &self.get_shortcuts(context)[Listing::DESCRIPTION];
         match *event {
             UIEvent::Input(ref k)
                 if k == shortcuts["next_folder"] || k == shortcuts["prev_folder"] =>
@@ -347,7 +347,7 @@ impl Component for Listing {
         }
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = match self.component {
             Compact(ref l) => l.get_shortcuts(context),
             Plain(ref l) => l.get_shortcuts(context),
@@ -355,46 +355,54 @@ impl Component for Listing {
         };
         let config_map = context.settings.shortcuts.listing.key_values();
         map.insert(
-            "new_mail",
-            if let Some(key) = config_map.get("new_mail") {
-                (*key).clone()
-            } else {
-                Key::Char('m')
-            },
+            Listing::DESCRIPTION.to_string(),
+            [
+                (
+                    "new_mail",
+                    if let Some(key) = config_map.get("new_mail") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('m')
+                    },
+                ),
+                (
+                    "prev_folder",
+                    if let Some(key) = config_map.get("prev_folder") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('K')
+                    },
+                ),
+                (
+                    "next_folder",
+                    if let Some(key) = config_map.get("next_folder") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('J')
+                    },
+                ),
+                (
+                    "prev_account",
+                    if let Some(key) = config_map.get("prev_account") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('l')
+                    },
+                ),
+                (
+                    "next_account",
+                    if let Some(key) = config_map.get("next_account") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('h')
+                    },
+                ),
+                ("toggle-menu-visibility", Key::Char('`')),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
         );
-        map.insert(
-            "prev_folder",
-            if let Some(key) = config_map.get("prev_folder") {
-                (*key).clone()
-            } else {
-                Key::Char('K')
-            },
-        );
-        map.insert(
-            "next_folder",
-            if let Some(key) = config_map.get("next_folder") {
-                (*key).clone()
-            } else {
-                Key::Char('J')
-            },
-        );
-        map.insert(
-            "prev_account",
-            if let Some(key) = config_map.get("prev_account") {
-                (*key).clone()
-            } else {
-                Key::Char('l')
-            },
-        );
-        map.insert(
-            "next_account",
-            if let Some(key) = config_map.get("next_account") {
-                (*key).clone()
-            } else {
-                Key::Char('h')
-            },
-        );
-        map.insert("toggle-menu-visibility", Key::Char('`'));
 
         map
     }
@@ -426,6 +434,7 @@ impl From<IndexStyle> for ListingComponent {
 }
 
 impl Listing {
+    const DESCRIPTION: &'static str = "listing";
     pub fn new(accounts: &[Account]) -> Self {
         let accounts = accounts
             .iter()

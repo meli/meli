@@ -97,6 +97,7 @@ impl fmt::Display for MailboxView {
 }
 
 impl MailboxView {
+    const DESCRIPTION: &'static str = "";
     /// Helper function to format entry strings for CompactListing */
     /* TODO: Make this configurable */
     fn make_entry_string(
@@ -546,7 +547,7 @@ impl Component for MailboxView {
             return true;
         }
 
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = &self.get_shortcuts(context)[CompactListing::DESCRIPTION];
         match *event {
             UIEvent::Input(Key::Up) => {
                 if self.cursor_pos.2 > 0 {
@@ -661,45 +662,53 @@ impl Component for MailboxView {
         self.dirty = true;
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if self.unfocused {
             self.view.get_shortcuts(context)
         } else {
-            ShortcutMap::default()
+            ShortcutMaps::default()
         };
 
         let config_map = context.settings.shortcuts.compact_listing.key_values();
         map.insert(
-            "open_thread",
-            if let Some(key) = config_map.get("open_thread") {
-                (*key).clone()
-            } else {
-                Key::Char('\n')
-            },
-        );
-        map.insert(
-            "prev_page",
-            if let Some(key) = config_map.get("prev_page") {
-                (*key).clone()
-            } else {
-                Key::PageUp
-            },
-        );
-        map.insert(
-            "next_page",
-            if let Some(key) = config_map.get("next_page") {
-                (*key).clone()
-            } else {
-                Key::PageDown
-            },
-        );
-        map.insert(
-            "exit_thread",
-            if let Some(key) = config_map.get("exit_thread") {
-                (*key).clone()
-            } else {
-                Key::Char('i')
-            },
+            CompactListing::DESCRIPTION.to_string(),
+            [
+                (
+                    "open_thread",
+                    if let Some(key) = config_map.get("open_thread") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('\n')
+                    },
+                ),
+                (
+                    "prev_page",
+                    if let Some(key) = config_map.get("prev_page") {
+                        (*key).clone()
+                    } else {
+                        Key::PageUp
+                    },
+                ),
+                (
+                    "next_page",
+                    if let Some(key) = config_map.get("next_page") {
+                        (*key).clone()
+                    } else {
+                        Key::PageDown
+                    },
+                ),
+                (
+                    "exit_thread",
+                    if let Some(key) = config_map.get("exit_thread") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('i')
+                    },
+                ),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
         );
 
         map
@@ -747,6 +756,7 @@ impl Default for CompactListing {
 }
 
 impl CompactListing {
+    const DESCRIPTION: &'static str = "compact listing";
     pub fn new() -> Self {
         CompactListing {
             views: Vec::with_capacity(8),
@@ -811,7 +821,7 @@ impl Component for CompactListing {
         self.dirty = true;
     }
 
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         if self.views.is_empty() {
             return Default::default();
         }

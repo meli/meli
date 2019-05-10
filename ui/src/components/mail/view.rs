@@ -75,11 +75,12 @@ pub struct MailView {
 impl fmt::Display for MailView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO display subject/info
-        write!(f, "view mail")
+        write!(f, "{}", MailView::DESCRIPTION)
     }
 }
 
 impl MailView {
+    const DESCRIPTION: &'static str = "mail";
     pub fn new(
         coordinates: (usize, usize, EnvelopeHash),
         pager: Option<Pager>,
@@ -752,28 +753,30 @@ impl Component for MailView {
             _ => {}
         }
     }
-    fn get_shortcuts(&self, context: &Context) -> ShortcutMap {
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if let Some(ref sbv) = self.subview {
             sbv.get_shortcuts(context)
         } else if let Some(ref pgr) = self.pager {
             pgr.get_shortcuts(context)
         } else {
-            FnvHashMap::with_capacity_and_hasher(4, Default::default())
+            Default::default()
         };
 
-        map.insert("add_addresses_to_contacts", Key::Char('c'));
-        map.insert("view_raw_source", Key::Alt('r'));
+        let mut our_map = FnvHashMap::with_capacity_and_hasher(4, Default::default());
+        our_map.insert("add_addresses_to_contacts", Key::Char('c'));
+        our_map.insert("view_raw_source", Key::Alt('r'));
         if self.mode.is_attachment() || self.mode == ViewMode::Subview || self.mode == ViewMode::Raw
         {
-            map.insert("return_to_normal_view", Key::Char('r'));
+            our_map.insert("return_to_normal_view", Key::Char('r'));
         }
-        map.insert("open_attachment", Key::Char('a'));
+        our_map.insert("open_attachment", Key::Char('a'));
         if self.mode == ViewMode::Url {
-            map.insert("go_to_url", Key::Char('g'));
+            our_map.insert("go_to_url", Key::Char('g'));
         }
         if self.mode == ViewMode::Normal || self.mode == ViewMode::Url {
-            map.insert("toggle_url_mode", Key::Char('u'));
+            our_map.insert("toggle_url_mode", Key::Char('u'));
         }
+        map.insert(MailView::DESCRIPTION.to_string(), our_map);
 
         map
     }
