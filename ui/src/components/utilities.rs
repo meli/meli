@@ -446,13 +446,8 @@ impl Component for Pager {
                     self.cursor_pos = self.cursor_pos.saturating_sub(height);
                 }
                 PageMovement::PageDown => {
-                    /* This might "overflow" beyond the max_cursor_pos boundary if it's not yet
-                     * set. TODO: Rework the page up/down stuff
-                     */
-                    if self.cursor_pos + 2 * height + 1 < self.height {
+                    if self.cursor_pos + height < self.height {
                         self.cursor_pos += height;
-                    } else {
-                        self.cursor_pos = self.height.saturating_sub(height).saturating_sub(1);
                     }
                 }
             }
@@ -460,18 +455,6 @@ impl Component for Pager {
 
         if self.height == 0 || self.width == 0 {
             return;
-        }
-
-        match self.max_cursor_pos {
-            Some(max) if max <= self.cursor_pos => {
-                self.cursor_pos -= 1;
-                return;
-            }
-            Some(max) if max >= height => {
-                self.cursor_pos = 0;
-                return;
-            }
-            _ => {}
         }
 
         clear_area(grid, area);
@@ -489,16 +472,15 @@ impl Component for Pager {
             self.content = CellBuffer::new(width, height, Cell::with_char(' '));
             Pager::print_string(&mut self.content, lines);
         }
-
+        if self.cursor_pos + height >= self.height {
+            self.cursor_pos = self.height.saturating_sub(height);
+        };
         let pos = copy_area_with_break(
             grid,
             &self.content,
             area,
             ((0, self.cursor_pos), (self.width - 1, self.height - 1)),
         );
-        if pos.1 < get_y(bottom_right!(area)) {
-            self.max_cursor_pos = Some(self.height + 1);
-        }
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
