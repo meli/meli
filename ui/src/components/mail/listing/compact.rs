@@ -155,6 +155,9 @@ impl MailboxView {
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
         let folder_hash = context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
+        context
+            .replies
+            .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
 
         // Get mailbox as a reference.
         //
@@ -581,9 +584,6 @@ impl Component for MailboxView {
                 self.unfocused = false;
                 self.dirty = true;
                 return true;
-            }
-            UIEvent::RefreshMailbox(_) => {
-                self.dirty = true;
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if (*idxa, *idxf)

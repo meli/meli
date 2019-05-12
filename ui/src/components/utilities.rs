@@ -592,16 +592,24 @@ impl StatusBar {
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area);
+        let (x, y) = write_string_to_grid(
+            &self.status,
+            grid,
+            Color::Byte(123),
+            Color::Byte(26),
+            area,
+            false,
+        );
         if let Some(n) = self.notifications.pop_front() {
-            self.dirty = true;
-            write_string_to_grid(&n, grid, Color::Byte(219), Color::Byte(88), area, false);
-        } else {
             write_string_to_grid(
-                &self.status,
+                &n,
                 grid,
-                Color::Byte(123),
-                Color::Byte(26),
-                area,
+                Color::Byte(219),
+                Color::Byte(88),
+                (
+                    (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
+                    bottom_right!(area),
+                ),
                 false,
             );
         }
