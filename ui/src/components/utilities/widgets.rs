@@ -707,22 +707,33 @@ impl ScrollBar {
         if height < 3 {
             return;
         }
-        let visible_ratio: f32 = (std::cmp::min(visible_rows, length) as f32) / (length as f32);
-        let scrollbar_height = std::cmp::max((visible_ratio * (length as f32)) as usize, 1);
-        let scrollbar_offset = (visible_ratio * (pos as f32)) as usize + 1;
+        let height = height - 2;
+        clear_area(grid, area);
 
+        let visible_ratio: f32 = (std::cmp::min(visible_rows, length) as f32) / (length as f32);
+        let scrollbar_height = std::cmp::max((visible_ratio * (height as f32)) as usize, 1);
+        let scrollbar_offset = {
+            let mut temp = (((pos as f32) / (length as f32)) * (height as f32)) as usize;
+            if temp + scrollbar_height >= height {
+                height - scrollbar_height
+            } else {
+                temp
+            }
+        };
         let (upper_left, bottom_right) = area;
 
         grid[upper_left].set_ch('▴');
-        for y in get_y(upper_left) + 1..(get_y(upper_left) + scrollbar_offset) {
+        let upper_left = (upper_left.0, upper_left.1 + 1);
+
+        for y in get_y(upper_left)..(get_y(upper_left) + scrollbar_offset) {
             grid[set_y(upper_left, y)].set_ch(' ');
         }
         for y in (get_y(upper_left) + scrollbar_offset)
-            ..(get_y(upper_left) + scrollbar_offset + scrollbar_height)
+            ..=(get_y(upper_left) + scrollbar_offset + scrollbar_height)
         {
             grid[set_y(upper_left, y)].set_ch('█');
         }
-        for y in (get_y(upper_left) + scrollbar_offset + scrollbar_height)..get_y(bottom_right) - 1
+        for y in (get_y(upper_left) + scrollbar_offset + scrollbar_height + 1)..get_y(bottom_right)
         {
             grid[set_y(upper_left, y)].set_ch(' ');
         }

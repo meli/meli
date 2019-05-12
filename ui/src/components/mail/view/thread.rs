@@ -372,9 +372,6 @@ impl ThreadView {
         let page_no = (self.new_cursor_pos).wrapping_div(rows);
 
         let top_idx = page_no * rows;
-        if (rows >= height!(self.content.area())) {
-            upper_left = pos_dec(upper_left!(area), (1, 0));
-        }
         /* This closure (written for code clarity, should be inlined by the compiler) returns the
          * **line** of an entry in the ThreadView grid. */
         let get_entry_area = |idx: usize, entries: &[ThreadEntry]| {
@@ -393,19 +390,21 @@ impl ThreadView {
             if page_no != prev_page_no {
                 clear_area(grid, area);
             }
-            let visibles = self
+            let visibles: Vec<&usize> = self
                 .visible_entries
                 .iter()
-                .flat_map(|v| v.iter())
-                .skip(top_idx)
-                .take(rows);
-            let mut visible_entry_counter = 0;
+                .flat_map(|ref v| v.iter())
+                .collect();
+            if (rows >= visibles.len()) {
+                upper_left = pos_dec(upper_left!(area), (1, 0));
+            }
 
-            for v in visibles {
+            let mut visible_entry_counter = 0;
+            for v in visibles.iter().skip(top_idx).take(rows) {
                 if visible_entry_counter >= rows {
                     break;
                 }
-                let idx = v;
+                let idx = *v;
                 copy_area(
                     grid,
                     &self.content,
@@ -422,11 +421,6 @@ impl ThreadView {
             }
             /* If cursor position has changed, remove the highlight from the previous position and
              * apply it in the new one. */
-            let visibles: Vec<&usize> = self
-                .visible_entries
-                .iter()
-                .flat_map(|ref v| v.iter())
-                .collect();
             self.cursor_pos = self.new_cursor_pos;
             if self.cursor_pos + 1 > visibles.len() {
                 self.cursor_pos = visibles.len().saturating_sub(1);
@@ -455,7 +449,7 @@ impl ThreadView {
             );
 
             self.highlight_line(grid, dest_area, src_area, idx);
-            if (rows < height!(self.content.area())) {
+            if (rows < visibles.len()) {
                 ScrollBar::draw(
                     grid,
                     (
@@ -479,6 +473,9 @@ impl ThreadView {
                 .iter()
                 .flat_map(|ref v| v.iter())
                 .collect();
+            if (rows >= visibles.len()) {
+                upper_left = pos_dec(upper_left!(area), (1, 0));
+            }
             for &idx in &[old_cursor_pos, self.cursor_pos] {
                 let entry_idx = *visibles[idx];
                 let src_area = { get_entry_area(entry_idx, &self.entries) };
@@ -504,7 +501,7 @@ impl ThreadView {
                 );
 
                 self.highlight_line(grid, dest_area, src_area, entry_idx);
-                if (rows < height!(self.content.area())) {
+                if (rows < visibles.len()) {
                     ScrollBar::draw(
                         grid,
                         (
