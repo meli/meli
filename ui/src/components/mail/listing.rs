@@ -235,59 +235,29 @@ impl Component for Listing {
             }
             UIEvent::Action(ref action) => match action {
                 Action::Listing(ListingAction::SetPlain) => {
-                    let new_l = match self.component {
-                        Plain(_) => {
-                            return true;
-                        }
-                        Threaded(ref mut l) => {
-                            let mut new_l = PlainListing::default();
-                            new_l.set_coordinates(l.coordinates());
-                            new_l
-                        }
-                        Compact(ref mut l) => {
-                            let mut new_l = PlainListing::default();
-                            new_l.set_coordinates(l.coordinates());
-                            new_l
-                        }
-                    };
+                    if let Plain(_) = self.component {
+                        return true;
+                    }
+                    let mut new_l = PlainListing::default();
+                    new_l.set_coordinates((self.cursor_pos.0, self.cursor_pos.1, None));
                     self.component = Plain(new_l);
                     return true;
                 }
                 Action::Listing(ListingAction::SetThreaded) => {
-                    let new_l = match self.component {
-                        Threaded(_) => {
-                            return true;
-                        }
-                        Plain(ref mut l) => {
-                            let mut new_l = ThreadListing::default();
-                            new_l.set_coordinates(l.coordinates());
-                            new_l
-                        }
-                        Compact(ref mut l) => {
-                            let mut new_l = ThreadListing::default();
-                            new_l.set_coordinates(l.coordinates());
-                            new_l
-                        }
-                    };
+                    if let Threaded(_) = self.component {
+                        return true;
+                    }
+                    let mut new_l = ThreadListing::default();
+                    new_l.set_coordinates((self.cursor_pos.0, self.cursor_pos.1, None));
                     self.component = Threaded(new_l);
                     return true;
                 }
                 Action::Listing(ListingAction::SetCompact) => {
-                    let new_l = match self.component {
-                        Compact(_) => {
-                            return true;
-                        }
-                        Threaded(ref mut l) => {
-                            let mut new_l = CompactListing::default();
-                            new_l.set_coordinates(l.coordinates());
-                            new_l
-                        }
-                        Plain(ref mut l) => {
-                            let mut new_l = CompactListing::default();
-                            new_l.set_coordinates(l.coordinates());
-                            new_l
-                        }
-                    };
+                    if let Compact(_) = self.component {
+                        return true;
+                    }
+                    let mut new_l = CompactListing::default();
+                    new_l.set_coordinates((self.cursor_pos.0, self.cursor_pos.1, None));
                     self.component = Compact(new_l);
                     return true;
                 }
