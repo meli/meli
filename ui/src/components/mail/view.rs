@@ -200,13 +200,14 @@ impl MailView {
         match self.mode {
             ViewMode::Normal | ViewMode::Subview => {
                 let mut t = body_text.to_string();
+                t.push('\n');
                 if body.count_attachments() > 1 {
                     t = body
                         .attachments()
                         .iter()
                         .enumerate()
                         .fold(t, |mut s, (idx, a)| {
-                            s.push_str(&format!("[{}] {}\n\n", idx, a));
+                            s.push_str(&format!("\n[{}] {}\n", idx, a));
                             s
                         });
                 }
@@ -659,6 +660,14 @@ impl Component for MailView {
                                     ));
                                     return true;
                                 }
+                            }
+                            ContentType::PGPSignature => {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(
+                                        "Signatures aren't supported yet".to_string(),
+                                    ),
+                                ));
+                                return true;
                             }
                         }
                     } else {

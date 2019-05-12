@@ -80,6 +80,7 @@ pub enum MultipartType {
     Mixed,
     Alternative,
     Digest,
+    Signed,
 }
 
 impl Default for MultipartType {
@@ -94,6 +95,7 @@ impl Display for MultipartType {
             MultipartType::Mixed => write!(f, "multipart/mixed"),
             MultipartType::Alternative => write!(f, "multipart/alternative"),
             MultipartType::Digest => write!(f, "multipart/digest"),
+            MultipartType::Signed => write!(f, "multipart/signed"),
         }
     }
 }
@@ -110,6 +112,7 @@ pub enum ContentType {
         subattachments: Vec<Attachment>,
     },
     MessageRfc822,
+    PGPSignature,
     Unsupported {
         tag: Vec<u8>,
     },
@@ -130,6 +133,7 @@ impl Display for ContentType {
             ContentType::Text { kind: t, .. } => t.fmt(f),
             ContentType::Multipart { kind: k, .. } => k.fmt(f),
             ContentType::Unsupported { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
+            ContentType::PGPSignature => write!(f, "application/pgp-signature"),
             ContentType::MessageRfc822 => write!(f, "message/rfc822"),
         }
     }

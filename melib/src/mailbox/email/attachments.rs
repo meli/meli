@@ -95,6 +95,8 @@ impl AttachmentBuilder {
                             MultipartType::Alternative
                         } else if cst.eq_ignore_ascii_case(b"digest") {
                             MultipartType::Digest
+                        } else if cst.eq_ignore_ascii_case(b"signed") {
+                            MultipartType::Signed
                         } else {
                             Default::default()
                         },
@@ -134,6 +136,10 @@ impl AttachmentBuilder {
                 } else if ct.eq_ignore_ascii_case(b"message") && cst.eq_ignore_ascii_case(b"rfc822")
                 {
                     self.content_type = ContentType::MessageRfc822;
+                } else if ct.eq_ignore_ascii_case(b"application")
+                    && cst.eq_ignore_ascii_case(b"pgp-signature")
+                {
+                    self.content_type = ContentType::PGPSignature;
                 } else {
                     let mut tag: Vec<u8> = Vec::with_capacity(ct.len() + cst.len() + 1);
                     tag.extend(ct);
@@ -260,6 +266,7 @@ impl fmt::Display for Attachment {
                 ),
                 Err(e) => write!(f, "{}", e),
             },
+            ContentType::PGPSignature => write!(f, "pgp signature {}", self.mime_type()),
             ContentType::Unsupported { .. } => {
                 write!(f, "Data attachment of type {}", self.mime_type())
             }
@@ -388,6 +395,15 @@ impl Attachment {
                 return true;
             }
             ContentType::Multipart {
+                kind: MultipartType::Signed,
+                ref subattachments,
+                ..
+            } => subattachments
+                .iter()
+                .find(|s| s.content_type != ContentType::PGPSignature)
+                .map(|s| s.is_html())
+                .unwrap_or(false),
+            ContentType::Multipart {
                 ref subattachments, ..
             } => subattachments
                 .iter()
@@ -439,6 +455,7 @@ fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> 
     let ret = match a.content_type {
         ContentType::Unsupported { .. } => Vec::new(),
         ContentType::Text { .. } => decode_helper(a, filter),
+        ContentType::PGPSignature => a.content_type.to_string().into_bytes(),
         ContentType::MessageRfc822 => decode_rec(&decode_rfc822(&a.raw), None),
         ContentType::Multipart {
             ref kind,

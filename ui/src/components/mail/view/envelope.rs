@@ -459,6 +459,14 @@ impl Component for EnvelopeView {
                                     return true;
                                 }
                             }
+                            ContentType::PGPSignature => {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(
+                                        "Signatures aren't supported yet".to_string(),
+                                    ),
+                                ));
+                                return true;
+                            }
                         }
                     } else {
                         context.replies.push_back(UIEvent::StatusEvent(
