@@ -241,8 +241,8 @@ pub struct ThreadsIterator<'a> {
     tree: Ref<'a, Vec<ThreadTree>>,
 }
 impl<'a> Iterator for ThreadsIterator<'a> {
-    type Item = (usize, usize);
-    fn next(&mut self) -> Option<(usize, usize)> {
+    type Item = (usize, usize, bool);
+    fn next(&mut self) -> Option<(usize, usize, bool)> {
         {
             let mut tree = &(*self.tree);
             for i in &self.stack {
@@ -256,7 +256,11 @@ impl<'a> Iterator for ThreadsIterator<'a> {
                 }
             } else {
                 debug_assert!(self.pos < tree.len());
-                let ret = (self.stack.len(), tree[self.pos].id);
+                let ret = (
+                    self.stack.len(),
+                    tree[self.pos].id,
+                    !tree.is_empty() && !self.stack.is_empty() && (self.pos != (tree.len() - 1)),
+                );
                 if !tree[self.pos].children.is_empty() {
                     self.stack.push(self.pos);
                     self.pos = 0;
@@ -1168,7 +1172,15 @@ impl Threads {
 
     pub fn has_sibling(&self, i: usize) -> bool {
         if let Some(parent) = self[i].parent {
-            self[parent].children.len() > 1
+            let children = &self[parent].children;
+            if children.is_empty() {
+                return false;
+            }
+            let pos = children
+                .iter()
+                .position(|&x| x == i)
+                .expect("Did not find node in parent!");
+            pos != children.len() - 1
         } else {
             false
         }

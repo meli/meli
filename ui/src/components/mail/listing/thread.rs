@@ -155,26 +155,11 @@ impl ThreadListing {
         let mut iter = threads.threads_iter().peekable();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
-        while let Some((indentation, i)) = iter.next() {
+        while let Some((indentation, i, has_sibling)) = iter.next() {
             let thread_node = &thread_nodes[i];
 
             if indentation == 0 {
                 thread_idx += 1;
-            }
-
-            match iter.peek() {
-                Some((x, _)) if *x == indentation => {
-                    indentations.pop();
-                    indentations.push(true);
-                }
-                _ => {
-                    indentations.pop();
-                    indentations.push(false);
-                }
-            }
-            if threads.has_sibling(i) {
-                indentations.pop();
-                indentations.push(true);
             }
             if thread_node.has_message() {
                 let envelope: &Envelope = &mailbox.collection[&thread_node.message().unwrap()];
@@ -200,6 +185,7 @@ impl ThreadListing {
                         threads,
                         &indentations,
                         self.length,
+                        has_sibling,
                         //    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
                     ),
                     &mut self.content,
@@ -212,26 +198,26 @@ impl ThreadListing {
                     self.content[(x, idx)].set_ch(' ');
                     self.content[(x, idx)].set_bg(bg_color);
                 }
+                idx += 1;
             } else {
-                self.locations.push(0);
-                for x in 0..MAX_COLS {
-                    self.content[(x, idx)].set_ch(' ');
-                    self.content[(x, idx)].set_bg(Color::Default);
-                }
+                continue;
             }
 
             match iter.peek() {
-                Some((x, _)) if *x > indentation => {
-                    indentations.push(false);
+                Some((x, _, _)) if *x > indentation => {
+                    if debug!(has_sibling) {
+                        indentations.push(true);
+                    } else {
+                        indentations.push(false);
+                    }
                 }
-                Some((x, _)) if *x < indentation => {
+                Some((x, _, _)) if *x < indentation => {
                     for _ in 0..(indentation - *x) {
                         indentations.pop();
                     }
                 }
                 _ => {}
             }
-            idx += 1;
         }
     }
 
@@ -381,30 +367,25 @@ impl ThreadListing {
         threads: &Threads,
         indentations: &[bool],
         idx_width: usize,
+        has_sibling: bool,
         //op: Box<BackendOp>,
     ) -> String {
-        let has_sibling = threads.has_sibling(node_idx);
         let thread_node = &threads[node_idx];
         let has_parent = thread_node.has_parent();
         let show_subject = thread_node.show_subject();
 
-        let mut s = format!(
-            "{}{}{} ",
-            idx,
-            " ".repeat(idx_width + 2 - (idx.to_string().chars().count())),
-            ThreadListing::format_date(&envelope)
-        );
+        let mut s = format!("{}{}{} ", idx, " ", ThreadListing::format_date(&envelope));
         for i in 0..indent {
             if indentations.len() > i && indentations[i] {
                 s.push('│');
-            } else {
+            } else if indentations.len() > i {
                 s.push(' ');
             }
             if i > 0 {
                 s.push(' ');
             }
         }
-        if indent > 0 {
+        if indent > 0 && (has_sibling || has_parent) {
             if has_sibling && has_parent {
                 s.push('├');
             } else if has_sibling {
