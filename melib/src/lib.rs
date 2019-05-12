@@ -23,6 +23,7 @@ pub mod dbg {
     #[macro_export]
     macro_rules! debug {
         ($val:literal) => {
+            {
             if cfg!(debug_assertions) {
                 eprint!(
                     "[{:?}] {}:{}_{}:	",
@@ -36,8 +37,11 @@ pub mod dbg {
                 );
                 eprintln!($val);
             }
+            $val
+        }
         };
         ($val:expr) => {
+            {
             if cfg!(debug_assertions) {
                 eprint!(
                     "[{:?}] {}:{}_{}:	",
@@ -50,6 +54,8 @@ pub mod dbg {
                     column!()
                 );
                 eprintln!("{} = {:?}", stringify!($val), $val);
+            }
+            $val
             }
         };
         ($fmt:literal, $($arg:tt)*) => {
