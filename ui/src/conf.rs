@@ -107,7 +107,7 @@ impl Default for FolderConf {
 
 impl FolderConf {
     pub fn rename(&self) -> Option<&str> {
-        self.rename.as_ref().map(|v| v.as_str())
+        self.rename.as_ref().map(String::as_str)
     }
 }
 
@@ -149,7 +149,7 @@ impl From<FileAccount> for AccountConf {
             display_name,
         };
 
-        let folder_confs = x.folders.clone().unwrap_or_else(|| Default::default());
+        let folder_confs = x.folders.clone().unwrap_or_else(Default::default);
 
         AccountConf {
             account: acc,
@@ -173,7 +173,7 @@ impl FileAccount {
         self.sent_folder.as_str()
     }
     pub fn html_filter(&self) -> Option<&str> {
-        self.html_filter.as_ref().map(|f| f.as_str())
+        self.html_filter.as_ref().map(String::as_str)
     }
 }
 
@@ -236,7 +236,7 @@ impl FileSettings {
             .unwrap();
 
         /* No point in returning without a config file. */
-        match s.deserialize() {
+        match s.try_into() {
             Ok(v) => Ok(v),
             Err(e) => Err(MeliError::new(e.to_string())),
         }

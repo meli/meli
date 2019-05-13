@@ -45,7 +45,7 @@ impl Component for XDGNotifications {
             notify_Notification::new()
                 .appname("meli")
                 .icon("mail-message-new")
-                .summary(title.as_ref().map(|v| v.as_str()).unwrap_or("Event"))
+                .summary(title.as_ref().map(String::as_str).unwrap_or("Event"))
                 .body(&escape_str(body))
                 .icon("dialog-information")
                 .show()
@@ -124,7 +124,7 @@ impl Component for NotificationFilter {
         if let UIEvent::Notification(ref title, ref body) = event {
             if let Some(ref bin) = context.runtime_settings.notifications.script {
                 if let Err(v) = Command::new(bin)
-                    .arg(title.as_ref().map(|v| v.as_str()).unwrap_or("Event"))
+                    .arg(title.as_ref().map(String::as_str).unwrap_or("Event"))
                     .arg(body)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())

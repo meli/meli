@@ -21,7 +21,6 @@
 
 use super::*;
 use std::cmp;
-use std::ops::Index;
 
 #[derive(Debug, Clone)]
 struct ThreadEntry {
@@ -299,7 +298,7 @@ impl ThreadView {
                     ),
                     false,
                 );
-                if let Some(len) = highlight_reply_subjects[y] {
+                if let Some(_len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
                     let fg_color = Color::Byte(33);
@@ -395,12 +394,11 @@ impl ThreadView {
                 .iter()
                 .flat_map(|ref v| v.iter())
                 .collect();
-            if (rows >= visibles.len()) {
+            if rows >= visibles.len() {
                 upper_left = pos_dec(upper_left!(area), (1, 0));
             }
 
-            let mut visible_entry_counter = 0;
-            for v in visibles.iter().skip(top_idx).take(rows) {
+            for (visible_entry_counter, v) in visibles.iter().skip(top_idx).take(rows).enumerate() {
                 if visible_entry_counter >= rows {
                     break;
                 }
@@ -417,7 +415,6 @@ impl ThreadView {
                         (width - 1, 2 * idx + 1),
                     ),
                 );
-                visible_entry_counter += 1;
             }
             /* If cursor position has changed, remove the highlight from the previous position and
              * apply it in the new one. */
@@ -449,7 +446,7 @@ impl ThreadView {
             );
 
             self.highlight_line(grid, dest_area, src_area, idx);
-            if (rows < visibles.len()) {
+            if rows < visibles.len() {
                 ScrollBar::draw(
                     grid,
                     (
@@ -473,7 +470,7 @@ impl ThreadView {
                 .iter()
                 .flat_map(|ref v| v.iter())
                 .collect();
-            if (rows >= visibles.len()) {
+            if rows >= visibles.len() {
                 upper_left = pos_dec(upper_left!(area), (1, 0));
             }
             for &idx in &[old_cursor_pos, self.cursor_pos] {
@@ -501,7 +498,7 @@ impl ThreadView {
                 );
 
                 self.highlight_line(grid, dest_area, src_area, entry_idx);
-                if (rows < visibles.len()) {
+                if rows < visibles.len() {
                     ScrollBar::draw(
                         grid,
                         (
@@ -534,45 +531,41 @@ impl ThreadView {
 
         /* First draw the thread subject on the first row */
         let y = if self.dirty {
-            let y = {
-                let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
-                    .as_ref()
-                    .unwrap();
-                let threads = &mailbox.collection.threads;
-                let thread_node = &threads.thread_nodes()[threads.root_set(self.coordinates.2)];
-                let i = if let Some(i) = thread_node.message() {
-                    i
-                } else {
-                    threads.thread_nodes()[thread_node.children()[0]]
-                        .message()
-                        .unwrap()
-                };
-                let envelope: &Envelope = &mailbox.collection[&i];
-
-                let (x, y) = write_string_to_grid(
-                    &envelope.subject(),
-                    grid,
-                    Color::Byte(33),
-                    Color::Default,
-                    area,
-                    true,
-                );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
-                context
-                    .dirty_areas
-                    .push_back((upper_left, set_y(bottom_right, y + 1)));
-                context
-                    .dirty_areas
-                    .push_back(((mid, y + 1), set_x(bottom_right, mid)));
-                clear_area(grid, ((mid, y + 1), set_x(bottom_right, mid)));
-                y + 2
+            let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
+                .as_ref()
+                .unwrap();
+            let threads = &mailbox.collection.threads;
+            let thread_node = &threads.thread_nodes()[threads.root_set(self.coordinates.2)];
+            let i = if let Some(i) = thread_node.message() {
+                i
+            } else {
+                threads.thread_nodes()[thread_node.children()[0]]
+                    .message()
+                    .unwrap()
             };
-            //clear_area(grid, (set_y(upper_left, y), set_x(bottom_right, mid)));
-            y
+            let envelope: &Envelope = &mailbox.collection[&i];
+
+            let (x, y) = write_string_to_grid(
+                &envelope.subject(),
+                grid,
+                Color::Byte(33),
+                Color::Default,
+                area,
+                true,
+            );
+            for x in x..=get_x(bottom_right) {
+                grid[(x, y)].set_ch(' ');
+                grid[(x, y)].set_bg(Color::Default);
+                grid[(x, y)].set_fg(Color::Default);
+            }
+            context
+                .dirty_areas
+                .push_back((upper_left, set_y(bottom_right, y + 1)));
+            context
+                .dirty_areas
+                .push_back(((mid, y + 1), set_x(bottom_right, mid)));
+            clear_area(grid, ((mid, y + 1), set_x(bottom_right, mid)));
+            y + 2
         } else {
             get_y(upper_left) + 2
         };
@@ -716,9 +709,6 @@ impl ThreadView {
         }
     }
 
-    fn visible_entries(&self) -> Vec<Vec<usize>> {
-        self.visible_entries.clone()
-    }
     fn recalc_visible_entries(&mut self) {
         if self
             .entries

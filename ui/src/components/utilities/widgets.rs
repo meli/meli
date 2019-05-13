@@ -645,7 +645,7 @@ impl AutoComplete {
         }
 
         let mut content = CellBuffer::new(
-            entries.iter().map(|e| e.len()).max().unwrap_or(0) + 1,
+            entries.iter().map(String::len).max().unwrap_or(0) + 1,
             entries.len(),
             Cell::with_style(Color::Byte(23), Color::Byte(7), Attr::Default),
         );

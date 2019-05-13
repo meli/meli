@@ -187,7 +187,7 @@ impl Component for VSplit {
         if get_y(upper_left) > 1 {
             let c = grid
                 .get(mid, get_y(upper_left) - 1)
-                .map(|a| a.ch())
+                .map(Cell::ch)
                 .unwrap_or_else(|| ' ');
             if let HORZ_BOUNDARY = c {
                 grid[(mid, get_y(upper_left) - 1)].set_ch(LIGHT_DOWN_AND_HORIZONTAL);
@@ -203,7 +203,7 @@ impl Component for VSplit {
             if get_y(bottom_right) > 1 {
                 let c = grid
                     .get(mid, get_y(bottom_right) - 1)
-                    .map(|a| a.ch())
+                    .map(Cell::ch)
                     .unwrap_or_else(|| ' ');
                 if let HORZ_BOUNDARY = c {
                     grid[(mid, get_y(bottom_right) + 1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
@@ -475,7 +475,7 @@ impl Component for Pager {
         if self.cursor_pos + height >= self.height {
             self.cursor_pos = self.height.saturating_sub(height);
         };
-        let pos = copy_area_with_break(
+        copy_area_with_break(
             grid,
             &self.content,
             area,
@@ -872,7 +872,6 @@ impl Tabbed {
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
 
         if self.children.is_empty() {
             clear_area(grid, area);

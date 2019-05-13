@@ -108,21 +108,20 @@ impl<'a> Iterator for MailboxIterator<'a> {
         if self.pos == self.folders.len() {
             return None;
         }
-        for fh in self.folders_order[self.pos..].iter() {
-            if self.pos == self.folders.len() {
-                return None;
-            }
+        let fh = &self.folders_order[self.pos];
 
-            self.pos += 1;
-            if self.folders[&fh].is_none() {
-                return Some(None);
-            }
-            if let Some(Err(_)) = self.folders[&fh] {
-                return Some(None);
-            }
-            return Some(Some(self.folders[&fh].as_ref().unwrap().as_ref().unwrap()));
+        if self.pos == self.folders.len() {
+            return None;
         }
-        return None;
+
+        self.pos += 1;
+        if self.folders[&fh].is_none() {
+            return Some(None);
+        }
+        if let Some(Err(_)) = self.folders[&fh] {
+            return Some(None);
+        }
+        return Some(Some(self.folders[&fh].as_ref().unwrap().as_ref().unwrap()));
     }
 }
 
@@ -155,8 +154,8 @@ impl Account {
                 .or_default();
             if (f.name().eq_ignore_ascii_case("junk")
                 || f.name().eq_ignore_ascii_case("spam")
-                || f.name().eq_ignore_ascii_case("trash")
-                || f.name().eq_ignore_ascii_case("sent"))
+                || f.name().eq_ignore_ascii_case("sent")
+                || f.name().eq_ignore_ascii_case("trash"))
                 && entry.ignore.is_unset()
             {
                 entry.ignore = ToggleFlag::InternalVal(true);
@@ -181,10 +180,6 @@ impl Account {
 
                 tree.push(rec(*h, &ref_folders));
                 for &c in f.children() {
-                    let k = FolderNode {
-                        hash: c,
-                        kids: Vec::new(),
-                    };
                     stack.push(c);
                 }
                 while let Some(next) = stack.pop() {
@@ -206,10 +201,10 @@ impl Account {
             for n in tree.iter_mut() {
                 folders_order.push(n.hash);
                 n.kids.sort_unstable_by_key(|f| ref_folders[&f.hash].name());
-                stack.extend(n.kids.iter().rev().map(|r| Some(r)));
+                stack.extend(n.kids.iter().rev().map(Some));
                 while let Some(Some(next)) = stack.pop() {
                     folders_order.push(next.hash);
-                    stack.extend(next.kids.iter().rev().map(|r| Some(r)));
+                    stack.extend(next.kids.iter().rev().map(Some));
                 }
             }
         }
@@ -455,7 +450,7 @@ impl Account {
     pub fn save(&self, bytes: &[u8], folder: &str) -> Result<()> {
         self.backend.save(bytes, folder)
     }
-    pub fn iter_mailboxes<'a>(&'a self) -> MailboxIterator<'a> {
+    pub fn iter_mailboxes(&self) -> MailboxIterator {
         MailboxIterator {
             folders_order: &self.folders_order,
             folders: &self.folders,

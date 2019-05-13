@@ -72,22 +72,22 @@ impl<'s> Iterator for WordBreakIter<'s> {
                 let next_idx = graphemes[next_idx].0;
                 let ret = &self.input[..next_idx];
                 self.input = &self.input[next_idx..];
-                return Some(ret);
+                Some(ret)
             } else {
                 let ret = &self.input[..self.width];
                 self.input = &self.input[self.width..];
-                return Some(ret);
+                Some(ret)
             }
         } else {
             /* graphemes.len() < width */
             let ret = self.input;
             self.input = &self.input[0..0];
-            return Some(ret);
+            Some(ret)
         }
     }
 }
 
-pub fn word_break_string(mut s: &str, width: usize) -> Vec<&str> {
+pub fn word_break_string(s: &str, width: usize) -> Vec<&str> {
     let iter = WordBreakIter { input: s, width };
     iter.collect()
 }

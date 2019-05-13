@@ -1,7 +1,7 @@
 use chan;
 use melib::async_workers::Work;
 use std;
-use std::mem;
+
 use std::thread;
 
 const MAX_WORKER: usize = 4;

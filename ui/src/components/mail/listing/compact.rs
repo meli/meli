@@ -92,7 +92,7 @@ column_str!(struct SubjectString(String));
 
 impl fmt::Display for MailboxView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "")
+        write!(f, "{}", MailboxView::DESCRIPTION)
     }
 }
 
@@ -237,11 +237,9 @@ impl MailboxView {
             self.order.insert(i, idx);
         }
         let widths: (usize, usize, usize);
-        let column_sep: usize;
-
-        if MAX_COLS >= min_width.0 + min_width.1 + min_width.2 {
+        let column_sep: usize = if MAX_COLS >= min_width.0 + min_width.1 + min_width.2 {
             widths = min_width;
-            column_sep = 2;
+            2
         } else {
             let width = MAX_COLS - 3 - min_width.0;
             widths = (
@@ -249,8 +247,8 @@ impl MailboxView {
                 cmp::min(min_width.1, width / 3),
                 cmp::min(min_width.2, width / 3),
             );
-            column_sep = 1;
-        }
+            1
+        };
 
         for ((idx, root_idx), strings) in threads.root_iter().enumerate().zip(rows) {
             let thread_node = &threads.thread_nodes()[root_idx];
@@ -738,8 +736,10 @@ impl ListingTrait for CompactListing {
         (self.cursor, self.views[self.cursor].cursor_pos.1, None)
     }
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
-        self.views[self.cursor].new_cursor_pos = (coordinates.0, coordinates.1, 0);
-        self.views[self.cursor].unfocused = false;
+        self.views
+            .get_mut(self.cursor)
+            .map(|v| v.new_cursor_pos = (coordinates.0, coordinates.1, 0));
+        self.views.get_mut(self.cursor).map(|v| v.unfocused = false);
     }
 }
 

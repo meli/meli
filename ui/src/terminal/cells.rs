@@ -23,7 +23,7 @@
  Define a (x, y) point in the terminal display as a holder of a character, foreground/background
  colors and attributes.
 */
-use super::grapheme_clusters::*;
+
 use super::position::*;
 use std::convert::From;
 use std::fmt;

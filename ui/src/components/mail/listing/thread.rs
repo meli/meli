@@ -184,9 +184,7 @@ impl ThreadListing {
                         i,
                         threads,
                         &indentations,
-                        self.length,
                         has_sibling,
-                        //    context.accounts[self.cursor_pos.0].backend.operation(envelope.hash())
                     ),
                     &mut self.content,
                     fg_color,
@@ -194,6 +192,7 @@ impl ThreadListing {
                     ((0, idx), (MAX_COLS - 1, idx)),
                     false,
                 );
+
                 for x in x..MAX_COLS {
                     self.content[(x, idx)].set_ch(' ');
                     self.content[(x, idx)].set_bg(bg_color);
@@ -205,7 +204,7 @@ impl ThreadListing {
 
             match iter.peek() {
                 Some((x, _, _)) if *x > indentation => {
-                    if debug!(has_sibling) {
+                    if has_sibling {
                         indentations.push(true);
                     } else {
                         indentations.push(false);
@@ -366,7 +365,6 @@ impl ThreadListing {
         node_idx: usize,
         threads: &Threads,
         indentations: &[bool],
-        idx_width: usize,
         has_sibling: bool,
         //op: Box<BackendOp>,
     ) -> String {

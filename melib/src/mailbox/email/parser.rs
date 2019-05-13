@@ -821,6 +821,7 @@ mod tests {
         let mut buffer: Vec<u8> = Vec::new();
         //FIXME: add file
         return;
+        /*
         let _ = std::fs::File::open("").unwrap().read_to_end(&mut buffer);
         let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
         let (_, body) = match mail(&buffer).to_full_result() {
@@ -834,6 +835,7 @@ mod tests {
             .map(|v| std::str::from_utf8(v).unwrap())
             .collect();
         println!("attachments {:?}", v);
+        */
     }
     #[test]
     fn test_addresses() {

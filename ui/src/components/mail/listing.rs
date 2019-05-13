@@ -104,9 +104,10 @@ impl Component for Listing {
         let bottom_right = bottom_right!(area);
         let total_cols = get_x(bottom_right) - get_x(upper_left);
 
-        let right_component_width = match self.menu_visibility {
-            true => (self.ratio * total_cols) / 100,
-            false => total_cols,
+        let right_component_width = if self.menu_visibility {
+            (self.ratio * total_cols) / 100
+        } else {
+            total_cols
         };
         let mid = get_x(bottom_right) - right_component_width;
         if self.dirty && mid != get_x(upper_left) {
@@ -568,7 +569,7 @@ impl Listing {
                 (Color::Default, Color::Default)
             };
 
-            let (x, _) = write_string_to_grid(
+            write_string_to_grid(
                 &s,
                 grid,
                 color_fg,

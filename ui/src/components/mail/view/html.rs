@@ -70,36 +70,31 @@ impl HtmlView {
                 ));
                 display_text
             }
-        } else {
-            if let Ok(mut html_filter) = Command::new("w3m")
-                .args(&["-I", "utf-8", "-T", "text/html"])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .spawn()
-            {
-                html_filter
-                    .stdin
-                    .as_mut()
-                    .unwrap()
-                    .write_all(&bytes)
-                    .expect("Failed to write to html filter stdin");
-                let mut display_text = String::from(
-                    "Text piped through `w3m`. Press `v` to open in web browser. \n\n",
-                );
-                display_text.push_str(&String::from_utf8_lossy(
-                    &html_filter.wait_with_output().unwrap().stdout,
-                ));
+        } else if let Ok(mut html_filter) = Command::new("w3m")
+            .args(&["-I", "utf-8", "-T", "text/html"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+        {
+            html_filter
+                .stdin
+                .as_mut()
+                .unwrap()
+                .write_all(&bytes)
+                .expect("Failed to write to html filter stdin");
+            let mut display_text =
+                String::from("Text piped through `w3m`. Press `v` to open in web browser. \n\n");
+            display_text.push_str(&String::from_utf8_lossy(
+                &html_filter.wait_with_output().unwrap().stdout,
+            ));
 
-                display_text
-            } else {
-                context.replies.push_back(UIEvent::Notification(
-                    Some(format!(
-                        "Failed to find any application to use as html filter"
-                    )),
-                    String::new(),
-                ));
-                String::from_utf8_lossy(&bytes).to_string()
-            }
+            display_text
+        } else {
+            context.replies.push_back(UIEvent::Notification(
+                Some("Failed to find any application to use as html filter".to_string()),
+                String::new(),
+            ));
+            String::from_utf8_lossy(&bytes).to_string()
         };
         if body.count_attachments() > 1 {
             display_text =

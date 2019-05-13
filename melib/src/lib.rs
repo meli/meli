@@ -20,6 +20,7 @@
  */
 #[macro_use]
 pub mod dbg {
+    #[allow(clippy::redundant_closure)]
     #[macro_export]
     macro_rules! debug {
         ($val:literal) => {
