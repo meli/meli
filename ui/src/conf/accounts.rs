@@ -24,6 +24,7 @@
  */
 
 use super::AccountConf;
+use super::ToggleFlag;
 use crate::StackVec;
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
@@ -62,6 +63,7 @@ pub struct Account {
     name: String,
     pub(crate) folders: FnvHashMap<FolderHash, Option<Result<Mailbox>>>,
     pub(crate) folders_order: Vec<FolderHash>,
+    folder_names: FnvHashMap<FolderHash, String>,
     tree: Vec<FolderNode>,
     sent_folder: Option<usize>,
 
@@ -131,7 +133,12 @@ struct FolderNode {
 }
 
 impl Account {
-    pub fn new(name: String, settings: AccountConf, map: &Backends, notify_fn: NotifyFn) -> Self {
+    pub fn new(
+        name: String,
+        mut settings: AccountConf,
+        map: &Backends,
+        notify_fn: NotifyFn,
+    ) -> Self {
         let mut backend = map.get(settings.account().format())(settings.account());
         let mut ref_folders: FnvHashMap<FolderHash, Folder> = backend.folders();
         let mut folders: FnvHashMap<FolderHash, Option<Result<Mailbox>>> =
@@ -139,17 +146,24 @@ impl Account {
         let mut folders_order: Vec<FolderHash> = Vec::with_capacity(ref_folders.len());
         let mut workers: FnvHashMap<FolderHash, Worker> = FnvHashMap::default();
         let notify_fn = Arc::new(notify_fn);
+        let mut folder_names = FnvHashMap::default();
 
-        if let Some(folder_confs) = settings.conf().folders() {
-            //debug!("folder renames: {:?}", folder_renames);
-            for f in ref_folders.values_mut() {
-                if let Some(r) = folder_confs.get(&f.name().to_ascii_lowercase()) {
-                    if let Some(rename) = r.rename() {
-                        f.change_name(rename);
-                    }
-                }
+        for f in ref_folders.values_mut() {
+            let entry = settings
+                .folder_confs
+                .entry(f.name().to_string())
+                .or_default();
+            if (f.name().eq_ignore_ascii_case("junk")
+                || f.name().eq_ignore_ascii_case("spam")
+                || f.name().eq_ignore_ascii_case("trash")
+                || f.name().eq_ignore_ascii_case("sent"))
+                && entry.ignore.is_unset()
+            {
+                entry.ignore = ToggleFlag::InternalVal(true);
             }
+            folder_names.insert(f.hash(), f.name().to_string());
         }
+
         let mut stack: StackVec<FolderHash> = StackVec::new();
         let mut tree: Vec<FolderNode> = Vec::new();
         for (h, f) in ref_folders.iter() {
@@ -221,6 +235,7 @@ impl Account {
             name,
             folders,
             folders_order,
+            folder_names,
             tree,
             address_book,
             sent_folder: None,
@@ -271,6 +286,10 @@ impl Account {
                     debug!("create {}", envelope.hash());
                     let env: &Envelope = mailbox!(&folder_hash, self.folders).insert(*envelope);
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
+                    let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
+                    if folder_conf.ignore.is_true() {
+                        return None;
+                    }
                     return Some(Notification(
                         Some("new mail".into()),
                         format!(
@@ -314,7 +333,7 @@ impl Account {
         if let Some(folder_confs) = self.settings.conf().folders() {
             //debug!("folder renames: {:?}", folder_renames);
             for f in folders.values_mut() {
-                if let Some(r) = folder_confs.get(&f.name().to_ascii_lowercase()) {
+                if let Some(r) = folder_confs.get(f.name()) {
                     if let Some(rename) = r.rename() {
                         f.change_name(rename);
                     }

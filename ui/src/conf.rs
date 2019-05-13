@@ -53,12 +53,56 @@ macro_rules! split_command {
     }};
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ToggleFlag {
+    Unset,
+    InternalVal(bool),
+    False,
+    True,
+}
+
+impl Default for ToggleFlag {
+    fn default() -> Self {
+        ToggleFlag::Unset
+    }
+}
+
+impl ToggleFlag {
+    pub fn is_unset(&self) -> bool {
+        ToggleFlag::Unset == *self
+    }
+    pub fn is_internal(&self) -> bool {
+        if let ToggleFlag::InternalVal(_) = *self {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn is_false(&self) -> bool {
+        ToggleFlag::False == *self || ToggleFlag::InternalVal(false) == *self
+    }
+    pub fn is_true(&self) -> bool {
+        ToggleFlag::True == *self || ToggleFlag::InternalVal(true) == *self
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct FolderConf {
     rename: Option<String>,
     #[serde(default = "true_val")]
     autoload: bool,
-    ignore: bool,
+    #[serde(deserialize_with = "toggleflag_de", default)]
+    ignore: ToggleFlag,
+}
+
+impl Default for FolderConf {
+    fn default() -> Self {
+        FolderConf {
+            rename: None,
+            autoload: true,
+            ignore: ToggleFlag::Unset,
+        }
+    }
 }
 
 impl FolderConf {
@@ -105,9 +149,12 @@ impl From<FileAccount> for AccountConf {
             display_name,
         };
 
+        let folder_confs = x.folders.clone().unwrap_or_else(|| Default::default());
+
         AccountConf {
             account: acc,
             conf: x,
+            folder_confs,
         }
     }
 }
@@ -143,6 +190,7 @@ struct FileSettings {
 pub struct AccountConf {
     account: AccountSettings,
     conf: FileAccount,
+    folder_confs: HashMap<String, FolderConf>,
 }
 
 impl AccountConf {
@@ -184,10 +232,11 @@ impl FileSettings {
             );
         }
         let mut s = Config::new();
-        let s = s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml));
+        s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml))
+            .unwrap();
 
         /* No point in returning without a config file. */
-        match s.unwrap().deserialize() {
+        match s.deserialize() {
             Ok(v) => Ok(v),
             Err(e) => Err(MeliError::new(e.to_string())),
         }
@@ -252,6 +301,18 @@ where
     } else {
         Ok(Some(s))
     }
+}
+
+fn toggleflag_de<'de, D>(deserializer: D) -> std::result::Result<ToggleFlag, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = <bool>::deserialize(deserializer);
+    Ok(match s {
+        Err(_) => ToggleFlag::Unset,
+        Ok(true) => ToggleFlag::True,
+        Ok(false) => ToggleFlag::False,
+    })
 }
 
 /*
