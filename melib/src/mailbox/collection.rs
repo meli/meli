@@ -7,8 +7,9 @@ use std::ops::{Deref, DerefMut};
 use fnv::FnvHashMap;
 
 /// `Mailbox` represents a folder of mail.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Deserialize, Default, Serialize)]
 pub struct Collection {
+    #[serde(skip_serializing, skip_deserializing)]
     folder: Folder,
     pub envelopes: FnvHashMap<EnvelopeHash, Envelope>,
     date_index: BTreeMap<UnixTimestamp, EnvelopeHash>,

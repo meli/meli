@@ -127,14 +127,14 @@ impl Composer {
      * msg: index of message we reply to in thread_nodes
      * context: current context
      */
-    pub fn edit(coordinates: (usize, usize, usize), msg: usize, context: &Context) -> Self {
+    pub fn edit(coordinates: (usize, usize, usize), msg: ThreadHash, context: &Context) -> Self {
         let mailbox = &context.accounts[coordinates.0][coordinates.1]
             .as_ref()
             .unwrap();
         let threads = &mailbox.collection.threads;
         let thread_nodes = &threads.thread_nodes();
         let mut ret = Composer::default();
-        let message = &mailbox.collection[&thread_nodes[msg].message().unwrap()];
+        let message = &mailbox.collection[&thread_nodes[&msg].message().unwrap()];
         let op = context.accounts[coordinates.0]
             .backend
             .operation(message.hash(), mailbox.folder.hash());
@@ -144,14 +144,18 @@ impl Composer {
         ret.account_cursor = coordinates.0;
         ret
     }
-    pub fn with_context(coordinates: (usize, usize, usize), msg: usize, context: &Context) -> Self {
+    pub fn with_context(
+        coordinates: (usize, usize, usize),
+        msg: ThreadHash,
+        context: &Context,
+    ) -> Self {
         let mailbox = &context.accounts[coordinates.0][coordinates.1]
             .as_ref()
             .unwrap();
         let threads = &mailbox.collection.threads;
         let thread_nodes = &threads.thread_nodes();
         let mut ret = Composer::default();
-        let p = &thread_nodes[msg];
+        let p = &thread_nodes[&msg];
         let parent_message = &mailbox.collection[&p.message().unwrap()];
         let mut op = context.accounts[coordinates.0]
             .backend

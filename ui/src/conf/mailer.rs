@@ -20,7 +20,7 @@
  */
 
 /// Settings for the mailer function.
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct MailerSettings {
     /// A command to pipe new emails to
     /// Required

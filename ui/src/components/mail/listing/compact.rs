@@ -207,15 +207,15 @@ impl MailboxView {
 
         threads.sort_by(self.sort, self.subsort, &mailbox.collection);
         for (idx, root_idx) in threads.root_iter().enumerate() {
-            let thread_node = &threads.thread_nodes()[root_idx];
+            let thread_node = &threads.thread_nodes()[&root_idx];
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
                 let mut iter_ptr = thread_node.children()[0];
-                while threads.thread_nodes()[iter_ptr].message().is_none() {
-                    iter_ptr = threads.thread_nodes()[iter_ptr].children()[0];
+                while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
                 }
-                threads.thread_nodes()[iter_ptr].message().unwrap()
+                threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
             if !mailbox.collection.contains_key(&i) {
                 debug!("key = {}", i);
@@ -251,15 +251,15 @@ impl MailboxView {
         };
 
         for ((idx, root_idx), strings) in threads.root_iter().enumerate().zip(rows) {
-            let thread_node = &threads.thread_nodes()[root_idx];
+            let thread_node = &threads.thread_nodes()[&root_idx];
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
                 let mut iter_ptr = thread_node.children()[0];
-                while threads.thread_nodes()[iter_ptr].message().is_none() {
-                    iter_ptr = threads.thread_nodes()[iter_ptr].children()[0];
+                while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
                 }
-                threads.thread_nodes()[iter_ptr].message().unwrap()
+                threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
             if !mailbox.collection.contains_key(&i) {
                 debug!("key = {}", i);
@@ -354,15 +354,15 @@ impl MailboxView {
             }
             let threads = &mailbox.collection.threads;
             let thread_node = threads.root_set(idx);
-            let thread_node = &threads.thread_nodes()[thread_node];
+            let thread_node = &threads.thread_nodes()[&thread_node];
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
                 let mut iter_ptr = thread_node.children()[0];
-                while threads.thread_nodes()[iter_ptr].message().is_none() {
-                    iter_ptr = threads.thread_nodes()[iter_ptr].children()[0];
+                while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
                 }
-                threads.thread_nodes()[iter_ptr].message().unwrap()
+                threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
 
             let root_envelope: &Envelope = &mailbox.collection[&i];

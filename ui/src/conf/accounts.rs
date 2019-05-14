@@ -92,6 +92,17 @@ impl Drop for Account {
             let writer = io::BufWriter::new(f);
             serde_json::to_writer(writer, &self.address_book).unwrap();
         };
+        if let Ok(data) = data_dir.place_data_file("mailbox") {
+            /* place result in cache directory */
+            let f = match fs::File::create(data) {
+                Ok(f) => f,
+                Err(e) => {
+                    panic!("{}", e);
+                }
+            };
+            let writer = io::BufWriter::new(f);
+            bincode::serialize_into(writer, &self.folders).unwrap();
+        };
     }
 }
 
@@ -125,7 +136,7 @@ impl<'a> Iterator for MailboxIterator<'a> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Serialize, Debug, Default)]
 struct FolderNode {
     hash: FolderHash,
     kids: Vec<FolderNode>,

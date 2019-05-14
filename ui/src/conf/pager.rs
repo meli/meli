@@ -21,7 +21,7 @@
 
 use super::default_vals::*;
 /// Settings for the pager function.
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct PagerSettings {
     /// Number of context lines when going to next page.
     /// Default: 0

@@ -35,7 +35,7 @@ use nom;
 
 pub type Result<T> = result::Result<T, MeliError>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MeliError {
     details: String,
 }

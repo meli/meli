@@ -24,7 +24,7 @@ use std::cmp;
 
 #[derive(Debug, Clone)]
 struct ThreadEntry {
-    index: (usize, usize, usize),
+    index: (usize, ThreadHash, usize),
     /// (indentation, thread_node index, line number in listing)
     indentation: usize,
     msg_hash: EnvelopeHash,
@@ -57,13 +57,13 @@ impl ThreadView {
     const DESCRIPTION: &'static str = "thread view";
     /*
      * coordinates: (account index, mailbox index, root set thread_node index)
-     * expanded_idx: optional position of expanded entry when we render the threadview. Default
+     * expanded_hash: optional position of expanded entry when we render the threadview. Default
      *  expanded message is the last one.
      * context: current context
      */
     pub fn new(
         coordinates: (usize, usize, usize),
-        expanded_idx: Option<usize>,
+        expanded_hash: Option<ThreadHash>,
         context: &Context,
     ) -> Self {
         let mut view = ThreadView {
@@ -79,7 +79,7 @@ impl ThreadView {
             id: ComponentId::new_v4(),
             ..Default::default()
         };
-        view.initiate(expanded_idx, context);
+        view.initiate(expanded_hash, context);
         view.new_cursor_pos = view.new_expanded_pos;
         view
     }
@@ -102,8 +102,8 @@ impl ThreadView {
             None
         };
 
-        let expanded_pos = self.expanded_pos;
-        self.initiate(Some(expanded_pos), context);
+        let expanded_hash = old_expanded_entry.as_ref().map(|e| e.index.1);
+        self.initiate(expanded_hash, context);
 
         let mut old_cursor = 0;
         let mut new_cursor = 0;
@@ -144,7 +144,7 @@ impl ThreadView {
         }
         self.set_dirty();
     }
-    fn initiate(&mut self, expanded_idx: Option<usize>, context: &Context) {
+    fn initiate(&mut self, expanded_hash: Option<ThreadHash>, context: &Context) {
         /* stack to push thread messages in order in order to pop and print them later */
         let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
             .as_ref()
@@ -153,23 +153,23 @@ impl ThreadView {
 
         let thread_iter = threads.thread_iter(self.coordinates.2);
         self.entries.clear();
-        for (line, (ind, idx)) in thread_iter.enumerate() {
-            let entry = if let Some(msg_hash) = threads.thread_nodes()[idx].message() {
+        for (line, (ind, thread_hash)) in thread_iter.enumerate() {
+            let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_hash].message() {
                 let seen: bool = mailbox.collection[&msg_hash].is_seen();
-                self.make_entry((ind, idx, line), msg_hash, seen)
+                self.make_entry((ind, thread_hash, line), msg_hash, seen)
             } else {
                 continue;
             };
             self.entries.push(entry);
-            match expanded_idx {
-                Some(expanded_idx) if expanded_idx == idx => {
+            match expanded_hash {
+                Some(expanded_hash) if expanded_hash == thread_hash => {
                     self.new_expanded_pos = self.entries.len().saturating_sub(1);
                     self.expanded_pos = self.new_expanded_pos + 1;
                 }
                 _ => {}
             }
         }
-        if expanded_idx.is_none() {
+        if expanded_hash.is_none() {
             self.new_expanded_pos = self.entries.len().saturating_sub(1);
             self.expanded_pos = self.new_expanded_pos + 1;
         }
@@ -181,7 +181,7 @@ impl ThreadView {
             Vec::with_capacity(self.entries.len());
         for e in &mut self.entries {
             let envelope: &Envelope = &mailbox.collection[&e.msg_hash];
-            let thread_node = &threads.thread_nodes()[e.index.1];
+            let thread_node = &threads.thread_nodes()[&e.index.1];
             let string = if thread_node.show_subject() {
                 let subject = envelope.subject();
                 highlight_reply_subjects.push(Some(subject.grapheme_width()));
@@ -324,7 +324,7 @@ impl ThreadView {
 
     fn make_entry(
         &mut self,
-        i: (usize, usize, usize),
+        i: (usize, ThreadHash, usize),
         msg_hash: EnvelopeHash,
         seen: bool,
     ) -> ThreadEntry {
@@ -535,11 +535,11 @@ impl ThreadView {
                 .as_ref()
                 .unwrap();
             let threads = &mailbox.collection.threads;
-            let thread_node = &threads.thread_nodes()[threads.root_set(self.coordinates.2)];
+            let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
-                threads.thread_nodes()[thread_node.children()[0]]
+                threads.thread_nodes()[&thread_node.children()[0]]
                     .message()
                     .unwrap()
             };
@@ -615,15 +615,15 @@ impl ThreadView {
                 .as_ref()
                 .unwrap();
             let threads = &mailbox.collection.threads;
-            let thread_node = &threads.thread_nodes()[threads.root_set(self.coordinates.2)];
+            let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
                 let mut iter_ptr = thread_node.children()[0];
-                while threads.thread_nodes()[iter_ptr].message().is_none() {
-                    iter_ptr = threads.thread_nodes()[iter_ptr].children()[0];
+                while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
                 }
-                threads.thread_nodes()[iter_ptr].message().unwrap()
+                threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
             let envelope: &Envelope = &mailbox.collection[&i];
 
@@ -835,11 +835,12 @@ impl Component for ThreadView {
                         .as_ref()
                         .unwrap();
                     let threads = &mailbox.collection.threads;
-                    let thread_node = &threads.thread_nodes()[threads.root_set(self.coordinates.2)];
+                    let thread_node =
+                        &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
                     let i = if let Some(i) = thread_node.message() {
                         i
                     } else {
-                        threads.thread_nodes()[thread_node.children()[0]]
+                        threads.thread_nodes()[&thread_node.children()[0]]
                             .message()
                             .unwrap()
                     };
@@ -890,8 +891,8 @@ impl Component for ThreadView {
             }
             UIEvent::Input(Key::Ctrl('r')) => {
                 self.reversed = !self.reversed;
-                let expanded_pos = self.expanded_pos;
-                self.initiate(Some(expanded_pos), context);
+                let expanded_hash = self.entries[self.expanded_pos].index.1;
+                self.initiate(Some(expanded_hash), context);
                 self.initiated = false;
                 self.dirty = true;
                 return true;

@@ -34,6 +34,7 @@ use parser::BytesExt;
 
 use super::backends::BackendOp;
 use crate::error::{MeliError, Result};
+use crate::mailbox::thread::ThreadHash;
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -320,7 +321,7 @@ pub struct Envelope {
     references: Option<References>,
 
     timestamp: UnixTimestamp,
-    thread: usize,
+    thread: ThreadHash,
 
     hash: EnvelopeHash,
 
@@ -355,7 +356,7 @@ impl Envelope {
 
             timestamp: 0,
 
-            thread: 0,
+            thread: ThreadHash::null(),
 
             hash,
             flags: Flag::default(),
@@ -731,10 +732,10 @@ impl Envelope {
             None => Vec::new(),
         }
     }
-    pub fn thread(&self) -> usize {
+    pub fn thread(&self) -> ThreadHash {
         self.thread
     }
-    pub fn set_thread(&mut self, new_val: usize) {
+    pub fn set_thread(&mut self, new_val: ThreadHash) {
         self.thread = new_val;
     }
     pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) {

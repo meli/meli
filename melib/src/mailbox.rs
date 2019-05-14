@@ -31,6 +31,8 @@ pub use self::email::*;
 pub mod backends;
 use self::backends::Folder;
 use crate::error::Result;
+use crate::mailbox::thread::ThreadHash;
+
 pub mod thread;
 pub use self::thread::{SortField, SortOrder, ThreadNode, Threads};
 
@@ -40,8 +42,9 @@ pub use self::collection::*;
 use std::option::Option;
 
 /// `Mailbox` represents a folder of mail.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Mailbox {
+    #[serde(skip_serializing, skip_deserializing)]
     pub folder: Folder,
     name: String,
     pub collection: Collection,
@@ -72,28 +75,28 @@ impl Mailbox {
     pub fn len(&self) -> usize {
         self.collection.len()
     }
-    pub fn thread_to_mail_mut(&mut self, i: usize) -> &mut Envelope {
+    pub fn thread_to_mail_mut(&mut self, h: ThreadHash) -> &mut Envelope {
         self.collection
             .envelopes
-            .entry(self.collection.threads.thread_to_mail(i))
+            .entry(self.collection.threads.thread_to_mail(h))
             .or_default()
     }
-    pub fn thread_to_mail(&self, i: usize) -> &Envelope {
-        &self.collection.envelopes[&self.collection.threads.thread_to_mail(i)]
+    pub fn thread_to_mail(&self, h: ThreadHash) -> &Envelope {
+        &self.collection.envelopes[&self.collection.threads.thread_to_mail(h)]
     }
-    pub fn threaded_mail(&self, i: usize) -> EnvelopeHash {
-        self.collection.threads.thread_to_mail(i)
+    pub fn threaded_mail(&self, h: ThreadHash) -> EnvelopeHash {
+        self.collection.threads.thread_to_mail(h)
     }
     pub fn mail_and_thread(&mut self, i: EnvelopeHash) -> (&mut Envelope, &ThreadNode) {
         let thread;
         {
             let x = &mut self.collection.envelopes.entry(i).or_default();
-            thread = &self.collection.threads[x.thread()];
+            thread = &self.collection.threads[&x.thread()];
         }
         (self.collection.envelopes.entry(i).or_default(), thread)
     }
-    pub fn thread(&self, i: usize) -> &ThreadNode {
-        &self.collection.threads.thread_nodes()[i]
+    pub fn thread(&self, h: ThreadHash) -> &ThreadNode {
+        &self.collection.threads.thread_nodes()[&h]
     }
 
     pub fn insert_sent_folder(&mut self, _sent: &Mailbox) {

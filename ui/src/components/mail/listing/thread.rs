@@ -151,12 +151,12 @@ impl ThreadListing {
                                 /* Draw threaded view. */
         let threads = &mailbox.collection.threads;
         threads.sort_by(self.sort, self.subsort, &mailbox.collection);
-        let thread_nodes: &Vec<ThreadNode> = &threads.thread_nodes();
+        let thread_nodes: &FnvHashMap<ThreadHash, ThreadNode> = &threads.thread_nodes();
         let mut iter = threads.threads_iter().peekable();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
-        while let Some((indentation, i, has_sibling)) = iter.next() {
-            let thread_node = &thread_nodes[i];
+        while let Some((indentation, thread_hash, has_sibling)) = iter.next() {
+            let thread_node = &thread_nodes[&thread_hash];
 
             if indentation == 0 {
                 thread_idx += 1;
@@ -181,7 +181,7 @@ impl ThreadListing {
                         envelope,
                         idx,
                         indentation,
-                        i,
+                        thread_hash,
                         threads,
                         &indentations,
                         has_sibling,
@@ -362,13 +362,13 @@ impl ThreadListing {
         envelope: &Envelope,
         idx: usize,
         indent: usize,
-        node_idx: usize,
+        node_idx: ThreadHash,
         threads: &Threads,
         indentations: &[bool],
         has_sibling: bool,
         //op: Box<BackendOp>,
     ) -> String {
-        let thread_node = &threads[node_idx];
+        let thread_node = &threads[&node_idx];
         let has_parent = thread_node.has_parent();
         let show_subject = thread_node.show_subject();
 
