@@ -41,6 +41,7 @@ pub struct PlainListing {
     /// If `self.view` exists or not.
     unfocused: bool,
     view: Option<MailView>,
+    movement: Option<PageMovement>,
     id: ComponentId,
 }
 
@@ -90,6 +91,7 @@ impl PlainListing {
             dirty: true,
             unfocused: false,
             view: None,
+            movement: None,
             id: ComponentId::new_v4(),
         }
     }
@@ -265,6 +267,26 @@ impl PlainListing {
             return;
         }
         let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+        if let Some(mvm) = self.movement.take() {
+            match mvm {
+                PageMovement::PageUp => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows);
+                }
+                PageMovement::PageDown => {
+                    if self.new_cursor_pos.2 + rows + 1 < self.length {
+                        self.new_cursor_pos.2 += rows;
+                    } else {
+                        self.new_cursor_pos.2 = (self.length / rows) * rows;
+                    }
+                }
+                PageMovement::Home => {
+                    self.new_cursor_pos.2 = 0;
+                }
+                PageMovement::End => {
+                    self.new_cursor_pos.2 = (self.length / rows) * rows;
+                }
+            }
+        }
         let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
@@ -428,6 +450,22 @@ impl Component for PlainListing {
                     self.dirty = true;
                 }
                 return true;
+            }
+            UIEvent::Input(ref key) if *key == Key::PageUp => {
+                self.movement = Some(PageMovement::PageUp);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::PageDown => {
+                self.movement = Some(PageMovement::PageDown);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::Home => {
+                self.movement = Some(PageMovement::Home);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::End => {
+                self.movement = Some(PageMovement::End);
+                self.set_dirty();
             }
             UIEvent::Input(Key::Char('\n')) if !self.unfocused => {
                 self.unfocused = true;

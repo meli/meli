@@ -44,6 +44,7 @@ pub struct ThreadListing {
     unfocused: bool,
     initialised: bool,
     view: Option<MailView>,
+    movement: Option<PageMovement>,
     id: ComponentId,
 }
 
@@ -87,6 +88,7 @@ impl ThreadListing {
             unfocused: false,
             view: None,
             initialised: false,
+            movement: None,
             id: ComponentId::new_v4(),
         }
     }
@@ -569,6 +571,22 @@ impl Component for ThreadListing {
                     self.dirty = true;
                 }
                 return true;
+            }
+            UIEvent::Input(ref key) if *key == Key::PageUp => {
+                self.movement = Some(PageMovement::PageUp);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::PageDown => {
+                self.movement = Some(PageMovement::PageDown);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::Home => {
+                self.movement = Some(PageMovement::Home);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::End => {
+                self.movement = Some(PageMovement::End);
+                self.set_dirty();
             }
             UIEvent::Input(Key::Char('\n')) if !self.unfocused => {
                 self.unfocused = true;

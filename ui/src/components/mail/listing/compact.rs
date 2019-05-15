@@ -443,14 +443,17 @@ impl MailboxView {
                     self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows);
                 }
                 PageMovement::PageDown => {
-                    /* This might "overflow" beyond the max_cursor_pos boundary if it's not yet
-                     * set. TODO: Rework the page up/down stuff
-                     */
-                    if self.new_cursor_pos.2 + 2 * rows + 1 < self.length {
+                    if self.new_cursor_pos.2 + rows + 1 < self.length {
                         self.new_cursor_pos.2 += rows;
                     } else {
-                        self.new_cursor_pos.2 = self.length.saturating_sub(rows).saturating_sub(1);
+                        self.new_cursor_pos.2 = (self.length / rows) * rows;
                     }
+                }
+                PageMovement::Home => {
+                    self.new_cursor_pos.2 = 0;
+                }
+                PageMovement::End => {
+                    self.new_cursor_pos.2 = (self.length / rows) * rows;
                 }
             }
         }
@@ -595,6 +598,14 @@ impl Component for MailboxView {
             }
             UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
                 self.movement = Some(PageMovement::PageDown);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::Home => {
+                self.movement = Some(PageMovement::Home);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::End => {
+                self.movement = Some(PageMovement::End);
                 self.set_dirty();
             }
             UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {

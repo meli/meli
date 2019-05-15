@@ -264,8 +264,10 @@ impl Component for VSplit {
 
 #[derive(Debug)]
 pub enum PageMovement {
+    Home,
     PageUp,
     PageDown,
+    End,
 }
 
 /// A pager for text.
@@ -449,6 +451,12 @@ impl Component for Pager {
                     if self.cursor_pos + height < self.height {
                         self.cursor_pos += height;
                     }
+                }
+                PageMovement::Home => {
+                    self.cursor_pos = 0;
+                }
+                PageMovement::End => {
+                    self.cursor_pos = (self.height / height) * height;
                 }
             }
         }
