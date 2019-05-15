@@ -90,6 +90,11 @@ named!(
     preceded!(tag!("set "), alt_complete!(threaded | plain | compact))
 );
 
+named!(
+    toggle_thread_snooze<Action>,
+    map!(ws!(tag!("toggle_thread_snooze")), |_| ToggleThreadSnooze)
+);
+
 named!(pub parse_command<Action>,
-    alt_complete!( goto | toggle | sort | subsort | close)
+    alt_complete!( goto | toggle | sort | subsort | close | toggle_thread_snooze)
         );

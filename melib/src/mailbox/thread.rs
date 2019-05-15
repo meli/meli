@@ -359,6 +359,8 @@ pub struct ThreadNode {
     len: usize,
     has_unseen: bool,
 
+    snoozed: bool,
+
     /* Union/Find set fields */
     thread_group: ThreadHash,
     rank: i32,
@@ -376,6 +378,8 @@ impl Default for ThreadNode {
 
             len: 0,
             has_unseen: false,
+            snoozed: false,
+
             thread_group: ThreadHash::default(),
             rank: 0,
         }
@@ -428,11 +432,23 @@ impl ThreadNode {
     pub fn indentation(&self) -> usize {
         self.indentation
     }
+
+    pub fn snoozed(&self) -> bool {
+        self.snoozed
+    }
+
+    pub fn thread_group(&self) -> ThreadHash {
+        self.thread_group
+    }
+
+    pub fn set_snoozed(&mut self, set: bool) {
+        self.snoozed = set;
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Threads {
-    thread_nodes: FnvHashMap<ThreadHash, ThreadNode>,
+    pub thread_nodes: FnvHashMap<ThreadHash, ThreadNode>,
     root_set: RefCell<Vec<ThreadHash>>,
     tree: RefCell<Vec<ThreadTree>>,
 
@@ -468,6 +484,13 @@ impl<'a> Iterator for RootIterator<'a> {
         }
     }
 }
+fn find_ref(buf: &FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
+    if buf[&h].thread_group == h {
+        return h;
+    }
+    let p = buf[&h].thread_group;
+    find_ref(buf, p)
+}
 fn find(buf: &mut FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
     if buf[&h].thread_group == h {
         return h;
@@ -502,7 +525,11 @@ fn union(buf: &mut FnvHashMap<ThreadHash, ThreadNode>, x: ThreadHash, y: ThreadH
 }
 
 impl Threads {
-    fn find(&mut self, i: ThreadHash) -> ThreadHash {
+    pub fn is_snoozed(&self, h: ThreadHash) -> bool {
+        let root = find_ref(&self.thread_nodes, h);
+        self.thread_nodes[&root].snoozed()
+    }
+    pub fn find(&mut self, i: ThreadHash) -> ThreadHash {
         find(&mut self.thread_nodes, i)
     }
     fn union(&mut self, x: ThreadHash, y: ThreadHash) -> ThreadHash {

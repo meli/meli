@@ -104,20 +104,30 @@ impl MailboxView {
         e: &Envelope,
         len: usize,
         idx: usize,
+        is_snoozed: bool,
     ) -> (IndexNoString, FromString, DateString, SubjectString) {
         if len > 0 {
             (
                 IndexNoString(idx.to_string()),
                 FromString(address_list!((e.from()) as comma_sep_list)),
                 DateString(MailboxView::format_date(e)),
-                SubjectString(format!("{} ({})", e.subject(), len)),
+                SubjectString(format!(
+                    "{} ({}){}",
+                    e.subject(),
+                    len,
+                    if is_snoozed { " 💤" } else { "" }
+                )),
             )
         } else {
             (
                 IndexNoString(idx.to_string()),
                 FromString(address_list!((e.from()) as comma_sep_list)),
                 DateString(MailboxView::format_date(e)),
-                SubjectString(e.subject().to_string()),
+                SubjectString(format!(
+                    "{}{}",
+                    e.subject(),
+                    if is_snoozed { " 💤" } else { "" }
+                )),
             )
         }
     }
@@ -229,7 +239,13 @@ impl MailboxView {
                 panic!();
             }
             let root_envelope: &Envelope = &mailbox.collection[&i];
-            let strings = MailboxView::make_entry_string(root_envelope, thread_node.len(), idx);
+
+            let strings = MailboxView::make_entry_string(
+                root_envelope,
+                thread_node.len(),
+                idx,
+                threads.is_snoozed(root_idx),
+            );
             min_width.0 = cmp::max(min_width.0, strings.0.len()); /* index */
             min_width.1 = cmp::max(min_width.1, strings.2.split_graphemes().len()); /* date */
             min_width.2 = cmp::max(min_width.2, strings.3.split_graphemes().len()); /* subject */
@@ -328,6 +344,9 @@ impl MailboxView {
                 ((_x, idx), (widths.2 + _x, idx)),
                 false,
             );
+            if threads.is_snoozed(root_idx) {
+                self.content[(x - 1, idx)].set_fg(Color::Red);
+            }
 
             self.order.insert(i, idx);
 
@@ -596,8 +615,7 @@ impl Component for MailboxView {
             }
             UIEvent::StartupCheck(ref f)
                 if *f
-                    == context.accounts[self.new_cursor_pos.0].folders_order
-                        [self.new_cursor_pos.1] =>
+                    == context.accounts[self.cursor_pos.0].folders_order[self.new_cursor_pos.1] =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty();
@@ -636,6 +654,35 @@ impl Component for MailboxView {
                 Action::Sort(field, order) => {
                     debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
+                    self.refresh_mailbox(context);
+                    return true;
+                }
+                Action::ToggleThreadSnooze => {
+                    {
+                        //FIXME NLL
+
+                        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+                            .as_mut()
+                            .unwrap();
+                        let threads = &mut mailbox.collection.threads;
+                        let thread_group = threads.thread_nodes()
+                            [&threads.root_set(self.cursor_pos.2)]
+                            .thread_group();
+                        let thread_group = threads.find(thread_group);
+                        /*let i = if let Some(i) = threads.thread_nodes[&thread_group].message() {
+                            i
+                        } else {
+                            let mut iter_ptr = threads.thread_nodes[&thread_group].children()[0];
+                            while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                                iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+                            }
+                            threads.thread_nodes()[&iter_ptr].message().unwrap()
+                        };*/
+                        let root_node = threads.thread_nodes.entry(thread_group).or_default();
+                        let is_snoozed = root_node.snoozed();
+                        root_node.set_snoozed(!is_snoozed);
+                        //self.row_updates.push(i);
+                    }
                     self.refresh_mailbox(context);
                     return true;
                 }

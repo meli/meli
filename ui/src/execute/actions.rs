@@ -54,4 +54,5 @@ pub enum Action {
     Sort(SortField, SortOrder),
     SubSort(SortField, SortOrder),
     Tab(TabAction),
+    ToggleThreadSnooze,
 }

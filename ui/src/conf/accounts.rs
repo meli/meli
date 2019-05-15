@@ -290,10 +290,18 @@ impl Account {
                 }
                 RefreshEventKind::Create(envelope) => {
                     debug!("create {}", envelope.hash());
-                    let env: &Envelope = mailbox!(&folder_hash, self.folders).insert(*envelope);
+                    let env_hash: EnvelopeHash = {
+                        let mailbox = mailbox!(&folder_hash, self.folders);
+                        mailbox.insert(*envelope).hash()
+                    };
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
                     let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
                     if folder_conf.ignore.is_true() {
+                        return None;
+                    }
+                    let (env, thread_node) =
+                        mailbox!(&folder_hash, self.folders).mail_and_thread(env_hash);
+                    if thread_node.snoozed() {
                         return None;
                     }
                     return Some(Notification(
