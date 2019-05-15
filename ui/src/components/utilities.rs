@@ -561,12 +561,15 @@ pub struct StatusBar {
     container: Box<Component>,
     status: String,
     notifications: VecDeque<String>,
-    ex_buffer: String,
+    ex_buffer: Field,
     display_buffer: String,
     mode: UIMode,
     height: usize,
     dirty: bool,
     id: ComponentId,
+
+    auto_complete: AutoComplete,
+    cmd_history: Vec<String>,
 }
 
 impl fmt::Display for StatusBar {
@@ -582,12 +585,15 @@ impl StatusBar {
             container,
             status: String::with_capacity(256),
             notifications: VecDeque::new(),
-            ex_buffer: String::with_capacity(256),
+            ex_buffer: Field::Text(UText::new(String::with_capacity(256)), None),
             display_buffer: String::with_capacity(8),
             dirty: true,
             mode: UIMode::Normal,
             height: 1,
             id: ComponentId::new_v4(),
+            auto_complete: AutoComplete::new(Vec::new()),
+
+            cmd_history: Vec::new(),
         }
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -628,7 +634,7 @@ impl StatusBar {
     fn draw_execute_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area);
         write_string_to_grid(
-            &self.ex_buffer,
+            self.ex_buffer.as_str(),
             grid,
             Color::Byte(219),
             Color::Byte(88),
@@ -683,6 +689,160 @@ impl Component for StatusBar {
                     ),
                     context,
                 );
+                /* don't autocomplete for less than 3 characters */
+                if self.ex_buffer.as_str().split_graphemes().len() <= 2 {
+                    self.container.set_dirty();
+                    return;
+                }
+                let suggestions: Vec<String> = self
+                    .cmd_history
+                    .iter()
+                    .filter_map(|h| {
+                        if h.starts_with(self.ex_buffer.as_str()) {
+                            Some(h.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if suggestions.is_empty() {
+                    /* redraw self.container because we might have got ridden of an autocomplete
+                     * box, and it must be drawn over */
+                    self.container.set_dirty();
+                    return;
+                }
+                /* redraw self.container because we have less suggestions than before */
+                if suggestions.len() < self.auto_complete.suggestions().len() {
+                    self.container.set_dirty();
+                }
+
+                if self.auto_complete.set_suggestions(suggestions) {
+                    let len = self.auto_complete.suggestions().len() - 1;
+                    self.auto_complete.set_cursor(len);
+                }
+                let hist_height = std::cmp::min(15, self.auto_complete.suggestions().len());
+                let hist_area = if height < self.auto_complete.suggestions().len() {
+                    let mut scrollbar = ScrollBar::default();
+                    scrollbar.set_show_arrows(false);
+                    scrollbar.set_block_character(Some('▌'));
+                    scrollbar.draw(
+                        grid,
+                        (
+                            (
+                                get_x(upper_left),
+                                get_y(bottom_right) - height - hist_height + 1,
+                            ),
+                            set_y(bottom_right, get_y(bottom_right) - height),
+                        ),
+                        self.auto_complete.cursor(),
+                        hist_height,
+                        self.auto_complete.suggestions().len(),
+                    );
+                    change_colors(
+                        grid,
+                        (
+                            (
+                                get_x(upper_left),
+                                get_y(bottom_right) - height - hist_height + 1,
+                            ),
+                            set_y(bottom_right, get_y(bottom_right) - height),
+                        ),
+                        Color::Byte(197), // DeepPink2,
+                        Color::Byte(174), //LightPink3
+                    );
+                    context.dirty_areas.push_back((
+                        (
+                            get_x(upper_left),
+                            get_y(bottom_right) - height - hist_height + 1,
+                        ),
+                        set_y(bottom_right, get_y(bottom_right) - height),
+                    ));
+                    (
+                        (
+                            get_x(upper_left) + 1,
+                            get_y(bottom_right) - height - hist_height + 1,
+                        ),
+                        set_y(bottom_right, get_y(bottom_right) - height),
+                    )
+                } else {
+                    (
+                        (
+                            get_x(upper_left),
+                            get_y(bottom_right) - height - hist_height + 1,
+                        ),
+                        set_y(bottom_right, get_y(bottom_right) - height),
+                    )
+                };
+                let offset = if hist_height
+                    > (self.auto_complete.suggestions().len() - self.auto_complete.cursor())
+                {
+                    self.auto_complete.suggestions().len() - hist_height
+                } else {
+                    self.auto_complete.cursor()
+                };
+                clear_area(grid, hist_area);
+                change_colors(
+                    grid,
+                    hist_area,
+                    Color::Byte(88),  // DarkRed,
+                    Color::Byte(174), //LightPink3
+                );
+                for (y_offset, s) in self
+                    .auto_complete
+                    .suggestions()
+                    .iter()
+                    .skip(offset)
+                    .take(hist_height)
+                    .enumerate()
+                {
+                    write_string_to_grid(
+                        s.as_str(),
+                        grid,
+                        Color::Byte(88),  // DarkRed,
+                        Color::Byte(174), //LightPink3
+                        (
+                            set_y(
+                                upper_left!(hist_area),
+                                get_y(bottom_right!(hist_area)) - hist_height + y_offset + 1,
+                            ),
+                            bottom_right!(hist_area),
+                        ),
+                        true,
+                    );
+                    if y_offset + offset == self.auto_complete.cursor() {
+                        change_colors(
+                            grid,
+                            (
+                                set_y(
+                                    upper_left!(hist_area),
+                                    get_y(bottom_right!(hist_area)) - hist_height + y_offset + 1,
+                                ),
+                                set_y(
+                                    bottom_right!(hist_area),
+                                    get_y(bottom_right!(hist_area)) - hist_height + y_offset + 1,
+                                ),
+                            ),
+                            Color::Byte(88),  // DarkRed,
+                            Color::Byte(173), //LightSalmon3
+                        );
+                        write_string_to_grid(
+                            &s.as_str()[self.ex_buffer.as_str().len()..],
+                            grid,
+                            Color::Byte(97), // MediumPurple3,
+                            Color::Byte(88), //LightPink3
+                            (
+                                (
+                                    get_y(upper_left)
+                                        + self.ex_buffer.as_str().split_graphemes().len(),
+                                    get_y(bottom_right) - height + 1,
+                                ),
+                                set_y(bottom_right, get_y(bottom_right) - height + 1),
+                            ),
+                            true,
+                        );
+                    }
+                }
+                context.dirty_areas.push_back(hist_area);
             }
             _ => {}
         }
@@ -721,9 +881,15 @@ impl Component for StatusBar {
                         if !self.ex_buffer.is_empty() {
                             context
                                 .replies
-                                .push_back(UIEvent::Command(self.ex_buffer.clone()));
+                                .push_back(UIEvent::Command(self.ex_buffer.as_str().to_string()));
                         }
-                        self.ex_buffer.clear()
+                        if parse_command(&self.ex_buffer.as_str().as_bytes())
+                            .to_full_result()
+                            .is_ok()
+                        {
+                            self.cmd_history.push(self.ex_buffer.as_str().to_string());
+                        }
+                        self.ex_buffer.clear();
                     }
                     UIMode::Execute => {
                         self.height = 2;
@@ -731,9 +897,20 @@ impl Component for StatusBar {
                     _ => {}
                 };
             }
+            UIEvent::ExInput(Key::Char('\t')) => {
+                if let Some(suggestion) = self.auto_complete.get_suggestion() {
+                    let mut utext = UText::new(suggestion);
+                    let len = utext.as_str().len();
+                    utext.set_cursor(len);
+                    self.container.set_dirty();
+                    self.set_dirty();
+                    self.ex_buffer = Field::Text(utext, None);
+                }
+            }
             UIEvent::ExInput(Key::Char(c)) => {
                 self.dirty = true;
-                self.ex_buffer.push(*c);
+                self.ex_buffer
+                    .process_event(&mut UIEvent::InsertInput(Key::Char(*c)), context);
                 return true;
             }
             UIEvent::ExInput(Key::Ctrl('u')) => {
@@ -741,10 +918,19 @@ impl Component for StatusBar {
                 self.ex_buffer.clear();
                 return true;
             }
-            UIEvent::ExInput(Key::Backspace) | UIEvent::ExInput(Key::Ctrl('h')) => {
+            UIEvent::ExInput(k @ Key::Backspace) | UIEvent::ExInput(k @ Key::Ctrl('h')) => {
                 self.dirty = true;
-                self.ex_buffer.pop();
+                self.ex_buffer
+                    .process_event(&mut UIEvent::InsertInput(k.clone()), context);
                 return true;
+            }
+            UIEvent::ExInput(Key::Up) => {
+                self.auto_complete.dec_cursor();
+                self.dirty = true;
+            }
+            UIEvent::ExInput(Key::Down) => {
+                self.auto_complete.inc_cursor();
+                self.dirty = true;
             }
             UIEvent::Resize => {
                 self.dirty = true;

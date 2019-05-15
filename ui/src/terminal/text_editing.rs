@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct UText {
     content: String,
     cursor_pos: usize,
@@ -17,7 +17,7 @@ impl UText {
     }
 
     pub fn set_cursor(&mut self, cursor_pos: usize) {
-        if cursor_pos >= self.content.len() {
+        if cursor_pos > self.content.len() {
             return;
         }
 
@@ -28,6 +28,12 @@ impl UText {
 
     pub fn as_str(&self) -> &str {
         self.content.as_str()
+    }
+
+    pub fn clear(&mut self) {
+        self.content.clear();
+        self.cursor_pos = 0;
+        self.grapheme_cursor_pos = 0;
     }
 
     pub fn into_string(self) -> String {

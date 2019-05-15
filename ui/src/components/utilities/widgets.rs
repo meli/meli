@@ -36,12 +36,12 @@ use Field::*;
 
 impl Default for Field {
     fn default() -> Field {
-        Field::Text(UText::new(String::new()), None)
+        Field::Text(UText::new(String::with_capacity(256)), None)
     }
 }
 
 impl Field {
-    fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             Text(ref s, _) => s.as_str(),
             Choice(ref v, cursor) => {
@@ -53,6 +53,9 @@ impl Field {
             }
         }
     }
+    pub fn is_empty(&self) -> bool {
+        self.as_str().is_empty()
+    }
 
     pub fn into_string(self) -> String {
         match self {
@@ -61,7 +64,14 @@ impl Field {
         }
     }
 
-    fn draw_cursor(
+    pub fn clear(&mut self) {
+        match self {
+            Text(s, _) => s.clear(),
+            Choice(_, _) => {}
+        }
+    }
+
+    pub fn draw_cursor(
         &mut self,
         grid: &mut CellBuffer,
         area: Area,
@@ -168,7 +178,7 @@ impl Component for Field {
                     }
                 }
             }
-            UIEvent::InsertInput(Key::Backspace) => {
+            UIEvent::InsertInput(Key::Backspace) | UIEvent::InsertInput(Key::Ctrl('h')) => {
                 if let Text(ref mut s, auto_complete) = self {
                     s.backspace();
                     if let Some(ac) = auto_complete.as_mut() {
@@ -565,7 +575,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct AutoComplete {
     entries: Vec<String>,
     content: CellBuffer,
@@ -639,9 +649,9 @@ impl AutoComplete {
         ret
     }
 
-    pub fn set_suggestions(&mut self, entries: Vec<String>) {
+    pub fn set_suggestions(&mut self, entries: Vec<String>) -> bool {
         if entries.len() == self.entries.len() && entries == self.entries {
-            return;
+            return false;;
         }
 
         let mut content = CellBuffer::new(
@@ -671,6 +681,7 @@ impl AutoComplete {
         self.content = content;
         self.entries = entries;
         self.cursor = 0;
+        true
     }
 
     pub fn inc_cursor(&mut self) {
@@ -684,6 +695,15 @@ impl AutoComplete {
         self.set_dirty();
     }
 
+    pub fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    pub fn set_cursor(&mut self, val: usize) {
+        debug_assert!(val < self.entries.len());
+        self.cursor = val;
+    }
+
     pub fn get_suggestion(&mut self) -> Option<String> {
         if self.entries.is_empty() {
             return None;
@@ -694,20 +714,43 @@ impl AutoComplete {
         self.content.empty();
         Some(ret)
     }
+
+    pub fn suggestions(&self) -> &Vec<String> {
+        &self.entries
+    }
 }
 
-pub struct ScrollBar();
+#[derive(Default)]
+pub struct ScrollBar {
+    show_arrows: bool,
+    block_character: Option<char>,
+}
 
 impl ScrollBar {
-    pub fn draw(grid: &mut CellBuffer, area: Area, pos: usize, visible_rows: usize, length: usize) {
+    pub fn set_show_arrows(&mut self, flag: bool) {
+        self.show_arrows = flag;
+    }
+    pub fn set_block_character(&mut self, val: Option<char>) {
+        self.block_character = val;
+    }
+    pub fn draw(
+        self,
+        grid: &mut CellBuffer,
+        area: Area,
+        pos: usize,
+        visible_rows: usize,
+        length: usize,
+    ) {
         if length == 0 {
             return;
         }
-        let height = height!(area);
+        let mut height = height!(area);
         if height < 3 {
             return;
         }
-        let height = height - 2;
+        if self.show_arrows {
+            height = height - 2;
+        }
         clear_area(grid, area);
 
         let visible_ratio: f32 = (std::cmp::min(visible_rows, length) as f32) / (length as f32);
@@ -720,10 +763,12 @@ impl ScrollBar {
                 temp
             }
         };
-        let (upper_left, bottom_right) = area;
+        let (mut upper_left, bottom_right) = area;
 
-        grid[upper_left].set_ch('▴');
-        let upper_left = (upper_left.0, upper_left.1 + 1);
+        if self.show_arrows {
+            grid[upper_left].set_ch('▴');
+            upper_left = (upper_left.0, upper_left.1 + 1);
+        }
 
         for y in get_y(upper_left)..(get_y(upper_left) + scrollbar_offset) {
             grid[set_y(upper_left, y)].set_ch(' ');
@@ -731,12 +776,14 @@ impl ScrollBar {
         for y in (get_y(upper_left) + scrollbar_offset)
             ..=(get_y(upper_left) + scrollbar_offset + scrollbar_height)
         {
-            grid[set_y(upper_left, y)].set_ch('█');
+            grid[set_y(upper_left, y)].set_ch(self.block_character.unwrap_or('█'));
         }
         for y in (get_y(upper_left) + scrollbar_offset + scrollbar_height + 1)..get_y(bottom_right)
         {
             grid[set_y(upper_left, y)].set_ch(' ');
         }
-        grid[set_x(bottom_right, get_x(upper_left))].set_ch('▾');
+        if self.show_arrows {
+            grid[set_x(bottom_right, get_x(upper_left))].set_ch('▾');
+        }
     }
 }

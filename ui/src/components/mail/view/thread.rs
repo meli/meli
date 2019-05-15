@@ -448,6 +448,7 @@ impl ThreadView {
             self.highlight_line(grid, dest_area, src_area, idx);
             if rows < visibles.len() {
                 ScrollBar::draw(
+                    ScrollBar::default(),
                     grid,
                     (
                         upper_left!(area),
@@ -500,6 +501,7 @@ impl ThreadView {
                 self.highlight_line(grid, dest_area, src_area, entry_idx);
                 if rows < visibles.len() {
                     ScrollBar::draw(
+                        ScrollBar::default(),
                         grid,
                         (
                             upper_left!(area),
