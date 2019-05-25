@@ -73,7 +73,11 @@ impl MaildirOp {
                 debug!("{:#?}", e);
             }
         }
-        map.get(&self.hash).unwrap().clone()
+        if let Some(path) = &map[&self.hash].modified {
+            path.clone()
+        } else {
+            map.get(&self.hash).unwrap().buf.to_path_buf()
+        }
     }
 }
 
@@ -161,13 +165,12 @@ impl<'a> BackendOp for MaildirOp {
         debug!("success in rename");
         let old_hash = envelope.hash();
         let new_name: PathBuf = new_name.into();
-        let new_hash = get_file_hash(&new_name);
-        envelope.set_hash(new_hash);
         let hash_index = self.hash_index.clone();
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(self.folder_hash).or_default();
-        map.insert(old_hash, new_name.clone());
-        map.insert(new_hash, new_name);
+        if let maildir_path = map.entry(old_hash).or_default() {
+            maildir_path.modified = Some(new_name.clone().into());
+        }
         Ok(())
     }
 }

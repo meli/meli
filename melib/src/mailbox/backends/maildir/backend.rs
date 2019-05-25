@@ -49,20 +49,48 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 #[derive(Debug, Default)]
+pub struct MaildirPath {
+    pub(super) buf: PathBuf,
+    pub(super) modified: Option<PathBuf>,
+}
+
+impl Deref for MaildirPath {
+    type Target = PathBuf;
+    fn deref(&self) -> &PathBuf {
+        &self.buf
+    }
+}
+
+impl DerefMut for MaildirPath {
+    fn deref_mut(&mut self) -> &mut PathBuf {
+        &mut self.buf
+    }
+}
+
+impl From<PathBuf> for MaildirPath {
+    fn from(val: PathBuf) -> MaildirPath {
+        MaildirPath {
+            buf: val,
+            modified: None,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct HashIndex {
-    index: FnvHashMap<EnvelopeHash, PathBuf>,
+    index: FnvHashMap<EnvelopeHash, MaildirPath>,
     hash: FolderHash,
 }
 
 impl Deref for HashIndex {
-    type Target = FnvHashMap<EnvelopeHash, PathBuf>;
-    fn deref(&self) -> &FnvHashMap<EnvelopeHash, PathBuf> {
+    type Target = FnvHashMap<EnvelopeHash, MaildirPath>;
+    fn deref(&self) -> &FnvHashMap<EnvelopeHash, MaildirPath> {
         &self.index
     }
 }
 
 impl DerefMut for HashIndex {
-    fn deref_mut(&mut self) -> &mut FnvHashMap<EnvelopeHash, PathBuf> {
+    fn deref_mut(&mut self) -> &mut FnvHashMap<EnvelopeHash, MaildirPath> {
         &mut self.index
     }
 }
@@ -227,10 +255,10 @@ impl MailBackend for MaildirType {
                                 /* Linear search in hash_index to find old hash */
                                 let old_hash: EnvelopeHash = {
                                     if let Some((k, v)) =
-                                        index_lock.iter_mut().find(|(_, v)| **v == pathbuf)
+                                        index_lock.iter_mut().find(|(_, v)| *v.buf == pathbuf)
                                     {
                                         //TODO FIXME This doesn't make sense?
-                                        *v = pathbuf.clone();
+                                        *v = pathbuf.clone().into();
                                         *k
                                     } else {
                                         /* Did we just miss a Create event? In any case, create
@@ -269,7 +297,7 @@ impl MailBackend for MaildirType {
                                             "hash {}, path: {:?} couldn't be parsed",
                                             new_hash, &pathbuf
                                         );
-                                        index_lock.insert(new_hash, pathbuf);
+                                        index_lock.insert(new_hash, pathbuf.into());
 
                                         /* Send Write notice */
 
@@ -288,13 +316,22 @@ impl MailBackend for MaildirType {
                                 let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                                 let index_lock = hash_indexes_lock.entry(folder_hash).or_default();
                                 let hash: EnvelopeHash = if let Some((k, _)) =
-                                    index_lock.iter().find(|(_, v)| **v == pathbuf)
+                                    index_lock.iter().find(|(_, v)| *v.buf == pathbuf)
                                 {
                                     *k
                                 } else {
                                     debug!("removed but not contained in index");
                                     continue;
                                 };
+                                if let Some(path) = &index_lock[&hash].modified {
+                                    debug!(
+                                        "envelope {} has modified path set {}",
+                                        hash,
+                                        path.display()
+                                    );
+                                    continue;
+                                }
+
                                 index_lock.remove(&hash);
 
                                 sender.send(RefreshEvent {
@@ -322,7 +359,7 @@ impl MailBackend for MaildirType {
                                         kind: Rename(old_hash, new_hash),
                                     });
                                     index_lock.remove(&old_hash);
-                                    index_lock.insert(new_hash, dest);
+                                    index_lock.insert(new_hash, dest.into());
                                     continue;
                                 } else if !index_lock.contains_key(&new_hash) {
                                     debug!("not contains_new_key");
@@ -618,7 +655,7 @@ impl MaildirType {
                                                     let mut map = map.lock().unwrap();
                                                     let map = map.entry(folder_hash).or_default();
                                                     let hash = env.hash();
-                                                    map.insert(hash, file.clone());
+                                                    map.insert(hash, file.clone().into());
                                                     local_r.push(env);
                                                     continue;
                                                 }
@@ -627,7 +664,7 @@ impl MaildirType {
                                             {
                                                 let mut map = map.lock().unwrap();
                                                 let map = map.entry(folder_hash).or_default();
-                                                (*map).insert(hash, PathBuf::from(file));
+                                                (*map).insert(hash, PathBuf::from(file).into());
                                             }
                                             let op = Box::new(MaildirOp::new(
                                                 hash,
@@ -694,7 +731,7 @@ fn add_path_to_index(
     {
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(folder_hash).or_default();;
-        map.insert(hash, path.to_path_buf());
+        map.insert(hash, path.to_path_buf().into());
         debug!(
             "inserted {} in {} map, len={}",
             hash,
