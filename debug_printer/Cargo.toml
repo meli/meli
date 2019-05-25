@@ -1,0 +1,16 @@
+[package]
+name = "debug_printer"
+version = "0.0.1"  #:version
+authors = []
+workspace = ".."
+
+[lib]
+name = "debugprinter"
+crate-type = ["dylib"]
+path = "src/lib.rs"
+
+
+[dependencies]
+libc = {version = "0.2.55", features = ["extra_traits",] }
+melib = { path = "../melib", version = "*" }
+ui = { path = "../ui", version = "*" }

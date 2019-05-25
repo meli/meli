@@ -21,4 +21,4 @@ lto = true
 debug = true
 
 [workspace]
-members = ["melib", "ui"]
+members = ["melib", "ui", "debug_printer"]
