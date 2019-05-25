@@ -127,21 +127,14 @@ impl Composer {
      * msg: index of message we reply to in thread_nodes
      * context: current context
      */
-    pub fn edit(coordinates: (usize, usize, usize), msg: ThreadHash, context: &Context) -> Self {
-        let mailbox = &context.accounts[coordinates.0][coordinates.1]
-            .as_ref()
-            .unwrap();
-        let threads = &mailbox.collection.threads;
-        let thread_nodes = &threads.thread_nodes();
+    pub fn edit(account_pos: usize, h: EnvelopeHash, context: &Context) -> Self {
         let mut ret = Composer::default();
-        let message = &mailbox.collection[&thread_nodes[&msg].message().unwrap()];
-        let op = context.accounts[coordinates.0]
-            .backend
-            .operation(message.hash(), mailbox.folder.hash());
+        let op = context.accounts[account_pos].operation(&h);
+        let envelope: &Envelope = context.accounts[account_pos].get_env(&h);
 
-        ret.draft = Draft::edit(message, op);
+        ret.draft = Draft::edit(envelope, op);
 
-        ret.account_cursor = coordinates.0;
+        ret.account_cursor = account_pos;
         ret
     }
     pub fn with_context(
@@ -149,17 +142,14 @@ impl Composer {
         msg: ThreadHash,
         context: &Context,
     ) -> Self {
-        let mailbox = &context.accounts[coordinates.0][coordinates.1]
-            .as_ref()
-            .unwrap();
-        let threads = &mailbox.collection.threads;
+        let account = &context.accounts[coordinates.0];
+        let mailbox = &account[coordinates.1].as_ref().unwrap();
+        let threads = &account.collection.threads[&mailbox.folder.hash()];
         let thread_nodes = &threads.thread_nodes();
         let mut ret = Composer::default();
         let p = &thread_nodes[&msg];
-        let parent_message = &mailbox.collection[&p.message().unwrap()];
-        let mut op = context.accounts[coordinates.0]
-            .backend
-            .operation(parent_message.hash(), mailbox.folder.hash());
+        let parent_message = &account.collection[&p.message().unwrap()];
+        let mut op = account.operation(&parent_message.hash());
         let parent_bytes = op.as_bytes();
 
         ret.draft = Draft::new_reply(parent_message, parent_bytes.unwrap());
@@ -168,10 +158,10 @@ impl Composer {
             if p.show_subject() {
                 format!(
                     "Re: {}",
-                    mailbox.collection[&p.message().unwrap()].subject().clone()
+                    account.get_env(&p.message().unwrap()).subject().clone()
                 )
             } else {
-                mailbox.collection[&p.message().unwrap()].subject().into()
+                account.get_env(&p.message().unwrap()).subject().into()
             },
         );
 

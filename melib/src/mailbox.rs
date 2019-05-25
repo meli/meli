@@ -41,26 +41,30 @@ pub use self::collection::*;
 
 use std::option::Option;
 
+use fnv::{FnvHashMap, FnvHashSet};
 /// `Mailbox` represents a folder of mail.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Mailbox {
     #[serde(skip_serializing, skip_deserializing)]
     pub folder: Folder,
     name: String,
-    pub collection: Collection,
+    pub envelopes: FnvHashSet<EnvelopeHash>,
+    pub thread_root_set: FnvHashSet<ThreadHash>,
     has_sent: bool,
 }
 
 impl Mailbox {
-    pub fn new(folder: Folder, envelopes: Result<Vec<Envelope>>) -> Result<Mailbox> {
-        let mut envelopes: Vec<Envelope> = envelopes?;
-        envelopes.sort_by(|a, b| a.date().cmp(&b.date()));
-        let collection = Collection::new(envelopes, &folder);
+    pub fn new(
+        folder: Folder,
+        envelopes: Result<&FnvHashMap<EnvelopeHash, Envelope>>,
+    ) -> Result<Mailbox> {
+        let envelopes = envelopes?;
         let name = folder.name().into();
+        let envelopes = envelopes.keys().cloned().collect();
         Ok(Mailbox {
             folder,
-            collection,
             name,
+            envelopes,
             ..Default::default()
         })
     }
@@ -70,65 +74,20 @@ impl Mailbox {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.collection.is_empty()
+        self.envelopes.is_empty()
     }
     pub fn len(&self) -> usize {
-        self.collection.len()
+        self.envelopes.len()
     }
-    pub fn thread_to_mail_mut(&mut self, h: ThreadHash) -> &mut Envelope {
-        self.collection
-            .envelopes
-            .entry(self.collection.threads.thread_to_mail(h))
-            .or_default()
+    pub fn insert(&mut self, h: EnvelopeHash) {
+        self.envelopes.insert(h);
     }
-    pub fn thread_to_mail(&self, h: ThreadHash) -> &Envelope {
-        &self.collection.envelopes[&self.collection.threads.thread_to_mail(h)]
-    }
-    pub fn threaded_mail(&self, h: ThreadHash) -> EnvelopeHash {
-        self.collection.threads.thread_to_mail(h)
-    }
-    pub fn mail_and_thread(&mut self, i: EnvelopeHash) -> (&mut Envelope, &ThreadNode) {
-        let thread;
-        {
-            let x = &mut self.collection.envelopes.entry(i).or_default();
-            thread = &self.collection.threads[&x.thread()];
-        }
-        (self.collection.envelopes.entry(i).or_default(), thread)
-    }
-    pub fn thread(&self, h: ThreadHash) -> &ThreadNode {
-        &self.collection.threads.thread_nodes()[&h]
-    }
-
-    pub fn insert_sent_folder(&mut self, _sent: &Mailbox) {
-        /*if !self.has_sent {
-            for envelope in sent.collection.envelopes.values() {
-                self.insert_reply(envelope);
-            }
-            self.has_sent = true;
-        }*/
-    }
-
     pub fn rename(&mut self, old_hash: EnvelopeHash, new_hash: EnvelopeHash) {
-        self.collection.rename(old_hash, new_hash);
-    }
+        self.envelopes.remove(&old_hash);
 
-    pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope) {
-        self.collection.update_envelope(old_hash, envelope);
+        self.envelopes.insert(new_hash);
     }
-
-    pub fn insert(&mut self, envelope: Envelope) -> &Envelope {
-        let hash = envelope.hash();
-        self.collection.insert(envelope);
-        &self.collection[&hash]
-    }
-
-    pub fn insert_reply(&mut self, envelope: &Envelope) {
-        debug!("mailbox insert reply {}", self.name);
-        self.collection.insert_reply(envelope);
-    }
-
-    pub fn remove(&mut self, envelope_hash: EnvelopeHash) {
-        self.collection.remove(envelope_hash);
-        //    debug!("envelope_hash: {}\ncollection:\n{:?}", envelope_hash, self.collection);
+    pub fn remove(&mut self, h: EnvelopeHash) {
+        self.envelopes.remove(&h);
     }
 }

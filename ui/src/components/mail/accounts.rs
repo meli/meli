@@ -163,12 +163,11 @@ impl AccountsPanel {
             write_string_to_grid(
                 &format!(
                     "total {}",
-                    a.iter_mailboxes().fold(0, |mut acc, m| {
-                        acc += m
-                            .map(|m| m.collection.values().filter(|e| !e.is_seen()).count())
-                            .unwrap_or(0);
-                        acc
-                    })
+                    a.collection
+                        .envelopes
+                        .values()
+                        .filter(|e| !e.is_seen())
+                        .count()
                 ),
                 &mut self.content,
                 Color::Default,

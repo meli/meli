@@ -89,8 +89,7 @@ impl MailView {
     ) -> Self {
         let account = &mut context.accounts[coordinates.0];
         let (hash, is_seen) = {
-            let mailbox = &mut account[coordinates.1].as_mut().unwrap();
-            let envelope: &mut Envelope = &mut mailbox.collection.entry(coordinates.2).or_default();
+            let envelope: &Envelope = &account.get_env(&coordinates.2);
             (envelope.hash(), envelope.is_seen())
         };
         if !is_seen {
@@ -102,8 +101,7 @@ impl MailView {
                 let backend = &account.backend;
                 backend.operation(hash, folder_hash)
             };
-            let mailbox = &mut account[coordinates.1].as_mut().unwrap();
-            let envelope: &mut Envelope = &mut mailbox.collection.entry(coordinates.2).or_default();
+            let envelope: &mut Envelope = &mut account.get_env_mut(&coordinates.2);
             envelope.set_seen(op).unwrap();
         }
         MailView {
@@ -292,16 +290,13 @@ impl Component for MailView {
         let bottom_right = bottom_right!(area);
 
         let y: usize = {
-            let accounts = &mut context.accounts;
-            let mailbox = &mut accounts[self.coordinates.0][self.coordinates.1]
-                .as_ref()
-                .unwrap();
-            if !mailbox.collection.contains_key(&self.coordinates.2) {
+            let account = &mut context.accounts[self.coordinates.0];
+            if !account.contains_key(&self.coordinates.2) {
                 /* The envelope has been renamed or removed, so wait for the appropriate event to
                  * arrive */
                 return;
             }
-            let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
+            let envelope: &Envelope = &account.get_env(&self.coordinates.2);
 
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area);
@@ -383,14 +378,9 @@ impl Component for MailView {
 
         if self.dirty {
             let body = {
-                let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
-                let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
-                    .as_ref()
-                    .unwrap();
-                let envelope: &Envelope = &mailbox.collection[&mailbox_idx.2];
-                let op = context.accounts[mailbox_idx.0]
-                    .backend
-                    .operation(envelope.hash(), mailbox.folder.hash());
+                let account = &mut context.accounts[self.coordinates.0];
+                let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                let op = account.operation(&envelope.hash());
                 envelope.body(op)
             };
             match self.mode {
@@ -413,14 +403,9 @@ impl Component for MailView {
                 ViewMode::Subview | ViewMode::ContactSelector(_) => {}
                 ViewMode::Raw => {
                     let text = {
-                        let mailbox_idx = self.coordinates; // coordinates are mailbox idxs
-                        let mailbox = &context.accounts[mailbox_idx.0][mailbox_idx.1]
-                            .as_ref()
-                            .unwrap();
-                        let envelope: &Envelope = &mailbox.collection[&mailbox_idx.2];
-                        let mut op = context.accounts[mailbox_idx.0]
-                            .backend
-                            .operation(envelope.hash(), mailbox.folder.hash());
+                        let account = &mut context.accounts[self.coordinates.0];
+                        let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                        let mut op = account.operation(&envelope.hash());
                         op.as_bytes()
                             .map(|v| String::from_utf8_lossy(v).into_owned())
                             .unwrap_or_else(|e| e.to_string())
@@ -507,8 +492,7 @@ impl Component for MailView {
                         let account = &mut context.accounts[self.coordinates.0];
                         let mut results = Vec::new();
                         {
-                            let mailbox = &account[self.coordinates.1].as_ref().unwrap();
-                            let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
+                            let envelope: &Envelope = &account.get_env(&self.coordinates.2);
                             for c in s.collect() {
                                 let c = usize::from_ne_bytes({
                                     [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]
@@ -536,11 +520,8 @@ impl Component for MailView {
                     }
                     return true;
                 }
-                let accounts = &context.accounts;
-                let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
-                    .as_ref()
-                    .unwrap();
-                let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
+                let account = &mut context.accounts[self.coordinates.0];
+                let envelope: &Envelope = &account.get_env(&self.coordinates.2);
 
                 let mut entries = Vec::new();
                 for (idx, env) in envelope
@@ -594,15 +575,9 @@ impl Component for MailView {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
 
                 {
-                    let accounts = &context.accounts;
-                    let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
-                        .as_ref()
-                        .unwrap();
-
-                    let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
-                    let op = context.accounts[self.coordinates.0]
-                        .backend
-                        .operation(envelope.hash(), mailbox.folder.hash());
+                    let account = &mut context.accounts[self.coordinates.0];
+                    let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                    let op = account.operation(&envelope.hash());
                     if let Some(u) = envelope.body(op).attachments().get(lidx) {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
@@ -690,16 +665,10 @@ impl Component for MailView {
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 let url = {
-                    let accounts = &context.accounts;
-                    let mailbox = &accounts[self.coordinates.0][self.coordinates.1]
-                        .as_ref()
-                        .unwrap();
-
-                    let envelope: &Envelope = &mailbox.collection[&self.coordinates.2];
+                    let account = &mut context.accounts[self.coordinates.0];
+                    let envelope: &Envelope = &account.get_env(&self.coordinates.2);
                     let finder = LinkFinder::new();
-                    let op = context.accounts[self.coordinates.0]
-                        .backend
-                        .operation(envelope.hash(), mailbox.folder.hash());
+                    let op = account.operation(&envelope.hash());
                     let mut t = envelope.body(op).text().to_string();
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {

@@ -20,7 +20,6 @@
  */
 
 use super::*;
-use std::dbg;
 
 const MAX_COLS: usize = 500;
 
@@ -129,11 +128,10 @@ impl ThreadListing {
                 return;
             }
         }
-        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap();
+        let account = &context.accounts[self.cursor_pos.0];
+        let mailbox = account[self.cursor_pos.1].as_ref().unwrap();
 
-        self.length = mailbox.collection.threads.len();
+        self.length = account.collection.threads.len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         self.locations.clear();
         if self.length == 0 {
@@ -151,8 +149,8 @@ impl ThreadListing {
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let mut thread_idx = 0; // needed for alternate thread colors
                                 /* Draw threaded view. */
-        let threads = &mailbox.collection.threads;
-        threads.sort_by(self.sort, self.subsort, &mailbox.collection);
+        let threads = &account.collection.threads[&mailbox.folder.hash()];
+        threads.sort_by(self.sort, self.subsort, &account.collection);
         let thread_nodes: &FnvHashMap<ThreadHash, ThreadNode> = &threads.thread_nodes();
         let mut iter = threads.threads_iter().peekable();
         /* This is just a desugared for loop so that we can use .peek() */
@@ -164,7 +162,7 @@ impl ThreadListing {
                 thread_idx += 1;
             }
             if thread_node.has_message() {
-                let envelope: &Envelope = &mailbox.collection[&thread_node.message().unwrap()];
+                let envelope: &Envelope = &account.get_env(&thread_node.message().unwrap());
                 self.locations.push(envelope.hash());
                 let fg_color = if !envelope.is_seen() {
                     Color::Byte(0)
@@ -230,7 +228,8 @@ impl ThreadListing {
             return;
         }
         if self.locations[idx] != 0 {
-            let envelope: &Envelope = &mailbox.collection[&self.locations[idx]];
+            let envelope: &Envelope =
+                &context.accounts[self.cursor_pos.0].get_env(&self.locations[idx]);
 
             let fg_color = if !envelope.is_seen() {
                 Color::Byte(0)
@@ -262,7 +261,8 @@ impl ThreadListing {
         }
 
         if self.locations[idx] != 0 {
-            let envelope: &Envelope = &mailbox.collection[&self.locations[idx]];
+            let envelope: &Envelope =
+                &context.accounts[self.cursor_pos.0].get_env(&self.locations[idx]);
 
             let fg_color = if !envelope.is_seen() {
                 Color::Byte(0)
@@ -469,26 +469,14 @@ impl Component for ThreadListing {
                 } else {
                     let account = &mut context.accounts[self.cursor_pos.0];
                     let (hash, is_seen) = {
-                        let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        debug!("key is {}", self.locations[dbg!(self.cursor_pos).2]);
                         let envelope: &Envelope =
-                            &mailbox.collection[&self.locations[self.cursor_pos.2]];
+                            &account.get_env(&self.locations[self.cursor_pos.2]);
                         (envelope.hash(), envelope.is_seen())
                     };
                     if !is_seen {
-                        let folder_hash = {
-                            let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                            mailbox.folder.hash()
-                        };
-                        let op = {
-                            let backend = &account.backend;
-                            backend.operation(hash, folder_hash)
-                        };
-                        let mailbox = &mut account[self.cursor_pos.1].as_mut().unwrap();
-                        let envelope: &mut Envelope = mailbox
-                            .collection
-                            .get_mut(&self.locations[self.cursor_pos.2])
-                            .unwrap();
+                        let op = account.operation(&hash);
+                        let envelope: &mut Envelope =
+                            account.get_env_mut(&self.locations[self.cursor_pos.2]);
                         envelope.set_seen(op).unwrap();
                         true
                     } else {

@@ -31,9 +31,11 @@ use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
 use melib::backends::FolderHash;
 use melib::error::Result;
 use melib::mailbox::backends::{
-    Backends, Folder, MailBackend, NotifyFn, RefreshEvent, RefreshEventConsumer, RefreshEventKind,
+    BackendOp, Backends, Folder, MailBackend, NotifyFn, RefreshEvent, RefreshEventConsumer,
+    RefreshEventKind,
 };
 use melib::mailbox::*;
+use melib::thread::ThreadHash;
 use melib::AddressBook;
 
 use std::collections::VecDeque;
@@ -45,7 +47,7 @@ use std::result;
 use std::sync::Arc;
 use types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 
-pub type Worker = Option<Async<Result<Mailbox>>>;
+pub type Worker = Option<Async<(Result<FnvHashMap<EnvelopeHash, Envelope>>, Result<Mailbox>)>>;
 
 macro_rules! mailbox {
     ($idx:expr, $folders:expr) => {
@@ -66,7 +68,8 @@ pub struct Account {
     pub(crate) folders_order: Vec<FolderHash>,
     folder_names: FnvHashMap<FolderHash, String>,
     tree: Vec<FolderNode>,
-    sent_folder: Option<usize>,
+    sent_folder: Option<FolderHash>,
+    pub(crate) collection: Collection,
 
     pub(crate) address_book: AddressBook,
 
@@ -161,11 +164,15 @@ impl Account {
         let notify_fn = Arc::new(notify_fn);
         let mut folder_names = FnvHashMap::default();
 
+        let mut sent_folder = None;
         for f in ref_folders.values_mut() {
             let entry = settings
                 .folder_confs
                 .entry(f.name().to_string())
                 .or_default();
+            if f.name().eq_ignore_ascii_case("sent") {
+                sent_folder = Some(f.hash());
+            }
             if (f.name().eq_ignore_ascii_case("junk")
                 || f.name().eq_ignore_ascii_case("spam")
                 || f.name().eq_ignore_ascii_case("sent")
@@ -247,7 +254,8 @@ impl Account {
             folder_names,
             tree,
             address_book,
-            sent_folder: None,
+            sent_folder,
+            collection: Collection::new(Default::default()),
             workers,
             settings: settings.clone(),
             runtime_settings: settings,
@@ -271,10 +279,17 @@ impl Account {
             let work = handle.work().unwrap();
             work.compute();
             handle.join();
-            let envelopes = handle.extract();
+            let envelopes: Result<FnvHashMap<EnvelopeHash, Envelope>> = handle.extract().map(|v| {
+                v.into_iter()
+                    .map(|e| (e.hash(), e))
+                    .collect::<FnvHashMap<EnvelopeHash, Envelope>>()
+            });
             let hash = folder.hash();
-            let ret = Mailbox::new(folder, envelopes);
-            tx.send(AsyncStatus::Payload(ret));
+            let m = {
+                //FIXME NLL
+                Mailbox::new(folder, envelopes.as_ref().map_err(|e| e.clone()))
+            };
+            tx.send(AsyncStatus::Payload((envelopes, m)));
             notify_fn.notify(hash);
         })))
     }
@@ -291,31 +306,51 @@ impl Account {
             //let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
             match kind {
                 RefreshEventKind::Update(old_hash, envelope) => {
-                    mailbox!(&folder_hash, self.folders).update(old_hash, *envelope);
+                    mailbox!(&folder_hash, self.folders).rename(old_hash, envelope.hash());
+                    self.collection.update(old_hash, *envelope, folder_hash);
                     return Some(EnvelopeUpdate(old_hash));
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
                     debug!("rename {} to {}", old_hash, new_hash);
                     let mailbox = mailbox!(&folder_hash, self.folders);
                     mailbox.rename(old_hash, new_hash);
+                    self.collection.rename(old_hash, new_hash, folder_hash);
                     return Some(EnvelopeRename(mailbox.folder.hash(), old_hash, new_hash));
                 }
                 RefreshEventKind::Create(envelope) => {
-                    debug!("create {}", envelope.hash());
-                    let env_hash: EnvelopeHash = {
+                    let env_hash = envelope.hash();
+                    {
+                        //FIXME NLL
                         let mailbox = mailbox!(&folder_hash, self.folders);
-                        mailbox.insert(*envelope).hash()
-                    };
+                        mailbox.insert(env_hash);
+                        self.collection.insert(*envelope, folder_hash);
+                        if self
+                            .sent_folder
+                            .as_ref()
+                            .map(|h| *h == folder_hash)
+                            .unwrap_or(false)
+                        {
+                            self.collection.insert_reply(env_hash);
+                        }
+                    }
+
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
-                    let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
-                    if folder_conf.ignore.is_true() {
-                        return None;
+                    {
+                        //FIXME NLL
+                        let folder_conf =
+                            &self.settings.folder_confs[&self.folder_names[&folder_hash]];
+                        if folder_conf.ignore.is_true() {
+                            return None;
+                        }
                     }
-                    let (env, thread_node) =
-                        mailbox!(&folder_hash, self.folders).mail_and_thread(env_hash);
-                    if thread_node.snoozed() {
-                        return None;
+                    {
+                        //FIXME NLL
+                        let (_, thread_node) = self.mail_and_thread(env_hash, folder_hash);
+                        if thread_node.snoozed() {
+                            return None;
+                        }
                     }
+                    let env = self.get_env(&env_hash);
                     return Some(Notification(
                         Some("new mail".into()),
                         format!(
@@ -329,6 +364,7 @@ impl Account {
                 }
                 RefreshEventKind::Remove(envelope_hash) => {
                     mailbox!(&folder_hash, self.folders).remove(envelope_hash);
+                    self.collection.remove(envelope_hash, folder_hash);
                     return Some(EnvelopeRemove(envelope_hash));
                 }
                 RefreshEventKind::Rescan => {
@@ -394,7 +430,19 @@ impl Account {
         &mut self.workers
     }
 
-    fn load_mailbox(&mut self, folder_hash: FolderHash, mailbox: Result<Mailbox>) {
+    fn load_mailbox(
+        &mut self,
+        folder_hash: FolderHash,
+        mailbox: (Result<FnvHashMap<EnvelopeHash, Envelope>>, Result<Mailbox>),
+    ) {
+        let (envs, mut mailbox) = mailbox;
+        if envs.is_err() {
+            self.folders.insert(folder_hash, None);
+            return;
+        }
+        let envs = envs.unwrap();
+        self.collection
+            .merge(envs, folder_hash, &mut mailbox, self.sent_folder);
         self.folders.insert(folder_hash, Some(mailbox));
     }
 
@@ -440,7 +488,58 @@ impl Account {
             pos: 0,
         }
     }
+
+    pub fn get_env(&self, h: &EnvelopeHash) -> &Envelope {
+        &self.collection[h]
+    }
+    pub fn get_env_mut(&mut self, h: &EnvelopeHash) -> &mut Envelope {
+        self.collection.entry(*h).or_default()
+    }
+    pub fn contains_key(&self, h: &EnvelopeHash) -> bool {
+        self.collection.contains_key(h)
+    }
+    pub fn operation(&self, h: &EnvelopeHash) -> Box<BackendOp> {
+        for mailbox in self.folders.values() {
+            if let Some(Ok(m)) = mailbox {
+                if m.envelopes.contains(h) {
+                    return self.backend.operation(*h, m.folder.hash());
+                }
+            }
+        }
+        debug!("didn't find {}", *h);
+        std::dbg!(&self.folders);
+        std::dbg!(&self.collection.envelopes);
+        unreachable!()
+    }
+    pub fn thread_to_mail_mut(&mut self, h: ThreadHash, f: FolderHash) -> &mut Envelope {
+        self.collection
+            .envelopes
+            .entry(self.collection.threads[&f].thread_to_mail(h))
+            .or_default()
+    }
+    pub fn thread_to_mail(&self, h: ThreadHash, f: FolderHash) -> &Envelope {
+        &self.collection.envelopes[&self.collection.threads[&f].thread_to_mail(h)]
+    }
+    pub fn threaded_mail(&self, h: ThreadHash, f: FolderHash) -> EnvelopeHash {
+        self.collection.threads[&f].thread_to_mail(h)
+    }
+    pub fn mail_and_thread(
+        &mut self,
+        i: EnvelopeHash,
+        f: FolderHash,
+    ) -> (&mut Envelope, &ThreadNode) {
+        let thread;
+        {
+            let x = &mut self.collection.envelopes.entry(i).or_default();
+            thread = &self.collection.threads[&f][&x.thread()];
+        }
+        (self.collection.envelopes.entry(i).or_default(), thread)
+    }
+    pub fn thread(&self, h: ThreadHash, f: FolderHash) -> &ThreadNode {
+        &self.collection.threads[&f].thread_nodes()[&h]
+    }
 }
+
 impl Index<FolderHash> for Account {
     type Output = Result<Mailbox>;
     fn index(&self, index: FolderHash) -> &Result<Mailbox> {

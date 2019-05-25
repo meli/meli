@@ -146,16 +146,15 @@ impl ThreadView {
     }
     fn initiate(&mut self, expanded_hash: Option<ThreadHash>, context: &Context) {
         /* stack to push thread messages in order in order to pop and print them later */
-        let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
-            .as_ref()
-            .unwrap();
-        let threads = &mailbox.collection.threads;
+        let account = &context.accounts[self.coordinates.0];
+        let mailbox = &account[self.coordinates.1].as_ref().unwrap();
+        let threads = &account.collection.threads[&mailbox.folder.hash()];
 
         let thread_iter = threads.thread_iter(self.coordinates.2);
         self.entries.clear();
         for (line, (ind, thread_hash)) in thread_iter.enumerate() {
             let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_hash].message() {
-                let seen: bool = mailbox.collection[&msg_hash].is_seen();
+                let seen: bool = account.get_env(&msg_hash).is_seen();
                 self.make_entry((ind, thread_hash, line), msg_hash, seen)
             } else {
                 continue;
@@ -180,7 +179,7 @@ impl ThreadView {
         let mut highlight_reply_subjects: Vec<Option<usize>> =
             Vec::with_capacity(self.entries.len());
         for e in &mut self.entries {
-            let envelope: &Envelope = &mailbox.collection[&e.msg_hash];
+            let envelope: &Envelope = &context.accounts[self.coordinates.0].get_env(&e.msg_hash);
             let thread_node = &threads.thread_nodes()[&e.index.1];
             let string = if thread_node.show_subject() {
                 let subject = envelope.subject();
@@ -533,10 +532,9 @@ impl ThreadView {
 
         /* First draw the thread subject on the first row */
         let y = if self.dirty {
-            let mailbox = &mut context.accounts[self.coordinates.0][self.coordinates.1]
-                .as_ref()
-                .unwrap();
-            let threads = &mailbox.collection.threads;
+            let account = &context.accounts[self.coordinates.0];
+            let mailbox = &account[self.coordinates.1].as_ref().unwrap();
+            let threads = &account.collection.threads[&mailbox.folder.hash()];
             let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
             let i = if let Some(i) = thread_node.message() {
                 i
@@ -545,7 +543,7 @@ impl ThreadView {
                     .message()
                     .unwrap()
             };
-            let envelope: &Envelope = &mailbox.collection[&i];
+            let envelope: &Envelope = account.get_env(&i);
 
             let (x, y) = write_string_to_grid(
                 &envelope.subject(),
@@ -613,10 +611,9 @@ impl ThreadView {
 
         /* First draw the thread subject on the first row */
         let y = {
-            let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
-                .as_ref()
-                .unwrap();
-            let threads = &mailbox.collection.threads;
+            let account = &context.accounts[self.coordinates.0];
+            let mailbox = &account[self.coordinates.1].as_ref().unwrap();
+            let threads = &account.collection.threads[&mailbox.folder.hash()];
             let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
             let i = if let Some(i) = thread_node.message() {
                 i
@@ -627,7 +624,7 @@ impl ThreadView {
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
-            let envelope: &Envelope = &mailbox.collection[&i];
+            let envelope: &Envelope = account.get_env(&i);
 
             let (x, y) = write_string_to_grid(
                 &envelope.subject(),
@@ -833,10 +830,9 @@ impl Component for ThreadView {
             }
             UIEvent::Input(Key::Char('e')) => {
                 {
-                    let mailbox = &context.accounts[self.coordinates.0][self.coordinates.1]
-                        .as_ref()
-                        .unwrap();
-                    let threads = &mailbox.collection.threads;
+                    let account = &context.accounts[self.coordinates.0];
+                    let mailbox = &account[self.coordinates.1].as_ref().unwrap();
+                    let threads = &account.collection.threads[&mailbox.folder.hash()];
                     let thread_node =
                         &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
                     let i = if let Some(i) = thread_node.message() {
@@ -846,20 +842,18 @@ impl Component for ThreadView {
                             .message()
                             .unwrap()
                     };
-                    let envelope: &Envelope = &mailbox.collection[&i];
-                    let op = context.accounts[self.coordinates.0]
-                        .backend
-                        .operation(envelope.hash(), mailbox.folder.hash());
+                    let envelope: &Envelope = &account.get_env(&i);
+                    let op = account.operation(&envelope.hash());
                     debug!(
                         "sending action edit for {}, {}",
                         envelope.message_id(),
                         op.description()
                     );
+                    context.replies.push_back(UIEvent::Action(Tab(Edit(
+                        self.coordinates.0,
+                        envelope.hash(),
+                    ))));
                 }
-                context.replies.push_back(UIEvent::Action(Tab(Edit(
-                    self.coordinates,
-                    self.entries[self.expanded_pos].index.1,
-                ))));
                 return true;
             }
             UIEvent::Input(Key::Up) => {

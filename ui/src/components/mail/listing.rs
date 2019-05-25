@@ -500,11 +500,13 @@ impl Listing {
         ) {
             match context.accounts[index].status(entries[&folder_idx].hash()) {
                 Ok(_) => {
-                    let count = context.accounts[index][entries[&folder_idx].hash()]
+                    let account = &context.accounts[index];
+                    let count = account[entries[&folder_idx].hash()]
                         .as_ref()
                         .unwrap()
-                        .collection
-                        .values()
+                        .envelopes
+                        .iter()
+                        .map(|h| &account.collection[&h])
                         .filter(|e| !e.is_seen())
                         .count();
                     let len = s.len();

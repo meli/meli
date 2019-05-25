@@ -1,4 +1,5 @@
 use super::*;
+use crate::mailbox::backends::FolderHash;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
@@ -6,22 +7,20 @@ use std::ops::{Deref, DerefMut};
 
 use fnv::FnvHashMap;
 
-/// `Mailbox` represents a folder of mail.
 #[derive(Debug, Clone, Deserialize, Default, Serialize)]
 pub struct Collection {
-    #[serde(skip_serializing, skip_deserializing)]
-    folder: Folder,
     pub envelopes: FnvHashMap<EnvelopeHash, Envelope>,
+    message_ids: FnvHashMap<Vec<u8>, EnvelopeHash>,
     date_index: BTreeMap<UnixTimestamp, EnvelopeHash>,
     subject_index: Option<BTreeMap<String, EnvelopeHash>>,
-    pub threads: Threads,
+    pub threads: FnvHashMap<FolderHash, Threads>,
+    sent_folder: Option<FolderHash>,
 }
 
 impl Drop for Collection {
     fn drop(&mut self) {
-        let cache_dir =
-            xdg::BaseDirectories::with_profile("meli", format!("{}_Thread", self.folder.hash()))
-                .unwrap();
+        let cache_dir: xdg::BaseDirectories =
+            xdg::BaseDirectories::with_profile("meli", "threads".to_string()).unwrap();
         if let Ok(cached) = cache_dir.place_cache_file("threads") {
             /* place result in cache directory */
             let f = match fs::File::create(cached) {
@@ -37,47 +36,24 @@ impl Drop for Collection {
 }
 
 impl Collection {
-    pub fn new(vec: Vec<Envelope>, folder: &Folder) -> Collection {
-        let mut envelopes: FnvHashMap<EnvelopeHash, Envelope> =
-            FnvHashMap::with_capacity_and_hasher(vec.len(), Default::default());
-        for e in vec {
-            envelopes.insert(e.hash(), e);
-        }
+    pub fn new(envelopes: FnvHashMap<EnvelopeHash, Envelope>) -> Collection {
         let date_index = BTreeMap::new();
         let subject_index = None;
+        let message_ids = FnvHashMap::with_capacity_and_hasher(2048, Default::default());
 
         /* Scrap caching for now. When a cached threads file is loaded, we must remove/rehash the
          * thread nodes that shouldn't exist anymore (e.g. because their file moved from /new to
          * /cur, or it was deleted).
          */
-        let threads = Threads::new(&mut envelopes);
-
-        /*let cache_dir =
-                    xdg::BaseDirectories::with_profile("meli", format!("{}_Thread", folder.hash()))
-                        .unwrap();
-                if let Some(cached) = cache_dir.find_cache_file("threads") {
-                    let reader = io::BufReader::new(fs::File::open(cached).unwrap());
-                    let result: result::Result<Threads, _> = bincode::deserialize_from(reader);
-                    let ret = if let Ok(mut cached_t) = result {
-        use std::iter::FromIterator;
-        debug!("loaded cache, our hash set is {:?}\n and the cached one is {:?}", FnvHashSet::from_iter(envelopes.keys().cloned()), cached_t.hash_set);
-                        cached_t.amend(&mut envelopes);
-                        cached_t
-                    } else {
-                        Threads::new(&mut envelopes)
-                    };
-                    ret
-                } else {
-                    Threads::new(&mut envelopes)
-                };
-                */
+        let threads = FnvHashMap::with_capacity_and_hasher(16, Default::default());
 
         Collection {
-            folder: folder.clone(),
             envelopes,
             date_index,
+            message_ids,
             subject_index,
             threads,
+            sent_folder: None,
         }
     }
 
@@ -89,22 +65,34 @@ impl Collection {
         self.envelopes.is_empty()
     }
 
-    pub fn remove(&mut self, envelope_hash: EnvelopeHash) {
+    pub fn remove(&mut self, envelope_hash: EnvelopeHash, folder_hash: FolderHash) {
         debug!("DEBUG: Removing {}", envelope_hash);
         self.envelopes.remove(&envelope_hash);
-        self.threads.remove(envelope_hash, &mut self.envelopes);
+        self.threads
+            .entry(folder_hash)
+            .or_default()
+            .remove(envelope_hash, &mut self.envelopes);
     }
 
-    pub fn rename(&mut self, old_hash: EnvelopeHash, new_hash: EnvelopeHash) {
+    pub fn rename(
+        &mut self,
+        old_hash: EnvelopeHash,
+        new_hash: EnvelopeHash,
+        folder_hash: FolderHash,
+    ) {
         if !self.envelopes.contains_key(&old_hash) {
             return;
         }
         let mut env = self.envelopes.remove(&old_hash).unwrap();
         env.set_hash(new_hash);
+        self.message_ids
+            .insert(env.message_id().raw().to_vec(), new_hash);
         self.envelopes.insert(new_hash, env);
         {
             if self
                 .threads
+                .entry(folder_hash)
+                .or_default()
                 .update_envelope(old_hash, new_hash, &self.envelopes)
                 .is_ok()
             {
@@ -114,17 +102,102 @@ impl Collection {
         /* envelope is not in threads, so insert it */
         let env = self.envelopes.entry(new_hash).or_default() as *mut Envelope;
         unsafe {
-            self.threads.insert(&mut (*env), &self.envelopes);
+            self.threads
+                .entry(folder_hash)
+                .or_default()
+                .insert(&mut (*env), &self.envelopes);
         }
     }
 
-    pub fn update_envelope(&mut self, old_hash: EnvelopeHash, envelope: Envelope) {
+    pub fn merge(
+        &mut self,
+        mut envelopes: FnvHashMap<EnvelopeHash, Envelope>,
+        folder_hash: FolderHash,
+        mailbox: &mut Result<Mailbox>,
+        sent_folder: Option<FolderHash>,
+    ) {
+        self.sent_folder = sent_folder;
+        envelopes.retain(|&h, e| {
+            if self.message_ids.contains_key(e.message_id().raw()) {
+                /* skip duplicates until a better way to handle them is found. */
+                //FIXME
+                if let Ok(mailbox) = mailbox.as_mut() {
+                    mailbox.remove(h);
+                }
+                false
+            } else {
+                self.message_ids.insert(e.message_id().raw().to_vec(), h);
+                true
+            }
+        });
+        let mut threads = Threads::new(&mut envelopes);
+
+        for (h, e) in envelopes {
+            self.envelopes.insert(h, e);
+        }
+        for (t_fh, t) in self.threads.iter_mut() {
+            if self.sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
+                let mut ordered_hash_set = threads
+                    .hash_set
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<EnvelopeHash>>();
+                unsafe {
+                    /* FIXME NLL
+                     * Sorting ordered_hash_set triggers a borrow which should not happen with NLL
+                     * probably */
+                    let envelopes = &self.envelopes as *const FnvHashMap<EnvelopeHash, Envelope>;
+                    ordered_hash_set.sort_by(|a, b| {
+                        (*envelopes)[a]
+                            .date()
+                            .partial_cmp(&(*(envelopes))[b].date())
+                            .unwrap()
+                    });
+                }
+                for h in ordered_hash_set {
+                    t.insert_reply(&mut self.envelopes, h);
+                }
+                continue;
+            }
+            if self.sent_folder.map(|f| f == *t_fh).unwrap_or(false) {
+                let mut ordered_hash_set =
+                    t.hash_set.iter().cloned().collect::<Vec<EnvelopeHash>>();
+                unsafe {
+                    /* FIXME NLL
+                     * Sorting ordered_hash_set triggers a borrow which should not happen with NLL
+                     * probably */
+                    let envelopes = &self.envelopes as *const FnvHashMap<EnvelopeHash, Envelope>;
+                    ordered_hash_set.sort_by(|a, b| {
+                        (*envelopes)[a]
+                            .date()
+                            .partial_cmp(&(*(envelopes))[b].date())
+                            .unwrap()
+                    });
+                }
+                for h in ordered_hash_set {
+                    threads.insert_reply(&mut self.envelopes, h);
+                }
+            }
+        }
+        self.threads.insert(folder_hash, threads);
+    }
+
+    pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope, folder_hash: FolderHash) {
         self.envelopes.remove(&old_hash);
         let new_hash = envelope.hash();
+        self.message_ids
+            .insert(envelope.message_id().raw().to_vec(), new_hash);
         self.envelopes.insert(new_hash, envelope);
+        if self.sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
+            for (_, t) in self.threads.iter_mut() {
+                t.update_envelope(old_hash, new_hash, &self.envelopes);
+            }
+        }
         {
             if self
                 .threads
+                .entry(folder_hash)
+                .or_default()
                 .update_envelope(old_hash, new_hash, &self.envelopes)
                 .is_ok()
             {
@@ -134,26 +207,28 @@ impl Collection {
         /* envelope is not in threads, so insert it */
         let env = self.envelopes.entry(new_hash).or_default() as *mut Envelope;
         unsafe {
-            self.threads.insert(&mut (*env), &self.envelopes);
+            self.threads
+                .entry(folder_hash)
+                .or_default()
+                .insert(&mut (*env), &self.envelopes);
         }
     }
 
-    pub fn insert(&mut self, envelope: Envelope) {
+    pub fn insert(&mut self, envelope: Envelope, folder_hash: FolderHash) -> &Envelope {
         let hash = envelope.hash();
-        debug!("DEBUG: Inserting hash {} in {}", hash, self.folder.name());
+        self.message_ids
+            .insert(envelope.message_id().raw().to_vec(), hash);
         self.envelopes.insert(hash, envelope);
-        let env = self.envelopes.entry(hash).or_default() as *mut Envelope;
-        unsafe {
-            self.threads.insert(&mut (*env), &self.envelopes);
-        }
+        self.threads
+            .entry(folder_hash)
+            .or_default()
+            .insert_reply(&mut self.envelopes, hash);
+        &self.envelopes[&hash]
     }
-    pub(crate) fn insert_reply(&mut self, _envelope: &Envelope) {
-        return;
-        /*
-        //self.insert(envelope);
-        debug!("insert_reply in collections");
-        self.threads.insert_reply(envelope, &mut self.envelopes);
-        */
+    pub fn insert_reply(&mut self, env_hash: EnvelopeHash) {
+        for (_, t) in self.threads.iter_mut() {
+            t.insert_reply(&mut self.envelopes, env_hash);
+        }
     }
 }
 

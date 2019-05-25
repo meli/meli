@@ -189,15 +189,15 @@ impl MailboxView {
         }
         if old_cursor_pos == self.new_cursor_pos {
             self.view.update(context);
-        } else {
+        } else if self.unfocused {
             self.view = ThreadView::new(self.new_cursor_pos, None, context);
         }
 
-        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap();
+        let account = &context.accounts[self.cursor_pos.0];
+        let mailbox = account[self.cursor_pos.1].as_ref().unwrap();
 
-        self.length = mailbox.collection.threads.root_len();
+        let threads = &account.collection.threads[&mailbox.folder.hash()];
+        self.length = threads.root_len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         self.order.clear();
         if self.length == 0 {
@@ -211,11 +211,10 @@ impl MailboxView {
             );
             return;
         }
-        let threads = &mailbox.collection.threads;
         let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0);
 
-        threads.sort_by(self.sort, self.subsort, &mailbox.collection);
+        threads.sort_by(self.sort, self.subsort, &account.collection);
         for (idx, root_idx) in threads.root_iter().enumerate() {
             let thread_node = &threads.thread_nodes()[&root_idx];
             let i = if let Some(i) = thread_node.message() {
@@ -227,7 +226,7 @@ impl MailboxView {
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
-            if !mailbox.collection.contains_key(&i) {
+            if !context.accounts[self.cursor_pos.0].contains_key(&i) {
                 debug!("key = {}", i);
                 debug!(
                     "name = {} {}",
@@ -238,7 +237,7 @@ impl MailboxView {
 
                 panic!();
             }
-            let root_envelope: &Envelope = &mailbox.collection[&i];
+            let root_envelope: &Envelope = &context.accounts[self.cursor_pos.0].get_env(&i);
 
             let strings = MailboxView::make_entry_string(
                 root_envelope,
@@ -277,14 +276,14 @@ impl MailboxView {
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
-            if !mailbox.collection.contains_key(&i) {
-                debug!("key = {}", i);
-                debug!(
-                    "name = {} {}",
-                    mailbox.name(),
-                    context.accounts[self.cursor_pos.0].name()
-                );
-                debug!("{:#?}", context.accounts);
+            if !context.accounts[self.cursor_pos.0].contains_key(&i) {
+                //debug!("key = {}", i);
+                //debug!(
+                //    "name = {} {}",
+                //    mailbox.name(),
+                //    context.accounts[self.cursor_pos.0].name()
+                //);
+                //debug!("{:#?}", context.accounts);
 
                 panic!();
             }
@@ -365,13 +364,12 @@ impl MailboxView {
         context: &Context,
     ) {
         if idx == self.cursor_pos.2 || grid.is_none() {
-            let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-                .as_ref()
-                .unwrap();
-            if mailbox.is_empty() {
+            if self.length == 0 {
                 return;
             }
-            let threads = &mailbox.collection.threads;
+            let account = &context.accounts[self.cursor_pos.0];
+            let mailbox = account[self.cursor_pos.1].as_ref().unwrap();
+            let threads = &account.collection.threads[&mailbox.folder.hash()];
             let thread_node = threads.root_set(idx);
             let thread_node = &threads.thread_nodes()[&thread_node];
             let i = if let Some(i) = thread_node.message() {
@@ -384,7 +382,7 @@ impl MailboxView {
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
 
-            let root_envelope: &Envelope = &mailbox.collection[&i];
+            let root_envelope: &Envelope = &account.get_env(&i);
             let fg_color = if !root_envelope.is_seen() {
                 Color::Byte(0)
             } else {
@@ -671,11 +669,12 @@ impl Component for MailboxView {
                 Action::ToggleThreadSnooze => {
                     {
                         //FIXME NLL
-
-                        let mailbox = &mut context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-                            .as_mut()
+                        let account = &mut context.accounts[self.cursor_pos.0];
+                        let folder_hash = account[self.cursor_pos.1]
+                            .as_ref()
+                            .map(|m| m.folder.hash())
                             .unwrap();
-                        let threads = &mut mailbox.collection.threads;
+                        let threads = account.collection.threads.entry(folder_hash).or_default();
                         let thread_group = threads.thread_nodes()
                             [&threads.root_set(self.cursor_pos.2)]
                             .thread_group();

@@ -868,13 +868,18 @@ impl Component for StatusBar {
                         return false;
                     }
                 }
-                let m = &context.accounts[*idx_a][*idx_f].as_ref().unwrap();
+                let account = &context.accounts[*idx_a];
+                let m = &account[*idx_f].as_ref().unwrap();
                 self.status = format!(
                     "{} | Mailbox: {}, Messages: {}, New: {}",
                     self.mode,
                     m.folder.name(),
-                    m.collection.len(),
-                    m.collection.values().filter(|e| !e.is_seen()).count()
+                    m.envelopes.len(),
+                    m.envelopes
+                        .iter()
+                        .map(|h| &account.collection[&h])
+                        .filter(|e| !e.is_seen())
+                        .count()
                 );
                 self.dirty = true;
             }
@@ -1254,8 +1259,8 @@ impl Component for Tabbed {
                 self.children[self.cursor_pos].set_dirty();
                 return true;
             }
-            UIEvent::Action(Tab(Edit(coordinates, msg))) => {
-                self.add_component(Box::new(Composer::edit(coordinates, msg, context)));
+            UIEvent::Action(Tab(Edit(account_pos, msg))) => {
+                self.add_component(Box::new(Composer::edit(account_pos, msg, context)));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
                 return true;
