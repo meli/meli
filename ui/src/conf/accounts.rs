@@ -36,6 +36,7 @@ use melib::mailbox::backends::{
 use melib::mailbox::*;
 use melib::AddressBook;
 
+use std::collections::VecDeque;
 use std::fs;
 use std::io;
 use std::mem;
@@ -74,6 +75,8 @@ pub struct Account {
     pub(crate) settings: AccountConf,
     pub(crate) runtime_settings: AccountConf,
     pub(crate) backend: Box<dyn MailBackend>,
+
+    event_queue: VecDeque<(FolderHash, RefreshEvent)>,
     notify_fn: Arc<NotifyFn>,
 }
 
@@ -250,6 +253,8 @@ impl Account {
             runtime_settings: settings,
             backend,
             notify_fn,
+
+            event_queue: VecDeque::with_capacity(8),
         }
     }
     fn new_worker(
@@ -274,6 +279,13 @@ impl Account {
         })))
     }
     pub fn reload(&mut self, event: RefreshEvent, folder_hash: FolderHash) -> Option<UIEvent> {
+        if self.folders[&folder_hash].is_none()
+            || self.folders[&folder_hash].as_ref().unwrap().is_err()
+        {
+            self.event_queue.push_back((folder_hash, event));
+            return None;
+        }
+
         let kind = event.kind();
         {
             //let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
@@ -384,55 +396,7 @@ impl Account {
 
     fn load_mailbox(&mut self, folder_hash: FolderHash, mailbox: Result<Mailbox>) {
         self.folders.insert(folder_hash, Some(mailbox));
-        /*
-        if self.sent_folder.is_some() && self.sent_folder.unwrap() == index {
-            self.folders[index] = Some(mailbox);
-            /* Add our replies to other folders */
-        for id in (0..self.folders.len()).filter(|i| *i != index) {
-        self.add_replies_to_folder(id);
-        }
-        } else {
-        self.folders[index] = Some(mailbox);
-        self.add_replies_to_folder(index);
-        };
-         */
     }
-
-    /*
-    fn add_replies_to_folder(&mut self, folder_index: usize) {
-        if let Some(sent_index) = self.sent_folder.as_ref() {
-            if self.folders[*sent_index]
-                .as_ref()
-                .map(|v| v.is_ok())
-                .unwrap_or(false)
-                && self.folders[folder_index]
-                    .as_ref()
-                    .map(|v| v.is_ok())
-                    .unwrap_or(false)
-            {
-                let (sent, cur) = {
-                    let ptr = self.folders.as_mut_ptr();
-                    unsafe {
-                        use std::slice::from_raw_parts_mut;
-                        (
-                            from_raw_parts_mut(ptr.offset(*sent_index as isize), *sent_index + 1)
-                                [0].as_mut()
-                            .unwrap()
-                            .as_mut()
-                            .unwrap(),
-                            from_raw_parts_mut(ptr.offset(folder_index as isize), folder_index + 1)
-                                [0].as_mut()
-                            .unwrap()
-                            .as_mut()
-                            .unwrap(),
-                        )
-                    }
-                };
-                cur.insert_sent_folder(&sent);
-            }
-        }
-    }
-    */
 
     pub fn status(&mut self, folder_hash: FolderHash) -> result::Result<(), usize> {
         match self.workers.get_mut(&folder_hash).unwrap() {
