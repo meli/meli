@@ -22,7 +22,7 @@ extern crate serde;
 use self::serde::de::Visitor;
 use self::serde::{de, Deserialize, Deserializer};
 extern crate unicode_segmentation;
-use self::unicode_segmentation::UnicodeSegmentation;
+use melib::grapheme_clusters::*;
 
 #[macro_use]
 mod position;
@@ -30,12 +30,8 @@ mod position;
 mod cells;
 #[macro_use]
 mod keys;
-mod grapheme_clusters;
 mod text_editing;
-mod wcwidth;
 pub use self::cells::*;
-pub use self::grapheme_clusters::*;
 pub use self::keys::*;
 pub use self::position::*;
 pub use self::text_editing::*;
-pub use self::wcwidth::*;

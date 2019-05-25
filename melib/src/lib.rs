@@ -81,7 +81,11 @@ pub mod addressbook;
 pub mod async_workers;
 pub mod conf;
 pub mod error;
+pub mod grapheme_clusters;
 pub mod mailbox;
+mod wcwidth;
+pub use self::grapheme_clusters::*;
+pub use self::wcwidth::*;
 
 #[macro_use]
 extern crate serde_derive;
