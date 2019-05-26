@@ -695,7 +695,7 @@ impl Threads {
              */
             let mut c_idx = 0;
             loop {
-                if c_idx == thread_nodes[&idx].children.len() {
+                if c_idx >= thread_nodes[&idx].children.len() {
                     break;
                 }
                 let c = thread_nodes[&idx].children[c_idx];
