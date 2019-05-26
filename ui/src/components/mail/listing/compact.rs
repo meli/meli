@@ -115,7 +115,7 @@ impl MailboxView {
                     "{} ({}){}{}",
                     e.subject(),
                     len,
-                    if e.has_attachments() { " 🔗" } else { "" },
+                    if e.has_attachments() { " 📎" } else { "" },
                     if is_snoozed { " 💤" } else { "" }
                 )),
             )
@@ -127,7 +127,7 @@ impl MailboxView {
                 SubjectString(format!(
                     "{}{}{}",
                     e.subject(),
-                    if e.has_attachments() { " 🔗" } else { "" },
+                    if e.has_attachments() { " 📎" } else { "" },
                     if is_snoozed { " 💤" } else { "" }
                 )),
             )
