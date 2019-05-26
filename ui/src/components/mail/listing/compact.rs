@@ -112,9 +112,10 @@ impl MailboxView {
                 FromString(address_list!((e.from()) as comma_sep_list)),
                 DateString(MailboxView::format_date(e)),
                 SubjectString(format!(
-                    "{} ({}){}",
+                    "{} ({}){}{}",
                     e.subject(),
                     len,
+                    if e.has_attachments() { " 🔗" } else { "" },
                     if is_snoozed { " 💤" } else { "" }
                 )),
             )
@@ -124,8 +125,9 @@ impl MailboxView {
                 FromString(address_list!((e.from()) as comma_sep_list)),
                 DateString(MailboxView::format_date(e)),
                 SubjectString(format!(
-                    "{}{}",
+                    "{}{}{}",
                     e.subject(),
+                    if e.has_attachments() { " 🔗" } else { "" },
                     if is_snoozed { " 💤" } else { "" }
                 )),
             )
@@ -343,8 +345,23 @@ impl MailboxView {
                 ((_x, idx), (widths.2 + _x, idx)),
                 false,
             );
-            if threads.is_snoozed(root_idx) {
-                self.content[(x - 1, idx)].set_fg(Color::Red);
+            match (
+                threads.is_snoozed(root_idx),
+                &context.accounts[self.cursor_pos.0]
+                    .get_env(&i)
+                    .has_attachments(),
+            ) {
+                (true, true) => {
+                    self.content[(x - 1, idx)].set_fg(Color::Red);
+                    self.content[(x - 2, idx)].set_fg(Color::Byte(103));
+                }
+                (true, false) => {
+                    self.content[(x - 1, idx)].set_fg(Color::Red);
+                }
+                (false, true) => {
+                    self.content[(x - 1, idx)].set_fg(Color::Byte(103));
+                }
+                (false, false) => {}
             }
 
             self.order.insert(i, idx);

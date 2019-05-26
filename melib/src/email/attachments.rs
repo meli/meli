@@ -69,7 +69,11 @@ impl AttachmentBuilder {
             raw: content.to_vec(),
         }
     }
-    pub fn content_type(&mut self, value: &[u8]) -> &Self {
+    pub fn content_type(&mut self) -> &ContentType {
+        &self.content_type
+    }
+
+    pub fn set_content_type(&mut self, value: &[u8]) -> &Self {
         match parser::content_type(value).to_full_result() {
             Ok((ct, cst, params)) => {
                 if ct.eq_ignore_ascii_case(b"multipart") {
@@ -86,7 +90,8 @@ impl AttachmentBuilder {
                         (_boundary.as_ptr() as usize).wrapping_sub(value.as_ptr() as usize);
                     let boundary = SliceBuild::new(offset, _boundary.len());
                     let subattachments = Self::subattachments(&self.raw, boundary.get(&value));
-                    assert!(!subattachments.is_empty());
+                    // Invalid mail or wrong assumption?
+                    // assert!(!subattachments.is_empty());
                     self.content_type = ContentType::Multipart {
                         boundary,
                         kind: if cst.eq_ignore_ascii_case(b"mixed") {
@@ -154,7 +159,7 @@ impl AttachmentBuilder {
         }
         self
     }
-    pub fn content_transfer_encoding(&mut self, value: &[u8]) -> &Self {
+    pub fn set_content_transfer_encoding(&mut self, value: &[u8]) -> &Self {
         self.content_transfer_encoding = if value.eq_ignore_ascii_case(b"base64") {
             ContentTransferEncoding::Base64
         } else if value.eq_ignore_ascii_case(b"7bit") {
@@ -231,9 +236,9 @@ impl AttachmentBuilder {
                     builder.raw = body_slice.get(a).ltrim().into();
                     for (name, value) in headers {
                         if name.eq_ignore_ascii_case(b"content-type") {
-                            builder.content_type(value);
+                            builder.set_content_type(value);
                         } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
-                            builder.content_transfer_encoding(value);
+                            builder.set_content_transfer_encoding(value);
                         }
                     }
                     vec.push(builder.build());
@@ -370,6 +375,12 @@ impl Attachment {
     }
     pub fn content_transfer_encoding(&self) -> &ContentTransferEncoding {
         &self.content_transfer_encoding
+    }
+    pub fn is_text(&self) -> bool {
+        match self.content_type {
+            ContentType::Text { .. } => true,
+            _ => false,
+        }
     }
     pub fn is_html(&self) -> bool {
         match self.content_type {

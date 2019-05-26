@@ -326,6 +326,7 @@ pub struct Envelope {
     hash: EnvelopeHash,
 
     flags: Flag,
+    has_attachments: bool,
 }
 
 impl fmt::Debug for Envelope {
@@ -359,6 +360,7 @@ impl Envelope {
             thread: ThreadHash::null(),
 
             hash,
+            has_attachments: false,
             flags: Flag::default(),
         }
     }
@@ -392,7 +394,7 @@ impl Envelope {
         self.hash
     }
     pub fn populate_headers(&mut self, bytes: &[u8]) -> Result<()> {
-        let (headers, _) = match parser::mail(bytes).to_full_result() {
+        let (headers, body) = match parser::mail(bytes).to_full_result() {
             Ok(v) => v,
             Err(e) => {
                 debug!("error in parsing mail\n{:?}\n", e);
@@ -458,6 +460,22 @@ impl Envelope {
                     self.set_date(value.as_slice());
                 } else {
                     self.set_date(value);
+                }
+            } else if name.eq_ignore_ascii_case(b"content-type") {
+                match parser::content_type(value).to_full_result() {
+                    Ok((ct, cst, _))
+                        if ct.eq_ignore_ascii_case(b"multipart")
+                            && cst.eq_ignore_ascii_case(b"mixed") =>
+                    {
+                        let mut builder = AttachmentBuilder::new(body);
+                        builder.set_content_type(value);
+                        let b = builder.build();
+                        let subs = b.attachments();
+
+                        self.has_attachments =
+                            subs.iter().fold(false, |acc, sub| acc || !sub.is_text());
+                    }
+                    _ => {}
                 }
             }
         }
@@ -560,9 +578,9 @@ impl Envelope {
                 continue;
             }
             if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
-                builder.content_transfer_encoding(value);
+                builder.set_content_transfer_encoding(value);
             } else if name.eq_ignore_ascii_case(b"content-type") {
-                builder.content_type(value);
+                builder.set_content_type(value);
             }
         }
         builder.build()
@@ -754,6 +772,9 @@ impl Envelope {
     }
     pub fn is_seen(&self) -> bool {
         self.flags.contains(Flag::SEEN)
+    }
+    pub fn has_attachments(&self) -> bool {
+        self.has_attachments
     }
 }
 
