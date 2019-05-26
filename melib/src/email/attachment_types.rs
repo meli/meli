@@ -1,5 +1,5 @@
-use crate::mailbox::email::attachments::Attachment;
-use crate::mailbox::email::parser::BytesExt;
+use crate::email::attachments::Attachment;
+use crate::email::parser::BytesExt;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
 

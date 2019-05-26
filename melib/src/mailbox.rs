@@ -25,21 +25,14 @@
  * This module handles reading emails from various backends, handling account data etc
  */
 
-pub mod email;
-pub use self::email::*;
-/* Mail backends. Currently only maildir is supported */
-pub mod backends;
-use self::backends::Folder;
+use crate::backends::Folder;
+pub use crate::email::*;
 use crate::error::Result;
-use crate::mailbox::thread::ThreadHash;
+use crate::thread::ThreadHash;
 
-pub mod thread;
-pub use self::thread::{SortField, SortOrder, ThreadNode, Threads};
+pub use crate::thread::{SortField, SortOrder, ThreadNode, Threads};
 
-mod collection;
-pub use self::collection::*;
-
-use std::option::Option;
+pub use crate::collection::*;
 
 use fnv::{FnvHashMap, FnvHashSet};
 /// `Mailbox` represents a folder of mail.

@@ -1,5 +1,5 @@
 use super::*;
-use crate::mailbox::backends::FolderHash;
+use crate::backends::FolderHash;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;

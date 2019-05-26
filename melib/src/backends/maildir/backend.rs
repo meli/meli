@@ -26,8 +26,8 @@ use super::{
 use super::{MaildirFolder, MaildirOp};
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
+use crate::email::{Envelope, EnvelopeHash};
 use crate::error::{MeliError, Result};
-use crate::mailbox::email::{Envelope, EnvelopeHash};
 
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::time::Duration;

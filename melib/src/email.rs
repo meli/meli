@@ -32,9 +32,9 @@ pub use crate::attachments::*;
 pub mod parser;
 use parser::BytesExt;
 
-use super::backends::BackendOp;
+use crate::backends::BackendOp;
 use crate::error::{MeliError, Result};
-use crate::mailbox::thread::ThreadHash;
+use crate::thread::ThreadHash;
 
 use std::borrow::Cow;
 use std::cmp::Ordering;

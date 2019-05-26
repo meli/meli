@@ -18,14 +18,14 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::mailbox::email::parser;
-use crate::mailbox::email::parser::BytesExt;
-use crate::mailbox::email::EnvelopeWrapper;
+use crate::email::parser;
+use crate::email::parser::BytesExt;
+use crate::email::EnvelopeWrapper;
 use data_encoding::BASE64_MIME;
 use std::fmt;
 use std::str;
 
-pub use crate::mailbox::email::attachment_types::*;
+pub use crate::email::attachment_types::*;
 
 /*
  *

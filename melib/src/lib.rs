@@ -79,10 +79,16 @@ pub mod dbg {
 
 pub mod addressbook;
 pub mod async_workers;
+pub mod backends;
+mod collection;
 pub mod conf;
+pub mod email;
 pub mod error;
 pub mod grapheme_clusters;
 pub mod mailbox;
+pub mod thread;
+pub use crate::email::*;
+pub use thread::*;
 mod wcwidth;
 pub use self::grapheme_clusters::*;
 pub use self::wcwidth::*;
@@ -109,8 +115,8 @@ extern crate uuid;
 pub use conf::*;
 pub use mailbox::*;
 
+pub use backends::{Backends, RefreshEvent, RefreshEventConsumer};
+pub use email::{Envelope, Flag};
 pub use error::{MeliError, Result};
-pub use mailbox::backends::{Backends, RefreshEvent, RefreshEventConsumer};
-pub use mailbox::email::{Envelope, Flag};
 
 pub use addressbook::*;

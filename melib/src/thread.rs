@@ -32,9 +32,9 @@
  * user having mutable ownership.
  */
 
+use crate::email::parser::BytesExt;
+use crate::email::*;
 use crate::grapheme_clusters::*;
-use crate::mailbox::email::parser::BytesExt;
-use crate::mailbox::email::*;
 use crate::structs::StackVec;
 use uuid::Uuid;
 

@@ -27,12 +27,11 @@ use super::AccountConf;
 use super::ToggleFlag;
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
-use melib::backends::FolderHash;
-use melib::error::Result;
-use melib::mailbox::backends::{
-    BackendOp, Backends, Folder, MailBackend, NotifyFn, RefreshEvent, RefreshEventConsumer,
-    RefreshEventKind,
+use melib::backends::{
+    BackendOp, Backends, Folder, FolderHash, MailBackend, NotifyFn, RefreshEvent,
+    RefreshEventConsumer, RefreshEventKind,
 };
+use melib::error::Result;
 use melib::mailbox::*;
 use melib::thread::ThreadHash;
 use melib::AddressBook;
