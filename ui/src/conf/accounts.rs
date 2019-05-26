@@ -25,7 +25,6 @@
 
 use super::AccountConf;
 use super::ToggleFlag;
-use crate::StackVec;
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
 use melib::backends::FolderHash;
@@ -37,6 +36,7 @@ use melib::mailbox::backends::{
 use melib::mailbox::*;
 use melib::thread::ThreadHash;
 use melib::AddressBook;
+use melib::StackVec;
 
 use std::collections::VecDeque;
 use std::fs;

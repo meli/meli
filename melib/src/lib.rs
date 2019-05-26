@@ -86,6 +86,8 @@ pub mod mailbox;
 mod wcwidth;
 pub use self::grapheme_clusters::*;
 pub use self::wcwidth::*;
+mod structs;
+pub use self::structs::*;
 
 #[macro_use]
 extern crate serde_derive;

@@ -35,6 +35,7 @@
 use crate::grapheme_clusters::*;
 use crate::mailbox::email::parser::BytesExt;
 use crate::mailbox::email::*;
+use crate::structs::StackVec;
 use uuid::Uuid;
 
 use fnv::{FnvHashMap, FnvHashSet};
@@ -350,7 +351,7 @@ impl ThreadTree {
 
 pub struct ThreadsIterator<'a> {
     pos: usize,
-    stack: Vec<usize>,
+    stack: StackVec<usize>,
     tree: Ref<'a, Vec<ThreadTree>>,
 }
 impl<'a> Iterator for ThreadsIterator<'a> {
@@ -358,7 +359,7 @@ impl<'a> Iterator for ThreadsIterator<'a> {
     fn next(&mut self) -> Option<(usize, ThreadHash, bool)> {
         {
             let mut tree = &(*self.tree);
-            for i in &self.stack {
+            for i in self.stack.iter() {
                 tree = &tree[*i].children;
             }
             if self.pos == tree.len() {
@@ -402,7 +403,7 @@ impl<'a> Iterator for ThreadsIterator<'a> {
 pub struct ThreadIterator<'a> {
     init_pos: usize,
     pos: usize,
-    stack: Vec<usize>,
+    stack: StackVec<usize>,
     tree: Ref<'a, Vec<ThreadTree>>,
 }
 impl<'a> Iterator for ThreadIterator<'a> {
@@ -410,7 +411,7 @@ impl<'a> Iterator for ThreadIterator<'a> {
     fn next(&mut self) -> Option<(usize, ThreadHash)> {
         {
             let mut tree = &(*self.tree);
-            for i in &self.stack {
+            for i in self.stack.iter() {
                 tree = &tree[*i].children;
             }
             if self.pos == tree.len() || (self.stack.is_empty() && self.pos > self.init_pos) {
@@ -823,7 +824,7 @@ impl Threads {
     pub fn threads_iter(&self) -> ThreadsIterator {
         ThreadsIterator {
             pos: 0,
-            stack: Vec::with_capacity(4),
+            stack: StackVec::new(),
             tree: self.tree.borrow(),
         }
     }
@@ -832,7 +833,7 @@ impl Threads {
         ThreadIterator {
             init_pos: index,
             pos: index,
-            stack: Vec::with_capacity(4),
+            stack: StackVec::new(),
             tree: self.tree.borrow(),
         }
     }
@@ -1057,7 +1058,7 @@ impl Threads {
     /* Update thread tree information on envelope insertion */
     fn rebuild_thread(&mut self, id: ThreadHash, envelopes: &Envelopes) {
         let mut node_idx = id;
-        let mut stack = Vec::with_capacity(32);
+        let mut stack = StackVec::new();
 
         {
             let tree = self.tree.get_mut();
