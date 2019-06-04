@@ -21,7 +21,48 @@
 
 use super::*;
 
+use std::cmp;
+use std::ops::{Deref, DerefMut};
 const MAX_COLS: usize = 500;
+macro_rules! address_list {
+    (($name:expr) as comma_sep_list) => {{
+        let mut ret: String =
+            $name
+                .into_iter()
+                .fold(String::new(), |mut s: String, n: &Address| {
+                    s.extend(n.to_string().chars());
+                    s.push_str(", ");
+                    s
+                });
+        ret.pop();
+        ret.pop();
+        ret
+    }};
+}
+
+macro_rules! column_str {
+    (
+        struct $name:ident(String)) => {
+        pub struct $name(String);
+
+        impl Deref for $name {
+            type Target = String;
+            fn deref(&self) -> &String {
+                &self.0
+            }
+        }
+        impl DerefMut for $name {
+            fn deref_mut(&mut self) -> &mut String {
+                &mut self.0
+            }
+        }
+    };
+}
+
+column_str!(struct IndexNoString(String));
+column_str!(struct DateString(String));
+column_str!(struct FromString(String));
+column_str!(struct SubjectString(String));
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `MailView`.
@@ -69,12 +110,19 @@ impl fmt::Display for PlainListing {
 impl PlainListing {
     /// Helper function to format entry strings for PlainListing */
     /* TODO: Make this configurable */
-    fn make_entry_string(e: &Envelope, idx: usize) -> String {
-        format!(
-            "{}    {}    {}",
-            idx,
-            &e.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),
-            e.subject()
+    fn make_entry_string(
+        e: &Envelope,
+        idx: usize,
+    ) -> (IndexNoString, FromString, DateString, SubjectString) {
+        (
+            IndexNoString(idx.to_string()),
+            FromString(address_list!((e.from()) as comma_sep_list)),
+            DateString(PlainListing::format_date(e)),
+            SubjectString(format!(
+                "{}{}",
+                e.subject(),
+                if e.has_attachments() { " 📎" } else { "" },
+            )),
         )
     }
 
@@ -147,7 +195,56 @@ impl PlainListing {
             );
             return;
         }
+        self.local_collection = account.collection.keys().cloned().collect();
+        let sort = self.sort;
+        self.local_collection.sort_by(|a, b| match sort {
+            (SortField::Date, SortOrder::Desc) => {
+                let ma = &account.get_env(a);
+                let mb = &account.get_env(b);
+                mb.date().cmp(&ma.date())
+            }
+            (SortField::Date, SortOrder::Asc) => {
+                let ma = &account.get_env(a);
+                let mb = &account.get_env(b);
+                ma.date().cmp(&mb.date())
+            }
+            (SortField::Subject, SortOrder::Desc) => {
+                let ma = &account.get_env(a);
+                let mb = &account.get_env(b);
+                ma.subject().cmp(&mb.subject())
+            }
+            (SortField::Subject, SortOrder::Asc) => {
+                let ma = &account.get_env(a);
+                let mb = &account.get_env(b);
+                mb.subject().cmp(&ma.subject())
+            }
+        });
 
+        let mut rows = Vec::with_capacity(1024);
+        let mut min_width = (0, 0, 0);
+        let widths: (usize, usize, usize);
+
+        for idx in 0..self.local_collection.len() {
+            let envelope: &Envelope = &account.get_env(&self.local_collection[idx]);
+
+            let strings = PlainListing::make_entry_string(envelope, idx);
+            min_width.0 = cmp::max(min_width.0, strings.0.len()); /* index */
+            min_width.1 = cmp::max(min_width.1, strings.2.split_graphemes().len()); /* date */
+            min_width.2 = cmp::max(min_width.2, strings.3.split_graphemes().len()); /* subject */
+            rows.push(strings);
+        }
+        let column_sep: usize = if MAX_COLS >= min_width.0 + min_width.1 + min_width.2 {
+            widths = min_width;
+            2
+        } else {
+            let width = MAX_COLS - 3 - min_width.0;
+            widths = (
+                min_width.0,
+                cmp::min(min_width.1, width / 3),
+                cmp::min(min_width.2, width / 3),
+            );
+            1
+        };
         // Populate `CellBuffer` with every entry.
         let mut idx = 0;
         for y in 0..=self.length {
@@ -157,30 +254,6 @@ impl PlainListing {
                 break;
             }
             /* Write an entire line for each envelope entry. */
-            self.local_collection = account.collection.keys().cloned().collect();
-            let sort = self.sort;
-            self.local_collection.sort_by(|a, b| match sort {
-                (SortField::Date, SortOrder::Desc) => {
-                    let ma = &account.get_env(a);
-                    let mb = &account.get_env(b);
-                    mb.date().cmp(&ma.date())
-                }
-                (SortField::Date, SortOrder::Asc) => {
-                    let ma = &account.get_env(a);
-                    let mb = &account.get_env(b);
-                    ma.date().cmp(&mb.date())
-                }
-                (SortField::Subject, SortOrder::Desc) => {
-                    let ma = &account.get_env(a);
-                    let mb = &account.get_env(b);
-                    ma.subject().cmp(&mb.subject())
-                }
-                (SortField::Subject, SortOrder::Asc) => {
-                    let ma = &account.get_env(a);
-                    let mb = &account.get_env(b);
-                    mb.subject().cmp(&ma.subject())
-                }
-            });
             let envelope: &Envelope = &account.get_env(&self.local_collection[idx]);
 
             let fg_color = if !envelope.is_seen() {
@@ -195,12 +268,48 @@ impl PlainListing {
             } else {
                 Color::Default
             };
-            let (x, y) = write_string_to_grid(
-                &PlainListing::make_entry_string(envelope, idx),
+            let (x, _) = write_string_to_grid(
+                &rows[idx].0,
                 &mut self.content,
                 fg_color,
                 bg_color,
-                ((0, y), (MAX_COLS - 1, y)),
+                ((0, idx), (widths.0, idx)),
+                false,
+            );
+            for x in x..=widths.0 + column_sep {
+                self.content[(x, idx)].set_bg(bg_color);
+            }
+            let mut _x = widths.0 + column_sep;
+            let (mut x, _) = write_string_to_grid(
+                &rows[idx].2,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                ((_x, idx), (widths.1 + _x, idx)),
+                false,
+            );
+            _x += widths.1 + column_sep + 1;
+            for x in x.._x {
+                self.content[(x, idx)].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &rows[idx].1,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                ((_x, idx), (widths.1 + _x, idx)),
+                false,
+            );
+            _x += widths.1 + column_sep + 2;
+            for x in x.._x {
+                self.content[(x, idx)].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &rows[idx].3,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                ((_x, idx), (widths.2 + _x, idx)),
                 false,
             );
 
@@ -327,6 +436,20 @@ impl PlainListing {
             context,
         );
         context.dirty_areas.push_back(area);
+    }
+    fn format_date(envelope: &Envelope) -> String {
+        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
+        let now: std::time::Duration = std::time::SystemTime::now()
+            .duration_since(d)
+            .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
+        match now.as_secs() {
+            n if n < 10 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(8)),
+            n if n < 24 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(7)),
+            n if n < 4 * 24 * 60 * 60 => {
+                format!("{} days ago{}", n / (24 * 60 * 60), " ".repeat(9))
+            }
+            _ => envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),
+        }
     }
 }
 
