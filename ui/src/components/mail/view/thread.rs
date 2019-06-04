@@ -20,7 +20,17 @@
  */
 
 use super::*;
+use components::utilities::PageMovement;
 use std::cmp;
+
+const INDENTATION_COLORS: &'static [u8] = &[
+    69,  // CornflowerBlue
+    196, // Red1
+    175, // Pink3
+    220, // Gold1
+    172, // Orange3
+    072, // CadetBlue
+];
 
 #[derive(Debug, Clone)]
 struct ThreadEntry {
@@ -47,6 +57,7 @@ pub struct ThreadView {
     entries: Vec<ThreadEntry>,
     visible_entries: Vec<Vec<usize>>,
 
+    movement: Option<PageMovement>,
     dirty: bool,
     content: CellBuffer,
     initiated: bool,
@@ -185,17 +196,27 @@ impl ThreadView {
                 let subject = envelope.subject();
                 highlight_reply_subjects.push(Some(subject.grapheme_width()));
                 format!(
-                    "  {} - {} {}",
+                    "  {} - {} {}{}",
                     envelope.date_as_str(),
                     envelope.field_from_to_string(),
                     envelope.subject(),
+                    if envelope.has_attachments() {
+                        " 📎"
+                    } else {
+                        ""
+                    },
                 )
             } else {
                 highlight_reply_subjects.push(None);
                 format!(
-                    "  {} - {}",
+                    "  {} - {}{}",
                     envelope.date_as_str(),
                     envelope.field_from_to_string(),
+                    if envelope.has_attachments() {
+                        " 📎"
+                    } else {
+                        ""
+                    },
                 )
             };
             e.heading = string;
@@ -242,6 +263,14 @@ impl ThreadView {
                     ),
                     true,
                 );
+                {
+                    let envelope: &Envelope =
+                        &context.accounts[self.coordinates.0].get_env(&e.msg_hash);
+                    if envelope.has_attachments() {
+                        content[(e.index.0 * 4 + e.heading.grapheme_width(), 2 * y)]
+                            .set_fg(Color::Byte(103));
+                    }
+                }
                 if let Some(len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1 + e.heading.grapheme_width() - len;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
@@ -260,11 +289,25 @@ impl ThreadView {
         } else {
             for (y, e) in self.entries.iter().enumerate() {
                 /* Box character drawing stuff */
+                let mut x = 0;
+                for i in 0..e.index.0 {
+                    let color =
+                        INDENTATION_COLORS[(i).wrapping_rem(INDENTATION_COLORS.len())];
+                    change_colors(
+                        &mut content,
+                        ((x, 2 * y), (x + 3, 2 * y + 1)),
+                        Color::Default,
+                        Color::Byte(color),
+                    );
+                    x += 4;
+                }
                 if y > 0 && content.get_mut(e.index.0 * 4, 2 * y - 1).is_some() {
                     let index = (e.index.0 * 4, 2 * y - 1);
                     if content[index].ch() == ' ' {
                         let mut ctr = 1;
+                        content[(e.index.0 * 4, 2 * y - 1)].set_bg(Color::Default);
                         while content.get(e.index.0 * 4 + ctr, 2 * y - 1).is_some() {
+                            content[(e.index.0 * 4 + ctr, 2 * y - 1)].set_bg(Color::Default);
                             if content[(e.index.0 * 4 + ctr, 2 * y - 1)].ch() != ' ' {
                                 break;
                             }
@@ -297,6 +340,14 @@ impl ThreadView {
                     ),
                     false,
                 );
+                {
+                    let envelope: &Envelope =
+                        &context.accounts[self.coordinates.0].get_env(&e.msg_hash);
+                    if envelope.has_attachments() {
+                        content[(e.index.0 * 4 + e.heading.grapheme_width(), 2 * y)]
+                            .set_fg(Color::Byte(103));
+                    }
+                }
                 if let Some(_len) = highlight_reply_subjects[y] {
                     let index = e.index.0 * 4 + 1;
                     let area = ((index, 2 * y), (width - 2, 2 * y));
@@ -366,6 +417,29 @@ impl ThreadView {
             return;
         }
         let rows = (get_y(bottom_right) - get_y(upper_left)).wrapping_div(2);
+        if let Some(mvm) = self.movement.take() {
+            match mvm {
+                PageMovement::PageUp => {
+                    self.new_cursor_pos = self.new_cursor_pos.saturating_sub(rows);
+                }
+                PageMovement::PageDown => {
+                    if self.new_cursor_pos + rows + 1 < height {
+                        self.new_cursor_pos += rows;
+                    } else {
+                        self.new_cursor_pos = (height / rows) * rows;
+                    }
+                }
+                PageMovement::Home => {
+                    self.new_cursor_pos = 0;
+                }
+                PageMovement::End => {
+                    self.new_cursor_pos = (height / rows) * rows;
+                }
+            }
+        }
+        if self.new_cursor_pos >= self.entries.len() {
+            self.new_cursor_pos = self.entries.len().saturating_sub(1);
+        }
         let prev_page_no = (self.cursor_pos).wrapping_div(rows);
         let page_no = (self.new_cursor_pos).wrapping_div(rows);
 
@@ -793,16 +867,12 @@ impl Component for ThreadView {
         /* If user has selected another mail to view, change to it */
         if self.new_expanded_pos != self.expanded_pos {
             self.expanded_pos = self.new_expanded_pos;
-            self.mailview = MailView::new(
-                (
-                    self.coordinates.0,
-                    self.coordinates.1,
-                    self.entries[self.current_pos()].msg_hash,
-                ),
-                None,
-                None,
-                context,
+            let coordinates = (
+                self.coordinates.0,
+                self.coordinates.1,
+                self.entries[self.current_pos()].msg_hash,
             );
+            self.mailview.update(coordinates);
         }
 
         if self.entries.len() == 1 {
@@ -817,9 +887,10 @@ impl Component for ThreadView {
         }
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if self.mailview.process_event(event, context) {
+        if self.show_mailview && self.mailview.process_event(event, context) {
             return true;
         }
+        let shortcuts = &self.get_shortcuts(context)[ThreadView::DESCRIPTION];
         match *event {
             UIEvent::Input(Key::Char('R')) => {
                 context.replies.push_back(UIEvent::Action(Tab(Reply(
@@ -868,6 +939,22 @@ impl Component for ThreadView {
                     self.new_cursor_pos += 1;
                 }
                 return true;
+            }
+            UIEvent::Input(ref key) if *key == shortcuts["prev_page"] => {
+                self.movement = Some(PageMovement::PageUp);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
+                self.movement = Some(PageMovement::PageDown);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::Home => {
+                self.movement = Some(PageMovement::Home);
+                self.set_dirty();
+            }
+            UIEvent::Input(ref key) if *key == Key::End => {
+                self.movement = Some(PageMovement::End);
+                self.set_dirty();
             }
             UIEvent::Input(Key::Char('\n')) => {
                 if self.entries.len() < 2 {
@@ -926,7 +1013,11 @@ impl Component for ThreadView {
             UIEvent::Resize => {
                 self.set_dirty();
             }
-            _ => {}
+            _ => {
+                if self.mailview.process_event(event, context) {
+                    return true;
+                }
+            }
         }
         false
     }
@@ -941,6 +1032,8 @@ impl Component for ThreadView {
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self.mailview.get_shortcuts(context);
+        //FIXME
+        let config_map = context.settings.shortcuts.compact_listing.key_values();
 
         map.insert(
             ThreadView::DESCRIPTION.to_string(),
@@ -949,6 +1042,30 @@ impl Component for ThreadView {
                 ("reverse thread order", Key::Ctrl('r')),
                 ("toggle_mailview", Key::Char('p')),
                 ("toggle_subthread visibility", Key::Char('h')),
+                (
+                    "prev_page",
+                    if let Some(key) = config_map.get("prev_page") {
+                        (*key).clone()
+                    } else {
+                        Key::PageUp
+                    },
+                ),
+                (
+                    "next_page",
+                    if let Some(key) = config_map.get("next_page") {
+                        (*key).clone()
+                    } else {
+                        Key::PageDown
+                    },
+                ),
+                (
+                    "exit_thread",
+                    if let Some(key) = config_map.get("exit_thread") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('i')
+                    },
+                ),
             ]
             .iter()
             .cloned()
