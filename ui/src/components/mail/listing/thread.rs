@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use components::utilities::PageMovement;
 
 const MAX_COLS: usize = 500;
 
@@ -39,7 +40,7 @@ pub struct ThreadListing {
     locations: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
     dirty: bool,
-    /// If `self.view` exists or not.
+    /// If `self.view` is focused or not.
     unfocused: bool,
     initialised: bool,
     view: Option<MailView>,
@@ -131,7 +132,8 @@ impl ThreadListing {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = account[self.cursor_pos.1].as_ref().unwrap();
 
-        self.length = account.collection.threads.len();
+        let threads = &account.collection.threads[&mailbox.folder.hash()];
+        self.length = threads.len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         self.locations.clear();
         if self.length == 0 {
@@ -149,7 +151,6 @@ impl ThreadListing {
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let mut thread_idx = 0; // needed for alternate thread colors
                                 /* Draw threaded view. */
-        let threads = &account.collection.threads[&mailbox.folder.hash()];
         threads.sort_by(self.sort, self.subsort, &account.collection);
         let thread_nodes: &FnvHashMap<ThreadHash, ThreadNode> = &threads.thread_nodes();
         let mut iter = threads.threads_iter().peekable();
@@ -529,7 +530,12 @@ impl Component for ThreadListing {
                 self.locations[self.cursor_pos.2],
             );
 
-            self.view = Some(MailView::new(coordinates, None, None, context));
+            if let Some(ref mut v) = self.view {
+                v.update(coordinates);
+            } else {
+                self.view = Some(MailView::new(coordinates, None, None, context));
+            }
+
             self.view.as_mut().unwrap().draw(
                 grid,
                 (set_y(upper_left, mid + 1), bottom_right),
