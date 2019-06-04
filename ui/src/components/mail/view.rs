@@ -67,6 +67,7 @@ pub struct MailView {
     subview: Option<Box<Component>>,
     dirty: bool,
     mode: ViewMode,
+    expand_headers: bool,
 
     cmd_buf: String,
     id: ComponentId,
@@ -110,6 +111,7 @@ impl MailView {
             subview,
             dirty: true,
             mode: ViewMode::Normal,
+            expand_headers: false,
 
             cmd_buf: String::with_capacity(4),
             id: ComponentId::new_v4(),
@@ -279,6 +281,12 @@ impl MailView {
         }
         buf
     }
+
+    pub fn update(&mut self, new_coordinates: (usize, usize, EnvelopeHash)) {
+        self.coordinates = new_coordinates;
+        self.mode = ViewMode::Normal;
+        self.set_dirty();
+    }
 }
 
 impl Component for MailView {
@@ -355,7 +363,7 @@ impl Component for MailView {
                     grid[(x, y)].set_bg(Color::Default);
                     grid[(x, y)].set_fg(Color::Default);
                 }
-                let (x, y) = write_string_to_grid(
+                let (x, mut y) = write_string_to_grid(
                     &format!("Message-ID: <{}>", envelope.message_id_raw()),
                     grid,
                     Color::Byte(33),
@@ -367,6 +375,43 @@ impl Component for MailView {
                     grid[(x, y)].set_ch(' ');
                     grid[(x, y)].set_bg(Color::Default);
                     grid[(x, y)].set_fg(Color::Default);
+                }
+                if self.expand_headers && envelope.in_reply_to().is_some() {
+                    let (x, _y) = write_string_to_grid(
+                        &format!("In-Reply-To: {}", envelope.in_reply_to_display().unwrap()),
+                        grid,
+                        Color::Byte(33),
+                        Color::Default,
+                        (set_y(upper_left, y + 1), bottom_right),
+                        true,
+                    );
+                    for x in x..=get_x(bottom_right) {
+                        grid[(x, _y)].set_ch(' ');
+                        grid[(x, _y)].set_bg(Color::Default);
+                        grid[(x, _y)].set_fg(Color::Default);
+                    }
+                    let (x, _y) = write_string_to_grid(
+                        &format!(
+                            "References: {}",
+                            envelope
+                                .references()
+                                .iter()
+                                .map(|r| r.to_string())
+                                .collect::<Vec<String>>()
+                                .join(", ")
+                        ),
+                        grid,
+                        Color::Byte(33),
+                        Color::Default,
+                        (set_y(upper_left, _y + 1), bottom_right),
+                        true,
+                    );
+                    for x in x..=get_x(bottom_right) {
+                        grid[(x, _y)].set_ch(' ');
+                        grid[(x, _y)].set_bg(Color::Default);
+                        grid[(x, _y)].set_fg(Color::Default);
+                    }
+                    y = _y;
                 }
                 clear_area(grid, (set_y(upper_left, y + 1), set_y(bottom_right, y + 1)));
                 context
@@ -655,6 +700,11 @@ impl Component for MailView {
                         return true;
                     }
                 };
+            }
+            UIEvent::Input(Key::Char('h')) => {
+                self.expand_headers = !self.expand_headers;
+                self.dirty = true;
+                return true;
             }
             UIEvent::Input(Key::Char('g'))
                 if !self.cmd_buf.is_empty() && self.mode == ViewMode::Url =>
