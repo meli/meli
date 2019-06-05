@@ -646,10 +646,7 @@ impl Component for MailboxView {
                 self.refresh_mailbox(context);
                 self.set_dirty();
             }
-            UIEvent::EnvelopeRename(ref folder_hash, ref old_hash, ref new_hash)
-                if *folder_hash
-                    == context.accounts[self.cursor_pos.0].folders_order[self.new_cursor_pos.1] =>
-            {
+            UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 if let Some(row) = self.order.remove(old_hash) {
                     self.order.insert(*new_hash, row);
                     self.highlight_line(None, ((0, row), (MAX_COLS - 1, row)), row, context);
@@ -658,6 +655,8 @@ impl Component for MailboxView {
                 } else {
                     /* Listing has was updated in time before the event */
                 }
+                self.view
+                    .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
@@ -872,7 +871,7 @@ impl Component for CompactListing {
             | UIEvent::ComponentKill(_)
             | UIEvent::StartupCheck(_)
             | UIEvent::EnvelopeUpdate(_)
-            | UIEvent::EnvelopeRename(_, _, _)
+            | UIEvent::EnvelopeRename(_, _)
             | UIEvent::EnvelopeRemove(_) => {
                 return self.views[self.cursor].process_event(event, context)
             }

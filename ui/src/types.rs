@@ -87,7 +87,7 @@ pub enum UIEvent {
     StartupCheck(FolderHash),
     RefreshEvent(Box<RefreshEvent>),
     EnvelopeUpdate(EnvelopeHash),
-    EnvelopeRename(FolderHash, EnvelopeHash, EnvelopeHash), // folder_hash, old_hash, new_hash
+    EnvelopeRename(EnvelopeHash, EnvelopeHash), // old_hash, new_hash
     EnvelopeRemove(EnvelopeHash),
 }
 

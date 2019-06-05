@@ -88,23 +88,6 @@ impl MailView {
         subview: Option<Box<Component>>,
         context: &mut Context,
     ) -> Self {
-        let account = &mut context.accounts[coordinates.0];
-        let (hash, is_seen) = {
-            let envelope: &Envelope = &account.get_env(&coordinates.2);
-            (envelope.hash(), envelope.is_seen())
-        };
-        if !is_seen {
-            let folder_hash = {
-                let mailbox = &mut account[coordinates.1].as_mut().unwrap();
-                mailbox.folder.hash()
-            };
-            let op = {
-                let backend = &account.backend;
-                backend.operation(hash, folder_hash)
-            };
-            let envelope: &mut Envelope = &mut account.get_env_mut(&coordinates.2);
-            envelope.set_seen(op).unwrap();
-        }
         MailView {
             coordinates,
             pager,
@@ -303,6 +286,19 @@ impl Component for MailView {
                 /* The envelope has been renamed or removed, so wait for the appropriate event to
                  * arrive */
                 return;
+            }
+            let (hash, is_seen) = {
+                let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                (envelope.hash(), envelope.is_seen())
+            };
+            if !is_seen {
+                let folder_hash = {
+                    let mailbox = &mut account[self.coordinates.1].as_mut().unwrap();
+                    mailbox.folder.hash()
+                };
+                let op = account.operation(&hash);
+                let envelope: &mut Envelope = &mut account.get_env_mut(&self.coordinates.2);
+                envelope.set_seen(op).unwrap();
             }
             let envelope: &Envelope = &account.get_env(&self.coordinates.2);
 
@@ -746,7 +742,7 @@ impl Component for MailView {
                 }
                 self.dirty = true;
             }
-            UIEvent::EnvelopeRename(_, old_hash, new_hash) if old_hash == self.coordinates.2 => {
+            UIEvent::EnvelopeRename(old_hash, new_hash) => {
                 self.coordinates.2 = new_hash;
             }
             _ => {

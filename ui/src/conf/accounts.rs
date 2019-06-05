@@ -314,7 +314,7 @@ impl Account {
                     let mailbox = mailbox!(&folder_hash, self.folders);
                     mailbox.rename(old_hash, new_hash);
                     self.collection.rename(old_hash, new_hash, folder_hash);
-                    return Some(EnvelopeRename(mailbox.folder.hash(), old_hash, new_hash));
+                    return Some(EnvelopeRename(old_hash, new_hash));
                 }
                 RefreshEventKind::Create(envelope) => {
                     let env_hash = envelope.hash();

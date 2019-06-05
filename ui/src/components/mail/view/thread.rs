@@ -291,8 +291,7 @@ impl ThreadView {
                 /* Box character drawing stuff */
                 let mut x = 0;
                 for i in 0..e.index.0 {
-                    let color =
-                        INDENTATION_COLORS[(i).wrapping_rem(INDENTATION_COLORS.len())];
+                    let color = INDENTATION_COLORS[(i).wrapping_rem(INDENTATION_COLORS.len())];
                     change_colors(
                         &mut content,
                         ((x, 2 * y), (x + 3, 2 * y + 1)),
@@ -408,6 +407,7 @@ impl ThreadView {
 
     /// draw the list
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        /* Make space on the left for the scrollbar */
         let mut upper_left = pos_inc(upper_left!(area), (1, 0));
         let bottom_right = bottom_right!(area);
         let (width, height) = self.content.size();
@@ -613,9 +613,11 @@ impl ThreadView {
             let i = if let Some(i) = thread_node.message() {
                 i
             } else {
-                threads.thread_nodes()[&thread_node.children()[0]]
-                    .message()
-                    .unwrap()
+                let mut iter_ptr = thread_node.children()[0];
+                while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+                }
+                threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
             let envelope: &Envelope = account.get_env(&i);
 
@@ -1012,6 +1014,15 @@ impl Component for ThreadView {
             }
             UIEvent::Resize => {
                 self.set_dirty();
+            }
+            UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
+                for e in self.entries.iter_mut() {
+                    if e.msg_hash == *old_hash {
+                        e.msg_hash = *new_hash;
+                    }
+                }
+                self.mailview
+                    .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
             }
             _ => {
                 if self.mailview.process_event(event, context) {
