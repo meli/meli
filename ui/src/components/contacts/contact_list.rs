@@ -77,25 +77,17 @@ impl ContactList {
         if self.id_positions.capacity() < book.len() {
             self.id_positions.reserve(book.len());
         }
-        let mut maxima = (
-            "First Name".len(),
-            "Last Name".len(),
-            "E-mail".len(),
-            "URL".len(),
-        );
+        let mut maxima = ("Name".len(), "E-mail".len());
 
         for c in book.values() {
             self.id_positions.push(*c.id());
-            maxima.0 = std::cmp::max(maxima.0, c.firstname().split_graphemes().len());
-            maxima.1 = std::cmp::max(maxima.1, c.lastname().split_graphemes().len());
-            maxima.2 = std::cmp::max(maxima.2, c.email().split_graphemes().len());
-            maxima.3 = std::cmp::max(maxima.3, c.url().split_graphemes().len());
+            maxima.0 = std::cmp::max(maxima.0, c.name().split_graphemes().len());
+            maxima.1 = std::cmp::max(maxima.1, c.email().split_graphemes().len());
         }
         maxima.0 += 5;
         maxima.1 += maxima.0 + 5;
-        maxima.2 += maxima.1 + 5;
         write_string_to_grid(
-            "First Name",
+            "Name",
             &mut self.content,
             Color::Default,
             Color::Default,
@@ -103,7 +95,7 @@ impl ContactList {
             false,
         );
         write_string_to_grid(
-            "Last Name",
+            "E-mail",
             &mut self.content,
             Color::Default,
             Color::Default,
@@ -111,26 +103,18 @@ impl ContactList {
             false,
         );
         write_string_to_grid(
-            "E-mail",
+            "URL",
             &mut self.content,
             Color::Default,
             Color::Default,
             ((maxima.1, 0), (MAX_COLS - 1, self.length)),
             false,
         );
-        write_string_to_grid(
-            "URL",
-            &mut self.content,
-            Color::Default,
-            Color::Default,
-            ((maxima.2, 0), (MAX_COLS - 1, self.length)),
-            false,
-        );
         for (i, c) in book.values().enumerate() {
             self.id_positions.push(*c.id());
 
             write_string_to_grid(
-                c.firstname(),
+                c.name(),
                 &mut self.content,
                 Color::Default,
                 Color::Default,
@@ -138,7 +122,7 @@ impl ContactList {
                 false,
             );
             write_string_to_grid(
-                c.lastname(),
+                c.email(),
                 &mut self.content,
                 Color::Default,
                 Color::Default,
@@ -146,19 +130,11 @@ impl ContactList {
                 false,
             );
             write_string_to_grid(
-                c.email(),
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                ((maxima.1, i + 1), (MAX_COLS - 1, self.length)),
-                false,
-            );
-            write_string_to_grid(
                 c.url(),
                 &mut self.content,
                 Color::Default,
                 Color::Default,
-                ((maxima.2, i + 1), (MAX_COLS - 1, self.length)),
+                ((maxima.1, i + 1), (MAX_COLS - 1, self.length)),
                 false,
             );
         }

@@ -550,7 +550,7 @@ impl Component for MailView {
 
                                     let mut new_card: Card = Card::new();
                                     new_card.set_email(env.get_email());
-                                    new_card.set_lastname(env.get_display_name());
+                                    new_card.set_name(env.get_display_name());
                                     results.push(new_card);
                                 }
                             }

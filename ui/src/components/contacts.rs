@@ -98,9 +98,7 @@ impl ContactManager {
         self.form = FormWidget::new("Save".into());
         self.form.add_button(("Cancel".into(), false));
         self.form
-            .push(("First Name".into(), self.card.firstname().to_string()));
-        self.form
-            .push(("Last Name".into(), self.card.lastname().to_string()));
+            .push(("Name".into(), self.card.name().to_string()));
         self.form.push((
             "Additional Name".into(),
             self.card.additionalname().to_string(),

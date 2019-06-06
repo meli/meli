@@ -38,8 +38,7 @@ pub struct AddressBook {
 pub struct Card {
     id: CardId,
     title: String,
-    firstname: String,
-    lastname: String,
+    name: String,
     additionalname: String,
     name_prefix: String,
     name_suffix: String,
@@ -94,8 +93,7 @@ impl Card {
         Card {
             id: Uuid::new_v4(),
             title: String::new(),
-            firstname: String::new(),
-            lastname: String::new(),
+            name: String::new(),
             additionalname: String::new(),
             name_prefix: String::new(),
             name_suffix: String::new(),
@@ -118,11 +116,8 @@ impl Card {
     pub fn title(&self) -> &str {
         self.title.as_str()
     }
-    pub fn firstname(&self) -> &str {
-        self.firstname.as_str()
-    }
-    pub fn lastname(&self) -> &str {
-        self.lastname.as_str()
+    pub fn name(&self) -> &str {
+        self.name.as_str()
     }
     pub fn additionalname(&self) -> &str {
         self.additionalname.as_str()
@@ -152,11 +147,8 @@ impl Card {
     pub fn set_title(&mut self, new: String) {
         self.title = new;
     }
-    pub fn set_firstname(&mut self, new: String) {
-        self.firstname = new;
-    }
-    pub fn set_lastname(&mut self, new: String) {
-        self.lastname = new;
+    pub fn set_name(&mut self, new: String) {
+        self.name = new;
     }
     pub fn set_additionalname(&mut self, new: String) {
         self.additionalname = new;
@@ -191,11 +183,8 @@ impl From<FnvHashMap<String, String>> for Card {
         if let Some(val) = map.remove("Title") {
             card.title = val;
         }
-        if let Some(val) = map.remove("First Name") {
-            card.firstname = val;
-        }
-        if let Some(val) = map.remove("Last Name") {
-            card.lastname = val;
+        if let Some(val) = map.remove("Name") {
+            card.name = val;
         }
         if let Some(val) = map.remove("Additional Name") {
             card.additionalname = val;
