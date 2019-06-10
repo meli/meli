@@ -2,7 +2,7 @@
 name = "melib"
 version = "0.0.1"  #:version
 edition = "2018"
-authors = []
+authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 workspace = ".."
 
 [dependencies]

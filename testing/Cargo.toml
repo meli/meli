@@ -1,7 +1,7 @@
 [package]
 name = "testing"
 version = "0.0.1"  #:version
-authors = []
+authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 workspace = ".."
 
 [[bin]]
