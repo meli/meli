@@ -9,13 +9,13 @@ xdg = "2.1.0" # >:c
 serde = "1.0.71"
 serde_derive = "1.0.71"
 serde_json = "1.0"
-config = { path = "../../config-rs", version = "*" }
+config = { git = "https://github.com/meli/config-rs", version = "*" }
 chan = "0.1.21"
 chan-signal = "0.3.1"
 fnv = "1.0.3" # >:c
 linkify = "0.3.1" # >:c
 melib = { path = "../melib", version = "*" }
-mime_apps = { path = "../../mime_apps", version = "*" }
+mime_apps = { git = "https://github.com/meli/mime_apps", version = "*" }
 nom = "3.2.0"
 notify = "4.0.1" # >:c
 notify-rust = "^3" # >:c
