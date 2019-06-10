@@ -39,6 +39,8 @@ struct MailboxView {
     order: FnvHashMap<EnvelopeHash, usize>,
     /// Cache current view.
     content: CellBuffer,
+    columns: [CellBuffer; 5],
+    widths: [usize; 5], // widths of columns calculated in first draw and after size changes
     /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.view` exists or not.
@@ -89,6 +91,7 @@ column_str!(struct IndexNoString(String));
 column_str!(struct DateString(String));
 column_str!(struct FromString(String));
 column_str!(struct SubjectString(String));
+column_str!(struct FlagString(String));
 
 impl fmt::Display for MailboxView {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -105,31 +108,36 @@ impl MailboxView {
         len: usize,
         idx: usize,
         is_snoozed: bool,
-    ) -> (IndexNoString, FromString, DateString, SubjectString) {
+    ) -> (
+        IndexNoString,
+        DateString,
+        FromString,
+        FlagString,
+        SubjectString,
+    ) {
         if len > 0 {
             (
                 IndexNoString(idx.to_string()),
-                FromString(address_list!((e.from()) as comma_sep_list)),
                 DateString(MailboxView::format_date(e)),
-                SubjectString(format!(
-                    "{} ({}){}{}",
-                    e.subject(),
-                    len,
-                    if e.has_attachments() { " 📎" } else { "" },
-                    if is_snoozed { " 💤" } else { "" }
+                FromString(address_list!((e.from()) as comma_sep_list)),
+                FlagString(format!(
+                    "{}{}",
+                    if e.has_attachments() { "📎" } else { "" },
+                    if is_snoozed { "💤" } else { "" }
                 )),
+                SubjectString(format!("{} ({})", e.subject(), len,)),
             )
         } else {
             (
                 IndexNoString(idx.to_string()),
-                FromString(address_list!((e.from()) as comma_sep_list)),
                 DateString(MailboxView::format_date(e)),
-                SubjectString(format!(
-                    "{}{}{}",
-                    e.subject(),
-                    if e.has_attachments() { " 📎" } else { "" },
-                    if is_snoozed { " 💤" } else { "" }
+                FromString(address_list!((e.from()) as comma_sep_list)),
+                FlagString(format!(
+                    "{}{}",
+                    if e.has_attachments() { "📎" } else { "" },
+                    if is_snoozed { "💤" } else { "" }
                 )),
+                SubjectString(e.subject().to_string()),
             )
         }
     }
@@ -144,6 +152,14 @@ impl MailboxView {
             subsort: (SortField::Date, SortOrder::Desc),
             order: FnvHashMap::default(),
             row_updates: StackVec::new(),
+            columns: [
+                CellBuffer::default(),
+                CellBuffer::default(),
+                CellBuffer::default(),
+                CellBuffer::default(),
+                CellBuffer::default(),
+            ],
+            widths: [0; 5],
             content,
             dirty: true,
             unfocused: false,
@@ -166,7 +182,16 @@ impl MailboxView {
         }
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
-        let folder_hash = context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
+        let folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
+            .folders_order
+            .get(self.cursor_pos.1)
+        {
+            *h
+        } else {
+            self.cursor_pos.1 = old_cursor_pos.1;
+            self.dirty = false;
+            return;
+        };
         context
             .replies
             .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
@@ -199,25 +224,14 @@ impl MailboxView {
         let mailbox = account[self.cursor_pos.1].as_ref().unwrap();
 
         let threads = &account.collection.threads[&mailbox.folder.hash()];
-        self.length = threads.root_len();
-        self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         self.order.clear();
-        if self.length == 0 {
-            write_string_to_grid(
-                &format!("Folder `{}` is empty.", mailbox.folder.name()),
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                ((0, 0), (MAX_COLS - 1, 0)),
-                false,
-            );
-            return;
-        }
+        self.length = 0;
         let mut rows = Vec::with_capacity(1024);
-        let mut min_width = (0, 0, 0);
+        let mut min_width = (0, 0, 0, 0, 0);
 
         threads.sort_by(self.sort, self.subsort, &account.collection);
         for (idx, root_idx) in threads.root_iter().enumerate() {
+            self.length += 1;
             let thread_node = &threads.thread_nodes()[&root_idx];
             let i = if let Some(i) = thread_node.message() {
                 i
@@ -247,25 +261,25 @@ impl MailboxView {
                 idx,
                 threads.is_snoozed(root_idx),
             );
-            min_width.0 = cmp::max(min_width.0, strings.0.len()); /* index */
-            min_width.1 = cmp::max(min_width.1, strings.2.split_graphemes().len()); /* date */
-            min_width.2 = cmp::max(min_width.2, strings.3.split_graphemes().len()); /* subject */
+            min_width.0 = cmp::max(min_width.0, strings.0.grapheme_width()); /* index */
+            min_width.1 = cmp::max(min_width.1, strings.1.grapheme_width()); /* date */
+            min_width.2 = cmp::max(min_width.2, strings.2.grapheme_width()); /* from */
+            min_width.3 = cmp::max(min_width.3, strings.3.grapheme_width()); /* flags */
+            min_width.4 = cmp::max(min_width.4, strings.4.grapheme_width()); /* subject */
             rows.push(strings);
             self.order.insert(i, idx);
         }
-        let widths: (usize, usize, usize);
-        let column_sep: usize = if MAX_COLS >= min_width.0 + min_width.1 + min_width.2 {
-            widths = min_width;
-            2
-        } else {
-            let width = MAX_COLS - 3 - min_width.0;
-            widths = (
-                min_width.0,
-                cmp::min(min_width.1, width / 3),
-                cmp::min(min_width.2, width / 3),
-            );
-            1
-        };
+
+        /* index column */
+        self.columns[0] = CellBuffer::new(min_width.0, rows.len(), Cell::with_char(' '));
+        /* date column */
+        self.columns[1] = CellBuffer::new(min_width.1, rows.len(), Cell::with_char(' '));
+        /* from column */
+        self.columns[2] = CellBuffer::new(min_width.2, rows.len(), Cell::with_char(' '));
+        /* flags column */
+        self.columns[3] = CellBuffer::new(min_width.3, rows.len(), Cell::with_char(' '));
+        /* subject column */
+        self.columns[4] = CellBuffer::new(min_width.4, rows.len(), Cell::with_char(' '));
 
         for ((idx, root_idx), strings) in threads.root_iter().enumerate().zip(rows) {
             let thread_node = &threads.thread_nodes()[&root_idx];
@@ -303,48 +317,59 @@ impl MailboxView {
             };
             let (x, _) = write_string_to_grid(
                 &strings.0,
-                &mut self.content,
+                &mut self.columns[0],
                 fg_color,
                 bg_color,
-                ((0, idx), (widths.0, idx)),
+                ((0, idx), (min_width.0, idx)),
                 false,
             );
-            for x in x..=widths.0 + column_sep {
-                self.content[(x, idx)].set_bg(bg_color);
+            for x in x..min_width.0 {
+                self.columns[0][(x, idx)].set_bg(bg_color);
             }
-            let mut _x = widths.0 + column_sep;
             let (mut x, _) = write_string_to_grid(
-                &strings.2,
-                &mut self.content,
+                &strings.1,
+                &mut self.columns[1],
                 fg_color,
                 bg_color,
-                ((_x, idx), (widths.1 + _x, idx)),
+                ((0, idx), (min_width.1, idx)),
                 false,
             );
-            _x += widths.1 + column_sep + 1;
-            for x in x.._x {
-                self.content[(x, idx)].set_bg(bg_color);
+            for x in x..min_width.1 {
+                self.columns[1][(x, idx)].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
-                &strings.1,
-                &mut self.content,
+                &strings.2,
+                &mut self.columns[2],
                 fg_color,
                 bg_color,
-                ((_x, idx), (widths.1 + _x, idx)),
+                ((0, idx), (min_width.2, idx)),
                 false,
             );
-            _x += widths.1 + column_sep + 2;
-            for x in x.._x {
-                self.content[(x, idx)].set_bg(bg_color);
+            for x in x..min_width.2 {
+                self.columns[2][(x, idx)].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
                 &strings.3,
-                &mut self.content,
+                &mut self.columns[3],
                 fg_color,
                 bg_color,
-                ((_x, idx), (widths.2 + _x, idx)),
+                ((0, idx), (min_width.3, idx)),
                 false,
             );
+            for x in x..min_width.3 {
+                self.columns[3][(x, idx)].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.4,
+                &mut self.columns[4],
+                fg_color,
+                bg_color,
+                ((0, idx), (min_width.4, idx)),
+                false,
+            );
+            for x in x..min_width.4 {
+                self.columns[4][(x, idx)].set_bg(bg_color);
+            }
             match (
                 threads.is_snoozed(root_idx),
                 &context.accounts[self.cursor_pos.0]
@@ -352,24 +377,31 @@ impl MailboxView {
                     .has_attachments(),
             ) {
                 (true, true) => {
-                    self.content[(x - 1, idx)].set_fg(Color::Red);
-                    self.content[(x - 2, idx)].set_fg(Color::Byte(103));
+                    self.columns[3][(0, idx)].set_fg(Color::Red);
+                    self.columns[3][(1, idx)].set_fg(Color::Byte(103));
                 }
                 (true, false) => {
-                    self.content[(x - 1, idx)].set_fg(Color::Red);
+                    self.columns[3][(0, idx)].set_fg(Color::Red);
                 }
                 (false, true) => {
-                    self.content[(x - 1, idx)].set_fg(Color::Byte(103));
+                    self.columns[3][(0, idx)].set_fg(Color::Byte(103));
                 }
                 (false, false) => {}
             }
 
             self.order.insert(i, idx);
-
-            for x in x..MAX_COLS {
-                self.content[(x, idx)].set_ch(' ');
-                self.content[(x, idx)].set_bg(bg_color);
-            }
+        }
+        self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
+        if self.length == 0 {
+            write_string_to_grid(
+                &format!("Folder `{}` is empty.", mailbox.folder.name()),
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                ((0, 0), (MAX_COLS - 1, 0)),
+                false,
+            );
+            return;
         }
     }
 
@@ -380,7 +412,7 @@ impl MailboxView {
         idx: usize,
         context: &Context,
     ) {
-        if idx == self.cursor_pos.2 || grid.is_none() {
+        let is_seen = {
             if self.length == 0 {
                 return;
             }
@@ -400,20 +432,24 @@ impl MailboxView {
             };
 
             let root_envelope: &Envelope = &account.get_env(&i);
-            let fg_color = if !root_envelope.is_seen() {
-                Color::Byte(0)
-            } else {
-                Color::Default
-            };
-            let bg_color = if self.cursor_pos.2 == idx {
-                Color::Byte(246)
-            } else if !root_envelope.is_seen() {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(236)
-            } else {
-                Color::Default
-            };
+            root_envelope.is_seen()
+        };
+
+        let fg_color = if !is_seen {
+            Color::Byte(0)
+        } else {
+            Color::Default
+        };
+        let bg_color = if self.cursor_pos.2 == idx {
+            Color::Byte(246)
+        } else if !is_seen {
+            Color::Byte(251)
+        } else if idx % 2 == 0 {
+            Color::Byte(236)
+        } else {
+            Color::Default
+        };
+        if idx == self.cursor_pos.2 || grid.is_none() {
             if let Some(grid) = grid {
                 change_colors(grid, area, fg_color, bg_color);
             } else {
@@ -422,13 +458,55 @@ impl MailboxView {
             return;
         }
 
-        let (width, height) = self.content.size();
-        copy_area(
-            grid.unwrap(), /* grid == None is covered in the if above */
-            &self.content,
-            area,
-            ((0, idx), (width - 1, height - 1)),
-        );
+        let (upper_left, bottom_right) = area;
+        let grid = grid.unwrap();
+        let (mut x, y) = upper_left;
+        for i in 0..self.columns.len() {
+            let (width, height) = self.columns[i].size();
+            if self.widths[i] == 0 {
+                continue;
+            }
+            copy_area(
+                grid,
+                &self.columns[i],
+                (
+                    set_x(upper_left, x),
+                    set_x(
+                        bottom_right,
+                        std::cmp::min(get_x(bottom_right), x + (self.widths[i])),
+                    ),
+                ),
+                ((0, idx), (width.saturating_sub(1), height - 1)),
+            );
+            if i != self.columns.len() - 1 {
+                change_colors(
+                    grid,
+                    (
+                        set_x(upper_left, x + self.widths[i].saturating_sub(1)),
+                        set_x(bottom_right, x + self.widths[i] + 1),
+                    ),
+                    fg_color,
+                    bg_color,
+                );
+            } else {
+                change_colors(
+                    grid,
+                    (
+                        set_x(
+                            upper_left,
+                            std::cmp::min(get_x(bottom_right), x + (self.widths[i])),
+                        ),
+                        bottom_right,
+                    ),
+                    fg_color,
+                    bg_color,
+                );
+            }
+            x += self.widths[i] + 2; // + SEPARATOR
+            if x > get_x(bottom_right) {
+                break;
+            }
+        }
     }
 
     /// Draw the list of `Envelope`s.
@@ -503,23 +581,116 @@ impl MailboxView {
             self.cursor_pos.2 = self.new_cursor_pos.2;
         }
 
+        let width = width!(area);
+        self.widths = [
+            self.columns[0].size().0,
+            self.columns[1].size().0, /* date*/
+            self.columns[2].size().0, /* from */
+            self.columns[3].size().0, /* flags */
+            self.columns[4].size().0, /* subject */
+        ];
+        let min_col_width = std::cmp::min(15, std::cmp::min(self.widths[4], self.widths[2]));
+        if self.widths[0] + self.widths[1] + 3 * min_col_width + 8 > width {
+            let remainder = width
+                .saturating_sub(self.widths[0])
+                .saturating_sub(self.widths[1])
+                - 4;
+            self.widths[2] = remainder / 6;
+            self.widths[4] = (2 * remainder) / 3 - self.widths[3];
+        } else {
+            let remainder = width
+                .saturating_sub(self.widths[0])
+                .saturating_sub(self.widths[1])
+                .saturating_sub(8);
+            if min_col_width + self.widths[4] > remainder {
+                self.widths[4] = remainder - min_col_width - self.widths[3];
+                self.widths[2] = min_col_width;
+            }
+        }
+        clear_area(grid, area);
         /* Page_no has changed, so draw new page */
-        copy_area(
-            grid,
-            &self.content,
-            area,
-            ((0, top_idx), (MAX_COLS - 1, self.length)),
-        );
-        let temp = self.cursor_pos.2; // FIXME when NLL
+        let mut x = get_x(upper_left);
+        let mut flag_x = 0;
+        for i in 0..self.columns.len() {
+            let column_width = self.columns[i].size().0;
+            if i == 3 {
+                flag_x = x;
+            }
+            if self.widths[i] == 0 {
+                continue;
+            }
+            copy_area(
+                grid,
+                &self.columns[i],
+                (
+                    set_x(upper_left, x),
+                    set_x(
+                        bottom_right,
+                        std::cmp::min(get_x(bottom_right), x + (self.widths[i])),
+                    ),
+                ),
+                (
+                    (0, top_idx),
+                    (column_width.saturating_sub(1), self.length - 1),
+                ),
+            );
+            x += self.widths[i] + 2; // + SEPARATOR
+            if x > get_x(bottom_right) {
+                break;
+            }
+        }
+        for r in 0..cmp::min(self.length - top_idx, rows) {
+            let (fg_color, bg_color) = {
+                let c = &self.columns[0][(0, r + top_idx)];
+                (c.fg(), c.bg())
+            };
+            change_colors(
+                grid,
+                (
+                    pos_inc(upper_left, (0, r)),
+                    (flag_x - 1, get_y(upper_left) + r),
+                ),
+                fg_color,
+                bg_color,
+            );
+            for x in flag_x..(flag_x + 2 + self.widths[3]) {
+                grid[(x, get_y(upper_left) + r)].set_bg(bg_color);
+            }
+            change_colors(
+                grid,
+                (
+                    (flag_x + 2 + self.widths[3], get_y(upper_left) + r),
+                    (get_x(bottom_right), get_y(upper_left) + r),
+                ),
+                fg_color,
+                bg_color,
+            );
+        }
+        let temp_copy_because_of_nll = self.cursor_pos.2; // FIXME
         self.highlight_line(
             Some(grid),
             (
-                set_y(upper_left, get_y(upper_left) + (temp % rows)),
-                set_y(bottom_right, get_y(upper_left) + (temp % rows)),
+                set_y(
+                    upper_left,
+                    get_y(upper_left) + (temp_copy_because_of_nll % rows),
+                ),
+                set_y(
+                    bottom_right,
+                    get_y(upper_left) + (temp_copy_because_of_nll % rows),
+                ),
             ),
-            temp,
+            temp_copy_because_of_nll,
             context,
         );
+        if top_idx + rows > self.length {
+            clear_area(
+                grid,
+                (
+                    pos_inc(upper_left, (0, self.length - top_idx)),
+                    bottom_right,
+                ),
+            );
+        }
         context.dirty_areas.push_back(area);
     }
 
@@ -666,6 +837,13 @@ impl Component for MailboxView {
             }
             UIEvent::Action(ref action) => match action {
                 Action::ViewMailbox(idx) => {
+                    if context.accounts[self.cursor_pos.0]
+                        .folders_order
+                        .get(self.cursor_pos.1)
+                        .is_none()
+                    {
+                        return true;
+                    }
                     self.new_cursor_pos.1 = *idx;
                     self.refresh_mailbox(context);
                     return true;
