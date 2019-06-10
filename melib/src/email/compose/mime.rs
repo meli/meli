@@ -8,7 +8,7 @@ pub fn encode_header(value: &str) -> String {
             ret.push_str(word);
         } else {
             ret.push_str(
-                format!("=?UTF-8?B?{}?=", BASE64_MIME.encode(word.as_bytes()).trim()).as_str(),
+                format!("=?UTF-8?B?{}?=", BASE64_MIME.encode(word.trim().as_bytes())).trim(),
             );
         }
         ret.push(' ');
