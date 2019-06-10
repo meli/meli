@@ -368,69 +368,95 @@ impl State {
         for i in 0..self.components.len() {
             self.draw_component(i);
         }
-        let areas: Vec<Area> = self.context.dirty_areas.drain(0..).collect();
+        let mut areas: Vec<Area> = self.context.dirty_areas.drain(0..).collect();
+        /* Sort by x_start, ie upper_left corner's x coordinate */
+        areas.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
         /* draw each dirty area */
-        for a in areas {
-            self.draw_area(a);
-        }
-    }
-
-    /// Draw only a specific `area` on the screen.
-    fn draw_area(&mut self, area: Area) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-
-        for y in get_y(upper_left)..=get_y(bottom_right) {
-            write!(
-                self.stdout(),
-                "{}",
-                cursor::Goto(get_x(upper_left) as u16 + 1, (y + 1) as u16)
-            )
-            .unwrap();
-            for x in get_x(upper_left)..=get_x(bottom_right) {
-                let c = self.grid[(x, y)];
-
-                if c.bg() != Color::Default {
-                    write!(self.stdout(), "{}", termion::color::Bg(c.bg().as_termion())).unwrap();
+        let cols = self.cols;
+        let rows = self.rows;
+        for y in 0..rows {
+            let mut segment = None;
+            for ((x_start, y_start), (x_end, y_end)) in &areas {
+                if y < *y_start || y > *y_end {
+                    continue;
                 }
-                if c.fg() != Color::Default {
-                    write!(self.stdout(), "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
+                if let Some((x_start, x_end)) = segment.take() {
+                    self.draw_horizontal_segment(x_start, x_end, y);
                 }
-                write!(self.stdout(), "{}", c.ch()).unwrap();
-                if c.bg() != Color::Default {
-                    write!(
-                        self.stdout(),
-                        "{}",
-                        termion::color::Bg(termion::color::Reset)
-                    )
-                    .unwrap();
+                match segment {
+                    ref mut s @ None => {
+                        *s = Some((*x_start, *x_end));
+                    }
+                    ref mut s @ Some(_) if s.unwrap().1 < *x_start => {
+                        self.draw_horizontal_segment(s.unwrap().0, s.unwrap().1, y);
+                        *s = Some((*x_start, *x_end));
+                    }
+                    ref mut s @ Some(_) if s.unwrap().1 < *x_end => {
+                        self.draw_horizontal_segment(s.unwrap().0, s.unwrap().1, y);
+                        *s = Some((s.unwrap().1, *x_end));
+                    }
+                    Some((_, ref mut x)) => {
+                        *x = *x_end;
+                    }
                 }
-                if c.fg() != Color::Default {
-                    write!(
-                        self.stdout(),
-                        "{}",
-                        termion::color::Fg(termion::color::Reset)
-                    )
-                    .unwrap();
-                }
+            }
+            if let Some((x_start, x_end)) = segment {
+                self.draw_horizontal_segment(x_start, x_end, y);
             }
         }
         self.flush();
     }
 
+    /// Draw only a specific `area` on the screen.
+    fn draw_horizontal_segment(&mut self, x_start: usize, x_end: usize, y: usize) {
+        write!(
+            self.stdout(),
+            "{}",
+            cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
+        )
+        .unwrap();
+        for x in x_start..=x_end {
+            let c = self.grid[(x, y)];
+
+            if c.bg() != Color::Default {
+                write!(self.stdout(), "{}", termion::color::Bg(c.bg().as_termion())).unwrap();
+            }
+            if c.fg() != Color::Default {
+                write!(self.stdout(), "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
+            }
+            write!(self.stdout(), "{}", c.ch()).unwrap();
+            let mut b = [0; 4];
+            if c.bg() != Color::Default {
+                write!(
+                    self.stdout(),
+                    "{}",
+                    termion::color::Bg(termion::color::Reset)
+                )
+                .unwrap();
+            }
+            if c.fg() != Color::Default {
+                write!(
+                    self.stdout(),
+                    "{}",
+                    termion::color::Fg(termion::color::Reset)
+                )
+                .unwrap();
+            }
+        }
+    }
+
     /// Draw the entire screen from scratch.
     pub fn render(&mut self) {
         self.update_size();
-
-        /* draw each component */
-        for i in 0..self.components.len() {
-            self.draw_component(i);
-        }
         let cols = self.cols;
         let rows = self.rows;
+        self.context
+            .dirty_areas
+            .push_back(((0, 0), (cols - 1, rows - 1)));
 
-        self.draw_area(((0, 0), (cols - 1, rows - 1)));
+        self.redraw();
     }
+
     pub fn draw_component(&mut self, idx: usize) {
         let component = &mut self.components[idx];
         let upper_left = (0, 0);
