@@ -17,7 +17,7 @@ ui = { path = "ui", version = "*" }
 
 [profile.release]
 lto = true
-debug = true
+debug = false
 
 [workspace]
 members = ["melib", "ui", "debug_printer", "testing"]

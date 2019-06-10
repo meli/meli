@@ -5,11 +5,12 @@
 /  \__   \__/    │' `│  `┒ .'   `  │   │
 \__/  \__/  \    │   │   │ |────'  │   │
    \__/  \__/    │       / `.___, /\__ /
-      \__/
-
-        terminal mail user agent
-
-
+      \__/                       
+			                              ,-.  
+																    \_/   
+        terminal mail user agent   {|||)<
+                                    / \
+                                    `-'  
 config
 ======
 
@@ -28,14 +29,6 @@ profiling:
 
 --------------------------------------------------------------------------
 
-                  / /
-                 /_/ |
-                /  \/
-                \__/|
-                /  \|
-                \__/|
-                   ||
-
 
 NAME
       meli - Meli Mail User Agent. Meli is the Greek word for honey.
@@ -49,9 +42,20 @@ STARTING WITH meli
 
       The view into each folder has 3 modes: plain, threaded and compact. Plain views each mail indvidually, threaded shows their thread relationship visually, and compact includes one entry per thread of emails.
 
-
-
-
+    
+         ^^      .-=-=-=-.  ^^
+     ^^        (`-=-=-=-=-`)         ^^
+             (`-=-=-=-=-=-=-`)  ^^         ^^
+       ^^   (`-=-=-=-=-=-=-=-`)   ^^
+           ( `-=-=-=-(@)-=-=-` )      ^^
+           (`-=-=-=-=-=-=-=-=-`)  ^^
+           (`-=-=-=-=-=-=-=-=-`)          ^^
+           (`-=-=-=-=-=-=-=-=-`)
+    ^^     (`-=-=-=-=-=-=-=-=-`)  ^^
+       ^^   (`-=-=-=-=-=-=-=-`)          ^^
+             (`-=-=-=-=-=-=-`)  ^^
+      ^^       (`-=-=-=-=-`)
+                `-=-=-=-=-`          ^^
 
 SYNOPSIS
       meli
