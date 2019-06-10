@@ -124,29 +124,96 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
     IResult::Incomplete(Needed::Unknown)
 }
 
-/* Parse the name part of the header -> &str */
-named!(name<&[u8]>, is_not!(":\n"));
+/* Parse a single header as a tuple */
+fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+    if input.is_empty() {
+        return IResult::Incomplete(Needed::Unknown);
+    } else if input.starts_with(b"\n") {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+    let mut ptr = 0;
+    let mut name: &[u8] = &input[0..0];
+    for (i, x) in input.iter().enumerate() {
+        if *x == b':' {
+            name = &input[0..i];
+            ptr = i + 1;
+            break;
+        }
+    }
+    if name.is_empty() {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+    if ptr > input.len() {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
 
-/* Parse a single header as a tuple -> (&str, Vec<&str>) */
-named!(
-    header_has_val<(&[u8], &[u8])>,
-    separated_pair!(complete!(name), ws!(tag!(b":")), complete!(header_value))
-);
+    if input[ptr] == b'\n' {
+        ptr += 1;
+        if ptr > input.len() {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        }
+    }
+    while input[ptr] == b' ' || input[ptr] == b'\t' {
+        ptr += 1;
+        if ptr > input.len() {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        }
+    }
+    match header_value(&input[ptr..]) {
+        IResult::Done(rest, value) => IResult::Done(rest, (name, value)),
+        IResult::Incomplete(needed) => IResult::Incomplete(needed),
+        IResult::Error(code) => IResult::Error(code),
+    }
+}
 
-named!(
-    header_no_val<(&[u8], &[u8])>,
-    do_parse!(
-        name: complete!(name)
-            >> tag!(b":")
-            >> opt!(is_a!(" \t"))
-            >> tag!(b"\n")
-            >> ({ (name, b"") })
-    )
-);
+fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+    if input.is_empty() {
+        return IResult::Incomplete(Needed::Unknown);
+    } else if input.starts_with(b"\n") {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+    let mut ptr = 0;
+    let mut name: &[u8] = &input[0..0];
+    for (i, x) in input.iter().enumerate() {
+        if *x == b':' || *x == b'\n' {
+            name = &input[0..i];
+            ptr = i;
+            break;
+        }
+    }
+    if name.is_empty() {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+    if input[ptr] == b':' {
+        ptr += 1;
+        if ptr > input.len() {
+            return IResult::Incomplete(Needed::Unknown);
+        }
+    }
+    while input[ptr] == b' ' {
+        ptr += 1;
+        if ptr > input.len() {
+            return IResult::Incomplete(Needed::Unknown);
+        }
+    }
+    if input[ptr..].starts_with(b"\n") {
+        ptr += 1;
+        if ptr > input.len() {
+            return IResult::Incomplete(Needed::Unknown);
+        }
+        if input[ptr] != b' ' && input[ptr] != b'\t' {
+            IResult::Done(&input[ptr..], (name, b""))
+        } else {
+            IResult::Error(error_code!(ErrorKind::Custom(43)))
+        }
+    } else {
+        IResult::Error(error_code!(ErrorKind::Custom(43)))
+    }
+}
 
 named!(
     header<(&[u8], &[u8])>,
-    alt_complete!(header_no_val | header_has_val)
+    alt_complete!(call!(header_without_val) | call!(header_with_val))
 );
 /* Parse all headers -> Vec<(&str, Vec<&str>)> */
 named!(pub headers<std::vec::Vec<(&[u8], &[u8])>>,
@@ -321,38 +388,50 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
             }
         }
         if !flag {
+            let (rest, output) = match phrase(input) {
+                IResult::Done(rest, raw) => (rest, raw),
+                _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
+            };
+            if output.contains(&b'<') {
+                match display_addr(&output) {
+                    IResult::Done(_, address) => return IResult::Done(rest, address),
+                    _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
+                }
+            }
             return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
         let mut end = input.len();
         let mut flag = false;
         for (i, b) in input[display_name.length + 2..].iter().enumerate() {
-            if *b == b'@' {
-                flag = true;
-            }
-            if *b == b'>' {
-                end = i;
-                break;
+            match *b {
+                b'@' => flag = true,
+                b'>' => {
+                    end = i;
+                    break;
+                }
+                _ => {}
             }
         }
         if flag {
             match phrase(&input[0..end + display_name.length + 3]) {
                 IResult::Error(e) => IResult::Error(e),
                 IResult::Incomplete(i) => IResult::Incomplete(i),
-                IResult::Done(_, raw) => {
-                    display_name.length = raw.find(b"<").unwrap().saturating_sub(1);
-                    let address_spec = if display_name.length == 0 {
+                IResult::Done(rest, raw) => {
+                    let display_name_end = raw.find(b"<").unwrap();
+                    display_name.length = { raw[0..display_name_end].trim().len() };
+                    let address_spec = if display_name_end == 0 {
                         StrBuilder {
-                            offset: raw.find(b"<").map(|v| v + 1).unwrap_or(0),
+                            offset: 1,
                             length: end + 1,
                         }
                     } else {
                         StrBuilder {
-                            offset: display_name.length + 2,
+                            offset: display_name_end + 1,
                             length: end,
                         }
                     };
                     IResult::Done(
-                        &input[end + display_name.length + 3..],
+                        rest,
                         Address::Mailbox(MailboxAddress {
                             raw,
                             display_name,
