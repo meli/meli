@@ -53,11 +53,16 @@ pub struct Attachment {
 
 impl fmt::Debug for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n, body:\n{}\n }}",
+        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n, body:\n{}\n}}",
         self.content_type,
         self.content_transfer_encoding,
         self.raw.len(),
-        str::from_utf8(&self.raw).unwrap())
+        {
+            let mut text = Vec::with_capacity(4096);
+            self.get_text_recursive(&mut text);
+            std::str::from_utf8(&text).map(|r| r.to_string()).unwrap_or_else(|e| format!("Unicode error {}", e))
+        }
+        )
     }
 }
 

@@ -1,0 +1,13 @@
+[package]
+name = "testing"
+version = "0.0.1"  #:version
+authors = []
+workspace = ".."
+
+[[bin]]
+name = "emailparse"
+path = "src/email_parse.rs"
+
+
+[dependencies]
+melib = { path = "../melib", version = "*" }
