@@ -44,6 +44,8 @@ use pager::PagerSettings;
 use self::serde::{de, Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::env;
+use std::fs::OpenOptions;
+use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
 #[macro_export]
@@ -180,8 +182,11 @@ impl FileAccount {
 #[derive(Debug, Clone, Default, Deserialize)]
 struct FileSettings {
     accounts: HashMap<String, FileAccount>,
+    #[serde(default)]
     pager: PagerSettings,
+    #[serde(default)]
     notifications: NotificationsSettings,
+    #[serde(default)]
     shortcuts: Shortcuts,
     mailer: MailerSettings,
 }
@@ -226,14 +231,51 @@ impl FileSettings {
             }
         };
         if !config_path.exists() {
-            panic!(
-                "Config file path `{}` doesn't exist or can't be created.",
+            println!(
+                "No configuration found. Would you like to generate one in {}? [Y/n]",
                 config_path.display()
             );
+            let mut buffer = String::new();
+            let stdin = io::stdin();
+            let mut handle = stdin.lock();
+
+            loop {
+                buffer.clear();
+                handle
+                    .read_line(&mut buffer)
+                    .expect("Could not read from stdin.");
+
+                match buffer.trim() {
+                    "Y" | "y" | "yes" | "YES" | "Yes" => {
+                        let mut file = OpenOptions::new()
+                            .write(true)
+                            .create_new(true)
+                            .open(config_path.as_path())
+                            .expect("Could not create config file.");
+                        file.write_all(include_str!("../../sample-config").as_bytes())
+                            .expect("Could not write to config file.");
+                        println!("Written config to {}", config_path.display());
+                        std::process::exit(1);
+                    }
+                    "n" | "N" | "no" | "No" | "NO" => {
+                        std::process::exit(1);
+                    }
+                    _ => {
+                        println!(
+                            "No configuration found. Would you like to generate one in {}? [Y/n]",
+                            config_path.display()
+                        );
+                    }
+                }
+            }
         }
         let mut s = Config::new();
-        s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml))
-            .unwrap();
+        if s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml))
+            .is_err()
+        {
+            println!("Config file contains errors.");
+            std::process::exit(1);
+        }
 
         /* No point in returning without a config file. */
         match s.try_into() {
@@ -245,7 +287,10 @@ impl FileSettings {
 
 impl Settings {
     pub fn new() -> Settings {
-        let fs = FileSettings::new().unwrap_or_else(|e| panic!(format!("{}", e)));
+        let fs = FileSettings::new().unwrap_or_else(|e| {
+            println!("Configuration error: {}", e);
+            std::process::exit(1);
+        });
         let mut s: HashMap<String, AccountConf> = HashMap::new();
 
         for (id, x) in fs.accounts {

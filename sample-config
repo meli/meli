@@ -1,15 +1,49 @@
-[accounts.account-name]
-root_folder = "/path/to/root/folder"
-sent_folder = "/path/to/sent/folder" # optional
-format = "Maildir"
-threaded = true
+# Setting up a Maildir account
+#[accounts.account-name]
+#root_folder = "/path/to/root/folder"
+#sent_folder = "/path/to/sent/folder" # optional
+#draft_folder = "Drafts"
+#format = "Maildir"
+#index = "Compact" # [plain, threaded, compact]
+#identity="Name <email@address.tld>"
+#display_name = "Name"
 
-  [accounts.account-name.folders]
-  "Inbox" = "inbox"
-  "Sent" = "sent"
-  "Drafts" = "drafts"
-  "foobar-devel" = "devbar-fooel"
+# Set folder-specific settings
+#  [accounts.account-name.folders]
+#  "INBOX" = { rename="Inbox" }
+#  "drafts" = { rename="Drafts" }
+#  "foobar-devel" = { ignore = true } # don't show notifications for this folder
 
 #[pager]
 #pager_ratio = 80
 #filter = "/usr/bin/pygmentize"
+
+#[notifications]
+#script = "notify-send"
+
+#[shortcuts]
+# Compact mail listing defaults:
+#open_thread = '\n'
+#exit_thread = 'i'
+#create_contact = 'c'
+#edit_contact = 'e'
+
+# Mail listing defaults
+#prev_page = PageUp,
+#next_page = PageDown,
+#prev_folder = 'K',
+#next_folder = 'J',
+#prev_account = 'l',
+#next_account = 'h',
+#new_mail = 'm',
+
+# Pager defaults
+
+#scroll_up = 'k',
+#scroll_down = 'j',
+#page_up = PageUp,
+#page_down = PageDown,
+
+#[mailer]
+# required for sending e-mail
+#mailer_cmd = 'msmtp --read-recipients --read-envelope-from'
