@@ -27,6 +27,7 @@ use std;
 pub mod actions;
 pub use crate::actions::Action::{self, *};
 pub use crate::actions::ListingAction::{self, *};
+pub use crate::actions::MailingListAction::{self, *};
 pub use crate::actions::TabAction::{self, *};
 
 named!(
@@ -95,6 +96,19 @@ named!(
     map!(ws!(tag!("toggle_thread_snooze")), |_| ToggleThreadSnooze)
 );
 
+named!(
+    mailinglist<Action>,
+    alt_complete!(
+        map!(ws!(tag!("list-post")), |_| MailingListAction(ListPost))
+            | map!(ws!(tag!("list-unsubscribe")), |_| MailingListAction(
+                ListUnsubscribe
+            ))
+            | map!(ws!(tag!("list-archive")), |_| MailingListAction(
+                ListArchive
+            ))
+    )
+);
+
 named!(pub parse_command<Action>,
-    alt_complete!( goto | toggle | sort | subsort | close | toggle_thread_snooze)
+    alt_complete!( goto | toggle | sort | subsort | close | toggle_thread_snooze | mailinglist)
         );

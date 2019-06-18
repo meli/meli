@@ -49,6 +49,13 @@ pub enum TabAction {
 }
 
 #[derive(Debug)]
+pub enum MailingListAction {
+    ListPost,
+    ListArchive,
+    ListUnsubscribe,
+}
+
+#[derive(Debug)]
 pub enum Action {
     Listing(ListingAction),
     ViewMailbox(usize),
@@ -56,4 +63,5 @@ pub enum Action {
     SubSort(SortField, SortOrder),
     Tab(TabAction),
     ToggleThreadSnooze,
+    MailingListAction(MailingListAction),
 }

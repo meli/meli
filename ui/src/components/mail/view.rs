@@ -24,6 +24,8 @@ use linkify::{Link, LinkFinder};
 
 use std::process::{Command, Stdio};
 
+mod list_management;
+
 mod html;
 pub use self::html::*;
 mod thread;
