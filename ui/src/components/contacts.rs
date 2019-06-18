@@ -139,7 +139,7 @@ impl Component for ContactManager {
             match self.form.buttons_result() {
                 None => {}
                 Some(true) => {
-                    let mut fields = std::mem::replace(&mut self.form, FormWidget::default())
+                    let fields = std::mem::replace(&mut self.form, FormWidget::default())
                         .collect()
                         .unwrap();
                     let fields: FnvHashMap<String, String> = fields

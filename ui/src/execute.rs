@@ -25,9 +25,9 @@ pub use melib::mailbox::{SortField, SortOrder};
 use nom::{digit, not_line_ending};
 use std;
 pub mod actions;
-pub use actions::Action::{self, *};
-pub use actions::ListingAction::{self, *};
-pub use actions::TabAction::{self, *};
+pub use crate::actions::Action::{self, *};
+pub use crate::actions::ListingAction::{self, *};
+pub use crate::actions::TabAction::{self, *};
 
 named!(
     usize_c<usize>,

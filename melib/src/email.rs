@@ -30,7 +30,7 @@ mod attachment_types;
 pub mod attachments;
 pub use crate::attachments::*;
 pub mod parser;
-use parser::BytesExt;
+use crate::parser::BytesExt;
 
 use crate::backends::BackendOp;
 use crate::error::{MeliError, Result};
@@ -472,8 +472,7 @@ impl Envelope {
                         let b = builder.build();
                         let subs = b.attachments();
 
-                        self.has_attachments =
-                            subs.iter().fold(false, |acc, sub| acc || !sub.is_text());
+                        self.has_attachments = subs.iter().any(|sub| !sub.is_text());
                     }
                     _ => {}
                 }

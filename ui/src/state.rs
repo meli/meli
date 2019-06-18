@@ -166,7 +166,7 @@ impl State {
          * Create async channel to block the input-thread if we need to fork and stop it from reading
          * stdin, see get_events() for details
          * */
-        let input_thread = chan::async();
+        let input_thread = chan::r#async();
         let _stdout = std::io::stdout();
         _stdout.lock();
         let backends = Backends::new();
@@ -372,7 +372,6 @@ impl State {
         /* Sort by x_start, ie upper_left corner's x coordinate */
         areas.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
         /* draw each dirty area */
-        let cols = self.cols;
         let rows = self.rows;
         for y in 0..rows {
             let mut segment = None;
@@ -425,7 +424,6 @@ impl State {
                 write!(self.stdout(), "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
             }
             write!(self.stdout(), "{}", c.ch()).unwrap();
-            let mut b = [0; 4];
             if c.bg() != Color::Default {
                 write!(
                     self.stdout(),
@@ -526,7 +524,7 @@ impl State {
     pub fn try_wait_on_child(&mut self) -> Option<bool> {
         let should_return_flag = match self.child {
             Some(ForkType::NewDraft(_, ref mut c)) => {
-                let mut w = c.try_wait();
+                let w = c.try_wait();
                 match w {
                     Ok(Some(_)) => true,
                     Ok(None) => false,
@@ -536,7 +534,7 @@ impl State {
                 }
             }
             Some(ForkType::Generic(ref mut c)) => {
-                let mut w = c.try_wait();
+                let w = c.try_wait();
                 match w {
                     Ok(Some(_)) => true,
                     Ok(None) => false,

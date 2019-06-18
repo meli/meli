@@ -32,7 +32,7 @@ impl Debug for Field {
     }
 }
 
-use Field::*;
+use crate::Field::*;
 
 impl Default for Field {
     fn default() -> Field {
@@ -749,14 +749,14 @@ impl ScrollBar {
             return;
         }
         if self.show_arrows {
-            height = height - 2;
+            height -= height;
         }
         clear_area(grid, area);
 
         let visible_ratio: f32 = (std::cmp::min(visible_rows, length) as f32) / (length as f32);
         let scrollbar_height = std::cmp::max((visible_ratio * (height as f32)) as usize, 1);
         let scrollbar_offset = {
-            let mut temp = (((pos as f32) / (length as f32)) * (height as f32)) as usize;
+            let temp = (((pos as f32) / (length as f32)) * (height as f32)) as usize;
             if temp + scrollbar_height >= height {
                 height - scrollbar_height
             } else {

@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use components::utilities::PageMovement;
+use crate::components::utilities::PageMovement;
 use std::cmp;
 use std::ops::{Deref, DerefMut};
 
@@ -242,7 +242,7 @@ impl MailboxView {
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
-            if !context.accounts[self.cursor_pos.0].contains_key(&i) {
+            if !context.accounts[self.cursor_pos.0].contains_key(i) {
                 debug!("key = {}", i);
                 debug!(
                     "name = {} {}",
@@ -292,7 +292,7 @@ impl MailboxView {
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
-            if !context.accounts[self.cursor_pos.0].contains_key(&i) {
+            if !context.accounts[self.cursor_pos.0].contains_key(i) {
                 //debug!("key = {}", i);
                 //debug!(
                 //    "name = {} {}",
@@ -326,7 +326,7 @@ impl MailboxView {
             for x in x..min_width.0 {
                 self.columns[0][(x, idx)].set_bg(bg_color);
             }
-            let (mut x, _) = write_string_to_grid(
+            let (x, _) = write_string_to_grid(
                 &strings.1,
                 &mut self.columns[1],
                 fg_color,
@@ -460,7 +460,7 @@ impl MailboxView {
 
         let (upper_left, bottom_right) = area;
         let grid = grid.unwrap();
-        let (mut x, y) = upper_left;
+        let (mut x, _y) = upper_left;
         for i in 0..self.columns.len() {
             let (width, height) = self.columns[i].size();
             if self.widths[i] == 0 {
@@ -861,32 +861,28 @@ impl Component for MailboxView {
                     return true;
                 }
                 Action::ToggleThreadSnooze => {
-                    {
-                        //FIXME NLL
-                        let account = &mut context.accounts[self.cursor_pos.0];
-                        let folder_hash = account[self.cursor_pos.1]
-                            .as_ref()
-                            .map(|m| m.folder.hash())
-                            .unwrap();
-                        let threads = account.collection.threads.entry(folder_hash).or_default();
-                        let thread_group = threads.thread_nodes()
-                            [&threads.root_set(self.cursor_pos.2)]
-                            .thread_group();
-                        let thread_group = threads.find(thread_group);
-                        /*let i = if let Some(i) = threads.thread_nodes[&thread_group].message() {
-                            i
-                        } else {
-                            let mut iter_ptr = threads.thread_nodes[&thread_group].children()[0];
-                            while threads.thread_nodes()[&iter_ptr].message().is_none() {
-                                iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
-                            }
-                            threads.thread_nodes()[&iter_ptr].message().unwrap()
-                        };*/
-                        let root_node = threads.thread_nodes.entry(thread_group).or_default();
-                        let is_snoozed = root_node.snoozed();
-                        root_node.set_snoozed(!is_snoozed);
-                        //self.row_updates.push(i);
-                    }
+                    let account = &mut context.accounts[self.cursor_pos.0];
+                    let folder_hash = account[self.cursor_pos.1]
+                        .as_ref()
+                        .map(|m| m.folder.hash())
+                        .unwrap();
+                    let threads = account.collection.threads.entry(folder_hash).or_default();
+                    let thread_group =
+                        threads.thread_nodes()[&threads.root_set(self.cursor_pos.2)].thread_group();
+                    let thread_group = threads.find(thread_group);
+                    /*let i = if let Some(i) = threads.thread_nodes[&thread_group].message() {
+                        i
+                    } else {
+                        let mut iter_ptr = threads.thread_nodes[&thread_group].children()[0];
+                        while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                            iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+                        }
+                        threads.thread_nodes()[&iter_ptr].message().unwrap()
+                    };*/
+                    let root_node = threads.thread_nodes.entry(thread_group).or_default();
+                    let is_snoozed = root_node.snoozed();
+                    root_node.set_snoozed(!is_snoozed);
+                    //self.row_updates.push(i);
                     self.refresh_mailbox(context);
                     return true;
                 }

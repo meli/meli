@@ -246,8 +246,7 @@ impl PlainListing {
             1
         };
         // Populate `CellBuffer` with every entry.
-        let mut idx = 0;
-        for y in 0..=self.length {
+        for (idx, y) in (0..=self.length).enumerate() {
             if idx >= self.length {
                 /* No more entries left, so fill the rest of the area with empty space */
                 clear_area(&mut self.content, ((0, y), (MAX_COLS - 1, self.length)));
@@ -280,7 +279,7 @@ impl PlainListing {
                 self.content[(x, idx)].set_bg(bg_color);
             }
             let mut _x = widths.0 + column_sep;
-            let (mut x, _) = write_string_to_grid(
+            let (x, _) = write_string_to_grid(
                 &rows[idx].2,
                 &mut self.content,
                 fg_color,
@@ -317,8 +316,6 @@ impl PlainListing {
                 self.content[(x, y)].set_ch(' ');
                 self.content[(x, y)].set_bg(bg_color);
             }
-
-            idx += 1;
         }
     }
 
@@ -537,7 +534,7 @@ impl Component for PlainListing {
                     coordinates.1,
                     self.local_collection[self.cursor_pos.2],
                 );
-                self.view = Some(MailView::new(coordinates, None, None, context));
+                self.view = Some(MailView::new(coordinates, None, None));
             }
             self.view.as_mut().unwrap().draw(
                 grid,

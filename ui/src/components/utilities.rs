@@ -336,7 +336,7 @@ impl Pager {
                 .spawn()
                 .expect("Failed to start pager filter process");
             {
-                let mut stdin = filter_child.stdin.as_mut().expect("failed to open stdin");
+                let stdin = filter_child.stdin.as_mut().expect("failed to open stdin");
                 stdin
                     .write_all(text.as_bytes())
                     .expect("Failed to write to stdin");

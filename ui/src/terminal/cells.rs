@@ -25,6 +25,7 @@
 */
 
 use super::position::*;
+
 use std::convert::From;
 use std::fmt;
 use std::ops::{Deref, DerefMut, Index, IndexMut};

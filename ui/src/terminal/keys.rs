@@ -72,7 +72,7 @@ pub enum Key {
 
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use Key::*;
+        use crate::Key::*;
         match self {
             F(n) => write!(f, "F{}", n),
             Char('\t') => write!(f, "Tab"),

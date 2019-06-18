@@ -21,6 +21,7 @@
 
 use super::*;
 use linkify::{Link, LinkFinder};
+
 use std::process::{Command, Stdio};
 
 mod html;
@@ -86,7 +87,6 @@ impl MailView {
         coordinates: (usize, usize, EnvelopeHash),
         pager: Option<Pager>,
         subview: Option<Box<Component>>,
-        context: &mut Context,
     ) -> Self {
         MailView {
             coordinates,
@@ -168,9 +168,10 @@ impl MailView {
                             v.extend(html_filter.wait_with_output().unwrap().stdout);
                         } else {
                             context.replies.push_back(UIEvent::Notification(
-                                Some(format!(
+                                Some(
                                     "Failed to find any application to use as html filter"
-                                )),
+                                        .to_string(),
+                                ),
                                 String::new(),
                             ));
                             return;
@@ -282,7 +283,7 @@ impl Component for MailView {
 
         let y: usize = {
             let account = &mut context.accounts[self.coordinates.0];
-            if !account.contains_key(&self.coordinates.2) {
+            if !account.contains_key(self.coordinates.2) {
                 /* The envelope has been renamed or removed, so wait for the appropriate event to
                  * arrive */
                 return;
@@ -292,11 +293,7 @@ impl Component for MailView {
                 (envelope.hash(), envelope.is_seen())
             };
             if !is_seen {
-                let folder_hash = {
-                    let mailbox = &mut account[self.coordinates.1].as_mut().unwrap();
-                    mailbox.folder.hash()
-                };
-                let op = account.operation(&hash);
+                let op = account.operation(hash);
                 let envelope: &mut Envelope = &mut account.get_env_mut(&self.coordinates.2);
                 envelope.set_seen(op).unwrap();
             }
@@ -392,7 +389,7 @@ impl Component for MailView {
                             envelope
                                 .references()
                                 .iter()
-                                .map(|r| r.to_string())
+                                .map(std::string::ToString::to_string)
                                 .collect::<Vec<String>>()
                                 .join(", ")
                         ),
@@ -421,7 +418,7 @@ impl Component for MailView {
             let body = {
                 let account = &mut context.accounts[self.coordinates.0];
                 let envelope: &Envelope = &account.get_env(&self.coordinates.2);
-                let op = account.operation(&envelope.hash());
+                let op = account.operation(envelope.hash());
                 envelope.body(op)
             };
             match self.mode {
@@ -446,7 +443,7 @@ impl Component for MailView {
                     let text = {
                         let account = &mut context.accounts[self.coordinates.0];
                         let envelope: &Envelope = &account.get_env(&self.coordinates.2);
-                        let mut op = account.operation(&envelope.hash());
+                        let mut op = account.operation(envelope.hash());
                         op.as_bytes()
                             .map(|v| String::from_utf8_lossy(v).into_owned())
                             .unwrap_or_else(|e| e.to_string())
@@ -618,7 +615,7 @@ impl Component for MailView {
                 {
                     let account = &mut context.accounts[self.coordinates.0];
                     let envelope: &Envelope = &account.get_env(&self.coordinates.2);
-                    let op = account.operation(&envelope.hash());
+                    let op = account.operation(envelope.hash());
                     if let Some(u) = envelope.body(op).attachments().get(lidx) {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
@@ -657,7 +654,7 @@ impl Component for MailView {
                                 let attachment_type = u.mime_type();
                                 let binary = query_default_app(&attachment_type);
                                 if let Ok(binary) = binary {
-                                    let mut p = create_temp_file(&decode(u, None), None);
+                                    let p = create_temp_file(&decode(u, None), None);
                                     Command::new(&binary)
                                         .arg(p.path())
                                         .stdin(Stdio::piped())
@@ -714,8 +711,8 @@ impl Component for MailView {
                     let account = &mut context.accounts[self.coordinates.0];
                     let envelope: &Envelope = &account.get_env(&self.coordinates.2);
                     let finder = LinkFinder::new();
-                    let op = account.operation(&envelope.hash());
-                    let mut t = envelope.body(op).text().to_string();
+                    let op = account.operation(envelope.hash());
+                    let t = envelope.body(op).text().to_string();
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {
                         u.as_str().to_string()
@@ -742,7 +739,7 @@ impl Component for MailView {
                 }
                 self.dirty = true;
             }
-            UIEvent::EnvelopeRename(old_hash, new_hash) => {
+            UIEvent::EnvelopeRename(old_hash, new_hash) if self.coordinates.2 == old_hash => {
                 self.coordinates.2 = new_hash;
             }
             _ => {

@@ -130,56 +130,50 @@ impl Collection {
                 true
             }
         });
-        let mut threads = Threads::new(&mut envelopes);
+        let mut new_threads = Threads::new(&mut envelopes);
 
         for (h, e) in envelopes {
             self.envelopes.insert(h, e);
         }
-        for (t_fh, t) in self.threads.iter_mut() {
-            if self.sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
-                let mut ordered_hash_set = threads
+        let &mut Collection {
+            ref mut threads,
+            ref mut envelopes,
+            ref sent_folder,
+            ..
+        } = self;
+        for (t_fh, t) in threads.iter_mut() {
+            if sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
+                let mut ordered_hash_set = new_threads
                     .hash_set
                     .iter()
                     .cloned()
                     .collect::<Vec<EnvelopeHash>>();
-                unsafe {
-                    /* FIXME NLL
-                     * Sorting ordered_hash_set triggers a borrow which should not happen with NLL
-                     * probably */
-                    let envelopes = &self.envelopes as *const FnvHashMap<EnvelopeHash, Envelope>;
-                    ordered_hash_set.sort_by(|a, b| {
-                        (*envelopes)[a]
-                            .date()
-                            .partial_cmp(&(*(envelopes))[b].date())
-                            .unwrap()
-                    });
-                }
+                ordered_hash_set.sort_by(|a, b| {
+                    envelopes[a]
+                        .date()
+                        .partial_cmp(&envelopes[b].date())
+                        .unwrap()
+                });
                 for h in ordered_hash_set {
-                    t.insert_reply(&mut self.envelopes, h);
+                    t.insert_reply(envelopes, h);
                 }
                 continue;
             }
-            if self.sent_folder.map(|f| f == *t_fh).unwrap_or(false) {
+            if sent_folder.map(|f| f == *t_fh).unwrap_or(false) {
                 let mut ordered_hash_set =
                     t.hash_set.iter().cloned().collect::<Vec<EnvelopeHash>>();
-                unsafe {
-                    /* FIXME NLL
-                     * Sorting ordered_hash_set triggers a borrow which should not happen with NLL
-                     * probably */
-                    let envelopes = &self.envelopes as *const FnvHashMap<EnvelopeHash, Envelope>;
-                    ordered_hash_set.sort_by(|a, b| {
-                        (*envelopes)[a]
-                            .date()
-                            .partial_cmp(&(*(envelopes))[b].date())
-                            .unwrap()
-                    });
-                }
+                ordered_hash_set.sort_by(|a, b| {
+                    envelopes[a]
+                        .date()
+                        .partial_cmp(&envelopes[b].date())
+                        .unwrap()
+                });
                 for h in ordered_hash_set {
-                    threads.insert_reply(&mut self.envelopes, h);
+                    new_threads.insert_reply(envelopes, h);
                 }
             }
         }
-        self.threads.insert(folder_hash, threads);
+        threads.insert(folder_hash, new_threads);
     }
 
     pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope, folder_hash: FolderHash) {
@@ -190,7 +184,8 @@ impl Collection {
         self.envelopes.insert(new_hash, envelope);
         if self.sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
             for (_, t) in self.threads.iter_mut() {
-                t.update_envelope(old_hash, new_hash, &self.envelopes);
+                t.update_envelope(old_hash, new_hash, &self.envelopes)
+                    .unwrap_or(());
             }
         }
         {

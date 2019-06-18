@@ -37,9 +37,9 @@ pub use self::shortcuts::*;
 
 use self::default_vals::*;
 use self::notifications::NotificationsSettings;
+use crate::pager::PagerSettings;
 use melib::conf::AccountSettings;
 use melib::error::*;
-use pager::PagerSettings;
 
 use self::serde::{de, Deserialize, Deserializer};
 use std::collections::HashMap;
@@ -252,7 +252,7 @@ impl FileSettings {
                             .create_new(true)
                             .open(config_path.as_path())
                             .expect("Could not create config file.");
-                        file.write_all(include_str!("../../sample-config").as_bytes())
+                        file.write_all(include_bytes!("../../sample-config"))
                             .expect("Could not write to config file.");
                         println!("Written config to {}", config_path.display());
                         std::process::exit(1);
@@ -365,23 +365,23 @@ where
  */
 
 mod default_vals {
-    pub(in conf) fn false_val() -> bool {
+    pub(in crate::conf) fn false_val() -> bool {
         true
     }
 
-    pub(in conf) fn true_val() -> bool {
+    pub(in crate::conf) fn true_val() -> bool {
         true
     }
 
-    pub(in conf) fn zero_val() -> usize {
+    pub(in crate::conf) fn zero_val() -> usize {
         0
     }
 
-    pub(in conf) fn eighty_percent() -> usize {
+    pub(in crate::conf) fn eighty_percent() -> usize {
         80
     }
 
-    pub(in conf) fn none() -> Option<String> {
+    pub(in crate::conf) fn none() -> Option<String> {
         None
     }
 }

@@ -2,7 +2,7 @@ use super::*;
 
 pub fn encode_header(value: &str) -> String {
     eprintln!("encoding \"{}\"", value);
-    let mut ret = String::with_capacity(5 / 3 * value.len());
+    let mut ret = String::with_capacity(value.len());
     for word in value.split_whitespace() {
         if word.is_ascii() {
             ret.push_str(word);

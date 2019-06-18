@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use components::utilities::PageMovement;
+use crate::components::utilities::PageMovement;
 
 const MAX_COLS: usize = 500;
 
@@ -475,7 +475,7 @@ impl Component for ThreadListing {
                         (envelope.hash(), envelope.is_seen())
                     };
                     if !is_seen {
-                        let op = account.operation(&hash);
+                        let op = account.operation(hash);
                         let envelope: &mut Envelope =
                             account.get_env_mut(&self.locations[self.cursor_pos.2]);
                         envelope.set_seen(op).unwrap();
@@ -533,7 +533,7 @@ impl Component for ThreadListing {
             if let Some(ref mut v) = self.view {
                 v.update(coordinates);
             } else {
-                self.view = Some(MailView::new(coordinates, None, None, context));
+                self.view = Some(MailView::new(coordinates, None, None));
             }
 
             self.view.as_mut().unwrap().draw(

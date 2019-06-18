@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use components::utilities::PageMovement;
+use crate::components::utilities::PageMovement;
 use std::cmp;
 
 const INDENTATION_COLORS: &'static [u8] = &[
@@ -916,7 +916,7 @@ impl Component for ThreadView {
                             .unwrap()
                     };
                     let envelope: &Envelope = &account.get_env(&i);
-                    let op = account.operation(&envelope.hash());
+                    let op = account.operation(envelope.hash());
                     debug!(
                         "sending action edit for {}, {}",
                         envelope.message_id(),

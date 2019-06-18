@@ -129,7 +129,7 @@ impl Composer {
      */
     pub fn edit(account_pos: usize, h: EnvelopeHash, context: &Context) -> Self {
         let mut ret = Composer::default();
-        let op = context.accounts[account_pos].operation(&h);
+        let op = context.accounts[account_pos].operation(h);
         let envelope: &Envelope = context.accounts[account_pos].get_env(&h);
 
         ret.draft = Draft::edit(envelope, op);
@@ -149,7 +149,7 @@ impl Composer {
         let mut ret = Composer::default();
         let p = &thread_nodes[&msg];
         let parent_message = &account.collection[&p.message().unwrap()];
-        let mut op = account.operation(&parent_message.hash());
+        let mut op = account.operation(parent_message.hash());
         let parent_bytes = op.as_bytes();
 
         ret.draft = Draft::new_reply(parent_message, parent_bytes.unwrap());
@@ -538,7 +538,7 @@ impl Component for Composer {
                     .spawn()
                     .expect("Failed to start mailer command");
                 {
-                    let mut stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
+                    let stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
                     self.update_draft();
                     let draft = self.draft.clone().finalise().unwrap();
                     stdin
@@ -582,8 +582,7 @@ impl Component for Composer {
                 }
                 /* update Draft's headers based on form values */
                 self.update_draft();
-                let mut f =
-                    create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
+                let f = create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
                 //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
 
                 // TODO: check exit status

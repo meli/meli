@@ -23,7 +23,7 @@
  * User actions that need to be handled by the UI
  */
 
-use components::Component;
+use crate::components::Component;
 pub use melib::mailbox::{SortField, SortOrder};
 use melib::thread::ThreadHash;
 use melib::EnvelopeHash;

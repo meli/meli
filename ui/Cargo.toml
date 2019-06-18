@@ -3,6 +3,7 @@ name = "ui"
 version = "0.0.1"  #:version
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 workspace = ".."
+edition = "2018"
 
 [dependencies]
 xdg = "2.1.0" # >:c

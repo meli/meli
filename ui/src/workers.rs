@@ -152,7 +152,7 @@ impl<T: Send> WorkQueue<T> {
 
 impl WorkController {
     pub fn new() -> WorkController {
-        let (new_jobs_tx, new_jobs_rx) = chan::async();
+        let (new_jobs_tx, new_jobs_rx) = chan::r#async();
         // Create a new work queue to keep track of what work needs to be done.
         // Note that the queue is internally mutable (or, rather, the Mutex is),
         // but this binding doesn't need to be mutable. This isn't unsound because
@@ -163,7 +163,7 @@ impl WorkController {
         // Create a MPSC (Multiple Producer, Single Consumer) channel. Every worker
         // is a producer, the main thread is a consumer; the producers put their
         // work into the channel when it's done.
-        let (results_tx, results_rx) = chan::async();
+        let (results_tx, results_rx) = chan::r#async();
 
         // Create a SyncFlag to share whether or not there are more jobs to be done.
         let (thread_end_tx, thread_end_rx) = chan::sync(::std::mem::size_of::<bool>());

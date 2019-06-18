@@ -168,9 +168,7 @@ impl<'a> BackendOp for MaildirOp {
         let hash_index = self.hash_index.clone();
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(self.folder_hash).or_default();
-        if let maildir_path = map.entry(old_hash).or_default() {
-            maildir_path.modified = Some(new_name.clone().into());
-        }
+        map.entry(old_hash).or_default().modified = Some(new_name.clone());
         Ok(())
     }
 }
@@ -247,11 +245,11 @@ impl BackendFolder for MaildirFolder {
             name: self.name.clone(),
             path: self.path.clone(),
             children: self.children.clone(),
-            parent: self.parent.clone(),
+            parent: self.parent,
         })
     }
 
     fn parent(&self) -> Option<FolderHash> {
-        self.parent.clone()
+        self.parent
     }
 }

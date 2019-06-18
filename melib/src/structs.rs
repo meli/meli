@@ -1,7 +1,7 @@
 use std::iter::Extend;
 use std::ops::Index;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct StackVec<T: Default + Copy + std::fmt::Debug> {
     len: usize,
     array: [T; 32],
@@ -42,7 +42,7 @@ impl<T: Default + Copy + std::fmt::Debug> StackVec<T> {
             self.heap_vec.pop()
         } else {
             let ret = self.array[self.len - 1];
-            self.len = self.len - 1;
+            self.len -= 1;
             Some(ret)
         }
     }

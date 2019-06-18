@@ -48,6 +48,7 @@ use std::mem;
 use std::ops::Index;
 use std::result::Result as StdResult;
 use std::str::FromStr;
+use std::string::ToString;
 
 type Envelopes = FnvHashMap<EnvelopeHash, Envelope>;
 
@@ -82,9 +83,12 @@ fn rec_change_root_parent(
     idx: ThreadHash,
     new_root: ThreadHash,
 ) {
-    let entry = b.entry(idx).or_default();
-    entry.thread_group = new_root;
-    if let Some(p) = entry.parent {
+    let parent = {
+        let entry = b.entry(idx).or_default();
+        entry.thread_group = new_root;
+        entry.parent
+    };
+    if let Some(p) = parent {
         rec_change_children(b, p, new_root);
         rec_change_root_parent(b, p, new_root);
     }
@@ -109,8 +113,8 @@ fn rec_change_children(
 macro_rules! remove_from_parent {
     ($buf:expr, $idx:expr) => {{
         let mut parent: Option<ThreadHash> = None;
-        let entry = $buf.entry($idx).or_default();
-        if let Some(p) = entry.parent {
+        let entry_parent = $buf.entry($idx).or_default().parent;
+        if let Some(p) = entry_parent {
             parent = Some(p);
             if let Some(pos) = $buf[&p].children.iter().position(|c| *c == $idx) {
                 $buf.entry(p).and_modify(|e| {
@@ -964,14 +968,14 @@ impl Threads {
             .get(
                 envelopes[&env_hash]
                     .in_reply_to()
-                    .map(|mgid| mgid.raw())
+                    .map(crate::email::StrBuild::raw)
                     .unwrap_or(&[]),
             )
-            .map(|h| *h);
+            .cloned();
         if let Some(id) = self
             .message_ids
             .get(envelopes[&env_hash].message_id().raw())
-            .map(|h| *h)
+            .cloned()
         {
             self.thread_nodes.entry(id).and_modify(|n| {
                 n.message = Some(env_hash);
@@ -1069,11 +1073,8 @@ impl Threads {
             }
         }
         let no_parent: bool = if let Some(node) = self.thread_nodes.get(&node_idx) {
-            match (node.parent, node.message, node.children.len()) {
-                (None, None, 0) => {
-                    return;
-                }
-                _ => {}
+            if let (None, None, 0) = (node.parent, node.message, node.children.len()) {
+                return;
             }
             node.parent.is_none()
         } else {
@@ -1085,10 +1086,10 @@ impl Threads {
 
         if no_parent {
             let tree = self.tree.get_mut();
-            if let Some(tree) = tree.iter_mut().find(|t| t.id == id) {
-                *tree = ThreadTree::new(id);
+            if let Some(pos) = tree.iter().position(|t| t.id == id) {
+                tree[pos] = ThreadTree::new(id);
                 node_build(
-                    tree,
+                    &mut tree[pos],
                     id,
                     *(self.sort.borrow()),
                     &mut self.thread_nodes,
@@ -1481,7 +1482,7 @@ impl Threads {
                 ref_ptr = parent_id;
                 continue;
             } */
-            if !self.thread_nodes[&ref_ptr].parent.is_none() {
+            if self.thread_nodes[&ref_ptr].parent.is_some() {
                 if self.thread_nodes[&parent_id].parent == Some(ref_ptr) {
                     eprintln!("ALARM");
                     remove_from_parent!(&mut self.thread_nodes, parent_id);
@@ -1506,12 +1507,9 @@ impl Threads {
         while i < tree.len() {
             // Evaluate if useless
             let node = &self.thread_nodes[&tree[i].id];
-            match (node.parent, node.message, node.children.len()) {
-                (None, None, 0) => {
-                    tree.remove(i);
-                    continue;
-                }
-                _ => {}
+            if let (None, None, 0) = (node.parent, node.message, node.children.len()) {
+                tree.remove(i);
+                continue;
             }
             i += 1;
         }
@@ -1570,14 +1568,9 @@ fn node_build(
                 }
             }
         }
-    } else {
-        if let Some(node) = thread_nodes.get(&idx) {
-            match (node.parent, node.message, node.children.len()) {
-                (None, None, 0) => {
-                    return;
-                }
-                _ => {}
-            }
+    } else if let Some(node) = thread_nodes.get(&idx) {
+        if let (None, None, 0) = (node.parent, node.message, node.children.len()) {
+            return;
         }
     }
 
@@ -1648,9 +1641,9 @@ fn print_threadnodes(
                   "\t".repeat(level),
                   node_hash,
                   "\t".repeat(level),
-                  nodes[&node_hash].message().as_ref().map(|m| format!("{} - {}\n{}\t\t{}", envelopes[m].message_id_display(), envelopes[m].subject(), "\t".repeat(level), envelopes[m].references().iter().map(|r| r.to_string()).collect::<Vec<String>>().join(", "))).unwrap_or_else(|| "None".to_string()),
+                  nodes[&node_hash].message().as_ref().map(|m| format!("{} - {}\n{}\t\t{}", envelopes[m].message_id_display(), envelopes[m].subject(), "\t".repeat(level), envelopes[m].references().iter().map(ToString::to_string).collect::<Vec<String>>().join(", "))).unwrap_or_else(|| "None".to_string()),
                   "\t".repeat(level),
-                  nodes[&node_hash].parent().as_ref().map(|p| p.to_string()).unwrap_or_else(|| "None".to_string()),
+                  nodes[&node_hash].parent().as_ref().map(ToString::to_string).unwrap_or_else(|| "None".to_string()),
                   "\t".repeat(level),
                   nodes[&node_hash].thread_group,
                   "\t".repeat(level),

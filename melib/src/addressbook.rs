@@ -173,7 +173,7 @@ impl Card {
         self.extra_properties.insert(key.to_string(), value);
     }
     pub fn extra_property(&self, key: &str) -> Option<&str> {
-        self.extra_properties.get(key).map(|v| v.as_str())
+        self.extra_properties.get(key).map(String::as_str)
     }
 }
 

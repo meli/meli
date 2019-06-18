@@ -28,7 +28,7 @@ See the `Component` Trait for more details.
 use super::*;
 
 pub mod mail;
-pub use mail::*;
+pub use crate::mail::*;
 
 pub mod notifications;
 
@@ -39,7 +39,7 @@ pub mod utilities;
 pub use self::utilities::*;
 
 pub mod contacts;
-pub use contacts::*;
+pub use crate::contacts::*;
 
 use std::fmt;
 use std::fmt::{Debug, Display};

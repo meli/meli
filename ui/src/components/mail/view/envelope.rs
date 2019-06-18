@@ -336,7 +336,7 @@ impl Component for EnvelopeView {
                     let cursor_pos = if self.mode.is_attachment() {
                         Some(0)
                     } else {
-                        self.pager.as_mut().map(|p| p.cursor_pos())
+                        self.pager.as_ref().map(Pager::cursor_pos)
                     };
                     self.pager = Some(Pager::from_string(
                         text,
@@ -439,7 +439,7 @@ impl Component for EnvelopeView {
                                 let attachment_type = u.mime_type();
                                 let binary = query_default_app(&attachment_type);
                                 if let Ok(binary) = binary {
-                                    let mut p = create_temp_file(&decode(u, None), None);
+                                    let p = create_temp_file(&decode(u, None), None);
                                     Command::new(&binary)
                                         .arg(p.path())
                                         .stdin(Stdio::piped())
@@ -491,7 +491,7 @@ impl Component for EnvelopeView {
                 let url = {
                     let envelope: &Envelope = self.wrapper.envelope();
                     let finder = LinkFinder::new();
-                    let mut t = envelope
+                    let t = envelope
                         .body_bytes(self.wrapper.buffer())
                         .text()
                         .to_string();

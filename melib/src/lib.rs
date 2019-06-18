@@ -30,7 +30,7 @@ pub mod dbg {
                     "[{:?}] {}:{}_{}:	",
                     std::thread::current()
                     .name()
-                    .map(|v| v.to_string())
+                    .map(std::string::ToString::to_string)
                     .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
                     file!(),
                     line!(),
@@ -48,7 +48,7 @@ pub mod dbg {
                     "[{:?}] {}:{}_{}:	",
                     std::thread::current()
                     .name()
-                    .map(|v| v.to_string())
+                    .map(std::string::ToString::to_string)
                     .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
                     file!(),
                     line!(),
@@ -65,7 +65,7 @@ pub mod dbg {
                     "[{:?}] {}:{}_{}:	",
                     std::thread::current()
                     .name()
-                    .map(|v| v.to_string())
+                    .map(std::string::ToString::to_string)
                     .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
                     file!(),
                     line!(),
@@ -88,7 +88,7 @@ pub mod grapheme_clusters;
 pub mod mailbox;
 pub mod thread;
 pub use crate::email::*;
-pub use thread::*;
+pub use crate::thread::*;
 mod wcwidth;
 pub use self::grapheme_clusters::*;
 pub use self::wcwidth::*;
@@ -112,11 +112,11 @@ extern crate bitflags;
 extern crate fnv;
 extern crate uuid;
 
-pub use conf::*;
-pub use mailbox::*;
+pub use crate::conf::*;
+pub use crate::mailbox::*;
 
-pub use backends::{Backends, RefreshEvent, RefreshEventConsumer};
-pub use email::{Envelope, Flag};
-pub use error::{MeliError, Result};
+pub use crate::backends::{Backends, RefreshEvent, RefreshEventConsumer};
+pub use crate::email::{Envelope, Flag};
+pub use crate::error::{MeliError, Result};
 
-pub use addressbook::*;
+pub use crate::addressbook::*;

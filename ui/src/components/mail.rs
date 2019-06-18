@@ -27,9 +27,9 @@ use melib::backends::FolderHash;
 use melib::thread::ThreadHash;
 
 pub mod listing;
-pub use listing::*;
+pub use crate::listing::*;
 pub mod view;
-pub use view::*;
+pub use crate::view::*;
 mod compose;
 pub use self::compose::*;
 

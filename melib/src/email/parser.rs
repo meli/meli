@@ -896,11 +896,11 @@ mod tests {
     }
     #[test]
     fn test_attachments() {
-        use std::io::Read;
-        let mut buffer: Vec<u8> = Vec::new();
         //FIXME: add file
         return;
         /*
+        use std::io::Read;
+        let mut buffer: Vec<u8> = Vec::new();
         let _ = std::fs::File::open("").unwrap().read_to_end(&mut buffer);
         let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
         let (_, body) = match mail(&buffer).to_full_result() {

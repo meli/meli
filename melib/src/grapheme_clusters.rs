@@ -9,7 +9,8 @@
 */
 
 use super::*;
-use unicode_segmentation::UnicodeSegmentation;
+extern crate unicode_segmentation;
+use self::unicode_segmentation::UnicodeSegmentation;
 
 pub trait Graphemes: UnicodeSegmentation + CodePointsIter {
     fn split_graphemes<'a>(&'a self) -> Vec<&'a str> {

@@ -60,7 +60,7 @@ impl fmt::Debug for Attachment {
         {
             let mut text = Vec::with_capacity(4096);
             self.get_text_recursive(&mut text);
-            std::str::from_utf8(&text).map(|r| r.to_string()).unwrap_or_else(|e| format!("Unicode error {}", e))
+            std::str::from_utf8(&text).map(std::string::ToString::to_string).unwrap_or_else(|e| format!("Unicode error {}", e))
         }
         )
     }
@@ -346,7 +346,7 @@ impl Attachment {
         String::from_utf8_lossy(text.as_slice().trim()).into()
     }
     pub fn description(&self) -> Vec<String> {
-        self.attachments().iter().map(|a| a.text()).collect()
+        self.attachments().iter().map(Attachment::text).collect()
     }
     pub fn mime_type(&self) -> String {
         format!("{}", self.content_type).to_string()
@@ -408,7 +408,7 @@ impl Attachment {
                         return false;
                     }
                 }
-                return true;
+                true
             }
             ContentType::Multipart {
                 kind: MultipartType::Signed,
@@ -417,7 +417,7 @@ impl Attachment {
             } => subattachments
                 .iter()
                 .find(|s| s.content_type != ContentType::PGPSignature)
-                .map(|s| s.is_html())
+                .map(Attachment::is_html)
                 .unwrap_or(false),
             ContentType::Multipart {
                 ref subattachments, ..
@@ -468,11 +468,14 @@ fn decode_rfc822(_raw: &[u8]) -> Attachment {
 type Filter<'a> = Box<FnMut(&'a Attachment, &mut Vec<u8>) -> () + 'a>;
 
 fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> Vec<u8> {
-    let ret = match a.content_type {
+    match a.content_type {
         ContentType::Unsupported { .. } => Vec::new(),
         ContentType::Text { .. } => decode_helper(a, filter),
         ContentType::PGPSignature => a.content_type.to_string().into_bytes(),
-        ContentType::MessageRfc822 => decode_rec(&decode_rfc822(&a.raw), None),
+        ContentType::MessageRfc822 => {
+            let temp = decode_rfc822(&a.raw);
+            decode_rec(&temp, None)
+        }
         ContentType::Multipart {
             ref kind,
             ref subattachments,
@@ -497,8 +500,7 @@ fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> 
                 vec
             }
         },
-    };
-    ret
+    }
 }
 
 pub fn decode_rec<'a>(a: &'a Attachment, mut filter: Option<Filter<'a>>) -> Vec<u8> {

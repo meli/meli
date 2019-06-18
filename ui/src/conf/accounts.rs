@@ -37,6 +37,7 @@ use melib::thread::ThreadHash;
 use melib::AddressBook;
 use melib::StackVec;
 
+use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use std::collections::VecDeque;
 use std::fs;
 use std::io;
@@ -44,7 +45,6 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 use std::result;
 use std::sync::Arc;
-use types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 
 pub type Worker = Option<Async<(Result<FnvHashMap<EnvelopeHash, Envelope>>, Result<Mailbox>)>>;
 
@@ -215,17 +215,15 @@ impl Account {
             );
         }
         tree.sort_unstable_by_key(|f| ref_folders[&f.hash].name());
-        {
-            //FIXME: NLL
-            let mut stack: StackVec<Option<&FolderNode>> = StackVec::new();
-            for n in tree.iter_mut() {
-                folders_order.push(n.hash);
-                n.kids.sort_unstable_by_key(|f| ref_folders[&f.hash].name());
-                stack.extend(n.kids.iter().rev().map(Some));
-                while let Some(Some(next)) = stack.pop() {
-                    folders_order.push(next.hash);
-                    stack.extend(next.kids.iter().rev().map(Some));
-                }
+
+        let mut stack: StackVec<Option<&FolderNode>> = StackVec::new();
+        for n in tree.iter_mut() {
+            folders_order.push(n.hash);
+            n.kids.sort_unstable_by_key(|f| ref_folders[&f.hash].name());
+            stack.extend(n.kids.iter().rev().map(Some));
+            while let Some(Some(next)) = stack.pop() {
+                folders_order.push(next.hash);
+                stack.extend(next.kids.iter().rev().map(Some));
             }
         }
 
@@ -234,7 +232,7 @@ impl Account {
             if data.exists() {
                 let reader = io::BufReader::new(fs::File::open(data).unwrap());
                 let result: result::Result<AddressBook, _> = serde_json::from_reader(reader);
-                if let Ok(mut data_t) = result {
+                if let Ok(data_t) = result {
                     data_t
                 } else {
                     AddressBook::new(name.clone())
@@ -284,10 +282,7 @@ impl Account {
                     .collect::<FnvHashMap<EnvelopeHash, Envelope>>()
             });
             let hash = folder.hash();
-            let m = {
-                //FIXME NLL
-                Mailbox::new(folder, envelopes.as_ref().map_err(|e| e.clone()))
-            };
+            let m = Mailbox::new(folder, envelopes.as_ref().map_err(Clone::clone));
             tx.send(AsyncStatus::Payload((envelopes, m)));
             notify_fn.notify(hash);
         })))
@@ -318,36 +313,26 @@ impl Account {
                 }
                 RefreshEventKind::Create(envelope) => {
                     let env_hash = envelope.hash();
+                    let mailbox = mailbox!(&folder_hash, self.folders);
+                    mailbox.insert(env_hash);
+                    self.collection.insert(*envelope, folder_hash);
+                    if self
+                        .sent_folder
+                        .as_ref()
+                        .map(|h| *h == folder_hash)
+                        .unwrap_or(false)
                     {
-                        //FIXME NLL
-                        let mailbox = mailbox!(&folder_hash, self.folders);
-                        mailbox.insert(env_hash);
-                        self.collection.insert(*envelope, folder_hash);
-                        if self
-                            .sent_folder
-                            .as_ref()
-                            .map(|h| *h == folder_hash)
-                            .unwrap_or(false)
-                        {
-                            self.collection.insert_reply(env_hash);
-                        }
+                        self.collection.insert_reply(env_hash);
                     }
 
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
-                    {
-                        //FIXME NLL
-                        let folder_conf =
-                            &self.settings.folder_confs[&self.folder_names[&folder_hash]];
-                        if folder_conf.ignore.is_true() {
-                            return None;
-                        }
+                    let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
+                    if folder_conf.ignore.is_true() {
+                        return None;
                     }
-                    {
-                        //FIXME NLL
-                        let (_, thread_node) = self.mail_and_thread(env_hash, folder_hash);
-                        if thread_node.snoozed() {
-                            return None;
-                        }
+                    let (_, thread_node) = self.mail_and_thread(env_hash, folder_hash);
+                    if thread_node.snoozed() {
+                        return None;
                     }
                     let env = self.get_env(&env_hash);
                     return Some(Notification(
@@ -494,18 +479,18 @@ impl Account {
     pub fn get_env_mut(&mut self, h: &EnvelopeHash) -> &mut Envelope {
         self.collection.entry(*h).or_default()
     }
-    pub fn contains_key(&self, h: &EnvelopeHash) -> bool {
-        self.collection.contains_key(h)
+    pub fn contains_key(&self, h: EnvelopeHash) -> bool {
+        self.collection.contains_key(&h)
     }
-    pub fn operation(&self, h: &EnvelopeHash) -> Box<BackendOp> {
+    pub fn operation(&self, h: EnvelopeHash) -> Box<BackendOp> {
         for mailbox in self.folders.values() {
             if let Some(Ok(m)) = mailbox {
-                if m.envelopes.contains(h) {
-                    return self.backend.operation(*h, m.folder.hash());
+                if m.envelopes.contains(&h) {
+                    return self.backend.operation(h, m.folder.hash());
                 }
             }
         }
-        debug!("didn't find {}", *h);
+        debug!("didn't find {}", h);
         std::dbg!(&self.folders);
         std::dbg!(&self.collection.envelopes);
         unreachable!()

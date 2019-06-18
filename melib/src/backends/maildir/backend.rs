@@ -29,7 +29,8 @@ use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash};
 use crate::error::{MeliError, Result};
 
-use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
+extern crate notify;
+use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::time::Duration;
 
 use std::sync::mpsc::channel;
@@ -166,7 +167,7 @@ fn move_to_cur(p: PathBuf) -> PathBuf {
         new.set_extension(":2,");
     }
     debug!("moved to cur: {}", new.display());
-    fs::rename(p, &new).unwrap();
+    fs::rename(&p, &new).unwrap();
     new
 }
 
@@ -263,11 +264,6 @@ impl MailBackend for MaildirType {
                                     } else {
                                         /* Did we just miss a Create event? In any case, create
                                          * envelope. */
-
-                                        /* Drop the lock manually as add_path_to_index would deadlock
-                                         * */
-                                        drop(index_lock);
-                                        drop(hash_indexes_lock);
                                         if let Some(env) = add_path_to_index(
                                             &hash_indexes,
                                             folder_hash,
@@ -369,10 +365,6 @@ impl MailBackend for MaildirType {
                                         .unwrap()
                                         .to_path_buf();
                                     debug!("filename = {:?}", file_name);
-                                    /* Drop the lock manually as add_path_to_index would deadlock
-                                     * */
-                                    drop(index_lock);
-                                    drop(hash_indexes_lock);
                                     if let Some(env) = add_path_to_index(
                                         &hash_indexes,
                                         folder_hash,

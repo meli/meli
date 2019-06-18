@@ -39,7 +39,7 @@ struct AccountMenuEntry {
 
 trait ListingTrait {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>);
-    fn set_coordinates(&mut self, (usize, usize, Option<EnvelopeHash>));
+    fn set_coordinates(&mut self, _: (usize, usize, Option<EnvelopeHash>));
 }
 
 #[derive(Debug)]
@@ -48,7 +48,7 @@ pub enum ListingComponent {
     Threaded(ThreadListing),
     Compact(CompactListing),
 }
-use ListingComponent::*;
+use crate::ListingComponent::*;
 
 impl ListingTrait for ListingComponent {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
