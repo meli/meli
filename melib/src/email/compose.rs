@@ -127,6 +127,11 @@ impl Draft {
 
         ret
     }
+    pub fn set_header(&mut self, header: &str, value: String) {
+        if self.headers.insert(header.to_string(), value).is_none() {
+            self.header_order.push(header.to_string());
+        }
+    }
     pub fn new_reply(envelope: &Envelope, bytes: &[u8]) -> Self {
         let mut ret = Draft::default();
         ret.headers_mut().insert(

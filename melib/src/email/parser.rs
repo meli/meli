@@ -530,7 +530,7 @@ fn group(input: &[u8]) -> IResult<&[u8], Address> {
     }
 }
 
-named!(address<Address>, ws!(alt_complete!(mailbox | group)));
+named!(pub address<Address>, ws!(alt_complete!(mailbox | group)));
 
 named!(pub rfc2822address_list<Vec<Address>>, ws!( separated_list!(is_a!(","), address)));
 
@@ -786,6 +786,82 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         }
     }
     IResult::Done(&input[ptr..], acc)
+}
+
+named!(pub angle_bracket_delimeted_list<Vec<&[u8]>>, separated_nonempty_list!(complete!(is_a!(",")), ws!(complete!(message_id))));
+
+pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
+    if !input.starts_with(b"mailto:") {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+
+    input = &input[b"mailto:".len()..];
+
+    let end = input.iter().position(|e| *e == b'?').unwrap_or(input.len());
+    let address: Address;
+
+    if let IResult::Done(rest, addr) = crate::email::parser::address(&input[..end]) {
+        address = addr;
+        input = if input[end..].is_empty() {
+            &input[end..]
+        } else {
+            &input[end + 1..]
+        };
+    } else {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
+
+    let mut subject = None;
+    let mut cc = None;
+    let mut bcc = None;
+    let mut body = None;
+    while !input.is_empty() {
+        let tag = if let Some(tag_pos) = input.iter().position(|e| *e == b'=') {
+            let ret = &input[0..tag_pos];
+            input = &input[tag_pos + 1..];
+            ret
+        } else {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        };
+
+        let value_end = input.iter().position(|e| *e == b'&').unwrap_or(input.len());
+
+        let value = String::from_utf8_lossy(&input[..value_end]).to_string();
+        match tag {
+            b"subject" if subject.is_none() => {
+                subject = Some(value);
+            }
+            b"cc" if cc.is_none() => {
+                cc = Some(value);
+            }
+            b"bcc" if bcc.is_none() => {
+                bcc = Some(value);
+            }
+            b"body" if body.is_none() => {
+                /* FIXME:
+                 * Parse escaped characters properly.
+                 */
+                body = Some(value.replace("%20", " ").replace("%0A", "\n"));
+            }
+            _ => {
+                return IResult::Error(error_code!(ErrorKind::Custom(43)));
+            }
+        }
+        if input[value_end..].is_empty() {
+            break;
+        }
+        input = &input[value_end + 1..];
+    }
+    IResult::Done(
+        input,
+        Mailto {
+            address,
+            subject,
+            cc,
+            bcc,
+            body,
+        },
+    )
 }
 
 #[cfg(test)]
