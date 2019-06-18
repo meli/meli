@@ -22,7 +22,7 @@
 /*!
  * Email parsing, handling, sending etc.
  */
-
+use fnv::FnvHashMap;
 mod compose;
 pub use self::compose::*;
 
@@ -319,6 +319,7 @@ pub struct Envelope {
     message_id: MessageID,
     in_reply_to: Option<MessageID>,
     references: Option<References>,
+    other_headers: FnvHashMap<String, String>,
 
     timestamp: UnixTimestamp,
     thread: ThreadHash,
@@ -354,6 +355,7 @@ impl Envelope {
             message_id: MessageID::default(),
             in_reply_to: None,
             references: None,
+            other_headers: FnvHashMap::default(),
 
             timestamp: 0,
 
@@ -476,6 +478,11 @@ impl Envelope {
                     }
                     _ => {}
                 }
+            } else {
+                self.other_headers.insert(
+                    String::from_utf8_lossy(name).into(),
+                    String::from_utf8_lossy(value).into(),
+                );
             }
         }
         /*
@@ -748,6 +755,9 @@ impl Envelope {
                 }),
             None => Vec::new(),
         }
+    }
+    pub fn other_headers(&self) -> &FnvHashMap<String, String> {
+        &self.other_headers
     }
     pub fn thread(&self) -> ThreadHash {
         self.thread
