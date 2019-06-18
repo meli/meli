@@ -1,4 +1,4 @@
-use std::iter::Extend;
+use std::iter::{Extend, FromIterator};
 use std::ops::Index;
 
 #[derive(Debug, Default)]
@@ -58,6 +58,18 @@ impl<T: Default + Copy + std::fmt::Debug> StackVec<T> {
             range: 0..self.len,
         }
     }
+    pub fn remove(&mut self, i: usize) -> T {
+        if self.len >= self.array.len() {
+            self.heap_vec.remove(i)
+        } else {
+            let ret = std::mem::replace(&mut self.array[i], T::default());
+            self.len -= 1;
+            for i in i..self.len {
+                self.array[i] = self.array[i + 1];
+            }
+            ret
+        }
+    }
 }
 
 pub struct StackVecIter<'a, T: Default + Copy + std::fmt::Debug> {
@@ -110,6 +122,47 @@ impl<T: Default + Copy + std::fmt::Debug> Extend<T> for StackVec<T> {
     {
         for elem in iter {
             self.push(elem);
+        }
+    }
+}
+
+impl<T: Default + Copy + std::fmt::Debug> FromIterator<T> for StackVec<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let mut c = StackVec::new();
+
+        for i in iter {
+            c.push(i);
+        }
+
+        c
+    }
+}
+
+pub struct StackVecIterOwned<T: Default + Copy + std::fmt::Debug>(StackVec<T>);
+impl<T: Default + Copy + std::fmt::Debug> IntoIterator for StackVec<T> {
+    type Item = T;
+    type IntoIter = StackVecIterOwned<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        StackVecIterOwned(self)
+    }
+}
+impl<T: Default + Copy + std::fmt::Debug> Iterator for StackVecIterOwned<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        if self.0.is_empty() {
+            None
+        } else {
+            Some(self.0.remove(0))
+        }
+    }
+}
+impl<T: Default + Copy + std::fmt::Debug> std::iter::DoubleEndedIterator for StackVecIterOwned<T> {
+    fn next_back(&mut self) -> Option<T> {
+        if self.0.is_empty() {
+            None
+        } else {
+            self.0.pop()
         }
     }
 }
