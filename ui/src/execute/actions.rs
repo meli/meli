@@ -26,7 +26,7 @@
 use crate::components::Component;
 pub use melib::mailbox::{SortField, SortOrder};
 use melib::thread::ThreadHash;
-use melib::EnvelopeHash;
+use melib::{Draft, EnvelopeHash};
 
 extern crate uuid;
 use uuid::Uuid;
@@ -41,7 +41,7 @@ pub enum ListingAction {
 #[derive(Debug)]
 pub enum TabAction {
     TabOpen(Option<Box<Component>>),
-    NewDraft(usize),
+    NewDraft(usize, Option<Draft>),
     Reply((usize, usize, usize), ThreadHash), // thread coordinates (account, mailbox, root_set idx) and thread hash
     Close,
     Edit(usize, EnvelopeHash), // account_position, envelope hash

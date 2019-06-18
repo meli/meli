@@ -173,6 +173,11 @@ impl Composer {
         ret
     }
 
+    pub fn set_draft(&mut self, draft: Draft) {
+        self.draft = draft;
+        self.update_form();
+    }
+
     fn update_draft(&mut self) {
         let header_values = self.form.values_mut();
         let draft_header_map = self.draft.headers_mut();
@@ -526,51 +531,12 @@ impl Component for Composer {
                 return true;
             }
             UIEvent::Input(Key::Char('s')) if self.mode.is_overview() => {
-                use std::io::Write;
-                use std::process::{Command, Stdio};
-                let settings = &context.settings;
-                let parts = split_command!(settings.mailer.mailer_cmd);
-                let (cmd, args) = (parts[0], &parts[1..]);
-                let mut msmtp = Command::new(cmd)
-                    .args(args)
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                    .expect("Failed to start mailer command");
-                {
-                    let stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
-                    self.update_draft();
-                    let draft = self.draft.clone().finalise().unwrap();
-                    stdin
-                        .write_all(draft.as_bytes())
-                        .expect("Failed to write to stdin");
-                    if let Err(e) = context.accounts[self.account_cursor].save(
-                        draft.as_bytes(),
-                        &context.accounts[self.account_cursor]
-                            .settings
-                            .conf()
-                            .sent_folder(),
-                    ) {
-                        debug!("{:?} could not save sent msg", e);
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not save in 'Sent' folder.".into()),
-                            e.into(),
-                        ));
-                    }
+                self.update_draft();
+                if send_draft(context, self.account_cursor, self.draft.clone()) {
+                    context
+                        .replies
+                        .push_back(UIEvent::Action(Tab(Kill(self.id))));
                 }
-                context.replies.push_back(UIEvent::Notification(
-                    Some("Sent.".into()),
-                    format!(
-                        "Mailer output: {:#?}",
-                        msmtp
-                            .wait_with_output()
-                            .expect("Failed to wait on filter")
-                            .stdout
-                    ),
-                ));
-                context
-                    .replies
-                    .push_back(UIEvent::Action(Tab(Kill(self.id))));
                 return true;
             }
             UIEvent::Input(Key::Char('e')) if self.cursor == Cursor::Body => {
@@ -684,4 +650,54 @@ fn get_display_name(context: &Context, idx: usize) -> String {
     } else {
         settings.identity.to_string()
     }
+}
+
+pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) -> bool {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let mut failure = true;
+    let settings = &context.settings;
+    let parts = split_command!(settings.mailer.mailer_cmd);
+    let (cmd, args) = (parts[0], &parts[1..]);
+    let mut msmtp = Command::new(cmd)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to start mailer command");
+    {
+        let stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
+        let draft = draft.finalise().unwrap();
+        stdin
+            .write_all(draft.as_bytes())
+            .expect("Failed to write to stdin");
+        if let Err(e) = context.accounts[account_cursor].save(
+            draft.as_bytes(),
+            &context.accounts[account_cursor]
+                .settings
+                .conf()
+                .sent_folder(),
+        ) {
+            debug!("{:?} could not save sent msg", e);
+            context.replies.push_back(UIEvent::Notification(
+                Some("Could not save in 'Sent' folder.".into()),
+                e.into(),
+            ));
+        } else {
+            failure = false;
+        }
+    }
+    if !failure {
+        context.replies.push_back(UIEvent::Notification(
+            Some("Sent.".into()),
+            format!(
+                "Mailer output: {:#?}",
+                msmtp
+                    .wait_with_output()
+                    .expect("Failed to wait on filter")
+                    .stdout
+            ),
+        ));
+    }
+    return !failure;
 }

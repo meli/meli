@@ -288,7 +288,7 @@ impl Component for Listing {
             UIEvent::Input(ref k) if k == shortcuts["new_mail"] => {
                 context
                     .replies
-                    .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0))));
+                    .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0, None))));
                 return true;
             }
             UIEvent::StartupCheck(_) => {

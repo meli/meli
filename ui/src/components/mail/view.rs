@@ -22,6 +22,7 @@
 use super::*;
 use linkify::{Link, LinkFinder};
 
+use std::convert::TryFrom;
 use std::process::{Command, Stdio};
 
 mod list_management;
@@ -408,6 +409,91 @@ impl Component for MailView {
                     }
                     y = _y;
                 }
+                if let Some(list_management::ListActions {
+                    ref id,
+                    ref archive,
+                    ref post,
+                    ref unsubscribe,
+                }) = list_management::detect(envelope)
+                {
+                    let mut x = get_x(upper_left);
+                    y += 1;
+                    if let Some(id) = id {
+                        let (_x, _) = write_string_to_grid(
+                            "List-ID: ",
+                            grid,
+                            Color::Byte(33),
+                            Color::Default,
+                            (set_y(upper_left, y), bottom_right),
+                            false,
+                        );
+                        let (_x, _) = write_string_to_grid(
+                            id,
+                            grid,
+                            Color::Default,
+                            Color::Default,
+                            ((_x, y), bottom_right),
+                            false,
+                        );
+                        x = _x;
+                    }
+                    if archive.is_some() || post.is_some() || unsubscribe.is_some() {
+                        let (_x, _) = write_string_to_grid(
+                            " Available actions: [ ",
+                            grid,
+                            Color::Byte(33),
+                            Color::Default,
+                            ((x, y), bottom_right),
+                            false,
+                        );
+                        x = _x;
+                    }
+                    if archive.is_some() {
+                        let (_x, _) = write_string_to_grid(
+                            "list-archive, ",
+                            grid,
+                            Color::Default,
+                            Color::Default,
+                            ((x, y), bottom_right),
+                            false,
+                        );
+                        x = _x;
+                    }
+                    if post.is_some() {
+                        let (_x, _) = write_string_to_grid(
+                            "list-post, ",
+                            grid,
+                            Color::Default,
+                            Color::Default,
+                            ((x, y), bottom_right),
+                            false,
+                        );
+                        x = _x;
+                    }
+                    if unsubscribe.is_some() {
+                        let (_x, _) = write_string_to_grid(
+                            "list-unsubscribe, ",
+                            grid,
+                            Color::Default,
+                            Color::Default,
+                            ((x, y), bottom_right),
+                            false,
+                        );
+                        x = _x;
+                    }
+                    if archive.is_some() || post.is_some() || unsubscribe.is_some() {
+                        grid[(x - 2, y)].set_ch(' ');
+                        grid[(x - 1, y)].set_fg(Color::Byte(33));
+                        grid[(x - 1, y)].set_bg(Color::Default);
+                        grid[(x - 1, y)].set_ch(']');
+                    }
+                    for x in x..=get_x(bottom_right) {
+                        grid[(x, y)].set_ch(' ');
+                        grid[(x, y)].set_bg(Color::Default);
+                        grid[(x, y)].set_fg(Color::Default);
+                    }
+                }
+
                 clear_area(grid, (set_y(upper_left, y + 1), set_y(bottom_right, y + 1)));
                 context
                     .dirty_areas
@@ -743,6 +829,95 @@ impl Component for MailView {
             }
             UIEvent::EnvelopeRename(old_hash, new_hash) if self.coordinates.2 == old_hash => {
                 self.coordinates.2 = new_hash;
+            }
+            UIEvent::Action(MailingListAction(ref e)) => {
+                let unsafe_context = context as *mut Context;
+                let account = &context.accounts[self.coordinates.0];
+                if !account.contains_key(self.coordinates.2) {
+                    /* The envelope has been renamed or removed, so wait for the appropriate event to
+                     * arrive */
+                    return true;
+                }
+                let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                if let Some(actions) = list_management::detect(envelope) {
+                    match e {
+                        MailingListAction::ListPost if actions.post.is_some() => {
+                            /* open composer */
+                            let mut draft = Draft::default();
+                            draft.set_header("To", actions.post.unwrap().to_string());
+                            context.replies.push_back(UIEvent::Action(Tab(NewDraft(
+                                self.coordinates.0,
+                                Some(draft),
+                            ))));
+                            return true;
+                        }
+                        MailingListAction::ListUnsubscribe if actions.unsubscribe.is_some() => {
+                            /* autosend or open unsubscribe option*/
+                            let unsubscribe = actions.unsubscribe.unwrap();
+                            for option in unsubscribe {
+                                /* TODO: Ask for confirmation before proceding with an action */
+                                match option {
+                                    list_management::UnsubscribeOption::Email(email) => {
+                                        if let Ok(mailto) = Mailto::try_from(email) {
+                                            let draft: Draft = mailto.into();
+                                            if super::compose::send_draft(
+                                                /* FIXME: refactor to avoid unsafe.
+                                                 *
+                                                 * actions contains byte slices from the envelope's
+                                                 * headers send_draft only needs a mut ref for
+                                                 * context to push back replies and save the sent
+                                                 * message */
+                                                unsafe { &mut *(unsafe_context) },
+                                                self.coordinates.0,
+                                                draft,
+                                            ) {
+                                                context.replies.push_back(UIEvent::Notification(
+                                                    Some("Sent unsubscribe email.".into()),
+                                                    "Sent unsubscribe email".to_string(),
+                                                ));
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    list_management::UnsubscribeOption::Url(url) => {
+                                        if let Err(e) = Command::new("xdg-open")
+                                            .arg(String::from_utf8_lossy(url).into_owned())
+                                            .stdin(Stdio::piped())
+                                            .stdout(Stdio::piped())
+                                            .spawn()
+                                        {
+                                            context.replies.push_back(UIEvent::StatusEvent(
+                                                StatusEvent::DisplayMessage(format!(
+                                                    "Couldn't launch xdg-open: {}",
+                                                    e
+                                                )),
+                                            ));
+                                        }
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                        MailingListAction::ListArchive if actions.archive.is_some() => {
+                            /* open archive url with xdg-open */
+                            if let Err(e) = Command::new("xdg-open")
+                                .arg(actions.archive.unwrap())
+                                .stdin(Stdio::piped())
+                                .stdout(Stdio::piped())
+                                .spawn()
+                            {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(format!(
+                                        "Couldn't launch xdg-open: {}",
+                                        e
+                                    )),
+                                ));
+                            }
+                            return true;
+                        }
+                        _ => { /* error print message to user */ }
+                    }
+                }
             }
             _ => {
                 return false;

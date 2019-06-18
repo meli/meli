@@ -1247,8 +1247,12 @@ impl Component for Tabbed {
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Action(Tab(NewDraft(account_idx))) => {
-                self.add_component(Box::new(Composer::new(account_idx)));
+            UIEvent::Action(Tab(NewDraft(account_idx, ref draft))) => {
+                let mut composer = Composer::new(account_idx);
+                if let Some(draft) = draft {
+                    composer.set_draft(draft.clone());
+                }
+                self.add_component(Box::new(composer));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
                 return true;
