@@ -699,7 +699,6 @@ impl Component for StatusBar {
                 );
                 /* don't autocomplete for less than 3 characters */
                 if self.ex_buffer.as_str().split_graphemes().len() <= 2 {
-                    self.container.set_dirty();
                     return;
                 }
                 let suggestions: Vec<String> = self
@@ -713,8 +712,10 @@ impl Component for StatusBar {
                         }
                     })
                     .collect();
-                if suggestions.is_empty() {
-                    /* redraw self.container because we might have got ridden of an autocomplete
+                if suggestions.is_empty() && !self.auto_complete.suggestions().is_empty() {
+                    self.auto_complete.set_suggestions(suggestions);
+                    self.auto_complete.set_cursor(0);
+                    /* redraw self.container because we have got ridden of an autocomplete
                      * box, and it must be drawn over */
                     self.container.set_dirty();
                     return;

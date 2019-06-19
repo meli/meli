@@ -123,6 +123,7 @@ impl Component for Listing {
                     grid[(mid, i)].set_bg(Color::Default);
                 }
             }
+            self.dirty = false;
             context
                 .dirty_areas
                 .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
