@@ -1028,6 +1028,25 @@ impl Threads {
             self.rebuild_thread(reply_to_id, envelopes);
             true
         } else {
+            let new_id = ThreadHash::new();
+            self.thread_nodes.insert(
+                new_id,
+                ThreadNode {
+                    message: Some(env_hash),
+                    parent: None,
+                    date: envelopes[&env_hash].date(),
+                    ..ThreadNode::new(new_id)
+                },
+            );
+            self.message_ids
+                .insert(envelopes[&env_hash].message_id().raw().to_vec(), new_id);
+            self.message_ids_set
+                .insert(envelopes[&env_hash].message_id().raw().to_vec().to_vec());
+            self.missing_message_ids
+                .remove(envelopes[&env_hash].message_id().raw());
+            envelopes.get_mut(&env_hash).unwrap().set_thread(new_id);
+            self.hash_set.insert(env_hash);
+            self.rebuild_thread(new_id, envelopes);
             false
         }
         /*
