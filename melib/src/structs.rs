@@ -1,10 +1,11 @@
 use std::iter::{Extend, FromIterator};
 use std::ops::Index;
 
+const STACK_VEC_CAPACITY: usize = 32;
 #[derive(Debug, Default)]
 pub struct StackVec<T: Default + Copy + std::fmt::Debug> {
     len: usize,
-    array: [T; 32],
+    array: [T; STACK_VEC_CAPACITY],
     heap_vec: Vec<T>,
 }
 
@@ -12,19 +13,19 @@ impl<T: Default + Copy + std::fmt::Debug> StackVec<T> {
     pub fn new() -> Self {
         StackVec {
             len: 0,
-            array: [T::default(); 32],
+            array: [T::default(); STACK_VEC_CAPACITY],
             heap_vec: Vec::new(),
         }
     }
     pub fn push(&mut self, ind: T) {
         if self.len == self.array.len() {
             if self.heap_vec.is_empty() {
-                self.heap_vec.reserve(32);
-                for _ in 0..8 {
+                self.heap_vec.reserve(STACK_VEC_CAPACITY);
+                for _ in 0..STACK_VEC_CAPACITY {
                     self.heap_vec.push(T::default());
                 }
             }
-            self.heap_vec[0..8].copy_from_slice(&self.array);
+            self.heap_vec[0..STACK_VEC_CAPACITY].copy_from_slice(&self.array);
             self.heap_vec.push(ind);
         } else if self.len > self.array.len() {
             self.heap_vec.push(ind);
@@ -164,5 +165,30 @@ impl<T: Default + Copy + std::fmt::Debug> std::iter::DoubleEndedIterator for Sta
         } else {
             self.0.pop()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stackvec() {
+        let mut stack = StackVec::from_iter(0..4 * STACK_VEC_CAPACITY);
+        let mut ctr = 0;
+        assert!(stack.iter().all(|&x| {
+            let ret = (x == ctr);
+            ctr += 1;
+            ret
+        }));
+        for _ in 0..(3 * STACK_VEC_CAPACITY) + 1 {
+            stack.pop();
+        }
+        ctr = 0;
+        assert!(stack.iter().all(|&x| {
+            let ret = (x == ctr);
+            ctr += 1;
+            ret
+        }));
     }
 }
