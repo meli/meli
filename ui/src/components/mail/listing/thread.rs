@@ -59,6 +59,112 @@ impl ListingTrait for ThreadListing {
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
     }
+    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
+        {
+            self.refresh_mailbox(context);
+        }
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        if self.length == 0 {
+            clear_area(grid, area);
+            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, 0)));
+            context.dirty_areas.push_back(area);
+            return;
+        }
+        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+        let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
+        let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
+
+        let top_idx = page_no * rows;
+        if !self.initialised {
+            self.initialised = false;
+            copy_area(
+                grid,
+                &self.content,
+                area,
+                ((0, top_idx), (MAX_COLS - 1, self.length)),
+            );
+            self.highlight_line(
+                grid,
+                (
+                    set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+                    set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+                ),
+                self.cursor_pos.2,
+                context,
+            );
+            context.dirty_areas.push_back(area);
+        }
+        /* If cursor position has changed, remove the highlight from the previous position and
+         * apply it in the new one. */
+        if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
+            let old_cursor_pos = self.cursor_pos;
+            self.cursor_pos = self.new_cursor_pos;
+            for idx in &[old_cursor_pos.2, self.new_cursor_pos.2] {
+                if *idx >= self.length {
+                    continue; //bounds check
+                }
+                let new_area = (
+                    set_y(upper_left, get_y(upper_left) + (*idx % rows)),
+                    set_y(bottom_right, get_y(upper_left) + (*idx % rows)),
+                );
+                self.highlight_line(grid, new_area, *idx, context);
+                context.dirty_areas.push_back(new_area);
+            }
+            return;
+        } else if self.cursor_pos != self.new_cursor_pos {
+            self.cursor_pos = self.new_cursor_pos;
+        }
+
+        /* Page_no has changed, so draw new page */
+        copy_area(
+            grid,
+            &self.content,
+            area,
+            ((0, top_idx), (MAX_COLS - 1, self.length)),
+        );
+        self.highlight_line(
+            grid,
+            (
+                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+            ),
+            self.cursor_pos.2,
+            context,
+        );
+        context.dirty_areas.push_back(area);
+    }
+
+    fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
+        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+            .as_ref()
+            .unwrap();
+        if mailbox.is_empty() || mailbox.len() <= idx {
+            return;
+        }
+
+        if self.locations[idx] != 0 {
+            let envelope: &Envelope =
+                &context.accounts[self.cursor_pos.0].get_env(&self.locations[idx]);
+
+            let fg_color = if !envelope.is_seen() {
+                Color::Byte(0)
+            } else {
+                Color::Default
+            };
+            let bg_color = if self.cursor_pos.2 == idx {
+                Color::Byte(246)
+            } else if !envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            };
+            change_colors(grid, area, fg_color, bg_color);
+        }
+    }
 }
 
 impl Default for ThreadListing {
@@ -251,114 +357,6 @@ impl ThreadListing {
                 bg_color,
             );
         }
-    }
-
-    fn highlight_line(&self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap();
-        if mailbox.is_empty() || mailbox.len() <= idx {
-            return;
-        }
-
-        if self.locations[idx] != 0 {
-            let envelope: &Envelope =
-                &context.accounts[self.cursor_pos.0].get_env(&self.locations[idx]);
-
-            let fg_color = if !envelope.is_seen() {
-                Color::Byte(0)
-            } else {
-                Color::Default
-            };
-            let bg_color = if self.cursor_pos.2 == idx {
-                Color::Byte(246)
-            } else if !envelope.is_seen() {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(236)
-            } else {
-                Color::Default
-            };
-            change_colors(grid, area, fg_color, bg_color);
-        }
-    }
-
-    /// Draw the list of `Envelope`s.
-    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
-        {
-            self.refresh_mailbox(context);
-        }
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-        if self.length == 0 {
-            clear_area(grid, area);
-            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, 0)));
-            context.dirty_areas.push_back(area);
-            return;
-        }
-        let rows = get_y(bottom_right) - get_y(upper_left) + 1;
-        let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
-        let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
-
-        let top_idx = page_no * rows;
-        if !self.initialised {
-            self.initialised = false;
-            copy_area(
-                grid,
-                &self.content,
-                area,
-                ((0, top_idx), (MAX_COLS - 1, self.length)),
-            );
-            self.highlight_line(
-                grid,
-                (
-                    set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                    set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                ),
-                self.cursor_pos.2,
-                context,
-            );
-            context.dirty_areas.push_back(area);
-        }
-        /* If cursor position has changed, remove the highlight from the previous position and
-         * apply it in the new one. */
-        if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
-            let old_cursor_pos = self.cursor_pos;
-            self.cursor_pos = self.new_cursor_pos;
-            for idx in &[old_cursor_pos.2, self.new_cursor_pos.2] {
-                if *idx >= self.length {
-                    continue; //bounds check
-                }
-                let new_area = (
-                    set_y(upper_left, get_y(upper_left) + (*idx % rows)),
-                    set_y(bottom_right, get_y(upper_left) + (*idx % rows)),
-                );
-                self.highlight_line(grid, new_area, *idx, context);
-                context.dirty_areas.push_back(new_area);
-            }
-            return;
-        } else if self.cursor_pos != self.new_cursor_pos {
-            self.cursor_pos = self.new_cursor_pos;
-        }
-
-        /* Page_no has changed, so draw new page */
-        copy_area(
-            grid,
-            &self.content,
-            area,
-            ((0, top_idx), (MAX_COLS - 1, self.length)),
-        );
-        self.highlight_line(
-            grid,
-            (
-                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
-            ),
-            self.cursor_pos.2,
-            context,
-        );
-        context.dirty_areas.push_back(area);
     }
 
     fn make_thread_entry(

@@ -30,6 +30,12 @@ pub use self::thread::*;
 mod plain;
 pub use self::plain::*;
 
+#[derive(Debug, Default, Clone)]
+pub(in crate::listing) struct DataColumns {
+    columns: [CellBuffer; 12],
+    widths: [usize; 12], // widths of columns calculated in first draw and after size changes
+}
+
 #[derive(Debug)]
 struct AccountMenuEntry {
     name: String,
@@ -40,6 +46,8 @@ struct AccountMenuEntry {
 trait ListingTrait {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>);
     fn set_coordinates(&mut self, _: (usize, usize, Option<EnvelopeHash>));
+    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
+    fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
 }
 
 #[derive(Debug)]
@@ -63,6 +71,20 @@ impl ListingTrait for ListingComponent {
             Compact(ref mut l) => l.set_coordinates(c),
             Plain(ref mut l) => l.set_coordinates(c),
             Threaded(ref mut l) => l.set_coordinates(c),
+        }
+    }
+    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        match self {
+            Compact(ref mut l) => l.draw_list(grid, area, context),
+            Plain(ref mut l) => l.draw_list(grid, area, context),
+            Threaded(ref mut l) => l.draw_list(grid, area, context),
+        }
+    }
+    fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
+        match self {
+            Compact(ref mut l) => l.highlight_line(grid, area, idx, context),
+            Plain(ref mut l) => l.highlight_line(grid, area, idx, context),
+            Threaded(ref mut l) => l.highlight_line(grid, area, idx, context),
         }
     }
 }
@@ -123,11 +145,11 @@ impl Component for Listing {
                     grid[(mid, i)].set_bg(Color::Default);
                 }
             }
-            self.dirty = false;
             context
                 .dirty_areas
                 .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
         }
+        self.dirty = false;
         if right_component_width == total_cols {
             match self.component {
                 Compact(ref mut l) => l.draw(grid, area, context),
