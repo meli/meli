@@ -82,6 +82,10 @@ pub struct CompactListing {
     order: FnvHashMap<EnvelopeHash, usize>,
     /// Cache current view.
     data_columns: DataColumns,
+
+    filter_term: String,
+    filtered_selection: Vec<EnvelopeHash>,
+    filtered_order: FnvHashMap<EnvelopeHash, usize>,
     /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.view` exists or not.
@@ -109,16 +113,20 @@ impl ListingTrait for CompactListing {
             let account = &context.accounts[self.cursor_pos.0];
             let mailbox = account[self.cursor_pos.1].as_ref().unwrap();
             let threads = &account.collection.threads[&mailbox.folder.hash()];
-            let thread_node = threads.root_set(idx);
-            let thread_node = &threads.thread_nodes()[&thread_node];
-            let i = if let Some(i) = thread_node.message() {
-                i
-            } else {
-                let mut iter_ptr = thread_node.children()[0];
-                while threads.thread_nodes()[&iter_ptr].message().is_none() {
-                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+            let i = if self.filtered_selection.is_empty() {
+                let thread_node = threads.root_set(idx);
+                let thread_node = &threads.thread_nodes()[&thread_node];
+                if let Some(i) = thread_node.message() {
+                    i
+                } else {
+                    let mut iter_ptr = thread_node.children()[0];
+                    while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                        iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+                    }
+                    threads.thread_nodes()[&iter_ptr].message().unwrap()
                 }
-                threads.thread_nodes()[&iter_ptr].message().unwrap()
+            } else {
+                self.filtered_selection[idx]
             };
 
             let root_envelope: &Envelope = &account.get_env(&i);
@@ -210,7 +218,7 @@ impl ListingTrait for CompactListing {
                 grid,
                 &self.data_columns.columns[0],
                 area,
-                ((0, 0), (MAX_COLS - 1, self.length)),
+                ((0, 0), pos_dec(self.data_columns.columns[0].size(), (1, 1))),
             );
             context.dirty_areas.push_back(area);
             return;
@@ -361,22 +369,17 @@ impl ListingTrait for CompactListing {
                 bg_color,
             );
         }
-        let temp_copy_because_of_nll = self.cursor_pos.2; // FIXME
+
         self.highlight_line(
             grid,
             (
-                set_y(
-                    upper_left,
-                    get_y(upper_left) + (temp_copy_because_of_nll % rows),
-                ),
-                set_y(
-                    bottom_right,
-                    get_y(upper_left) + (temp_copy_because_of_nll % rows),
-                ),
+                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
             ),
-            temp_copy_because_of_nll,
+            self.cursor_pos.2,
             context,
         );
+
         if top_idx + rows > self.length {
             clear_area(
                 grid,
@@ -387,6 +390,52 @@ impl ListingTrait for CompactListing {
             );
         }
         context.dirty_areas.push_back(area);
+    }
+    fn filter(&mut self, filter_term: &str, context: &Context) {
+        self.filtered_order.clear();
+        self.filtered_selection.clear();
+        self.filter_term.clear();
+
+        for (i, h) in self.order.keys().enumerate() {
+            let account = &context.accounts[self.cursor_pos.0];
+            let envelope = &account.collection[h];
+            if envelope.subject().contains(&filter_term) {
+                self.filtered_selection.push(*h);
+                self.filtered_order.insert(*h, i);
+                continue;
+            }
+            if envelope.field_from_to_string().contains(&filter_term) {
+                self.filtered_selection.push(*h);
+                self.filtered_order.insert(*h, i);
+                continue;
+            }
+            let op = account.operation(*h);
+            let body = envelope.body(op);
+            let decoded = decode_rec(&body, None);
+            let body_text = String::from_utf8_lossy(&decoded);
+            if body_text.contains(&filter_term) {
+                self.filtered_selection.push(*h);
+                self.filtered_order.insert(*h, i);
+            }
+        }
+        if !self.filtered_selection.is_empty() {
+            self.filter_term = filter_term.to_string();
+            self.cursor_pos.2 = std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+            self.length = self.filtered_selection.len();
+        } else {
+            self.length = 0;
+            let message = format!("No results for `{}`.", filter_term);
+            self.data_columns.columns[0] =
+                CellBuffer::new(message.len(), self.length + 1, Cell::with_char(' '));
+            write_string_to_grid(
+                &message,
+                &mut self.data_columns.columns[0],
+                Color::Default,
+                Color::Default,
+                ((0, 0), (MAX_COLS - 1, 0)),
+                false,
+            );
+        }
     }
 }
 
@@ -412,6 +461,9 @@ impl CompactListing {
             sort: (Default::default(), Default::default()),
             subsort: (SortField::Date, SortOrder::Desc),
             order: FnvHashMap::default(),
+            filter_term: String::new(),
+            filtered_selection: Vec::new(),
+            filtered_order: FnvHashMap::default(),
             row_updates: StackVec::new(),
             data_columns: DataColumns::default(),
             dirty: true,
@@ -689,8 +741,8 @@ impl CompactListing {
 
             self.order.insert(i, idx);
         }
-        let message = format!("Folder `{}` is empty.", mailbox.folder.name());
         if self.length == 0 {
+            let message = format!("Folder `{}` is empty.", mailbox.folder.name());
             self.data_columns.columns[0] =
                 CellBuffer::new(message.len(), self.length + 1, Cell::with_char(' '));
             write_string_to_grid(
@@ -719,12 +771,168 @@ impl CompactListing {
             _ => envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),
         }
     }
+    fn draw_filtered_selection(&mut self, context: &mut Context) {
+        if self.filtered_selection.is_empty() {
+            return;
+        }
+        let account = &context.accounts[self.cursor_pos.0];
+        let mailbox = account[self.cursor_pos.1].as_ref().unwrap();
+
+        let threads = &account.collection.threads[&mailbox.folder.hash()];
+        self.length = 0;
+        let mut rows = Vec::with_capacity(1024);
+        let mut min_width = (0, 0, 0, 0, 0);
+
+        for (idx, envelope_hash) in self.filtered_selection.iter().enumerate() {
+            self.length += 1;
+            let envelope: &Envelope = &context.accounts[self.cursor_pos.0].get_env(&envelope_hash);
+            let t_idx = envelope.thread();
+            let strings = CompactListing::make_entry_string(
+                envelope,
+                threads[&envelope.thread()].len(),
+                idx,
+                threads.is_snoozed(t_idx),
+            );
+            min_width.0 = cmp::max(min_width.0, strings.0.grapheme_width()); /* index */
+            min_width.1 = cmp::max(min_width.1, strings.1.grapheme_width()); /* date */
+            min_width.2 = cmp::max(min_width.2, strings.2.grapheme_width()); /* from */
+            min_width.3 = cmp::max(min_width.3, strings.3.grapheme_width()); /* flags */
+            min_width.4 = cmp::max(min_width.4, strings.4.grapheme_width()); /* subject */
+            rows.push(strings);
+        }
+
+        /* index column */
+        self.data_columns.columns[0] =
+            CellBuffer::new(min_width.0, rows.len(), Cell::with_char(' '));
+        /* date column */
+        self.data_columns.columns[1] =
+            CellBuffer::new(min_width.1, rows.len(), Cell::with_char(' '));
+        /* from column */
+        self.data_columns.columns[2] =
+            CellBuffer::new(min_width.2, rows.len(), Cell::with_char(' '));
+        /* flags column */
+        self.data_columns.columns[3] =
+            CellBuffer::new(min_width.3, rows.len(), Cell::with_char(' '));
+        /* subject column */
+        self.data_columns.columns[4] =
+            CellBuffer::new(min_width.4, rows.len(), Cell::with_char(' '));
+
+        for ((idx, envelope_hash), strings) in self.filtered_selection.iter().enumerate().zip(rows)
+        {
+            let envelope: &Envelope = &context.accounts[self.cursor_pos.0].get_env(&envelope_hash);
+            let fg_color = if !envelope.is_seen() {
+                Color::Byte(0)
+            } else {
+                Color::Default
+            };
+            let bg_color = if !envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            };
+            let (x, _) = write_string_to_grid(
+                &strings.0,
+                &mut self.data_columns.columns[0],
+                fg_color,
+                bg_color,
+                ((0, idx), (min_width.0, idx)),
+                false,
+            );
+            for x in x..min_width.0 {
+                self.data_columns.columns[0][(x, idx)].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.1,
+                &mut self.data_columns.columns[1],
+                fg_color,
+                bg_color,
+                ((0, idx), (min_width.1, idx)),
+                false,
+            );
+            for x in x..min_width.1 {
+                self.data_columns.columns[1][(x, idx)].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.2,
+                &mut self.data_columns.columns[2],
+                fg_color,
+                bg_color,
+                ((0, idx), (min_width.2, idx)),
+                false,
+            );
+            for x in x..min_width.2 {
+                self.data_columns.columns[2][(x, idx)].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.3,
+                &mut self.data_columns.columns[3],
+                fg_color,
+                bg_color,
+                ((0, idx), (min_width.3, idx)),
+                false,
+            );
+            for x in x..min_width.3 {
+                self.data_columns.columns[3][(x, idx)].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.4,
+                &mut self.data_columns.columns[4],
+                fg_color,
+                bg_color,
+                ((0, idx), (min_width.4, idx)),
+                false,
+            );
+            for x in x..min_width.4 {
+                self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
+            }
+            match (
+                threads.is_snoozed(envelope.thread()),
+                &context.accounts[self.cursor_pos.0]
+                    .get_env(&envelope_hash)
+                    .has_attachments(),
+            ) {
+                (true, true) => {
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
+                    self.data_columns.columns[3][(1, idx)].set_fg(Color::Byte(103));
+                }
+                (true, false) => {
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
+                }
+                (false, true) => {
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
+                }
+                (false, false) => {}
+            }
+        }
+    }
 }
 
 impl Component for CompactListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if !self.unfocused {
             if !self.is_dirty() {
+                return;
+            }
+            if !self.filtered_selection.is_empty() {
+                self.draw_filtered_selection(context);
+                let (upper_left, bottom_right) = area;
+                let (x, y) = write_string_to_grid(
+                    &format!("Filter (Press ESC to exit): {}", self.filter_term),
+                    grid,
+                    Color::Default,
+                    Color::Default,
+                    area,
+                    true,
+                );
+                clear_area(grid, ((x, y), set_y(bottom_right, y)));
+                context
+                    .dirty_areas
+                    .push_back((upper_left, set_y(bottom_right, y + 1)));
+
+                self.draw_list(grid, (set_y(upper_left, y + 1), bottom_right), context);
+                self.dirty = false;
                 return;
             }
             if !self.row_updates.is_empty() {
@@ -784,7 +992,30 @@ impl Component for CompactListing {
                 return true;
             }
             UIEvent::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
-                self.view = ThreadView::new(self.cursor_pos, None, context);
+                if self.filtered_selection.is_empty() {
+                    self.view = ThreadView::new(self.cursor_pos, None, context);
+                } else {
+                    let mut temp = self.cursor_pos;
+                    let account = &mut context.accounts[self.cursor_pos.0];
+                    let thread_hash = {
+                        account
+                            .get_env(&self.filtered_selection[self.cursor_pos.2])
+                            .thread()
+                            .clone()
+                    };
+                    let folder_hash = account[self.cursor_pos.1]
+                        .as_ref()
+                        .map(|m| m.folder.hash())
+                        .unwrap();
+                    let threads = &account.collection.threads[&folder_hash];
+                    let root_thread_index = threads.root_iter().position(|t| t == thread_hash);
+                    if let Some(pos) = root_thread_index {
+                        temp.2 = pos;
+                        self.view = ThreadView::new(temp, Some(thread_hash), context);
+                    } else {
+                        return true;
+                    }
+                }
                 self.unfocused = true;
                 self.dirty = true;
                 return true;
@@ -837,6 +1068,13 @@ impl Component for CompactListing {
                         row,
                         context,
                     );
+                    for h in self.filtered_selection.iter_mut() {
+                        if *h == *old_hash {
+                            *h = *new_hash;
+                            break;
+                        }
+                    }
+
                     self.row_updates.push(*new_hash);
                     self.dirty = true;
                 } else {
@@ -860,6 +1098,7 @@ impl Component for CompactListing {
                     {
                         return true;
                     }
+                    self.filtered_selection.clear();
                     self.new_cursor_pos.1 = *idx;
                     self.refresh_mailbox(context);
                     return true;
@@ -902,8 +1141,19 @@ impl Component for CompactListing {
                     self.refresh_mailbox(context);
                     return true;
                 }
+                Action::Listing(Filter(ref filter_term)) => {
+                    self.filter(filter_term, context);
+                    self.dirty = true;
+                }
                 _ => {}
             },
+            UIEvent::Input(Key::Esc) => {
+                self.filter_term.clear();
+                self.filtered_selection.clear();
+                self.filtered_order.clear();
+                self.refresh_mailbox(context);
+                return true;
+            }
             _ => {}
         }
         false

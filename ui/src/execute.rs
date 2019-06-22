@@ -97,6 +97,15 @@ named!(
 );
 
 named!(
+    filter<Action>,
+    do_parse!(
+        ws!(tag!("filter"))
+            >> string: map_res!(call!(not_line_ending), std::str::from_utf8)
+            >> (Listing(Filter(String::from(string))))
+    )
+);
+
+named!(
     mailinglist<Action>,
     alt_complete!(
         map!(ws!(tag!("list-post")), |_| MailingListAction(ListPost))
@@ -110,5 +119,5 @@ named!(
 );
 
 named!(pub parse_command<Action>,
-    alt_complete!( goto | toggle | sort | subsort | close | toggle_thread_snooze | mailinglist)
+    alt_complete!( goto | toggle | sort | subsort | close | toggle_thread_snooze | mailinglist |filter)
         );

@@ -36,6 +36,7 @@ pub enum ListingAction {
     SetPlain,
     SetThreaded,
     SetCompact,
+    Filter(String),
 }
 
 #[derive(Debug)]

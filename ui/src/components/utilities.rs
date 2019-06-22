@@ -714,7 +714,6 @@ impl Component for StatusBar {
                     .collect();
                 if suggestions.is_empty() && !self.auto_complete.suggestions().is_empty() {
                     self.auto_complete.set_suggestions(suggestions);
-                    self.auto_complete.set_cursor(0);
                     /* redraw self.container because we have got ridden of an autocomplete
                      * box, and it must be drawn over */
                     self.container.set_dirty();

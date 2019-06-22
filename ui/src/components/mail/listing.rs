@@ -42,12 +42,19 @@ struct AccountMenuEntry {
     // Index in the config account vector.
     index: usize,
 }
+#[derive(Debug, Default, Clone)]
+pub(in crate::listing) struct CachedSearchStrings {
+    subject: String,
+    from: String,
+    body: String,
+}
 
 trait ListingTrait {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>);
     fn set_coordinates(&mut self, _: (usize, usize, Option<EnvelopeHash>));
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
+    fn filter(&mut self, filter_term: &str, context: &Context) {}
 }
 
 #[derive(Debug)]
