@@ -1145,6 +1145,63 @@ impl Component for CompactListing {
                     self.filter(filter_term, context);
                     self.dirty = true;
                 }
+                Action::Listing(a @ SetRead)
+                | Action::Listing(a @ SetUnread)
+                | Action::Listing(a @ Delete) => {
+                    let account = &mut context.accounts[self.cursor_pos.0];
+                    let folder_hash = account[self.cursor_pos.1]
+                        .as_ref()
+                        .map(|m| m.folder.hash())
+                        .unwrap();
+                    let threads = &account.collection.threads[&folder_hash];
+                    let i = if self.filtered_selection.is_empty() {
+                        let thread_node = threads.root_set(self.cursor_pos.2);
+                        let thread_node = &threads.thread_nodes()[&thread_node];
+                        if let Some(i) = thread_node.message() {
+                            i
+                        } else {
+                            let mut iter_ptr = thread_node.children()[0];
+                            while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                                iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+                            }
+                            threads.thread_nodes()[&iter_ptr].message().unwrap()
+                        }
+                    } else {
+                        self.filtered_selection[self.cursor_pos.2]
+                    };
+                    if !account.contains_key(i) {
+                        /* The envelope has been renamed or removed, so wait for the appropriate event to
+                         * arrive */
+                        return true;
+                    }
+                    match a {
+                        SetRead => {
+                            let (hash, is_seen) = {
+                                let envelope: &Envelope = &account.get_env(&i);
+                                (envelope.hash(), envelope.is_seen())
+                            };
+                            if !is_seen {
+                                let op = account.operation(hash);
+                                let envelope: &mut Envelope = &mut account.get_env_mut(&i);
+                                envelope.set_seen(op).unwrap();
+                            }
+                        }
+                        SetUnread => {
+                            let (hash, is_seen) = {
+                                let envelope: &Envelope = &account.get_env(&i);
+                                (envelope.hash(), envelope.is_seen())
+                            };
+                            if is_seen {
+                                let op = account.operation(hash);
+                                let envelope: &mut Envelope = &mut account.get_env_mut(&i);
+                                envelope.set_unseen(op).unwrap();
+                            }
+                        }
+                        Delete => { /* do nothing */ }
+                        _ => unreachable!(),
+                    }
+                }
+
                 _ => {}
             },
             UIEvent::Input(Key::Esc) => {

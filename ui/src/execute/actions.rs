@@ -37,6 +37,9 @@ pub enum ListingAction {
     SetThreaded,
     SetCompact,
     Filter(String),
+    SetRead,
+    SetUnread,
+    Delete,
 }
 
 #[derive(Debug)]

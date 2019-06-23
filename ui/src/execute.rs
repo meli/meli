@@ -90,6 +90,10 @@ named!(
     toggle<Action>,
     preceded!(tag!("set "), alt_complete!(threaded | plain | compact))
 );
+named!(
+    listing_action<Action>,
+    alt_complete!(toggle | envelope_action | filter | toggle_thread_snooze)
+);
 
 named!(
     toggle_thread_snooze<Action>,
@@ -118,6 +122,19 @@ named!(
     )
 );
 
+named!(
+    envelope_action<Action>,
+    alt_complete!(
+        preceded!(
+            ws!(tag!("set")),
+            alt_complete!(
+                map!(ws!(tag!("read")), |_| Listing(SetRead))
+                    | map!(ws!(tag!("unread")), |_| Listing(SetUnread))
+            )
+        ) | map!(ws!(tag!("delete")), |_| Listing(Delete))
+    )
+);
+
 named!(pub parse_command<Action>,
-    alt_complete!( goto | toggle | sort | subsort | close | toggle_thread_snooze | mailinglist |filter)
+    alt_complete!( goto | listing_action | sort | subsort | close | mailinglist)
         );

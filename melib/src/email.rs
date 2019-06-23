@@ -771,14 +771,17 @@ impl Envelope {
         self.timestamp = new_val.timestamp() as UnixTimestamp;
     }
     pub fn set_flag(&mut self, f: Flag, mut operation: Box<BackendOp>) -> Result<()> {
+        self.flags.toggle(f);
         operation.set_flag(self, f)?;
-        self.flags |= f;
         Ok(())
     }
     pub fn flags(&self) -> Flag {
         self.flags
     }
     pub fn set_seen(&mut self, operation: Box<BackendOp>) -> Result<()> {
+        self.set_flag(Flag::SEEN, operation)
+    }
+    pub fn set_unseen(&mut self, operation: Box<BackendOp>) -> Result<()> {
         self.set_flag(Flag::SEEN, operation)
     }
     pub fn is_seen(&self) -> bool {
