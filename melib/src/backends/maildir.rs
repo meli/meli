@@ -159,16 +159,16 @@ impl<'a> BackendOp for MaildirOp {
         if !(flags & Flag::TRASHED).is_empty() {
             new_name.push('T');
         }
-
-        debug!("renaming {:?} to {:?}", path, new_name);
-        fs::rename(&path, &new_name)?;
-        debug!("success in rename");
         let old_hash = envelope.hash();
         let new_name: PathBuf = new_name.into();
         let hash_index = self.hash_index.clone();
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(self.folder_hash).or_default();
         map.entry(old_hash).or_default().modified = Some(new_name.clone());
+
+        debug!("renaming {:?} to {:?}", path, new_name);
+        fs::rename(&path, &new_name)?;
+        debug!("success in rename");
         Ok(())
     }
 }
