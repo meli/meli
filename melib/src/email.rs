@@ -779,10 +779,18 @@ impl Envelope {
         self.flags
     }
     pub fn set_seen(&mut self, operation: Box<BackendOp>) -> Result<()> {
-        self.set_flag(Flag::SEEN, operation)
+        if !self.flags.contains(Flag::SEEN) {
+            self.set_flag(Flag::SEEN, operation)
+        } else {
+            Ok(())
+        }
     }
     pub fn set_unseen(&mut self, operation: Box<BackendOp>) -> Result<()> {
-        self.set_flag(Flag::SEEN, operation)
+        if self.flags.contains(Flag::SEEN) {
+            self.set_flag(Flag::SEEN, operation)
+        } else {
+            Ok(())
+        }
     }
     pub fn is_seen(&self) -> bool {
         self.flags.contains(Flag::SEEN)

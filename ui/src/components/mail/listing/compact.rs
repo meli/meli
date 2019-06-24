@@ -86,6 +86,7 @@ pub struct CompactListing {
     filter_term: String,
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: FnvHashMap<EnvelopeHash, usize>,
+    selection: FnvHashMap<EnvelopeHash, bool>,
     /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.view` exists or not.
@@ -106,29 +107,12 @@ impl ListingTrait for CompactListing {
         self.unfocused = false;
     }
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
+        if self.length == 0 {
+            return;
+        }
+        let i = self.get_envelope_under_cursor(idx, context);
+        let account = &context.accounts[self.cursor_pos.0];
         let is_seen = {
-            if self.length == 0 {
-                return;
-            }
-            let account = &context.accounts[self.cursor_pos.0];
-            let mailbox = account[self.cursor_pos.1].as_ref().unwrap();
-            let threads = &account.collection.threads[&mailbox.folder.hash()];
-            let i = if self.filtered_selection.is_empty() {
-                let thread_node = threads.root_set(idx);
-                let thread_node = &threads.thread_nodes()[&thread_node];
-                if let Some(i) = thread_node.message() {
-                    i
-                } else {
-                    let mut iter_ptr = thread_node.children()[0];
-                    while threads.thread_nodes()[&iter_ptr].message().is_none() {
-                        iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
-                    }
-                    threads.thread_nodes()[&iter_ptr].message().unwrap()
-                }
-            } else {
-                self.filtered_selection[idx]
-            };
-
             let root_envelope: &Envelope = &account.get_env(&i);
             root_envelope.is_seen()
         };
@@ -138,8 +122,12 @@ impl ListingTrait for CompactListing {
         } else {
             Color::Default
         };
-        let bg_color = if self.cursor_pos.2 == idx {
+        let bg_color = if self.cursor_pos.2 == idx && self.selection[&i] {
+            Color::Byte(246 | 210)
+        } else if self.cursor_pos.2 == idx {
             Color::Byte(246)
+        } else if self.selection[&i] {
+            Color::Byte(210)
         } else if !is_seen {
             Color::Byte(251)
         } else if idx % 2 == 0 {
@@ -370,6 +358,7 @@ impl ListingTrait for CompactListing {
             );
         }
 
+        /* TODO: highlight selected entries */
         self.highlight_line(
             grid,
             (
@@ -394,6 +383,9 @@ impl ListingTrait for CompactListing {
     fn filter(&mut self, filter_term: &str, context: &Context) {
         self.filtered_order.clear();
         self.filtered_selection.clear();
+        for v in self.selection.values_mut() {
+            *v = false;
+        }
         self.filter_term.clear();
 
         for (i, h) in self.order.keys().enumerate() {
@@ -402,11 +394,13 @@ impl ListingTrait for CompactListing {
             if envelope.subject().contains(&filter_term) {
                 self.filtered_selection.push(*h);
                 self.filtered_order.insert(*h, i);
+                self.selection.insert(*h, false);
                 continue;
             }
             if envelope.field_from_to_string().contains(&filter_term) {
                 self.filtered_selection.push(*h);
                 self.filtered_order.insert(*h, i);
+                self.selection.insert(*h, false);
                 continue;
             }
             let op = account.operation(*h);
@@ -416,6 +410,7 @@ impl ListingTrait for CompactListing {
             if body_text.contains(&filter_term) {
                 self.filtered_selection.push(*h);
                 self.filtered_order.insert(*h, i);
+                self.selection.insert(*h, false);
             }
         }
         if !self.filtered_selection.is_empty() {
@@ -464,6 +459,7 @@ impl CompactListing {
             filter_term: String::new(),
             filtered_selection: Vec::new(),
             filtered_order: FnvHashMap::default(),
+            selection: FnvHashMap::default(),
             row_updates: StackVec::new(),
             data_columns: DataColumns::default(),
             dirty: true,
@@ -570,6 +566,7 @@ impl CompactListing {
 
         let threads = &account.collection.threads[&mailbox.folder.hash()];
         self.order.clear();
+        self.selection.clear();
         self.length = 0;
         let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0, 0);
@@ -613,7 +610,14 @@ impl CompactListing {
             min_width.4 = cmp::max(min_width.4, strings.4.grapheme_width()); /* subject */
             rows.push(strings);
             self.order.insert(i, idx);
+            self.selection.insert(i, false);
         }
+        let CompactListing {
+            ref mut selection,
+            ref order,
+            ..
+        } = self;
+        selection.retain(|e, _| order.contains_key(e));
 
         /* index column */
         self.data_columns.columns[0] =
@@ -738,8 +742,6 @@ impl CompactListing {
                 }
                 (false, false) => {}
             }
-
-            self.order.insert(i, idx);
         }
         if self.length == 0 {
             let message = format!("Folder `{}` is empty.", mailbox.folder.name());
@@ -825,7 +827,9 @@ impl CompactListing {
             } else {
                 Color::Default
             };
-            let bg_color = if !envelope.is_seen() {
+            let bg_color = if self.selection[&envelope_hash] {
+                Color::Byte(210)
+            } else if !envelope.is_seen() {
                 Color::Byte(251)
             } else if idx % 2 == 0 {
                 Color::Byte(236)
@@ -905,6 +909,29 @@ impl CompactListing {
                 }
                 (false, false) => {}
             }
+        }
+    }
+    fn get_envelope_under_cursor(&self, cursor: usize, context: &Context) -> EnvelopeHash {
+        let account = &context.accounts[self.cursor_pos.0];
+        let folder_hash = account[self.cursor_pos.1]
+            .as_ref()
+            .map(|m| m.folder.hash())
+            .unwrap();
+        let threads = &account.collection.threads[&folder_hash];
+        if self.filtered_selection.is_empty() {
+            let thread_node = threads.root_set(cursor);
+            let thread_node = &threads.thread_nodes()[&thread_node];
+            if let Some(i) = thread_node.message() {
+                i
+            } else {
+                let mut iter_ptr = thread_node.children()[0];
+                while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+                }
+                threads.thread_nodes()[&iter_ptr].message().unwrap()
+            }
+        } else {
+            self.filtered_selection[self.cursor_pos.2]
         }
     }
 }
@@ -1041,6 +1068,10 @@ impl Component for CompactListing {
                 self.dirty = true;
                 return true;
             }
+            UIEvent::Input(ref key) if !self.unfocused && *key == shortcuts["select_entry"] => {
+                let env_hash = self.get_envelope_under_cursor(self.cursor_pos.2, context);
+                self.selection.entry(env_hash).and_modify(|e| *e = !*e);
+            }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if (*idxa, *idxf)
                     == (
@@ -1062,6 +1093,8 @@ impl Component for CompactListing {
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 if let Some(row) = self.order.remove(old_hash) {
                     self.order.insert(*new_hash, row);
+                    let selection_status = self.selection.remove(old_hash).unwrap();
+                    self.selection.insert(*new_hash, selection_status);
                     self.highlight_line(
                         &mut CellBuffer::default(),
                         ((0, row), (MAX_COLS - 1, row)),
@@ -1116,14 +1149,15 @@ impl Component for CompactListing {
                     return true;
                 }
                 Action::ToggleThreadSnooze => {
+                    let i = self.get_envelope_under_cursor(self.cursor_pos.2, context);
                     let account = &mut context.accounts[self.cursor_pos.0];
+                    let thread_hash = account.get_env(&i).thread();
                     let folder_hash = account[self.cursor_pos.1]
                         .as_ref()
                         .map(|m| m.folder.hash())
                         .unwrap();
                     let threads = account.collection.threads.entry(folder_hash).or_default();
-                    let thread_group =
-                        threads.thread_nodes()[&threads.root_set(self.cursor_pos.2)].thread_group();
+                    let thread_group = threads.thread_nodes()[&thread_hash].thread_group();
                     let thread_group = threads.find(thread_group);
                     /*let i = if let Some(i) = threads.thread_nodes[&thread_group].message() {
                         i
@@ -1148,65 +1182,66 @@ impl Component for CompactListing {
                 Action::Listing(a @ SetRead)
                 | Action::Listing(a @ SetUnread)
                 | Action::Listing(a @ Delete) => {
-                    let account = &mut context.accounts[self.cursor_pos.0];
-                    let folder_hash = account[self.cursor_pos.1]
-                        .as_ref()
-                        .map(|m| m.folder.hash())
-                        .unwrap();
-                    let threads = &account.collection.threads[&folder_hash];
-                    let i = if self.filtered_selection.is_empty() {
-                        let thread_node = threads.root_set(self.cursor_pos.2);
-                        let thread_node = &threads.thread_nodes()[&thread_node];
-                        if let Some(i) = thread_node.message() {
-                            i
-                        } else {
-                            let mut iter_ptr = thread_node.children()[0];
-                            while threads.thread_nodes()[&iter_ptr].message().is_none() {
-                                iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
-                            }
-                            threads.thread_nodes()[&iter_ptr].message().unwrap()
-                        }
+                    /* Iterate over selection if exists, else only over the envelope under the
+                     * cursor. Using two iterators allows chaining them which results into a Chain
+                     * type. We can't conditonally select either a slice iterator or a Map iterator
+                     * because of the type system */
+                    let is_selection_empty =
+                        self.selection.values().cloned().any(std::convert::identity);
+                    let i = [self.get_envelope_under_cursor(self.cursor_pos.2, context)];
+                    let cursor_iter;
+                    let sel_iter = if is_selection_empty {
+                        cursor_iter = None;
+                        Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
                     } else {
-                        self.filtered_selection[self.cursor_pos.2]
+                        cursor_iter = Some(i.iter());
+                        None
                     };
-                    if !account.contains_key(i) {
-                        /* The envelope has been renamed or removed, so wait for the appropriate event to
-                         * arrive */
-                        return true;
-                    }
-                    match a {
-                        SetRead => {
-                            let (hash, is_seen) = {
-                                let envelope: &Envelope = &account.get_env(&i);
-                                (envelope.hash(), envelope.is_seen())
-                            };
-                            if !is_seen {
+                    let iter = sel_iter
+                        .into_iter()
+                        .flatten()
+                        .chain(cursor_iter.into_iter().flatten());
+                    for &i in iter {
+                        let account = &mut context.accounts[self.cursor_pos.0];
+                        if !account.contains_key(i) {
+                            /* The envelope has been renamed or removed, so wait for the appropriate event to
+                             * arrive */
+                            continue;
+                        }
+                        match a {
+                            SetRead => {
+                                let hash = account.get_env(&i).hash();
                                 let op = account.operation(hash);
                                 let envelope: &mut Envelope = &mut account.get_env_mut(&i);
                                 envelope.set_seen(op).unwrap();
+                                self.row_updates.push(i);
                             }
-                        }
-                        SetUnread => {
-                            let (hash, is_seen) = {
-                                let envelope: &Envelope = &account.get_env(&i);
-                                (envelope.hash(), envelope.is_seen())
-                            };
-                            if is_seen {
+                            SetUnread => {
+                                let hash = account.get_env(&i).hash();
                                 let op = account.operation(hash);
                                 let envelope: &mut Envelope = &mut account.get_env_mut(&i);
                                 envelope.set_unseen(op).unwrap();
+                                self.row_updates.push(i);
                             }
+                            Delete => { /* do nothing */ }
+                            _ => unreachable!(),
                         }
-                        Delete => { /* do nothing */ }
-                        _ => unreachable!(),
                     }
+                    self.dirty = true;
+                    for v in self.selection.values_mut() {
+                        *v = false;
+                    }
+                    return true;
                 }
 
                 _ => {}
             },
-            UIEvent::Input(Key::Esc) => {
+            UIEvent::Input(Key::Esc) if !self.unfocused && !self.filtered_selection.is_empty() => {
                 self.filter_term.clear();
                 self.filtered_selection.clear();
+                for v in self.selection.values_mut() {
+                    *v = false;
+                }
                 self.filtered_order.clear();
                 self.refresh_mailbox(context);
                 return true;
@@ -1271,6 +1306,14 @@ impl Component for CompactListing {
                         (*key).clone()
                     } else {
                         Key::Char('i')
+                    },
+                ),
+                (
+                    "select_entry",
+                    if let Some(key) = config_map.get("select_entry") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('v')
                     },
                 ),
             ]
