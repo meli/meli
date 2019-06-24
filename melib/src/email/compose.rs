@@ -155,8 +155,12 @@ impl Draft {
         ret.headers_mut()
             .insert("In-Reply-To".into(), envelope.message_id_display().into());
         ret.header_order.push("In-Reply-To".into());
-        ret.headers_mut()
-            .insert("To".into(), envelope.field_from_to_string());
+        if let Some(reply_to) = envelope.other_headers().get("Reply-To") {
+            ret.headers_mut().insert("To".into(), reply_to.to_string());
+        } else {
+            ret.headers_mut()
+                .insert("To".into(), envelope.field_from_to_string());
+        }
         ret.headers_mut()
             .insert("Cc".into(), envelope.field_cc_to_string());
         let body = envelope.body_bytes(bytes);
