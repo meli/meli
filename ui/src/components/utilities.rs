@@ -789,12 +789,14 @@ impl Component for StatusBar {
                     self.auto_complete.cursor()
                 };
                 clear_area(grid, hist_area);
-                change_colors(
-                    grid,
-                    hist_area,
-                    Color::Byte(88),  // DarkRed,
-                    Color::Byte(174), //LightPink3
-                );
+                if hist_height > 0 {
+                    change_colors(
+                        grid,
+                        hist_area,
+                        Color::Byte(88),  // DarkRed,
+                        Color::Byte(174), //LightPink3
+                    );
+                }
                 for (y_offset, s) in self
                     .auto_complete
                     .suggestions()
@@ -900,7 +902,11 @@ impl Component for StatusBar {
                             .to_full_result()
                             .is_ok()
                         {
-                            self.cmd_history.push(self.ex_buffer.as_str().to_string());
+                            if self.cmd_history.last().map(String::as_str)
+                                != Some(self.ex_buffer.as_str())
+                            {
+                                self.cmd_history.push(self.ex_buffer.as_str().to_string());
+                            }
                         }
                         self.ex_buffer.clear();
                     }
