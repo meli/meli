@@ -275,17 +275,12 @@ impl State {
                 return;
             }
             if let Some(notification) = self.context.accounts[idxa].reload(event, hash) {
-                self.context
-                    .sender
-                    .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(hash)));
-                self.context
-                    .sender
-                    .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((idxa, hash))));
                 self.context.replies.push_back(notification);
+            } else {
+                self.context
+                    .replies
+                    .push_back(UIEvent::MailboxUpdate((idxa, hash)));
             }
-            self.context
-                .replies
-                .push_back(UIEvent::MailboxUpdate((idxa, hash)));
         } else {
             debug!(
                 "BUG: mailbox with hash {} not found in mailbox_hashes.",
