@@ -135,6 +135,26 @@ named!(
     )
 );
 
+named!(
+    setenv<Action>,
+    do_parse!(
+        ws!(tag!("setenv"))
+            >> key: map_res!(take_until1!("="), std::str::from_utf8)
+            >> ws!(tag!("="))
+            >> val: map_res!(call!(not_line_ending), std::str::from_utf8)
+            >> (SetEnv(key.to_string(), val.to_string()))
+    )
+);
+
+named!(
+    printenv<Action>,
+    do_parse!(
+        ws!(tag!("env"))
+            >> key: map_res!(call!(not_line_ending), std::str::from_utf8)
+            >> (PrintEnv(key.to_string()))
+    )
+);
+
 named!(pub parse_command<Action>,
-    alt_complete!( goto | listing_action | sort | subsort | close | mailinglist)
+    alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv)
         );

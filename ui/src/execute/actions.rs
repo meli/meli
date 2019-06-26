@@ -68,4 +68,6 @@ pub enum Action {
     Tab(TabAction),
     ToggleThreadSnooze,
     MailingListAction(MailingListAction),
+    SetEnv(String, String),
+    PrintEnv(String),
 }

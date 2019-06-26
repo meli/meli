@@ -33,6 +33,7 @@ use melib::backends::{FolderHash, NotifyFn};
 
 use chan::{Receiver, Sender};
 use fnv::FnvHashMap;
+use std::env;
 use std::io::Write;
 use std::result;
 use std::thread;
@@ -471,7 +472,21 @@ impl State {
         let result = parse_command(&cmd.as_bytes()).to_full_result();
 
         if let Ok(v) = result {
-            self.rcv_event(UIEvent::Action(v));
+            match v {
+                SetEnv(key, val) => {
+                    env::set_var(key.as_str(), val.as_str());
+                }
+                PrintEnv(key) => {
+                    self.context.replies.push_back(UIEvent::StatusEvent(
+                        StatusEvent::DisplayMessage(
+                            env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
+                        ),
+                    ));
+                }
+                v => {
+                    self.rcv_event(UIEvent::Action(v));
+                }
+            }
         }
     }
 
