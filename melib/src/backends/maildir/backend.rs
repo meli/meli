@@ -26,7 +26,7 @@ use super::{
 use super::{MaildirFolder, MaildirOp};
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
-use crate::email::{Envelope, EnvelopeHash};
+use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{MeliError, Result};
 
 extern crate notify;
@@ -464,7 +464,7 @@ impl MailBackend for MaildirType {
         Box::new(MaildirOp::new(hash, self.hash_indexes.clone(), folder_hash))
     }
 
-    fn save(&self, bytes: &[u8], folder: &str) -> Result<()> {
+    fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
         for f in self.folders.values() {
             if f.name == folder {
                 let mut path = f.fs_path.clone();
@@ -484,13 +484,34 @@ impl MailBackend for MaildirType {
                         .duration_since(std::time::SystemTime::UNIX_EPOCH)
                         .unwrap()
                         .as_millis();
-                    path.push(&format!(
+                    let mut filename = format!(
                         "{}.{:x}_{}.{}:2,",
                         timestamp,
                         u128::from_be_bytes(rand_buf),
                         std::process::id(),
                         hostn_buf.trim()
-                    ));
+                    );
+                    if let Some(flags) = flags {
+                        if !(flags & Flag::DRAFT).is_empty() {
+                            filename.push('D');
+                        }
+                        if !(flags & Flag::FLAGGED).is_empty() {
+                            filename.push('F');
+                        }
+                        if !(flags & Flag::PASSED).is_empty() {
+                            filename.push('P');
+                        }
+                        if !(flags & Flag::REPLIED).is_empty() {
+                            filename.push('R');
+                        }
+                        if !(flags & Flag::SEEN).is_empty() {
+                            filename.push('S');
+                        }
+                        if !(flags & Flag::TRASHED).is_empty() {
+                            filename.push('T');
+                        }
+                    }
+                    path.push(filename);
                 }
                 debug!("saving at {}", path.display());
                 let file = fs::File::create(path).unwrap();

@@ -12,6 +12,10 @@ path = "src/email_parse.rs"
 name = "linebreak"
 path = "src/linebreak.rs"
 
+[[bin]]
+name = "imapconn"
+path = "src/imap_conn.rs"
+
 
 [dependencies]
 melib = { path = "../melib", version = "*" }

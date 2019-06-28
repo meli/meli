@@ -119,6 +119,11 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
                 || i + 1 == input_len)
         {
             return IResult::Done(&input[(i + 1)..], &input[0..i]);
+        } else if input[i..].starts_with(b"\r\n")
+            && (((i + 2) < input_len && input[i + 2] != b' ' && input[i + 2] != b'\t')
+                || i + 2 == input_len)
+        {
+            return IResult::Done(&input[(i + 2)..], &input[0..i]);
         }
     }
     IResult::Incomplete(Needed::Unknown)
@@ -128,7 +133,7 @@ fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
 fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
     if input.is_empty() {
         return IResult::Incomplete(Needed::Unknown);
-    } else if input.starts_with(b"\n") {
+    } else if input.starts_with(b"\n") || input.starts_with(b"\r\n") {
         return IResult::Error(error_code!(ErrorKind::Custom(43)));
     }
     let mut ptr = 0;
@@ -152,6 +157,11 @@ fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
         if ptr >= input.len() {
             return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
+    } else if input[ptr..].starts_with(b"\r\n") {
+        ptr += 2;
+        if ptr > input.len() {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        }
     }
     while input[ptr] == b' ' || input[ptr] == b'\t' {
         ptr += 1;
@@ -169,13 +179,17 @@ fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
 fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
     if input.is_empty() {
         return IResult::Incomplete(Needed::Unknown);
-    } else if input.starts_with(b"\n") {
+    } else if input.starts_with(b"\n") || input.starts_with(b"\r\n") {
         return IResult::Error(error_code!(ErrorKind::Custom(43)));
     }
     let mut ptr = 0;
     let mut name: &[u8] = &input[0..0];
     for (i, x) in input.iter().enumerate() {
-        if *x == b':' || *x == b'\n' {
+        if input[i..].starts_with(b"\r\n") {
+            name = &input[0..i];
+            ptr = i + 2;
+            break;
+        } else if *x == b':' || *x == b'\n' {
             name = &input[0..i];
             ptr = i;
             break;
@@ -201,7 +215,17 @@ fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
         if ptr >= input.len() {
             return IResult::Incomplete(Needed::Unknown);
         }
-        if input[ptr] != b' ' && input[ptr] != b'\t' {
+        if input.len() > ptr && input[ptr] != b' ' && input[ptr] != b'\t' {
+            IResult::Done(&input[ptr..], (name, b""))
+        } else {
+            IResult::Error(error_code!(ErrorKind::Custom(43)))
+        }
+    } else if input[ptr..].starts_with(b"\r\n") {
+        ptr += 2;
+        if ptr > input.len() {
+            return IResult::Incomplete(Needed::Unknown);
+        }
+        if input.len() > ptr && input[ptr] != b' ' && input[ptr] != b'\t' {
             IResult::Done(&input[ptr..], (name, b""))
         } else {
             IResult::Error(error_code!(ErrorKind::Custom(43)))
@@ -224,8 +248,10 @@ pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
         return IResult::Incomplete(Needed::Unknown);
     }
     for (i, x) in input.iter().enumerate() {
-        if *x == b'\n' && i + 1 < input.len() && input[i + 1] == b'\n' {
+        if input[i..].starts_with(b"\n\n") {
             return IResult::Done(&input[(i + 1)..], &input[0..=i]);
+        } else if input[i..].starts_with(b"\r\n\r\n") {
+            return IResult::Done(&input[(i + 2)..], &input[0..=i]);
         }
     }
     IResult::Error(error_code!(ErrorKind::Custom(43)))
@@ -233,12 +259,12 @@ pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
 
 named!(pub body_raw<&[u8]>,
        do_parse!(
-           take_until1!("\n\n") >>
+           alt_complete!(take_until1!("\n\n") | take_until1!("\r\n\r\n")) >>
            body: take_while!(call!(|_| true)) >>
            ( { body } )));
 
 named!(pub mail<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
-       separated_pair!(headers, tag!(b"\n"), take_while!(call!(|_| true))));
+       separated_pair!(headers, alt_complete!(tag!(b"\n") | tag!(b"\r\n")), take_while!(call!(|_| true))));
 named!(pub attachment<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
        do_parse!(
             opt!(is_a!(" \n\t\r")) >>
@@ -543,7 +569,7 @@ named!(pub address_list<String>, ws!(do_parse!(
             let mut i = 0;
             list.iter().fold(String::with_capacity(string_len),
             |acc, x| {
-                let mut acc = acc + &String::from_utf8_lossy(x.replace(b"\n", b"").replace(b"\t", b" ").trim());
+                let mut acc = acc + &String::from_utf8_lossy(x.replace(b"\n", b"").replace(b"\r", b"").replace(b"\t", b" ").trim());
                 if i != list_len - 1 {
                     acc.push_str(" ");
                     i+=1;
@@ -626,7 +652,7 @@ fn attachments_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<
         input = &input[b_start - 2..];
         if &input[0..2] == b"--" {
             input = &input[2 + boundary.len()..];
-            if &input[0..1] != b"\n" {
+            if input[0] != b'\n' && !input[0..].starts_with(b"\r\n") {
                 continue;
             }
             input = &input[1..];

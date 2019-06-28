@@ -280,7 +280,7 @@ impl Deref for EnvelopeWrapper {
 impl EnvelopeWrapper {
     pub fn new(buffer: Vec<u8>) -> Result<Self> {
         Ok(EnvelopeWrapper {
-            envelope: Envelope::from_bytes(&buffer)?,
+            envelope: Envelope::from_bytes(&buffer, None)?,
             buffer,
         })
     }
@@ -373,12 +373,15 @@ impl Envelope {
         self.hash = new_hash;
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Envelope> {
+    pub fn from_bytes(bytes: &[u8], flags: Option<Flag>) -> Result<Envelope> {
         let mut h = DefaultHasher::new();
         h.write(bytes);
         let mut e = Envelope::new(h.finish());
         let res = e.populate_headers(bytes).ok();
         if res.is_some() {
+            if let Some(f) = flags {
+                e.flags = f;
+            }
             return Ok(e);
         }
         Err(MeliError::new("Couldn't parse mail."))

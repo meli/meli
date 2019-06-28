@@ -574,16 +574,16 @@ impl Account {
         }
         let finalize = draft.finalise()?;
         self.backend
-            .save(&finalize.as_bytes(), &self.settings.conf.draft_folder)
+            .save(&finalize.as_bytes(), &self.settings.conf.draft_folder, None)
     }
-    pub fn save(&self, bytes: &[u8], folder: &str) -> Result<()> {
+    pub fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
         if self.settings.account.read_only() {
             return Err(MeliError::new(format!(
                 "Account {} is read-only.",
                 self.name.as_str()
             )));
         }
-        self.backend.save(bytes, folder)
+        self.backend.save(bytes, folder, flags)
     }
     pub fn iter_mailboxes(&self) -> MailboxIterator {
         MailboxIterator {

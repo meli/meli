@@ -262,7 +262,7 @@ pub fn mbox_parse(
     while !input.is_empty() {
         let next_offset: Option<usize> = input.find(b"\n\nFrom ");
         if let Some(len) = next_offset {
-            match Envelope::from_bytes(&input[..len]) {
+            match Envelope::from_bytes(&input[..len], None) {
                 Ok(mut env) => {
                     let mut flags = Flag::empty();
                     if env.other_headers().contains_key("Status") {
@@ -307,7 +307,7 @@ pub fn mbox_parse(
             offset += len + 2;
             input = &input[len + 2..];
         } else {
-            match Envelope::from_bytes(input) {
+            match Envelope::from_bytes(input, None) {
                 Ok(mut env) => {
                     let mut flags = Flag::empty();
                     if env.other_headers().contains_key("Status") {
@@ -534,7 +534,7 @@ impl MailBackend for MboxType {
         Box::new(MboxOp::new(hash, self.path.as_path(), offset, length))
     }
 
-    fn save(&self, bytes: &[u8], folder: &str) -> Result<()> {
+    fn save(&self, _bytes: &[u8], _folder: &str, _flags: Option<Flag>) -> Result<()> {
         unimplemented!();
     }
 }

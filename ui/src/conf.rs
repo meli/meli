@@ -127,6 +127,8 @@ pub struct FileAccount {
     sent_folder: String,
     draft_folder: String,
     identity: String,
+    #[serde(flatten)]
+    pub extra: HashMap<String, String>,
 
     #[serde(default = "none")]
     display_name: Option<String>,
@@ -161,6 +163,7 @@ impl From<FileAccount> for AccountConf {
             read_only: x.read_only,
             display_name,
             subscribed_folders: x.subscribed_folders.clone(),
+            extra: x.extra.clone(),
         };
 
         let root_path = PathBuf::from(acc.root_folder.as_str());

@@ -22,6 +22,7 @@ pub mod imap;
 pub mod maildir;
 pub mod mbox;
 
+pub use self::imap::ImapType;
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::error::{MeliError, Result};
@@ -63,7 +64,10 @@ impl Backends {
             "mbox".to_string(),
             Box::new(|| Box::new(|f| Box::new(MboxType::new(f)))),
         );
-        //b.register("imap".to_string(), Box::new(|| Box::new(ImapType::new(""))));
+        b.register(
+            "imap".to_string(),
+            Box::new(|| Box::new(|f| Box::new(ImapType::new(f)))),
+        );
         b
     }
 
@@ -161,11 +165,10 @@ pub trait MailBackend: ::std::fmt::Debug {
     fn folders(&self) -> FnvHashMap<FolderHash, Folder>;
     fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp>;
 
-    fn save(&self, bytes: &[u8], folder: &str) -> Result<()>;
+    fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()>;
     fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
         Ok(())
     }
-    //login function
 }
 
 /// A `BackendOp` manages common operations for the various mail backends. They only live for the

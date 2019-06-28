@@ -18,6 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+use std::collections::hash_map::HashMap;
 
 #[derive(Debug, Serialize, Default, Clone)]
 pub struct AccountSettings {
@@ -29,6 +30,8 @@ pub struct AccountSettings {
     pub read_only: bool,
     pub display_name: Option<String>,
     pub subscribed_folders: Vec<String>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, String>,
 }
 
 impl AccountSettings {

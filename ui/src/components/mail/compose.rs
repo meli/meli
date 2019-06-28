@@ -775,6 +775,7 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
                 .settings
                 .conf()
                 .sent_folder(),
+            Some(Flag::SEEN),
         ) {
             debug!("{:?} could not save sent msg", e);
             context.replies.push_back(UIEvent::Notification(

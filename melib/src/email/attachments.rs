@@ -164,6 +164,10 @@ impl AttachmentBuilder {
     }
 
     pub fn subattachments(raw: &[u8], boundary: &[u8]) -> Vec<Attachment> {
+        if raw.is_empty() {
+            return Vec::new();
+        }
+
         match parser::attachments(raw, boundary).to_full_result() {
             Ok(attachments) => {
                 let mut vec = Vec::with_capacity(attachments.len());
