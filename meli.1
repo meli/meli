@@ -1,0 +1,124 @@
+.\" meli - meli.1
+.\" 
+.\" Copyright 2017-2019 Manos Pitsidianakis
+.\" 
+.\" This file is part of meli.
+.\" 
+.\" meli is free software: you can redistribute it and/or modify
+.\" it under the terms of the GNU General Public License as published by
+.\" the Free Software Foundation, either version 3 of the License, or
+.\" (at your option) any later version.
+.\" 
+.\" meli is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\" 
+.\" You should have received a copy of the GNU General Public License
+.\" along with meli. If not, see <http://www.gnu.org/licenses/>.
+.\" 
+.Dd July 03, 2019
+.Dt MELI 1
+.Os Linux
+.Sh NAME
+.Nm meli - Meli Mail User Agent.
+.Nd Meli is the Greek word for honey.
+.Sh SYNOPSIS
+\f[C]meli\f[R]
+.Sh DESCRIPTION
+Experimental terminal mail client
+.Sh STARTING WITH meli
+When launched for the first time, meli will search for its configuration directory ($XDG_CONFIG_HOME/meli/). If it doesn't exist, you will be asked if you want to create one along with a sample configuration. The sample configuration ($XDG_CONFIG_HOME/meli/config) includes comments with the basic settings required for setting up accounts allowing you to copy and edit right away.
+.Pp
+At any time, you can press `?` to show a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
+.Pp
+The main visual navigation tool is the left-side sidebar. The menu's visibility can be toggled (default shortcut `).
+.Pp
+The view into each folder has 3 modes: plain, threaded and compact. Plain views each mail indvidually, threaded shows their thread relationship visually, and compact includes one entry per thread of emails.
+.Pp
+         ^^      .-=-=-=-.  ^^
+     ^^        (`-=-=-=-=-`)         ^^
+             (`-=-=-=-=-=-=-`)  ^^         ^^
+       ^^   (`-=-=-=-=-=-=-=-`)   ^^
+           ( `-=-=-=-(@)-=-=-` )      ^^
+           (`-=-=-=-=-=-=-=-=-`)  ^^
+           (`-=-=-=-=-=-=-=-=-`)          ^^
+           (`-=-=-=-=-=-=-=-=-`)
+    ^^     (`-=-=-=-=-=-=-=-=-`)  ^^
+       ^^   (`-=-=-=-=-=-=-=-`)          ^^
+             (`-=-=-=-=-=-=-`)  ^^
+      ^^       (`-=-=-=-=-`)
+                `-=-=-=-=-`          ^^
+.Sh EXECUTE mode
+Commands are issued in EXECUTE mode, by default started with the space character and exited with Escape key.
+.Bl -tag -width "subsort [subject/date] [asc/desc]"
+.It set plain/threaded/compact # set the way mailboxes are displayed
+.It sort [subject/date] [asc/desc]
+.It subsort [subject/date] [asc/desc] # this only sorts the first level of replies.
+.It close # closes closeable tabs
+.It go n # where n is a mailbox prefixed with the n number for the current account
+.It toggle_thread_snooze # don't issue notifications for thread under cursor in thread listing
+.It filter STRING # filter mailbox with STRING key. Escape exits filter results
+.It list-post # post in list of currently viewed envelope
+.It list-unsubscribe # unsubscribe automatically from list of currently viewed envelope
+.It list-archive # open list archive with xdg-open
+.It set read, set unread
+.It setenv KEY=VALUE # set environment variable KEY to VALUE
+.It printenv KEY # print environment variable KEY
+.El
+.Sh SHORTCUTS
+Non-complete list of shortcuts
+.Bl -tag -width next_account
+.It open_thread '\\n'
+.It exit_thread = 'i'
+.It create_contact = 'c'
+.It edit_contact = 'e'
+.It prev_page = PageUp,
+.It next_page = PageDown,
+.It prev_folder = 'K',
+.It next_folder = 'J',
+.It prev_account = 'l',
+.It next_account = 'h',
+.It new_mail = 'm',
+.It scroll_up = 'k',
+.It scroll_down = 'j',
+.It page_up = PageUp,
+.It page_down = PageDown,
+.It '`' toggles hiding of sidebar in mail listings
+.It '?' opens up a shortcut window that shows available actions in the current component you are using (eg mail listing, contact list, mail composing)
+.It 'm' starts a new mail composer
+.It 'R' replies to the currently viewed mail.
+.It `u` displays numbers next to urls in the body text of an email and <number>g opens the url with xdg-open
+.It <n>a opens the nth attachment.
+.El
+.Sh EXIT STATUS
+No exit status codes are currently assigned.
+.Sh CONFORMING TO
+XDG Standard
+.Sh ENVIRONMENT
+.Bl -tag -width MELI_CONFIG
+.It Ev EDITOR         Specifies the editor to use
+.It Ev MELI_CONFIG  Override the configuration file
+.El
+.Sh FILES
+meli uses the following parts of the XDG standard:
+.Bl -tag -width XDG_CONFIG_HOME
+.It Ev XDG_CONFIG_HOME defaults to ~/.config/
+.It Ev XDG_CACHE_HOME  defaults to ~/.cache/
+.El
+.Bl -tag -width $XDG_CONFIG_HOME/meli/plugins/*
+.It Pa $XDG_CONFIG_HOME/meli/ User configuration directory.
+.It Pa $XDG_CONFIG_HOME/meli/config User configuration file.
+.It Pa $XDG_CONFIG_HOME/meli/hooks/* Reserved for event hooks.
+.It Pa $XDG_CONFIG_HOME/meli/plugins/* Reserved for plugin files.
+.It Pa $XDG_CACHE_HOME/meli/* Internal cached data used by meli.
+.It Pa /tmp/meli/* Temporary files generated by meli.
+.El
+.Sh AUTHORS
+Copyright 2017--2019 Manos Pitsidianakis (epilys\[at]nessuent.xyz).
+Released under the GPL, version 3 or greater.
+This software carries no warranty of any kind.
+(See COPYING for full copyright and warranty notices.)
+.Pp
+<https://meli.delivery>.
+.Sh SEE ALSO
