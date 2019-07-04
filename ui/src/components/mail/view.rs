@@ -660,12 +660,14 @@ impl Component for MailView {
                 }
                 self.mode = ViewMode::ContactSelector(Selector::new(entries, true));
                 self.dirty = true;
+                return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) => {
                 self.cmd_buf.clear();
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                return true;
             }
             UIEvent::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
                 self.cmd_buf.push(c);
@@ -674,12 +676,14 @@ impl Component for MailView {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
                         self.cmd_buf.clone(),
                     )));
+                return true;
             }
             UIEvent::Input(Key::Alt('r'))
                 if self.mode == ViewMode::Normal || self.mode == ViewMode::Subview =>
             {
                 self.mode = ViewMode::Raw;
                 self.set_dirty();
+                return true;
             }
             UIEvent::Input(Key::Char('r'))
                 if self.mode.is_attachment()
@@ -689,6 +693,7 @@ impl Component for MailView {
             {
                 self.mode = ViewMode::Normal;
                 self.set_dirty();
+                return true;
             }
             UIEvent::Input(Key::Char('a'))
                 if !self.cmd_buf.is_empty()
@@ -818,6 +823,7 @@ impl Component for MailView {
                     .stdout(Stdio::piped())
                     .spawn()
                     .expect("Failed to start xdg_open");
+                return true;
             }
             UIEvent::Input(Key::Char('u')) => {
                 match self.mode {
@@ -826,6 +832,7 @@ impl Component for MailView {
                     _ => {}
                 }
                 self.dirty = true;
+                return true;
             }
             UIEvent::EnvelopeRename(old_hash, new_hash) if self.coordinates.2 == old_hash => {
                 self.coordinates.2 = new_hash;
@@ -919,11 +926,9 @@ impl Component for MailView {
                     }
                 }
             }
-            _ => {
-                return false;
-            }
+            _ => {}
         }
-        true
+        false
     }
     fn is_dirty(&self) -> bool {
         self.dirty

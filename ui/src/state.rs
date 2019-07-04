@@ -276,7 +276,7 @@ impl State {
                 return;
             }
             if let Some(notification) = self.context.accounts[idxa].reload(event, hash) {
-                self.context.replies.push_back(notification);
+                self.rcv_event(notification);
             } else {
                 self.context
                     .replies
