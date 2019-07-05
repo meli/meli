@@ -89,6 +89,7 @@ pub struct CompactListing {
     selection: FnvHashMap<EnvelopeHash, bool>,
     /// If we must redraw on next redraw event
     dirty: bool,
+    force_draw: bool,
     /// If `self.view` exists or not.
     unfocused: bool,
     view: ThreadView,
@@ -463,6 +464,7 @@ impl CompactListing {
             row_updates: StackVec::new(),
             data_columns: DataColumns::default(),
             dirty: true,
+            force_draw: true,
             unfocused: false,
             view: ThreadView::default(),
 
@@ -982,6 +984,11 @@ impl Component for CompactListing {
                         );
                     }
                 }
+                if self.force_draw {
+                    /* Draw the entire list */
+                    self.draw_list(grid, area, context);
+                    self.force_draw = false;
+                }
             } else {
                 /* Draw the entire list */
                 self.draw_list(grid, area, context);
@@ -1066,6 +1073,10 @@ impl Component for CompactListing {
             UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
                 self.unfocused = false;
                 self.dirty = true;
+                /* If self.row_updates is not empty and we exit a thread, the row_update events
+                 * will be performed but the list will not be drawn. So force a draw in any case.
+                 * */
+                self.force_draw = true;
                 return true;
             }
             UIEvent::Input(ref key) if !self.unfocused && *key == shortcuts["select_entry"] => {
@@ -1109,7 +1120,6 @@ impl Component for CompactListing {
                     }
 
                     self.row_updates.push(*new_hash);
-                    self.dirty = true;
                 } else {
                     /* Listing has was updated in time before the event */
                 }

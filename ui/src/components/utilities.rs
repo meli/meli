@@ -523,11 +523,9 @@ impl Component for Pager {
                 self.max_cursor_pos = None;
                 return false;
             }
-            _ => {
-                return false;
-            }
+            _ => {}
         }
-        true
+        false
     }
     fn is_dirty(&self) -> bool {
         self.dirty
