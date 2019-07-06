@@ -86,30 +86,39 @@ impl ContactList {
         }
         maxima.0 += 5;
         maxima.1 += maxima.0 + 5;
-        write_string_to_grid(
-            "Name",
+        let (x, _) = write_string_to_grid(
+            "NAME",
             &mut self.content,
-            Color::Default,
-            Color::Default,
+            Color::Black,
+            Color::White,
             ((0, 0), (MAX_COLS - 1, self.length)),
             false,
         );
+        for x in x..maxima.0 {
+            self.content[(x, 0)].set_bg(Color::White);
+        }
         write_string_to_grid(
-            "E-mail",
+            "E-MAIL",
             &mut self.content,
-            Color::Default,
-            Color::Default,
+            Color::Black,
+            Color::White,
             ((maxima.0, 0), (MAX_COLS - 1, self.length)),
             false,
         );
+        for x in x..maxima.1 {
+            self.content[(x, 0)].set_bg(Color::White);
+        }
         write_string_to_grid(
             "URL",
             &mut self.content,
-            Color::Default,
-            Color::Default,
+            Color::Black,
+            Color::White,
             ((maxima.1, 0), (MAX_COLS - 1, self.length)),
             false,
         );
+        for x in x..(MAX_COLS - 1) {
+            self.content[(x, 0)].set_bg(Color::White);
+        }
         for (i, c) in book.values().enumerate() {
             self.id_positions.push(*c.id());
 

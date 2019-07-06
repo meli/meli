@@ -72,19 +72,11 @@ impl ContactManager {
         let (width, _) = self.content.size();
 
         let (x, _) = write_string_to_grid(
-            "Contact Name  ",
-            &mut self.content,
-            Color::Byte(33),
-            Color::Default,
-            ((0, 0), (width, 0)),
-            false,
-        );
-        let (x, _) = write_string_to_grid(
             "Last edited: ",
             &mut self.content,
             Color::Byte(250),
             Color::Default,
-            ((x, 0), (width, 0)),
+            ((0, 0), (width, 0)),
             false,
         );
         write_string_to_grid(
@@ -98,19 +90,19 @@ impl ContactManager {
         self.form = FormWidget::new("Save".into());
         self.form.add_button(("Cancel".into(), false));
         self.form
-            .push(("Name".into(), self.card.name().to_string()));
+            .push(("NAME".into(), self.card.name().to_string()));
         self.form.push((
-            "Additional Name".into(),
+            "ADDITIONAL NAME".into(),
             self.card.additionalname().to_string(),
         ));
         self.form
-            .push(("Name Prefix".into(), self.card.name_prefix().to_string()));
+            .push(("NAME PREFIX".into(), self.card.name_prefix().to_string()));
         self.form
-            .push(("Name Suffix".into(), self.card.name_suffix().to_string()));
+            .push(("NAME SUFFIX".into(), self.card.name_suffix().to_string()));
         self.form
-            .push(("E-mail".into(), self.card.email().to_string()));
-        self.form.push(("url".into(), self.card.url().to_string()));
-        self.form.push(("key".into(), self.card.key().to_string()));
+            .push(("E-MAIL".into(), self.card.email().to_string()));
+        self.form.push(("URL".into(), self.card.url().to_string()));
+        self.form.push(("KEY".into(), self.card.key().to_string()));
     }
 }
 
