@@ -315,6 +315,7 @@ impl Account {
                     let env_hash = envelope.hash();
                     let mailbox = mailbox!(&folder_hash, self.folders);
                     mailbox.insert(env_hash);
+                    self.collection.insert(*envelope, folder_hash);
                     if self
                         .sent_folder
                         .as_ref()
@@ -322,8 +323,6 @@ impl Account {
                         .unwrap_or(false)
                     {
                         self.collection.insert_reply(env_hash);
-                    } else {
-                        self.collection.insert(*envelope, folder_hash);
                     }
 
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();

@@ -1121,7 +1121,7 @@ impl Component for CompactListing {
 
                     self.row_updates.push(*new_hash);
                 } else {
-                    /* Listing has was updated in time before the event */
+                    /* Listing was updated in time before the event */
                 }
                 self.view
                     .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);

@@ -1028,6 +1028,7 @@ impl Threads {
             self.rebuild_thread(reply_to_id, envelopes);
             true
         } else {
+            /*
             let new_id = ThreadHash::new();
             self.thread_nodes.insert(
                 new_id,
@@ -1047,35 +1048,9 @@ impl Threads {
             envelopes.get_mut(&env_hash).unwrap().set_thread(new_id);
             self.hash_set.insert(env_hash);
             self.rebuild_thread(new_id, envelopes);
+            */
             false
         }
-        /*
-        {
-            if let Some(in_reply_to) = envelope.in_reply_to() {
-                if !self.message_ids.contains_key(in_reply_to.raw()) {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-        let hash: EnvelopeHash = envelope.hash();
-        envelopes.insert(hash, envelope.clone());
-        {
-            let envelope = envelopes.entry(hash).or_default() as *mut Envelope;
-            unsafe {
-                /* Safe because insert only changes envelope's fields and nothing more */
-                self.insert(&mut (*envelope), &envelopes);
-            }
-        }
-        let envelope: &Envelope = &envelopes[&hash];
-        {
-            let in_reply_to = envelope.in_reply_to().unwrap().raw();
-            let parent_id = self.message_ids[in_reply_to];
-            self.rebuild_thread(parent_id, envelopes);
-        }
-        true
-            */
     }
 
     /* Update thread tree information on envelope insertion */

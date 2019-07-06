@@ -72,6 +72,12 @@ impl Collection {
             .entry(folder_hash)
             .or_default()
             .remove(envelope_hash, &mut self.envelopes);
+        for (h, t) in self.threads.iter_mut() {
+            if *h == folder_hash {
+                continue;
+            }
+            t.remove(envelope_hash, &mut self.envelopes);
+        }
     }
 
     pub fn rename(
@@ -106,6 +112,14 @@ impl Collection {
                 .entry(folder_hash)
                 .or_default()
                 .insert(&mut (*env), &self.envelopes);
+        }
+        for (h, t) in self.threads.iter_mut() {
+            if *h == folder_hash {
+                continue;
+            }
+            t.update_envelope(old_hash, new_hash, &self.envelopes)
+                .ok()
+                .take();
         }
     }
 
@@ -207,6 +221,14 @@ impl Collection {
                 .or_default()
                 .insert(&mut (*env), &self.envelopes);
         }
+        for (h, t) in self.threads.iter_mut() {
+            if *h == folder_hash {
+                continue;
+            }
+            t.update_envelope(old_hash, new_hash, &self.envelopes)
+                .ok()
+                .take();
+        }
     }
 
     pub fn insert(&mut self, envelope: Envelope, folder_hash: FolderHash) -> &Envelope {
@@ -221,6 +243,7 @@ impl Collection {
         &self.envelopes[&hash]
     }
     pub fn insert_reply(&mut self, env_hash: EnvelopeHash) {
+        debug_assert!(self.envelopes.contains_key(&env_hash));
         for (_, t) in self.threads.iter_mut() {
             t.insert_reply(&mut self.envelopes, env_hash);
         }
