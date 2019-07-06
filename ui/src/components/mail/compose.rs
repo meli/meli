@@ -205,6 +205,9 @@ impl Composer {
                         let book: &AddressBook = &c.accounts[account_cursor].address_book;
                         let results: Vec<String> = book.search(term);
                         results
+                            .into_iter()
+                            .map(|r| AutoCompleteEntry::from(r))
+                            .collect::<Vec<AutoCompleteEntry>>()
                     }),
                 ));
             } else {

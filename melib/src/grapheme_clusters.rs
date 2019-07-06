@@ -37,6 +37,10 @@ pub trait Graphemes: UnicodeSegmentation + CodePointsIter {
 
         count
     }
+
+    fn grapheme_len(&self) -> usize {
+        self.split_graphemes().len()
+    }
 }
 
 impl Graphemes for str {}

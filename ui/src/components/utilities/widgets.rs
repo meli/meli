@@ -1,7 +1,7 @@
 use super::*;
 use fnv::FnvHashMap;
 
-type AutoCompleteFn = Box<Fn(&Context, &str) -> Vec<String> + Send>;
+type AutoCompleteFn = Box<Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send>;
 
 #[derive(Debug, PartialEq)]
 enum FormFocus {
@@ -576,8 +576,49 @@ where
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct AutoCompleteEntry {
+    pub entry: String,
+    pub description: String,
+}
+
+impl AutoCompleteEntry {
+    pub fn as_str(&self) -> &str {
+        self.entry.as_str()
+    }
+}
+
+impl From<String> for AutoCompleteEntry {
+    fn from(val: String) -> Self {
+        AutoCompleteEntry {
+            entry: val,
+            description: String::new(),
+        }
+    }
+}
+
+impl From<&(&str, &str)> for AutoCompleteEntry {
+    fn from(val: &(&str, &str)) -> Self {
+        let (a, b) = val;
+        AutoCompleteEntry {
+            entry: a.to_string(),
+            description: b.to_string(),
+        }
+    }
+}
+
+impl From<(String, String)> for AutoCompleteEntry {
+    fn from(val: (String, String)) -> Self {
+        let (a, b) = val;
+        AutoCompleteEntry {
+            entry: a,
+            description: b,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct AutoComplete {
-    entries: Vec<String>,
+    entries: Vec<AutoCompleteEntry>,
     content: CellBuffer,
     cursor: usize,
 
@@ -637,7 +678,7 @@ impl Component for AutoComplete {
 }
 
 impl AutoComplete {
-    pub fn new(entries: Vec<String>) -> Self {
+    pub fn new(entries: Vec<AutoCompleteEntry>) -> Self {
         let mut ret = AutoComplete {
             entries: Vec::new(),
             content: CellBuffer::default(),
@@ -649,24 +690,37 @@ impl AutoComplete {
         ret
     }
 
-    pub fn set_suggestions(&mut self, entries: Vec<String>) -> bool {
+    pub fn set_suggestions(&mut self, entries: Vec<AutoCompleteEntry>) -> bool {
         if entries.len() == self.entries.len() && entries == self.entries {
             return false;;
         }
 
         let mut content = CellBuffer::new(
-            entries.iter().map(String::len).max().unwrap_or(0) + 1,
+            entries
+                .iter()
+                .map(|a| a.entry.grapheme_len() + a.description.grapheme_len() + 2)
+                .max()
+                .unwrap_or(0)
+                + 1,
             entries.len(),
             Cell::with_style(Color::Byte(23), Color::Byte(7), Attr::Default),
         );
         let width = content.cols();
         for (i, e) in entries.iter().enumerate() {
-            write_string_to_grid(
-                e,
+            let (x, _) = write_string_to_grid(
+                &e.entry,
                 &mut content,
                 Color::Byte(23),
                 Color::Byte(7),
                 ((0, i), (width - 1, i)),
+                false,
+            );
+            write_string_to_grid(
+                &e.description,
+                &mut content,
+                Color::Byte(23),
+                Color::Byte(7),
+                ((x + 2, i), (width - 1, i)),
                 false,
             );
             write_string_to_grid(
@@ -712,10 +766,10 @@ impl AutoComplete {
         self.entries.clear();
         self.cursor = 0;
         self.content.empty();
-        Some(ret)
+        Some(ret.entry)
     }
 
-    pub fn suggestions(&self) -> &Vec<String> {
+    pub fn suggestions(&self) -> &Vec<AutoCompleteEntry> {
         &self.entries
     }
 }

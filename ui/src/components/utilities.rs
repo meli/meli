@@ -699,17 +699,24 @@ impl Component for StatusBar {
                 if self.ex_buffer.as_str().split_graphemes().len() <= 2 {
                     return;
                 }
-                let suggestions: Vec<String> = self
+                let mut suggestions: Vec<AutoCompleteEntry> = self
                     .cmd_history
                     .iter()
                     .filter_map(|h| {
                         if h.starts_with(self.ex_buffer.as_str()) {
-                            Some(h.clone())
+                            Some(h.clone().into())
                         } else {
                             None
                         }
                     })
                     .collect();
+                suggestions.extend(crate::execute::COMMAND_COMPLETION.iter().filter_map(|e| {
+                    if e.0.starts_with(self.ex_buffer.as_str()) {
+                        Some(e.into())
+                    } else {
+                        None
+                    }
+                }));
                 if suggestions.is_empty() && !self.auto_complete.suggestions().is_empty() {
                     self.auto_complete.set_suggestions(suggestions);
                     /* redraw self.container because we have got ridden of an autocomplete
@@ -803,7 +810,7 @@ impl Component for StatusBar {
                     .take(hist_height)
                     .enumerate()
                 {
-                    write_string_to_grid(
+                    let (x, y) = write_string_to_grid(
                         s.as_str(),
                         grid,
                         Color::Byte(88),  // DarkRed,
@@ -816,6 +823,14 @@ impl Component for StatusBar {
                             bottom_right!(hist_area),
                         ),
                         true,
+                    );
+                    write_string_to_grid(
+                        &s.description,
+                        grid,
+                        Color::White,
+                        Color::Byte(174),
+                        ((x + 2, y), bottom_right!(hist_area)),
+                        false,
                     );
                     if y_offset + offset == self.auto_complete.cursor() {
                         change_colors(
