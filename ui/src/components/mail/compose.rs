@@ -699,5 +699,5 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
             ),
         ));
     }
-    return !failure;
+    !failure
 }

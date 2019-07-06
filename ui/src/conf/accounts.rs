@@ -137,7 +137,7 @@ impl<'a> Iterator for MailboxIterator<'a> {
         if let Some(Err(_)) = self.folders[&fh] {
             return Some(None);
         }
-        return Some(Some(self.folders[&fh].as_ref().unwrap().as_ref().unwrap()));
+        Some(Some(self.folders[&fh].as_ref().unwrap().as_ref().unwrap()))
     }
 }
 

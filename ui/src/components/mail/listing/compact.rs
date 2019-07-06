@@ -123,9 +123,7 @@ impl ListingTrait for CompactListing {
         } else {
             Color::Default
         };
-        let bg_color = if self.cursor_pos.2 == idx && self.selection[&i] {
-            Color::Byte(246 | 210)
-        } else if self.cursor_pos.2 == idx {
+        let bg_color = if self.cursor_pos.2 == idx {
             Color::Byte(246)
         } else if self.selection[&i] {
             Color::Byte(210)

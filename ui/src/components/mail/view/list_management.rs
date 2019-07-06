@@ -55,8 +55,8 @@ impl<'a> Default for UnsubscribeOption<'a> {
 impl<'a> Clone for UnsubscribeOption<'a> {
     fn clone(&self) -> Self {
         match self {
-            UnsubscribeOption::Url(a) => UnsubscribeOption::Url(a.clone()),
-            UnsubscribeOption::Email(a) => UnsubscribeOption::Email(a.clone()),
+            UnsubscribeOption::Url(a) => UnsubscribeOption::Url(<&[u8]>::clone(a)),
+            UnsubscribeOption::Email(a) => UnsubscribeOption::Email(<&[u8]>::clone(a)),
         }
     }
 }

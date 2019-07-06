@@ -899,12 +899,10 @@ impl Component for StatusBar {
                         if parse_command(&self.ex_buffer.as_str().as_bytes())
                             .to_full_result()
                             .is_ok()
-                        {
-                            if self.cmd_history.last().map(String::as_str)
+                            && self.cmd_history.last().map(String::as_str)
                                 != Some(self.ex_buffer.as_str())
-                            {
-                                self.cmd_history.push(self.ex_buffer.as_str().to_string());
-                            }
+                        {
+                            self.cmd_history.push(self.ex_buffer.as_str().to_string());
                         }
                         self.ex_buffer.clear();
                     }
