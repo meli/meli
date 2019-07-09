@@ -478,7 +478,7 @@ impl MaildirType {
                             continue 'entries;
                         }
                         if path.is_dir() {
-                            let path_children = std::dbg!(recurse_folders(folders, &path));
+                            let path_children = recurse_folders(folders, &path);
                             if let Ok(f) = MaildirFolder::new(
                                 path.to_str().unwrap().to_string(),
                                 path.file_name().unwrap().to_str().unwrap().to_string(),

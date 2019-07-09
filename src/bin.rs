@@ -92,7 +92,7 @@ fn main() {
             /* Poll on all channels. Currently we have the input channel for stdin, watching events and the signal watcher. */
             chan_select! {
                 receiver.recv() -> r => {
-                    match std::dbg!(r.unwrap()) {
+                    match debug!(r.unwrap()) {
                         ThreadEvent::Input(Key::Ctrl('z')) => {
                             state.switch_to_main_screen();
                             //_thread_handler.join().expect("Couldn't join on the associated thread");

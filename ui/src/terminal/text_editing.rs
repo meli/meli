@@ -130,8 +130,6 @@ impl UText {
         };
         self.cursor_dec();
 
-        self.content
-            .drain(std::dbg!(offset..offset + graph_len))
-            .count();
+        self.content.drain(offset..offset + graph_len).count();
     }
 }

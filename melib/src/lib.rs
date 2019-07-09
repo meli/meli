@@ -42,21 +42,27 @@ pub mod dbg {
         }
         };
         ($val:expr) => {
-            {
             if cfg!(debug_assertions) {
-                eprint!(
-                    "[{:?}] {}:{}_{}:	",
-                    std::thread::current()
-                    .name()
-                    .map(std::string::ToString::to_string)
-                    .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
-                    file!(),
-                    line!(),
-                    column!()
-                );
-                eprintln!("{} = {:?}", stringify!($val), $val);
-            }
-            $val
+                // Use of `match` here is intentional because it affects the lifetimes
+                // of temporaries - https://stackoverflow.com/a/48732525/1063961
+                match $val {
+                    tmp => {
+                        eprint!(
+                            "[{:?}] {}:{}_{}:	",
+                            std::thread::current()
+                            .name()
+                            .map(std::string::ToString::to_string)
+                            .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
+                            file!(),
+                            line!(),
+                            column!()
+                        );
+                        eprintln!("{} = {:?}", stringify!(tmp), tmp);
+                        tmp
+                    }
+                }
+            } else {
+                $val
             }
         };
         ($fmt:literal, $($arg:tt)*) => {

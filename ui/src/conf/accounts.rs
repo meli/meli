@@ -491,8 +491,8 @@ impl Account {
             }
         }
         debug!("didn't find {}", h);
-        std::dbg!(&self.folders);
-        std::dbg!(&self.collection.envelopes);
+        debug!(&self.folders);
+        debug!(&self.collection.envelopes);
         unreachable!()
     }
     pub fn thread_to_mail_mut(&mut self, h: ThreadHash, f: FolderHash) -> &mut Envelope {
