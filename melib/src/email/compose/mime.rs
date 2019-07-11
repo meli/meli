@@ -11,10 +11,6 @@ pub fn encode_header(value: &str) -> String {
             (true, true) => {
                 ret.push_str(g);
             }
-            (false, true) => {
-                current_window_start = idx;
-                is_current_window_ascii = false;
-            }
             (true, false) => {
                 /* If !g.is_whitespace()
                  *
@@ -31,7 +27,13 @@ pub fn encode_header(value: &str) -> String {
                         ret.push(' ');
                     }
                     is_current_window_ascii = true;
+                    current_window_start = idx;
+                    ret.push_str(g);
                 }
+            }
+            (false, true) => {
+                current_window_start = idx;
+                is_current_window_ascii = false;
             }
             /* RFC2047 recommends:
              * 'While there is no limit to the length of a multiple-line header field, each line of
