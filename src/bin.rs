@@ -25,6 +25,8 @@ The mail handling stuff is done in the `melib` crate which includes all backend 
  */
 
 use std::alloc::System;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 #[global_allocator]
 static GLOBAL: System = System;
@@ -41,15 +43,115 @@ use chan_signal;
 use chan_signal::Signal;
 
 use nix;
+use xdg;
+
+macro_rules! error_and_exit {
+    ($($err:expr),*) => {{
+            println!($($err),*);
+            std::process::exit(1);
+    }}
+}
+
+#[derive(Debug)]
+struct CommandLineArguments {
+    create_config: Option<String>,
+    config: Option<String>,
+    help: bool,
+}
 
 fn main() {
-    /* Lock all stdio outs */
-    //let _stdout = stdout();
-    //let mut _stdout = _stdout.lock();
-    /*
-    let _stderr = stderr();
-    let mut _stderr = _stderr.lock();
-    */
+    enum CommandLineFlags {
+        CreateConfig,
+        Config,
+    }
+    use CommandLineFlags::*;
+    let mut prev: Option<CommandLineFlags> = None;
+    let mut args = CommandLineArguments {
+        create_config: None,
+        config: None,
+        help: false,
+    };
+
+    for i in std::env::args().skip(1) {
+        match i.as_str() {
+            "--create-config" => match prev {
+                None => prev = Some(CreateConfig),
+                Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
+                Some(Config) => error_and_exit!("invalid value for flag `--config`"),
+            },
+            "--config" | "-c" => match prev {
+                None => prev = Some(Config),
+                Some(CreateConfig) if args.create_config.is_none() => {
+                    args.config = Some(String::new());
+                    prev = Some(Config);
+                }
+                Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
+                Some(Config) => error_and_exit!("invalid value for flag `--config`"),
+            },
+            "--help" | "-h" => match prev {
+                Some(_) => {}
+                None => args.help = true,
+            },
+            e => match prev {
+                None => error_and_exit!("error: value without command {}", e),
+                Some(CreateConfig) if args.create_config.is_none() => {
+                    args.create_config = Some(i);
+                    prev = None;
+                }
+                Some(Config) if args.config.is_none() => {
+                    args.config = Some(i);
+                    prev = None;
+                }
+                Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
+                Some(Config) => error_and_exit!("Duplicate value for flag `--config`"),
+            },
+        }
+    }
+
+    if args.help {
+        println!("usage:\tmeli [--create-config[ PATH]] [--config[ PATH]|-c[ PATH]]");
+        println!("\tmeli --help");
+        println!("");
+        println!("\t--help\t\t\tshow this message and exit");
+        println!("\t--create-config[ PATH]\tCreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config");
+        println!("\t--config PATH, -c PATH\tUse specified configuration file");
+        std::process::exit(0);
+    }
+
+    match prev {
+        None => {}
+        Some(CreateConfig) if args.create_config.is_none() => args.create_config = Some("".into()),
+        Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
+        Some(Config) => error_and_exit!("error: flag without value: --config"),
+    };
+
+    if let Some(config_path) = args.create_config.as_mut() {
+        let config_path: PathBuf = if config_path.is_empty() {
+            let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
+            xdg_dirs.place_config_file("config").unwrap_or_else(|e| {
+                error_and_exit!("Cannot create configuration directory:\n{}", e)
+            })
+        } else {
+            Path::new(config_path).to_path_buf()
+        };
+        if config_path.exists() {
+            println!("File `{}` already exists.\nMaybe you meant to specify another path with --create-config=PATH", config_path.display());
+            std::process::exit(1);
+        }
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(config_path.as_path())
+            .unwrap_or_else(|e| error_and_exit!("Could not create config file:\n{}", e));
+        file.write_all(include_bytes!("../sample-config"))
+            .unwrap_or_else(|e| error_and_exit!("Could not write to config file:\n{}", e));
+        println!("Written example configuration to {}", config_path.display());
+        std::process::exit(0);
+    }
+
+    if let Some(config_location) = args.config.as_ref() {
+        std::env::set_var("MELI_CONFIG", config_location);
+    }
 
     /* Catch SIGWINCH to handle terminal resizing */
     let signal = chan_signal::notify(&[Signal::WINCH]);
