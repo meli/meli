@@ -775,6 +775,9 @@ impl Envelope {
         operation.set_flag(self, f)?;
         Ok(())
     }
+    pub fn set_flags(&mut self, f: Flag) {
+        self.flags = f;
+    }
     pub fn flags(&self) -> Flag {
         self.flags
     }

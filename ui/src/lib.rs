@@ -71,3 +71,53 @@ pub use crate::conf::*;
 
 pub mod workers;
 pub use crate::workers::*;
+
+pub use crate::username::*;
+pub mod username {
+    use libc;
+    use std::ptr::null_mut;
+    /* taken from whoami-0.1.1 */
+    fn getpwuid() -> libc::passwd {
+        let mut pwent = libc::passwd {
+            pw_name: null_mut(),
+            pw_passwd: null_mut(),
+            pw_uid: 0,
+            pw_gid: 0,
+            pw_gecos: null_mut(),
+            pw_dir: null_mut(),
+            pw_shell: null_mut(),
+        };
+        let mut pwentp = null_mut();
+        let mut buffer = [0i8; 16384]; // from the man page
+
+        unsafe {
+            libc::getpwuid_r(
+                libc::geteuid(),
+                &mut pwent,
+                &mut buffer[0],
+                16384,
+                &mut pwentp,
+            );
+        }
+
+        pwent
+    }
+    fn ptr_to_string(name: *mut i8) -> String {
+        let uname = name as *mut _ as *mut u8;
+
+        let s;
+        let string;
+
+        unsafe {
+            s = ::std::slice::from_raw_parts(uname, libc::strlen(name));
+            string = String::from_utf8_lossy(s).to_string();
+        }
+
+        string
+    }
+    pub fn username() -> String {
+        let pwent = getpwuid();
+
+        ptr_to_string(pwent.pw_name)
+    }
+}

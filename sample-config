@@ -14,6 +14,15 @@
 #  "drafts" = { rename="Drafts" }
 #  "foobar-devel" = { ignore = true } # don't show notifications for this folder
 
+# Setting up an mbox account
+#[accounts.mbox]
+#root_folder = "/var/mail/username"
+#draft_folder = ""
+#sent_folder = ""
+#format = "mbox"
+#index = "Compact"
+#identity="username@hostname.local"
+
 #[pager]
 #pager_ratio = 80
 #filter = "/usr/bin/pygmentize"

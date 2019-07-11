@@ -26,8 +26,8 @@ use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::error::{MeliError, Result};
 //use mailbox::backends::imap::ImapType;
-//use mailbox::backends::mbox::MboxType;
 use self::maildir::MaildirType;
+use self::mbox::MboxType;
 use super::email::{Envelope, EnvelopeHash, Flag};
 use std::fmt;
 use std::fmt::Debug;
@@ -59,7 +59,10 @@ impl Backends {
             "maildir".to_string(),
             Box::new(|| Box::new(|f| Box::new(MaildirType::new(f)))),
         );
-        //b.register("mbox".to_string(), Box::new(|| Box::new(MboxType::new(""))));
+        b.register(
+            "mbox".to_string(),
+            Box::new(|| Box::new(|f| Box::new(MboxType::new(f)))),
+        );
         //b.register("imap".to_string(), Box::new(|| Box::new(ImapType::new(""))));
         b
     }
@@ -249,6 +252,9 @@ impl BackendOp for ReadOnlyOp {
 pub trait BackendFolder: Debug {
     fn hash(&self) -> FolderHash;
     fn name(&self) -> &str;
+    fn path(&self) -> &str {
+        self.name()
+    }
     fn change_name(&mut self, new_name: &str);
     fn clone(&self) -> Folder;
     fn children(&self) -> &Vec<FolderHash>;
