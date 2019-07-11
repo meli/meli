@@ -1080,6 +1080,14 @@ impl Component for CompactListing {
             UIEvent::Input(ref key) if !self.unfocused && *key == shortcuts["select_entry"] => {
                 let env_hash = self.get_envelope_under_cursor(self.cursor_pos.2, context);
                 self.selection.entry(env_hash).and_modify(|e| *e = !*e);
+                if self.selection[&env_hash] {
+                    /* self.draw_list detects bg_color by checking the first cell of the first column, so
+                     * set it to make it permanent */
+                    let bg_color = Color::Byte(210);
+                    for x in 0..self.data_columns.columns[0].size().0 {
+                        self.data_columns.columns[0][(x, self.order[&env_hash])].set_bg(bg_color);
+                    }
+                }
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if (*idxa, *idxf)
