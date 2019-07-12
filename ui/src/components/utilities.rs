@@ -499,29 +499,31 @@ impl Component for Pager {
                     self.cursor_pos -= 1;
                     self.dirty = true;
                 }
+                return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["scroll_down"] => {
                 if self.height > 0 && self.cursor_pos + 1 < self.height {
                     self.cursor_pos += 1;
                     self.dirty = true;
                 }
+                return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["page_up"] => {
                 self.movement = Some(PageMovement::PageUp);
                 self.dirty = true;
+                return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["page_down"] => {
                 self.movement = Some(PageMovement::PageDown);
                 self.dirty = true;
+                return true;
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
-                return false;
             }
             UIEvent::Resize => {
                 self.dirty = true;
                 self.max_cursor_pos = None;
-                return false;
             }
             _ => {}
         }
