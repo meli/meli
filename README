@@ -12,21 +12,59 @@
                                     / \
                                     `-'  
 
+BUILDING
+========
 
-builds with debug print logs on stderr
+meli requires rust 1.34 and rust's package manager, Cargo. Information on how
+to get it on your system can be found here:
 
-config
+https://doc.rust-lang.org/cargo/getting-started/installation.html
+
+With Cargo available, the project can be built with 
+
+# cargo build --release
+
+The resulting binary will then be found under target/release/meli
+
+You can build and run meli with one command:
+
+# cargo run --release
+
+While the project is in early development, meli will only be developed for the
+linux kernel and respected linux distributions. Support for more UNIX-like OSes
+is on the roadmap.
+
+DEVELOPMENT
+===========
+
+Development builds can be built and/or run with
+
+# cargo build
+# cargo run 2> debug.log
+
+The debug logs can be disabled by setting debug-assertions to false in the
+development profile in Cargo.toml. In the future debug logs will be a feature.
+
+CONFIG
 ======
 
+meli by default looks for a configuration file in this location:
 # $XDG_CONFIG_HOME/meli/config
 
-testing
+You can run meli with arbitrary configuration files by setting the MELI_CONFIG
+environment variable to their locations, ie:
+
+# MELI_CONFIG=./test_config cargo run 2> debug.log
+
+TESTING
 =======
+
+How to run specific tests:
 
 # cargo test -p {melib, ui, meli} (-- --nocapture) (--test test_name)
 
-profiling:
-==========
+PROFILING
+=========
 
 # perf record -g target/debug/bin
 # perf script | stackcollapse-perf | rust-unmangle | flamegraph > perf.svg
