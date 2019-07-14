@@ -28,6 +28,7 @@ pub mod actions;
 pub use crate::actions::Action::{self, *};
 pub use crate::actions::ListingAction::{self, *};
 pub use crate::actions::MailingListAction::{self, *};
+pub use crate::actions::PagerAction::{self, *};
 pub use crate::actions::TabAction::{self, *};
 
 /* Create a const table with every command part that can be auto-completed and its description */
@@ -161,6 +162,29 @@ define_commands!([
                               )
                       );
                   )
+                },
+                /* Pipe pager contents to binary */
+                { tags: ["pipe "],
+                  desc: "pipe EXECUTABLE ARGS",
+                  parser:(
+                      named!( pipe<Action>,
+                              alt_complete!(
+                                  do_parse!(
+                                  ws!(tag!("pipe"))
+                                  >> bin: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> is_a!(" ")
+                                  >> args: separated_list!(is_a!(" "), is_not!(" "))
+                                  >> ({
+                                      Pager(Pipe(bin.to_string(), args.into_iter().map(|v| String::from_utf8(v.to_vec()).unwrap()).collect::<Vec<String>>()))
+                                  })) | do_parse!(
+                                          ws!(tag!("pipe"))
+                                          >> bin: ws!(map_res!(is_not!(" "), std::str::from_utf8))
+                                          >> ({
+                                              Pager(Pipe(bin.to_string(), Vec::new()))
+                                          })
+                                  ))
+                      );
+                  )
                 }
 ]);
 
@@ -207,5 +231,5 @@ named!(
     alt_complete!(toggle | envelope_action | filter | toggle_thread_snooze)
 );
 named!(pub parse_command<Action>,
-       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv)
+       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | pipe)
 );

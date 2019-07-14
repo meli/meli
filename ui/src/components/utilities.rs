@@ -493,7 +493,7 @@ impl Component for Pager {
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = &self.get_shortcuts(context)[Self::DESCRIPTION];
-        match *event {
+        match event {
             UIEvent::Input(ref key) if *key == shortcuts["scroll_up"] => {
                 if self.cursor_pos > 0 {
                     self.cursor_pos -= 1;
@@ -520,6 +520,41 @@ impl Component for Pager {
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
+            }
+            UIEvent::Action(Pager(Pipe(ref bin, ref args))) => {
+                use std::io::Write;
+                use std::process::{Command, Stdio};
+                let mut command_obj = match Command::new(bin)
+                    .args(args.as_slice())
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                {
+                    Ok(o) => o,
+                    Err(e) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!(
+                                "Could not pipe to {}: {}",
+                                bin, e
+                            )),
+                        ));
+                        return true;
+                    }
+                };
+                let stdin = command_obj.stdin.as_mut().expect("failed to open stdin");
+                stdin
+                    .write_all(self.text.as_bytes())
+                    .expect("Failed to write to stdin");
+
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                        "Pager text piped to '{}{}{}'",
+                        &bin,
+                        if args.is_empty() { "" } else { " " },
+                        args.join(", ")
+                    ))));
+                return true;
             }
             UIEvent::Resize => {
                 self.dirty = true;
