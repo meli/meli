@@ -240,7 +240,7 @@ impl MailView {
         let mut buf = CellBuffer::from(s);
 
         if highlight_urls {
-            let lines: Vec<&str> = s.split('\n').map(|l| l.trim_right()).collect();
+            let lines: Vec<&str> = s.split('\n').map(|l| l.trim_end()).collect();
             let mut shift = 0;
             let mut lidx_total = 0;
             let finder = LinkFinder::new();
