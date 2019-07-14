@@ -43,6 +43,7 @@ pub mod dbg {
         };
         ($val:expr) => {
             if cfg!(debug_assertions) {
+                let stringify = stringify!($val);
                 // Use of `match` here is intentional because it affects the lifetimes
                 // of temporaries - https://stackoverflow.com/a/48732525/1063961
                 match $val {
@@ -57,7 +58,7 @@ pub mod dbg {
                             line!(),
                             column!()
                         );
-                        eprintln!("{} = {:?}", stringify!(tmp), tmp);
+                        eprintln!("{} = {:?}", stringify, tmp);
                         tmp
                     }
                 }
