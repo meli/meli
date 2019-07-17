@@ -800,7 +800,7 @@ pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
     let end = input.iter().position(|e| *e == b'?').unwrap_or(input.len());
     let address: Address;
 
-    if let IResult::Done(rest, addr) = crate::email::parser::address(&input[..end]) {
+    if let IResult::Done(_, addr) = crate::email::parser::address(&input[..end]) {
         address = addr;
         input = if input[end..].is_empty() {
             &input[end..]
