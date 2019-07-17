@@ -54,7 +54,7 @@ trait ListingTrait {
     fn set_coordinates(&mut self, _: (usize, usize, Option<EnvelopeHash>));
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
-    fn filter(&mut self, filter_term: &str, context: &Context) {}
+    fn filter(&mut self, _filter_term: &str, _context: &Context) {}
 }
 
 #[derive(Debug)]
