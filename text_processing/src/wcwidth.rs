@@ -286,7 +286,7 @@ pub fn wcwidth(ucs: WChar) -> Option<usize> {
     )
 }
 
-fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
+pub fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
     let mut width = 0;
 
     while pwcs > 0 && n > 0 {
