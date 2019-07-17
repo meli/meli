@@ -291,7 +291,7 @@ impl FileSettings {
 impl Settings {
     pub fn new() -> Settings {
         let fs = FileSettings::new().unwrap_or_else(|e| {
-            println!("Configuration error: {}", e);
+            eprintln!("Configuration error: {}", e);
             std::process::exit(1);
         });
         let mut s: HashMap<String, AccountConf> = HashMap::new();
