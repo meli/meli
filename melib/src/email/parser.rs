@@ -362,7 +362,7 @@ named!(
     ))
 );
 
-/// For atoms in Header values.
+// For atoms in Header values.
 named!(
     pub quoted_printable_bytes<Vec<u8>>,
     many0!(alt_complete!(
