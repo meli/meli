@@ -276,7 +276,7 @@ impl FileSettings {
         if s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml))
             .is_err()
         {
-            println!("Config file contains errors.");
+            eprintln!("Config file contains errors.");
             std::process::exit(1);
         }
 
