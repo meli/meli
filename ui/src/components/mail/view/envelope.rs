@@ -96,7 +96,6 @@ impl EnvelopeView {
             Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
                     use std::io::Write;
-                    use std::process::{Command, Stdio};
                     let settings = context.accounts[self.account_pos].runtime_settings.conf();
                     if let Some(filter_invocation) = settings.html_filter() {
                         let parts = split_command!(filter_invocation);

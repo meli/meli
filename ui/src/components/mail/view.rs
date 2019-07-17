@@ -116,7 +116,6 @@ impl MailView {
             Some(Box::new(move |a: &'closure Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
                     use std::io::Write;
-                    use std::process::{Command, Stdio};
                     let settings = context.accounts[self.coordinates.0].runtime_settings.conf();
                     /* FIXME: duplication with view/html.rs */
                     if let Some(filter_invocation) = settings.html_filter() {
