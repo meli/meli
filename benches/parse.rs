@@ -2,7 +2,6 @@
 //extern crate melib;
 //
 //use melib::mailbox::backends::maildir::MaildirOp;
-//use melib::mailbox::backends::BackendOpGenerator;
 //use melib::mailbox::email::Envelope;
 //
 //extern crate test;
