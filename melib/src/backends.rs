@@ -24,7 +24,7 @@ pub mod mbox;
 
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
-use crate::error::Result;
+use crate::error::{MeliError, Result};
 //use mailbox::backends::imap::ImapType;
 //use mailbox::backends::mbox::MboxType;
 use self::maildir::MaildirType;
@@ -210,6 +210,39 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn set_flag(&mut self, envelope: &mut Envelope, flag: Flag) -> Result<()>;
 }
 
+/// Wrapper for BackendOps that are to be set read-only.
+///
+/// Warning: Backend implementations may still cause side-effects (for example IMAP can set the
+/// Seen flag when fetching an envelope)
+#[derive(Debug)]
+pub struct ReadOnlyOp {
+    op: Box<BackendOp>,
+}
+
+impl ReadOnlyOp {
+    pub fn new(op: Box<BackendOp>) -> Box<BackendOp> {
+        Box::new(ReadOnlyOp { op })
+    }
+}
+
+impl BackendOp for ReadOnlyOp {
+    fn description(&self) -> String {
+        format!("read-only: {}", self.op.description())
+    }
+    fn as_bytes(&mut self) -> Result<&[u8]> {
+        self.op.as_bytes()
+    }
+    fn fetch_headers(&mut self) -> Result<&[u8]> {
+        self.op.fetch_headers()
+    }
+    fn fetch_body(&mut self) -> Result<&[u8]> {
+        self.op.fetch_body()
+    }
+    fn fetch_flags(&self) -> Flag {
+        self.op.fetch_flags()
+    }
+    fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag) -> Result<()> {
+        Err(MeliError::new("read-only set."))
     }
 }
 

@@ -28,10 +28,10 @@ use super::ToggleFlag;
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
 use melib::backends::{
-    BackendOp, Backends, Folder, FolderHash, MailBackend, NotifyFn, RefreshEvent,
+    BackendOp, Backends, Folder, FolderHash, MailBackend, NotifyFn, ReadOnlyOp, RefreshEvent,
     RefreshEventConsumer, RefreshEventKind,
 };
-use melib::error::Result;
+use melib::error::{MeliError, Result};
 use melib::mailbox::*;
 use melib::thread::ThreadHash;
 use melib::AddressBook;
@@ -458,11 +458,23 @@ impl Account {
     }
 
     pub fn save_draft(&self, draft: Draft) -> Result<()> {
+        if self.settings.account.read_only() {
+            return Err(MeliError::new(format!(
+                "Account {} is read-only.",
+                self.name.as_str()
+            )));
+        }
         let finalize = draft.finalise()?;
         self.backend
             .save(&finalize.as_bytes(), &self.settings.conf.draft_folder)
     }
     pub fn save(&self, bytes: &[u8], folder: &str) -> Result<()> {
+        if self.settings.account.read_only() {
+            return Err(MeliError::new(format!(
+                "Account {} is read-only.",
+                self.name.as_str()
+            )));
+        }
         self.backend.save(bytes, folder)
     }
     pub fn iter_mailboxes(&self) -> MailboxIterator {
@@ -486,7 +498,12 @@ impl Account {
         for mailbox in self.folders.values() {
             if let Some(Ok(m)) = mailbox {
                 if m.envelopes.contains(&h) {
-                    return self.backend.operation(h, m.folder.hash());
+                    let operation = self.backend.operation(h, m.folder.hash());
+                    if self.settings.account.read_only() {
+                        return ReadOnlyOp::new(operation);
+                    } else {
+                        return operation;
+                    }
                 }
             }
         }

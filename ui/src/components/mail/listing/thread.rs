@@ -472,20 +472,14 @@ impl Component for ThreadListing {
                             &account.get_env(&self.locations[self.cursor_pos.2]);
                         (envelope.hash(), envelope.is_seen())
                     };
-                    if !is_seen {
-                        let op = account.operation(hash);
-                        let envelope: &mut Envelope =
-                            account.get_env_mut(&self.locations[self.cursor_pos.2]);
-                        envelope.set_seen(op).unwrap();
-                        true
-                    } else {
-                        false
-                    }
+                    is_seen
                 }
             };
+
             if must_highlight {
                 self.highlight_line_self(idx, context);
             }
+
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
             self.draw_list(
                 grid,

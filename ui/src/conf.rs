@@ -131,6 +131,8 @@ pub struct FileAccount {
     #[serde(default = "none", deserialize_with = "non_empty_string")]
     html_filter: Option<String>,
 
+    #[serde(default = "false_val")]
+    read_only: bool,
     folders: Option<HashMap<String, FolderConf>>,
 }
 
@@ -148,6 +150,7 @@ impl From<FileAccount> for AccountConf {
             format,
             sent_folder,
             identity,
+            read_only: x.read_only,
             display_name,
         };
 
@@ -366,7 +369,7 @@ where
 
 mod default_vals {
     pub(in crate::conf) fn false_val() -> bool {
-        true
+        false
     }
 
     pub(in crate::conf) fn true_val() -> bool {

@@ -1229,14 +1229,22 @@ impl Component for CompactListing {
                                 let hash = account.get_env(&i).hash();
                                 let op = account.operation(hash);
                                 let envelope: &mut Envelope = &mut account.get_env_mut(&i);
-                                envelope.set_seen(op).unwrap();
+                                if let Err(e) = envelope.set_seen(op) {
+                                    context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(e.to_string()),
+                                    ));
+                                }
                                 self.row_updates.push(i);
                             }
                             SetUnread => {
                                 let hash = account.get_env(&i).hash();
                                 let op = account.operation(hash);
                                 let envelope: &mut Envelope = &mut account.get_env_mut(&i);
-                                envelope.set_unseen(op).unwrap();
+                                if let Err(e) = envelope.set_unseen(op) {
+                                    context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(e.to_string()),
+                                    ));
+                                }
                                 self.row_updates.push(i);
                             }
                             Delete => { /* do nothing */ }

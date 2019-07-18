@@ -26,6 +26,7 @@ pub struct AccountSettings {
     pub format: String,
     pub sent_folder: String,
     pub identity: String,
+    pub read_only: bool,
     pub display_name: Option<String>,
 }
 
@@ -44,6 +45,9 @@ impl AccountSettings {
     }
     pub fn identity(&self) -> &str {
         &self.identity
+    }
+    pub fn read_only(&self) -> bool {
+        self.read_only
     }
     pub fn display_name(&self) -> Option<&String> {
         self.display_name.as_ref()

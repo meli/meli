@@ -298,7 +298,14 @@ impl Component for MailView {
             if !is_seen {
                 let op = account.operation(hash);
                 let envelope: &mut Envelope = &mut account.get_env_mut(&self.coordinates.2);
-                envelope.set_seen(op).unwrap();
+                if let Err(e) = envelope.set_seen(op) {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                            "Could not set message as seen: {}",
+                            e
+                        ))));
+                }
             }
             let envelope: &Envelope = &account.get_env(&self.coordinates.2);
 
