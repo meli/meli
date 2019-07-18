@@ -176,9 +176,9 @@ impl Account {
                 || f.name().eq_ignore_ascii_case("spam")
                 || f.name().eq_ignore_ascii_case("sent")
                 || f.name().eq_ignore_ascii_case("trash"))
-                && entry.ignore.is_unset()
+                && entry.subscribe.is_unset()
             {
-                entry.ignore = ToggleFlag::InternalVal(true);
+                entry.subscribe = ToggleFlag::InternalVal(false);
             }
             folder_names.insert(f.hash(), f.name().to_string());
         }
@@ -327,7 +327,7 @@ impl Account {
 
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
                     let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
-                    if folder_conf.ignore.is_true() {
+                    if folder_conf.subscribe.is_false() {
                         return None;
                     }
                     let (_, thread_node) = self.mail_and_thread(env_hash, folder_hash);

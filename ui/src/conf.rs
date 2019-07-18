@@ -94,7 +94,7 @@ pub struct FolderConf {
     #[serde(default = "true_val")]
     autoload: bool,
     #[serde(deserialize_with = "toggleflag_de", default)]
-    ignore: ToggleFlag,
+    subscribe: ToggleFlag,
 }
 
 impl Default for FolderConf {
@@ -102,7 +102,7 @@ impl Default for FolderConf {
         FolderConf {
             rename: None,
             autoload: true,
-            ignore: ToggleFlag::Unset,
+            subscribe: ToggleFlag::Unset,
         }
     }
 }
