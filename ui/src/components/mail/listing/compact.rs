@@ -1195,9 +1195,9 @@ impl Component for CompactListing {
                     self.filter(filter_term, context);
                     self.dirty = true;
                 }
-                Action::Listing(a @ SetRead)
-                | Action::Listing(a @ SetUnread)
-                | Action::Listing(a @ Delete) => {
+                Action::Listing(a @ ListingAction::SetSeen)
+                | Action::Listing(a @ ListingAction::SetUnseen)
+                | Action::Listing(a @ ListingAction::Delete) => {
                     /* Iterate over selection if exists, else only over the envelope under the
                      * cursor. Using two iterators allows chaining them which results into a Chain
                      * type. We can't conditonally select either a slice iterator or a Map iterator
@@ -1225,7 +1225,7 @@ impl Component for CompactListing {
                             continue;
                         }
                         match a {
-                            SetRead => {
+                            ListingAction::SetSeen => {
                                 let hash = account.get_env(&i).hash();
                                 let op = account.operation(hash);
                                 let envelope: &mut Envelope = &mut account.get_env_mut(&i);
@@ -1236,7 +1236,7 @@ impl Component for CompactListing {
                                 }
                                 self.row_updates.push(i);
                             }
-                            SetUnread => {
+                            ListingAction::SetUnseen => {
                                 let hash = account.get_env(&i).hash();
                                 let op = account.operation(hash);
                                 let envelope: &mut Envelope = &mut account.get_env_mut(&i);
@@ -1247,7 +1247,7 @@ impl Component for CompactListing {
                                 }
                                 self.row_updates.push(i);
                             }
-                            Delete => { /* do nothing */ }
+                            ListingAction::Delete => { /* do nothing */ }
                             _ => unreachable!(),
                         }
                     }

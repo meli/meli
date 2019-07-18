@@ -49,8 +49,8 @@ define_commands!([
                                  preceded!(
                                      ws!(tag!("set")),
                                      alt_complete!(
-                                         map!(ws!(tag!("read")), |_| Listing(SetRead))
-                                         | map!(ws!(tag!("unread")), |_| Listing(SetUnread))
+                                         map!(ws!(tag!("seen")), |_| Listing(SetSeen))
+                                         | map!(ws!(tag!("unseen")), |_| Listing(SetUnseen))
                                      )
                                  ) | map!(ws!(tag!("delete")), |_| Listing(Delete))
                              )
