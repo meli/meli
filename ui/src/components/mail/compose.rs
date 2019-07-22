@@ -268,7 +268,7 @@ impl Component for Composer {
             {
                 self.draft.headers_mut().insert(
                     "From".into(),
-                    get_display_name(context, self.account_cursor),
+                    crate::components::mail::get_display_name(context, self.account_cursor),
                 );
             }
             self.pager.update_from_str(self.draft.body(), Some(77));
@@ -643,15 +643,6 @@ impl Component for Composer {
     }
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
-    }
-}
-
-fn get_display_name(context: &Context, idx: usize) -> String {
-    let settings = context.accounts[idx].runtime_settings.account();
-    if let Some(d) = settings.display_name.as_ref() {
-        format!("{} <{}>", d, settings.identity)
-    } else {
-        settings.identity.to_string()
     }
 }
 

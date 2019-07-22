@@ -35,3 +35,12 @@ pub use self::compose::*;
 
 mod accounts;
 pub use self::accounts::*;
+
+fn get_display_name(context: &Context, idx: usize) -> String {
+    let settings = context.accounts[idx].runtime_settings.account();
+    if let Some(d) = settings.display_name.as_ref() {
+        format!("{} <{}>", d, settings.identity)
+    } else {
+        settings.identity.to_string()
+    }
+}

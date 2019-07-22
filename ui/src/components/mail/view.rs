@@ -873,7 +873,14 @@ impl Component for MailView {
                                 match option {
                                     list_management::UnsubscribeOption::Email(email) => {
                                         if let Ok(mailto) = Mailto::try_from(email) {
-                                            let draft: Draft = mailto.into();
+                                            let mut draft: Draft = mailto.into();
+                                            draft.headers_mut().insert(
+                                                "From".into(),
+                                                crate::components::mail::get_display_name(
+                                                    context,
+                                                    self.coordinates.0,
+                                                ),
+                                            );
                                             if super::compose::send_draft(
                                                 /* FIXME: refactor to avoid unsafe.
                                                  *
