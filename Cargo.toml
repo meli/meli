@@ -20,4 +20,4 @@ lto = true
 debug = false
 
 [workspace]
-members = ["melib", "ui", "debug_printer", "testing"]
+members = ["melib", "ui", "debug_printer", "testing", "text_processing"]

@@ -27,6 +27,7 @@
 extern crate melib;
 extern crate mime_apps;
 extern crate notify_rust;
+extern crate text_processing;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
@@ -45,6 +46,7 @@ extern crate serde_json;
 
 use melib::*;
 use std::collections::VecDeque;
+use text_processing::*;
 
 #[macro_use]
 mod types;

@@ -1,5 +1,5 @@
 use super::*;
-use crate::grapheme_clusters::Graphemes;
+use text_processing::grapheme_clusters::Graphemes;
 
 pub fn encode_header(value: &str) -> String {
     let mut ret = String::with_capacity(value.len());

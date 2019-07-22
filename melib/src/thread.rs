@@ -34,8 +34,8 @@
 
 use crate::email::parser::BytesExt;
 use crate::email::*;
-use crate::grapheme_clusters::*;
 use crate::structs::StackVec;
+use text_processing::grapheme_clusters::*;
 use uuid::Uuid;
 
 use fnv::{FnvHashMap, FnvHashSet};

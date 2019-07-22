@@ -1,4 +1,4 @@
-use melib::Graphemes;
+use text_processing::Graphemes;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UText {

@@ -84,6 +84,8 @@ pub mod dbg {
     }
 }
 
+extern crate text_processing;
+
 pub mod addressbook;
 pub mod async_workers;
 pub mod backends;
@@ -91,14 +93,10 @@ mod collection;
 pub mod conf;
 pub mod email;
 pub mod error;
-pub mod grapheme_clusters;
 pub mod mailbox;
 pub mod thread;
 pub use crate::email::*;
 pub use crate::thread::*;
-mod wcwidth;
-pub use self::grapheme_clusters::*;
-pub use self::wcwidth::*;
 mod structs;
 pub use self::structs::*;
 
