@@ -8,7 +8,11 @@ edition = "2018"
 [[bin]]
 name = "emailparse"
 path = "src/email_parse.rs"
+[[bin]]
+name = "linebreak"
+path = "src/linebreak.rs"
 
 
 [dependencies]
 melib = { path = "../melib", version = "*" }
+text_processing = { path = "../text_processing", version = "*" }
