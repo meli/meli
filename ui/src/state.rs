@@ -276,11 +276,12 @@ impl State {
                 return;
             }
             if let Some(notification) = self.context.accounts[idxa].reload(event, hash) {
+                if let UIEvent::Notification(_, _) = notification {
+                    self.context
+                        .replies
+                        .push_back(UIEvent::MailboxUpdate((idxa, hash)));
+                }
                 self.rcv_event(notification);
-            } else {
-                self.context
-                    .replies
-                    .push_back(UIEvent::MailboxUpdate((idxa, hash)));
             }
         } else {
             debug!(

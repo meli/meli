@@ -921,7 +921,7 @@ impl Component for StatusBar {
                     }
                 }
                 let account = &context.accounts[*idx_a];
-                let m = &account[*idx_f].as_ref().unwrap();
+                let m = &account[*idx_f].unwrap();
                 self.status = format!(
                     "{} | Mailbox: {}, Messages: {}, New: {}",
                     self.mode,

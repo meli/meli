@@ -106,13 +106,10 @@ impl Collection {
             }
         }
         /* envelope is not in threads, so insert it */
-        let env = self.envelopes.entry(new_hash).or_default() as *mut Envelope;
-        unsafe {
-            self.threads
-                .entry(folder_hash)
-                .or_default()
-                .insert(&mut (*env), &self.envelopes);
-        }
+        self.threads
+            .entry(folder_hash)
+            .or_default()
+            .insert(&mut self.envelopes, new_hash);
         for (h, t) in self.threads.iter_mut() {
             if *h == folder_hash {
                 continue;
@@ -127,7 +124,7 @@ impl Collection {
         &mut self,
         mut envelopes: FnvHashMap<EnvelopeHash, Envelope>,
         folder_hash: FolderHash,
-        mailbox: &mut Result<Mailbox>,
+        mailbox: &mut Mailbox,
         sent_folder: Option<FolderHash>,
     ) {
         self.sent_folder = sent_folder;
@@ -135,9 +132,7 @@ impl Collection {
             if self.message_ids.contains_key(e.message_id().raw()) {
                 /* skip duplicates until a better way to handle them is found. */
                 //FIXME
-                if let Ok(mailbox) = mailbox.as_mut() {
-                    mailbox.remove(h);
-                }
+                mailbox.remove(h);
                 false
             } else {
                 self.message_ids.insert(e.message_id().raw().to_vec(), h);
@@ -214,13 +209,10 @@ impl Collection {
             }
         }
         /* envelope is not in threads, so insert it */
-        let env = self.envelopes.entry(new_hash).or_default() as *mut Envelope;
-        unsafe {
-            self.threads
-                .entry(folder_hash)
-                .or_default()
-                .insert(&mut (*env), &self.envelopes);
-        }
+        self.threads
+            .entry(folder_hash)
+            .or_default()
+            .insert(&mut self.envelopes, new_hash);
         for (h, t) in self.threads.iter_mut() {
             if *h == folder_hash {
                 continue;
@@ -236,10 +228,17 @@ impl Collection {
         self.message_ids
             .insert(envelope.message_id().raw().to_vec(), hash);
         self.envelopes.insert(hash, envelope);
-        self.threads
+        if !self
+            .threads
             .entry(folder_hash)
             .or_default()
-            .insert_reply(&mut self.envelopes, hash);
+            .insert_reply(&mut self.envelopes, hash)
+        {
+            self.threads
+                .entry(folder_hash)
+                .or_default()
+                .insert(&mut self.envelopes, hash);
+        }
         &self.envelopes[&hash]
     }
     pub fn insert_reply(&mut self, env_hash: EnvelopeHash) {

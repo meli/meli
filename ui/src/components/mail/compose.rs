@@ -143,7 +143,7 @@ impl Composer {
         context: &Context,
     ) -> Self {
         let account = &context.accounts[coordinates.0];
-        let mailbox = &account[coordinates.1].as_ref().unwrap();
+        let mailbox = &account[coordinates.1].unwrap();
         let threads = &account.collection.threads[&mailbox.folder.hash()];
         let thread_nodes = &threads.thread_nodes();
         let mut ret = Composer::default();

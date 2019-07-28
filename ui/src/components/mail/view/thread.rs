@@ -158,7 +158,7 @@ impl ThreadView {
     fn initiate(&mut self, expanded_hash: Option<ThreadHash>, context: &Context) {
         /* stack to push thread messages in order in order to pop and print them later */
         let account = &context.accounts[self.coordinates.0];
-        let mailbox = &account[self.coordinates.1].as_ref().unwrap();
+        let mailbox = &account[self.coordinates.1].unwrap();
         let threads = &account.collection.threads[&mailbox.folder.hash()];
 
         let thread_iter = threads.thread_iter(self.coordinates.2);
@@ -607,7 +607,7 @@ impl ThreadView {
         /* First draw the thread subject on the first row */
         let y = if self.dirty {
             let account = &context.accounts[self.coordinates.0];
-            let mailbox = &account[self.coordinates.1].as_ref().unwrap();
+            let mailbox = &account[self.coordinates.1].unwrap();
             let threads = &account.collection.threads[&mailbox.folder.hash()];
             let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
             let i = if let Some(i) = thread_node.message() {
@@ -688,7 +688,7 @@ impl ThreadView {
         /* First draw the thread subject on the first row */
         let y = {
             let account = &context.accounts[self.coordinates.0];
-            let mailbox = &account[self.coordinates.1].as_ref().unwrap();
+            let mailbox = &account[self.coordinates.1].unwrap();
             let threads = &account.collection.threads[&mailbox.folder.hash()];
             let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
             let i = if let Some(i) = thread_node.message() {
@@ -904,7 +904,7 @@ impl Component for ThreadView {
             UIEvent::Input(Key::Char('e')) => {
                 {
                     let account = &context.accounts[self.coordinates.0];
-                    let mailbox = &account[self.coordinates.1].as_ref().unwrap();
+                    let mailbox = &account[self.coordinates.1].unwrap();
                     let threads = &account.collection.threads[&mailbox.folder.hash()];
                     let thread_node =
                         &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];

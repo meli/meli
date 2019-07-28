@@ -266,10 +266,11 @@ impl PlainListing {
         match context.accounts[self.cursor_pos.0].status(folder_hash) {
             Ok(_) => {}
             Err(_) => {
-                self.content = CellBuffer::new(MAX_COLS, 1, Cell::with_char(' '));
+                let message: String = context.accounts[self.cursor_pos.0][folder_hash].to_string();
+                self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
                 self.length = 0;
                 write_string_to_grid(
-                    "Loading.",
+                    message.as_str(),
                     &mut self.content,
                     Color::Default,
                     Color::Default,
@@ -280,7 +281,7 @@ impl PlainListing {
             }
         }
         let account = &context.accounts[self.cursor_pos.0];
-        let mailbox = &account[self.cursor_pos.1].as_ref().unwrap();
+        let mailbox = &account[self.cursor_pos.1].unwrap();
 
         self.length = mailbox.len();
         self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));

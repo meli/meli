@@ -137,9 +137,11 @@ impl ListingTrait for ThreadListing {
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap();
+        let mailbox = if context.accounts[self.cursor_pos.0][self.cursor_pos.1].is_available() {
+            context.accounts[self.cursor_pos.0][self.cursor_pos.1].unwrap()
+        } else {
+            return;
+        };
         if mailbox.is_empty() || mailbox.len() <= idx {
             return;
         }
@@ -222,10 +224,11 @@ impl ThreadListing {
         match context.accounts[self.cursor_pos.0].status(folder_hash) {
             Ok(_) => {}
             Err(_) => {
-                self.content = CellBuffer::new(MAX_COLS, 1, Cell::with_char(' '));
+                let message: String = context.accounts[self.cursor_pos.0][folder_hash].to_string();
+                self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
                 self.length = 0;
                 write_string_to_grid(
-                    "Loading.",
+                    message.as_str(),
                     &mut self.content,
                     Color::Default,
                     Color::Default,
@@ -236,7 +239,7 @@ impl ThreadListing {
             }
         }
         let account = &context.accounts[self.cursor_pos.0];
-        let mailbox = account[self.cursor_pos.1].as_ref().unwrap();
+        let mailbox = account[self.cursor_pos.1].unwrap();
 
         let threads = &account.collection.threads[&mailbox.folder.hash()];
         self.length = threads.len();
@@ -328,9 +331,11 @@ impl ThreadListing {
     }
 
     fn highlight_line_self(&mut self, idx: usize, context: &Context) {
-        let mailbox = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .as_ref()
-            .unwrap();
+        let mailbox = if context.accounts[self.cursor_pos.0][self.cursor_pos.1].is_available() {
+            context.accounts[self.cursor_pos.0][self.cursor_pos.1].unwrap()
+        } else {
+            return;
+        };
         if mailbox.is_empty() {
             return;
         }

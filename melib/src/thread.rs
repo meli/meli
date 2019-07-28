@@ -938,12 +938,7 @@ impl Threads {
             new_hash_set.difference(&self.hash_set).cloned().collect();
         for h in difference {
             debug!("inserting {}", envelopes[&h].subject());
-            let env = envelopes.entry(h).or_default() as *mut Envelope;
-            unsafe {
-                // `envelopes` is borrowed immutably and `insert` only changes the envelope's
-                // `thread` field.
-                self.insert(&mut (*env), envelopes);
-            }
+            self.insert(envelopes, h);
         }
         self.create_root_set(envelopes);
 
@@ -953,10 +948,10 @@ impl Threads {
         tree.retain(|t| root_set.contains(&t.id));
     }
 
-    pub fn insert(&mut self, envelope: &mut Envelope, envelopes: &Envelopes) {
-        self.link_envelope(envelope);
+    pub fn insert(&mut self, envelopes: &mut Envelopes, env_hash: EnvelopeHash) {
+        self.link_envelope(envelopes.get_mut(&env_hash).unwrap());
         {
-            let id = self.message_ids[envelope.message_id().raw()];
+            let id = self.message_ids[envelopes[&env_hash].message_id().raw()];
             self.rebuild_thread(id, envelopes);
         }
     }

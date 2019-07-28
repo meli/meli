@@ -532,12 +532,16 @@ impl Listing {
                 Ok(_) => {
                     let account = &context.accounts[index];
                     let count = account[entries[&folder_idx].hash()]
-                        .as_ref()
                         .unwrap()
                         .envelopes
                         .iter()
-                        .map(|h| &account.collection[&h])
-                        .filter(|e| !e.is_seen())
+                        .filter_map(|h| {
+                            if account.collection[&h].is_seen() {
+                                None
+                            } else {
+                                Some(())
+                            }
+                        })
                         .count();
                     let len = s.len();
                     s.insert_str(

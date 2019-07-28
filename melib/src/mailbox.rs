@@ -27,7 +27,6 @@
 
 use crate::backends::Folder;
 pub use crate::email::*;
-use crate::error::Result;
 use crate::thread::ThreadHash;
 
 pub use crate::thread::{SortField, SortOrder, ThreadNode, Threads};
@@ -47,19 +46,15 @@ pub struct Mailbox {
 }
 
 impl Mailbox {
-    pub fn new(
-        folder: Folder,
-        envelopes: Result<&FnvHashMap<EnvelopeHash, Envelope>>,
-    ) -> Result<Mailbox> {
-        let envelopes = envelopes?;
+    pub fn new(folder: Folder, envelopes: &FnvHashMap<EnvelopeHash, Envelope>) -> Mailbox {
         let name = folder.name().into();
         let envelopes = envelopes.keys().cloned().collect();
-        Ok(Mailbox {
+        Mailbox {
             folder,
             name,
             envelopes,
             ..Default::default()
-        })
+        }
     }
 
     pub fn name(&self) -> &str {
