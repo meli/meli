@@ -78,29 +78,65 @@ pub mod username {
     use std::ptr::null_mut;
     /* taken from whoami-0.1.1 */
     fn getpwuid() -> libc::passwd {
-        let mut pwent = libc::passwd {
-            pw_name: null_mut(),
-            pw_passwd: null_mut(),
-            pw_uid: 0,
-            pw_gid: 0,
-            pw_gecos: null_mut(),
-            pw_dir: null_mut(),
-            pw_shell: null_mut(),
-        };
         let mut pwentp = null_mut();
         let mut buffer = [0i8; 16384]; // from the man page
+        #[cfg(any(
+            target_os = "macos",
+            target_os = "ios",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        ))]
+        {
+            let mut pwent = libc::passwd {
+                pw_name: null_mut(),
+                pw_passwd: null_mut(),
+                pw_uid: 0,
+                pw_gid: 0,
+                pw_change: 0,
+                pw_class: null_mut(),
+                pw_gecos: null_mut(),
+                pw_dir: null_mut(),
+                pw_shell: null_mut(),
+                pw_expire: 0,
+            };
+            unsafe {
+                libc::getpwuid_r(
+                    libc::geteuid(),
+                    &mut pwent,
+                    &mut buffer[0],
+                    16384,
+                    &mut pwentp,
+                );
+            }
 
-        unsafe {
-            libc::getpwuid_r(
-                libc::geteuid(),
-                &mut pwent,
-                &mut buffer[0],
-                16384,
-                &mut pwentp,
-            );
+            pwent
         }
+        #[cfg(target_os = "linux")]
+        {
+            let mut pwent = libc::passwd {
+                pw_name: null_mut(),
+                pw_passwd: null_mut(),
+                pw_uid: 0,
+                pw_gid: 0,
+                pw_gecos: null_mut(),
+                pw_dir: null_mut(),
+                pw_shell: null_mut(),
+            };
 
-        pwent
+            unsafe {
+                libc::getpwuid_r(
+                    libc::geteuid(),
+                    &mut pwent,
+                    &mut buffer[0],
+                    16384,
+                    &mut pwentp,
+                );
+            }
+
+            pwent
+        }
     }
     fn ptr_to_string(name: *mut i8) -> String {
         let uname = name as *mut _ as *mut u8;
