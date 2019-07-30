@@ -262,6 +262,8 @@ impl MailBackend for MaildirType {
                                         *v = pathbuf.clone().into();
                                         *k
                                     } else {
+                                        drop(index_lock);
+                                        drop(hash_indexes_lock);
                                         /* Did we just miss a Create event? In any case, create
                                          * envelope. */
                                         if let Some(env) = add_path_to_index(
@@ -365,6 +367,8 @@ impl MailBackend for MaildirType {
                                         .unwrap()
                                         .to_path_buf();
                                     debug!("filename = {:?}", file_name);
+                                    drop(index_lock);
+                                    drop(hash_indexes_lock);
                                     if let Some(env) = add_path_to_index(
                                         &hash_indexes,
                                         folder_hash,
