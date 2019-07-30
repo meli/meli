@@ -33,7 +33,10 @@ impl Default for Draft {
         let now: DateTime<Local> = Local::now();
         headers.insert("Date".into(), now.to_rfc2822());
         headers.insert("Subject".into(), "".into());
-        headers.insert("User-Agent".into(), "meli 0.0".into());
+        headers.insert(
+            "User-Agent".into(),
+            format!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0")),
+        );
         header_order.push("Date".into());
         header_order.push("From".into());
         header_order.push("To".into());
