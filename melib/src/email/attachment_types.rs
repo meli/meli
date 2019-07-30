@@ -1,29 +1,27 @@
+/*
+ * meli
+ *
+ * Copyright 2017-2019 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
 use crate::email::attachments::Attachment;
 use crate::email::parser::BytesExt;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
-
-// TODO: rename.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Default)]
-pub struct SliceBuild {
-    offset: usize,
-    end: usize,
-}
-
-impl SliceBuild {
-    pub fn new(offset: usize, length: usize) -> Self {
-        SliceBuild {
-            offset,
-            end: offset + length,
-        }
-    }
-    //fn length(&self) -> usize {
-    //    self.end - self.offset + 1
-    //}
-    pub fn get<'a>(&self, slice: &'a [u8]) -> &'a [u8] {
-        &slice[self.offset..self.end]
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Charset {
@@ -100,6 +98,22 @@ impl Display for MultipartType {
     }
 }
 
+impl From<&[u8]> for MultipartType {
+    fn from(val: &[u8]) -> MultipartType {
+        if val.eq_ignore_ascii_case(b"mixed") {
+            MultipartType::Mixed
+        } else if val.eq_ignore_ascii_case(b"alternative") {
+            MultipartType::Alternative
+        } else if val.eq_ignore_ascii_case(b"digest") {
+            MultipartType::Digest
+        } else if val.eq_ignore_ascii_case(b"signed") {
+            MultipartType::Signed
+        } else {
+            Default::default()
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum ContentType {
     Text {
@@ -107,7 +121,7 @@ pub enum ContentType {
         charset: Charset,
     },
     Multipart {
-        boundary: SliceBuild,
+        boundary: Vec<u8>,
         kind: MultipartType,
         subattachments: Vec<Attachment>,
     },
@@ -212,6 +226,23 @@ impl Display for ContentTransferEncoding {
             ContentTransferEncoding::QuotedPrintable => write!(f, "quoted-printable"),
             ContentTransferEncoding::Other { tag: ref t } => {
                 panic!("unknown encoding {:?}", str::from_utf8(t))
+            }
+        }
+    }
+}
+impl From<&[u8]> for ContentTransferEncoding {
+    fn from(val: &[u8]) -> ContentTransferEncoding {
+        if val.eq_ignore_ascii_case(b"base64") {
+            ContentTransferEncoding::Base64
+        } else if val.eq_ignore_ascii_case(b"7bit") {
+            ContentTransferEncoding::_7Bit
+        } else if val.eq_ignore_ascii_case(b"8bit") {
+            ContentTransferEncoding::_8Bit
+        } else if val.eq_ignore_ascii_case(b"quoted-printable") {
+            ContentTransferEncoding::QuotedPrintable
+        } else {
+            ContentTransferEncoding::Other {
+                tag: val.to_ascii_lowercase(),
             }
         }
     }

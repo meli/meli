@@ -21,20 +21,12 @@
 use crate::email::parser;
 use crate::email::parser::BytesExt;
 use crate::email::EnvelopeWrapper;
+use core::fmt;
+use core::str;
 use data_encoding::BASE64_MIME;
-use std::fmt;
-use std::str;
 
 pub use crate::email::attachment_types::*;
 
-/*
- *
- * Data
- * Text { content: Vec<u8> }
- * Multipart
- */
-// TODO: Add example.
-//
 #[derive(Default, PartialEq)]
 pub struct AttachmentBuilder {
     content_type: ContentType,
@@ -42,30 +34,6 @@ pub struct AttachmentBuilder {
 
     raw: Vec<u8>,
 }
-
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
-pub struct Attachment {
-    content_type: ContentType,
-    content_transfer_encoding: ContentTransferEncoding,
-
-    raw: Vec<u8>,
-}
-
-impl fmt::Debug for Attachment {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n, body:\n{}\n}}",
-        self.content_type,
-        self.content_transfer_encoding,
-        self.raw.len(),
-        {
-            let mut text = Vec::with_capacity(4096);
-            self.get_text_recursive(&mut text);
-            std::str::from_utf8(&text).map(std::string::ToString::to_string).unwrap_or_else(|e| format!("Unicode error {}", e))
-        }
-        )
-    }
-}
-
 impl AttachmentBuilder {
     pub fn new(content: &[u8]) -> Self {
         AttachmentBuilder {
@@ -74,11 +42,26 @@ impl AttachmentBuilder {
             raw: content.to_vec(),
         }
     }
-    pub fn content_type(&mut self) -> &ContentType {
+
+    pub fn set_content_type(&mut self, val: ContentType) -> &mut Self {
+        self.content_type = val;
+        self
+    }
+
+    pub fn content_type(&self) -> &ContentType {
         &self.content_type
     }
 
-    pub fn set_content_type(&mut self, value: &[u8]) -> &Self {
+    pub fn set_content_transfer_encoding(&mut self, val: ContentTransferEncoding) -> &mut Self {
+        self.content_transfer_encoding = val;
+        self
+    }
+
+    pub fn content_transfer_encoding(&self) -> &ContentTransferEncoding {
+        &self.content_transfer_encoding
+    }
+
+    pub fn set_content_type_from_bytes(&mut self, value: &[u8]) -> &mut Self {
         match parser::content_type(value).to_full_result() {
             Ok((ct, cst, params)) => {
                 if ct.eq_ignore_ascii_case(b"multipart") {
@@ -90,26 +73,12 @@ impl AttachmentBuilder {
                         }
                     }
                     assert!(boundary.is_some());
-                    let _boundary = boundary.unwrap();
-                    let offset =
-                        (_boundary.as_ptr() as usize).wrapping_sub(value.as_ptr() as usize);
-                    let boundary = SliceBuild::new(offset, _boundary.len());
-                    let subattachments = Self::subattachments(&self.raw, boundary.get(&value));
-                    // Invalid mail or wrong assumption?
-                    // assert!(!subattachments.is_empty());
+                    let boundary = boundary.unwrap().to_vec();
+                    let subattachments = Self::subattachments(&self.raw, &boundary);
+
                     self.content_type = ContentType::Multipart {
                         boundary,
-                        kind: if cst.eq_ignore_ascii_case(b"mixed") {
-                            MultipartType::Mixed
-                        } else if cst.eq_ignore_ascii_case(b"alternative") {
-                            MultipartType::Alternative
-                        } else if cst.eq_ignore_ascii_case(b"digest") {
-                            MultipartType::Digest
-                        } else if cst.eq_ignore_ascii_case(b"signed") {
-                            MultipartType::Signed
-                        } else {
-                            Default::default()
-                        },
+                        kind: MultipartType::from(cst),
                         subattachments,
                     };
                 } else if ct.eq_ignore_ascii_case(b"text") {
@@ -164,50 +133,7 @@ impl AttachmentBuilder {
         }
         self
     }
-    pub fn set_content_transfer_encoding(&mut self, value: &[u8]) -> &Self {
-        self.content_transfer_encoding = if value.eq_ignore_ascii_case(b"base64") {
-            ContentTransferEncoding::Base64
-        } else if value.eq_ignore_ascii_case(b"7bit") {
-            ContentTransferEncoding::_7Bit
-        } else if value.eq_ignore_ascii_case(b"8bit") {
-            ContentTransferEncoding::_8Bit
-        } else if value.eq_ignore_ascii_case(b"quoted-printable") {
-            ContentTransferEncoding::QuotedPrintable
-        } else {
-            ContentTransferEncoding::Other {
-                tag: value.to_ascii_lowercase(),
-            }
-        };
-        self
-    }
-    /*
-    fn decode(&self) -> Vec<u8> {
-        // TODO merge this and standalone decode() function
-        let charset = match self.content_type {
-            ContentType::Text { charset: c, .. } => c,
-            _ => Default::default(),
-        };
 
-        let bytes = match self.content_transfer_encoding {
-            ContentTransferEncoding::Base64 => match BASE64_MIME.decode(&self.raw) {
-                Ok(v) => v,
-                _ => self.raw.to_vec(),
-            },
-            ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_bytes(&self.raw)
-                .to_full_result()
-                .unwrap(),
-            ContentTransferEncoding::_7Bit
-            | ContentTransferEncoding::_8Bit
-            | ContentTransferEncoding::Other { .. } => self.raw.to_vec(),
-        };
-
-        if let Ok(b) = parser::decode_charset(&bytes, charset) {
-            b.into_bytes()
-        } else {
-            self.raw.to_vec()
-        }
-    }
-    */
     pub fn build(self) -> Attachment {
         Attachment {
             content_type: self.content_type,
@@ -234,16 +160,14 @@ impl AttachmentBuilder {
                         }
                     };
 
-                    let body_slice = {
-                        let offset = (body.as_ptr() as usize).wrapping_sub(a.as_ptr() as usize);
-                        SliceBuild::new(offset, body.len())
-                    };
-                    builder.raw = body_slice.get(a).ltrim().into();
+                    builder.raw = body.ltrim().into();
                     for (name, value) in headers {
                         if name.eq_ignore_ascii_case(b"content-type") {
-                            builder.set_content_type(value);
+                            builder.set_content_type_from_bytes(value);
                         } else if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
-                            builder.set_content_transfer_encoding(value);
+                            builder.set_content_transfer_encoding(ContentTransferEncoding::from(
+                                value,
+                            ));
                         }
                     }
                     vec.push(builder.build());
@@ -263,10 +187,34 @@ impl AttachmentBuilder {
     }
 }
 
+/// Immutable attachment type.
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
+pub struct Attachment {
+    content_type: ContentType,
+    content_transfer_encoding: ContentTransferEncoding,
+
+    raw: Vec<u8>,
+}
+
+impl fmt::Debug for Attachment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Attachment {{\n content_type: {:?},\n content_transfer_encoding: {:?},\n raw: Vec of {} bytes\n, body:\n{}\n}}",
+        self.content_type,
+        self.content_transfer_encoding,
+        self.raw.len(),
+        {
+            let mut text = Vec::with_capacity(4096);
+            self.get_text_recursive(&mut text);
+            std::str::from_utf8(&text).map(std::string::ToString::to_string).unwrap_or_else(|e| format!("Unicode error {}", e))
+        }
+        )
+    }
+}
+
 impl fmt::Display for Attachment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.content_type {
-            ContentType::MessageRfc822 => match EnvelopeWrapper::new(self.bytes().to_vec()) {
+            ContentType::MessageRfc822 => match EnvelopeWrapper::new(self.raw().to_vec()) {
                 Ok(wrapper) => write!(
                     f,
                     "message/rfc822: {} - {} - {}",
@@ -307,7 +255,7 @@ impl Attachment {
         }
     }
 
-    pub fn bytes(&self) -> &[u8] {
+    pub fn raw(&self) -> &[u8] {
         &self.raw
     }
     fn get_text_recursive(&self, text: &mut Vec<u8>) {
@@ -442,27 +390,13 @@ impl Attachment {
 }
 
 pub fn interpret_format_flowed(_t: &str) -> String {
-    //let mut n = String::with_capacity(t.len());
     unimplemented!()
 }
 
 fn decode_rfc822(_raw: &[u8]) -> Attachment {
-    let builder = AttachmentBuilder::new(b"");
+    // FIXME
+    let builder = AttachmentBuilder::new(b"message/rfc822 cannot be displayed");
     builder.build()
-
-    /*
-    debug!("raw is\n{:?}", str::from_utf8(raw).unwrap());
-         let e = match Envelope::from_bytes(raw) {
-             Some(e) => e,
-             None => {
-             debug!("error in parsing mail");
-                 let error_msg = b"Mail cannot be shown because of errors.";
-                 let mut builder = AttachmentBuilder::new(error_msg);
-                 return builder.build();
-             }
-         };
-         e.body(None)
-         */
 }
 
 type Filter<'a> = Box<FnMut(&'a Attachment, &mut Vec<u8>) -> () + 'a>;
@@ -514,23 +448,23 @@ fn decode_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> Vec<
     };
 
     let bytes = match a.content_transfer_encoding {
-        ContentTransferEncoding::Base64 => match BASE64_MIME.decode(a.bytes()) {
+        ContentTransferEncoding::Base64 => match BASE64_MIME.decode(a.raw()) {
             Ok(v) => v,
-            _ => a.bytes().to_vec(),
+            _ => a.raw().to_vec(),
         },
-        ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_bytes(a.bytes())
+        ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_bytes(a.raw())
             .to_full_result()
             .unwrap(),
         ContentTransferEncoding::_7Bit
         | ContentTransferEncoding::_8Bit
-        | ContentTransferEncoding::Other { .. } => a.bytes().to_vec(),
+        | ContentTransferEncoding::Other { .. } => a.raw().to_vec(),
     };
 
     let mut ret = if a.content_type.is_text() {
         if let Ok(v) = parser::decode_charset(&bytes, charset) {
             v.into_bytes()
         } else {
-            a.bytes().to_vec()
+            a.raw().to_vec()
         }
     } else {
         bytes.to_vec()

@@ -150,7 +150,7 @@ impl EnvelopeView {
                 }
                 t
             }
-            ViewMode::Raw => String::from_utf8_lossy(body.bytes()).into_owned(),
+            ViewMode::Raw => String::from_utf8_lossy(body.raw()).into_owned(),
             ViewMode::Url => {
                 let mut t = body_text.to_string();
                 for (lidx, l) in finder.links(&body.text()).enumerate() {

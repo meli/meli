@@ -472,7 +472,7 @@ impl Envelope {
                             && cst.eq_ignore_ascii_case(b"mixed") =>
                     {
                         let mut builder = AttachmentBuilder::new(body);
-                        builder.set_content_type(value);
+                        builder.set_content_type_from_bytes(value);
                         let b = builder.build();
                         let subs = b.attachments();
 
@@ -586,9 +586,9 @@ impl Envelope {
                 continue;
             }
             if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
-                builder.set_content_transfer_encoding(value);
+                builder.set_content_transfer_encoding(ContentTransferEncoding::from(value));
             } else if name.eq_ignore_ascii_case(b"content-type") {
-                builder.set_content_type(value);
+                builder.set_content_type_from_bytes(value);
             }
         }
         builder.build()
