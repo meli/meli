@@ -127,8 +127,12 @@ pub enum ContentType {
     },
     MessageRfc822,
     PGPSignature,
-    Unsupported {
+    Other {
         tag: Vec<u8>,
+        name: Option<String>,
+    },
+    OctetStream {
+        name: Option<String>,
     },
 }
 
@@ -146,9 +150,10 @@ impl Display for ContentType {
         match self {
             ContentType::Text { kind: t, .. } => t.fmt(f),
             ContentType::Multipart { kind: k, .. } => k.fmt(f),
-            ContentType::Unsupported { tag: ref t } => write!(f, "{}", String::from_utf8_lossy(t)),
+            ContentType::Other { ref tag, .. } => write!(f, "{}", String::from_utf8_lossy(tag)),
             ContentType::PGPSignature => write!(f, "application/pgp-signature"),
             ContentType::MessageRfc822 => write!(f, "message/rfc822"),
+            ContentType::OctetStream { .. } => write!(f, "application/octet-stream"),
         }
     }
 }
@@ -161,6 +166,7 @@ impl ContentType {
             false
         }
     }
+
     pub fn is_text_html(&self) -> bool {
         if let ContentType::Text {
             kind: Text::Html, ..
@@ -169,6 +175,14 @@ impl ContentType {
             true
         } else {
             false
+        }
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            ContentType::Other { ref name, .. } => name.as_ref().map(|n| n.as_ref()),
+            ContentType::OctetStream { ref name } => name.as_ref().map(|n| n.as_ref()),
+            _ => None,
         }
     }
 }

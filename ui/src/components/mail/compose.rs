@@ -551,7 +551,11 @@ impl Component for Composer {
                 }
                 /* update Draft's headers based on form values */
                 self.update_draft();
-                let f = create_temp_file(self.draft.to_string().unwrap().as_str().as_bytes(), None);
+                let f = create_temp_file(
+                    self.draft.to_string().unwrap().as_str().as_bytes(),
+                    None,
+                    None,
+                );
                 //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
 
                 // TODO: check exit status

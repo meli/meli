@@ -63,10 +63,10 @@ impl File {
 
 /// Returned `File` will be deleted when dropped, so make sure to add it on `context.temp_files`
 /// to reap it later.
-pub fn create_temp_file(bytes: &[u8], filename: Option<&PathBuf>) -> File {
+pub fn create_temp_file(bytes: &[u8], filename: Option<String>, path: Option<&PathBuf>) -> File {
     let mut dir = std::env::temp_dir();
 
-    let path = if let Some(p) = filename {
+    let path = if let Some(p) = path {
         p
     } else {
         dir.push("meli");
@@ -74,8 +74,12 @@ pub fn create_temp_file(bytes: &[u8], filename: Option<&PathBuf>) -> File {
             .recursive(true)
             .create(&dir)
             .unwrap();
-        let u = Uuid::new_v4();
-        dir.push(u.hyphenated().to_string());
+        if let Some(filename) = filename {
+            dir.push(filename)
+        } else {
+            let u = Uuid::new_v4();
+            dir.push(u.hyphenated().to_string());
+        }
         &dir
     };
 

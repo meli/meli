@@ -27,13 +27,14 @@ use data_encoding::BASE64_MIME;
 
 pub use crate::email::attachment_types::*;
 
-#[derive(Default, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AttachmentBuilder {
-    content_type: ContentType,
-    content_transfer_encoding: ContentTransferEncoding,
+    pub content_type: ContentType,
+    pub content_transfer_encoding: ContentTransferEncoding,
 
-    raw: Vec<u8>,
+    pub raw: Vec<u8>,
 }
+
 impl AttachmentBuilder {
     pub fn new(content: &[u8]) -> Self {
         AttachmentBuilder {
@@ -41,6 +42,15 @@ impl AttachmentBuilder {
             content_transfer_encoding: ContentTransferEncoding::_7Bit,
             raw: content.to_vec(),
         }
+    }
+
+    pub fn raw(&self) -> &[u8] {
+        &self.raw
+    }
+
+    pub fn set_raw(&mut self, raw: Vec<u8>) -> &mut Self {
+        self.raw = raw;
+        self
     }
 
     pub fn set_content_type(&mut self, val: ContentType) -> &mut Self {
@@ -120,15 +130,26 @@ impl AttachmentBuilder {
                 {
                     self.content_type = ContentType::PGPSignature;
                 } else {
+                    let mut name: Option<String> = None;
+                    for (n, v) in params {
+                        if n.eq_ignore_ascii_case(b"name") {
+                            name = Some(String::from_utf8_lossy(v).into());
+                            break;
+                        }
+                    }
                     let mut tag: Vec<u8> = Vec::with_capacity(ct.len() + cst.len() + 1);
                     tag.extend(ct);
                     tag.push(b'/');
                     tag.extend(cst);
-                    self.content_type = ContentType::Unsupported { tag };
+                    self.content_type = ContentType::Other { tag, name };
                 }
             }
-            Err(v) => {
-                debug!("parsing error in content_type: {:?} {:?}", value, v);
+            Err(e) => {
+                debug!(
+                    "parsing error in content_type: {:?} {:?}",
+                    String::from_utf8_lossy(value),
+                    e
+                );
             }
         }
         self
@@ -187,13 +208,28 @@ impl AttachmentBuilder {
     }
 }
 
+impl From<Attachment> for AttachmentBuilder {
+    fn from(val: Attachment) -> Self {
+        let Attachment {
+            content_type,
+            content_transfer_encoding,
+            raw,
+        } = val;
+        AttachmentBuilder {
+            content_type,
+            content_transfer_encoding,
+            raw,
+        }
+    }
+}
+
 /// Immutable attachment type.
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct Attachment {
-    content_type: ContentType,
-    content_transfer_encoding: ContentTransferEncoding,
+    pub(in crate::email) content_type: ContentType,
+    pub(in crate::email) content_transfer_encoding: ContentTransferEncoding,
 
-    raw: Vec<u8>,
+    pub(in crate::email) raw: Vec<u8>,
 }
 
 impl fmt::Debug for Attachment {
@@ -225,9 +261,10 @@ impl fmt::Display for Attachment {
                 Err(e) => write!(f, "{}", e),
             },
             ContentType::PGPSignature => write!(f, "pgp signature {}", self.mime_type()),
-            ContentType::Unsupported { .. } => {
-                write!(f, "Data attachment of type {}", self.mime_type())
+            ContentType::OctetStream { ref name } => {
+                write!(f, "{}", name.clone().unwrap_or_else(|| self.mime_type()))
             }
+            ContentType::Other { .. } => write!(f, "Data attachment of type {}", self.mime_type()),
             ContentType::Text { .. } => write!(f, "Text attachment of type {}", self.mime_type()),
             ContentType::Multipart {
                 subattachments: ref sub_att_vec,
@@ -258,6 +295,7 @@ impl Attachment {
     pub fn raw(&self) -> &[u8] {
         &self.raw
     }
+
     fn get_text_recursive(&self, text: &mut Vec<u8>) {
         match self.content_type {
             ContentType::Text { .. } => {
@@ -403,8 +441,13 @@ type Filter<'a> = Box<FnMut(&'a Attachment, &mut Vec<u8>) -> () + 'a>;
 
 fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> Vec<u8> {
     match a.content_type {
-        ContentType::Unsupported { .. } => Vec::new(),
+        ContentType::Other { .. } => Vec::new(),
         ContentType::Text { .. } => decode_helper(a, filter),
+        ContentType::OctetStream { ref name } => name
+            .clone()
+            .unwrap_or_else(|| a.mime_type())
+            .to_string()
+            .into_bytes(),
         ContentType::PGPSignature => a.content_type.to_string().into_bytes(),
         ContentType::MessageRfc822 => {
             let temp = decode_rfc822(&a.raw);

@@ -435,11 +435,15 @@ impl Component for EnvelopeView {
                                 ));
                                 return true;
                             }
-                            ContentType::Unsupported { .. } => {
+                            ContentType::Other { ref name, .. } => {
                                 let attachment_type = u.mime_type();
                                 let binary = query_default_app(&attachment_type);
                                 if let Ok(binary) = binary {
-                                    let p = create_temp_file(&decode(u, None), None);
+                                    let p = create_temp_file(
+                                        &decode(u, None),
+                                        name.as_ref().map(|n| n.clone()),
+                                        None,
+                                    );
                                     Command::new(&binary)
                                         .arg(p.path())
                                         .stdin(Stdio::piped())
@@ -458,6 +462,14 @@ impl Component for EnvelopeView {
                                     ));
                                     return true;
                                 }
+                            }
+                            ContentType::OctetStream { .. } => {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(
+                                        "application/octet-stream isn't supported yet".to_string(),
+                                    ),
+                                ));
+                                return true;
                             }
                             ContentType::PGPSignature => {
                                 context.replies.push_back(UIEvent::StatusEvent(

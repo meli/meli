@@ -750,11 +750,15 @@ impl Component for MailView {
                                 ));
                                 return true;
                             }
-                            ContentType::Unsupported { .. } => {
+                            ContentType::Other { ref name, .. } => {
                                 let attachment_type = u.mime_type();
                                 let binary = query_default_app(&attachment_type);
                                 if let Ok(binary) = binary {
-                                    let p = create_temp_file(&decode(u, None), None);
+                                    let p = create_temp_file(
+                                        &decode(u, None),
+                                        name.as_ref().map(|n| n.clone()),
+                                        None,
+                                    );
                                     Command::new(&binary)
                                         .arg(p.path())
                                         .stdin(Stdio::piped())
@@ -766,13 +770,30 @@ impl Component for MailView {
                                     context.temp_files.push(p);
                                 } else {
                                     context.replies.push_back(UIEvent::StatusEvent(
-                                        StatusEvent::DisplayMessage(format!(
-                                            "Couldn't find a default application for type {}",
-                                            attachment_type
-                                        )),
-                                    ));
+                                            StatusEvent::DisplayMessage(if name.is_some() {
+                                                format!(
+                                                        "Couldn't find a default application for file {} (type {})",
+                                                        name.as_ref().unwrap(), attachment_type
+                                            )
+                                            } else {
+                                                format!( "Couldn't find a default application for type {}", attachment_type)
+                                            }
+
+                                            ,
+                                            )));
                                     return true;
                                 }
+                            }
+                            ContentType::OctetStream { ref name } => {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(
+                                        format!(
+                                        "Failed to open {}. application/octet-stream isn't supported yet",
+                                        name.as_ref().map(|n| n.as_str()).unwrap_or("file")
+                                        )
+                                    ),
+                                ));
+                                return true;
                             }
                             ContentType::PGPSignature => {
                                 context.replies.push_back(UIEvent::StatusEvent(
