@@ -18,7 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::email::attachments::Attachment;
+use crate::email::attachments::{Attachment, AttachmentBuilder};
 use crate::email::parser::BytesExt;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
@@ -176,6 +176,42 @@ impl ContentType {
         } else {
             false
         }
+    }
+
+    pub fn make_boundary(subattachments: &Vec<AttachmentBuilder>) -> String {
+        use crate::email::compose::random::gen_boundary;
+        let mut boundary = "bzz_bzz__bzz__".to_string();
+        let mut random_boundary = gen_boundary();
+
+        let mut loop_counter = 4096;
+        'loo: loop {
+            let mut flag = true;
+            for sub in subattachments {
+                'sub_loop: loop {
+                    if sub.raw().find(random_boundary.as_bytes()).is_some() {
+                        random_boundary = gen_boundary();
+                        flag = false;
+                    } else {
+                        break 'sub_loop;
+                    }
+                }
+            }
+            if flag {
+                break 'loo;
+            }
+            loop_counter -= 1;
+            if loop_counter == 0 {
+                panic!("Can't generate randomness. This is a BUG");
+            }
+        }
+
+        boundary.extend(random_boundary.chars());
+        /* rfc134
+         * "The only mandatory parameter for the multipart Content-Type is the boundary parameter,
+         * which consists of 1 to 70 characters from a set of characters known to be very robust
+         * through email gateways, and NOT ending with white space"*/
+        boundary.truncate(70);
+        boundary
     }
 
     pub fn name(&self) -> Option<&str> {

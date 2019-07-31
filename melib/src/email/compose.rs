@@ -1,11 +1,12 @@
 use super::*;
 use crate::backends::BackendOp;
+use crate::email::attachments::AttachmentBuilder;
 use chrono::{DateTime, Local};
 use data_encoding::BASE64_MIME;
 use std::str;
 
-mod mime;
-mod random;
+pub mod mime;
+pub mod random;
 
 //use self::mime::*;
 
@@ -18,7 +19,7 @@ pub struct Draft {
     header_order: Vec<String>,
     body: String,
 
-    attachments: Vec<Attachment>,
+    attachments: Vec<AttachmentBuilder>,
 }
 
 impl Default for Draft {
@@ -193,6 +194,14 @@ impl Draft {
         &self.headers
     }
 
+    pub fn attachments(&self) -> &Vec<AttachmentBuilder> {
+        &self.attachments
+    }
+
+    pub fn attachments_mut(&mut self) -> &mut Vec<AttachmentBuilder> {
+        &mut self.attachments
+    }
+
     pub fn body(&self) -> &str {
         &self.body
     }
@@ -248,22 +257,32 @@ impl Draft {
         }
         ret.push_str("MIME-Version: 1.0\n");
 
-        if self.body.is_ascii() {
-            ret.push('\n');
-            ret.push_str(&self.body);
+        if !self.attachments.is_empty() {
+            let mut subattachments = Vec::with_capacity(self.attachments.len() + 1);
+            let attachments = std::mem::replace(&mut self.attachments, Vec::new());
+            let mut body_attachment = AttachmentBuilder::default();
+            body_attachment.set_raw(self.body.as_bytes().to_vec());
+            subattachments.push(body_attachment);
+            subattachments.extend(attachments.into_iter());
+            build_multipart(&mut ret, MultipartType::Mixed, subattachments);
         } else {
-            let content_type: ContentType = Default::default();
-            let content_transfer_encoding: ContentTransferEncoding =
-                ContentTransferEncoding::Base64;
+            if self.body.is_ascii() {
+                ret.push('\n');
+                ret.push_str(&self.body);
+            } else {
+                let content_type: ContentType = Default::default();
+                let content_transfer_encoding: ContentTransferEncoding =
+                    ContentTransferEncoding::Base64;
 
-            ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", content_type).chars());
-            ret.extend(
-                format!("Content-Transfer-Encoding: {}\n", content_transfer_encoding).chars(),
-            );
-            ret.push('\n');
+                ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", content_type).chars());
+                ret.extend(
+                    format!("Content-Transfer-Encoding: {}\n", content_transfer_encoding).chars(),
+                );
+                ret.push('\n');
 
-            ret.push_str(&BASE64_MIME.encode(&self.body.as_bytes()).trim());
-            ret.push('\n');
+                ret.push_str(&BASE64_MIME.encode(&self.body.as_bytes()).trim());
+                ret.push('\n');
+            }
         }
 
         Ok(ret)
@@ -289,9 +308,98 @@ fn ignore_header(header: &[u8]) -> bool {
     }
 }
 
+fn build_multipart(ret: &mut String, kind: MultipartType, subattachments: Vec<AttachmentBuilder>) {
+    use ContentType::*;
+    let boundary = ContentType::make_boundary(&subattachments);
+    ret.extend(
+        format!(
+            "Content-Type: {}; charset=\"utf-8\"; boundary=\"{}\"\n",
+            kind, boundary
+        )
+        .chars(),
+    );
+    ret.push('\n');
+    /* rfc1341 */
+    ret.extend("This is a MIME formatted message with attachments. Use a MIME-compliant client to view it properly.\n".chars());
+    for sub in subattachments {
+        ret.push_str("--");
+        ret.extend(boundary.chars());
+        ret.push('\n');
+        match sub.content_type {
+            ContentType::Text {
+                kind: crate::email::attachment_types::Text::Plain,
+                charset: Charset::UTF8,
+            } => {
+                ret.push('\n');
+                ret.push_str(&String::from_utf8_lossy(sub.raw()));
+                ret.push('\n');
+            }
+            Text {
+                ref kind,
+                charset: _,
+            } => {
+                ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", kind).chars());
+                ret.push('\n');
+                ret.push_str(&String::from_utf8_lossy(sub.raw()));
+                ret.push('\n');
+            }
+            Multipart {
+                boundary: _boundary,
+                kind,
+                subattachments: subsubattachments,
+            } => {
+                build_multipart(
+                    ret,
+                    kind,
+                    subsubattachments
+                        .into_iter()
+                        .map(|s| s.into())
+                        .collect::<Vec<AttachmentBuilder>>(),
+                );
+                ret.push('\n');
+            }
+            MessageRfc822 | PGPSignature => {
+                ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", kind).chars());
+                ret.push('\n');
+                ret.push_str(&String::from_utf8_lossy(sub.raw()));
+                ret.push('\n');
+            }
+            _ => {
+                let content_transfer_encoding: ContentTransferEncoding =
+                    ContentTransferEncoding::Base64;
+                if let Some(name) = sub.content_type().name() {
+                    ret.extend(
+                        format!(
+                            "Content-Type: {}; name=\"{}\"; charset=\"utf-8\"\n",
+                            sub.content_type(),
+                            name
+                        )
+                        .chars(),
+                    );
+                } else {
+                    ret.extend(
+                        format!("Content-Type: {}; charset=\"utf-8\"\n", sub.content_type())
+                            .chars(),
+                    );
+                }
+                ret.extend(
+                    format!("Content-Transfer-Encoding: {}\n", content_transfer_encoding).chars(),
+                );
+                ret.push('\n');
+                ret.push_str(&BASE64_MIME.encode(sub.raw()).trim());
+                ret.push('\n');
+            }
+        }
+    }
+    ret.push_str("--");
+    ret.extend(boundary.chars());
+    ret.push_str("--\n");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
     use std::str::FromStr;
 
     #[test]
@@ -311,5 +419,27 @@ mod tests {
             Draft::from_str(&default.to_string().unwrap()).unwrap(),
             default
         );
+    }
+
+    #[test]
+    fn test_attachments() {
+        return;
+        let mut default = Draft::default();
+        default.set_body("αδφαφσαφασ".to_string());
+
+        let mut file = std::fs::File::open("file path").unwrap();
+        let mut contents = Vec::new();
+        file.read_to_end(&mut contents).unwrap();
+
+        let mut attachment = AttachmentBuilder::new(b"");
+        attachment
+            .set_raw(contents)
+            .set_content_type(ContentType::Other {
+                name: Some("images.jpeg".to_string()),
+                tag: b"image/jpeg".to_vec(),
+            })
+            .set_content_transfer_encoding(ContentTransferEncoding::Base64);
+        default.attachments_mut().push(attachment);
+        println!("{}", default.finalise().unwrap());
     }
 }

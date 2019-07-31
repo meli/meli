@@ -49,3 +49,11 @@ pub fn gen_message_id(fqdn: &str) -> String {
 
     format!("<{}.{}@{}>", clock, rand, fqdn)
 }
+
+pub fn gen_boundary() -> String {
+    let clock = base36(clock());
+    let rand = base36(random_u64());
+    let rand2 = base36(random_u64());
+
+    format!("{}{}{}", rand, clock, rand2)
+}
