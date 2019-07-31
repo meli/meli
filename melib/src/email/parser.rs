@@ -143,19 +143,19 @@ fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
     if name.is_empty() {
         return IResult::Error(error_code!(ErrorKind::Custom(43)));
     }
-    if ptr > input.len() {
+    if ptr >= input.len() {
         return IResult::Error(error_code!(ErrorKind::Custom(43)));
     }
 
     if input[ptr] == b'\n' {
         ptr += 1;
-        if ptr > input.len() {
+        if ptr >= input.len() {
             return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
     }
     while input[ptr] == b' ' || input[ptr] == b'\t' {
         ptr += 1;
-        if ptr > input.len() {
+        if ptr >= input.len() {
             return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
     }
@@ -186,19 +186,19 @@ fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
     }
     if input[ptr] == b':' {
         ptr += 1;
-        if ptr > input.len() {
+        if ptr >= input.len() {
             return IResult::Incomplete(Needed::Unknown);
         }
     }
     while input[ptr] == b' ' {
         ptr += 1;
-        if ptr > input.len() {
+        if ptr >= input.len() {
             return IResult::Incomplete(Needed::Unknown);
         }
     }
     if input[ptr..].starts_with(b"\n") {
         ptr += 1;
-        if ptr > input.len() {
+        if ptr >= input.len() {
             return IResult::Incomplete(Needed::Unknown);
         }
         if input[ptr] != b' ' && input[ptr] != b'\t' {
