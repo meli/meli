@@ -73,6 +73,33 @@ impl ListingTrait for ThreadListing {
             return;
         }
         let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+        if let Some(mvm) = self.movement.take() {
+            match mvm {
+                PageMovement::PageUp => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows);
+                }
+                PageMovement::PageDown => {
+                    if self.new_cursor_pos.2 + rows + 1 < self.length {
+                        self.new_cursor_pos.2 += rows;
+                    } else if self.new_cursor_pos.2 + rows > self.length {
+                        self.new_cursor_pos.2 = self.length - 1;
+                    } else {
+                        self.new_cursor_pos.2 = (self.length / rows) * rows;
+                    }
+                }
+                PageMovement::Home => {
+                    self.new_cursor_pos.2 = 0;
+                }
+                PageMovement::End => {
+                    if self.new_cursor_pos.2 + rows > self.length {
+                        self.new_cursor_pos.2 = self.length - 1;
+                    } else {
+                        self.new_cursor_pos.2 = (self.length / rows) * rows;
+                    }
+                }
+            }
+        }
+
         let prev_page_no = (self.cursor_pos.2).wrapping_div(rows);
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 

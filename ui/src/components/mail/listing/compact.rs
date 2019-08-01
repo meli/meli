@@ -220,6 +220,8 @@ impl ListingTrait for CompactListing {
                 PageMovement::PageDown => {
                     if self.new_cursor_pos.2 + rows + 1 < self.length {
                         self.new_cursor_pos.2 += rows;
+                    } else if self.new_cursor_pos.2 + rows > self.length {
+                        self.new_cursor_pos.2 = self.length - 1;
                     } else {
                         self.new_cursor_pos.2 = (self.length / rows) * rows;
                     }
@@ -228,7 +230,11 @@ impl ListingTrait for CompactListing {
                     self.new_cursor_pos.2 = 0;
                 }
                 PageMovement::End => {
-                    self.new_cursor_pos.2 = (self.length / rows) * rows;
+                    if self.new_cursor_pos.2 + rows > self.length {
+                        self.new_cursor_pos.2 = self.length - 1;
+                    } else {
+                        self.new_cursor_pos.2 = (self.length / rows) * rows;
+                    }
                 }
             }
         }
