@@ -73,10 +73,13 @@ impl MaildirOp {
                 debug!("{:#?}", e);
             }
         }
-        if let Some(path) = &map[&self.hash].modified {
-            path.clone()
+        if let Some(modif) = &map[&self.hash].modified {
+            match modif {
+                PathMod::Path(ref path) => path.clone(),
+                PathMod::Hash(hash) => map[&hash].to_path_buf(),
+            }
         } else {
-            map.get(&self.hash).unwrap().buf.to_path_buf()
+            map.get(&self.hash).unwrap().to_path_buf()
         }
     }
 }
@@ -161,7 +164,7 @@ impl<'a> BackendOp for MaildirOp {
         let hash_index = self.hash_index.clone();
         let mut map = hash_index.lock().unwrap();
         let map = map.entry(self.folder_hash).or_default();
-        map.entry(old_hash).or_default().modified = Some(new_name.clone());
+        map.entry(old_hash).or_default().modified = Some(PathMod::Path(new_name.clone()));
 
         debug!("renaming {:?} to {:?}", path, new_name);
         fs::rename(&path, &new_name)?;

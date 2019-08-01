@@ -49,21 +49,30 @@ use std::result;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum PathMod {
+    Path(PathBuf),
+    Hash(EnvelopeHash),
+}
+
 #[derive(Debug, Default)]
 pub struct MaildirPath {
     pub(super) buf: PathBuf,
-    pub(super) modified: Option<PathBuf>,
+    pub(super) modified: Option<PathMod>,
+    pub(super) removed: bool,
 }
 
 impl Deref for MaildirPath {
     type Target = PathBuf;
     fn deref(&self) -> &PathBuf {
+        assert!(!(self.removed && self.modified.is_none()));
         &self.buf
     }
 }
 
 impl DerefMut for MaildirPath {
     fn deref_mut(&mut self) -> &mut PathBuf {
+        assert!(!(self.removed && self.modified.is_none()));
         &mut self.buf
     }
 }
@@ -73,6 +82,7 @@ impl From<PathBuf> for MaildirPath {
         MaildirPath {
             buf: val,
             modified: None,
+            removed: false,
         }
     }
 }
@@ -321,16 +331,25 @@ impl MailBackend for MaildirType {
                                     debug!("removed but not contained in index");
                                     continue;
                                 };
-                                if let Some(path) = &index_lock[&hash].modified {
-                                    debug!(
-                                        "envelope {} has modified path set {}",
-                                        hash,
-                                        path.display()
-                                    );
+                                if let Some(ref modif) = &index_lock[&hash].modified {
+                                    match modif {
+                                        PathMod::Path(path) => debug!(
+                                            "envelope {} has modified path set {}",
+                                            hash,
+                                            path.display()
+                                        ),
+                                        PathMod::Hash(hash) => debug!(
+                                            "envelope {} has modified path set {}",
+                                            hash,
+                                            &index_lock[&hash].buf.display()
+                                        ),
+                                    }
                                     continue;
                                 }
 
-                                index_lock.remove(&hash);
+                                index_lock.entry(hash).and_modify(|e| {
+                                    e.removed = true;
+                                });
 
                                 sender.send(RefreshEvent {
                                     hash: folder_hash,
@@ -356,7 +375,11 @@ impl MailBackend for MaildirType {
                                         hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
                                     });
-                                    index_lock.remove(&old_hash);
+                                    index_lock.entry(old_hash).and_modify(|e| {
+                                        debug!(&e.modified);
+                                        e.modified = Some(PathMod::Hash(new_hash));
+                                        e.removed = false;
+                                    });
                                     index_lock.insert(new_hash, dest.into());
                                     continue;
                                 } else if !index_lock.contains_key(&new_hash) {
