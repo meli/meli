@@ -47,7 +47,7 @@ use xdg;
 
 macro_rules! error_and_exit {
     ($($err:expr),*) => {{
-            println!($($err),*);
+            eprintln!($($err),*);
             std::process::exit(1);
     }}
 }
@@ -57,6 +57,7 @@ struct CommandLineArguments {
     create_config: Option<String>,
     config: Option<String>,
     help: bool,
+    version: bool,
 }
 
 fn main() {
@@ -70,6 +71,7 @@ fn main() {
         create_config: None,
         config: None,
         help: false,
+        version: false,
     };
 
     for i in std::env::args().skip(1) {
@@ -88,10 +90,12 @@ fn main() {
                 Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
                 Some(Config) => error_and_exit!("invalid value for flag `--config`"),
             },
-            "--help" | "-h" => match prev {
-                Some(_) => {}
-                None => args.help = true,
-            },
+            "--help" | "-h" => {
+                args.help = true;
+            }
+            "--version" | "-v" => {
+                args.version = true;
+            }
             e => match prev {
                 None => error_and_exit!("error: value without command {}", e),
                 Some(CreateConfig) if args.create_config.is_none() => {
@@ -111,10 +115,17 @@ fn main() {
     if args.help {
         println!("usage:\tmeli [--create-config[ PATH]] [--config[ PATH]|-c[ PATH]]");
         println!("\tmeli --help");
+        println!("\tmeli --version");
         println!("");
-        println!("\t--help\t\t\tshow this message and exit");
+        println!("\t--help, -h\t\tshow this message and exit");
+        println!("\t--version, -v\t\tprint version and exit");
         println!("\t--create-config[ PATH]\tCreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config");
         println!("\t--config PATH, -c PATH\tUse specified configuration file");
+        std::process::exit(0);
+    }
+
+    if args.version {
+        println!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0"));
         std::process::exit(0);
     }
 
