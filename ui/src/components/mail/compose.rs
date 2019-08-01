@@ -545,6 +545,19 @@ impl Component for Composer {
             UIEvent::Input(Key::Char('e')) if self.cursor == Cursor::Body => {
                 /* Edit draft in $EDITOR */
                 use std::process::{Command, Stdio};
+                let editor = match std::env::var("EDITOR") {
+                    Err(e) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some(
+                                "$EDITOR is not set. You can change an envvar's value with setenv"
+                                    .to_string(),
+                            ),
+                            e.to_string(),
+                        ));
+                        return true;
+                    }
+                    Ok(v) => v,
+                };
                 /* Kill input thread so that spawned command can be sole receiver of stdin */
                 {
                     context.input_kill();
@@ -556,35 +569,28 @@ impl Component for Composer {
                     None,
                     None,
                 );
-                //let mut f = Box::new(std::fs::File::create(&dir).unwrap());
 
                 // TODO: check exit status
-                Command::new("vim")
+                if let Err(e) = Command::new(&editor)
                     .arg("+/^$")
                     .arg(&f.path())
                     .stdin(Stdio::inherit())
                     .stdout(Stdio::inherit())
                     .output()
-                    .expect("failed to execute process");
+                {
+                    context.replies.push_back(UIEvent::Notification(
+                        Some(format!("Failed to execute {}", editor)),
+                        e.to_string(),
+                    ));
+                    context.replies.push_back(UIEvent::Fork(ForkType::Finished));
+                    context.restore_input();
+                    return true;
+                }
                 let result = f.read_to_string();
                 self.draft = Draft::from_str(result.as_str()).unwrap();
                 self.initialized = false;
                 context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                 context.restore_input();
-                /*
-
-                Cursor::To | Cursor::Cc | Cursor::Bcc => {
-                    let account = &context.accounts[self.account_cursor];
-                    let mut entries = account.address_book.values().map(|v| (v.id().as_bytes().to_vec(), v.email().to_string())).collect();
-                    self.mode = ViewMode::Selector(Selector::new(entries, true));
-                },
-                Cursor::Attachments => {
-                    unimplemented!()
-                },
-                Cursor::From => {
-                    return true;
-                }
-                */
                 self.dirty = true;
                 return true;
             }
