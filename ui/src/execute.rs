@@ -26,10 +26,12 @@ use nom::{digit, not_line_ending};
 use std;
 pub mod actions;
 pub use crate::actions::Action::{self, *};
+pub use crate::actions::ComposeAction::{self, *};
 pub use crate::actions::ListingAction::{self, *};
 pub use crate::actions::MailingListAction::{self, *};
 pub use crate::actions::PagerAction::{self, *};
 pub use crate::actions::TabAction::{self, *};
+use std::str::FromStr;
 
 /* Create a const table with every command part that can be auto-completed and its description */
 macro_rules! define_commands {
@@ -185,6 +187,30 @@ define_commands!([
                                   ))
                       );
                   )
+                },
+                { tags: ["add-attachment "],
+                  desc: "add-attachment PATH",
+                  parser:(
+                      named!( add_attachment<Action>,
+                              do_parse!(
+                                  ws!(tag!("add-attachment"))
+                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
+                                  >> (Compose(AddAttachment(path.to_string())))
+                              )
+                      );
+                  )
+                },
+                { tags: ["remove-attachment "],
+                  desc: "remove-attachment INDEX",
+                  parser:(
+                      named!( remove_attachment<Action>,
+                              do_parse!(
+                                  ws!(tag!("remove-attachment"))
+                                  >> idx: map_res!(map_res!(call!(not_line_ending), std::str::from_utf8), usize::from_str)
+                                  >> (Compose(RemoveAttachment(idx)))
+                              )
+                      );
+                  )
                 }
 ]);
 
@@ -230,6 +256,12 @@ named!(
     listing_action<Action>,
     alt_complete!(toggle | envelope_action | filter | toggle_thread_snooze)
 );
+
+named!(
+    compose_action<Action>,
+    alt_complete!(add_attachment | remove_attachment)
+);
+
 named!(pub parse_command<Action>,
-       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | pipe)
+       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | pipe | compose_action)
 );

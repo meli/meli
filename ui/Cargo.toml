@@ -16,7 +16,7 @@ chan-signal = "0.3.1"
 fnv = "1.0.3" # >:c
 linkify = "0.3.1" # >:c
 melib = { path = "../melib", version = "*" }
-mime_apps = { git = "https://github.com/meli/mime_apps", version = "*" }
+mime_apps = { git = "https://git.meli.delivery/meli/mime_apps", version = "^0.2.0" }
 nom = "3.2.0"
 notify = "4.0.1" # >:c
 notify-rust = "^3" # >:c

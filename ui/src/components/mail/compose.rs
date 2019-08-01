@@ -22,6 +22,7 @@
 use super::*;
 
 use melib::Draft;
+use mime_apps::query_mime_info;
 use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
@@ -216,37 +217,55 @@ impl Composer {
         }
     }
 
-    /*
-    let (x, y) = if k == "From" {
-        write_string_to_grid(
-            "◀ ",
-            grid,
-            Color::Byte(251),
-            Color::Default,
-            ((x, y), set_y(bottom_right, y)),
-            true,
-        )
-    } else {
-        (x, y)
-    };
-    let (x, y) = write_string_to_grid(
-        &headers[k],
-        grid,
-        Color::Default,
-        bg_color,
-        ((x, y), set_y(bottom_right, y)),
-        true,
-    );
-    if k == "From" {
-        write_string_to_grid(
-            " ▶",
-            grid,
-            Color::Byte(251),
-            Color::Default,
-            ((x, y), set_y(bottom_right, y)),
-            true,
-        )
-        */
+    fn draw_attachments(&self, grid: &mut CellBuffer, area: Area, _context: &mut Context) {
+        let attachments_no = self.draft.attachments().len();
+        if attachments_no == 0 {
+            write_string_to_grid(
+                "no attachments",
+                grid,
+                Color::Default,
+                Color::Default,
+                (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
+                false,
+            );
+        } else {
+            write_string_to_grid(
+                &format!("{} attachments ", attachments_no),
+                grid,
+                Color::Default,
+                Color::Default,
+                (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
+                false,
+            );
+            for (i, a) in self.draft.attachments().iter().enumerate() {
+                if let Some(name) = a.content_type().name() {
+                    write_string_to_grid(
+                        &format!(
+                            "[{}] \"{}\", {} {} bytes",
+                            i,
+                            name,
+                            a.content_type(),
+                            a.raw.len()
+                        ),
+                        grid,
+                        Color::Default,
+                        Color::Default,
+                        (pos_inc(upper_left!(area), (0, 2 + i)), bottom_right!(area)),
+                        false,
+                    );
+                } else {
+                    write_string_to_grid(
+                        &format!("[{}] {} {} bytes", i, a.content_type(), a.raw.len()),
+                        grid,
+                        Color::Default,
+                        Color::Default,
+                        (pos_inc(upper_left!(area), (0, 2 + i)), bottom_right!(area)),
+                        false,
+                    );
+                }
+            }
+        }
+    }
 }
 
 impl Component for Composer {
@@ -256,6 +275,10 @@ impl Component for Composer {
         let bottom_right = bottom_right!(area);
 
         let upper_left = set_y(upper_left, get_y(upper_left) + 1);
+
+        if height!(area) < 4 {
+            return;
+        }
 
         let width = if width!(area) > 80 && self.reply_context.is_some() {
             width!(area) / 2
@@ -275,7 +298,7 @@ impl Component for Composer {
             self.update_form();
             self.initialized = true;
         }
-        let header_height = self.form.len() + 1;
+        let header_height = self.form.len();
 
         let mid = if width > 80 {
             let width = width - 80;
@@ -320,26 +343,39 @@ impl Component for Composer {
         let header_area = if self.reply_context.is_some() {
             (
                 set_x(upper_left, mid + 1),
-                set_y(bottom_right, get_y(upper_left) + header_height + 1),
+                set_y(bottom_right, get_y(upper_left) + header_height),
             )
         } else {
             (
                 set_x(upper_left, mid + 1),
                 (
                     get_x(bottom_right).saturating_sub(mid),
-                    get_y(upper_left) + header_height + 1,
+                    get_y(upper_left) + header_height,
                 ),
             )
         };
-        let body_area = if self.reply_context.is_some() {
+        let attachments_no = self.draft.attachments().len();
+        let attachment_area = if self.reply_context.is_some() {
             (
-                (mid + 1, get_y(upper_left) + header_height + 1),
+                (mid + 1, get_y(bottom_right) - 2 - attachments_no),
                 bottom_right,
             )
         } else {
             (
-                pos_inc(upper_left, (mid + 1, header_height + 2)),
+                (mid + 1, get_y(bottom_right) - 2 - attachments_no),
                 pos_dec(bottom_right, (mid, 0)),
+            )
+        };
+
+        let body_area = if self.reply_context.is_some() {
+            (
+                (mid + 1, get_y(upper_left) + header_height + 1),
+                set_y(bottom_right, get_y(bottom_right) - 3 - attachments_no),
+            )
+        } else {
+            (
+                pos_inc(upper_left, (mid + 1, header_height + 1)),
+                pos_dec(bottom_right, (mid, 3 + attachments_no)),
             )
         };
 
@@ -431,6 +467,7 @@ impl Component for Composer {
             }
         }
 
+        self.draw_attachments(grid, attachment_area, context);
         context.dirty_areas.push_back(area);
     }
 
@@ -587,12 +624,60 @@ impl Component for Composer {
                     return true;
                 }
                 let result = f.read_to_string();
-                self.draft = Draft::from_str(result.as_str()).unwrap();
+                let mut new_draft = Draft::from_str(result.as_str()).unwrap();
+                std::mem::swap(self.draft.attachments_mut(), new_draft.attachments_mut());
+                self.draft = new_draft;
                 self.initialized = false;
                 context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                 context.restore_input();
                 self.dirty = true;
                 return true;
+            }
+            UIEvent::Action(ref a) => {
+                match a {
+                    Action::Compose(ComposeAction::AddAttachment(ref path)) => {
+                        let mut attachment = match melib::email::attachment_from_file(path) {
+                            Ok(a) => a,
+                            Err(e) => {
+                                context.replies.push_back(UIEvent::Notification(
+                                    Some("could not add attachment".to_string()),
+                                    e.to_string(),
+                                ));
+                                self.dirty = true;
+                                return true;
+                            }
+                        };
+                        if let Ok(mime_type) = query_mime_info(path) {
+                            match attachment.content_type {
+                                ContentType::Other { ref mut tag, .. } => {
+                                    *tag = mime_type;
+                                }
+                                _ => {}
+                            }
+                        }
+                        self.draft.attachments_mut().push(attachment);
+                        self.dirty = true;
+                        return true;
+                    }
+                    Action::Compose(ComposeAction::RemoveAttachment(idx)) => {
+                        if *idx + 1 > self.draft.attachments().len() {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(
+                                    "attachment with given index does not exist".to_string(),
+                                ),
+                            ));
+                            self.dirty = true;
+                            return true;
+                        }
+                        self.draft.attachments_mut().remove(*idx);
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage("attachment removed".to_string()),
+                        ));
+                        self.dirty = true;
+                        return true;
+                    }
+                    _ => {}
+                }
             }
             _ => {}
         }

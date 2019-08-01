@@ -65,6 +65,12 @@ pub enum PagerAction {
 }
 
 #[derive(Debug)]
+pub enum ComposeAction {
+    AddAttachment(String),
+    RemoveAttachment(usize),
+}
+
+#[derive(Debug)]
 pub enum Action {
     Listing(ListingAction),
     ViewMailbox(usize),
@@ -76,4 +82,5 @@ pub enum Action {
     Pager(PagerAction),
     SetEnv(String, String),
     PrintEnv(String),
+    Compose(ComposeAction),
 }
