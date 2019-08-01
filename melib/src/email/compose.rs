@@ -3,6 +3,9 @@ use crate::backends::BackendOp;
 use crate::email::attachments::AttachmentBuilder;
 use chrono::{DateTime, Local};
 use data_encoding::BASE64_MIME;
+use std::ffi::OsStr;
+use std::io::Read;
+use std::path::Path;
 use std::str;
 
 pub mod mime;
@@ -104,8 +107,6 @@ impl str::FromStr for Draft {
         let body = Envelope::new(0).body_bytes(s.as_bytes());
 
         ret.body = String::from_utf8(decode(&body, None))?;
-
-        //ret.attachments = body.attachments();
 
         Ok(ret)
     }
@@ -442,4 +443,28 @@ mod tests {
         default.attachments_mut().push(attachment);
         println!("{}", default.finalise().unwrap());
     }
+}
+
+/// Reads file from given path, and returns an 'application/octet-stream' AttachmentBuilder object
+pub fn attachment_from_file<I>(path: &I) -> Result<AttachmentBuilder>
+where
+    I: AsRef<OsStr>,
+{
+    let path: &Path = Path::new(path);
+    if !path.is_file() {
+        return Err(MeliError::new(format!("{} is not a file", path.display())));
+    }
+
+    let mut file = std::fs::File::open(path)?;
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents)?;
+    let mut attachment = AttachmentBuilder::new(b"");
+    attachment
+        .set_raw(contents)
+        .set_content_type(ContentType::Other {
+            name: path.file_name().map(|s| s.to_string_lossy().into()),
+            tag: b"application/octet-stream".to_vec(),
+        });
+
+    Ok(attachment)
 }
