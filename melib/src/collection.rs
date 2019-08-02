@@ -120,13 +120,15 @@ impl Collection {
         }
     }
 
+    /// Merge new Mailbox to collection and update threads.
+    /// Returns a list of already existing folders whose threads were updated
     pub fn merge(
         &mut self,
         mut envelopes: FnvHashMap<EnvelopeHash, Envelope>,
         folder_hash: FolderHash,
         mailbox: &mut Mailbox,
         sent_folder: Option<FolderHash>,
-    ) {
+    ) -> Option<StackVec<FolderHash>> {
         self.sent_folder = sent_folder;
         envelopes.retain(|&h, e| {
             if self.message_ids.contains_key(e.message_id().raw()) {
@@ -150,6 +152,8 @@ impl Collection {
             ref sent_folder,
             ..
         } = self;
+
+        let mut ret = StackVec::new();
         for (t_fh, t) in threads.iter_mut() {
             if sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
                 let mut ordered_hash_set = new_threads
@@ -163,8 +167,12 @@ impl Collection {
                         .partial_cmp(&envelopes[b].date())
                         .unwrap()
                 });
+                let mut updated = false;
                 for h in ordered_hash_set {
-                    t.insert_reply(envelopes, h);
+                    updated |= t.insert_reply(envelopes, h);
+                }
+                if updated {
+                    ret.push(*t_fh);
                 }
                 continue;
             }
@@ -183,6 +191,11 @@ impl Collection {
             }
         }
         threads.insert(folder_hash, new_threads);
+        if ret.is_empty() {
+            None
+        } else {
+            Some(ret)
+        }
     }
 
     pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope, folder_hash: FolderHash) {

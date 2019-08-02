@@ -468,8 +468,14 @@ impl Account {
             return;
         }
         let (envelopes, mut mailbox) = payload.unwrap();
-        self.collection
-            .merge(envelopes, folder_hash, &mut mailbox, self.sent_folder);
+        if let Some(updated_folders) =
+            self.collection
+                .merge(envelopes, folder_hash, &mut mailbox, self.sent_folder)
+        {
+            for f in updated_folders {
+                self.notify_fn.notify(f);
+            }
+        }
         self.folders
             .insert(folder_hash, MailboxEntry::Available(mailbox));
     }
