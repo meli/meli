@@ -1,6 +1,6 @@
 [package]
 name = "ui"
-version = "0.0.1"  #:version
+version = "0.2.0"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 workspace = ".."
 edition = "2018"
