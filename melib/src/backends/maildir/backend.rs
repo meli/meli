@@ -369,21 +369,39 @@ impl MailBackend for MaildirType {
                                 let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                                 let index_lock = hash_indexes_lock.entry(folder_hash).or_default();
 
-                                if index_lock.contains_key(&old_hash) {
+                                if index_lock.contains_key(&old_hash)
+                                    && !index_lock[&old_hash].removed
+                                {
                                     debug!("contains_old_key");
+                                    index_lock.entry(old_hash).and_modify(|e| {
+                                        debug!(&e.modified);
+                                        e.modified = Some(PathMod::Hash(new_hash));
+                                    });
                                     sender.send(RefreshEvent {
                                         hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
                                     });
-                                    index_lock.entry(old_hash).and_modify(|e| {
-                                        debug!(&e.modified);
-                                        e.modified = Some(PathMod::Hash(new_hash));
-                                        e.removed = false;
-                                    });
                                     index_lock.insert(new_hash, dest.into());
                                     continue;
-                                } else if !index_lock.contains_key(&new_hash) {
-                                    debug!("not contains_new_key");
+                                } else if !index_lock.contains_key(&new_hash)
+                                    || index_lock
+                                        .get(&old_hash)
+                                        .map(|e| e.removed)
+                                        .unwrap_or(false)
+                                {
+                                    if index_lock
+                                        .get(&old_hash)
+                                        .map(|e| e.removed)
+                                        .unwrap_or(false)
+                                    {
+                                        index_lock.entry(old_hash).and_modify(|e| {
+                                            e.modified = Some(PathMod::Hash(new_hash));
+                                            e.removed = false;
+                                        });
+                                        debug!("contains_old_key, key was marked as removed (by external source)");
+                                    } else {
+                                        debug!("not contains_new_key");
+                                    }
                                     let file_name = dest
                                         .as_path()
                                         .strip_prefix(&root_path)
