@@ -168,11 +168,8 @@ impl State {
          * stdin, see get_events() for details
          * */
         let input_thread = chan::r#async();
-        let _stdout = std::io::stdout();
-        _stdout.lock();
         let backends = Backends::new();
         let settings = Settings::new();
-        let stdout = AlternateScreen::from(_stdout.into_raw_mode().unwrap());
 
         let termsize = termion::terminal_size().ok();
         let termcols = termsize.map(|(w, _)| w);
@@ -195,6 +192,11 @@ impl State {
             })
             .collect();
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
+
+        let _stdout = std::io::stdout();
+        _stdout.lock();
+        let stdout = AlternateScreen::from(_stdout.into_raw_mode().unwrap());
+
         let mut s = State {
             cols,
             rows,

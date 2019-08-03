@@ -496,6 +496,18 @@ impl MaildirType {
             folders: &mut FnvHashMap<FolderHash, MaildirFolder>,
             p: P,
         ) -> Vec<FolderHash> {
+            if !p.as_ref().exists() || !p.as_ref().is_dir() {
+                eprintln!(
+                    "Configuration error: Path \"{}\" {}",
+                    p.as_ref().display(),
+                    if !p.as_ref().exists() {
+                        "does not exist."
+                    } else {
+                        "is not a directory."
+                    }
+                );
+                std::process::exit(1);
+            }
             let mut children = Vec::new();
             for mut f in fs::read_dir(p).unwrap() {
                 'entries: for f in f.iter_mut() {
