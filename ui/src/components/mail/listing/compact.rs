@@ -1147,7 +1147,7 @@ impl Component for CompactListing {
                 Action::ViewMailbox(idx) => {
                     if context.accounts[self.cursor_pos.0]
                         .folders_order
-                        .get(self.cursor_pos.1)
+                        .get(*idx)
                         .is_none()
                     {
                         return true;
@@ -1157,19 +1157,19 @@ impl Component for CompactListing {
                     self.refresh_mailbox(context);
                     return true;
                 }
-                Action::SubSort(field, order) => {
+                Action::SubSort(field, order) if !self.unfocused => {
                     debug!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
                     self.refresh_mailbox(context);
                     return true;
                 }
-                Action::Sort(field, order) => {
+                Action::Sort(field, order) if !self.unfocused => {
                     debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
                     self.refresh_mailbox(context);
                     return true;
                 }
-                Action::ToggleThreadSnooze => {
+                Action::ToggleThreadSnooze if !self.unfocused => {
                     let i = self.get_envelope_under_cursor(self.cursor_pos.2, context);
                     let account = &mut context.accounts[self.cursor_pos.0];
                     let thread_hash = account.get_env(&i).thread();
@@ -1193,13 +1193,15 @@ impl Component for CompactListing {
                     self.refresh_mailbox(context);
                     return true;
                 }
-                Action::Listing(Filter(ref filter_term)) => {
+                Action::Listing(Filter(ref filter_term)) if !self.unfocused => {
                     self.filter(filter_term, context);
                     self.dirty = true;
                 }
                 Action::Listing(a @ ListingAction::SetSeen)
                 | Action::Listing(a @ ListingAction::SetUnseen)
-                | Action::Listing(a @ ListingAction::Delete) => {
+                | Action::Listing(a @ ListingAction::Delete)
+                    if !self.unfocused =>
+                {
                     /* Iterate over selection if exists, else only over the envelope under the
                      * cursor. Using two iterators allows chaining them which results into a Chain
                      * type. We can't conditonally select either a slice iterator or a Map iterator
