@@ -1016,9 +1016,15 @@ impl Component for ThreadView {
                 self.set_dirty();
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
+                let account = &context.accounts[self.coordinates.0];
                 for e in self.entries.iter_mut() {
                     if e.msg_hash == *old_hash {
                         e.msg_hash = *new_hash;
+                        let seen: bool = account.get_env(&new_hash).is_seen();
+                        if seen != e.seen {
+                            self.dirty = true;
+                        }
+                        e.seen = seen;
                     }
                 }
                 self.mailview
