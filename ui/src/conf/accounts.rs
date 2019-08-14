@@ -443,7 +443,11 @@ impl Account {
             .enumerate()
             .map(|(i, &fh)| (fh, i))
             .collect();
-        let mut folders: Vec<Folder> = folders.drain().map(|(_, f)| f).collect();
+        let mut folders: Vec<Folder> = folders
+            .drain()
+            .map(|(_, f)| f)
+            .filter(|f| self.folders.contains_key(&f.hash()))
+            .collect();
         folders.sort_unstable_by(|a, b| order[&a.hash()].partial_cmp(&order[&b.hash()]).unwrap());
         folders
     }
@@ -509,7 +513,11 @@ impl Account {
             .extract();
         self.workers.insert(folder_hash, None);
         self.load_mailbox(folder_hash, m);
-        Ok(())
+        if self.folders[&folder_hash].is_available() {
+            Ok(())
+        } else {
+            Err(0)
+        }
     }
 
     pub fn save_draft(&self, draft: Draft) -> Result<()> {
