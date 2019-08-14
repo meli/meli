@@ -111,11 +111,9 @@ impl RefreshEvent {
 /// A `RefreshEventConsumer` is a boxed closure that must be used to consume a `RefreshEvent` and
 /// send it to a UI provided channel. We need this level of abstraction to provide an interface for
 /// all users of mailbox refresh events.
-pub struct RefreshEventConsumer(Box<Fn(RefreshEvent) -> ()>);
-unsafe impl Send for RefreshEventConsumer {}
-unsafe impl Sync for RefreshEventConsumer {}
+pub struct RefreshEventConsumer(Box<Fn(RefreshEvent) -> () + Send + Sync>);
 impl RefreshEventConsumer {
-    pub fn new(b: Box<Fn(RefreshEvent) -> ()>) -> Self {
+    pub fn new(b: Box<Fn(RefreshEvent) -> () + Send + Sync>) -> Self {
         RefreshEventConsumer(b)
     }
     pub fn send(&self, r: RefreshEvent) {
@@ -123,9 +121,7 @@ impl RefreshEventConsumer {
     }
 }
 
-pub struct NotifyFn(Box<Fn(FolderHash) -> ()>);
-unsafe impl Send for NotifyFn {}
-unsafe impl Sync for NotifyFn {}
+pub struct NotifyFn(Box<Fn(FolderHash) -> () + Send + Sync>);
 
 impl fmt::Debug for NotifyFn {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -133,14 +129,14 @@ impl fmt::Debug for NotifyFn {
     }
 }
 
-impl From<Box<Fn(FolderHash) -> ()>> for NotifyFn {
-    fn from(kind: Box<Fn(FolderHash) -> ()>) -> Self {
+impl From<Box<Fn(FolderHash) -> () + Send + Sync>> for NotifyFn {
+    fn from(kind: Box<Fn(FolderHash) -> () + Send + Sync>) -> Self {
         NotifyFn(kind)
     }
 }
 
 impl NotifyFn {
-    pub fn new(b: Box<Fn(FolderHash) -> ()>) -> Self {
+    pub fn new(b: Box<Fn(FolderHash) -> () + Send + Sync>) -> Self {
         NotifyFn(b)
     }
     pub fn notify(&self, f: FolderHash) {
@@ -297,7 +293,7 @@ pub fn folder_default() -> Folder {
 }
 
 pub type FolderHash = u64;
-pub type Folder = Box<dyn BackendFolder + Send>;
+pub type Folder = Box<dyn BackendFolder + Send + Sync>;
 
 impl Clone for Folder {
     fn clone(&self) -> Self {

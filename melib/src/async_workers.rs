@@ -36,7 +36,7 @@ use std::fmt;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct Work(pub Arc<Box<dyn Fn() -> ()>>);
+pub struct Work(pub Arc<Box<dyn Fn() -> () + Send + Sync>>);
 
 impl Work {
     pub fn compute(&self) {
@@ -49,9 +49,6 @@ impl fmt::Debug for Work {
         write!(f, "Work object")
     }
 }
-
-unsafe impl Send for Work {}
-unsafe impl Sync for Work {}
 
 /// Messages to pass between `Async<T>` owner and its worker thread.
 #[derive(Clone)]
@@ -76,13 +73,13 @@ impl<T> fmt::Debug for AsyncStatus<T> {
 
 /// A builder object for `Async<T>`
 #[derive(Debug, Clone)]
-pub struct AsyncBuilder<T> {
+pub struct AsyncBuilder<T: Send + Sync> {
     tx: chan::Sender<AsyncStatus<T>>,
     rx: chan::Receiver<AsyncStatus<T>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Async<T> {
+pub struct Async<T: Send + Sync> {
     value: Option<T>,
     work: Work,
     active: bool,
@@ -90,13 +87,16 @@ pub struct Async<T> {
     rx: chan::Receiver<AsyncStatus<T>>,
 }
 
-impl<T> Default for AsyncBuilder<T> {
+impl<T: Send + Sync> Default for AsyncBuilder<T> {
     fn default() -> Self {
         AsyncBuilder::<T>::new()
     }
 }
 
-impl<T> AsyncBuilder<T> {
+impl<T> AsyncBuilder<T>
+where
+    T: Send + Sync,
+{
     pub fn new() -> Self {
         let (sender, receiver) = chan::sync(8 * ::std::mem::size_of::<AsyncStatus<T>>());
         AsyncBuilder {
@@ -113,7 +113,7 @@ impl<T> AsyncBuilder<T> {
         self.rx.clone()
     }
     /// Returns an `Async<T>` object that contains a `Thread` join handle that returns a `T`
-    pub fn build(self, work: Box<dyn Fn() -> ()>) -> Async<T> {
+    pub fn build(self, work: Box<dyn Fn() -> () + Send + Sync>) -> Async<T> {
         Async {
             work: Work(Arc::new(work)),
             value: None,
@@ -124,7 +124,10 @@ impl<T> AsyncBuilder<T> {
     }
 }
 
-impl<T> Async<T> {
+impl<T> Async<T>
+where
+    T: Send + Sync,
+{
     /// Consumes `self` and returns the computed value. Will panic if computation hasn't finished.
     pub fn extract(self) -> T {
         self.value.unwrap()
