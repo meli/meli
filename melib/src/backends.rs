@@ -94,6 +94,7 @@ pub enum RefreshEventKind {
     Create(Box<Envelope>),
     Remove(FolderHash),
     Rescan,
+    Failure(MeliError),
 }
 
 #[derive(Debug)]

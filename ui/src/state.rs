@@ -277,7 +277,9 @@ impl State {
                 self.context.replies.push_back(UIEvent::from(event));
                 return;
             }
-            if let Some(notification) = self.context.accounts[idxa].reload(event, hash) {
+            if let Some(notification) =
+                self.context.accounts[idxa].reload(event, hash, &self.context.sender)
+            {
                 if let UIEvent::Notification(_, _) = notification {
                     self.context
                         .replies

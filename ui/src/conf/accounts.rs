@@ -355,7 +355,12 @@ impl Account {
         }));
         Some(w)
     }
-    pub fn reload(&mut self, event: RefreshEvent, folder_hash: FolderHash) -> Option<UIEvent> {
+    pub fn reload(
+        &mut self,
+        event: RefreshEvent,
+        folder_hash: FolderHash,
+        sender: &chan::Sender<crate::types::ThreadEvent>,
+    ) -> Option<UIEvent> {
         if !self.folders[&folder_hash].is_available() {
             self.event_queue.push_back((folder_hash, event));
             return None;
@@ -423,6 +428,13 @@ impl Account {
                         self.notify_fn.clone(),
                     );
                     self.workers.insert(folder_hash, handle);
+                }
+                RefreshEventKind::Failure(e) => {
+                    debug!("RefreshEvent Failure: {}", e.to_string());
+                    let sender = sender.clone();
+                    self.watch(RefreshEventConsumer::new(Box::new(move |r| {
+                        sender.send(crate::types::ThreadEvent::from(r));
+                    })));
                 }
             }
         }
