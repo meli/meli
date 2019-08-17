@@ -415,14 +415,16 @@ impl State {
         .unwrap();
         for x in x_start..=x_end {
             let c = self.grid[(x, y)];
-
             if c.bg() != Color::Default {
                 write!(self.stdout(), "{}", termion::color::Bg(c.bg().as_termion())).unwrap();
             }
             if c.fg() != Color::Default {
                 write!(self.stdout(), "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
             }
-            write!(self.stdout(), "{}", c.ch()).unwrap();
+            if !c.empty() {
+                write!(self.stdout(), "{}", c.ch()).unwrap();
+            }
+
             if c.bg() != Color::Default {
                 write!(
                     self.stdout(),

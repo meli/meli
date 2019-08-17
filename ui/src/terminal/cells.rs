@@ -25,6 +25,7 @@
 */
 
 use super::position::*;
+use text_processing::wcwidth;
 
 use std::convert::From;
 use std::fmt;
@@ -280,6 +281,7 @@ impl fmt::Display for CellBuffer {
 pub struct Cell {
     ch: char,
 
+    empty: bool,
     fg: Color,
     bg: Color,
     attrs: Attr,
@@ -300,7 +302,13 @@ impl Cell {
     /// assert_eq!(cell.attrs(), Attr::Default);
     /// ```
     pub fn new(ch: char, fg: Color, bg: Color, attrs: Attr) -> Cell {
-        Cell { ch, fg, bg, attrs }
+        Cell {
+            ch,
+            fg,
+            bg,
+            attrs,
+            empty: false,
+        }
     }
 
     /// Creates a new `Cell` with the given `char` and default style.
@@ -440,6 +448,10 @@ impl Cell {
     pub fn set_attrs(&mut self, newattrs: Attr) -> &mut Cell {
         self.attrs = newattrs;
         self
+    }
+
+    pub fn empty(&self) -> bool {
+        self.empty
     }
 }
 
@@ -750,6 +762,21 @@ pub fn write_string_to_grid(
             grid[(x, y)].set_fg(fg_color);
             grid[(x, y)].set_bg(bg_color);
         }
+
+        match wcwidth(u32::from(c)) {
+            Some(0) | None => {
+                /* Skip drawing zero width characters */
+                grid[(x, y)].empty = true;
+            }
+            Some(2) => {
+                /* Grapheme takes more than one column, so the next cell will be
+                 * drawn over. Set it as empty to skip drawing it. */
+                x += 1;
+                inspect_bounds!(grid, area, x, y, line_break);
+                grid[(x, y)].empty = true;
+            }
+            _ => {}
+        }
         x += 1;
 
         inspect_bounds!(grid, area, x, y, line_break);
@@ -769,6 +796,7 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area) {
             grid[(x, y)].set_ch(' ');
             grid[(x, y)].set_bg(Color::Default);
             grid[(x, y)].set_fg(Color::Default);
+            grid[(x, y)].empty = false;
         }
     }
 }
