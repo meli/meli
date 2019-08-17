@@ -683,7 +683,11 @@ impl ThreadView {
             return;
         }
 
-        let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
+        let mut mid = get_y(upper_left) + total_rows - bottom_entity_rows;
+        if mid >= get_y(bottom_right) {
+            mid = get_y(bottom_right) / 2;
+        }
+        let mid = mid;
 
         /* First draw the thread subject on the first row */
         let y = {
