@@ -864,11 +864,7 @@ impl fmt::Display for ThreadView {
 
 impl Component for ThreadView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let total_rows = height!(area);
         let total_cols = width!(area);
-        if total_rows < 24 || total_cols < 80 {
-            return;
-        }
 
         /* If user has selected another mail to view, change to it */
         if self.new_expanded_pos != self.expanded_pos {
