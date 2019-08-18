@@ -118,78 +118,38 @@ impl ListingTrait for CompactListing {
             root_envelope.is_seen()
         };
 
-        let fg_color = if !is_seen {
-            Color::Byte(0)
-        } else {
-            Color::Default
-        };
+        let fg_color = self.data_columns.columns[0][(0, idx)].fg();
         let bg_color = if self.cursor_pos.2 == idx {
             Color::Byte(246)
         } else if self.selection[&i] {
             Color::Byte(210)
-        } else if !is_seen {
-            Color::Byte(251)
-        } else if idx % 2 == 0 {
-            Color::Byte(236)
         } else {
-            Color::Default
+            self.data_columns.columns[0][(0, idx)].bg()
         };
-        if !grid.is_empty() {
-            change_colors(grid, area, fg_color, bg_color);
-            return;
-        }
 
         let (upper_left, bottom_right) = area;
-        let (mut x, _y) = upper_left;
-        for i in 0..self.data_columns.columns.len() {
-            let (width, height) = self.data_columns.columns[i].size();
-            if self.data_columns.widths[i] == 0 {
-                continue;
-            }
-            copy_area(
-                grid,
-                &self.data_columns.columns[i],
-                (
-                    set_x(upper_left, x),
-                    set_x(
-                        bottom_right,
-                        std::cmp::min(get_x(bottom_right), x + (self.data_columns.widths[i])),
-                    ),
-                ),
-                ((0, idx), (width.saturating_sub(1), height - 1)),
-            );
-            if i != self.data_columns.columns.len() - 1 {
-                change_colors(
-                    grid,
-                    (
-                        set_x(
-                            upper_left,
-                            x + self.data_columns.widths[i].saturating_sub(1),
-                        ),
-                        set_x(bottom_right, x + self.data_columns.widths[i] + 1),
-                    ),
-                    fg_color,
-                    bg_color,
-                );
-            } else {
-                change_colors(
-                    grid,
-                    (
-                        set_x(
-                            upper_left,
-                            std::cmp::min(get_x(bottom_right), x + (self.data_columns.widths[i])),
-                        ),
-                        bottom_right,
-                    ),
-                    fg_color,
-                    bg_color,
-                );
-            }
-            x += self.data_columns.widths[i] + 2; // + SEPARATOR
-            if x > get_x(bottom_right) {
-                break;
-            }
+        let (width, height) = self.data_columns.columns[3].size();
+        change_colors(grid, area, fg_color, bg_color);
+        let mut x = get_x(upper_left)
+            + self.data_columns.widths[0]
+            + self.data_columns.widths[1]
+            + self.data_columns.widths[2]
+            + 3 * 2;
+
+        copy_area(
+            grid,
+            &self.data_columns.columns[3],
+            (set_x(upper_left, x), bottom_right),
+            (
+                (0, idx),
+                pos_dec(self.data_columns.columns[3].size(), (1, 1)),
+            ),
+        );
+        for _ in 0..self.data_columns.widths[3] {
+            grid[(x, get_y(upper_left))].set_bg(bg_color);
+            x += 1;
         }
+        return;
     }
     /// Draw the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -346,7 +306,12 @@ impl ListingTrait for CompactListing {
                 fg_color,
                 bg_color,
             );
-            for x in flag_x..(flag_x + 2 + self.data_columns.widths[3]) {
+            for x in flag_x
+                ..std::cmp::min(
+                    get_x(bottom_right),
+                    flag_x + 2 + self.data_columns.widths[3],
+                )
+            {
                 grid[(x, get_y(upper_left) + r)].set_bg(bg_color);
             }
             change_colors(
@@ -745,8 +710,8 @@ impl CompactListing {
                     .has_attachments(),
             ) {
                 (true, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
-                    self.data_columns.columns[3][(1, idx)].set_fg(Color::Byte(103));
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
+                    self.data_columns.columns[3][(2, idx)].set_fg(Color::Red);
                 }
                 (true, false) => {
                     self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
@@ -922,8 +887,8 @@ impl CompactListing {
                     .has_attachments(),
             ) {
                 (true, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
-                    self.data_columns.columns[3][(1, idx)].set_fg(Color::Byte(103));
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
+                    self.data_columns.columns[3][(2, idx)].set_fg(Color::Red);
                 }
                 (true, false) => {
                     self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
@@ -1131,12 +1096,6 @@ impl Component for CompactListing {
                     self.order.insert(*new_hash, row);
                     let selection_status = self.selection.remove(old_hash).unwrap();
                     self.selection.insert(*new_hash, selection_status);
-                    self.highlight_line(
-                        &mut CellBuffer::default(),
-                        ((0, row), (MAX_COLS - 1, row)),
-                        row,
-                        context,
-                    );
                     for h in self.filtered_selection.iter_mut() {
                         if *h == *old_hash {
                             *h = *new_hash;
