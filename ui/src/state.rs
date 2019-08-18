@@ -421,6 +421,9 @@ impl State {
             if c.fg() != Color::Default {
                 write!(self.stdout(), "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
             }
+            if c.attrs() != Attr::Default {
+                write!(self.stdout(), "\x1B[{}m", c.attrs() as u8).unwrap();
+            }
             if !c.empty() {
                 write!(self.stdout(), "{}", c.ch()).unwrap();
             }
@@ -440,6 +443,9 @@ impl State {
                     termion::color::Fg(termion::color::Reset)
                 )
                 .unwrap();
+            }
+            if c.attrs() != Attr::Default {
+                write!(self.stdout(), "\x1B[{}m", Attr::Default as u8).unwrap();
             }
         }
     }

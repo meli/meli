@@ -318,6 +318,7 @@ impl Component for MailView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
+                    Attr::Default,
                     area,
                     true,
                 );
@@ -331,6 +332,7 @@ impl Component for MailView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
+                    Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
                     true,
                 );
@@ -344,6 +346,7 @@ impl Component for MailView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
+                    Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
                     true,
                 );
@@ -357,6 +360,7 @@ impl Component for MailView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
+                    Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
                     true,
                 );
@@ -370,6 +374,7 @@ impl Component for MailView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
+                    Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
                     true,
                 );
@@ -384,6 +389,7 @@ impl Component for MailView {
                         grid,
                         Color::Byte(33),
                         Color::Default,
+                        Attr::Default,
                         (set_y(upper_left, y + 1), bottom_right),
                         true,
                     );
@@ -405,6 +411,7 @@ impl Component for MailView {
                         grid,
                         Color::Byte(33),
                         Color::Default,
+                        Attr::Default,
                         (set_y(upper_left, _y + 1), bottom_right),
                         true,
                     );
@@ -430,6 +437,7 @@ impl Component for MailView {
                             grid,
                             Color::Byte(33),
                             Color::Default,
+                            Attr::Default,
                             (set_y(upper_left, y), bottom_right),
                             false,
                         );
@@ -438,6 +446,7 @@ impl Component for MailView {
                             grid,
                             Color::Default,
                             Color::Default,
+                            Attr::Default,
                             ((_x, y), bottom_right),
                             false,
                         );
@@ -449,6 +458,7 @@ impl Component for MailView {
                             grid,
                             Color::Byte(33),
                             Color::Default,
+                            Attr::Default,
                             ((x, y), bottom_right),
                             false,
                         );
@@ -460,6 +470,7 @@ impl Component for MailView {
                             grid,
                             Color::Default,
                             Color::Default,
+                            Attr::Default,
                             ((x, y), bottom_right),
                             false,
                         );
@@ -471,6 +482,7 @@ impl Component for MailView {
                             grid,
                             Color::Default,
                             Color::Default,
+                            Attr::Default,
                             ((x, y), bottom_right),
                             false,
                         );
@@ -482,6 +494,7 @@ impl Component for MailView {
                             grid,
                             Color::Default,
                             Color::Default,
+                            Attr::Default,
                             ((x, y), bottom_right),
                             false,
                         );

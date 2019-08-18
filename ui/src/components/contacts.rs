@@ -76,6 +76,7 @@ impl ContactManager {
             &mut self.content,
             Color::Byte(250),
             Color::Default,
+            Attr::Default,
             ((0, 0), (width, 0)),
             false,
         );
@@ -84,6 +85,7 @@ impl ContactManager {
             &mut self.content,
             Color::Byte(250),
             Color::Default,
+            Attr::Default,
             ((x, 0), (width, 0)),
             false,
         );

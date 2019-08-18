@@ -432,6 +432,7 @@ impl ListingTrait for CompactListing {
                 &mut self.data_columns.columns[0],
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
                 false,
             );
@@ -556,6 +557,7 @@ impl CompactListing {
                     &mut self.data_columns.columns[0],
                     Color::Default,
                     Color::Default,
+                    Attr::Default,
                     ((0, 0), (MAX_COLS - 1, 0)),
                     false,
                 );
@@ -681,6 +683,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[0],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.0, idx)),
                 false,
             );
@@ -692,6 +695,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[1],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.1, idx)),
                 false,
             );
@@ -703,6 +707,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[2],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.2, idx)),
                 false,
             );
@@ -714,6 +719,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[3],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.3, idx)),
                 false,
             );
@@ -725,6 +731,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[4],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.4, idx)),
                 false,
             );
@@ -759,6 +766,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[0],
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
                 false,
             );
@@ -852,6 +860,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[0],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.0, idx)),
                 false,
             );
@@ -863,6 +872,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[1],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.1, idx)),
                 false,
             );
@@ -874,6 +884,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[2],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.2, idx)),
                 false,
             );
@@ -885,6 +896,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[3],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.3, idx)),
                 false,
             );
@@ -896,6 +908,7 @@ impl CompactListing {
                 &mut self.data_columns.columns[4],
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (min_width.4, idx)),
                 false,
             );
@@ -958,6 +971,7 @@ impl Component for CompactListing {
                     grid,
                     Color::Default,
                     Color::Default,
+                    Attr::Default,
                     area,
                     true,
                 );

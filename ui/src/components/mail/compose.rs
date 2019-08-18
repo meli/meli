@@ -225,6 +225,7 @@ impl Composer {
                 grid,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
                 false,
             );
@@ -234,6 +235,7 @@ impl Composer {
                 grid,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
                 false,
             );
@@ -250,6 +252,7 @@ impl Composer {
                         grid,
                         Color::Default,
                         Color::Default,
+                        Attr::Default,
                         (pos_inc(upper_left!(area), (0, 2 + i)), bottom_right!(area)),
                         false,
                     );
@@ -259,6 +262,7 @@ impl Composer {
                         grid,
                         Color::Default,
                         Color::Default,
+                        Attr::Default,
                         (pos_inc(upper_left!(area), (0, 2 + i)), bottom_right!(area)),
                         false,
                     );
@@ -388,6 +392,7 @@ impl Component for Composer {
             grid,
             Color::Byte(189),
             Color::Byte(167),
+            Attr::Default,
             (
                 pos_dec(upper_left!(header_area), (0, 1)),
                 bottom_right!(header_area),
@@ -437,6 +442,7 @@ impl Component for Composer {
                     grid,
                     Color::Default,
                     Color::Default,
+                    Attr::Default,
                     area,
                     true,
                 );
@@ -445,6 +451,7 @@ impl Component for Composer {
                     grid,
                     Color::Byte(124),
                     Color::Default,
+                    Attr::Default,
                     (set_y(upper_left!(area), y + 2), bottom_right!(area)),
                     true,
                 );
@@ -453,6 +460,7 @@ impl Component for Composer {
                     grid,
                     Color::Byte(124),
                     Color::Default,
+                    Attr::Default,
                     (set_y(upper_left!(area), y + 1), bottom_right!(area)),
                     true,
                 );
@@ -461,6 +469,7 @@ impl Component for Composer {
                     grid,
                     Color::Byte(124),
                     Color::Default,
+                    Attr::Default,
                     (set_y(upper_left!(area), y + 1), bottom_right!(area)),
                     true,
                 );

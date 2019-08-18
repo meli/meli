@@ -110,6 +110,7 @@ impl AccountsPanel {
             &mut self.content,
             Color::Default,
             Color::Default,
+            Attr::Default,
             ((2, 3), (120 - 1, 3)),
             true,
         );
@@ -124,6 +125,7 @@ impl AccountsPanel {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Bold,
                 ((3, 5 + i * 10), (120 - 2, 5 + i * 10)),
                 true,
             );
@@ -132,6 +134,7 @@ impl AccountsPanel {
                 &mut self.content,
                 Color::Byte(32),
                 Color::Default,
+                Attr::Default,
                 ((x, y), (120 - 2, 5 + i * 10)),
                 true,
             );
@@ -140,6 +143,7 @@ impl AccountsPanel {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((4, y + 2), (120 - 2, y + 2)),
                 true,
             );
@@ -157,6 +161,7 @@ impl AccountsPanel {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((5, y + 3), (120 - 2, y + 3)),
                 true,
             );
@@ -172,6 +177,7 @@ impl AccountsPanel {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((10 + x, y + 3), (120 - 2, y + 3)),
                 true,
             );
@@ -180,6 +186,7 @@ impl AccountsPanel {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((5, y + 4), (120 - 2, y + 4)),
                 true,
             );
@@ -188,6 +195,7 @@ impl AccountsPanel {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((5, y + 5), (120 - 2, y + 5)),
                 true,
             );

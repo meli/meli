@@ -259,6 +259,7 @@ impl ThreadListing {
                     &mut self.content,
                     Color::Default,
                     Color::Default,
+                    Attr::Default,
                     ((0, 0), (MAX_COLS - 1, 0)),
                     false,
                 );
@@ -278,6 +279,7 @@ impl ThreadListing {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
                 true,
             );
@@ -326,6 +328,7 @@ impl ThreadListing {
                     &mut self.content,
                     fg_color,
                     bg_color,
+                    Attr::Default,
                     ((0, idx), (MAX_COLS - 1, idx)),
                     false,
                 );

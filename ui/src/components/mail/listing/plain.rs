@@ -280,6 +280,7 @@ impl PlainListing {
                     &mut self.content,
                     Color::Default,
                     Color::Default,
+                    Attr::Default,
                     ((0, 0), (MAX_COLS - 1, 0)),
                     false,
                 );
@@ -297,6 +298,7 @@ impl PlainListing {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
                 true,
             );
@@ -379,6 +381,7 @@ impl PlainListing {
                 &mut self.content,
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((0, idx), (widths.0, idx)),
                 false,
             );
@@ -391,6 +394,7 @@ impl PlainListing {
                 &mut self.content,
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((_x, idx), (widths.1 + _x, idx)),
                 false,
             );
@@ -403,6 +407,7 @@ impl PlainListing {
                 &mut self.content,
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((_x, idx), (widths.1 + _x, idx)),
                 false,
             );
@@ -415,6 +420,7 @@ impl PlainListing {
                 &mut self.content,
                 fg_color,
                 bg_color,
+                Attr::Default,
                 ((_x, idx), (widths.2 + _x, idx)),
                 false,
             );

@@ -91,6 +91,7 @@ impl ContactList {
             &mut self.content,
             Color::Black,
             Color::White,
+            Attr::Default,
             ((0, 0), (MAX_COLS - 1, self.length)),
             false,
         );
@@ -102,6 +103,7 @@ impl ContactList {
             &mut self.content,
             Color::Black,
             Color::White,
+            Attr::Default,
             ((maxima.0, 0), (MAX_COLS - 1, self.length)),
             false,
         );
@@ -113,6 +115,7 @@ impl ContactList {
             &mut self.content,
             Color::Black,
             Color::White,
+            Attr::Default,
             ((maxima.1, 0), (MAX_COLS - 1, self.length)),
             false,
         );
@@ -127,6 +130,7 @@ impl ContactList {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((0, i + 1), (MAX_COLS - 1, self.length)),
                 false,
             );
@@ -135,6 +139,7 @@ impl ContactList {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((maxima.0, i + 1), (MAX_COLS - 1, self.length)),
                 false,
             );
@@ -143,6 +148,7 @@ impl ContactList {
                 &mut self.content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((maxima.1, i + 1), (MAX_COLS - 1, self.length)),
                 false,
             );

@@ -420,6 +420,7 @@ impl Pager {
                 content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((0, i), (width - 1, i)),
                 true,
             );
@@ -646,15 +647,21 @@ impl StatusBar {
             grid,
             Color::Byte(123),
             Color::Byte(26),
+            Attr::Default,
             area,
             false,
         );
+        let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
+        for x in get_x(upper_left!(area))..get_x(upper_left!(area)) + offset {
+            grid[(x, y)].set_attrs(Attr::Bold);
+        }
         if let Some(n) = self.notifications.pop_front() {
             write_string_to_grid(
                 &n,
                 grid,
                 Color::Byte(219),
                 Color::Byte(88),
+                Attr::Default,
                 (
                     (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
                     bottom_right!(area),
@@ -676,14 +683,16 @@ impl StatusBar {
     }
     fn draw_execute_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area);
-        write_string_to_grid(
+        let (x, y) = write_string_to_grid(
             self.ex_buffer.as_str(),
             grid,
             Color::Byte(219),
             Color::Byte(88),
+            Attr::Default,
             area,
             false,
         );
+        grid[(x, y)].set_attrs(Attr::Underline);
         change_colors(grid, area, Color::Byte(219), Color::Byte(88));
         context.dirty_areas.push_back(area);
     }
@@ -852,6 +861,7 @@ impl Component for StatusBar {
                         grid,
                         Color::Byte(88),  // DarkRed,
                         Color::Byte(174), //LightPink3
+                        Attr::Default,
                         (
                             set_y(
                                 upper_left!(hist_area),
@@ -866,6 +876,7 @@ impl Component for StatusBar {
                         grid,
                         Color::White,
                         Color::Byte(174),
+                        Attr::Default,
                         ((x + 2, y), bottom_right!(hist_area)),
                         false,
                     );
@@ -890,6 +901,7 @@ impl Component for StatusBar {
                             grid,
                             Color::Byte(97), // MediumPurple3,
                             Color::Byte(88), //LightPink3
+                            Attr::Default,
                             (
                                 (
                                     get_y(upper_left)
@@ -1144,6 +1156,7 @@ impl Tabbed {
                 grid,
                 fg,
                 bg,
+                Attr::Default,
                 (set_x(upper_left, x), bottom_right!(area)),
                 false,
             );
@@ -1241,6 +1254,7 @@ impl Component for Tabbed {
                     grid,
                     Color::Default,
                     Color::Default,
+                    Attr::Default,
                     (
                         pos_inc(upper_left!(area), (2, 1 + idx)),
                         set_x(
@@ -1259,6 +1273,7 @@ impl Component for Tabbed {
                         grid,
                         Color::Byte(29),
                         Color::Default,
+                        Attr::Default,
                         (
                             pos_inc(upper_left!(area), (2, 1 + idx)),
                             set_x(
@@ -1273,6 +1288,7 @@ impl Component for Tabbed {
                         grid,
                         Color::Default,
                         Color::Default,
+                        Attr::Default,
                         (
                             (x + 2, y),
                             set_x(
@@ -1413,6 +1429,7 @@ impl Component for Selector {
                         &mut self.content,
                         Color::Default,
                         Color::Default,
+                        Attr::Default,
                         ((1, self.cursor), (width, self.cursor)),
                         false,
                     );
@@ -1422,6 +1439,7 @@ impl Component for Selector {
                         &mut self.content,
                         Color::Default,
                         Color::Default,
+                        Attr::Default,
                         ((1, self.cursor), (width, self.cursor)),
                         false,
                     );
@@ -1479,6 +1497,7 @@ impl Selector {
                 &mut content,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 ((0, i), (width - 1, i)),
                 false,
             );

@@ -111,6 +111,7 @@ impl Component for Field {
             grid,
             Color::Default,
             Color::Default,
+            Attr::Default,
             area,
             true,
         );
@@ -317,6 +318,7 @@ impl Component for FormWidget {
                 grid,
                 Color::Default,
                 Color::Default,
+                Attr::Default,
                 (
                     pos_inc(upper_left, (1, i)),
                     set_y(bottom_right, i + get_y(upper_left)),
@@ -530,6 +532,7 @@ where
                 } else {
                     Color::Default
                 },
+                Attr::Default,
                 (
                     pos_inc(upper_left, (len, 0)),
                     pos_inc(upper_left, (cur_len + len, 0)),
@@ -712,6 +715,7 @@ impl AutoComplete {
                 &mut content,
                 Color::Byte(23),
                 Color::Byte(7),
+                Attr::Default,
                 ((0, i), (width - 1, i)),
                 false,
             );
@@ -720,6 +724,7 @@ impl AutoComplete {
                 &mut content,
                 Color::Byte(23),
                 Color::Byte(7),
+                Attr::Default,
                 ((x + 2, i), (width - 1, i)),
                 false,
             );
@@ -728,6 +733,7 @@ impl AutoComplete {
                 &mut content,
                 Color::Byte(23),
                 Color::Byte(7),
+                Attr::Default,
                 ((width - 1, i), (width - 1, i)),
                 false,
             );
