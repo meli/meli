@@ -470,8 +470,8 @@ impl Listing {
         self.dirty = false;
         let mut y = get_y(upper_left);
         for a in &self.accounts {
-            y += 1;
             y += self.print_account(grid, (set_y(upper_left, y), bottom_right), &a, context);
+            y += 3;
         }
 
         context.dirty_areas.push_back(area);
@@ -505,26 +505,20 @@ impl Listing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        let highlight = self.cursor_pos.0 == a.index;
+        let must_highlight_account: bool = self.cursor_pos.0 == a.index;
 
         let mut inc = 0;
-        let mut depth = String::from("");
-        let mut s = format!("{}\n", a.name);
-        fn pop(depth: &mut String) {
-            depth.pop();
-        }
+        let mut depth = 0;
+        let mut lines: Vec<(usize, usize, FolderHash, Option<usize>)> = Vec::new();
 
-        fn push(depth: &mut String, c: char) {
-            depth.push(c);
-        }
-
+        /* Gather the folder tree structure in `lines` recursively */
         fn print(
             folder_idx: FolderHash,
-            depth: &mut String,
+            depth: &mut usize,
             inc: &mut usize,
             entries: &FnvHashMap<FolderHash, Folder>,
             folders_order: &FnvHashMap<FolderHash, usize>,
-            s: &mut String,
+            lines: &mut Vec<(usize, usize, FolderHash, Option<usize>)>,
             index: usize, //account index
             context: &mut Context,
         ) {
@@ -543,32 +537,33 @@ impl Listing {
                             }
                         })
                         .count();
-                    let len = s.len();
-                    s.insert_str(
-                        len,
-                        &format!("{} {}   {}\n  ", *inc, &entries[&folder_idx].name(), count),
-                    );
+                    lines.push((*depth, *inc, folder_idx, Some(count)));
                 }
                 Err(_) => {
-                    let len = s.len();
-                    s.insert_str(
-                        len,
-                        &format!("{} {}   ...\n  ", *inc, &entries[&folder_idx].name()),
-                    );
+                    lines.push((*depth, *inc, folder_idx, None));
                 }
             }
             *inc += 1;
             let mut children: Vec<FolderHash> = entries[&folder_idx].children().to_vec();
             children
                 .sort_unstable_by(|a, b| folders_order[a].partial_cmp(&folders_order[b]).unwrap());
-            push(depth, ' ');
+            *depth += 1;
             for child in children {
-                let len = s.len();
-                s.insert_str(len, &format!("{} ", depth));
-                print(child, depth, inc, entries, folders_order, s, index, context);
+                print(
+                    child,
+                    depth,
+                    inc,
+                    entries,
+                    folders_order,
+                    lines,
+                    index,
+                    context,
+                );
             }
-            pop(depth);
+            *depth -= 1;
         }
+
+        /* Start with roots */
         for f in entries.keys() {
             if entries[f].parent().is_none() {
                 print(
@@ -577,26 +572,37 @@ impl Listing {
                     &mut inc,
                     &entries,
                     &folders_order,
-                    &mut s,
+                    &mut lines,
                     a.index,
                     context,
                 );
             }
         }
 
-        let lines: Vec<&str> = s.lines().collect();
-        let lines_len = lines.len();
-        if lines_len < 2 {
+        /* Print account name first */
+        write_string_to_grid(
+            &a.name,
+            grid,
+            Color::Default,
+            Color::Default,
+            Attr::Bold,
+            area,
+            false,
+        );
+
+        if lines.is_empty() {
             return 0;
         }
+
+        let lines_len = lines.len();
         let mut idx = 0;
-        for y in get_y(upper_left)..get_y(bottom_right) {
+
+        for y in get_y(upper_left) + 1..get_y(bottom_right) {
             if idx == lines_len {
                 break;
             }
-            let s = lines[idx].to_string();
-            let (color_fg, color_bg) = if highlight {
-                if self.cursor_pos.1 + 1 == idx {
+            let (fg_color, bg_color) = if must_highlight_account {
+                if self.cursor_pos.1 == idx {
                     (Color::Byte(233), Color::Byte(15))
                 } else {
                     (Color::Byte(15), Color::Byte(233))
@@ -605,43 +611,84 @@ impl Listing {
                 (Color::Default, Color::Default)
             };
 
-            write_string_to_grid(
-                &s,
+            let (depth, inc, folder_idx, count) = lines[idx];
+            /* Calculate how many columns the folder index tags should occupy with right alignment,
+             * eg.
+             *  1
+             *  2
+             * ...
+             *  9
+             * 10
+             */
+            let total_folder_no_digits = {
+                let mut len = lines_len;
+                let mut ctr = 1;
+                while len > 9 {
+                    ctr += 1;
+                    len /= 10;
+                }
+                ctr
+            };
+            let (x, _) = write_string_to_grid(
+                &format!("{:>width$}", inc, width = total_folder_no_digits),
                 grid,
-                color_fg,
-                color_bg,
+                Color::Byte(243),
+                bg_color,
+                Attr::Default,
                 (set_y(upper_left, y), bottom_right),
                 false,
             );
-            {
-                enum CellPos {
-                    BeforeIndex,
-                    Index,
-                    //AfterIndex,
+            let (x, _) = write_string_to_grid(
+                &" ".repeat(depth + 1),
+                grid,
+                fg_color,
+                bg_color,
+                Attr::Default,
+                ((x, y), bottom_right),
+                false,
+            );
+            let (x, _) = write_string_to_grid(
+                entries[&folder_idx].name(),
+                grid,
+                fg_color,
+                bg_color,
+                Attr::Default,
+                ((x, y), bottom_right),
+                false,
+            );
+
+            /* Unread message count */
+            let count_string = if let Some(c) = count {
+                if c > 0 {
+                    format!(" {}", c)
+                } else {
+                    String::new()
                 }
-                let mut pos = CellPos::BeforeIndex;
-                let mut x = get_x(upper_left);
-                while let Some(cell) = grid.get_mut(x, y) {
-                    if x == get_x(bottom_right) {
-                        break;
-                    }
-                    match (cell.ch(), &pos) {
-                        (c, CellPos::Index) | (c, CellPos::BeforeIndex) if c.is_numeric() => {
-                            pos = CellPos::Index;
-                            cell.set_fg(Color::Byte(243));
-                            x += 1;
-                            continue;
-                        }
-                        (c, CellPos::BeforeIndex) if c.is_whitespace() => {
-                            x += 1;
-                            continue;
-                        }
-                        _ => {
-                            break;
-                        }
-                    }
-                }
-            }
+            } else {
+                " ...".to_string()
+            };
+
+            let (x, _) = write_string_to_grid(
+                &count_string,
+                grid,
+                fg_color,
+                bg_color,
+                if count.unwrap_or(0) > 0 {
+                    Attr::Bold
+                } else {
+                    Attr::Default
+                },
+                (
+                    (
+                        /* Hide part of folder name if need be to fit the message count */
+                        std::cmp::min(x, get_x(bottom_right).saturating_sub(count_string.len())),
+                        y,
+                    ),
+                    bottom_right,
+                ),
+                false,
+            );
+            change_colors(grid, ((x, y), set_y(bottom_right, y)), fg_color, bg_color);
             idx += 1;
         }
         if idx == 0 {
