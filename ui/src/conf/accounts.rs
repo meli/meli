@@ -24,12 +24,11 @@
  */
 
 use super::AccountConf;
-use super::ToggleFlag;
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
 use melib::backends::{
     BackendOp, Backends, Folder, FolderHash, MailBackend, NotifyFn, ReadOnlyOp, RefreshEvent,
-    RefreshEventConsumer, RefreshEventKind,
+    RefreshEventConsumer, RefreshEventKind, SpecialUseMailbox,
 };
 use melib::error::{MeliError, Result};
 use melib::mailbox::*;
@@ -189,12 +188,7 @@ struct FolderNode {
 }
 
 impl Account {
-    pub fn new(
-        name: String,
-        mut settings: AccountConf,
-        map: &Backends,
-        notify_fn: NotifyFn,
-    ) -> Self {
+    pub fn new(name: String, settings: AccountConf, map: &Backends, notify_fn: NotifyFn) -> Self {
         let mut backend = map.get(settings.account().format())(settings.account());
         let mut ref_folders: FnvHashMap<FolderHash, Folder> = backend.folders();
         let mut folders: FnvHashMap<FolderHash, MailboxEntry> =
@@ -211,6 +205,13 @@ impl Account {
             {
                 /* Skip unsubscribed folder */
                 continue;
+            }
+
+            match settings.folder_confs[f.path()].usage {
+                Some(SpecialUseMailbox::Sent) => {
+                    sent_folder = Some(f.hash());
+                }
+                _ => {}
             }
             folder_names.insert(f.hash(), f.path().to_string());
         }

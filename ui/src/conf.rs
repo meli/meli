@@ -38,6 +38,7 @@ pub use self::shortcuts::*;
 use self::default_vals::*;
 use self::notifications::NotificationsSettings;
 use crate::pager::PagerSettings;
+use melib::backends::SpecialUseMailbox;
 use melib::conf::AccountSettings;
 use melib::error::*;
 
@@ -97,6 +98,8 @@ pub struct FolderConf {
     subscribe: ToggleFlag,
     #[serde(deserialize_with = "toggleflag_de", default)]
     ignore: ToggleFlag,
+    #[serde(default = "none")]
+    usage: Option<SpecialUseMailbox>,
 }
 
 impl Default for FolderConf {
@@ -106,6 +109,7 @@ impl Default for FolderConf {
             autoload: true,
             subscribe: ToggleFlag::Unset,
             ignore: ToggleFlag::False,
+            usage: None,
         }
     }
 }
@@ -187,6 +191,34 @@ impl From<FileAccount> for AccountConf {
                     std::process::exit(1);
                 }
                 folder_confs.get_mut(s).unwrap().subscribe = ToggleFlag::True;
+            }
+
+            if folder_confs[s].usage.is_none() {
+                let name = s.split('/').last().unwrap_or("");
+                folder_confs.get_mut(s).unwrap().usage = if name.eq_ignore_ascii_case("inbox") {
+                    Some(SpecialUseMailbox::Inbox)
+                } else if name.eq_ignore_ascii_case("archive") {
+                    Some(SpecialUseMailbox::Archive)
+                } else if name.eq_ignore_ascii_case("drafts") {
+                    Some(SpecialUseMailbox::Drafts)
+                } else if name.eq_ignore_ascii_case("junk") {
+                    Some(SpecialUseMailbox::Junk)
+                } else if name.eq_ignore_ascii_case("spam") {
+                    Some(SpecialUseMailbox::Junk)
+                } else if name.eq_ignore_ascii_case("sent") {
+                    Some(SpecialUseMailbox::Sent)
+                } else if name.eq_ignore_ascii_case("trash") {
+                    Some(SpecialUseMailbox::Trash)
+                } else {
+                    Some(SpecialUseMailbox::Normal)
+                };
+            }
+
+            if folder_confs[s].ignore.is_unset() {
+                use SpecialUseMailbox::*;
+                if [Junk, Sent, Trash].contains(&folder_confs[s].usage.as_ref().unwrap()) {
+                    folder_confs.get_mut(s).unwrap().ignore = ToggleFlag::InternalVal(true);
+                }
             }
         }
 

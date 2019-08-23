@@ -120,7 +120,7 @@ extern crate uuid;
 pub use crate::conf::*;
 pub use crate::mailbox::*;
 
-pub use crate::backends::{Backends, RefreshEvent, RefreshEventConsumer};
+pub use crate::backends::{Backends, RefreshEvent, RefreshEventConsumer, SpecialUseMailbox};
 pub use crate::email::{Envelope, Flag};
 pub use crate::error::{MeliError, Result};
 

@@ -245,6 +245,18 @@ impl BackendOp for ReadOnlyOp {
     }
 }
 
+#[derive(Debug, Copy, Hash, Eq, Clone, Deserialize, PartialEq)]
+pub enum SpecialUseMailbox {
+    Normal,
+    Inbox,
+    Archive,
+    Drafts,
+    Flagged,
+    Junk,
+    Sent,
+    Trash,
+}
+
 pub trait BackendFolder: Debug {
     fn hash(&self) -> FolderHash;
     fn name(&self) -> &str;
