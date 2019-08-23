@@ -177,6 +177,7 @@ impl<'a> BackendOp for MaildirOp {
 pub struct MaildirFolder {
     hash: FolderHash,
     name: String,
+    fs_path: PathBuf,
     path: PathBuf,
     parent: Option<FolderHash>,
     children: Vec<FolderHash>,
@@ -188,26 +189,62 @@ impl MaildirFolder {
         file_name: String,
         parent: Option<FolderHash>,
         children: Vec<FolderHash>,
+        settings: &AccountSettings,
     ) -> Result<Self> {
-        let pathbuf = PathBuf::from(path);
+        macro_rules! strip_slash {
+            ($v:expr) => {
+                if $v.ends_with("/") {
+                    &$v[..$v.len() - 1]
+                } else {
+                    $v
+                }
+            };
+        }
+        let pathbuf = PathBuf::from(&path);
         let mut h = DefaultHasher::new();
         pathbuf.hash(&mut h);
+
+        /* Check if folder path (Eg `INBOX/Lists/luddites`) is included in the subscribed
+         * mailboxes in user configuration */
+        let fname = if let Ok(fname) = pathbuf.strip_prefix(
+            PathBuf::from(&settings.root_folder)
+                .parent()
+                .unwrap_or_else(|| &Path::new("/")),
+        ) {
+            if fname.components().count() != 0
+                && !settings
+                    .subscribed_folders
+                    .iter()
+                    .any(|x| x == strip_slash!(fname.to_str().unwrap()))
+            {
+                return Err(MeliError::new(format!(
+                    "Folder with name `{}` is not included in configured subscribed mailboxes",
+                    fname.display()
+                )));
+            }
+            Some(fname)
+        } else {
+            None
+        };
 
         let ret = MaildirFolder {
             hash: h.finish(),
             name: file_name,
-            path: pathbuf,
+            path: fname.unwrap().to_path_buf(),
+            fs_path: pathbuf,
             parent,
             children,
         };
         ret.is_valid()?;
         Ok(ret)
     }
-    pub fn path(&self) -> &Path {
-        self.path.as_path()
+
+    pub fn fs_path(&self) -> &Path {
+        self.fs_path.as_path()
     }
+
     fn is_valid(&self) -> Result<()> {
-        let path = self.path();
+        let path = self.fs_path();
         let mut p = PathBuf::from(path);
         for d in &["cur", "new", "tmp"] {
             p.push(d);
@@ -231,6 +268,10 @@ impl BackendFolder for MaildirFolder {
         &self.name
     }
 
+    fn path(&self) -> &str {
+        self.path.to_str().unwrap_or(self.name())
+    }
+
     fn change_name(&mut self, s: &str) {
         self.name = s.to_string();
     }
@@ -243,6 +284,7 @@ impl BackendFolder for MaildirFolder {
         Box::new(MaildirFolder {
             hash: self.hash,
             name: self.name.clone(),
+            fs_path: self.fs_path.clone(),
             path: self.path.clone(),
             children: self.children.clone(),
             parent: self.parent,

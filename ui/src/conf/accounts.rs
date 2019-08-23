@@ -206,27 +206,24 @@ impl Account {
 
         let mut sent_folder = None;
         for f in ref_folders.values_mut() {
-            let entry = settings
-                .folder_confs
-                .entry(f.name().to_string())
-                .or_default();
-            if f.name().eq_ignore_ascii_case("sent") {
-                sent_folder = Some(f.hash());
-            }
-            if (f.name().eq_ignore_ascii_case("junk")
-                || f.name().eq_ignore_ascii_case("spam")
-                || f.name().eq_ignore_ascii_case("sent")
-                || f.name().eq_ignore_ascii_case("trash"))
-                && entry.subscribe.is_unset()
+            if !settings.folder_confs.contains_key(f.path())
+                || settings.folder_confs[f.path()].subscribe.is_false()
             {
-                entry.subscribe = ToggleFlag::InternalVal(false);
+                /* Skip unsubscribed folder */
+                continue;
             }
-            folder_names.insert(f.hash(), f.name().to_string());
+            folder_names.insert(f.hash(), f.path().to_string());
         }
 
         let mut stack: StackVec<FolderHash> = StackVec::new();
         let mut tree: Vec<FolderNode> = Vec::new();
         for (h, f) in ref_folders.iter() {
+            if !settings.folder_confs.contains_key(f.path())
+                || settings.folder_confs[f.path()].subscribe.is_false()
+            {
+                /* Skip unsubscribed folder */
+                continue;
+            }
             if f.parent().is_none() {
                 fn rec(h: FolderHash, ref_folders: &FnvHashMap<FolderHash, Folder>) -> FolderNode {
                     let mut node = FolderNode {
@@ -255,12 +252,13 @@ impl Account {
                 Account::new_worker(f.clone(), &mut backend, notify_fn.clone()),
             );
         }
-        tree.sort_unstable_by_key(|f| ref_folders[&f.hash].name());
+
+        tree.sort_unstable_by_key(|f| ref_folders[&f.hash].path());
 
         let mut stack: StackVec<Option<&FolderNode>> = StackVec::new();
         for n in tree.iter_mut() {
             folders_order.push(n.hash);
-            n.kids.sort_unstable_by_key(|f| ref_folders[&f.hash].name());
+            n.kids.sort_unstable_by_key(|f| ref_folders[&f.hash].path());
             stack.extend(n.kids.iter().rev().map(Some));
             while let Some(Some(next)) = stack.pop() {
                 folders_order.push(next.hash);
@@ -422,7 +420,7 @@ impl Account {
         if let Some(folder_confs) = self.settings.conf().folders() {
             //debug!("folder renames: {:?}", folder_renames);
             for f in folders.values_mut() {
-                if let Some(r) = folder_confs.get(f.name()) {
+                if let Some(r) = folder_confs.get(f.path()) {
                     if let Some(rename) = r.rename() {
                         f.change_name(rename);
                     }

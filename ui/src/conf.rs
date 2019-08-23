@@ -95,6 +95,8 @@ pub struct FolderConf {
     autoload: bool,
     #[serde(deserialize_with = "toggleflag_de", default)]
     subscribe: ToggleFlag,
+    #[serde(deserialize_with = "toggleflag_de", default)]
+    ignore: ToggleFlag,
 }
 
 impl Default for FolderConf {
@@ -103,6 +105,7 @@ impl Default for FolderConf {
             rename: None,
             autoload: true,
             subscribe: ToggleFlag::Unset,
+            ignore: ToggleFlag::False,
         }
     }
 }
@@ -133,6 +136,7 @@ pub struct FileAccount {
 
     #[serde(default = "false_val")]
     read_only: bool,
+    subscribed_folders: Vec<String>,
     folders: Option<HashMap<String, FolderConf>>,
 }
 
@@ -144,7 +148,7 @@ impl From<FileAccount> for AccountConf {
         let identity = x.identity.clone();
         let display_name = x.display_name.clone();
 
-        let acc = AccountSettings {
+        let mut acc = AccountSettings {
             name: String::new(),
             root_folder,
             format,
@@ -152,9 +156,39 @@ impl From<FileAccount> for AccountConf {
             identity,
             read_only: x.read_only,
             display_name,
+            subscribed_folders: x.subscribed_folders.clone(),
         };
 
-        let folder_confs = x.folders.clone().unwrap_or_else(Default::default);
+        let root_path = PathBuf::from(acc.root_folder.as_str());
+        let root_tmp = root_path
+            .components()
+            .last()
+            .unwrap()
+            .as_os_str()
+            .to_str()
+            .unwrap()
+            .to_string();
+        if !acc.subscribed_folders.contains(&root_tmp) {
+            acc.subscribed_folders.push(root_tmp);
+        }
+        let mut folder_confs = x.folders.clone().unwrap_or_else(Default::default);
+        for s in &x.subscribed_folders {
+            if !folder_confs.contains_key(s) {
+                folder_confs.insert(
+                    s.to_string(),
+                    FolderConf {
+                        subscribe: ToggleFlag::True,
+                        ..FolderConf::default()
+                    },
+                );
+            } else {
+                if !folder_confs[s].subscribe.is_unset() {
+                    eprintln!("Configuration error: folder `{}` cannot both have `subscribe` flag set and be in the `subscribed_folders` array", s);
+                    std::process::exit(1);
+                }
+                folder_confs.get_mut(s).unwrap().subscribe = ToggleFlag::True;
+            }
+        }
 
         AccountConf {
             account: acc,
@@ -384,7 +418,7 @@ mod default_vals {
         80
     }
 
-    pub(in crate::conf) fn none() -> Option<String> {
+    pub(in crate::conf) fn none<T>() -> Option<T> {
         None
     }
 }

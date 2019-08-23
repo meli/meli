@@ -467,7 +467,7 @@ impl MailBackend for MaildirType {
     fn save(&self, bytes: &[u8], folder: &str) -> Result<()> {
         for f in self.folders.values() {
             if f.name == folder {
-                let mut path = f.path.clone();
+                let mut path = f.fs_path.clone();
                 path.push("cur");
                 {
                     let mut rand_buf = [0u8; 16];
@@ -508,10 +508,11 @@ impl MailBackend for MaildirType {
 }
 
 impl MaildirType {
-    pub fn new(f: &AccountSettings) -> Self {
+    pub fn new(settings: &AccountSettings) -> Self {
         let mut folders: FnvHashMap<FolderHash, MaildirFolder> = Default::default();
         fn recurse_folders<P: AsRef<Path>>(
             folders: &mut FnvHashMap<FolderHash, MaildirFolder>,
+            settings: &AccountSettings,
             p: P,
         ) -> Vec<FolderHash> {
             if !p.as_ref().exists() || !p.as_ref().is_dir() {
@@ -535,13 +536,14 @@ impl MaildirType {
                             continue 'entries;
                         }
                         if path.is_dir() {
-                            let path_children = recurse_folders(folders, &path);
-                            if let Ok(f) = MaildirFolder::new(
+                            if let Ok(mut f) = MaildirFolder::new(
                                 path.to_str().unwrap().to_string(),
                                 path.file_name().unwrap().to_str().unwrap().to_string(),
                                 None,
-                                path_children,
+                                Vec::new(),
+                                &settings,
                             ) {
+                                f.children = recurse_folders(folders, settings, &path);
                                 f.children
                                     .iter()
                                     .map(|c| folders.get_mut(c).map(|f| f.parent = Some(f.hash)))
@@ -555,28 +557,49 @@ impl MaildirType {
             }
             children
         };
-        let path = PathBuf::from(f.root_folder());
-        if path.is_dir() {
-            if let Ok(f) = MaildirFolder::new(
-                path.to_str().unwrap().to_string(),
-                path.file_name().unwrap().to_str().unwrap().to_string(),
-                None,
-                Vec::with_capacity(0),
-            ) {
-                let l: MaildirFolder = f;
-                folders.insert(l.hash, l);
+        let root_path = PathBuf::from(settings.root_folder());
+        if !root_path.exists() {
+            eprintln!(
+                "Configuration error ({}): root_path `{}` is not a valid directory.",
+                settings.name(),
+                settings.root_folder.as_str()
+            );
+            std::process::exit(1);
+        } else if !root_path.is_dir() {
+            eprintln!(
+                "Configuration error ({}): root_path `{}` is not a directory.",
+                settings.name(),
+                settings.root_folder.as_str()
+            );
+            std::process::exit(1);
+        }
+
+        match MaildirFolder::new(
+            root_path.to_str().unwrap().to_string(),
+            root_path.file_name().unwrap().to_str().unwrap().to_string(),
+            None,
+            Vec::with_capacity(0),
+            settings,
+        ) {
+            Ok(f) => {
+                folders.insert(f.hash, f);
+            }
+            Err(e) => {
+                eprint!("{}: ", settings.name());
+                eprintln!("{}", e.to_string());
+                std::process::exit(1);
             }
         }
 
         if folders.is_empty() {
-            let children = recurse_folders(&mut folders, &path);
+            let children = recurse_folders(&mut folders, settings, &root_path);
             children
                 .iter()
                 .map(|c| folders.get_mut(c).map(|f| f.parent = None))
                 .count();
         } else {
             let root_hash = *folders.keys().nth(0).unwrap();
-            let children = recurse_folders(&mut folders, &path);
+            let children = recurse_folders(&mut folders, settings, &root_path);
             children
                 .iter()
                 .map(|c| folders.get_mut(c).map(|f| f.parent = Some(root_hash)))
@@ -601,10 +624,10 @@ impl MaildirType {
             }
         }
         MaildirType {
-            name: f.name().to_string(),
+            name: settings.name().to_string(),
             folders,
             hash_indexes,
-            path: PathBuf::from(f.root_folder()),
+            path: PathBuf::from(settings.root_folder()),
         }
     }
     fn owned_folder_idx(&self, folder: &Folder) -> FolderHash {
@@ -626,7 +649,7 @@ impl MaildirType {
             let folder: &MaildirFolder = &self.folders[&self.owned_folder_idx(folder)];
             let folder_hash = folder.hash();
             let tx_final = w.tx();
-            let path: PathBuf = folder.path().into();
+            let path: PathBuf = folder.fs_path().into();
             let name = format!("parsing {:?}", folder.name());
             let root_path = self.path.to_path_buf();
             let map = self.hash_indexes.clone();

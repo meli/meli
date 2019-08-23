@@ -28,6 +28,7 @@ pub struct AccountSettings {
     pub identity: String,
     pub read_only: bool,
     pub display_name: Option<String>,
+    pub subscribed_folders: Vec<String>,
 }
 
 impl AccountSettings {
@@ -51,5 +52,9 @@ impl AccountSettings {
     }
     pub fn display_name(&self) -> Option<&String> {
         self.display_name.as_ref()
+    }
+
+    pub fn subscribed_folders(&self) -> &Vec<String> {
+        &self.subscribed_folders
     }
 }

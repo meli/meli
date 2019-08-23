@@ -248,9 +248,8 @@ impl BackendOp for ReadOnlyOp {
 pub trait BackendFolder: Debug {
     fn hash(&self) -> FolderHash;
     fn name(&self) -> &str;
-    fn path(&self) -> &str {
-        self.name()
-    }
+    /// Path of folder within the mailbox hierarchy, with `/` as separator.
+    fn path(&self) -> &str;
     fn change_name(&mut self, new_name: &str);
     fn clone(&self) -> Folder;
     fn children(&self) -> &Vec<FolderHash>;
@@ -268,6 +267,10 @@ impl BackendFolder for DummyFolder {
     }
 
     fn name(&self) -> &str {
+        ""
+    }
+
+    fn path(&self) -> &str {
         ""
     }
 
