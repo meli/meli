@@ -44,6 +44,7 @@ use fnv::{FnvHashMap, FnvHashSet};
 use native_tls::TlsConnector;
 use std::iter::FromIterator;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 pub type UID = usize;
 
@@ -54,6 +55,8 @@ pub struct ImapType {
     server_username: String,
     server_password: String,
     connection: Arc<Mutex<ImapConnection>>,
+    danger_accept_invalid_certs: bool,
+
     capabilities: FnvHashSet<Vec<u8>>,
     folders: FnvHashMap<FolderHash, ImapFolder>,
     folder_connections: FnvHashMap<FolderHash, Arc<Mutex<ImapConnection>>>,
@@ -541,12 +544,28 @@ macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).unwrap_or_else(|| {
             eprintln!(
-                "IMAP connection for {} requires the field `{}` set",
+                "Configuration error ({}): IMAP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
             );
             std::process::exit(1);
         })
+    };
+    ($s:ident[$var:literal], $default:expr) => {
+        $s.extra
+            .get($var)
+            .map(|v| {
+                <_>::from_str(v).unwrap_or_else(|_| {
+                    eprintln!(
+                        "Configuration error ({}): Invalid value for field `{}`: {}",
+                        $s.name.as_str(),
+                        $var,
+                        v,
+                    );
+                    std::process::exit(1);
+                })
+            })
+            .unwrap_or_else(|| $default)
     };
 }
 
@@ -556,8 +575,13 @@ impl ImapType {
         use std::net::TcpStream;
         debug!(s);
         let path = get_conf_val!(s["server_hostname"]);
+        let danger_accept_invalid_certs: bool =
+            get_conf_val!(s["danger_accept_invalid_certs"], false);
 
-        let connector = TlsConnector::builder();
+        let mut connector = TlsConnector::builder();
+        if danger_accept_invalid_certs {
+            connector.danger_accept_invalid_certs(true);
+        }
         let connector = connector.build().unwrap();
 
         let addr = if let Ok(a) = lookup_ipv4(path, 143) {
@@ -630,6 +654,7 @@ impl ImapType {
             server_password: get_conf_val!(s["server_password"]).to_string(),
             folders: Default::default(),
             connection: Arc::new(Mutex::new(ImapConnection { cmd_id, stream })),
+            danger_accept_invalid_certs,
             folder_connections: Default::default(),
             hash_index: Default::default(),
             uid_index: Default::default(),
@@ -711,7 +736,10 @@ impl ImapType {
         use std::net::TcpStream;
         let path = &self.server_hostname;
 
-        let connector = TlsConnector::builder();
+        let mut connector = TlsConnector::builder();
+        if self.danger_accept_invalid_certs {
+            connector.danger_accept_invalid_certs(true);
+        }
         let connector = connector.build().unwrap();
 
         let addr = if let Ok(a) = lookup_ipv4(path, 143) {
