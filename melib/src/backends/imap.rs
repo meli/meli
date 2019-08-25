@@ -569,6 +569,18 @@ macro_rules! get_conf_val {
     };
 }
 
+macro_rules! exit_on_error {
+    ($s:ident, $($result:expr)+) => {
+        $(if let Err(e) = $result {
+            eprintln!(
+                "IMAP error ({}): {}",
+                $s.name.as_str(),
+                e.to_string(),
+            );
+            std::process::exit(1);
+        })+
+    };
+}
 impl ImapType {
     pub fn new(s: &AccountSettings) -> Self {
         use std::io::prelude::*;
@@ -591,11 +603,15 @@ impl ImapType {
             std::process::exit(1);
         };
 
-        let mut socket = TcpStream::connect(&addr).unwrap();
+        let mut socket = TcpStream::connect(&addr);
         let cmd_id = 0;
-        socket
-            .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
-            .unwrap();
+        exit_on_error!(
+            s,
+            socket
+            socket.as_mut().unwrap().write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
+        );
+        let mut socket = socket.unwrap();
+        // FIXME handle response properly
         let mut buf = vec![0; 1024];
         let mut response = String::with_capacity(1024);
         let mut cap_flag = false;

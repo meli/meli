@@ -63,8 +63,8 @@ impl BackendOp for ImapOp {
             let mut response = String::with_capacity(8 * 1024);
             {
                 let mut conn = self.connection.lock().unwrap();
-                conn.send_command(format!("SELECT {}", self.folder_path).as_bytes());
-                conn.read_response(&mut response);
+                conn.send_command(format!("SELECT {}", self.folder_path).as_bytes())?;
+                conn.read_response(&mut response)?;
                 conn.send_command(format!("UID FETCH {} (FLAGS RFC822)", self.uid).as_bytes())?;
                 conn.read_response(&mut response)?;
             }

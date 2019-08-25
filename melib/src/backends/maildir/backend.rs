@@ -804,6 +804,7 @@ impl MaildirType {
                 };
                 let result = thunk();
                 tx_final.send(AsyncStatus::Payload(result));
+                tx_final.send(AsyncStatus::Finished);
             };
             Box::new(closure)
         };

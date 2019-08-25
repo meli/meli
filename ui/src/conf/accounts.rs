@@ -221,6 +221,7 @@ impl Account {
 
         let mut stack: StackVec<FolderHash> = StackVec::new();
         let mut tree: Vec<FolderNode> = Vec::new();
+        let mut collection: Collection = Collection::new(Default::default());
         for (h, f) in ref_folders.iter() {
             if !settings.folder_confs.contains_key(f.path())
                 || settings.folder_confs[f.path()].subscribe.is_false()
@@ -258,6 +259,7 @@ impl Account {
                 *h,
                 Account::new_worker(f.clone(), &mut backend, notify_fn.clone()),
             );
+            collection.threads.insert(*h, Threads::default());
         }
 
         tree.sort_unstable_by_key(|f| ref_folders[&f.hash].path());
@@ -298,7 +300,7 @@ impl Account {
             tree,
             address_book,
             sent_folder,
-            collection: Collection::new(Default::default()),
+            collection,
             workers,
             settings: settings.clone(),
             runtime_settings: settings,
@@ -320,37 +322,39 @@ impl Account {
         let w = builder.build(Box::new(move || {
             let mut mailbox_handle = mailbox_handle.clone();
             let work = mailbox_handle.work().unwrap();
-            let rx = mailbox_handle.rx();
-            let tx = mailbox_handle.tx();
-
+            debug!("AA");
             std::thread::Builder::new()
                 .spawn(move || {
+                    debug!("A");
                     work.compute();
+                    debug!("B");
                 })
                 .unwrap();
+            debug!("BB");
 
             loop {
-                debug!("looping");
-                chan_select! {
-                    rx.recv() -> r => {
-                debug!("got {:?}", r);
-                        match r {
-                            Some(s @ AsyncStatus::Payload(_)) => {
-                                our_tx.send(s);
-                                debug!("notifying for {}", folder_hash);
-                                notify_fn.notify(folder_hash);
-                            }
-                            Some(AsyncStatus::Finished) => {
-                                debug!("exiting");
-                                return;
-                            }
-                            Some(s) => {
-                                our_tx.send(s);
-                            }
-                            None => return,
-                        }
+                debug!("LL");
+                match debug!(mailbox_handle.poll_block()) {
+                    Ok(s @ AsyncStatus::Payload(_)) => {
+                        our_tx.send(s);
+                        debug!("notifying for {}", folder_hash);
+                        notify_fn.notify(folder_hash);
+                    }
+                    Ok(s @ AsyncStatus::Finished) => {
+                        our_tx.send(s);
+                        notify_fn.notify(folder_hash);
+                        debug!("exiting");
+                        return;
+                    }
+                    Ok(s) => {
+                        our_tx.send(s);
+                    }
+                    Err(_) => {
+                        debug!("poll error");
+                        return;
                     }
                 }
+                debug!("DD");
             }
         }));
         Some(w)
@@ -535,7 +539,7 @@ impl Account {
                     debug!("got payload in status for {}", folder_hash);
                     self.load_mailbox(folder_hash, envs);
                 }
-                Ok(AsyncStatus::Finished) if w.value.is_none() => {
+                Ok(AsyncStatus::Finished) => {
                     debug!("got finished in status for {}", folder_hash);
                     self.folders.entry(folder_hash).and_modify(|f| {
                         let m = if let MailboxEntry::Parsing(m, _, _) = f {
@@ -547,11 +551,6 @@ impl Account {
                     });
 
                     self.workers.insert(folder_hash, None);
-                }
-                Ok(AsyncStatus::Finished) if w.value.is_some() => {
-                    let envs = w.value.take().unwrap();
-                    debug!("got payload in status for {}", folder_hash);
-                    self.load_mailbox(folder_hash, envs);
                 }
                 Ok(AsyncStatus::ProgressReport(n)) => {
                     self.folders.entry(folder_hash).and_modify(|f| {
@@ -565,7 +564,6 @@ impl Account {
                     //return Err(0);
                 }
             },
-            Some(_) => return Ok(()),
         };
         if self.folders[&folder_hash].is_available()
             || (self.folders[&folder_hash].is_parsing()
