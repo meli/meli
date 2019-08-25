@@ -2,7 +2,7 @@ use crate::terminal::Key;
 //use std::any::TypeId;
 use fnv::FnvHashMap;
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Shortcuts {
     #[serde(flatten)]
     pub listing: ListingShortcuts,
@@ -22,7 +22,7 @@ macro_rules! shortcut_key_values {
         $(#[$outer:meta])*
         pub struct $name:ident { $($fname:ident : Key |> $fdesc:expr),* }) => {
         $(#[$outer])*
-        #[derive(Debug, Clone, Deserialize)]
+        #[derive(Debug, Clone, Serialize, Deserialize)]
         #[serde(default)]
         #[serde(rename = $cname)]
         pub struct $name {

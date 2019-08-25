@@ -245,7 +245,7 @@ impl BackendOp for ReadOnlyOp {
     }
 }
 
-#[derive(Debug, Copy, Hash, Eq, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Hash, Eq, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SpecialUseMailbox {
     Normal,
     Inbox,

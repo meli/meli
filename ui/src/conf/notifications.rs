@@ -24,7 +24,7 @@ fn none() -> Option<String> {
 }
 
 /// Settings for the notifications function.
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct NotificationsSettings {
     /// A command to pipe notifications through
     /// Default: None

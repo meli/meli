@@ -21,6 +21,7 @@
 
 use super::*;
 use chan;
+use serde::{Serialize, Serializer};
 use std::fmt;
 use std::io;
 use termion::event::Event as TermionEvent;
@@ -283,5 +284,35 @@ impl<'de> Deserialize<'de> for Key {
         }
 
         deserializer.deserialize_identifier(KeyVisitor)
+    }
+}
+
+impl Serialize for Key {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Key::Backspace => serializer.serialize_str("Backspace"),
+            Key::Left => serializer.serialize_str("Left"),
+            Key::Right => serializer.serialize_str("Right"),
+            Key::Up => serializer.serialize_str("Up"),
+            Key::Down => serializer.serialize_str("Down"),
+            Key::Home => serializer.serialize_str("Home"),
+            Key::End => serializer.serialize_str("End"),
+            Key::PageUp => serializer.serialize_str("PageUp"),
+            Key::PageDown => serializer.serialize_str("PageDown"),
+            Key::Delete => serializer.serialize_str("Delete"),
+            Key::Insert => serializer.serialize_str("Insert"),
+            Key::Esc => serializer.serialize_str("Esc"),
+            Key::Char(c) => serializer.serialize_char(*c),
+            Key::F(n) => serializer.serialize_str(&format!("F{}", n)),
+            Key::Alt(c) => serializer.serialize_str(&format!("M-{}", c)),
+            Key::Ctrl(c) => serializer.serialize_str(&format!("C-{}", c)),
+            v => Err(serde::ser::Error::custom(format!(
+                "`{}` is not a valid key",
+                v
+            ))),
+        }
     }
 }

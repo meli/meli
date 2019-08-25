@@ -41,7 +41,8 @@ use melib::backends::SpecialUseMailbox;
 use melib::conf::AccountSettings;
 use melib::error::*;
 
-use self::serde::{de, Deserialize, Deserializer};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+
 use std::collections::HashMap;
 use std::env;
 use std::fs::{File, OpenOptions};
@@ -88,7 +89,7 @@ impl ToggleFlag {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FolderConf {
     rename: Option<String>,
     #[serde(default = "true_val")]
@@ -119,7 +120,7 @@ impl FolderConf {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FileAccount {
     root_folder: String,
     format: String,
@@ -247,7 +248,7 @@ impl FileAccount {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct FileSettings {
     accounts: HashMap<String, FileAccount>,
     #[serde(default)]
@@ -376,7 +377,7 @@ impl Settings {
     }
 }
 
-#[derive(Copy, Debug, Clone, Deserialize)]
+#[derive(Copy, Debug, Clone, Serialize, Deserialize)]
 pub enum IndexStyle {
     Plain,
     Threaded,
@@ -424,6 +425,19 @@ where
         Ok(true) => ToggleFlag::True,
         Ok(false) => ToggleFlag::False,
     })
+}
+
+impl Serialize for ToggleFlag {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            ToggleFlag::Unset | ToggleFlag::InternalVal(_) => serializer.serialize_none(),
+            ToggleFlag::False => serializer.serialize_bool(false),
+            ToggleFlag::True => serializer.serialize_bool(true),
+        }
+    }
 }
 
 /*
