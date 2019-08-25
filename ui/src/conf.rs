@@ -20,8 +20,8 @@
  */
 
 extern crate bincode;
-extern crate config;
 extern crate serde;
+extern crate toml;
 extern crate xdg;
 
 pub mod mailer;
@@ -31,7 +31,6 @@ pub mod shortcuts;
 
 pub mod accounts;
 pub use self::accounts::Account;
-use self::config::{Config, File, FileFormat};
 pub use self::mailer::*;
 pub use self::shortcuts::*;
 
@@ -45,8 +44,8 @@ use melib::error::*;
 use self::serde::{de, Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::env;
-use std::fs::OpenOptions;
-use std::io::{self, BufRead, Write};
+use std::fs::{File, OpenOptions};
+use std::io::{self, BufRead, Read, Write};
 use std::path::PathBuf;
 
 #[macro_export]
@@ -338,19 +337,17 @@ impl FileSettings {
                 }
             }
         }
-        let mut s = Config::new();
-        if s.merge(File::new(config_path.to_str().unwrap(), FileFormat::Toml))
-            .is_err()
-        {
-            eprintln!("Config file contains errors.");
+
+        let mut file = File::open(config_path.to_str().unwrap())?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let s = toml::from_str(&contents);
+        if let Err(e) = s {
+            eprintln!("Config file contains errors: {}", e.to_string());
             std::process::exit(1);
         }
 
-        /* No point in returning without a config file. */
-        match s.try_into() {
-            Ok(v) => Ok(v),
-            Err(e) => Err(MeliError::new(e.to_string())),
-        }
+        Ok(s.unwrap())
     }
 }
 
