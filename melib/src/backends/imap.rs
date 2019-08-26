@@ -69,7 +69,7 @@ impl MailBackend for ImapType {
         macro_rules! exit_on_error {
             ($tx:expr,$($result:expr)+) => {
                 $(if let Err(e) = $result {
-                $tx.send(AsyncStatus::Payload(Err(e)));
+                $tx.send(AsyncStatus::Payload(Err(e.into())));
                     std::process::exit(1);
                 })+
             };
@@ -88,7 +88,9 @@ impl MailBackend for ImapType {
                 let tx = tx.clone();
                 let mut response = String::with_capacity(8 * 1024);
                 {
-                    let mut conn = connection.lock().unwrap();
+                    let conn = connection.lock();
+                    exit_on_error!(&tx, conn);
+                    let mut conn = conn.unwrap();
 
                     debug!("locked for get {}", folder_path);
                     exit_on_error!(&tx,
@@ -108,7 +110,9 @@ impl MailBackend for ImapType {
                 while exists > 1 {
                     let mut envelopes = vec![];
                     {
-                        let mut conn = connection.lock().unwrap();
+                        let conn = connection.lock();
+                        exit_on_error!(&tx, conn);
+                        let mut conn = conn.unwrap();
                         exit_on_error!(&tx,
                                        conn.send_command(format!("UID FETCH {}:{} (FLAGS RFC822.HEADER)", std::cmp::max(exists.saturating_sub(10000), 1), exists).as_bytes())
                                        conn.read_response(&mut response)
@@ -168,7 +172,7 @@ impl MailBackend for ImapType {
         let has_idle: bool = self.capabilities.contains(&b"IDLE"[0..]);
         let sender = Arc::new(sender);
         for f in self.folders.values() {
-            let mut conn = self.new_connection();
+            let mut conn = self.new_connection()?;
             let main_conn = self.connection.clone();
             let f_path = f.path().to_string();
             let hash_index = self.hash_index.clone();
@@ -632,6 +636,19 @@ macro_rules! exit_on_error {
             std::process::exit(1);
         })+
     };
+    ($s:ident returning $result:expr) => {
+        match $result {
+            Err(e) => {
+                eprintln!(
+                    "IMAP error ({}): {}",
+                    $s.name.as_str(),
+                    e.to_string(),
+                );
+                std::process::exit(1);
+            },
+            Ok(v) => v,
+        }
+    }
 }
 impl ImapType {
     pub fn new(s: &AccountSettings) -> Self {
@@ -662,7 +679,7 @@ impl ImapType {
             socket
             socket.as_mut().unwrap().write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
         );
-        let mut socket = socket.unwrap();
+        let mut socket = exit_on_error!(s returning socket);
         // FIXME handle response properly
         let mut buf = vec![0; 1024];
         let mut response = String::with_capacity(1024);
@@ -729,19 +746,13 @@ impl ImapType {
             capabilities: Default::default(),
         };
 
-        let mut conn = m.connection.lock().unwrap();
-        conn.send_command(
-            format!(
-                "LOGIN \"{}\" \"{}\"",
-                get_conf_val!(s["server_username"]),
-                get_conf_val!(s["server_password"])
-            )
-            .as_bytes(),
-        )
-        .unwrap();
         let mut res = String::with_capacity(8 * 1024);
-        conn.read_lines(&mut res, String::new()).unwrap();
-        std::io::stderr().write(res.as_bytes()).unwrap();
+        let mut conn = exit_on_error!(s returning m.connection.lock());
+        exit_on_error!(s,
+                       conn.send_command( format!( "LOGIN \"{}\" \"{}\"", get_conf_val!(s["server_username"]), get_conf_val!(s["server_password"])).as_bytes())
+                       conn.read_lines(&mut res, String::new())
+                       std::io::stderr().write(res.as_bytes())
+        );
         m.capabilities = match protocol_parser::capabilities(res.as_bytes())
             .to_full_result()
             .map_err(MeliError::from)
@@ -769,8 +780,10 @@ impl ImapType {
 
         m.folders = m.imap_folders();
         for f in m.folders.keys() {
-            m.folder_connections
-                .insert(*f, Arc::new(Mutex::new(m.new_connection())));
+            m.folder_connections.insert(
+                *f,
+                Arc::new(Mutex::new(exit_on_error!(s returning m.new_connection()))),
+            );
         }
         m
     }
@@ -799,7 +812,7 @@ impl ImapType {
         }
     }
 
-    fn new_connection(&self) -> ImapConnection {
+    fn new_connection(&self) -> Result<ImapConnection> {
         use std::io::prelude::*;
         use std::net::TcpStream;
         let path = &self.server_hostname;
@@ -808,20 +821,20 @@ impl ImapType {
         if self.danger_accept_invalid_certs {
             connector.danger_accept_invalid_certs(true);
         }
-        let connector = connector.build().unwrap();
+        let connector = connector.build()?;
 
         let addr = if let Ok(a) = lookup_ipv4(path, 143) {
             a
         } else {
-            eprintln!("Could not lookup address {}", &path);
-            std::process::exit(1);
+            return Err(MeliError::new(format!(
+                "Could not lookup address {}",
+                &path
+            )));
         };
 
-        let mut socket = TcpStream::connect(&addr).unwrap();
+        let mut socket = TcpStream::connect(&addr)?;
         let cmd_id = 0;
-        socket
-            .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
-            .unwrap();
+        socket.write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())?;
 
         let mut buf = vec![0; 1024];
         let mut response = String::with_capacity(1024);
@@ -849,9 +862,7 @@ impl ImapType {
         socket
             .set_nonblocking(true)
             .expect("set_nonblocking call failed");
-        socket
-            .set_read_timeout(Some(std::time::Duration::new(120, 0)))
-            .unwrap();
+        socket.set_read_timeout(Some(std::time::Duration::new(120, 0)))?;
         let stream = {
             let mut conn_result = connector.connect(path, socket);
             if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) = conn_result {
@@ -866,12 +877,12 @@ impl ImapType {
                             midhandshake_stream = Some(stream);
                         }
                         p => {
-                            p.unwrap();
+                            p?;
                         }
                     }
                 }
             }
-            conn_result.unwrap()
+            conn_result?
         };
         let mut ret = ImapConnection { cmd_id, stream };
         ret.send_command(
@@ -880,9 +891,8 @@ impl ImapType {
                 &self.server_username, &self.server_password
             )
             .as_bytes(),
-        )
-        .unwrap();
-        ret
+        )?;
+        Ok(ret)
     }
 
     pub fn imap_folders(&self) -> FnvHashMap<FolderHash, ImapFolder> {

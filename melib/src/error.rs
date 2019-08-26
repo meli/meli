@@ -117,3 +117,17 @@ impl<T> From<std::sync::PoisonError<T>> for MeliError {
         MeliError::new(format!("{}", kind))
     }
 }
+
+impl From<native_tls::HandshakeError<std::net::TcpStream>> for MeliError {
+    #[inline]
+    fn from(kind: native_tls::HandshakeError<std::net::TcpStream>) -> MeliError {
+        MeliError::new(format!("{}", kind))
+    }
+}
+
+impl From<native_tls::Error> for MeliError {
+    #[inline]
+    fn from(kind: native_tls::Error) -> MeliError {
+        MeliError::new(format!("{}", kind))
+    }
+}

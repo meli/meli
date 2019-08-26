@@ -92,15 +92,13 @@ impl ImapConnection {
 
     pub fn send_command(&mut self, command: &[u8]) -> Result<usize> {
         let command = command.trim();
-        self.stream.write_all(b"M").unwrap();
-        self.stream
-            .write_all(self.cmd_id.to_string().as_bytes())
-            .unwrap();
-        self.stream.write_all(b" ").unwrap();
+        self.stream.write_all(b"M")?;
+        self.stream.write_all(self.cmd_id.to_string().as_bytes())?;
+        self.stream.write_all(b" ")?;
         let ret = self.cmd_id;
         self.cmd_id += 1;
-        self.stream.write_all(command).unwrap();
-        self.stream.write_all(b"\r\n").unwrap();
+        self.stream.write_all(command)?;
+        self.stream.write_all(b"\r\n")?;
         debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
             std::str::from_utf8_unchecked(command)
         });
@@ -108,17 +106,17 @@ impl ImapConnection {
     }
 
     pub fn send_literal(&mut self, data: &[u8]) -> Result<()> {
-        self.stream.write_all(data).unwrap();
+        self.stream.write_all(data)?;
         if !data.ends_with(b"\r\n") {
-            self.stream.write_all(b"\r\n").unwrap();
+            self.stream.write_all(b"\r\n")?;
         }
-        self.stream.write_all(b"\r\n").unwrap();
+        self.stream.write_all(b"\r\n")?;
         Ok(())
     }
 
     pub fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
-        self.stream.write_all(raw).unwrap();
-        self.stream.write_all(b"\r\n").unwrap();
+        self.stream.write_all(raw)?;
+        self.stream.write_all(b"\r\n")?;
         Ok(())
     }
 
