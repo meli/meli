@@ -36,7 +36,7 @@ use crate::backends::BackendOp;
 use crate::backends::FolderHash;
 use crate::backends::RefreshEvent;
 use crate::backends::RefreshEventKind::{self, *};
-use crate::backends::{BackendFolder, Folder, MailBackend, RefreshEventConsumer};
+use crate::backends::{BackendFolder, Folder, FolderOperation, MailBackend, RefreshEventConsumer};
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
@@ -523,6 +523,58 @@ impl MailBackend for ImapType {
         conn.wait_for_continuation_request()?;
         conn.send_literal(bytes)?;
         conn.read_response(&mut response)?;
+        Ok(())
+    }
+
+    fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
+        use FolderOperation::*;
+
+        match (&op, self.folders.values().any(|f| f.path == path)) {
+            (Create, true) => {
+                return Err(MeliError::new(format!(
+                    "Folder named `{}` in account `{}` already exists.",
+                    path, self.account_name,
+                )));
+            }
+            (op, false) if *op != Create => {
+                return Err(MeliError::new(format!(
+                    "No folder named `{}` in account `{}`",
+                    path, self.account_name,
+                )));
+            }
+            _ => {}
+        }
+
+        let mut response = String::with_capacity(8 * 1024);
+        match op {
+            Create => {
+                let mut conn = self.connection.lock()?;
+                conn.send_command(format!("CREATE \"{}\"", path,).as_bytes())?;
+                conn.read_response(&mut response)?;
+                conn.send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())?;
+                conn.read_response(&mut response)?;
+            }
+            Rename(dest) => {
+                let mut conn = self.connection.lock()?;
+                conn.send_command(format!("RENAME \"{}\" \"{}\"", path, dest).as_bytes())?;
+                conn.read_response(&mut response)?;
+            }
+            Delete => {
+                let mut conn = self.connection.lock()?;
+                conn.send_command(format!("DELETE \"{}\"", path,).as_bytes())?;
+                conn.read_response(&mut response)?;
+            }
+            Subscribe => {
+                let mut conn = self.connection.lock()?;
+                conn.send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())?;
+                conn.read_response(&mut response)?;
+            }
+            Unsubscribe => {
+                let mut conn = self.connection.lock()?;
+                conn.send_command(format!("UNSUBSCRIBE \"{}\"", path,).as_bytes())?;
+                conn.read_response(&mut response)?;
+            }
+        }
         Ok(())
     }
 }
