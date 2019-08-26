@@ -110,3 +110,10 @@ impl From<str::Utf8Error> for MeliError {
 //        MeliError::new(format!("{:?}", kind))
 //    }
 //}
+
+impl<T> From<std::sync::PoisonError<T>> for MeliError {
+    #[inline]
+    fn from(kind: std::sync::PoisonError<T>) -> MeliError {
+        MeliError::new(format!("{}", kind))
+    }
+}

@@ -494,10 +494,37 @@ impl State {
                         ),
                     ));
                 }
+                Folder(account_name, path, op) => {
+                    if let Some(account) = self
+                        .context
+                        .accounts
+                        .iter_mut()
+                        .find(|a| a.name() == account_name)
+                    {
+                        if let Err(e) = account.folder_operation(&path, op) {
+                            self.context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(e.to_string()),
+                            ));
+                        }
+                    } else {
+                        self.context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!(
+                                "Account with name `{}` not found.",
+                                account_name
+                            )),
+                        ));
+                    }
+                }
                 v => {
                     self.rcv_event(UIEvent::Action(v));
                 }
             }
+        } else {
+            self.context
+                .replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                    "invalid command".to_string(),
+                )));
         }
     }
 

@@ -27,8 +27,8 @@ use super::AccountConf;
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
 use melib::backends::{
-    BackendOp, Backends, Folder, FolderHash, MailBackend, NotifyFn, ReadOnlyOp, RefreshEvent,
-    RefreshEventConsumer, RefreshEventKind, SpecialUseMailbox,
+    BackendOp, Backends, Folder, FolderHash, FolderOperation, MailBackend, NotifyFn, ReadOnlyOp,
+    RefreshEvent, RefreshEventConsumer, RefreshEventKind, SpecialUseMailbox,
 };
 use melib::error::{MeliError, Result};
 use melib::mailbox::*;
@@ -600,6 +600,10 @@ impl Account {
     }
     pub fn thread(&self, h: ThreadHash, f: FolderHash) -> &ThreadNode {
         &self.collection.threads[&f].thread_nodes()[&h]
+    }
+
+    pub fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
+        self.backend.folder_operation(path, op)
     }
 }
 

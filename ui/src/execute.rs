@@ -21,6 +21,7 @@
 
 /*! A parser module for user commands passed through the Ex mode.
 */
+use melib::backends::FolderOperation;
 pub use melib::mailbox::{SortField, SortOrder};
 use nom::{digit, not_line_ending};
 use std;
@@ -211,6 +212,78 @@ define_commands!([
                               )
                       );
                   )
+                },
+                { tags: ["create-folder "],
+                  desc: "create-folder ACCOUNT FOLDER_PATH",
+                  parser:(
+                      named!( create_folder<Action>,
+                              do_parse!(
+                                  ws!(tag!("create-folder"))
+                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> is_a!(" ")
+                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
+                                  >> (Folder(account.to_string(), path.to_string(), FolderOperation::Create))
+                              )
+                      );
+                  )
+                },
+                { tags: ["subscribe-folder "],
+                  desc: "subscribe-folder ACCOUNT FOLDER_PATH",
+                  parser:(
+                      named!( sub_folder<Action>,
+                              do_parse!(
+                                  ws!(tag!("subscribe-folder"))
+                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> is_a!(" ")
+                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
+                                  >> (Folder(account.to_string(), path.to_string(), FolderOperation::Subscribe))
+                              )
+                      );
+                  )
+                },
+                { tags: ["unsubscribe-folder "],
+                  desc: "unsubscribe-folder ACCOUNT FOLDER_PATH",
+                  parser:(
+                      named!( unsub_folder<Action>,
+                              do_parse!(
+                                  ws!(tag!("unsubscribe-folder"))
+                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> is_a!(" ")
+                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
+                                  >> (Folder(account.to_string(), path.to_string(), FolderOperation::Unsubscribe))
+                              )
+                      );
+                  )
+                },
+                { tags: ["rename-folder "],
+                  desc: "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST",
+                  parser:(
+                      named!( rename_folder<Action>,
+                              do_parse!(
+                                  ws!(tag!("rename-folder"))
+                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> is_a!(" ")
+                                  >> src: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> is_a!(" ")
+                                  >> dest: map_res!(call!(not_line_ending), std::str::from_utf8)
+                                  >> (Folder(account.to_string(), src.to_string(), FolderOperation::Rename(dest.to_string())))
+                              )
+                      );
+                  )
+                },
+                { tags: ["delete-folder "],
+                  desc: "delete-folder ACCOUNT FOLDER_PATH",
+                  parser:(
+                      named!( delete_folder<Action>,
+                              do_parse!(
+                                  ws!(tag!("delete-folder"))
+                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> is_a!(" ")
+                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
+                                  >> (Folder(account.to_string(), path.to_string(), FolderOperation::Delete))
+                              )
+                      );
+                  )
                 }
 ]);
 
@@ -263,5 +336,5 @@ named!(
 );
 
 named!(pub parse_command<Action>,
-       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | pipe | compose_action)
+       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | pipe | compose_action | create_folder | sub_folder | unsub_folder | delete_folder | rename_folder)
 );

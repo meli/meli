@@ -143,6 +143,18 @@ impl NotifyFn {
         self.0(f);
     }
 }
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub enum FolderOperation {
+    Create,
+    Delete,
+    Subscribe,
+    Unsubscribe,
+    Rename(NewFolderName),
+}
+
+type NewFolderName = String;
+
 pub trait MailBackend: ::std::fmt::Debug {
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
@@ -150,6 +162,9 @@ pub trait MailBackend: ::std::fmt::Debug {
     fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp>;
 
     fn save(&self, bytes: &[u8], folder: &str) -> Result<()>;
+    fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
+        Ok(())
+    }
     //login function
 }
 

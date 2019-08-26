@@ -24,6 +24,7 @@
  */
 
 use crate::components::Component;
+use melib::backends::FolderOperation;
 pub use melib::mailbox::{SortField, SortOrder};
 use melib::thread::ThreadHash;
 use melib::{Draft, EnvelopeHash};
@@ -83,4 +84,8 @@ pub enum Action {
     SetEnv(String, String),
     PrintEnv(String),
     Compose(ComposeAction),
+    Folder(AccountName, FolderPath, FolderOperation),
 }
+
+type AccountName = String;
+type FolderPath = String;
