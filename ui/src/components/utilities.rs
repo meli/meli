@@ -992,6 +992,12 @@ impl Component for StatusBar {
                     .process_event(&mut UIEvent::InsertInput(Key::Char(*c)), context);
                 return true;
             }
+            UIEvent::ExInput(Key::Paste(s)) => {
+                self.dirty = true;
+                self.ex_buffer
+                    .process_event(&mut UIEvent::InsertInput(Key::Paste(s.clone())), context);
+                return true;
+            }
             UIEvent::ExInput(Key::Ctrl('u')) => {
                 self.dirty = true;
                 self.ex_buffer.clear();
