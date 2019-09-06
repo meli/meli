@@ -192,7 +192,13 @@ struct FolderNode {
 
 impl Account {
     pub fn new(name: String, settings: AccountConf, map: &Backends, notify_fn: NotifyFn) -> Self {
-        let mut backend = map.get(settings.account().format())(settings.account());
+        let s = settings.clone();
+        let mut backend = map.get(settings.account().format())(
+            settings.account(),
+            Box::new(move |path: &str| {
+                s.folder_confs.contains_key(path) && s.folder_confs[path].subscribe.is_true()
+            }),
+        );
         let mut ref_folders: FnvHashMap<FolderHash, Folder> = backend.folders();
         let mut folders: FnvHashMap<FolderHash, MailboxEntry> =
             FnvHashMap::with_capacity_and_hasher(ref_folders.len(), Default::default());

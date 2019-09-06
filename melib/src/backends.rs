@@ -37,7 +37,7 @@ use std::ops::Deref;
 use fnv::FnvHashMap;
 use std;
 
-pub type BackendCreator = Box<Fn(&AccountSettings) -> Box<MailBackend>>;
+pub type BackendCreator = Box<Fn(&AccountSettings, Box<Fn(&str) -> bool>) -> Box<MailBackend>>;
 
 /// A hashmap containing all available mail backends.
 /// An abstraction over any available backends.
@@ -58,15 +58,15 @@ impl Backends {
         };
         b.register(
             "maildir".to_string(),
-            Box::new(|| Box::new(|f| Box::new(MaildirType::new(f)))),
+            Box::new(|| Box::new(|f, i| Box::new(MaildirType::new(f, i)))),
         );
         b.register(
             "mbox".to_string(),
-            Box::new(|| Box::new(|f| Box::new(MboxType::new(f)))),
+            Box::new(|| Box::new(|f, i| Box::new(MboxType::new(f, i)))),
         );
         b.register(
             "imap".to_string(),
-            Box::new(|| Box::new(|f| Box::new(ImapType::new(f)))),
+            Box::new(|| Box::new(|f, i| Box::new(ImapType::new(f, i)))),
         );
         b
     }

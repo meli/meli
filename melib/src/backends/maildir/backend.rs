@@ -529,7 +529,7 @@ impl MailBackend for MaildirType {
 }
 
 impl MaildirType {
-    pub fn new(settings: &AccountSettings) -> Self {
+    pub fn new(settings: &AccountSettings, is_subscribed: Box<Fn(&str) -> bool>) -> Self {
         let mut folders: FnvHashMap<FolderHash, MaildirFolder> = Default::default();
         fn recurse_folders<P: AsRef<Path>>(
             folders: &mut FnvHashMap<FolderHash, MaildirFolder>,
@@ -627,6 +627,7 @@ impl MaildirType {
                 .count();
             folders.get_mut(&root_hash).map(|f| f.children = children);
         }
+        folders.retain(|_, f| is_subscribed(f.path()));
 
         let hash_indexes = Arc::new(Mutex::new(FnvHashMap::with_capacity_and_hasher(
             folders.len(),

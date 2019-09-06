@@ -540,7 +540,7 @@ impl MailBackend for MboxType {
 }
 
 impl MboxType {
-    pub fn new(s: &AccountSettings) -> Self {
+    pub fn new(s: &AccountSettings, _is_subscribed: Box<Fn(&str) -> bool>) -> Self {
         let path = Path::new(s.root_folder.as_str());
         if !path.exists() {
             panic!(

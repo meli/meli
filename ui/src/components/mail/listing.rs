@@ -562,12 +562,14 @@ impl Listing {
             }
             *depth -= 1;
         }
+        let mut keys = entries.keys().cloned().collect::<Vec<FolderHash>>();
+        keys.sort_unstable_by(|a, b| folders_order[a].partial_cmp(&folders_order[b]).unwrap());
 
         /* Start with roots */
-        for f in entries.keys() {
-            if entries[f].parent().is_none() {
+        for f in keys {
+            if entries[&f].parent().is_none() {
                 print(
-                    *f,
+                    f,
                     &mut depth,
                     &mut inc,
                     &entries,

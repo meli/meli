@@ -651,7 +651,7 @@ macro_rules! exit_on_error {
     }
 }
 impl ImapType {
-    pub fn new(s: &AccountSettings) -> Self {
+    pub fn new(s: &AccountSettings, is_subscribed: Box<Fn(&str) -> bool>) -> Self {
         use std::io::prelude::*;
         use std::net::TcpStream;
         debug!(s);
@@ -779,17 +779,26 @@ impl ImapType {
         drop(conn);
 
         m.folders = m.imap_folders();
+        m.folders.retain(|_, f| is_subscribed(f.path()));
+        let keys = m
+            .folders
+            .keys()
+            .cloned()
+            .collect::<FnvHashSet<FolderHash>>();
+        for f in m.folders.values_mut() {
+            f.children.retain(|c| keys.contains(c));
+        }
+        /*
         for f in m.folders.keys() {
             m.folder_connections.insert(
                 *f,
                 Arc::new(Mutex::new(exit_on_error!(s returning m.new_connection()))),
             );
-        }
+        }*/
         m
     }
 
     pub fn shell(&mut self) {
-        self.folders();
         let mut conn = self.connection.lock().unwrap();
         let mut res = String::with_capacity(8 * 1024);
 
