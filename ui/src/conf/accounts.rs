@@ -40,7 +40,6 @@ use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate
 use std::collections::VecDeque;
 use std::fs;
 use std::io;
-use std::mem;
 use std::ops::{Index, IndexMut};
 use std::result;
 use std::sync::Arc;

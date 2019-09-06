@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use crate::backends::{BackendFolder, Folder, FolderHash};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Default)]
 pub struct ImapFolder {
@@ -27,6 +28,8 @@ pub struct ImapFolder {
     pub(super) name: String,
     pub(super) parent: Option<FolderHash>,
     pub(super) children: Vec<FolderHash>,
+
+    pub exists: Arc<Mutex<usize>>,
 }
 
 impl BackendFolder for ImapFolder {
@@ -57,6 +60,7 @@ impl BackendFolder for ImapFolder {
             name: self.name.clone(),
             parent: self.parent,
             children: self.children.clone(),
+            exists: self.exists.clone(),
         })
     }
 

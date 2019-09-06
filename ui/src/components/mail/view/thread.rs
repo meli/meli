@@ -869,6 +869,9 @@ impl fmt::Display for ThreadView {
 impl Component for ThreadView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let total_cols = width!(area);
+        if self.entries.is_empty() {
+            return;
+        }
 
         /* If user has selected another mail to view, change to it */
         if self.new_expanded_pos != self.expanded_pos {

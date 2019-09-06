@@ -28,6 +28,8 @@ mod operations;
 pub use operations::*;
 mod connection;
 pub use connection::*;
+mod watch;
+pub use watch::*;
 
 extern crate native_tls;
 
@@ -38,6 +40,7 @@ use crate::backends::RefreshEvent;
 use crate::backends::RefreshEventKind::{self, *};
 use crate::backends::{BackendFolder, Folder, FolderOperation, MailBackend, RefreshEventConsumer};
 use crate::conf::AccountSettings;
+use crate::email::parser::BytesExt;
 use crate::email::*;
 use crate::error::{MeliError, Result};
 use fnv::{FnvHashMap, FnvHashSet};
@@ -82,22 +85,21 @@ impl MailBackend for ImapType {
             let uid_index = self.uid_index.clone();
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
-            let connection = self.folder_connections[&folder_hash].clone();
+            let folder_exists = self.folders[&folder_hash].exists.clone();
+            let connection = self.connection.clone();
             let closure = move || {
                 let connection = connection.clone();
                 let tx = tx.clone();
                 let mut response = String::with_capacity(8 * 1024);
-                {
-                    let conn = connection.lock();
-                    exit_on_error!(&tx, conn);
-                    let mut conn = conn.unwrap();
+                let conn = connection.lock();
+                exit_on_error!(&tx, conn);
+                let mut conn = conn.unwrap();
+                debug!("locked for get {}", folder_path);
 
-                    debug!("locked for get {}", folder_path);
-                    exit_on_error!(&tx,
-                                   conn.send_command(format!("EXAMINE {}", folder_path).as_bytes())
-                                   conn.read_response(&mut response)
-                    );
-                }
+                exit_on_error!(&tx,
+                               conn.send_command(format!("EXAMINE {}", folder_path).as_bytes())
+                               conn.read_response(&mut response)
+                );
                 let examine_response = protocol_parser::select_response(&response)
                     .to_full_result()
                     .map_err(MeliError::from);
@@ -106,18 +108,17 @@ impl MailBackend for ImapType {
                     SelectResponse::Ok(ok) => ok.exists,
                     SelectResponse::Bad(b) => b.exists,
                 };
+                {
+                    let mut folder_exists = folder_exists.lock().unwrap();
+                    *folder_exists = exists;
+                }
 
                 while exists > 1 {
                     let mut envelopes = vec![];
-                    {
-                        let conn = connection.lock();
-                        exit_on_error!(&tx, conn);
-                        let mut conn = conn.unwrap();
-                        exit_on_error!(&tx,
-                                       conn.send_command(format!("UID FETCH {}:{} (FLAGS RFC822.HEADER)", std::cmp::max(exists.saturating_sub(10000), 1), exists).as_bytes())
-                                       conn.read_response(&mut response)
-                        );
-                    }
+                    exit_on_error!(&tx,
+                                   conn.send_command(format!("UID FETCH {}:{} (FLAGS RFC822.HEADER)", std::cmp::max(exists.saturating_sub(20000), 1), exists).as_bytes())
+                                   conn.read_response(&mut response)
+                    );
                     debug!(
                         "fetch response is {} bytes and {} lines",
                         response.len(),
@@ -145,10 +146,11 @@ impl MailBackend for ImapType {
                             tx.send(AsyncStatus::Payload(Err(e)));
                         }
                     }
-                    exists = std::cmp::max(exists.saturating_sub(10000), 1);
+                    exists = std::cmp::max(exists.saturating_sub(20000), 1);
                     debug!("sending payload");
                     tx.send(AsyncStatus::Payload(Ok(envelopes)));
                 }
+                drop(conn);
                 tx.send(AsyncStatus::Finished);
             };
             Box::new(closure)
@@ -157,286 +159,29 @@ impl MailBackend for ImapType {
     }
 
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()> {
-        macro_rules! exit_on_error {
-            ($sender:expr, $folder_hash:ident, $($result:expr)+) => {
-                $(if let Err(e) = $result {
-                    debug!("failure: {}", e.to_string());
-                    $sender.send(RefreshEvent {
-                        hash: $folder_hash,
-                        kind: RefreshEventKind::Failure(e),
-                    });
-                    std::process::exit(1);
-                })+
-            };
-        };
         let has_idle: bool = self.capabilities.contains(&b"IDLE"[0..]);
-        let sender = Arc::new(sender);
-        for f in self.folders.values() {
-            let mut conn = self.new_connection()?;
-            let main_conn = self.connection.clone();
-            let f_path = f.path().to_string();
-            let hash_index = self.hash_index.clone();
-            let uid_index = self.uid_index.clone();
-            let folder_hash = f.hash();
-            let sender = sender.clone();
-            std::thread::Builder::new()
-                .name(format!(
-                    "{},{}: imap connection",
-                    self.account_name.as_str(),
-                    f_path.as_str()
-                ))
-                .spawn(move || {
-                    let mut response = String::with_capacity(8 * 1024);
-                    exit_on_error!(
-                        sender.as_ref(),
-                        folder_hash,
-                        conn.read_response(&mut response)
-                        conn.send_command(format!("SELECT {}", f_path).as_bytes())
-                        conn.read_response(&mut response)
-                    );
-                    debug!("select response {}", &response);
-                    let mut prev_exists = match protocol_parser::select_response(&response)
-                        .to_full_result()
-                        .map_err(MeliError::from)
-                    {
-                        Ok(SelectResponse::Bad(bad)) => {
-                            debug!(bad);
-                            panic!("could not select mailbox");
-                        }
-                        Ok(SelectResponse::Ok(ok)) => {
-                            debug!(&ok);
-                            ok.exists
-                        }
-                        Err(e) => {
-                            debug!("{:?}", e);
-                            panic!("could not select mailbox");
-                        }
-                    };
-                    if has_idle {
-                        exit_on_error!(sender.as_ref(), folder_hash, conn.send_command(b"IDLE"));
-                        let mut iter = ImapBlockingConnection::from(conn);
-                        let mut beat = std::time::Instant::now();
-                        let _26_mins = std::time::Duration::from_secs(26 * 60);
-                        while let Some(line) = iter.next() {
-                            let now = std::time::Instant::now();
-                            if now.duration_since(beat) >= _26_mins {
-                                exit_on_error!(
-                                    sender.as_ref(),
-                                    folder_hash,
-                                    iter.conn.set_nonblocking(true)
-                                    iter.conn.send_raw(b"DONE")
-                                    iter.conn.read_response(&mut response)
-                                );
-                                exit_on_error!(
-                                    sender.as_ref(),
-                                    folder_hash,
-                                    iter.conn.send_command(b"IDLE")
-                                    iter.conn.set_nonblocking(false)
-                                );
-                                {
-                                    exit_on_error!(
-                                        sender.as_ref(),
-                                        folder_hash,
-                                        main_conn.lock().unwrap().send_command(b"NOOP")
-                                        main_conn.lock().unwrap().read_response(&mut response)
-                                    );
-                                }
-                                beat = now;
-                            }
-                            match protocol_parser::untagged_responses(line.as_slice())
-                                .to_full_result()
-                                .map_err(MeliError::from)
-                            {
-                                Ok(Some(Recent(_))) => {
-                                    /* UID SEARCH RECENT */
-                                    exit_on_error!(
-                                        sender.as_ref(),
-                                        folder_hash,
-                                        iter.conn.set_nonblocking(true)
-                                        iter.conn.send_raw(b"DONE")
-                                        iter.conn.read_response(&mut response)
-                                        iter.conn.send_command(b"UID SEARCH RECENT")
-                                        iter.conn.read_response(&mut response)
-                                    );
-                                    match protocol_parser::search_results_raw(response.as_bytes())
-                                        .to_full_result()
-                                        .map_err(MeliError::from)
-                                    {
-                                        Ok(&[]) => {
-                                            debug!("UID SEARCH RECENT returned no results");
-                                        }
-                                        Ok(v) => {
-                                            exit_on_error!(
-                                                sender.as_ref(),
-                                                folder_hash,
-                                                iter.conn.send_command(
-                                                    &[b"UID FETCH", v, b"(FLAGS RFC822.HEADER)"]
-                                                    .join(&b' '),
-                                                    )
-                                                iter.conn.read_response(&mut response)
-                                            );
-                                            debug!(&response);
-                                            match protocol_parser::uid_fetch_response(
-                                                response.as_bytes(),
-                                            )
-                                            .to_full_result()
-                                            .map_err(MeliError::from)
-                                            {
-                                                Ok(v) => {
-                                                    for (uid, flags, b) in v {
-                                                        if let Ok(env) =
-                                                            Envelope::from_bytes(&b, flags)
-                                                        {
-                                                            hash_index.lock().unwrap().insert(
-                                                                env.hash(),
-                                                                (uid, folder_hash),
-                                                            );
-                                                            uid_index
-                                                                .lock()
-                                                                .unwrap()
-                                                                .insert(uid, env.hash());
-                                                            debug!(
-                                                                "Create event {} {} {}",
-                                                                env.hash(),
-                                                                env.subject(),
-                                                                f_path.as_str()
-                                                            );
-                                                            sender.send(RefreshEvent {
-                                                                hash: folder_hash,
-                                                                kind: Create(Box::new(env)),
-                                                            });
-                                                        }
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    debug!(e);
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            debug!(
-                                                "UID SEARCH RECENT err: {}\nresp: {}",
-                                                e.to_string(),
-                                                &response
-                                            );
-                                        }
-                                    }
-                                    exit_on_error!(
-                                        sender.as_ref(),
-                                        folder_hash,
-                                        iter.conn.send_command(b"IDLE")
-                                        iter.conn.set_nonblocking(false)
-                                    );
-                                }
-                                Ok(Some(Expunge(n))) => {
-                                    debug!("expunge {}", n);
-                                }
-                                Ok(Some(Exists(n))) => {
-                                    exit_on_error!(
-                                        sender.as_ref(),
-                                        folder_hash,
-                                        iter.conn.set_nonblocking(true)
-                                        iter.conn.send_raw(b"DONE")
-                                        iter.conn.read_response(&mut response)
-                                    );
-                                    /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
-                                     * */
-                                    debug!("exists {}", n);
-                                    if n > prev_exists {
-                                        exit_on_error!(
-                                            sender.as_ref(),
-                                            folder_hash,
-                                            iter.conn.send_command(
-                                                &[
-                                                b"FETCH",
-                                                format!("{}:{}", prev_exists + 1, n).as_bytes(),
-                                                b"(UID FLAGS RFC822.HEADER)",
-                                                ]
-                                                .join(&b' '),
-                                                )
-                                            iter.conn.read_response(&mut response)
-                                        );
-                                        match protocol_parser::uid_fetch_response(
-                                            response.as_bytes(),
-                                        )
-                                        .to_full_result()
-                                        .map_err(MeliError::from)
-                                        {
-                                            Ok(v) => {
-                                                for (uid, flags, b) in v {
-                                                    if let Ok(env) = Envelope::from_bytes(&b, flags)
-                                                    {
-                                                        hash_index
-                                                            .lock()
-                                                            .unwrap()
-                                                            .insert(env.hash(), (uid, folder_hash));
-                                                        uid_index
-                                                            .lock()
-                                                            .unwrap()
-                                                            .insert(uid, env.hash());
-                                                        debug!(
-                                                            "Create event {} {} {}",
-                                                            env.hash(),
-                                                            env.subject(),
-                                                            f_path.as_str()
-                                                        );
-                                                        sender.send(RefreshEvent {
-                                                            hash: folder_hash,
-                                                            kind: Create(Box::new(env)),
-                                                        });
-                                                    }
-                                                }
-                                            }
-                                            Err(e) => {
-                                                debug!(e);
-                                            }
-                                        }
-
-                                        prev_exists = n;
-                                    } else if n < prev_exists {
-                                        prev_exists = n;
-                                    }
-                                    exit_on_error!(
-                                        sender.as_ref(),
-                                        folder_hash,
-                                        iter.conn.send_command(b"IDLE")
-                                        iter.conn.set_nonblocking(false)
-                                    );
-                                }
-                                Ok(None) | Err(_) => {}
-                            }
-                        }
-                        debug!("failure");
-                        sender.send(RefreshEvent {
-                            hash: folder_hash,
-                            kind: RefreshEventKind::Failure(MeliError::new("conn_error")),
-                        });
-                        return;
-                    } else {
-                        loop {
-                            {
-                                exit_on_error!(
-                                    sender.as_ref(),
-                                    folder_hash,
-                                    main_conn.lock().unwrap().send_command(b"NOOP")
-                                    main_conn.lock().unwrap().read_response(&mut response)
-                                );
-                            }
-                            exit_on_error!(
-                                sender.as_ref(),
-                                folder_hash,
-                                conn.send_command(b"NOOP")
-                                conn.read_response(&mut response)
-                            );
-                            for r in response.lines() {
-                                // FIXME mimic IDLE
-                                debug!(&r);
-                            }
-                            std::thread::sleep(std::time::Duration::from_millis(10 * 1000));
-                        }
-                    }
-                })?;
-        }
+        let folders = self.imap_folders();
+        let conn = self.new_connection()?;
+        let main_conn = self.connection.clone();
+        let hash_index = self.hash_index.clone();
+        let uid_index = self.uid_index.clone();
+        std::thread::Builder::new()
+            .name(format!("{} imap connection", self.account_name.as_str(),))
+            .spawn(move || {
+                let kit = ImapWatchKit {
+                    conn,
+                    main_conn,
+                    hash_index,
+                    uid_index,
+                    folders,
+                    sender,
+                };
+                if has_idle {
+                    idle(kit);
+                } else {
+                    poll_with_examine(kit);
+                }
+            })?;
         Ok(())
     }
 
