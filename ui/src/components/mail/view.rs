@@ -731,15 +731,16 @@ impl Component for MailView {
                     if let Some(u) = envelope.body(op).attachments().get(lidx) {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
-                                self.mode = ViewMode::Subview;
                                 match EnvelopeWrapper::new(u.raw().to_vec()) {
                                     Ok(wrapper) => {
-                                        self.subview = Some(Box::new(EnvelopeView::new(
-                                            wrapper,
-                                            None,
-                                            None,
-                                            self.coordinates.0,
-                                        )));
+                                        context.replies.push_back(UIEvent::Action(Tab(New(Some(
+                                            Box::new(EnvelopeView::new(
+                                                wrapper,
+                                                None,
+                                                None,
+                                                self.coordinates.0,
+                                            )),
+                                        )))));
                                     }
                                     Err(e) => {
                                         context.replies.push_back(UIEvent::StatusEvent(

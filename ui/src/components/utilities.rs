@@ -1345,7 +1345,7 @@ impl Component for Tabbed {
                 self.children[self.cursor_pos].set_dirty();
                 return true;
             }
-            UIEvent::Action(Tab(TabOpen(ref mut e))) if e.is_some() => {
+            UIEvent::Action(Tab(New(ref mut e))) if e.is_some() => {
                 self.add_component(e.take().unwrap());
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
@@ -1356,7 +1356,7 @@ impl Component for Tabbed {
                     return true;
                 }
                 let id = self.children[self.cursor_pos].id();
-                self.children[self.cursor_pos].kill(id);
+                self.children[self.cursor_pos].kill(id, context);
                 self.set_dirty();
                 return true;
             }

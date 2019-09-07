@@ -8,7 +8,6 @@ const MAX_COLS: usize = 500;
 enum ViewMode {
     List,
     View(CardId),
-    Close(Uuid),
 }
 
 #[derive(Debug)]
@@ -158,11 +157,6 @@ impl ContactList {
 
 impl Component for ContactList {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if let ViewMode::Close(u) = self.mode {
-            context.replies.push_back(UIEvent::Action(Tab(Kill(u))));
-            return;
-        }
-
         if let Some(mgr) = self.view.as_mut() {
             mgr.draw(grid, area, context);
             return;
@@ -289,8 +283,9 @@ impl Component for ContactList {
         self.dirty = true;
     }
 
-    fn kill(&mut self, uuid: Uuid) {
-        self.mode = ViewMode::Close(uuid);
+    fn kill(&mut self, uuid: Uuid, context: &mut Context) {
+        debug_assert!(uuid == self.id);
+        context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self

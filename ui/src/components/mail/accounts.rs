@@ -65,7 +65,7 @@ impl Component for AccountsPanel {
             UIEvent::Input(Key::Char('\n')) => {
                 context
                     .replies
-                    .push_back(UIEvent::Action(Tab(TabOpen(Some(Box::new(
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(
                         ContactList::for_account(self.cursor),
                     ))))));
                 return true;

@@ -713,7 +713,7 @@ impl Component for Composer {
         }
     }
 
-    fn kill(&mut self, uuid: Uuid) {
+    fn kill(&mut self, uuid: Uuid, _context: &mut Context) {
         self.mode = ViewMode::Discard(uuid);
     }
 

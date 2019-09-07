@@ -44,7 +44,7 @@ pub enum ListingAction {
 
 #[derive(Debug)]
 pub enum TabAction {
-    TabOpen(Option<Box<Component>>),
+    New(Option<Box<Component>>),
     NewDraft(usize, Option<Draft>),
     Reply((usize, usize, usize), ThreadHash), // thread coordinates (account, mailbox, root_set idx) and thread hash
     Close,

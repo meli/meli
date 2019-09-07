@@ -93,7 +93,7 @@ pub trait Component: Display + Debug + Send {
         true
     }
     fn set_dirty(&mut self);
-    fn kill(&mut self, _id: ComponentId) {}
+    fn kill(&mut self, _id: ComponentId, _context: &mut Context) {}
     fn set_id(&mut self, _id: ComponentId) {}
     fn id(&self) -> ComponentId;
 
