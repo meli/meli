@@ -369,7 +369,7 @@ impl Account {
 
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
                     let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
-                    if folder_conf.subscribe.is_false() {
+                    if folder_conf.ignore.is_true() {
                         return None;
                     }
                     let (_, thread_node) = self.mail_and_thread(env_hash, folder_hash);
