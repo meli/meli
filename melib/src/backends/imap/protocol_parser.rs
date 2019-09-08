@@ -4,6 +4,10 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
+macro_rules! to_str (
+    ($v:expr) => (unsafe{ std::str::from_utf8_unchecked($v) })
+);
+
 macro_rules! dbg_dmp (
   ($i: expr, $submac:ident!( $($args:tt)* )) => (
     {
@@ -371,9 +375,18 @@ pub fn flags(input: &str) -> IResult<&str, Flag> {
     let mut ret = Flag::default();
 
     let mut input = input;
-    while input.starts_with("\\") {
-        input = &input[1..];
-        let match_end = input.find(|c: char| !c.is_ascii_alphabetic()).or_else(|| input.find(" ")).unwrap_or(input.len());
+    while !input.starts_with(")") && !input.is_empty() {
+        if input.starts_with("\\") {
+            input = &input[1..];
+        }
+        let mut match_end = 0;
+        while match_end < input.len() {
+            if input[match_end..].starts_with(" ") || input[match_end..].starts_with(")") {
+                break;
+            }
+            match_end += 1;
+        }
+
         match &input[..match_end] {
             "Answered" => {
                 ret.set(Flag::REPLIED, true);
@@ -392,13 +405,10 @@ pub fn flags(input: &str) -> IResult<&str, Flag> {
             }
             f => {
                 debug!("unknown Flag token value: {}", f);
-                break;
             }
         }
         input = &input[match_end..];
-        if input.starts_with(" \\") {
-            input = &input[1..];
-        }
+        input = input.trim_start();
     }
     IResult::Done(input, ret)
 }
@@ -412,3 +422,205 @@ pub fn byte_flags(input: &[u8]) -> IResult<&[u8], Flag> {
 
     }
 }
+
+/*
+* The fields of the envelope structure are in the following
+* order: date, subject, from, sender, reply-to, to, cc, bcc,
+* in-reply-to, and message-id. The date, subject, in-reply-to,
+* and message-id fields are strings. The from, sender, reply-to,
+* to, cc, and bcc fields are parenthesized lists of address
+* structures.
+* An address structure is a parenthesized list that describes an
+* electronic mail address. The fields of an address structure
+* are in the following order: personal name, [SMTP]
+* at-domain-list (source route), mailbox name, and host name.
+*/
+
+/*
+*  * 12 FETCH (FLAGS (\Seen) INTERNALDATE "17-Jul-1996 02:44:25 -0700"
+*  RFC822.SIZE 4286 ENVELOPE ("Wed, 17 Jul 1996 02:23:25 -0700 (PDT)"
+*  "IMAP4rev1 WG mtg summary and minutes"
+*  (("Terry Gray" NIL "gray" "cac.washington.edu"))
+*  (("Terry Gray" NIL "gray" "cac.washington.edu"))
+*  (("Terry Gray" NIL "gray" "cac.washington.edu"))
+*  ((NIL NIL "imap" "cac.washington.edu"))
+*  ((NIL NIL "minutes" "CNRI.Reston.VA.US")
+*  ("John Klensin" NIL "KLENSIN" "MIT.EDU")) NIL NIL
+*  "<B27397-0100000@cac.washington.edu>")
+*/ 
+
+named!(
+    pub envelope<Envelope>,
+    do_parse!(
+        tag!("(")
+        >>  opt!(is_a!("\r\n\t "))
+        >>  date: quoted_or_nil
+        >>  opt!(is_a!("\r\n\t "))
+        >>  subject: quoted_or_nil
+        >>  opt!(is_a!("\r\n\t "))
+        >>  from: envelope_addresses
+        >>  opt!(is_a!("\r\n\t "))
+        >>  sender: envelope_addresses
+        >>  opt!(is_a!("\r\n\t "))
+        >>  reply_to: envelope_addresses
+        >>  opt!(is_a!("\r\n\t "))
+        >>  to: envelope_addresses
+        >>  opt!(is_a!("\r\n\t "))
+        >>  cc: envelope_addresses
+        >>  opt!(is_a!("\r\n\t "))
+        >>  bcc: envelope_addresses
+        >>  opt!(is_a!("\r\n\t "))
+        >>  in_reply_to: quoted_or_nil
+        >>  opt!(is_a!("\r\n\t "))
+        >>  message_id: quoted_or_nil
+        >>  opt!(is_a!("\r\n\t "))
+        >> tag!(")")
+        >> ({
+            let mut env = Envelope::new(0);
+            if let Some(date) = date {
+                env.set_date(&date);
+                if let Some(d) = crate::email::parser::date(env.date_as_str().as_bytes()) {
+                    env.set_datetime(d);
+                }
+            }
+
+            if let Some(subject) = subject {
+                env.set_subject(subject.to_vec());
+            }
+
+            if let Some(from) = from {
+                env.set_from(from);
+            }
+            if let Some(to) = to {
+                env.set_to(to);
+            }
+
+            if let Some(cc) = cc {
+                env.set_cc(cc);
+            }
+
+            if let Some(bcc) = bcc {
+                env.set_bcc(bcc);
+            }
+            if let Some(in_reply_to) = in_reply_to {
+                env.set_in_reply_to(&in_reply_to);
+                env.push_references(&in_reply_to);
+            }
+
+            if let Some(message_id) = message_id {
+                env.set_message_id(&message_id);
+            }
+            env
+        })
+));
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_envelope() {
+        // FIXME add a proper test
+        /*
+        use std::io::Read;
+        let mut buffer: Vec<u8> = Vec::new();
+        let _ = std::fs::File::open("/tmp/a").unwrap().read_to_end(&mut buffer);
+        debug!(envelope(&buffer));
+        */
+    }
+}
+
+/* Helper to build StrBuilder for Address structs */
+macro_rules! str_builder {
+    ($offset:expr, $length:expr) => {
+        StrBuilder {
+            offset: $offset,
+            length: $length,
+        }
+    }
+}
+
+// Parse a list of addresses in the format of the ENVELOPE structure
+named!(pub envelope_addresses<Option<Vec<Address>>>,
+       alt_complete!(map!(tag!("NIL"), |_| None) | 
+                     do_parse!(
+                         tag!("(")
+                         >> envelopes: many1!(delimited!(ws!(tag!("(")), envelope_address, tag!(")")))
+                         >> tag!(")")
+                         >> ({
+                             Some(envelopes)
+                         })
+                     )
+));
+
+// Parse an address in the format of the ENVELOPE structure eg
+// ("Terry Gray" NIL "gray" "cac.washington.edu")
+named!(
+    pub envelope_address<Address>,
+    do_parse!(
+        name: alt_complete!(quoted | map!(tag!("NIL"), |_| Vec::new()))
+        >>  is_a!("\r\n\t ")
+        >>  alt_complete!(quoted| map!(tag!("NIL"), |_| Vec::new()))
+        >>  is_a!("\r\n\t ")
+        >>  mailbox_name: dbg_dmp!(alt_complete!(quoted | map!(tag!("NIL"), |_| Vec::new())))
+        >>  is_a!("\r\n\t ")
+        >>  host_name: alt_complete!(quoted | map!(tag!("NIL"), |_| Vec::new()))
+        >>  ({
+        Address::Mailbox(MailboxAddress {
+            raw: format!("{}{}<{}@{}>", to_str!(&name), if name.is_empty() { "" } else { " " }, to_str!(&mailbox_name), to_str!(&host_name)).into_bytes(), 
+            display_name: str_builder!(0, name.len()),
+            address_spec: str_builder!(if name.is_empty() { 1 } else { name.len() + 2 }, mailbox_name.len() + host_name.len() + 1),
+        })
+    })
+));
+
+// Read a literal ie a byte sequence prefixed with a tag containing its length delimited in {}s
+named!(pub literal<&[u8]>,length_bytes!(delimited!(tag!("{"), map_res!(digit, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) }), tag!("}\r\n"))));
+
+// Return a byte sequence surrounded by "s and decoded if necessary
+pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+    if let IResult::Done(r, o) = literal(input) {
+        return match crate::email::parser::phrase(o) {
+            IResult::Done(_, out) => IResult::Done(r, out),
+            e => e,
+        };
+    }
+    if input.is_empty() || input[0] != b'"' {
+        return IResult::Error(nom::ErrorKind::Custom(0));
+    }
+
+    let mut i = 1;
+    while i < input.len() {
+        if input[i] == b'\"' { //&& input[i - 1] != b'\\' {
+            return match crate::email::parser::phrase(&input[1..i]) {
+                IResult::Done(_, out) => IResult::Done(&input[i+1..], out),
+                e=> e,
+            };
+        }
+        i += 1;
+    }
+
+    return IResult::Error(nom::ErrorKind::Custom(0));
+}
+
+named!(
+    pub quoted_or_nil<Option<Vec<u8>>>,
+    alt_complete!(map!(ws!(tag!("NIL")), |_| None) | map!(quoted, |v| Some(v))));
+
+named!(
+    pub uid_fetch_envelopes_response<Vec<(usize, Option<Flag>, Envelope)>>,
+    many0!(
+        do_parse!(
+            tag!("* ")
+            >> take_while!(call!(is_digit))
+            >> tag!(" FETCH (")
+            >> uid_flags: permutation!(preceded!(ws!(tag!("UID ")), map_res!(digit, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) })), opt!(preceded!(ws!(tag!("FLAGS ")), delimited!(tag!("("), byte_flags, tag!(")")))))
+            >> tag!(" ENVELOPE ")
+            >> env: ws!(envelope)
+            >> tag!(")\r\n")
+            >> ((uid_flags.0, uid_flags.1, env))
+        )
+    )
+);
+

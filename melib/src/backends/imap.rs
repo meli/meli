@@ -45,6 +45,8 @@ use crate::email::*;
 use crate::error::{MeliError, Result};
 use fnv::{FnvHashMap, FnvHashSet};
 use native_tls::TlsConnector;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 use std::iter::FromIterator;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -116,7 +118,7 @@ impl MailBackend for ImapType {
                 while exists > 1 {
                     let mut envelopes = vec![];
                     exit_on_error!(&tx,
-                                   conn.send_command(format!("UID FETCH {}:{} (FLAGS RFC822.HEADER)", std::cmp::max(exists.saturating_sub(20000), 1), exists).as_bytes())
+                                   conn.send_command(format!("UID FETCH {}:{} (FLAGS ENVELOPE)", std::cmp::max(exists.saturating_sub(20000), 1), exists).as_bytes())
                                    conn.read_response(&mut response)
                     );
                     debug!(
@@ -124,21 +126,23 @@ impl MailBackend for ImapType {
                         response.len(),
                         response.lines().collect::<Vec<&str>>().len()
                     );
-                    match protocol_parser::uid_fetch_response(response.as_bytes())
+                    match protocol_parser::uid_fetch_envelopes_response(response.as_bytes())
                         .to_full_result()
                         .map_err(MeliError::from)
                     {
                         Ok(v) => {
                             debug!("responses len is {}", v.len());
-                            for (uid, flags, b) in v {
-                                if let Ok(e) = Envelope::from_bytes(&b, flags) {
-                                    hash_index
-                                        .lock()
-                                        .unwrap()
-                                        .insert(e.hash(), (uid, folder_hash));
-                                    uid_index.lock().unwrap().insert(uid, e.hash());
-                                    envelopes.push(e);
-                                }
+                            for (uid, flags, mut env) in v {
+                                let mut h = DefaultHasher::new();
+                                h.write_usize(uid);
+                                h.write(folder_path.as_bytes());
+                                env.set_hash(h.finish());
+                                hash_index
+                                    .lock()
+                                    .unwrap()
+                                    .insert(env.hash(), (uid, folder_hash));
+                                uid_index.lock().unwrap().insert(uid, env.hash());
+                                envelopes.push(env);
                             }
                         }
                         Err(e) => {
@@ -496,17 +500,12 @@ impl ImapType {
         exit_on_error!(s,
                        conn.send_command( format!( "LOGIN \"{}\" \"{}\"", get_conf_val!(s["server_username"]), get_conf_val!(s["server_password"])).as_bytes())
                        conn.read_lines(&mut res, String::new())
-                       std::io::stderr().write(res.as_bytes())
         );
         m.capabilities = match protocol_parser::capabilities(res.as_bytes())
             .to_full_result()
             .map_err(MeliError::from)
         {
-            Ok(c) => {
-                eprintln!("cap len {}", c.len());
-
-                FnvHashSet::from_iter(c.into_iter().map(|s| s.to_vec()))
-            }
+            Ok(c) => FnvHashSet::from_iter(c.into_iter().map(|s| s.to_vec())),
             Err(e) => {
                 eprintln!(
                     "Could not login in account `{}`: {}",

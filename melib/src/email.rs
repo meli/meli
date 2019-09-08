@@ -52,16 +52,16 @@ use chrono::TimeZone;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GroupAddress {
-    raw: Vec<u8>,
-    display_name: StrBuilder,
-    mailbox_list: Vec<Address>,
+    pub raw: Vec<u8>,
+    pub display_name: StrBuilder,
+    pub mailbox_list: Vec<Address>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MailboxAddress {
-    raw: Vec<u8>,
-    display_name: StrBuilder,
-    address_spec: StrBuilder,
+    pub raw: Vec<u8>,
+    pub display_name: StrBuilder,
+    pub address_spec: StrBuilder,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -149,9 +149,9 @@ impl fmt::Debug for Address {
 
 /// Helper struct to return slices from a struct field on demand.
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
-struct StrBuilder {
-    offset: usize,
-    length: usize,
+pub struct StrBuilder {
+    pub offset: usize,
+    pub length: usize,
 }
 
 /// Structs implementing this trait must contain a `StrBuilder` field.
@@ -177,7 +177,7 @@ impl StrBuilder {
 
 /// `MessageID` is accessed through the `StrBuild` trait.
 #[derive(Clone, Serialize, Deserialize, Default)]
-pub struct MessageID(Vec<u8>, StrBuilder);
+pub struct MessageID(pub Vec<u8>, pub StrBuilder);
 
 impl StrBuild for MessageID {
     fn new(string: &[u8], slice: &[u8]) -> Self {
@@ -334,12 +334,13 @@ pub struct Envelope {
 
 impl fmt::Debug for Envelope {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Envelope {{\ndate: {}\n,from:{:#?}\nto {:#?}\nmessage_id: {},\n references: {:#?}\nhash: {}\n
-               }}",
+        write!(f, "Envelope {{\n\tsubject: {}\n\tdate: {},\n\tfrom:{:#?},\n\tto {:#?},\n\tmessage_id: {},\n\tin_reply_to: {:?}\n\treferences: {:#?},\n\thash: {}\n}}",
+               self.subject(),
                self.date,
                self.from,
                self.to,
                self.message_id_display(),
+               self.in_reply_to_display(),
                self.references,
                self.hash)
     }
@@ -667,22 +668,22 @@ impl Envelope {
     pub fn message_id_raw(&self) -> Cow<str> {
         String::from_utf8_lossy(self.message_id.raw())
     }
-    fn set_date(&mut self, new_val: &[u8]) {
+    pub fn set_date(&mut self, new_val: &[u8]) {
         self.date = String::from_utf8_lossy(new_val).into_owned();
     }
-    fn set_bcc(&mut self, new_val: Vec<Address>) {
+    pub fn set_bcc(&mut self, new_val: Vec<Address>) {
         self.bcc = new_val;
     }
-    fn set_cc(&mut self, new_val: Vec<Address>) {
+    pub fn set_cc(&mut self, new_val: Vec<Address>) {
         self.cc = new_val;
     }
-    fn set_from(&mut self, new_val: Vec<Address>) {
+    pub fn set_from(&mut self, new_val: Vec<Address>) {
         self.from = new_val;
     }
-    fn set_to(&mut self, new_val: Vec<Address>) {
+    pub fn set_to(&mut self, new_val: Vec<Address>) {
         self.to = new_val;
     }
-    fn set_in_reply_to(&mut self, new_val: &[u8]) {
+    pub fn set_in_reply_to(&mut self, new_val: &[u8]) {
         let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
             Err(_) => {
@@ -692,22 +693,24 @@ impl Envelope {
         };
         self.in_reply_to = Some(MessageID::new(new_val, slice));
     }
-    fn set_subject(&mut self, new_val: Vec<u8>) {
+    pub fn set_subject(&mut self, new_val: Vec<u8>) {
         self.subject = Some(new_val);
     }
-    fn set_message_id(&mut self, new_val: &[u8]) {
+    pub fn set_message_id(&mut self, new_val: &[u8]) {
         let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
-            Err(_) => {
+            Err(e) => {
+                debug!(e);
                 return;
             }
         };
         self.message_id = MessageID::new(new_val, slice);
     }
-    fn push_references(&mut self, new_val: &[u8]) {
+    pub fn push_references(&mut self, new_val: &[u8]) {
         let slice = match parser::message_id(new_val).to_full_result() {
             Ok(v) => v,
-            Err(_) => {
+            Err(e) => {
+                debug!(e);
                 return;
             }
         };
@@ -736,7 +739,7 @@ impl Envelope {
             }
         }
     }
-    fn set_references(&mut self, new_val: &[u8]) {
+    pub fn set_references(&mut self, new_val: &[u8]) {
         match self.references {
             Some(ref mut s) => {
                 s.raw = new_val.into();
@@ -764,6 +767,11 @@ impl Envelope {
     pub fn other_headers(&self) -> &FnvHashMap<String, String> {
         &self.other_headers
     }
+
+    pub fn other_headers_mut(&mut self) -> &mut FnvHashMap<String, String> {
+        &mut self.other_headers
+    }
+
     pub fn thread(&self) -> ThreadHash {
         self.thread
     }
