@@ -32,7 +32,7 @@ use melib::backends::{
 };
 use melib::error::{MeliError, Result};
 use melib::mailbox::*;
-use melib::thread::ThreadHash;
+use melib::thread::{ThreadHash, ThreadNode, Threads};
 use melib::AddressBook;
 use melib::StackVec;
 
@@ -45,7 +45,7 @@ use std::ops::{Index, IndexMut};
 use std::result;
 use std::sync::Arc;
 
-pub type Worker = Option<Async<Result<(FnvHashMap<EnvelopeHash, Envelope>, Mailbox)>>>;
+pub type Worker = Option<Async<Result<Vec<Envelope>>>>;
 
 macro_rules! mailbox {
     ($idx:expr, $folders:expr) => {
@@ -58,9 +58,13 @@ pub enum MailboxEntry {
     Available(Mailbox),
     Failed(MeliError),
     /// first argument is done work, and second is total work
-    Parsing(usize, usize),
-    /// first argument is done work, and second is total work
-    Threading(usize, usize),
+    Parsing(Mailbox, usize, usize),
+}
+
+impl Default for MailboxEntry {
+    fn default() -> Self {
+        MailboxEntry::Parsing(Mailbox::default(), 0, 0)
+    }
 }
 
 impl std::fmt::Display for MailboxEntry {
@@ -71,11 +75,8 @@ impl std::fmt::Display for MailboxEntry {
             match self {
                 MailboxEntry::Available(ref m) => m.name().to_string(),
                 MailboxEntry::Failed(ref e) => e.to_string(),
-                MailboxEntry::Parsing(done, total) => {
+                MailboxEntry::Parsing(_, done, total) => {
                     format!("Parsing messages. [{}/{}]", done, total)
-                }
-                MailboxEntry::Threading(done, total) => {
-                    format!("Calculating threads. [{}/{}]", done, total)
                 }
             }
         )
@@ -90,7 +91,7 @@ impl MailboxEntry {
         }
     }
     pub fn is_parsing(&self) -> bool {
-        if let MailboxEntry::Parsing(_, _) = self {
+        if let MailboxEntry::Parsing(_, _, _) = self {
             true
         } else {
             false
@@ -99,12 +100,14 @@ impl MailboxEntry {
     pub fn unwrap_mut(&mut self) -> &mut Mailbox {
         match self {
             MailboxEntry::Available(ref mut m) => m,
+            MailboxEntry::Parsing(ref mut m, _, _) => m,
             e => panic!(format!("mailbox is not available! {:#}", e)),
         }
     }
     pub fn unwrap(&self) -> &Mailbox {
         match self {
             MailboxEntry::Available(ref m) => m,
+            MailboxEntry::Parsing(ref m, _, _) => m,
             e => panic!(format!("mailbox is not available! {:#}", e)),
         }
     }
@@ -247,7 +250,10 @@ impl Account {
                     }
                 }
             }
-            folders.insert(*h, MailboxEntry::Parsing(0, 0));
+            folders.insert(
+                *h,
+                MailboxEntry::Parsing(Mailbox::new(f.clone(), &FnvHashMap::default()), 0, 0),
+            );
             workers.insert(
                 *h,
                 Account::new_worker(f.clone(), &mut backend, notify_fn.clone()),
@@ -309,29 +315,45 @@ impl Account {
     ) -> Worker {
         let mailbox_handle = backend.get(&folder);
         let mut builder = AsyncBuilder::new();
-        let tx = builder.tx();
-        Some(builder.build(Box::new(move || {
-            let mut handle = mailbox_handle.clone();
-            let folder = folder.clone();
-            let work = handle.work().unwrap();
-            work.compute();
-            handle.join();
-            let envelopes: Result<FnvHashMap<EnvelopeHash, Envelope>> = handle.extract().map(|v| {
-                v.into_iter()
-                    .map(|e| (e.hash(), e))
-                    .collect::<FnvHashMap<EnvelopeHash, Envelope>>()
-            });
-            let hash = folder.hash();
-            if envelopes.is_err() {
-                tx.send(AsyncStatus::Payload(Err(envelopes.unwrap_err())));
-                notify_fn.notify(hash);
-                return;
+        let our_tx = builder.tx();
+        let folder_hash = folder.hash();
+        let w = builder.build(Box::new(move || {
+            let mut mailbox_handle = mailbox_handle.clone();
+            let work = mailbox_handle.work().unwrap();
+            let rx = mailbox_handle.rx();
+            let tx = mailbox_handle.tx();
+
+            std::thread::Builder::new()
+                .spawn(move || {
+                    work.compute();
+                })
+                .unwrap();
+
+            loop {
+                debug!("looping");
+                chan_select! {
+                    rx.recv() -> r => {
+                debug!("got {:?}", r);
+                        match r {
+                            Some(s @ AsyncStatus::Payload(_)) => {
+                                our_tx.send(s);
+                                debug!("notifying for {}", folder_hash);
+                                notify_fn.notify(folder_hash);
+                            }
+                            Some(AsyncStatus::Finished) => {
+                                debug!("exiting");
+                                return;
+                            }
+                            Some(s) => {
+                                our_tx.send(s);
+                            }
+                            None => return,
+                        }
+                    }
+                }
             }
-            let envelopes = envelopes.unwrap();
-            let m = Mailbox::new(folder, &envelopes);
-            tx.send(AsyncStatus::Payload(Ok((envelopes, m))));
-            notify_fn.notify(hash);
-        })))
+        }));
+        Some(w)
     }
     pub fn reload(&mut self, event: RefreshEvent, folder_hash: FolderHash) -> Option<UIEvent> {
         if !self.folders[&folder_hash].is_available() {
@@ -460,27 +482,32 @@ impl Account {
         &mut self.workers
     }
 
-    fn load_mailbox(
-        &mut self,
-        folder_hash: FolderHash,
-        payload: (Result<(FnvHashMap<EnvelopeHash, Envelope>, Mailbox)>),
-    ) {
+    fn load_mailbox(&mut self, folder_hash: FolderHash, payload: Result<Vec<Envelope>>) {
         if payload.is_err() {
             self.folders
                 .insert(folder_hash, MailboxEntry::Failed(payload.unwrap_err()));
             return;
         }
-        let (envelopes, mut mailbox) = payload.unwrap();
-        if let Some(updated_folders) =
-            self.collection
-                .merge(envelopes, folder_hash, &mut mailbox, self.sent_folder)
-        {
-            for f in updated_folders {
-                self.notify_fn.notify(f);
+        let envelopes = payload
+            .unwrap()
+            .into_iter()
+            .map(|e| (e.hash(), e))
+            .collect::<FnvHashMap<EnvelopeHash, Envelope>>();
+        match self.folders.entry(folder_hash).or_default() {
+            MailboxEntry::Failed(_) => {}
+            MailboxEntry::Parsing(ref mut m, _, _) | MailboxEntry::Available(ref mut m) => {
+                m.merge(&envelopes);
+                if let Some(updated_folders) =
+                    self.collection
+                        .merge(envelopes, folder_hash, m, self.sent_folder)
+                {
+                    for f in updated_folders {
+                        self.notify_fn.notify(f);
+                    }
+                }
             }
         }
-        self.folders
-            .insert(folder_hash, MailboxEntry::Available(mailbox));
+        self.notify_fn.notify(folder_hash);
     }
 
     pub fn status(&mut self, folder_hash: FolderHash) -> result::Result<(), usize> {
@@ -488,31 +515,50 @@ impl Account {
             None => {
                 return Ok(());
             }
-            Some(ref mut w) if self.folders[&folder_hash].is_parsing() => match w.poll() {
+            Some(ref mut w) => match w.poll() {
                 Ok(AsyncStatus::NoUpdate) => {
-                    return Err(0);
+                    //return Err(0);
                 }
-                Ok(AsyncStatus::Finished) => {}
+                Ok(AsyncStatus::Payload(envs)) => {
+                    debug!("got payload in status for {}", folder_hash);
+                    self.load_mailbox(folder_hash, envs);
+                }
+                Ok(AsyncStatus::Finished) if w.value.is_none() => {
+                    debug!("got finished in status for {}", folder_hash);
+                    self.folders.entry(folder_hash).and_modify(|f| {
+                        let m = if let MailboxEntry::Parsing(m, _, _) = f {
+                            std::mem::replace(m, Mailbox::default())
+                        } else {
+                            return;
+                        };
+                        *f = MailboxEntry::Available(m);
+                    });
+
+                    self.workers.insert(folder_hash, None);
+                }
+                Ok(AsyncStatus::Finished) if w.value.is_some() => {
+                    let envs = w.value.take().unwrap();
+                    debug!("got payload in status for {}", folder_hash);
+                    self.load_mailbox(folder_hash, envs);
+                }
                 Ok(AsyncStatus::ProgressReport(n)) => {
                     self.folders.entry(folder_hash).and_modify(|f| {
-                        if let MailboxEntry::Parsing(ref mut d, _) = f {
+                        if let MailboxEntry::Parsing(_, ref mut d, _) = f {
                             *d += n;
                         }
                     });
-                    return Err(n);
+                    //return Err(n);
                 }
                 _ => {
-                    return Err(0);
+                    //return Err(0);
                 }
             },
             Some(_) => return Ok(()),
         };
-        let m = mem::replace(self.workers.get_mut(&folder_hash).unwrap(), None)
-            .unwrap()
-            .extract();
-        self.workers.insert(folder_hash, None);
-        self.load_mailbox(folder_hash, m);
-        if self.folders[&folder_hash].is_available() {
+        if self.folders[&folder_hash].is_available()
+            || (self.folders[&folder_hash].is_parsing()
+                && self.collection.threads.contains_key(&folder_hash))
+        {
             Ok(())
         } else {
             Err(0)
@@ -558,15 +604,18 @@ impl Account {
     }
     pub fn operation(&self, h: EnvelopeHash) -> Box<BackendOp> {
         for mailbox in self.folders.values() {
-            if let MailboxEntry::Available(ref m) = mailbox {
-                if m.envelopes.contains(&h) {
-                    let operation = self.backend.operation(h, m.folder.hash());
-                    if self.settings.account.read_only() {
-                        return ReadOnlyOp::new(operation);
-                    } else {
-                        return operation;
+            match mailbox {
+                MailboxEntry::Available(ref m) | MailboxEntry::Parsing(ref m, _, _) => {
+                    if m.envelopes.contains(&h) {
+                        let operation = self.backend.operation(h, m.folder.hash());
+                        if self.settings.account.read_only() {
+                            return ReadOnlyOp::new(operation);
+                        } else {
+                            return operation;
+                        }
                     }
                 }
+                _ => {}
             }
         }
         debug!("didn't find {}", h);

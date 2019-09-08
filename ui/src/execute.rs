@@ -22,7 +22,7 @@
 /*! A parser module for user commands passed through the Ex mode.
 */
 use melib::backends::FolderOperation;
-pub use melib::mailbox::{SortField, SortOrder};
+pub use melib::thread::{SortField, SortOrder};
 use nom::{digit, not_line_ending};
 use std;
 pub mod actions;

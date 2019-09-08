@@ -71,12 +71,12 @@ impl Collection {
         self.threads
             .entry(folder_hash)
             .or_default()
-            .remove(envelope_hash, &mut self.envelopes);
+            .remove(envelope_hash);
         for (h, t) in self.threads.iter_mut() {
             if *h == folder_hash {
                 continue;
             }
-            t.remove(envelope_hash, &mut self.envelopes);
+            t.remove(envelope_hash);
         }
     }
 
@@ -99,7 +99,7 @@ impl Collection {
                 .threads
                 .entry(folder_hash)
                 .or_default()
-                .update_envelope(old_hash, new_hash, &self.envelopes)
+                .update_envelope(old_hash, new_hash)
                 .is_ok()
             {
                 return;
@@ -114,9 +114,7 @@ impl Collection {
             if *h == folder_hash {
                 continue;
             }
-            t.update_envelope(old_hash, new_hash, &self.envelopes)
-                .ok()
-                .take();
+            t.update_envelope(old_hash, new_hash).ok().take();
         }
     }
 
@@ -124,13 +122,13 @@ impl Collection {
     /// Returns a list of already existing folders whose threads were updated
     pub fn merge(
         &mut self,
-        mut envelopes: FnvHashMap<EnvelopeHash, Envelope>,
+        mut new_envelopes: FnvHashMap<EnvelopeHash, Envelope>,
         folder_hash: FolderHash,
         mailbox: &mut Mailbox,
         sent_folder: Option<FolderHash>,
     ) -> Option<StackVec<FolderHash>> {
         self.sent_folder = sent_folder;
-        envelopes.retain(|&h, e| {
+        new_envelopes.retain(|&h, e| {
             if self.message_ids.contains_key(e.message_id().raw()) {
                 /* skip duplicates until a better way to handle them is found. */
                 //FIXME
@@ -141,11 +139,7 @@ impl Collection {
                 true
             }
         });
-        let mut new_threads = Threads::new(&mut envelopes);
 
-        for (h, e) in envelopes {
-            self.envelopes.insert(h, e);
-        }
         let &mut Collection {
             ref mut threads,
             ref mut envelopes,
@@ -153,10 +147,36 @@ impl Collection {
             ..
         } = self;
 
+        if !threads.contains_key(&folder_hash) {
+            threads.insert(folder_hash, Threads::new(&mut new_envelopes));
+            for (h, e) in new_envelopes {
+                envelopes.insert(h, e);
+            }
+        } else {
+            threads.entry(folder_hash).and_modify(|t| {
+                let mut ordered_hash_set =
+                    new_envelopes.keys().cloned().collect::<Vec<EnvelopeHash>>();
+                ordered_hash_set.sort_by(|a, b| {
+                    new_envelopes[a]
+                        .date()
+                        .partial_cmp(&new_envelopes[b].date())
+                        .unwrap()
+                });
+                for h in ordered_hash_set {
+                    envelopes.insert(h, new_envelopes.remove(&h).unwrap());
+                    t.insert(envelopes, h);
+                }
+            });
+        }
+
         let mut ret = StackVec::new();
-        for (t_fh, t) in threads.iter_mut() {
+        let keys = threads.keys().cloned().collect::<Vec<FolderHash>>();
+        for t_fh in keys {
+            if t_fh == folder_hash {
+                continue;
+            }
             if sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
-                let mut ordered_hash_set = new_threads
+                let mut ordered_hash_set = threads[&folder_hash]
                     .hash_set
                     .iter()
                     .cloned()
@@ -169,28 +189,37 @@ impl Collection {
                 });
                 let mut updated = false;
                 for h in ordered_hash_set {
-                    updated |= t.insert_reply(envelopes, h);
+                    updated |= threads.entry(t_fh).or_default().insert_reply(envelopes, h);
                 }
                 if updated {
-                    ret.push(*t_fh);
+                    ret.push(t_fh);
                 }
                 continue;
             }
-            if sent_folder.map(|f| f == *t_fh).unwrap_or(false) {
-                let mut ordered_hash_set =
-                    t.hash_set.iter().cloned().collect::<Vec<EnvelopeHash>>();
+            if sent_folder.map(|f| f == t_fh).unwrap_or(false) {
+                let mut ordered_hash_set = threads[&t_fh]
+                    .hash_set
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<EnvelopeHash>>();
                 ordered_hash_set.sort_by(|a, b| {
                     envelopes[a]
                         .date()
                         .partial_cmp(&envelopes[b].date())
                         .unwrap()
                 });
+                let mut updated = false;
                 for h in ordered_hash_set {
-                    new_threads.insert_reply(envelopes, h);
+                    updated |= threads
+                        .entry(folder_hash)
+                        .or_default()
+                        .insert_reply(envelopes, h);
+                }
+                if updated {
+                    ret.push(folder_hash);
                 }
             }
         }
-        threads.insert(folder_hash, new_threads);
         if ret.is_empty() {
             None
         } else {
@@ -206,8 +235,7 @@ impl Collection {
         self.envelopes.insert(new_hash, envelope);
         if self.sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
             for (_, t) in self.threads.iter_mut() {
-                t.update_envelope(old_hash, new_hash, &self.envelopes)
-                    .unwrap_or(());
+                t.update_envelope(old_hash, new_hash).unwrap_or(());
             }
         }
         {
@@ -215,7 +243,7 @@ impl Collection {
                 .threads
                 .entry(folder_hash)
                 .or_default()
-                .update_envelope(old_hash, new_hash, &self.envelopes)
+                .update_envelope(old_hash, new_hash)
                 .is_ok()
             {
                 return;
@@ -230,9 +258,7 @@ impl Collection {
             if *h == folder_hash {
                 continue;
             }
-            t.update_envelope(old_hash, new_hash, &self.envelopes)
-                .ok()
-                .take();
+            t.update_envelope(old_hash, new_hash).ok().take();
         }
     }
 

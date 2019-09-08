@@ -25,8 +25,8 @@
 
 use crate::components::Component;
 use melib::backends::FolderOperation;
-pub use melib::mailbox::{SortField, SortOrder};
 use melib::thread::ThreadHash;
+pub use melib::thread::{SortField, SortOrder};
 use melib::{Draft, EnvelopeHash};
 
 extern crate uuid;

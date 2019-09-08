@@ -19,19 +19,19 @@ impl WorkController {
     }
 }
 
-/*
 impl Drop for WorkController {
     fn drop(&mut self) {
         for _ in 0..self.threads.len() {
             self.thread_end_tx.send(true);
         }
+        /*
         let threads = mem::replace(&mut self.threads, Vec::new());
         for handle in threads {
             handle.join().unwrap();
         }
+        */
     }
 }
-*/
 
 // We need a way to keep track of what work needs to be done.
 // This is a multi-source, multi-consumer queue which we call a
@@ -194,16 +194,20 @@ impl WorkController {
                 let mut work_done = 0;
 
                 'work_loop: loop {
+                    debug!("Waiting for work");
                     // Loop while there's expected to be work, looking for work.
                     chan_select! {
                         thread_end_rx.recv() -> _ => {
+                            debug!("received thread_end_rx, quitting");
                             break 'work_loop;
                         },
                         new_jobs_rx.recv() -> _ => {
                             // If work is available, do that work.
                             while let Some(work) = thread_queue.get_work() {
+                                debug!("Got some work");
                                 // Do some work.
                                 work.compute();
+                                debug!("finished work");
 
                                 // Record that some work was done.
                                 work_done += 1;
@@ -243,58 +247,3 @@ impl WorkController {
         }
     }
 }
-/*
-pub fn add_jobkk
-
-    println!("Adding jobs to the queue.");
-    // Variables to keep track of the number of jobs we expect to do.
-    let mut jobs_remaining = 0;
-    let mut jobs_total = 0;
-
-    // Just add some numbers to the queue.
-    // These numbers will be passed into fib(), so they need to stay pretty
-    // small.
-    for work in 0..90 {
-        // Add each one several times.
-        for _ in 0..100 {
-            jobs_remaining = queue.add_work(work);
-            jobs_total += 1;
-        }
-    }
-
-
-    // Report that some jobs were inserted, and how many are left to be done.
-    // This is interesting because the workers have been taking jobs out of the queue
-    // the whole time the control thread has been putting them in!
-    //
-    // Try removing the use of std::thread::yield_now() in the thread closure.
-    // You'll probably (depending on your system) notice that the number remaining
-    // after insertion goes way up. That's because the operating system is usually
-    // (not always, but usually) fairly conservative about interrupting a thread
-    // that is actually doing work.
-    //
-    // Similarly, if you add a call to yield_now() in the loop above, you'll see the
-    // number remaining probably drop to 1 or 2. This can also change depending on
-    // how optimized the output code is - try `cargo run --release` vs `cargo run`.
-    //
-    // This inconsistency should drive home to you that you as the programmer can't
-    // make any assumptions at all about when and in what order things will happen
-    // in parallel code unless you use thread control primatives as demonstrated
-    // in this program.
-    println!("Total of {} jobs inserted into the queue ({} remaining at this time).",
-             jobs_total,
-             jobs_remaining);
-
-
-    // Get completed work from the channel while there's work to be done.
-    while jobs_total > 0 {
-        match results_rx.recv() {
-            // If the control thread successfully receives, a job was completed.
-            Ok(_) => { jobs_total -= 1 },
-            // If the control thread is the one left standing, that's pretty
-            // problematic.
-            Err(_) => {panic!("All workers died unexpectedly.");}
-        }
-    }
-
-*/

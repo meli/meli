@@ -301,7 +301,7 @@ impl ListingTrait for CompactListing {
                 grid,
                 (
                     pos_inc(upper_left, (0, r)),
-                    (flag_x - 1, get_y(upper_left) + r),
+                    (flag_x.saturating_sub(1), get_y(upper_left) + r),
                 ),
                 fg_color,
                 bg_color,

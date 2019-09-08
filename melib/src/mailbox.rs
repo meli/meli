@@ -26,14 +26,10 @@
  */
 
 use crate::backends::Folder;
-pub use crate::email::*;
-use crate::thread::ThreadHash;
-
-pub use crate::thread::{SortField, SortOrder, ThreadNode, Threads};
-
 pub use crate::collection::*;
-
+pub use crate::email::*;
 use fnv::{FnvHashMap, FnvHashSet};
+
 /// `Mailbox` represents a folder of mail.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct Mailbox {
@@ -41,7 +37,6 @@ pub struct Mailbox {
     pub folder: Folder,
     name: String,
     pub envelopes: FnvHashSet<EnvelopeHash>,
-    pub thread_root_set: FnvHashSet<ThreadHash>,
     has_sent: bool,
 }
 
@@ -55,6 +50,10 @@ impl Mailbox {
             envelopes,
             ..Default::default()
         }
+    }
+
+    pub fn merge(&mut self, envelopes: &FnvHashMap<EnvelopeHash, Envelope>) {
+        self.envelopes.extend(envelopes.keys().cloned());
     }
 
     pub fn name(&self) -> &str {

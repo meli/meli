@@ -72,19 +72,34 @@ impl<T> fmt::Debug for AsyncStatus<T> {
 }
 
 /// A builder object for `Async<T>`
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AsyncBuilder<T: Send + Sync> {
+    payload_hook: Option<Arc<Fn() -> () + Send + Sync>>,
     tx: chan::Sender<AsyncStatus<T>>,
     rx: chan::Receiver<AsyncStatus<T>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Async<T: Send + Sync> {
-    value: Option<T>,
+    pub value: Option<T>,
     work: Work,
     active: bool,
+    payload_hook: Option<Arc<dyn Fn() -> () + Send + Sync>>,
+    link: Option<T>,
     tx: chan::Sender<AsyncStatus<T>>,
     rx: chan::Receiver<AsyncStatus<T>>,
+}
+
+impl<T: Send + Sync> std::fmt::Debug for Async<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Async<{}> {{ active: {}, payload_hook: {} }}",
+            stringify!(T),
+            self.active,
+            self.payload_hook.is_some()
+        )
+    }
 }
 
 impl<T: Send + Sync> Default for AsyncBuilder<T> {
@@ -102,6 +117,7 @@ where
         AsyncBuilder {
             tx: sender,
             rx: receiver,
+            payload_hook: None,
         }
     }
     /// Returns the sender object of the promise's channel.
@@ -119,8 +135,18 @@ where
             value: None,
             tx: self.tx,
             rx: self.rx,
+            link: None,
+            payload_hook: None,
             active: false,
         }
+    }
+
+    pub fn add_payload_hook(
+        &mut self,
+        payload_hook: Option<Arc<dyn Fn() -> () + Send + Sync>>,
+    ) -> &mut Self {
+        self.payload_hook = payload_hook;
+        self
     }
 }
 
@@ -143,6 +169,10 @@ where
     /// Returns the sender object of the promise's channel.
     pub fn tx(&mut self) -> chan::Sender<AsyncStatus<T>> {
         self.tx.clone()
+    }
+    /// Returns the receiver object of the promise's channel.
+    pub fn rx(&mut self) -> chan::Receiver<AsyncStatus<T>> {
+        self.rx.clone()
     }
     /// Polls worker thread and returns result.
     pub fn poll(&mut self) -> Result<AsyncStatus<T>, ()> {
@@ -171,6 +201,10 @@ where
             },
         };
         self.value = Some(result);
+        if let Some(hook) = self.payload_hook.as_ref() {
+            hook();
+        }
+
         Ok(AsyncStatus::Finished)
     }
     /// Blocks until thread joins.
@@ -192,5 +226,20 @@ where
             }
         }
         self.value = Some(result);
+    }
+
+    pub fn link(&mut self, other: Async<T>) -> &mut Self {
+        let Async {
+            rx,
+            tx,
+            work,
+            value,
+            ..
+        } = other;
+        self.rx = rx;
+        self.tx = tx;
+        self.work = work;
+        self.value = value;
+        self
     }
 }
