@@ -1107,6 +1107,7 @@ impl Threads {
         }
     }
 
+    /*
     fn link_envelope(&mut self, envelope: &mut Envelope) {
         let t_idx: ThreadHash = {
             let m_id = envelope.message_id().raw();
@@ -1215,7 +1216,7 @@ impl Threads {
             }
             ref_ptr = parent_id;
         }
-    }
+    }*/
 
     fn tree_insert_root(&mut self, new_id: ThreadHash, envelopes: &Envelopes) {
         debug_assert!(

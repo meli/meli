@@ -460,7 +460,7 @@ impl MailBackend for MaildirType {
         Ok(())
     }
 
-    fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp> {
+    fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<dyn BackendOp> {
         Box::new(MaildirOp::new(hash, self.hash_indexes.clone(), folder_hash))
     }
 
@@ -529,7 +529,7 @@ impl MailBackend for MaildirType {
 }
 
 impl MaildirType {
-    pub fn new(settings: &AccountSettings, is_subscribed: Box<Fn(&str) -> bool>) -> Self {
+    pub fn new(settings: &AccountSettings, is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
         let mut folders: FnvHashMap<FolderHash, MaildirFolder> = Default::default();
         fn recurse_folders<P: AsRef<Path>>(
             folders: &mut FnvHashMap<FolderHash, MaildirFolder>,

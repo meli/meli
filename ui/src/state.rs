@@ -21,7 +21,7 @@
 
 /*! The application's state.
 
-The UI crate has an Box<Component>-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
+The UI crate has an Box<dyn Component>-Component-System design. The System part, is also the application's state, so they're both merged in the `State` struct.
 
 `State` owns all the Components of the UI. In the application's main event loop, input is handed to the state in the form of `UIEvent` objects which traverse the component graph. Components decide to handle each input or not.
 
@@ -128,7 +128,7 @@ pub struct State {
     stdout: Option<StateStdout>,
     child: Option<ForkType>,
     pub mode: UIMode,
-    components: Vec<Box<Component>>,
+    components: Vec<Box<dyn Component>>,
     pub context: Context,
     threads: FnvHashMap<thread::ThreadId, (chan::Sender<bool>, thread::JoinHandle<()>)>,
     work_controller: WorkController,
@@ -477,7 +477,7 @@ impl State {
             );
         }
     }
-    pub fn register_component(&mut self, component: Box<Component>) {
+    pub fn register_component(&mut self, component: Box<dyn Component>) {
         self.components.push(component);
     }
     /// Convert user commands to actions/method calls.

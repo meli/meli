@@ -317,7 +317,7 @@ impl Account {
     }
     fn new_worker(
         folder: Folder,
-        backend: &mut Box<MailBackend>,
+        backend: &mut Box<dyn MailBackend>,
         notify_fn: Arc<NotifyFn>,
     ) -> Worker {
         let mailbox_handle = backend.get(&folder);
@@ -617,7 +617,7 @@ impl Account {
     pub fn contains_key(&self, h: EnvelopeHash) -> bool {
         self.collection.contains_key(&h)
     }
-    pub fn operation(&self, h: EnvelopeHash) -> Box<BackendOp> {
+    pub fn operation(&self, h: EnvelopeHash) -> Box<dyn BackendOp> {
         for mailbox in self.folders.values() {
             match mailbox {
                 MailboxEntry::Available(ref m) | MailboxEntry::Parsing(ref m, _, _) => {

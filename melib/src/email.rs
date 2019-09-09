@@ -387,7 +387,7 @@ impl Envelope {
         }
         Err(MeliError::new("Couldn't parse mail."))
     }
-    pub fn from_token(mut operation: Box<BackendOp>, hash: EnvelopeHash) -> Option<Envelope> {
+    pub fn from_token(mut operation: Box<dyn BackendOp>, hash: EnvelopeHash) -> Option<Envelope> {
         let mut e = Envelope::new(hash);
         e.flags = operation.fetch_flags();
         if let Ok(bytes) = operation.as_bytes() {
@@ -522,7 +522,7 @@ impl Envelope {
         Ok(())
     }
 
-    pub fn populate_headers_from_token(&mut self, mut operation: Box<BackendOp>) -> Result<()> {
+    pub fn populate_headers_from_token(&mut self, mut operation: Box<dyn BackendOp>) -> Result<()> {
         let headers = operation.fetch_headers()?;
         self.populate_headers(headers)
     }
@@ -563,7 +563,7 @@ impl Envelope {
         let _strings: Vec<String> = self.to.iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
     }
-    pub fn bytes(&self, mut operation: Box<BackendOp>) -> Vec<u8> {
+    pub fn bytes(&self, mut operation: Box<dyn BackendOp>) -> Vec<u8> {
         operation
             .as_bytes()
             .map(|v| v.into())
@@ -608,7 +608,7 @@ impl Envelope {
                 })
             })
     }
-    pub fn body(&self, mut operation: Box<BackendOp>) -> Attachment {
+    pub fn body(&self, mut operation: Box<dyn BackendOp>) -> Attachment {
         debug!("searching body for {:?}", self.message_id_display());
         let file = operation.as_bytes();
         self.body_bytes(file.unwrap())
@@ -781,7 +781,7 @@ impl Envelope {
     pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) {
         self.timestamp = new_val.timestamp() as UnixTimestamp;
     }
-    pub fn set_flag(&mut self, f: Flag, mut operation: Box<BackendOp>) -> Result<()> {
+    pub fn set_flag(&mut self, f: Flag, mut operation: Box<dyn BackendOp>) -> Result<()> {
         self.flags.toggle(f);
         operation.set_flag(self, f)?;
         Ok(())
@@ -792,14 +792,14 @@ impl Envelope {
     pub fn flags(&self) -> Flag {
         self.flags
     }
-    pub fn set_seen(&mut self, operation: Box<BackendOp>) -> Result<()> {
+    pub fn set_seen(&mut self, operation: Box<dyn BackendOp>) -> Result<()> {
         if !self.flags.contains(Flag::SEEN) {
             self.set_flag(Flag::SEEN, operation)
         } else {
             Ok(())
         }
     }
-    pub fn set_unseen(&mut self, operation: Box<BackendOp>) -> Result<()> {
+    pub fn set_unseen(&mut self, operation: Box<dyn BackendOp>) -> Result<()> {
         if self.flags.contains(Flag::SEEN) {
             self.set_flag(Flag::SEEN, operation)
         } else {

@@ -33,7 +33,7 @@ pub struct Index {
     dirty: bool,
     state: IndexState,
 
-    content: Box<IndexContent>,
+    content: Box<dyn IndexContent>,
     id: ComponentId,
 }
 
@@ -117,7 +117,6 @@ impl Component for Index {
             IndexState::Unfocused => {
                 self.content.draw(grid, area, context);
             }
-            //IndexState::Search => unreachable!(),
         }
 
         self.dirty = false;

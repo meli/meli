@@ -30,8 +30,8 @@ pub use self::widgets::*;
 /// A horizontally split in half container.
 #[derive(Debug)]
 pub struct HSplit {
-    top: Box<Component>,
-    bottom: Box<Component>,
+    top: Box<dyn Component>,
+    bottom: Box<dyn Component>,
     show_divider: bool,
     ratio: usize, // bottom/whole height * 100
     id: ComponentId,
@@ -46,8 +46,8 @@ impl fmt::Display for HSplit {
 
 impl HSplit {
     pub fn new(
-        top: Box<Component>,
-        bottom: Box<Component>,
+        top: Box<dyn Component>,
+        bottom: Box<dyn Component>,
         ratio: usize,
         show_divider: bool,
     ) -> Self {
@@ -125,8 +125,8 @@ impl Component for HSplit {
 /// A vertically split in half container.
 #[derive(Debug)]
 pub struct VSplit {
-    left: Box<Component>,
-    right: Box<Component>,
+    left: Box<dyn Component>,
+    right: Box<dyn Component>,
     show_divider: bool,
     prev_visibility: (bool, bool),
     /// This is the width of the right container to the entire width.
@@ -143,8 +143,8 @@ impl fmt::Display for VSplit {
 
 impl VSplit {
     pub fn new(
-        left: Box<Component>,
-        right: Box<Component>,
+        left: Box<dyn Component>,
+        right: Box<dyn Component>,
         ratio: usize,
         show_divider: bool,
     ) -> Self {
@@ -602,7 +602,7 @@ impl Component for Pager {
 /// Status bar.
 #[derive(Debug)]
 pub struct StatusBar {
-    container: Box<Component>,
+    container: Box<dyn Component>,
     status: String,
     notifications: VecDeque<String>,
     ex_buffer: Field,
@@ -624,7 +624,7 @@ impl fmt::Display for StatusBar {
 }
 
 impl StatusBar {
-    pub fn new(container: Box<Component>) -> Self {
+    pub fn new(container: Box<dyn Component>) -> Self {
         StatusBar {
             container,
             status: String::with_capacity(256),
@@ -1120,7 +1120,7 @@ impl Component for Progress {
 #[derive(Debug)]
 pub struct Tabbed {
     pinned: usize,
-    children: Vec<Box<Component>>,
+    children: Vec<Box<dyn Component>>,
     cursor_pos: usize,
 
     show_shortcuts: bool,
@@ -1130,7 +1130,7 @@ pub struct Tabbed {
 }
 
 impl Tabbed {
-    pub fn new(children: Vec<Box<Component>>) -> Self {
+    pub fn new(children: Vec<Box<dyn Component>>) -> Self {
         let pinned = children.len();
         Tabbed {
             pinned,
@@ -1194,7 +1194,7 @@ impl Tabbed {
 
         context.dirty_areas.push_back(area);
     }
-    pub fn add_component(&mut self, new: Box<Component>) {
+    pub fn add_component(&mut self, new: Box<dyn Component>) {
         self.children.push(new);
     }
 }

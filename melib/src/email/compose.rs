@@ -113,7 +113,7 @@ impl str::FromStr for Draft {
 }
 
 impl Draft {
-    pub fn edit(envelope: &Envelope, mut op: Box<BackendOp>) -> Self {
+    pub fn edit(envelope: &Envelope, mut op: Box<dyn BackendOp>) -> Self {
         let mut ret = Draft::default();
         //TODO: Inform user if error
         {

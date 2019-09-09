@@ -112,11 +112,6 @@ impl ListingTrait for CompactListing {
             return;
         }
         let i = self.get_envelope_under_cursor(idx, context);
-        let account = &context.accounts[self.cursor_pos.0];
-        let is_seen = {
-            let root_envelope: &Envelope = &account.get_env(&i);
-            root_envelope.is_seen()
-        };
 
         let fg_color = self.data_columns.columns[0][(0, idx)].fg();
         let bg_color = if self.cursor_pos.2 == idx {
@@ -128,7 +123,6 @@ impl ListingTrait for CompactListing {
         };
 
         let (upper_left, bottom_right) = area;
-        let (width, height) = self.data_columns.columns[3].size();
         change_colors(grid, area, fg_color, bg_color);
         let mut x = get_x(upper_left)
             + self.data_columns.widths[0]

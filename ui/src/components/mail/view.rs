@@ -68,7 +68,7 @@ impl ViewMode {
 pub struct MailView {
     coordinates: (usize, usize, EnvelopeHash),
     pager: Option<Pager>,
-    subview: Option<Box<Component>>,
+    subview: Option<Box<dyn Component>>,
     dirty: bool,
     mode: ViewMode,
     expand_headers: bool,
@@ -89,7 +89,7 @@ impl MailView {
     pub fn new(
         coordinates: (usize, usize, EnvelopeHash),
         pager: Option<Pager>,
-        subview: Option<Box<Component>>,
+        subview: Option<Box<dyn Component>>,
     ) -> Self {
         MailView {
             coordinates,

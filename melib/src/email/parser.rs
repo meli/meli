@@ -247,7 +247,7 @@ pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
     if input.is_empty() {
         return IResult::Incomplete(Needed::Unknown);
     }
-    for (i, x) in input.iter().enumerate() {
+    for i in 0..input.len() {
         if input[i..].starts_with(b"\n\n") {
             return IResult::Done(&input[(i + 1)..], &input[0..=i]);
         } else if input[i..].starts_with(b"\r\n\r\n") {

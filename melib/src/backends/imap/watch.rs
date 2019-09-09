@@ -57,7 +57,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) {
     let mut response = String::with_capacity(8 * 1024);
     loop {
         std::thread::sleep(std::time::Duration::from_millis(5 * 60 * 1000));
-        for (hash, folder) in &folders {
+        for folder in folders.values() {
             examine_updates(folder, &sender, &mut conn, &hash_index, &uid_index);
         }
         let mut main_conn = main_conn.lock().unwrap();
@@ -318,11 +318,6 @@ pub fn idle(kit: ImapWatchKit) {
             }
         }
     }
-    debug!("failure");
-    sender.send(RefreshEvent {
-        hash: folder_hash,
-        kind: RefreshEventKind::Failure(MeliError::new("conn_error")),
-    });
 }
 
 fn examine_updates(

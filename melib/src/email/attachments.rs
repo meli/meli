@@ -441,7 +441,7 @@ fn decode_rfc822(_raw: &[u8]) -> Attachment {
     builder.build()
 }
 
-type Filter<'a> = Box<FnMut(&'a Attachment, &mut Vec<u8>) -> () + 'a>;
+type Filter<'a> = Box<dyn FnMut(&'a Attachment, &mut Vec<u8>) -> () + 'a>;
 
 fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> Vec<u8> {
     match a.content_type {

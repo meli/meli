@@ -48,7 +48,7 @@ impl ViewMode {
 #[derive(Debug)]
 pub struct EnvelopeView {
     pager: Option<Pager>,
-    subview: Option<Box<Component>>,
+    subview: Option<Box<dyn Component>>,
     dirty: bool,
     mode: ViewMode,
     wrapper: EnvelopeWrapper,
@@ -69,7 +69,7 @@ impl EnvelopeView {
     pub fn new(
         wrapper: EnvelopeWrapper,
         pager: Option<Pager>,
-        subview: Option<Box<Component>>,
+        subview: Option<Box<dyn Component>>,
         account_pos: usize,
     ) -> Self {
         EnvelopeView {

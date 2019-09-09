@@ -502,12 +502,8 @@ impl Component for ThreadListing {
                     false
                 } else {
                     let account = &mut context.accounts[self.cursor_pos.0];
-                    let (hash, is_seen) = {
-                        let envelope: &Envelope =
-                            &account.get_env(&self.locations[self.cursor_pos.2]);
-                        (envelope.hash(), envelope.is_seen())
-                    };
-                    is_seen
+                    let envelope: &Envelope = &account.get_env(&self.locations[self.cursor_pos.2]);
+                    envelope.is_seen()
                 }
             };
 

@@ -37,12 +37,13 @@ use std::ops::Deref;
 use fnv::FnvHashMap;
 use std;
 
-pub type BackendCreator = Box<Fn(&AccountSettings, Box<Fn(&str) -> bool>) -> Box<MailBackend>>;
+pub type BackendCreator =
+    Box<dyn Fn(&AccountSettings, Box<dyn Fn(&str) -> bool>) -> Box<dyn MailBackend>>;
 
 /// A hashmap containing all available mail backends.
 /// An abstraction over any available backends.
 pub struct Backends {
-    map: FnvHashMap<std::string::String, Box<Fn() -> BackendCreator>>,
+    map: FnvHashMap<std::string::String, Box<dyn Fn() -> BackendCreator>>,
 }
 
 impl Default for Backends {
@@ -78,7 +79,7 @@ impl Backends {
         self.map[key]()
     }
 
-    pub fn register(&mut self, key: String, backend: Box<Fn() -> BackendCreator>) {
+    pub fn register(&mut self, key: String, backend: Box<dyn Fn() -> BackendCreator>) {
         if self.map.contains_key(&key) {
             panic!("{} is an already registered backend", key);
         }
@@ -116,9 +117,9 @@ impl RefreshEvent {
 /// A `RefreshEventConsumer` is a boxed closure that must be used to consume a `RefreshEvent` and
 /// send it to a UI provided channel. We need this level of abstraction to provide an interface for
 /// all users of mailbox refresh events.
-pub struct RefreshEventConsumer(Box<Fn(RefreshEvent) -> () + Send + Sync>);
+pub struct RefreshEventConsumer(Box<dyn Fn(RefreshEvent) -> () + Send + Sync>);
 impl RefreshEventConsumer {
-    pub fn new(b: Box<Fn(RefreshEvent) -> () + Send + Sync>) -> Self {
+    pub fn new(b: Box<dyn Fn(RefreshEvent) -> () + Send + Sync>) -> Self {
         RefreshEventConsumer(b)
     }
     pub fn send(&self, r: RefreshEvent) {
@@ -126,7 +127,7 @@ impl RefreshEventConsumer {
     }
 }
 
-pub struct NotifyFn(Box<Fn(FolderHash) -> () + Send + Sync>);
+pub struct NotifyFn(Box<dyn Fn(FolderHash) -> () + Send + Sync>);
 
 impl fmt::Debug for NotifyFn {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -134,14 +135,14 @@ impl fmt::Debug for NotifyFn {
     }
 }
 
-impl From<Box<Fn(FolderHash) -> () + Send + Sync>> for NotifyFn {
-    fn from(kind: Box<Fn(FolderHash) -> () + Send + Sync>) -> Self {
+impl From<Box<dyn Fn(FolderHash) -> () + Send + Sync>> for NotifyFn {
+    fn from(kind: Box<dyn Fn(FolderHash) -> () + Send + Sync>) -> Self {
         NotifyFn(kind)
     }
 }
 
 impl NotifyFn {
-    pub fn new(b: Box<Fn(FolderHash) -> () + Send + Sync>) -> Self {
+    pub fn new(b: Box<dyn Fn(FolderHash) -> () + Send + Sync>) -> Self {
         NotifyFn(b)
     }
     pub fn notify(&self, f: FolderHash) {
@@ -164,10 +165,10 @@ pub trait MailBackend: ::std::fmt::Debug {
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
     fn folders(&self) -> FnvHashMap<FolderHash, Folder>;
-    fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<BackendOp>;
+    fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<dyn BackendOp>;
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()>;
-    fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
+    fn folder_operation(&mut self, _path: &str, _op: FolderOperation) -> Result<()> {
         Ok(())
     }
 }
@@ -234,11 +235,11 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
 /// Seen flag when fetching an envelope)
 #[derive(Debug)]
 pub struct ReadOnlyOp {
-    op: Box<BackendOp>,
+    op: Box<dyn BackendOp>,
 }
 
 impl ReadOnlyOp {
-    pub fn new(op: Box<BackendOp>) -> Box<BackendOp> {
+    pub fn new(op: Box<dyn BackendOp>) -> Box<dyn BackendOp> {
         Box::new(ReadOnlyOp { op })
     }
 }

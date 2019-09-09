@@ -22,7 +22,7 @@ pub struct ContactList {
 
     mode: ViewMode,
     dirty: bool,
-    view: Option<Box<Component>>,
+    view: Option<Box<dyn Component>>,
     id: ComponentId,
 }
 

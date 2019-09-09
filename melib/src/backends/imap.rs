@@ -245,7 +245,7 @@ impl MailBackend for ImapType {
             .collect()
     }
 
-    fn operation(&self, hash: EnvelopeHash, _folder_hash: FolderHash) -> Box<BackendOp> {
+    fn operation(&self, hash: EnvelopeHash, _folder_hash: FolderHash) -> Box<dyn BackendOp> {
         let (uid, folder_hash) = self.hash_index.lock().unwrap()[&hash];
         Box::new(ImapOp::new(
             uid,
@@ -400,7 +400,7 @@ macro_rules! exit_on_error {
     }
 }
 impl ImapType {
-    pub fn new(s: &AccountSettings, is_subscribed: Box<Fn(&str) -> bool>) -> Self {
+    pub fn new(s: &AccountSettings, is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
         use std::io::prelude::*;
         use std::net::TcpStream;
         debug!(s);

@@ -242,7 +242,7 @@ impl BackendOp for MboxOp {
         flags
     }
 
-    fn set_flag(&mut self, envelope: &mut Envelope, flag: Flag) -> Result<()> {
+    fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag) -> Result<()> {
         Ok(())
     }
 }
@@ -526,7 +526,7 @@ impl MailBackend for MboxType {
             .map(|(h, f)| (*h, f.clone() as Folder))
             .collect()
     }
-    fn operation(&self, hash: EnvelopeHash, _folder_hash: FolderHash) -> Box<BackendOp> {
+    fn operation(&self, hash: EnvelopeHash, _folder_hash: FolderHash) -> Box<dyn BackendOp> {
         let (offset, length) = {
             let index = self.index.lock().unwrap();
             index[&hash]
@@ -540,7 +540,7 @@ impl MailBackend for MboxType {
 }
 
 impl MboxType {
-    pub fn new(s: &AccountSettings, _is_subscribed: Box<Fn(&str) -> bool>) -> Self {
+    pub fn new(s: &AccountSettings, _is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
         let path = Path::new(s.root_folder.as_str());
         if !path.exists() {
             panic!(

@@ -1,7 +1,7 @@
 use super::*;
 use fnv::FnvHashMap;
 
-type AutoCompleteFn = Box<Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send>;
+type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send>;
 
 #[derive(Debug, PartialEq)]
 enum FormFocus {
