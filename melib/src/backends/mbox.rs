@@ -384,7 +384,8 @@ impl MailBackend for MboxType {
                 {
                     Ok(f) => f,
                     Err(e) => {
-                        tx.send(AsyncStatus::Payload(Err(MeliError::from(e))));
+                        tx.send(AsyncStatus::Payload(Err(MeliError::from(e))))
+                            .unwrap();
                         return;
                     }
                 };
@@ -392,7 +393,8 @@ impl MailBackend for MboxType {
                 let mut buf_reader = BufReader::new(file);
                 let mut contents = Vec::new();
                 if let Err(e) = buf_reader.read_to_end(&mut contents) {
-                    tx.send(AsyncStatus::Payload(Err(MeliError::from(e))));
+                    tx.send(AsyncStatus::Payload(Err(MeliError::from(e))))
+                        .unwrap();
                     return;
                 };
 
@@ -406,7 +408,7 @@ impl MailBackend for MboxType {
                         .and_modify(|f| f.content = contents);
                 }
 
-                tx.send(AsyncStatus::Payload(payload));
+                tx.send(AsyncStatus::Payload(payload)).unwrap();
             };
             Box::new(closure)
         };

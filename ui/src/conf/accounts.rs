@@ -341,18 +341,18 @@ impl Account {
                 debug!("LL");
                 match debug!(mailbox_handle.poll_block()) {
                     Ok(s @ AsyncStatus::Payload(_)) => {
-                        our_tx.send(s);
+                        our_tx.send(s).unwrap();
                         debug!("notifying for {}", folder_hash);
                         notify_fn.notify(folder_hash);
                     }
                     Ok(s @ AsyncStatus::Finished) => {
-                        our_tx.send(s);
+                        our_tx.send(s).unwrap();
                         notify_fn.notify(folder_hash);
                         debug!("exiting");
                         return;
                     }
                     Ok(s) => {
-                        our_tx.send(s);
+                        our_tx.send(s).unwrap();
                     }
                     Err(_) => {
                         debug!("poll error");
@@ -368,7 +368,7 @@ impl Account {
         &mut self,
         event: RefreshEvent,
         folder_hash: FolderHash,
-        sender: &chan::Sender<crate::types::ThreadEvent>,
+        sender: &crossbeam::channel::Sender<crate::types::ThreadEvent>,
     ) -> Option<UIEvent> {
         if !self.folders[&folder_hash].is_available() {
             self.event_queue.push_back((folder_hash, event));
@@ -442,7 +442,7 @@ impl Account {
                     debug!("RefreshEvent Failure: {}", e.to_string());
                     let sender = sender.clone();
                     self.watch(RefreshEventConsumer::new(Box::new(move |r| {
-                        sender.send(crate::types::ThreadEvent::from(r));
+                        sender.send(crate::types::ThreadEvent::from(r)).unwrap();
                     })));
                 }
             }

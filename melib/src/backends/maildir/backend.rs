@@ -706,9 +706,9 @@ impl MaildirType {
                         })?;
                         files.push(e);
                     }
-                    let mut threads = Vec::with_capacity(cores);
                     if !files.is_empty() {
                         crossbeam::scope(|scope| {
+                            let mut threads = Vec::with_capacity(cores);
                             let cache_dir = cache_dir.clone();
                             let chunk_size = if count / cores > 0 {
                                 count / cores
@@ -720,7 +720,7 @@ impl MaildirType {
                                 let tx = tx.clone();
                                 let map = map.clone();
                                 let root_path = root_path.clone();
-                                let s = scope.builder().name(name.clone()).spawn(move || {
+                                let s = scope.builder().name(name.clone()).spawn(move |_| {
                                     let len = chunk.len();
                                     let size = if len <= 100 { 100 } else { (len / 100) * 100 };
                                     let mut local_r: Vec<Envelope> =
@@ -789,23 +789,24 @@ impl MaildirType {
                                                 continue;
                                             }
                                         }
-                                        tx.send(AsyncStatus::ProgressReport(len));
+                                        tx.send(AsyncStatus::ProgressReport(len)).unwrap();
                                     }
                                     local_r
                                 });
                                 threads.push(s.unwrap());
                             }
-                        });
-                    }
-                    for t in threads {
-                        let mut result = t.join();
-                        ret.append(&mut result);
+                            for t in threads {
+                                let mut result = t.join().unwrap();
+                                ret.append(&mut result);
+                            }
+                        })
+                        .unwrap();
                     }
                     Ok(ret)
                 };
                 let result = thunk();
-                tx_final.send(AsyncStatus::Payload(result));
-                tx_final.send(AsyncStatus::Finished);
+                tx_final.send(AsyncStatus::Payload(result)).unwrap();
+                tx_final.send(AsyncStatus::Finished).unwrap();
             };
             Box::new(closure)
         };

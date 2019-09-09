@@ -74,7 +74,7 @@ impl MailBackend for ImapType {
         macro_rules! exit_on_error {
             ($tx:expr,$($result:expr)+) => {
                 $(if let Err(e) = $result {
-                $tx.send(AsyncStatus::Payload(Err(e.into())));
+                    $tx.send(AsyncStatus::Payload(Err(e.into()))).unwrap();
                     std::process::exit(1);
                 })+
             };
@@ -147,15 +147,15 @@ impl MailBackend for ImapType {
                         }
                         Err(e) => {
                             debug!(&e);
-                            tx.send(AsyncStatus::Payload(Err(e)));
+                            tx.send(AsyncStatus::Payload(Err(e))).unwrap();
                         }
                     }
                     exists = std::cmp::max(exists.saturating_sub(20000), 1);
                     debug!("sending payload");
-                    tx.send(AsyncStatus::Payload(Ok(envelopes)));
+                    tx.send(AsyncStatus::Payload(Ok(envelopes))).unwrap();
                 }
                 drop(conn);
-                tx.send(AsyncStatus::Finished);
+                tx.send(AsyncStatus::Finished).unwrap();
             };
             Box::new(closure)
         };

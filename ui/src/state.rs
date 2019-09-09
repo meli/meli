@@ -31,7 +31,7 @@ Input is received in the main loop from threads which listen on the stdin for us
 use super::*;
 use melib::backends::{FolderHash, NotifyFn};
 
-use chan::{Receiver, Sender};
+use crossbeam::channel::{bounded, unbounded, Receiver, Sender};
 use fnv::FnvHashMap;
 use std::env;
 use std::io::Write;
@@ -58,10 +58,11 @@ impl InputHandler {
                 get_events(
                     stdin,
                     |k| {
-                        tx.send(ThreadEvent::Input(k));
+                        tx.send(ThreadEvent::Input(k)).unwrap();
                     },
                     || {
-                        tx.send(ThreadEvent::UIEvent(UIEvent::ChangeMode(UIMode::Fork)));
+                        tx.send(ThreadEvent::UIEvent(UIEvent::ChangeMode(UIMode::Fork)))
+                            .unwrap();
                     },
                     &rx,
                 )
@@ -69,7 +70,7 @@ impl InputHandler {
             .unwrap();
     }
     fn kill(&self) {
-        self.tx.send(false);
+        self.tx.send(false).unwrap();
     }
 }
 
@@ -130,7 +131,7 @@ pub struct State {
     pub mode: UIMode,
     components: Vec<Box<dyn Component>>,
     pub context: Context,
-    threads: FnvHashMap<thread::ThreadId, (chan::Sender<bool>, thread::JoinHandle<()>)>,
+    threads: FnvHashMap<thread::ThreadId, (Sender<bool>, thread::JoinHandle<()>)>,
     work_controller: WorkController,
 }
 
@@ -161,13 +162,13 @@ impl State {
     pub fn new() -> Self {
         /* Create a channel to communicate with other threads. The main process is the sole receiver.
          * */
-        let (sender, receiver) = chan::sync(32 * ::std::mem::size_of::<ThreadEvent>());
+        let (sender, receiver) = bounded(32 * ::std::mem::size_of::<ThreadEvent>());
 
         /*
          * Create async channel to block the input-thread if we need to fork and stop it from reading
          * stdin, see get_events() for details
          * */
-        let input_thread = chan::r#async();
+        let input_thread = unbounded();
         let backends = Backends::new();
         let settings = Settings::new();
 
@@ -186,7 +187,9 @@ impl State {
                     a_s.clone(),
                     &backends,
                     NotifyFn::new(Box::new(move |f: FolderHash| {
-                        sender.send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
+                        sender
+                            .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
+                            .unwrap();
                     })),
                 )
             })
@@ -254,14 +257,14 @@ impl State {
             }
             let sender = s.context.sender.clone();
             account.watch(RefreshEventConsumer::new(Box::new(move |r| {
-                sender.send(ThreadEvent::from(r));
+                sender.send(ThreadEvent::from(r)).unwrap();
             })));
         }
         s.restore_input();
         s
     }
 
-    pub fn worker_receiver(&mut self) -> chan::Receiver<bool> {
+    pub fn worker_receiver(&mut self) -> Receiver<bool> {
         self.work_controller.results_rx()
     }
 
@@ -299,7 +302,7 @@ impl State {
     /// the thread from its list and `join` it.
     pub fn join(&mut self, id: thread::ThreadId) {
         let (tx, handle) = self.threads.remove(&id).unwrap();
-        tx.send(true);
+        tx.send(true).unwrap();
         handle.join().unwrap();
     }
 
@@ -555,7 +558,8 @@ impl State {
             UIEvent::ChangeMode(m) => {
                 self.context
                     .sender
-                    .send(ThreadEvent::UIEvent(UIEvent::ChangeMode(m)));
+                    .send(ThreadEvent::UIEvent(UIEvent::ChangeMode(m)))
+                    .unwrap();
             }
             _ => {}
         }

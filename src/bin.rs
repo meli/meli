@@ -39,14 +39,22 @@ use ui;
 pub use melib::*;
 pub use ui::*;
 
-#[macro_use]
-extern crate chan;
-use chan_signal;
-
-use chan_signal::Signal;
-
 use nix;
+use std::os::raw::c_int;
 use xdg;
+
+fn notify(
+    signals: &[c_int],
+) -> std::result::Result<crossbeam::channel::Receiver<c_int>, std::io::Error> {
+    let (s, r) = crossbeam::channel::bounded(100);
+    let signals = signal_hook::iterator::Signals::new(signals)?;
+    std::thread::spawn(move || {
+        for signal in signals.forever() {
+            s.send(signal).unwrap();
+        }
+    });
+    Ok(r)
+}
 
 macro_rules! error_and_exit {
     ($($err:expr),*) => {{
@@ -63,7 +71,7 @@ struct CommandLineArguments {
     version: bool,
 }
 
-fn main() {
+fn main() -> std::result::Result<(), std::io::Error> {
     enum CommandLineFlags {
         CreateConfig,
         Config,
@@ -168,7 +176,12 @@ fn main() {
     }
 
     /* Catch SIGWINCH to handle terminal resizing */
-    let signal = chan_signal::notify(&[Signal::WINCH]);
+    let signals = &[
+        /* Catch SIGWINCH to handle terminal resizing */
+        signal_hook::SIGWINCH,
+    ];
+
+    let signal_recvr = notify(signals)?;
 
     /* Create the application State. This is the 'System' part of an ECS architecture */
     let mut state = State::new();
@@ -206,8 +219,8 @@ fn main() {
             state.redraw();
 
             /* Poll on all channels. Currently we have the input channel for stdin, watching events and the signal watcher. */
-            chan_select! {
-                receiver.recv() -> r => {
+            crossbeam::select! {
+                recv(receiver) -> r => {
                     match debug!(r.unwrap()) {
                         ThreadEvent::Input(Key::Ctrl('z')) => {
                             state.switch_to_main_screen();
@@ -290,16 +303,19 @@ fn main() {
                         },
                     }
                 },
-                signal.recv() -> signal => {
-                    if state.mode != UIMode::Fork  {
-                        if let Some(Signal::WINCH) = signal {
-                            state.update_size();
-                            state.render();
-                            state.redraw();
-                        }
+                recv(signal_recvr) -> sig => {
+                    match sig.unwrap() {
+                        signal_hook::SIGWINCH => {
+                            if state.mode != UIMode::Fork  {
+                                state.update_size();
+                                state.render();
+                                state.redraw();
+                            }
+                        },
+                        _ => {}
                     }
                 },
-                worker_receiver.recv() -> _ => {
+                recv(worker_receiver) -> _ => {
                     /* Some worker thread finished their job, acknowledge
                      * it and move on*/
                 },
@@ -327,4 +343,5 @@ fn main() {
             }
         }
     }
+    Ok(())
 }

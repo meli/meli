@@ -1,4 +1,7 @@
-use chan;
+use crossbeam::{
+    channel::{bounded, unbounded, Receiver, Sender},
+    select,
+};
 use melib::async_workers::Work;
 use std;
 
@@ -8,13 +11,13 @@ const MAX_WORKER: usize = 4;
 
 pub struct WorkController {
     pub queue: WorkQueue<Work>,
-    thread_end_tx: chan::Sender<bool>,
-    results: Option<chan::Receiver<bool>>,
+    thread_end_tx: Sender<bool>,
+    results: Option<Receiver<bool>>,
     threads: Vec<std::thread::JoinHandle<()>>,
 }
 
 impl WorkController {
-    pub fn results_rx(&mut self) -> chan::Receiver<bool> {
+    pub fn results_rx(&mut self) -> Receiver<bool> {
         self.results.take().unwrap()
     }
 }
@@ -22,7 +25,7 @@ impl WorkController {
 impl Drop for WorkController {
     fn drop(&mut self) {
         for _ in 0..self.threads.len() {
-            self.thread_end_tx.send(true);
+            self.thread_end_tx.send(true).unwrap();
         }
         /*
         let threads = mem::replace(&mut self.threads, Vec::new());
@@ -141,7 +144,7 @@ impl<T: Send> WorkQueue<T> {
             // the internal VecDeque.
             queue.push_back(work);
 
-            self.new_jobs_tx.send(true);
+            self.new_jobs_tx.send(true).unwrap();
             // Now return the length of the queue.
             queue.len()
         } else {
@@ -152,7 +155,7 @@ impl<T: Send> WorkQueue<T> {
 
 impl WorkController {
     pub fn new() -> WorkController {
-        let (new_jobs_tx, new_jobs_rx) = chan::r#async();
+        let (new_jobs_tx, new_jobs_rx) = unbounded();
         // Create a new work queue to keep track of what work needs to be done.
         // Note that the queue is internally mutable (or, rather, the Mutex is),
         // but this binding doesn't need to be mutable. This isn't unsound because
@@ -163,10 +166,10 @@ impl WorkController {
         // Create a MPSC (Multiple Producer, Single Consumer) channel. Every worker
         // is a producer, the main thread is a consumer; the producers put their
         // work into the channel when it's done.
-        let (results_tx, results_rx) = chan::r#async();
+        let (results_tx, results_rx) = unbounded();
 
         // Create a SyncFlag to share whether or not there are more jobs to be done.
-        let (thread_end_tx, thread_end_rx) = chan::sync(::std::mem::size_of::<bool>());
+        let (thread_end_tx, thread_end_rx) = bounded(::std::mem::size_of::<bool>());
 
         // This Vec will hold thread join handles to allow us to not exit while work
         // is still being done. These handles provide a .join() method which blocks
@@ -196,12 +199,12 @@ impl WorkController {
                 'work_loop: loop {
                     debug!("Waiting for work");
                     // Loop while there's expected to be work, looking for work.
-                    chan_select! {
-                        thread_end_rx.recv() -> _ => {
+                    select! {
+                        recv(thread_end_rx) -> _ => {
                             debug!("received thread_end_rx, quitting");
                             break 'work_loop;
                         },
-                        new_jobs_rx.recv() -> _ => {
+                        recv(new_jobs_rx) -> _ => {
                             // If work is available, do that work.
                             while let Some(work) = thread_queue.get_work() {
                                 debug!("Got some work");
@@ -216,7 +219,7 @@ impl WorkController {
                                 //
                                 // Sending could fail. If so, there's no use in
                                 // doing any more work, so abort.
-                                thread_results_tx.send(true);
+                                thread_results_tx.send(true).unwrap();
 
                                 // Signal to the operating system that now is a good time
                                 // to give another thread a chance to run.

@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use chan;
+use crossbeam::{channel::Receiver, select};
 use serde::{Serialize, Serializer};
 use std::fmt;
 use std::io;
@@ -154,24 +154,23 @@ pub fn get_events(
     stdin: io::Stdin,
     mut closure: impl FnMut(Key),
     mut exit: impl FnMut(),
-    rx: &chan::Receiver<bool>,
+    rx: &Receiver<bool>,
 ) {
     let mut input_mode = InputMode::Normal;
     let mut paste_buf = String::with_capacity(256);
     for c in stdin.events() {
-        chan_select! {
+        select! {
             default => {},
-            rx.recv() -> val => {
-                if let Some(true) = val {
+            recv(rx) -> val => {
+                if let Ok(true) = val {
                     exit();
                     return;
-                } else if let Some(false) = val {
+                } else {
                     return;
                 }
             }
-
-
         };
+
         match c {
             Ok(TermionEvent::Key(k)) if input_mode == InputMode::Normal => {
                 closure(Key::from(k));

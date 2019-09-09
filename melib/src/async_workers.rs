@@ -31,7 +31,11 @@
  * can be extracted with `extract`.
  */
 
-use chan;
+use crossbeam::{
+    bounded,
+    channel::{Receiver, Sender},
+    select,
+};
 use std::fmt;
 use std::sync::Arc;
 
@@ -74,16 +78,16 @@ impl<T> fmt::Debug for AsyncStatus<T> {
 /// A builder object for `Async<T>`
 #[derive(Debug, Clone)]
 pub struct AsyncBuilder<T: Send + Sync> {
-    tx: chan::Sender<AsyncStatus<T>>,
-    rx: chan::Receiver<AsyncStatus<T>>,
+    tx: Sender<AsyncStatus<T>>,
+    rx: Receiver<AsyncStatus<T>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Async<T: Send + Sync> {
     work: Work,
     active: bool,
-    tx: chan::Sender<AsyncStatus<T>>,
-    rx: chan::Receiver<AsyncStatus<T>>,
+    tx: Sender<AsyncStatus<T>>,
+    rx: Receiver<AsyncStatus<T>>,
 }
 
 impl<T: Send + Sync> Default for AsyncBuilder<T> {
@@ -97,18 +101,18 @@ where
     T: Send + Sync,
 {
     pub fn new() -> Self {
-        let (sender, receiver) = chan::sync(8 * ::std::mem::size_of::<AsyncStatus<T>>());
+        let (sender, receiver) = bounded(8 * ::std::mem::size_of::<AsyncStatus<T>>());
         AsyncBuilder {
             tx: sender,
             rx: receiver,
         }
     }
     /// Returns the sender object of the promise's channel.
-    pub fn tx(&mut self) -> chan::Sender<AsyncStatus<T>> {
+    pub fn tx(&mut self) -> Sender<AsyncStatus<T>> {
         self.tx.clone()
     }
     /// Returns the receiver object of the promise's channel.
-    pub fn rx(&mut self) -> chan::Receiver<AsyncStatus<T>> {
+    pub fn rx(&mut self) -> Receiver<AsyncStatus<T>> {
         self.rx.clone()
     }
     /// Returns an `Async<T>` object that contains a `Thread` join handle that returns a `T`
@@ -135,11 +139,11 @@ where
         }
     }
     /// Returns the sender object of the promise's channel.
-    pub fn tx(&mut self) -> chan::Sender<AsyncStatus<T>> {
+    pub fn tx(&mut self) -> Sender<AsyncStatus<T>> {
         self.tx.clone()
     }
     /// Returns the receiver object of the promise's channel.
-    pub fn rx(&mut self) -> chan::Receiver<AsyncStatus<T>> {
+    pub fn rx(&mut self) -> Receiver<AsyncStatus<T>> {
         self.rx.clone()
     }
     /// Polls worker thread and returns result.
@@ -149,20 +153,20 @@ where
         }
 
         let rx = &self.rx;
-        chan_select! {
-            rx.recv() -> r => {
+        select! {
+            recv(rx) -> r => {
                 match r {
-                    Some(p @ AsyncStatus::Payload(_)) => {
+                    Ok(p @ AsyncStatus::Payload(_)) => {
                         return Ok(p);
                     },
-                    Some(f @ AsyncStatus::Finished) => {
+                    Ok(f @ AsyncStatus::Finished) => {
                         self.active = false;
                         return Ok(f);
                     },
-                    Some(a) => {
+                    Ok(a) => {
                         return Ok(a);
                     }
-                    _ => {
+                    Err(_) => {
                         return Err(());
                     },
                 }
@@ -176,23 +180,23 @@ where
         }
 
         let rx = &self.rx;
-        chan_select! {
+        select! {
             default => {
                 return Ok(AsyncStatus::NoUpdate);
             },
-            rx.recv() -> r => {
+            recv(rx) -> r => {
                 match r {
-                    Some(p @ AsyncStatus::Payload(_)) => {
+                    Ok(p @ AsyncStatus::Payload(_)) => {
                         return Ok(p);
                     },
-                    Some(f @ AsyncStatus::Finished) => {
+                    Ok(f @ AsyncStatus::Finished) => {
                         self.active = false;
                         return Ok(f);
                     },
-                    Some(a) => {
+                    Ok(a) => {
                         return Ok(a);
                     }
-                    _ => {
+                    Err(_) => {
                         return Err(());
                     },
                 }

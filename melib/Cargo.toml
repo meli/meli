@@ -7,9 +7,8 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1.0"
-chan = "0.1.21"
 chrono = { version = "0.4", features = ["serde"] }
-crossbeam = "^0.3.0"
+crossbeam = "0.7.2"
 data-encoding = "2.1.1"
 encoding = "0.2.33"
 fnv = "1.0.3"

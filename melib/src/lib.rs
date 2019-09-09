@@ -109,8 +109,6 @@ extern crate chrono;
 extern crate data_encoding;
 extern crate encoding;
 extern crate memmap;
-#[macro_use]
-extern crate chan;
 
 #[macro_use]
 extern crate bitflags;

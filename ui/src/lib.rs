@@ -30,9 +30,6 @@ extern crate notify_rust;
 extern crate text_processing;
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
-extern crate chan;
-extern crate chan_signal;
 extern crate linkify;
 extern crate uuid;
 
