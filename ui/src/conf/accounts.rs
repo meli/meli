@@ -23,7 +23,7 @@
  * Account management from user configuration.
  */
 
-use super::AccountConf;
+use super::{AccountConf, FolderConf};
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
 use melib::backends::{
@@ -116,8 +116,9 @@ impl MailboxEntry {
 pub struct Account {
     name: String,
     pub(crate) folders: FnvHashMap<FolderHash, MailboxEntry>,
+    pub(crate) folder_confs: FnvHashMap<FolderHash, FolderConf>,
     pub(crate) folders_order: Vec<FolderHash>,
-    folder_names: FnvHashMap<FolderHash, String>,
+    pub(crate) folder_names: FnvHashMap<FolderHash, String>,
     tree: Vec<FolderNode>,
     sent_folder: Option<FolderHash>,
     pub(crate) collection: Collection,
@@ -205,6 +206,7 @@ impl Account {
         let mut workers: FnvHashMap<FolderHash, Worker> = FnvHashMap::default();
         let notify_fn = Arc::new(notify_fn);
         let mut folder_names = FnvHashMap::default();
+        let mut folder_confs = FnvHashMap::default();
 
         let mut sent_folder = None;
         for f in ref_folders.values_mut() {
@@ -221,6 +223,7 @@ impl Account {
                 }
                 _ => {}
             }
+            folder_confs.insert(f.hash(), settings.folder_confs[f.path()].clone());
             folder_names.insert(f.hash(), f.path().to_string());
         }
 
@@ -300,6 +303,7 @@ impl Account {
         Account {
             name,
             folders,
+            folder_confs,
             folders_order,
             folder_names,
             tree,
@@ -668,6 +672,10 @@ impl Account {
 
     pub fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
         self.backend.folder_operation(path, op)
+    }
+
+    pub fn folder_confs(&self, folder_hash: FolderHash) -> &FolderConf {
+        &self.folder_confs[&folder_hash]
     }
 }
 

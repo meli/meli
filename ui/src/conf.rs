@@ -89,17 +89,29 @@ impl ToggleFlag {
     }
 }
 
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct MailUIConf {
+    pub pager: Option<PagerSettings>,
+    pub notifications: Option<NotificationsSettings>,
+    pub shortcuts: Option<Shortcuts>,
+    pub mailer: Option<MailerSettings>,
+    pub identity: Option<String>,
+    pub index: Option<IndexStyle>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FolderConf {
-    rename: Option<String>,
+    pub rename: Option<String>,
     #[serde(default = "true_val")]
-    autoload: bool,
+    pub autoload: bool,
     #[serde(deserialize_with = "toggleflag_de", default)]
-    subscribe: ToggleFlag,
+    pub subscribe: ToggleFlag,
     #[serde(deserialize_with = "toggleflag_de", default)]
-    ignore: ToggleFlag,
+    pub ignore: ToggleFlag,
     #[serde(default = "none")]
-    usage: Option<SpecialUseMailbox>,
+    pub usage: Option<SpecialUseMailbox>,
+    #[serde(flatten)]
+    pub conf_override: MailUIConf,
 }
 
 impl Default for FolderConf {
@@ -108,8 +120,9 @@ impl Default for FolderConf {
             rename: None,
             autoload: true,
             subscribe: ToggleFlag::Unset,
-            ignore: ToggleFlag::False,
+            ignore: ToggleFlag::Unset,
             usage: None,
+            conf_override: MailUIConf::default(),
         }
     }
 }
@@ -132,7 +145,6 @@ pub struct FileAccount {
 
     #[serde(default = "none")]
     display_name: Option<String>,
-    #[serde(deserialize_with = "index_from_str")]
     index: IndexStyle,
 
     /// A command to pipe html output before displaying it in a pager
@@ -197,7 +209,10 @@ impl From<FileAccount> for AccountConf {
             }
 
             if folder_confs[s].usage.is_none() {
-                let name = s.split('/').last().unwrap_or("");
+                let name = s
+                    .split(if s.contains('/') { '/' } else { '.' })
+                    .last()
+                    .unwrap_or("");
                 folder_confs.get_mut(s).unwrap().usage = if name.eq_ignore_ascii_case("inbox") {
                     Some(SpecialUseMailbox::Inbox)
                 } else if name.eq_ignore_ascii_case("archive") {
@@ -265,9 +280,9 @@ struct FileSettings {
 
 #[derive(Debug, Clone, Default)]
 pub struct AccountConf {
-    account: AccountSettings,
-    conf: FileAccount,
-    folder_confs: HashMap<String, FolderConf>,
+    pub(crate) account: AccountSettings,
+    pub(crate) conf: FileAccount,
+    pub(crate) folder_confs: HashMap<String, FolderConf>,
 }
 
 impl AccountConf {
@@ -380,7 +395,7 @@ impl Settings {
     }
 }
 
-#[derive(Copy, Debug, Clone, Serialize, Deserialize)]
+#[derive(Copy, Debug, Clone, Hash, PartialEq)]
 pub enum IndexStyle {
     Plain,
     Threaded,
@@ -390,19 +405,6 @@ pub enum IndexStyle {
 impl Default for IndexStyle {
     fn default() -> Self {
         IndexStyle::Compact
-    }
-}
-
-fn index_from_str<'de, D>(deserializer: D) -> std::result::Result<IndexStyle, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = <String>::deserialize(deserializer)?;
-    match s.as_str() {
-        "Plain" | "plain" => Ok(IndexStyle::Plain),
-        "Threaded" | "threaded" => Ok(IndexStyle::Threaded),
-        "Compact" | "compact" => Ok(IndexStyle::Compact),
-        _ => Err(de::Error::custom("invalid `index` value")),
     }
 }
 
@@ -466,5 +468,33 @@ mod default_vals {
 
     pub(in crate::conf) fn none<T>() -> Option<T> {
         None
+    }
+}
+
+impl<'de> Deserialize<'de> for IndexStyle {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <String>::deserialize(deserializer)?;
+        match s.as_str() {
+            "Plain" | "plain" => Ok(IndexStyle::Plain),
+            "Threaded" | "threaded" => Ok(IndexStyle::Threaded),
+            "Compact" | "compact" => Ok(IndexStyle::Compact),
+            _ => Err(de::Error::custom("invalid `index` value")),
+        }
+    }
+}
+
+impl Serialize for IndexStyle {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            IndexStyle::Plain => serializer.serialize_str("plain"),
+            IndexStyle::Threaded => serializer.serialize_str("threaded"),
+            IndexStyle::Compact => serializer.serialize_str("compact"),
+        }
     }
 }

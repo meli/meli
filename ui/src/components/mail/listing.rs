@@ -96,6 +96,40 @@ impl ListingTrait for ListingComponent {
     }
 }
 
+impl ListingComponent {
+    fn set_style(&mut self, new_style: IndexStyle) {
+        match new_style {
+            IndexStyle::Plain => {
+                if let Plain(_) = self {
+                    return;
+                }
+                let mut new_l = PlainListing::default();
+                let coors = self.coordinates();
+                new_l.set_coordinates((coors.0, coors.1, None));
+                *self = Plain(new_l);
+            }
+            IndexStyle::Threaded => {
+                if let Threaded(_) = self {
+                    return;
+                }
+                let mut new_l = ThreadListing::default();
+                let coors = self.coordinates();
+                new_l.set_coordinates((coors.0, coors.1, None));
+                *self = Threaded(new_l);
+            }
+            IndexStyle::Compact => {
+                if let Compact(_) = self {
+                    return;
+                }
+                let mut new_l = CompactListing::default();
+                let coors = self.coordinates();
+                new_l.set_coordinates((coors.0, coors.1, None));
+                *self = Compact(new_l);
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Listing {
     component: ListingComponent,
@@ -226,6 +260,14 @@ impl Component for Listing {
                 }
                 let folder_hash =
                     context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
+                /* Check if per-folder configuration overrides general configuration */
+                if let Some(index_style) = context
+                    .accounts
+                    .get(self.cursor_pos.0)
+                    .and_then(|account| account.folder_confs(folder_hash).conf_override.index)
+                {
+                    self.component.set_style(index_style);
+                };
                 // Inform State that we changed the current folder view.
                 context
                     .replies
@@ -258,6 +300,14 @@ impl Component for Listing {
                 }
                 let folder_hash =
                     context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
+                /* Check if per-folder configuration overrides general configuration */
+                if let Some(index_style) = context
+                    .accounts
+                    .get(self.cursor_pos.0)
+                    .and_then(|account| account.folder_confs(folder_hash).conf_override.index)
+                {
+                    self.component.set_style(index_style);
+                };
                 // Inform State that we changed the current folder view.
                 context
                     .replies
@@ -266,30 +316,15 @@ impl Component for Listing {
             }
             UIEvent::Action(ref action) => match action {
                 Action::Listing(ListingAction::SetPlain) => {
-                    if let Plain(_) = self.component {
-                        return true;
-                    }
-                    let mut new_l = PlainListing::default();
-                    new_l.set_coordinates((self.cursor_pos.0, self.cursor_pos.1, None));
-                    self.component = Plain(new_l);
+                    self.component.set_style(IndexStyle::Plain);
                     return true;
                 }
                 Action::Listing(ListingAction::SetThreaded) => {
-                    if let Threaded(_) = self.component {
-                        return true;
-                    }
-                    let mut new_l = ThreadListing::default();
-                    new_l.set_coordinates((self.cursor_pos.0, self.cursor_pos.1, None));
-                    self.component = Threaded(new_l);
+                    self.component.set_style(IndexStyle::Threaded);
                     return true;
                 }
                 Action::Listing(ListingAction::SetCompact) => {
-                    if let Compact(_) = self.component {
-                        return true;
-                    }
-                    let mut new_l = CompactListing::default();
-                    new_l.set_coordinates((self.cursor_pos.0, self.cursor_pos.1, None));
-                    self.component = Compact(new_l);
+                    self.component.set_style(IndexStyle::Compact);
                     return true;
                 }
                 _ => {}
@@ -437,7 +472,7 @@ impl From<IndexStyle> for ListingComponent {
 impl Listing {
     const DESCRIPTION: &'static str = "listing";
     pub fn new(accounts: &[Account]) -> Self {
-        let accounts = accounts
+        let account_entries = accounts
             .iter()
             .enumerate()
             .map(|(i, a)| AccountMenuEntry {
@@ -445,9 +480,20 @@ impl Listing {
                 index: i,
             })
             .collect();
+        /* Check if per-folder configuration overrides general configuration */
+        let component = if let Some(index_style) = accounts.get(0).and_then(|account| {
+            account
+                .folders_order
+                .get(0)
+                .and_then(|folder_hash| account.folder_confs(*folder_hash).conf_override.index)
+        }) {
+            ListingComponent::from(index_style)
+        } else {
+            Compact(Default::default())
+        };
         Listing {
-            component: Compact(Default::default()),
-            accounts,
+            component,
+            accounts: account_entries,
             visible: true,
             dirty: true,
             cursor_pos: (0, 0),
