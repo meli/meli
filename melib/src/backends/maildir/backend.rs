@@ -191,7 +191,11 @@ impl MailBackend for MaildirType {
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         self.multicore(4, folder)
     }
-    fn watch(&self, sender: RefreshEventConsumer) -> Result<()> {
+    fn watch(
+        &self,
+        sender: RefreshEventConsumer,
+        work_context: WorkContext,
+    ) -> Result<std::thread::ThreadId> {
         let (tx, rx) = channel();
         let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
         let root_path = self.path.to_path_buf();
@@ -199,11 +203,12 @@ impl MailBackend for MaildirType {
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
         debug!("watching {:?}", root_path);
         let hash_indexes = self.hash_indexes.clone();
-        thread::Builder::new()
+        let handle = thread::Builder::new()
             .name("folder watch".to_string())
             .spawn(move || {
                 // Move `watcher` in the closure's scope so that it doesn't get dropped.
                 let _watcher = watcher;
+                let _work_context = work_context;
                 loop {
                     match rx.recv() {
                         /*
@@ -457,7 +462,7 @@ impl MailBackend for MaildirType {
                     }
                 }
             })?;
-        Ok(())
+        Ok(handle.thread().id())
     }
 
     fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<dyn BackendOp> {
@@ -676,8 +681,12 @@ impl MaildirType {
             let root_path = self.path.to_path_buf();
             let map = self.hash_indexes.clone();
 
-            let closure = move || {
+            let closure = move |work_context: crate::async_workers::WorkContext| {
                 let name = name.clone();
+                work_context
+                    .set_name
+                    .send((std::thread::current().id(), name.clone()))
+                    .unwrap();
                 let root_path = root_path.clone();
                 let map = map.clone();
                 let tx = tx.clone();
@@ -798,6 +807,13 @@ impl MaildirType {
                             for t in threads {
                                 let mut result = t.join().unwrap();
                                 ret.append(&mut result);
+                                work_context
+                                    .set_status
+                                    .send((
+                                        std::thread::current().id(),
+                                        format!("parsing.. {}/{}", ret.len(), files.len()),
+                                    ))
+                                    .unwrap();
                             }
                         })
                         .unwrap();

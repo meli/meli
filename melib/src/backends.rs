@@ -163,7 +163,11 @@ type NewFolderName = String;
 
 pub trait MailBackend: ::std::fmt::Debug {
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
-    fn watch(&self, sender: RefreshEventConsumer) -> Result<()>;
+    fn watch(
+        &self,
+        sender: RefreshEventConsumer,
+        work_context: WorkContext,
+    ) -> Result<std::thread::ThreadId>;
     fn folders(&self) -> FnvHashMap<FolderHash, Folder>;
     fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<dyn BackendOp>;
 

@@ -89,6 +89,7 @@ pub struct Context {
     sender: Sender<ThreadEvent>,
     receiver: Receiver<ThreadEvent>,
     input: InputHandler,
+    work_controller: WorkController,
 
     pub temp_files: Vec<File>,
 }
@@ -117,6 +118,10 @@ impl Context {
             Err(n) => Err(n),
         }
     }
+
+    pub fn work_controller(&self) -> &WorkController {
+        &self.work_controller
+    }
 }
 
 /// A State object to manage and own components and components of the UI. `State` is responsible for
@@ -132,7 +137,6 @@ pub struct State {
     components: Vec<Box<dyn Component>>,
     pub context: Context,
     threads: FnvHashMap<thread::ThreadId, (Sender<bool>, thread::JoinHandle<()>)>,
-    work_controller: WorkController,
 }
 
 impl Drop for State {
@@ -218,6 +222,7 @@ impl State {
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),
+                work_controller: WorkController::new(sender.clone()),
 
                 sender,
                 receiver,
@@ -227,13 +232,12 @@ impl State {
                 },
             },
             threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
-            work_controller: WorkController::new(),
         };
         for a in s.context.accounts.iter_mut() {
             for worker in a.workers.values_mut() {
                 if let Some(worker) = worker.as_mut() {
                     if let Some(w) = worker.work() {
-                        s.work_controller.queue.add_work(w);
+                        s.context.work_controller.queue.add_work(w);
                     }
                 }
             }
@@ -250,22 +254,33 @@ impl State {
         .unwrap();
         s.flush();
         debug!("inserting mailbox hashes:");
-        for (x, account) in s.context.accounts.iter_mut().enumerate() {
-            for folder in account.backend.folders().values() {
-                debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
-                s.context.mailbox_hashes.insert(folder.hash(), x);
+        {
+            /* Account::watch() needs
+             * - work_controller to pass `work_context` to the watcher threads and then add them
+             *   to the controller's static thread list,
+             * - sender to pass a RefreshEventConsumer closure to watcher threads for them to
+             *   inform the main binary that refresh events arrived
+             * - replies to report any failures to the user
+             */
+            let Context {
+                ref mut work_controller,
+                ref sender,
+                ref mut replies,
+                ref mut accounts,
+                ref mut mailbox_hashes,
+                ..
+            } = &mut s.context;
+
+            for (x, account) in accounts.iter_mut().enumerate() {
+                for folder in account.backend.folders().values() {
+                    debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
+                    mailbox_hashes.insert(folder.hash(), x);
+                }
+                account.watch((work_controller, sender, replies));
             }
-            let sender = s.context.sender.clone();
-            account.watch(RefreshEventConsumer::new(Box::new(move |r| {
-                sender.send(ThreadEvent::from(r)).unwrap();
-            })));
         }
         s.restore_input();
         s
-    }
-
-    pub fn worker_receiver(&mut self) -> Receiver<bool> {
-        self.work_controller.results_rx()
     }
 
     /*
@@ -280,8 +295,16 @@ impl State {
                 self.context.replies.push_back(UIEvent::from(event));
                 return;
             }
+            let Context {
+                ref mut work_controller,
+                ref sender,
+                ref mut replies,
+                ref mut accounts,
+                ..
+            } = &mut self.context;
+
             if let Some(notification) =
-                self.context.accounts[idxa].reload(event, hash, &self.context.sender)
+                accounts[idxa].reload(event, hash, (work_controller, sender, replies))
             {
                 if let UIEvent::Notification(_, _) = notification {
                     self.context

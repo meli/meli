@@ -40,11 +40,45 @@ use std::fmt;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct Work(pub Arc<Box<dyn Fn() -> () + Send + Sync>>);
+pub struct WorkContext {
+    pub new_work: Sender<Work>,
+    pub set_name: Sender<(std::thread::ThreadId, String)>,
+    pub set_status: Sender<(std::thread::ThreadId, String)>,
+    pub finished: Sender<std::thread::ThreadId>,
+}
+
+#[derive(Clone)]
+pub struct Work {
+    priority: u64,
+    pub is_static: bool,
+    pub closure: Arc<Box<dyn Fn(WorkContext) -> () + Send + Sync>>,
+    name: String,
+    status: String,
+}
+
+impl Ord for Work {
+    fn cmp(&self, other: &Work) -> std::cmp::Ordering {
+        self.priority.cmp(&other.priority)
+    }
+}
+
+impl PartialOrd for Work {
+    fn partial_cmp(&self, other: &Work) -> Option<std::cmp::Ordering> {
+        Some(self.priority.cmp(&other.priority))
+    }
+}
+
+impl PartialEq for Work {
+    fn eq(&self, other: &Work) -> bool {
+        self.priority == other.priority
+    }
+}
+
+impl Eq for Work {}
 
 impl Work {
-    pub fn compute(&self) {
-        (self.0)();
+    pub fn compute(&self, work_context: WorkContext) {
+        (self.closure)(work_context);
     }
 }
 
@@ -80,6 +114,8 @@ impl<T> fmt::Debug for AsyncStatus<T> {
 pub struct AsyncBuilder<T: Send + Sync> {
     tx: Sender<AsyncStatus<T>>,
     rx: Receiver<AsyncStatus<T>>,
+    priority: u64,
+    is_static: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -105,6 +141,8 @@ where
         AsyncBuilder {
             tx: sender,
             rx: receiver,
+            priority: 0,
+            is_static: false,
         }
     }
     /// Returns the sender object of the promise's channel.
@@ -115,10 +153,27 @@ where
     pub fn rx(&mut self) -> Receiver<AsyncStatus<T>> {
         self.rx.clone()
     }
+
+    pub fn set_priority(&mut self, new_val: u64) -> &mut Self {
+        self.priority = new_val;
+        self
+    }
+
+    pub fn set_is_static(&mut self, new_val: bool) -> &mut Self {
+        self.is_static = new_val;
+        self
+    }
+
     /// Returns an `Async<T>` object that contains a `Thread` join handle that returns a `T`
-    pub fn build(self, work: Box<dyn Fn() -> () + Send + Sync>) -> Async<T> {
+    pub fn build(self, work: Box<dyn Fn(WorkContext) -> () + Send + Sync>) -> Async<T> {
         Async {
-            work: Work(Arc::new(work)),
+            work: Work {
+                priority: self.priority,
+                is_static: self.is_static,
+                closure: Arc::new(work),
+                name: String::new(),
+                status: String::new(),
+            },
             tx: self.tx,
             rx: self.rx,
             active: false,

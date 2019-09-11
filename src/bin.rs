@@ -188,8 +188,6 @@ fn main() -> std::result::Result<(), std::io::Error> {
 
     let receiver = state.receiver();
 
-    let worker_receiver = state.worker_receiver();
-
     /* Register some reasonably useful interfaces */
     let window = Box::new(Tabbed::new(vec![
         Box::new(listing::Listing::new(&state.context.accounts)),
@@ -298,6 +296,9 @@ fn main() -> std::result::Result<(), std::io::Error> {
                             state.rcv_event(e);
                             state.render();
                         },
+                        ThreadEvent::Pulse => {
+                            state.redraw();
+                        },
                         ThreadEvent::ThreadJoin(id) => {
                             state.join(id);
                         },
@@ -314,10 +315,6 @@ fn main() -> std::result::Result<(), std::io::Error> {
                         },
                         _ => {}
                     }
-                },
-                recv(worker_receiver) -> _ => {
-                    /* Some worker thread finished their job, acknowledge
-                     * it and move on*/
                 },
             }
         } // end of 'inner

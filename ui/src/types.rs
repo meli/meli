@@ -50,6 +50,8 @@ pub enum ThreadEvent {
     /// A watched folder has been refreshed.
     RefreshMailbox(Box<RefreshEvent>),
     UIEvent(UIEvent),
+    /// A thread has updated some of its information
+    Pulse,
     //Decode { _ }, // For gpg2 signature check
 }
 

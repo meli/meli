@@ -37,6 +37,8 @@ use melib::AddressBook;
 use melib::StackVec;
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
+use crate::{workers::WorkController, StatusEvent, ThreadEvent};
+use crossbeam::Sender;
 use std::collections::VecDeque;
 use std::fs;
 use std::io;
@@ -265,7 +267,7 @@ impl Account {
             );
             workers.insert(
                 *h,
-                Account::new_worker(f.clone(), &mut backend, notify_fn.clone()),
+                Account::new_worker(&settings, f.clone(), &mut backend, notify_fn.clone()),
             );
             collection.threads.insert(*h, Threads::default());
         }
@@ -320,6 +322,7 @@ impl Account {
         }
     }
     fn new_worker(
+        settings: &AccountConf,
         folder: Folder,
         backend: &mut Box<dyn MailBackend>,
         notify_fn: Arc<NotifyFn>,
@@ -328,21 +331,41 @@ impl Account {
         let mut builder = AsyncBuilder::new();
         let our_tx = builder.tx();
         let folder_hash = folder.hash();
-        let w = builder.build(Box::new(move || {
+        let priority = match settings.folder_confs[folder.path()].usage {
+            Some(SpecialUseMailbox::Inbox) => 0,
+            Some(SpecialUseMailbox::Sent) => 1,
+            Some(SpecialUseMailbox::Drafts) | Some(SpecialUseMailbox::Trash) => 2,
+            Some(_) | None => {
+                3 * folder
+                    .path()
+                    .split(if folder.path().contains('/') {
+                        '/'
+                    } else {
+                        '.'
+                    })
+                    .count() as u64
+            }
+        };
+
+        /* This polling closure needs to be 'static', that is to spawn its own thread instead of
+         * being assigned to a worker thread. Otherwise the polling closures could fill up the
+         * workers causing no actual parsing to be done. If we could yield from within the worker
+         * threads' closures this could be avoided, but it requires green threads.
+         */
+        builder.set_priority(priority).set_is_static(true);
+        let w = builder.build(Box::new(move |work_context| {
+            let name = format!("Parsing {}", folder.path());
             let mut mailbox_handle = mailbox_handle.clone();
             let work = mailbox_handle.work().unwrap();
-            debug!("AA");
-            std::thread::Builder::new()
-                .spawn(move || {
-                    debug!("A");
-                    work.compute();
-                    debug!("B");
-                })
+            work_context.new_work.send(work).unwrap();
+            let thread_id = std::thread::current().id();
+            work_context.set_name.send((thread_id, name)).unwrap();
+            work_context
+                .set_status
+                .send((thread_id, "Waiting for subworkers..".to_string()))
                 .unwrap();
-            debug!("BB");
 
             loop {
-                debug!("LL");
                 match debug!(mailbox_handle.poll_block()) {
                     Ok(s @ AsyncStatus::Payload(_)) => {
                         our_tx.send(s).unwrap();
@@ -353,6 +376,7 @@ impl Account {
                         our_tx.send(s).unwrap();
                         notify_fn.notify(folder_hash);
                         debug!("exiting");
+                        work_context.finished.send(thread_id).unwrap();
                         return;
                     }
                     Ok(s) => {
@@ -363,7 +387,6 @@ impl Account {
                         return;
                     }
                 }
-                debug!("DD");
             }
         }));
         Some(w)
@@ -372,7 +395,11 @@ impl Account {
         &mut self,
         event: RefreshEvent,
         folder_hash: FolderHash,
-        sender: &crossbeam::channel::Sender<crate::types::ThreadEvent>,
+        context: (
+            &mut WorkController,
+            &Sender<ThreadEvent>,
+            &mut VecDeque<UIEvent>,
+        ),
     ) -> Option<UIEvent> {
         if !self.folders[&folder_hash].is_available() {
             self.event_queue.push_back((folder_hash, event));
@@ -396,6 +423,13 @@ impl Account {
                 }
                 RefreshEventKind::Create(envelope) => {
                     let env_hash = envelope.hash();
+                    if self.collection.envelopes.contains_key(&env_hash)
+                        && mailbox!(&folder_hash, self.folders)
+                            .envelopes
+                            .contains(&env_hash)
+                    {
+                        return None;
+                    }
                     mailbox!(&folder_hash, self.folders).insert(env_hash);
                     self.collection.insert(*envelope, folder_hash);
                     if self
@@ -436,6 +470,7 @@ impl Account {
                 RefreshEventKind::Rescan => {
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
                     let handle = Account::new_worker(
+                        &self.settings,
                         ref_folders[&folder_hash].clone(),
                         &mut self.backend,
                         self.notify_fn.clone(),
@@ -444,17 +479,40 @@ impl Account {
                 }
                 RefreshEventKind::Failure(e) => {
                     debug!("RefreshEvent Failure: {}", e.to_string());
-                    let sender = sender.clone();
-                    self.watch(RefreshEventConsumer::new(Box::new(move |r| {
-                        sender.send(crate::types::ThreadEvent::from(r)).unwrap();
-                    })));
+                    self.watch(context);
                 }
             }
         }
         None
     }
-    pub fn watch(&self, r: RefreshEventConsumer) {
-        self.backend.watch(r).unwrap();
+    pub fn watch(
+        &self,
+        context: (
+            &mut WorkController,
+            &Sender<ThreadEvent>,
+            &mut VecDeque<UIEvent>,
+        ),
+    ) {
+        let (work_controller, sender, replies) = context;
+        let sender = sender.clone();
+        let r = RefreshEventConsumer::new(Box::new(move |r| {
+            sender.send(ThreadEvent::from(r)).unwrap();
+        }));
+        match self.backend.watch(r, work_controller.get_context()) {
+            Ok(id) => {
+                work_controller
+                    .static_threads
+                    .lock()
+                    .unwrap()
+                    .insert(id, format!("watching {}", self.name()).into());
+            }
+
+            Err(e) => {
+                replies.push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                    e.to_string(),
+                )));
+            }
+        }
     }
 
     pub fn len(&self) -> usize {

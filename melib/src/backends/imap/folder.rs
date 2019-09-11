@@ -21,7 +21,7 @@
 use crate::backends::{BackendFolder, Folder, FolderHash};
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ImapFolder {
     pub(super) hash: FolderHash,
     pub(super) path: String,

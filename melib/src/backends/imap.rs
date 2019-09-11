@@ -33,7 +33,7 @@ pub use watch::*;
 
 extern crate native_tls;
 
-use crate::async_workers::{Async, AsyncBuilder, AsyncStatus};
+use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
 use crate::backends::FolderHash;
 use crate::backends::RefreshEvent;
@@ -64,7 +64,6 @@ pub struct ImapType {
 
     capabilities: FnvHashSet<Vec<u8>>,
     folders: FnvHashMap<FolderHash, ImapFolder>,
-    folder_connections: FnvHashMap<FolderHash, Arc<Mutex<ImapConnection>>>,
     hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
     uid_index: Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
 }
@@ -89,7 +88,7 @@ impl MailBackend for ImapType {
             let folder_hash = folder.hash();
             let folder_exists = self.folders[&folder_hash].exists.clone();
             let connection = self.connection.clone();
-            let closure = move || {
+            let closure = move |_work_context| {
                 let connection = connection.clone();
                 let tx = tx.clone();
                 let mut response = String::with_capacity(8 * 1024);
@@ -162,16 +161,25 @@ impl MailBackend for ImapType {
         w.build(handle)
     }
 
-    fn watch(&self, sender: RefreshEventConsumer) -> Result<()> {
+    fn watch(
+        &self,
+        sender: RefreshEventConsumer,
+        work_context: WorkContext,
+    ) -> Result<std::thread::ThreadId> {
         let has_idle: bool = self.capabilities.contains(&b"IDLE"[0..]);
-        let folders = self.imap_folders();
+        let folders = self.folders.clone();
         let conn = self.new_connection()?;
         let main_conn = self.connection.clone();
         let hash_index = self.hash_index.clone();
         let uid_index = self.uid_index.clone();
-        std::thread::Builder::new()
+        let handle = std::thread::Builder::new()
             .name(format!("{} imap connection", self.account_name.as_str(),))
             .spawn(move || {
+                let thread = std::thread::current();
+                work_context
+                    .set_status
+                    .send((thread.id(), "watching".to_string()))
+                    .unwrap();
                 let kit = ImapWatchKit {
                     conn,
                     main_conn,
@@ -179,6 +187,7 @@ impl MailBackend for ImapType {
                     uid_index,
                     folders,
                     sender,
+                    work_context,
                 };
                 if has_idle {
                     idle(kit);
@@ -186,7 +195,7 @@ impl MailBackend for ImapType {
                     poll_with_examine(kit);
                 }
             })?;
-        Ok(())
+        Ok(handle.thread().id())
     }
 
     fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
@@ -194,7 +203,7 @@ impl MailBackend for ImapType {
             return self
                 .folders
                 .iter()
-                .map(|(h, f)| (*h, f.clone() as Folder))
+                .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
                 .collect();
         }
 
@@ -241,7 +250,7 @@ impl MailBackend for ImapType {
         debug!(&folders);
         folders
             .iter()
-            .map(|(h, f)| (*h, f.clone() as Folder))
+            .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
             .collect()
     }
 
@@ -489,7 +498,6 @@ impl ImapType {
             folders: Default::default(),
             connection: Arc::new(Mutex::new(ImapConnection { cmd_id, stream })),
             danger_accept_invalid_certs,
-            folder_connections: Default::default(),
             hash_index: Default::default(),
             uid_index: Default::default(),
             capabilities: Default::default(),
@@ -532,13 +540,6 @@ impl ImapType {
         for f in m.folders.values_mut() {
             f.children.retain(|c| keys.contains(c));
         }
-        /*
-        for f in m.folders.keys() {
-            m.folder_connections.insert(
-                *f,
-                Arc::new(Mutex::new(exit_on_error!(s returning m.new_connection()))),
-            );
-        }*/
         m
     }
 

@@ -1,92 +1,66 @@
+use crate::types::ThreadEvent;
 use crossbeam::{
-    channel::{bounded, unbounded, Receiver, Sender},
+    channel::{bounded, unbounded, Sender},
     select,
 };
-use melib::async_workers::Work;
-use std;
-
+use fnv::FnvHashMap;
+use melib::async_workers::{Work, WorkContext};
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
 
 const MAX_WORKER: usize = 4;
 
-pub struct WorkController {
-    pub queue: WorkQueue<Work>,
-    thread_end_tx: Sender<bool>,
-    results: Option<Receiver<bool>>,
-    threads: Vec<std::thread::JoinHandle<()>>,
+/// Representation of a worker thread for use in `WorkController`. These values are to be displayed
+/// to the user.
+#[derive(Debug)]
+pub struct Worker {
+    pub name: String,
+    pub status: String,
 }
 
-impl WorkController {
-    pub fn results_rx(&mut self) -> Receiver<bool> {
-        self.results.take().unwrap()
+impl From<String> for Worker {
+    fn from(val: String) -> Self {
+        Worker {
+            name: val,
+            status: String::new(),
+        }
     }
+}
+
+pub struct WorkController {
+    pub queue: WorkQueue,
+    thread_end_tx: Sender<bool>,
+    /// Worker threads that take up on jobs from self.queue
+    pub threads: Arc<Mutex<FnvHashMap<thread::ThreadId, Worker>>>,
+    /// Special function threads that live indefinitely (eg watching a mailbox)
+    pub static_threads: Arc<Mutex<FnvHashMap<thread::ThreadId, Worker>>>,
+    work_context: WorkContext,
 }
 
 impl Drop for WorkController {
     fn drop(&mut self) {
-        for _ in 0..self.threads.len() {
+        for _ in 0..self.threads.lock().unwrap().len() {
             self.thread_end_tx.send(true).unwrap();
         }
-        /*
-        let threads = mem::replace(&mut self.threads, Vec::new());
-        for handle in threads {
-            handle.join().unwrap();
-        }
-        */
     }
 }
 
-// We need a way to keep track of what work needs to be done.
-// This is a multi-source, multi-consumer queue which we call a
-// WorkQueue.
-
-// To create this type, we wrap a mutex (std::sync::mutex) around a
-// queue (technically a double-ended queue, std::collections::VecDeque).
-//
-// Mutex stands for MUTually EXclusive. It essentially ensures that only
-// one thread has access to a given resource at one time.
-use std::sync::Mutex;
-
-// A VecDeque is a double-ended queue, but we will only be using it in forward
-// mode; that is, we will push onto the back and pull from the front.
-use std::collections::VecDeque;
-
-// Finally we wrap the whole thing in Arc (Atomic Reference Counting) so that
-// we can safely share it with other threads. Arc (std::sync::arc) is a lot
-// like Rc (std::rc::Rc), in that it allows multiple references to some memory
-// which is freed when no references remain, except that it is atomic, making
-// it comparitively slow but able to be shared across the thread boundary.
-use std::sync::Arc;
-
-// All three of these types are wrapped around a generic type T.
-// T is required to be Send (a marker trait automatically implemented when
-// it is safe to do so) because it denotes types that are safe to move between
-// threads, which is the whole point of the WorkQueue.
-// For this implementation, T is required to be Copy as well, for simplicity.
-
-/// A generic work queue for work elements which can be trivially copied.
-/// Any producer of work can add elements and any worker can consume them.
-/// WorkQueue derives Clone so that it can be distributed among threads.
 #[derive(Clone)]
-pub struct WorkQueue<T: Send> {
-    inner: Arc<Mutex<VecDeque<T>>>,
-    new_jobs_tx: chan::Sender<bool>,
+pub struct WorkQueue {
+    inner: Arc<Mutex<Vec<Work>>>,
+    new_jobs_tx: Sender<bool>,
+    work_context: WorkContext,
 }
 
-impl<T: Send> WorkQueue<T> {
-    // Creating one of these by hand would be kind of a pain,
-    // so let's provide a convenience function.
-
-    /// Creates a new WorkQueue, ready to be used.
-    fn new(new_jobs_tx: chan::Sender<bool>) -> Self {
+impl WorkQueue {
+    fn new(new_jobs_tx: Sender<bool>, work_context: WorkContext) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(VecDeque::new())),
+            inner: Arc::new(Mutex::new(Vec::new())),
             new_jobs_tx,
+            work_context,
         }
     }
-
-    // This is the function workers will use to acquire work from the queue.
-    // They will call it in a loop, checking to see if there is any work available.
 
     /// Blocks the current thread until work is available, then
     /// gets the data required to perform that work.
@@ -97,37 +71,22 @@ impl<T: Send> WorkQueue<T> {
     /// # Panics
     /// Panics if the underlying mutex became poisoned. This is exceedingly
     /// unlikely.
-    fn get_work(&self) -> Option<T> {
-        // Try to get a lock on the Mutex. If this fails, there is a
-        // problem with the mutex - it's poisoned, meaning that a thread that
-        // held the mutex lock panicked before releasing it. There is no way
-        // to guarantee that all its invariants are upheld, so we need to not
-        // use it in that case.
+    fn get_work(&self) -> Option<Work> {
+        // try to get a lock on the mutex.
         let maybe_queue = self.inner.lock();
-        // A lot is going on here. self.inner is an Arc of Mutex. Arc can deref
-        // into its internal type, so we can call the methods of that inner
-        // type (Mutex) without dereferencing, so this is like
-        //      *(self.inner).lock()
-        // but doesn't look awful. Mutex::lock() returns a
-        // Result<MutexGuard<VecDeque<T>>>.
-
-        // Unwrapping with if let, we get a MutexGuard, which is an RAII guard
-        // that unlocks the Mutex when it goes out of scope.
         if let Ok(mut queue) = maybe_queue {
-            // queue is a MutexGuard<VecDeque>, so this is like
-            //      (*queue).pop_front()
-            // Returns Some(item) or None if there are no more items.
-            queue.pop_front()
-
-        // The function has returned, so queue goes out of scope and the
-        // mutex unlocks.
+            if queue.is_empty() {
+                return None;
+            } else {
+                return Some(queue.swap_remove(0));
+            }
         } else {
-            // There's a problem with the mutex.
+            // poisoned mutex, some other thread holding the mutex has panicked!
             panic!("WorkQueue::get_work() tried to lock a poisoned mutex");
         }
     }
 
-    // Both the controller (main thread) and possibly workers can use this
+    // Both the controller (main thread) and workers can use this
     // function to add work to the queue.
 
     /// Blocks the current thread until work can be added, then
@@ -137,16 +96,23 @@ impl<T: Send> WorkQueue<T> {
     /// # Panics
     /// Panics if the underlying mutex became poisoned. This is exceedingly
     /// unlikely.
-    pub fn add_work(&self, work: T) -> usize {
+    pub fn add_work(&self, work: Work) {
+        if work.is_static {
+            self.work_context.new_work.send(work).unwrap();
+            return;
+        }
+
         // As above, try to get a lock on the mutex.
         if let Ok(mut queue) = self.inner.lock() {
-            // As above, we can use the MutexGuard<VecDeque<T>> to access
-            // the internal VecDeque.
-            queue.push_back(work);
+            /* Insert in position that maintains the queue sorted */
+            let pos = match queue.binary_search_by(|probe| probe.cmp(&work)) {
+                Ok(p) => p,
+                Err(p) => p,
+            };
+            queue.insert(pos, work);
 
+            /* inform threads that new job is available */
             self.new_jobs_tx.send(true).unwrap();
-            // Now return the length of the queue.
-            queue.len()
         } else {
             panic!("WorkQueue::add_work() tried to lock a poisoned mutex");
         }
@@ -154,79 +120,77 @@ impl<T: Send> WorkQueue<T> {
 }
 
 impl WorkController {
-    pub fn new() -> WorkController {
+    pub fn new(pulse: Sender<ThreadEvent>) -> WorkController {
         let (new_jobs_tx, new_jobs_rx) = unbounded();
-        // Create a new work queue to keep track of what work needs to be done.
-        // Note that the queue is internally mutable (or, rather, the Mutex is),
-        // but this binding doesn't need to be mutable. This isn't unsound because
-        // the Mutex ensures at runtime that no two references can be used;
-        // therefore no mutation can occur at the same time as aliasing.
-        let queue: WorkQueue<Work> = WorkQueue::new(new_jobs_tx);
 
-        // Create a MPSC (Multiple Producer, Single Consumer) channel. Every worker
-        // is a producer, the main thread is a consumer; the producers put their
-        // work into the channel when it's done.
-        let (results_tx, results_rx) = unbounded();
+        /* create a channel for jobs to send new work to Controller thread */
+        let (new_work_tx, new_work_rx) = unbounded();
 
+        /* create a channel for jobs to set their names */
+        let (set_name_tx, set_name_rx) = unbounded();
+
+        /* create a channel for jobs to set their statuses */
+        let (set_status_tx, set_status_rx) = unbounded();
+
+        /* create a channel for jobs to announce their demise */
+        let (finished_tx, finished_rx) = unbounded();
+
+        /* each associated thread will hold a copy of this context item in order to communicate
+         * with the controller thread */
+        let work_context = WorkContext {
+            new_work: new_work_tx,
+            set_name: set_name_tx,
+            set_status: set_status_tx,
+            finished: finished_tx,
+        };
+
+        let queue: WorkQueue = WorkQueue::new(new_jobs_tx, work_context.clone());
         // Create a SyncFlag to share whether or not there are more jobs to be done.
-        let (thread_end_tx, thread_end_rx) = bounded(::std::mem::size_of::<bool>());
+        let (thread_end_tx, thread_end_rx) = bounded(1);
 
-        // This Vec will hold thread join handles to allow us to not exit while work
-        // is still being done. These handles provide a .join() method which blocks
-        // the current thread until the thread referred to by the handle exits.
-        let mut threads = Vec::new();
+        let threads_lock: Arc<Mutex<FnvHashMap<thread::ThreadId, Worker>>> =
+            Arc::new(Mutex::new(FnvHashMap::default()));
 
+        let static_threads_lock: Arc<Mutex<FnvHashMap<thread::ThreadId, Worker>>> =
+            Arc::new(Mutex::new(FnvHashMap::default()));
+
+        let mut threads = threads_lock.lock().unwrap();
+        /* spawn worker threads */
         for thread_num in 0..MAX_WORKER {
-            // Get a reference to the queue for the thread to use
-            // .clone() here doesn't clone the actual queue data, but rather the
-            // internal Arc produces a new reference for use in the new queue
-            // instance.
+            /* Each worker thread will wait on two channels: thread_end and new_jobs. thread_end
+             * informs the worker that it should quit and new_jobs informs that there is a new job
+             * available inside the queue. Only one worker will get each job, and others will
+             * go back to waiting on the channels */
             let thread_queue = queue.clone();
-
-            // Similarly, create a new transmitter for the thread to use
-            let thread_results_tx = results_tx.clone();
 
             let thread_end_rx = thread_end_rx.clone();
             let new_jobs_rx = new_jobs_rx.clone();
+            let new_jobs_rx = new_jobs_rx.clone();
 
-            // thread::spawn takes a closure (an anonymous function that "closes"
-            // over its environment). The move keyword means it takes ownership of
-            // those variables, meaning they can't be used again in the main thread.
+            let work_context = work_context.clone();
+            let pulse = pulse.clone();
+
             let handle = thread::spawn(move || {
-                // A varaible to keep track of how much work was done.
                 let mut work_done = 0;
 
                 'work_loop: loop {
                     debug!("Waiting for work");
-                    // Loop while there's expected to be work, looking for work.
                     select! {
                         recv(thread_end_rx) -> _ => {
                             debug!("received thread_end_rx, quitting");
                             break 'work_loop;
                         },
                         recv(new_jobs_rx) -> _ => {
-                            // If work is available, do that work.
                             while let Some(work) = thread_queue.get_work() {
                                 debug!("Got some work");
-                                // Do some work.
-                                work.compute();
+                                work.compute(work_context.clone());
                                 debug!("finished work");
 
-                                // Record that some work was done.
                                 work_done += 1;
+                                work_context.set_name.send((std::thread::current().id(), "idle-worker".to_string())).unwrap();
+                                work_context.set_status.send((std::thread::current().id(), "inactive".to_string())).unwrap();
+                                pulse.send(ThreadEvent::Pulse).unwrap();
 
-                                // Send the work and the result of that work.
-                                //
-                                // Sending could fail. If so, there's no use in
-                                // doing any more work, so abort.
-                                thread_results_tx.send(true).unwrap();
-
-                                // Signal to the operating system that now is a good time
-                                // to give another thread a chance to run.
-                                //
-                                // This isn't strictly necessary - the OS can preemptively
-                                // switch between threads, without asking - but it helps make
-                                // sure that other threads do get a chance to get some work.
                                 std::thread::yield_now();
                             }
                             continue 'work_loop;
@@ -234,19 +198,112 @@ impl WorkController {
                     }
                 }
 
-                // Report the amount of work done.
+                /* report the amount of work done. */
                 debug!("Thread {} did {} jobs.", thread_num, work_done);
             });
 
-            // Add the handle for the newly spawned thread to the list of handles
-            threads.push(handle);
+            /* add the handle for the newly spawned thread to the list of handles */
+            threads.insert(handle.thread().id(), String::from("idle-worker").into());
+        }
+        /* drop lock */
+        drop(threads);
+
+        {
+            /* start controller thread */
+            let threads_lock = threads_lock.clone();
+            let _static_threads_lock = static_threads_lock.clone();
+            let thread_queue = queue.clone();
+            let threads_lock = threads_lock.clone();
+            let thread_end_rx = thread_end_rx.clone();
+            let work_context = work_context.clone();
+
+            let handle = thread::spawn(move || 'control_loop: loop {
+                select! {
+                    recv(thread_end_rx) -> _ => {
+                        debug!("received thread_end_rx, quitting");
+                        break 'control_loop;
+                    },
+                    recv(new_work_rx) -> work => {
+                        if let Ok(work) = work {
+                            if work.is_static {
+                                let work_context = work_context.clone();
+                                let handle = thread::spawn(move || work.compute(work_context));
+                                 _static_threads_lock.lock().unwrap().insert(handle.thread().id(), String::new().into());
+                            } else {
+                                thread_queue.add_work(work);
+                            }
+                        }
+                    }
+                    recv(set_name_rx) -> new_name => {
+                        if let Ok((thread_id, new_name)) = new_name {
+                            let mut threads = threads_lock.lock().unwrap();
+                            let mut static_threads = _static_threads_lock.lock().unwrap();
+                            if threads.contains_key(&thread_id) {
+                                threads.entry(thread_id).and_modify(|e| e.name = new_name);
+                            } else if static_threads.contains_key(&thread_id) {
+                                static_threads.entry(thread_id).and_modify(|e| e.name = new_name);
+                            } else {
+                                unreachable!()
+                            }
+                            pulse.send(ThreadEvent::Pulse).unwrap();
+                        }
+                    }
+                    recv(set_status_rx) -> new_status => {
+                        if let Ok((thread_id, new_status)) = new_status {
+                            let mut threads = threads_lock.lock().unwrap();
+                            let mut static_threads = _static_threads_lock.lock().unwrap();
+                            if threads.contains_key(&thread_id) {
+                                threads.entry(thread_id).and_modify(|e| e.status = new_status);
+                            } else if static_threads.contains_key(&thread_id) {
+                                static_threads.entry(thread_id).and_modify(|e| e.status = new_status);
+                                debug!(&static_threads[&thread_id]);
+                            } else {
+                                unreachable!()
+                            }
+                            pulse.send(ThreadEvent::Pulse).unwrap();
+                        }
+                    }
+                    recv(finished_rx) -> dead_thread_id => {
+                        if let Ok(thread_id) = dead_thread_id {
+                            let mut threads = threads_lock.lock().unwrap();
+                            let mut static_threads = _static_threads_lock.lock().unwrap();
+                            if threads.contains_key(&thread_id) {
+                                threads.remove(&thread_id);
+                            } else if static_threads.contains_key(&thread_id) {
+                                static_threads.remove(&thread_id);
+                            } else {
+                                unreachable!()
+                            }
+                            pulse.send(ThreadEvent::Pulse).unwrap();
+                        }
+                    }
+                }
+            });
+
+            let mut static_threads = static_threads_lock.lock().unwrap();
+            static_threads.insert(
+                handle.thread().id(),
+                "WorkController-thread".to_string().into(),
+            );
         }
 
         WorkController {
             queue,
             thread_end_tx,
-            results: Some(results_rx),
-            threads,
+            threads: threads_lock,
+            static_threads: static_threads_lock,
+            work_context,
         }
+    }
+
+    pub fn add_static_thread(&mut self, id: std::thread::ThreadId) {
+        self.static_threads
+            .lock()
+            .unwrap()
+            .insert(id, String::new().into());
+    }
+
+    pub fn get_context(&self) -> WorkContext {
+        self.work_context.clone()
     }
 }

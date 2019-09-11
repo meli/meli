@@ -23,7 +23,7 @@
  * https://wiki2.dovecot.org/MailboxFormat/mbox
  */
 
-use crate::async_workers::{Async, AsyncBuilder, AsyncStatus};
+use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
 use crate::backends::FolderHash;
 use crate::backends::{
@@ -374,7 +374,7 @@ impl MailBackend for MboxType {
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
             let folders = self.folders.clone();
-            let closure = move || {
+            let closure = move |_work_context| {
                 let tx = tx.clone();
                 let index = index.clone();
                 let file = match std::fs::OpenOptions::new()
@@ -415,7 +415,11 @@ impl MailBackend for MboxType {
         w.build(handle)
     }
 
-    fn watch(&self, sender: RefreshEventConsumer) -> Result<()> {
+    fn watch(
+        &self,
+        sender: RefreshEventConsumer,
+        work_context: WorkContext,
+    ) -> Result<std::thread::ThreadId> {
         let (tx, rx) = channel();
         let mut watcher = watcher(tx, std::time::Duration::from_secs(10)).unwrap();
         for f in self.folders.lock().unwrap().values() {
@@ -424,7 +428,7 @@ impl MailBackend for MboxType {
         }
         let index = self.index.clone();
         let folders = self.folders.clone();
-        std::thread::Builder::new()
+        let handle = std::thread::Builder::new()
             .name(format!(
                 "watching {}",
                 self.path.file_name().unwrap().to_str().unwrap()
@@ -432,6 +436,7 @@ impl MailBackend for MboxType {
             .spawn(move || {
                 // Move `watcher` in the closure's scope so that it doesn't get dropped.
                 let _watcher = watcher;
+                let _work_context = work_context;
                 let index = index;
                 let folders = folders;
                 loop {
@@ -518,7 +523,7 @@ impl MailBackend for MboxType {
                     }
                 }
             })?;
-        Ok(())
+        Ok(handle.thread().id())
     }
     fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
         self.folders

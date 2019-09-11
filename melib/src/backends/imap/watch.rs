@@ -29,12 +29,14 @@ pub struct ImapWatchKit {
     pub uid_index: Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
     pub folders: FnvHashMap<FolderHash, ImapFolder>,
     pub sender: RefreshEventConsumer,
+    pub work_context: WorkContext,
 }
 
 macro_rules! exit_on_error {
-    ($sender:expr, $folder_hash:ident, $($result:expr)+) => {
+    ($sender:expr, $folder_hash:ident, $work_context:ident, $thread_id:ident, $($result:expr)+) => {
         $(if let Err(e) = $result {
             debug!("failure: {}", e.to_string());
+            $work_context.set_status.send(($thread_id, e.to_string())).unwrap();
             $sender.send(RefreshEvent {
                 hash: $folder_hash,
                 kind: RefreshEventKind::Failure(e),
@@ -53,12 +55,32 @@ pub fn poll_with_examine(kit: ImapWatchKit) {
         uid_index,
         folders,
         sender,
+        work_context,
     } = kit;
     let mut response = String::with_capacity(8 * 1024);
+    let thread_id: std::thread::ThreadId = std::thread::current().id();
     loop {
+        work_context
+            .set_status
+            .send((thread_id, "sleeping...".to_string()))
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(5 * 60 * 1000));
         for folder in folders.values() {
-            examine_updates(folder, &sender, &mut conn, &hash_index, &uid_index);
+            work_context
+                .set_status
+                .send((
+                    thread_id,
+                    format!("examining `{}` for updates...", folder.path()),
+                ))
+                .unwrap();
+            examine_updates(
+                folder,
+                &sender,
+                &mut conn,
+                &hash_index,
+                &uid_index,
+                &work_context,
+            );
         }
         let mut main_conn = main_conn.lock().unwrap();
         main_conn.send_command(b"NOOP").unwrap();
@@ -77,7 +99,9 @@ pub fn idle(kit: ImapWatchKit) {
         uid_index,
         folders,
         sender,
+        work_context,
     } = kit;
+    let thread_id: std::thread::ThreadId = std::thread::current().id();
     let folder: &ImapFolder = folders
         .values()
         .find(|f| f.parent.is_none() && f.path().eq_ignore_ascii_case("INBOX"))
@@ -87,6 +111,8 @@ pub fn idle(kit: ImapWatchKit) {
     exit_on_error!(
         sender,
         folder_hash,
+        work_context,
+        thread_id,
         conn.read_response(&mut response)
         conn.send_command(format!("SELECT {}", folder.path()).as_bytes())
         conn.read_response(&mut response)
@@ -112,7 +138,17 @@ pub fn idle(kit: ImapWatchKit) {
             }
         };
     }
-    exit_on_error!(sender, folder_hash, conn.send_command(b"IDLE"));
+    exit_on_error!(
+        sender,
+        folder_hash,
+        work_context,
+        thread_id,
+        conn.send_command(b"IDLE")
+    );
+    work_context
+        .set_status
+        .send((thread_id, "IDLEing".to_string()))
+        .unwrap();
     let mut iter = ImapBlockingConnection::from(conn);
     let mut beat = std::time::Instant::now();
     let mut watch = std::time::Instant::now();
@@ -127,6 +163,8 @@ pub fn idle(kit: ImapWatchKit) {
                 exit_on_error!(
                     sender,
                     folder_hash,
+                    work_context,
+                    thread_id,
                     iter.conn.set_nonblocking(true)
                     iter.conn.send_raw(b"DONE")
                     iter.conn.read_response(&mut response)
@@ -142,6 +180,8 @@ pub fn idle(kit: ImapWatchKit) {
                 exit_on_error!(
                     sender,
                     folder_hash,
+                    work_context,
+                    thread_id,
                     iter.conn.set_nonblocking(true)
                     iter.conn.send_raw(b"DONE")
                     iter.conn.read_response(&mut response)
@@ -151,11 +191,31 @@ pub fn idle(kit: ImapWatchKit) {
                         /* Skip INBOX */
                         continue;
                     }
-                    examine_updates(folder, &sender, &mut iter.conn, &hash_index, &uid_index);
+                    work_context
+                        .set_status
+                        .send((
+                            thread_id,
+                            format!("examining `{}` for updates...", folder.path()),
+                        ))
+                        .unwrap();
+                    examine_updates(
+                        folder,
+                        &sender,
+                        &mut iter.conn,
+                        &hash_index,
+                        &uid_index,
+                        &work_context,
+                    );
                 }
+                work_context
+                    .set_status
+                    .send((thread_id, "done examining mailboxes.".to_string()))
+                    .unwrap();
                 exit_on_error!(
                     sender,
                     folder_hash,
+                    work_context,
+                    thread_id,
                     iter.conn.send_command(b"IDLE")
                     iter.conn.set_nonblocking(false)
                     main_conn.lock().unwrap().send_command(b"NOOP")
@@ -167,11 +227,17 @@ pub fn idle(kit: ImapWatchKit) {
                 .to_full_result()
                 .map_err(MeliError::from)
             {
-                Ok(Some(Recent(_))) => {
+                Ok(Some(Recent(r))) => {
+                    work_context
+                        .set_status
+                        .send((thread_id, format!("got `{} RECENT` notification", r)))
+                        .unwrap();
                     /* UID SEARCH RECENT */
                     exit_on_error!(
                         sender,
                         folder_hash,
+                        work_context,
+                        thread_id,
                         iter.conn.set_nonblocking(true)
                         iter.conn.send_raw(b"DONE")
                         iter.conn.read_response(&mut response)
@@ -189,6 +255,8 @@ pub fn idle(kit: ImapWatchKit) {
                             exit_on_error!(
                                 sender,
                                 folder_hash,
+                                work_context,
+                                thread_id,
                                 iter.conn.send_command(
                                     &[b"UID FETCH", v, b"(FLAGS RFC822.HEADER)"]
                                     .join(&b' '),
@@ -201,8 +269,18 @@ pub fn idle(kit: ImapWatchKit) {
                                 .map_err(MeliError::from)
                             {
                                 Ok(v) => {
+                                    let len = v.len();
+                                    let mut ctr = 0;
                                     for (uid, flags, b) in v {
+                                        work_context
+                                            .set_status
+                                            .send((
+                                                thread_id,
+                                                format!("parsing {}/{} envelopes..", ctr, len),
+                                            ))
+                                            .unwrap();
                                         if let Ok(env) = Envelope::from_bytes(&b, flags) {
+                                            ctr += 1;
                                             hash_index
                                                 .lock()
                                                 .unwrap()
@@ -220,6 +298,13 @@ pub fn idle(kit: ImapWatchKit) {
                                             });
                                         }
                                     }
+                                    work_context
+                                        .set_status
+                                        .send((
+                                            thread_id,
+                                            format!("parsed {}/{} envelopes.", ctr, len),
+                                        ))
+                                        .unwrap();
                                 }
                                 Err(e) => {
                                     debug!(e);
@@ -237,17 +322,25 @@ pub fn idle(kit: ImapWatchKit) {
                     exit_on_error!(
                         sender,
                         folder_hash,
+                        work_context,
+                        thread_id,
                         iter.conn.send_command(b"IDLE")
                         iter.conn.set_nonblocking(false)
                     );
                 }
                 Ok(Some(Expunge(n))) => {
+                    work_context
+                        .set_status
+                        .send((thread_id, format!("got `{} EXPUNGED` notification", n)))
+                        .unwrap();
                     debug!("expunge {}", n);
                 }
                 Ok(Some(Exists(n))) => {
                     exit_on_error!(
                         sender,
                         folder_hash,
+                        work_context,
+                        thread_id,
                         iter.conn.set_nonblocking(true)
                         iter.conn.send_raw(b"DONE")
                         iter.conn.read_response(&mut response)
@@ -256,10 +349,24 @@ pub fn idle(kit: ImapWatchKit) {
                      * */
                     let mut prev_exists = folder.exists.lock().unwrap();
                     debug!("exists {}", n);
+                    work_context
+                        .set_status
+                        .send((
+                            thread_id,
+                            format!(
+                                "got `{} EXISTS` notification (EXISTS was previously {} for {}",
+                                n,
+                                *prev_exists,
+                                folder.path()
+                            ),
+                        ))
+                        .unwrap();
                     if n > *prev_exists {
                         exit_on_error!(
                             sender,
                             folder_hash,
+                            work_context,
+                            thread_id,
                             iter.conn.send_command(
                                 &[
                                 b"FETCH",
@@ -275,11 +382,22 @@ pub fn idle(kit: ImapWatchKit) {
                             .map_err(MeliError::from)
                         {
                             Ok(v) => {
+                                let len = v.len();
+                                let mut ctr = 0;
                                 for (uid, flags, b) in v {
+                                    work_context
+                                        .set_status
+                                        .send((
+                                            thread_id,
+                                            format!("parsing {}/{} envelopes..", ctr, len),
+                                        ))
+                                        .unwrap();
                                     if uid_index.lock().unwrap().contains_key(&uid) {
+                                        ctr += 1;
                                         continue;
                                     }
                                     if let Ok(env) = Envelope::from_bytes(&b, flags) {
+                                        ctr += 1;
                                         hash_index
                                             .lock()
                                             .unwrap()
@@ -297,6 +415,10 @@ pub fn idle(kit: ImapWatchKit) {
                                         });
                                     }
                                 }
+                                work_context
+                                    .set_status
+                                    .send((thread_id, format!("parsed {}/{} envelopes.", ctr, len)))
+                                    .unwrap();
                             }
                             Err(e) => {
                                 debug!(e);
@@ -310,12 +432,18 @@ pub fn idle(kit: ImapWatchKit) {
                     exit_on_error!(
                         sender,
                         folder_hash,
+                        work_context,
+                        thread_id,
                         iter.conn.send_command(b"IDLE")
                         iter.conn.set_nonblocking(false)
                     );
                 }
                 Ok(None) | Err(_) => {}
             }
+            work_context
+                .set_status
+                .send((thread_id, "IDLEing".to_string()))
+                .unwrap();
         }
     }
 }
@@ -326,13 +454,17 @@ fn examine_updates(
     conn: &mut ImapConnection,
     hash_index: &Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
     uid_index: &Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
+    work_context: &WorkContext,
 ) {
+    let thread_id: std::thread::ThreadId = std::thread::current().id();
     let folder_hash = folder.hash();
     debug!("examining folder {} {}", folder_hash, folder.path());
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
         sender,
         folder_hash,
+        work_context,
+        thread_id,
         conn.send_command(format!("EXAMINE {}", folder.path()).as_bytes())
         conn.read_response(&mut response)
     );
@@ -354,6 +486,8 @@ fn examine_updates(
                     exit_on_error!(
                         sender,
                         folder_hash,
+                        work_context,
+                        thread_id,
                         conn.send_command(b"UID SEARCH RECENT")
                         conn.read_response(&mut response)
                     );
@@ -368,6 +502,8 @@ fn examine_updates(
                             exit_on_error!(
                                 sender,
                                 folder_hash,
+                                work_context,
+                                thread_id,
                                 conn.send_command(
                                     &[b"UID FETCH", v, b"(FLAGS RFC822.HEADER)"]
                                     .join(&b' '),
@@ -421,6 +557,8 @@ fn examine_updates(
                 exit_on_error!(
                     sender,
                     folder_hash,
+                    work_context,
+                    thread_id,
                     conn.send_command(
                         &[
                         b"FETCH",
