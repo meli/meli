@@ -637,7 +637,7 @@ impl StatusBar {
             id: ComponentId::new_v4(),
             auto_complete: AutoComplete::new(Vec::new()),
 
-            cmd_history: Vec::new(),
+            cmd_history: crate::execute::history::old_cmd_history(),
         }
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -966,6 +966,7 @@ impl Component for StatusBar {
                             && self.cmd_history.last().map(String::as_str)
                                 != Some(self.ex_buffer.as_str())
                         {
+                            crate::execute::history::log_cmd(self.ex_buffer.as_str().to_string());
                             self.cmd_history.push(self.ex_buffer.as_str().to_string());
                         }
                         self.ex_buffer.clear();

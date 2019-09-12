@@ -26,6 +26,7 @@ pub use melib::thread::{SortField, SortOrder};
 use nom::{digit, not_line_ending};
 use std;
 pub mod actions;
+pub mod history;
 pub use crate::actions::Action::{self, *};
 pub use crate::actions::ComposeAction::{self, *};
 pub use crate::actions::ListingAction::{self, *};
