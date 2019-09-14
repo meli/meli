@@ -400,6 +400,7 @@ pub enum IndexStyle {
     Plain,
     Threaded,
     Compact,
+    Conversations,
 }
 
 impl Default for IndexStyle {
@@ -481,7 +482,8 @@ impl<'de> Deserialize<'de> for IndexStyle {
             "Plain" | "plain" => Ok(IndexStyle::Plain),
             "Threaded" | "threaded" => Ok(IndexStyle::Threaded),
             "Compact" | "compact" => Ok(IndexStyle::Compact),
-            _ => Err(de::Error::custom("invalid `index` value")),
+            "Conversations" | "conversations" => Ok(IndexStyle::Conversations),
+            _ => Err(de::Error::custom("invalid `index_style` value")),
         }
     }
 }
@@ -495,6 +497,7 @@ impl Serialize for IndexStyle {
             IndexStyle::Plain => serializer.serialize_str("plain"),
             IndexStyle::Threaded => serializer.serialize_str("threaded"),
             IndexStyle::Compact => serializer.serialize_str("compact"),
+            IndexStyle::Conversations => serializer.serialize_str("conversations"),
         }
     }
 }

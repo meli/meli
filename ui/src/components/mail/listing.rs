@@ -21,6 +21,9 @@
 
 use super::*;
 
+mod conversations;
+pub use self::conversations::*;
+
 mod compact;
 pub use self::compact::*;
 
@@ -62,6 +65,7 @@ pub enum ListingComponent {
     Plain(PlainListing),
     Threaded(ThreadListing),
     Compact(CompactListing),
+    Conversations(ConversationsListing),
 }
 use crate::ListingComponent::*;
 
@@ -71,6 +75,7 @@ impl ListingTrait for ListingComponent {
             Compact(ref l) => l.coordinates(),
             Plain(ref l) => l.coordinates(),
             Threaded(ref l) => l.coordinates(),
+            Conversations(ref l) => l.coordinates(),
         }
     }
     fn set_coordinates(&mut self, c: (usize, usize, Option<EnvelopeHash>)) {
@@ -78,6 +83,7 @@ impl ListingTrait for ListingComponent {
             Compact(ref mut l) => l.set_coordinates(c),
             Plain(ref mut l) => l.set_coordinates(c),
             Threaded(ref mut l) => l.set_coordinates(c),
+            Conversations(ref mut l) => l.set_coordinates(c),
         }
     }
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -85,6 +91,7 @@ impl ListingTrait for ListingComponent {
             Compact(ref mut l) => l.draw_list(grid, area, context),
             Plain(ref mut l) => l.draw_list(grid, area, context),
             Threaded(ref mut l) => l.draw_list(grid, area, context),
+            Conversations(ref mut l) => l.draw_list(grid, area, context),
         }
     }
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
@@ -92,6 +99,7 @@ impl ListingTrait for ListingComponent {
             Compact(ref mut l) => l.highlight_line(grid, area, idx, context),
             Plain(ref mut l) => l.highlight_line(grid, area, idx, context),
             Threaded(ref mut l) => l.highlight_line(grid, area, idx, context),
+            Conversations(ref mut l) => l.highlight_line(grid, area, idx, context),
         }
     }
 }
@@ -126,6 +134,15 @@ impl ListingComponent {
                 new_l.set_coordinates((coors.0, coors.1, None));
                 *self = Compact(new_l);
             }
+            IndexStyle::Conversations => {
+                if let Conversations(_) = self {
+                    return;
+                }
+                let mut new_l = ConversationsListing::default();
+                let coors = self.coordinates();
+                new_l.set_coordinates((coors.0, coors.1, None));
+                *self = Conversations(new_l);
+            }
         }
     }
 }
@@ -151,6 +168,7 @@ impl fmt::Display for Listing {
             Compact(ref l) => write!(f, "{}", l),
             Plain(ref l) => write!(f, "{}", l),
             Threaded(ref l) => write!(f, "{}", l),
+            Conversations(ref l) => write!(f, "{}", l),
         }
     }
 }
@@ -196,6 +214,7 @@ impl Component for Listing {
                 Compact(ref mut l) => l.draw(grid, area, context),
                 Plain(ref mut l) => l.draw(grid, area, context),
                 Threaded(ref mut l) => l.draw(grid, area, context),
+                Conversations(ref mut l) => l.draw(grid, area, context),
             }
         } else if right_component_width == 0 {
             self.draw_menu(grid, area, context);
@@ -211,6 +230,9 @@ impl Component for Listing {
                 Threaded(ref mut l) => {
                     l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
                 }
+                Conversations(ref mut l) => {
+                    l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
+                }
             }
         }
     }
@@ -219,6 +241,7 @@ impl Component for Listing {
             Plain(ref mut l) => l.process_event(event, context),
             Compact(ref mut l) => l.process_event(event, context),
             Threaded(ref mut l) => l.process_event(event, context),
+            Conversations(ref mut l) => l.process_event(event, context),
         } {
             return true;
         }
@@ -327,6 +350,10 @@ impl Component for Listing {
                     self.component.set_style(IndexStyle::Compact);
                     return true;
                 }
+                Action::Listing(ListingAction::SetConversations) => {
+                    self.component.set_style(IndexStyle::Conversations);
+                    return true;
+                }
                 _ => {}
             },
             UIEvent::RefreshMailbox((idxa, folder_hash)) => {
@@ -372,6 +399,7 @@ impl Component for Listing {
                 Compact(ref l) => l.is_dirty(),
                 Plain(ref l) => l.is_dirty(),
                 Threaded(ref l) => l.is_dirty(),
+                Conversations(ref l) => l.is_dirty(),
             }
     }
     fn set_dirty(&mut self) {
@@ -380,6 +408,7 @@ impl Component for Listing {
             Compact(ref mut l) => l.set_dirty(),
             Plain(ref mut l) => l.set_dirty(),
             Threaded(ref mut l) => l.set_dirty(),
+            Conversations(ref mut l) => l.set_dirty(),
         }
     }
 
@@ -388,6 +417,7 @@ impl Component for Listing {
             Compact(ref l) => l.get_shortcuts(context),
             Plain(ref l) => l.get_shortcuts(context),
             Threaded(ref l) => l.get_shortcuts(context),
+            Conversations(ref l) => l.get_shortcuts(context),
         };
         let config_map = context.settings.shortcuts.listing.key_values();
         map.insert(
@@ -448,6 +478,7 @@ impl Component for Listing {
             Compact(ref l) => l.id(),
             Plain(ref l) => l.id(),
             Threaded(ref l) => l.id(),
+            Conversations(ref l) => l.id(),
         }
     }
     fn set_id(&mut self, id: ComponentId) {
@@ -455,6 +486,7 @@ impl Component for Listing {
             Compact(ref mut l) => l.set_id(id),
             Plain(ref mut l) => l.set_id(id),
             Threaded(ref mut l) => l.set_id(id),
+            Conversations(ref mut l) => l.set_id(id),
         }
     }
 }
@@ -465,6 +497,7 @@ impl From<IndexStyle> for ListingComponent {
             IndexStyle::Plain => Plain(Default::default()),
             IndexStyle::Threaded => Threaded(Default::default()),
             IndexStyle::Compact => Compact(Default::default()),
+            IndexStyle::Conversations => Conversations(Default::default()),
         }
     }
 }
@@ -489,7 +522,7 @@ impl Listing {
         }) {
             ListingComponent::from(index_style)
         } else {
-            Compact(Default::default())
+            Conversations(Default::default())
         };
         Listing {
             component,

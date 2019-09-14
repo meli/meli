@@ -96,11 +96,11 @@ define_commands!([
                   )
                 },
                 { tags: ["set", "set plain", "set threaded", "set compact"],
-                  desc: "set [plain/threaded/compact], changes the mail listing view",
+                  desc: "set [plain/threaded/compact/conversations], changes the mail listing view",
                   parser: (
                       named!(
                           toggle<Action>,
-                          preceded!(tag!("set "), alt_complete!(threaded | plain | compact))
+                          preceded!(tag!("set "), alt_complete!(threaded | plain | compact | conversations))
                       );
                   )
                 },
@@ -326,6 +326,12 @@ named!(
     compact<Action>,
     map!(ws!(tag!("compact")), |_| Listing(SetCompact))
 );
+
+named!(
+    conversations<Action>,
+    map!(ws!(tag!("conversations")), |_| Listing(SetConversations))
+);
+
 named!(
     listing_action<Action>,
     alt_complete!(toggle | envelope_action | filter | toggle_thread_snooze)

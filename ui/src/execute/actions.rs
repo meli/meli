@@ -37,6 +37,7 @@ pub enum ListingAction {
     SetPlain,
     SetThreaded,
     SetCompact,
+    SetConversations,
     Filter(String),
     SetSeen,
     SetUnseen,
