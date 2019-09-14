@@ -53,19 +53,30 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 pub type UID = usize;
 
+#[derive(Debug, Default)]
+pub struct EnvelopeCache {
+    bytes: Option<String>,
+    headers: Option<String>,
+    body: Option<String>,
+    flags: Option<Flag>,
+}
+
+type Capabilities = FnvHashSet<Vec<u8>>;
 #[derive(Debug)]
 pub struct ImapType {
     account_name: String,
     server_hostname: String,
     server_username: String,
     server_password: String,
-    connection: Arc<Mutex<ImapConnection>>,
     danger_accept_invalid_certs: bool,
+    connection: Arc<Mutex<ImapConnection>>,
 
-    capabilities: FnvHashSet<Vec<u8>>,
+    capabilities: Capabilities,
     folders: FnvHashMap<FolderHash, ImapFolder>,
     hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
     uid_index: Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
+
+    byte_cache: Arc<Mutex<FnvHashMap<UID, EnvelopeCache>>>,
 }
 
 impl MailBackend for ImapType {
@@ -106,7 +117,7 @@ impl MailBackend for ImapType {
                     .map_err(MeliError::from);
                 exit_on_error!(&tx, examine_response);
                 let mut exists: usize = match examine_response.unwrap() {
-                    SelectResponse::Ok(ok) => ok.exists,
+                    SelectResponse::Ok(ok) => ok.uidnext - 1,
                     SelectResponse::Bad(b) => b.exists,
                 };
                 {
@@ -117,7 +128,7 @@ impl MailBackend for ImapType {
                 while exists > 1 {
                     let mut envelopes = vec![];
                     exit_on_error!(&tx,
-                                   conn.send_command(format!("UID FETCH {}:{} (FLAGS ENVELOPE)", std::cmp::max(exists.saturating_sub(20000), 1), exists).as_bytes())
+                                   conn.send_command(format!("UID FETCH {}:{} (UID FLAGS ENVELOPE)", std::cmp::max(exists.saturating_sub(20000), 1), exists).as_bytes())
                                    conn.read_response(&mut response)
                     );
                     debug!(
@@ -136,6 +147,9 @@ impl MailBackend for ImapType {
                                 h.write_usize(uid);
                                 h.write(folder_path.as_bytes());
                                 env.set_hash(h.finish());
+                                if let Some(flags) = flags {
+                                    env.set_flags(flags);
+                                }
                                 hash_index
                                     .lock()
                                     .unwrap()
@@ -260,6 +274,7 @@ impl MailBackend for ImapType {
             uid,
             self.folders[&folder_hash].path().to_string(),
             self.connection.clone(),
+            self.byte_cache.clone(),
         ))
     }
 
@@ -501,6 +516,7 @@ impl ImapType {
             hash_index: Default::default(),
             uid_index: Default::default(),
             capabilities: Default::default(),
+            byte_cache: Default::default(),
         };
 
         let mut res = String::with_capacity(8 * 1024);
@@ -555,7 +571,14 @@ impl ImapType {
             match io::stdin().read_line(&mut input) {
                 Ok(_) => {
                     conn.send_command(input.as_bytes()).unwrap();
-                    conn.read_response(&mut res).unwrap();
+                    conn.read_lines(&mut res, String::new()).unwrap();
+                    if input.trim() == "IDLE" {
+                        let mut iter = ImapBlockingConnection::from(conn);
+                        while let Some(line) = iter.next() {
+                            debug!("out: {}", unsafe { std::str::from_utf8_unchecked(&line) });
+                        }
+                        conn = iter.into_conn();
+                    }
                     debug!("out: {}", &res);
                     if input.trim().eq_ignore_ascii_case("logout") {
                         break;

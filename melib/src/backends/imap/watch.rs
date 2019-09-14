@@ -113,7 +113,6 @@ pub fn idle(kit: ImapWatchKit) {
         folder_hash,
         work_context,
         thread_id,
-        conn.read_response(&mut response)
         conn.send_command(format!("SELECT {}", folder.path()).as_bytes())
         conn.read_response(&mut response)
     );
