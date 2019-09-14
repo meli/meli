@@ -31,8 +31,6 @@ pub use connection::*;
 mod watch;
 pub use watch::*;
 
-extern crate native_tls;
-
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
 use crate::backends::FolderHash;
@@ -40,15 +38,11 @@ use crate::backends::RefreshEvent;
 use crate::backends::RefreshEventKind::{self, *};
 use crate::backends::{BackendFolder, Folder, FolderOperation, MailBackend, RefreshEventConsumer};
 use crate::conf::AccountSettings;
-use crate::email::parser::BytesExt;
 use crate::email::*;
 use crate::error::{MeliError, Result};
 use fnv::{FnvHashMap, FnvHashSet};
-use native_tls::TlsConnector;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
-use std::iter::FromIterator;
-use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 pub type UID = usize;
@@ -182,7 +176,13 @@ impl MailBackend for ImapType {
     ) -> Result<std::thread::ThreadId> {
         let has_idle: bool = self.capabilities.contains(&b"IDLE"[0..]);
         let folders = self.folders.clone();
-        let conn = self.new_connection()?;
+        let conn = ImapConnection::new_connection(
+            self.server_hostname.clone(),
+            self.server_username.clone(),
+            self.server_password.clone(),
+            self.danger_accept_invalid_certs,
+        )?
+        .1;
         let main_conn = self.connection.clone();
         let hash_index = self.hash_index.clone();
         let uid_index = self.uid_index.clone();
@@ -356,19 +356,6 @@ impl MailBackend for ImapType {
     }
 }
 
-fn lookup_ipv4(host: &str, port: u16) -> Result<SocketAddr> {
-    use std::net::ToSocketAddrs;
-
-    let addrs = (host, port).to_socket_addrs()?;
-    for addr in addrs {
-        if let SocketAddr::V4(_) = addr {
-            return Ok(addr);
-        }
-    }
-
-    Err(MeliError::new("Cannot lookup address"))
-}
-
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).unwrap_or_else(|| {
@@ -425,85 +412,13 @@ macro_rules! exit_on_error {
 }
 impl ImapType {
     pub fn new(s: &AccountSettings, is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
-        use std::io::prelude::*;
-        use std::net::TcpStream;
         debug!(s);
-        let path = get_conf_val!(s["server_hostname"]);
+        let server_hostname = get_conf_val!(s["server_hostname"]);
+        let server_username = get_conf_val!(s["server_username"]);
+        let server_password = get_conf_val!(s["server_password"]);
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false);
-
-        let mut connector = TlsConnector::builder();
-        if danger_accept_invalid_certs {
-            connector.danger_accept_invalid_certs(true);
-        }
-        let connector = connector.build().unwrap();
-
-        let addr = if let Ok(a) = lookup_ipv4(path, 143) {
-            a
-        } else {
-            eprintln!("Could not lookup address {}", &path);
-            std::process::exit(1);
-        };
-
-        let mut socket = TcpStream::connect(&addr);
-        let cmd_id = 0;
-        exit_on_error!(
-            s,
-            socket
-            socket.as_mut().unwrap().write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
-        );
-        let mut socket = exit_on_error!(s returning socket);
-        // FIXME handle response properly
-        let mut buf = vec![0; 1024];
-        let mut response = String::with_capacity(1024);
-        let mut cap_flag = false;
-        loop {
-            let len = socket.read(&mut buf).unwrap();
-            response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
-            if !cap_flag {
-                if response.starts_with("* OK [CAPABILITY") && response.find("\r\n").is_some() {
-                    if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                        response.drain(0..pos + 2);
-                        cap_flag = true;
-                    }
-                } else if response.starts_with("* OK ") && response.find("\r\n").is_some() {
-                    if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                        response.drain(0..pos + 2);
-                    }
-                }
-            }
-            if cap_flag && response == "M0 OK Begin TLS negotiation now.\r\n" {
-                break;
-            }
-        }
-
-        socket
-            .set_nonblocking(true)
-            .expect("set_nonblocking call failed");
-        socket
-            .set_read_timeout(Some(std::time::Duration::new(120, 0)))
-            .unwrap();
-        let stream = {
-            let mut conn_result = connector.connect(path, socket);
-            if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) = conn_result {
-                let mut midhandshake_stream = Some(midhandshake_stream);
-                loop {
-                    match midhandshake_stream.take().unwrap().handshake() {
-                        Ok(r) => {
-                            conn_result = Ok(r);
-                            break;
-                        }
-                        Err(native_tls::HandshakeError::WouldBlock(stream)) => {
-                            midhandshake_stream = Some(stream);
-                        }
-                        p => {
-                            p.unwrap();
-                        }
-                    }
-                }
-            }
-            conn_result.unwrap()
-        };
+        let (capabilities, connection) = exit_on_error!(s returning ImapConnection::new_connection(server_hostname.to_string(), server_username.to_string(), server_password.to_string(), danger_accept_invalid_certs));
 
         let mut m = ImapType {
             account_name: s.name().to_string(),
@@ -511,40 +426,19 @@ impl ImapType {
             server_username: get_conf_val!(s["server_username"]).to_string(),
             server_password: get_conf_val!(s["server_password"]).to_string(),
             folders: Default::default(),
-            connection: Arc::new(Mutex::new(ImapConnection { cmd_id, stream })),
+            connection: Arc::new(Mutex::new(connection)),
             danger_accept_invalid_certs,
             hash_index: Default::default(),
             uid_index: Default::default(),
-            capabilities: Default::default(),
+            capabilities,
             byte_cache: Default::default(),
         };
 
-        let mut res = String::with_capacity(8 * 1024);
-        let mut conn = exit_on_error!(s returning m.connection.lock());
-        exit_on_error!(s,
-                       conn.send_command( format!( "LOGIN \"{}\" \"{}\"", get_conf_val!(s["server_username"]), get_conf_val!(s["server_password"])).as_bytes())
-                       conn.read_lines(&mut res, String::new())
-        );
-        m.capabilities = match protocol_parser::capabilities(res.as_bytes())
-            .to_full_result()
-            .map_err(MeliError::from)
-        {
-            Ok(c) => FnvHashSet::from_iter(c.into_iter().map(|s| s.to_vec())),
-            Err(e) => {
-                eprintln!(
-                    "Could not login in account `{}`: {}",
-                    m.account_name.as_str(),
-                    e
-                );
-                std::process::exit(1);
-            }
-        };
         debug!(m
             .capabilities
             .iter()
             .map(|s| String::from_utf8(s.to_vec()).unwrap())
             .collect::<Vec<String>>());
-        drop(conn);
 
         m.folders = m.imap_folders();
         m.folders.retain(|_, f| is_subscribed(f.path()));
@@ -560,8 +454,17 @@ impl ImapType {
     }
 
     pub fn shell(&mut self) {
-        let mut conn = self.connection.lock().unwrap();
+        let mut conn = ImapConnection::new_connection(
+            self.server_hostname.clone(),
+            self.server_username.clone(),
+            self.server_password.clone(),
+            self.danger_accept_invalid_certs,
+        )
+        .unwrap()
+        .1;
         let mut res = String::with_capacity(8 * 1024);
+        conn.read_response(&mut res).unwrap();
+        debug!("out: {}", &res);
 
         let mut input = String::new();
         loop {
@@ -587,89 +490,6 @@ impl ImapType {
                 Err(error) => debug!("error: {}", error),
             }
         }
-    }
-
-    fn new_connection(&self) -> Result<ImapConnection> {
-        use std::io::prelude::*;
-        use std::net::TcpStream;
-        let path = &self.server_hostname;
-
-        let mut connector = TlsConnector::builder();
-        if self.danger_accept_invalid_certs {
-            connector.danger_accept_invalid_certs(true);
-        }
-        let connector = connector.build()?;
-
-        let addr = if let Ok(a) = lookup_ipv4(path, 143) {
-            a
-        } else {
-            return Err(MeliError::new(format!(
-                "Could not lookup address {}",
-                &path
-            )));
-        };
-
-        let mut socket = TcpStream::connect(&addr)?;
-        let cmd_id = 0;
-        socket.write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())?;
-
-        let mut buf = vec![0; 1024];
-        let mut response = String::with_capacity(1024);
-        let mut cap_flag = false;
-        loop {
-            let len = socket.read(&mut buf)?;
-            response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
-            if !cap_flag {
-                if response.starts_with("* OK [CAPABILITY") && response.find("\r\n").is_some() {
-                    if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                        response.drain(0..pos + 2);
-                        cap_flag = true;
-                    }
-                } else if response.starts_with("* OK ") && response.find("\r\n").is_some() {
-                    if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                        response.drain(0..pos + 2);
-                    }
-                }
-            }
-            if cap_flag && response == "M0 OK Begin TLS negotiation now.\r\n" {
-                break;
-            }
-        }
-
-        socket
-            .set_nonblocking(true)
-            .expect("set_nonblocking call failed");
-        socket.set_read_timeout(Some(std::time::Duration::new(120, 0)))?;
-        let stream = {
-            let mut conn_result = connector.connect(path, socket);
-            if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) = conn_result {
-                let mut midhandshake_stream = Some(midhandshake_stream);
-                loop {
-                    match midhandshake_stream.take().unwrap().handshake() {
-                        Ok(r) => {
-                            conn_result = Ok(r);
-                            break;
-                        }
-                        Err(native_tls::HandshakeError::WouldBlock(stream)) => {
-                            midhandshake_stream = Some(stream);
-                        }
-                        p => {
-                            p?;
-                        }
-                    }
-                }
-            }
-            conn_result?
-        };
-        let mut ret = ImapConnection { cmd_id, stream };
-        ret.send_command(
-            format!(
-                "LOGIN \"{}\" \"{}\"",
-                &self.server_username, &self.server_password
-            )
-            .as_bytes(),
-        )?;
-        Ok(ret)
     }
 
     pub fn imap_folders(&self) -> FnvHashMap<FolderHash, ImapFolder> {

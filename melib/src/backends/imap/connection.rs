@@ -23,11 +23,23 @@ use crate::email::parser::BytesExt;
 use crate::error::*;
 use std::io::Read;
 use std::io::Write;
+extern crate native_tls;
+use fnv::FnvHashSet;
+use native_tls::TlsConnector;
+use std::iter::FromIterator;
+use std::net::SocketAddr;
+
+use super::protocol_parser;
+use super::Capabilities;
 
 #[derive(Debug)]
 pub struct ImapConnection {
     pub cmd_id: usize,
     pub stream: native_tls::TlsStream<std::net::TcpStream>,
+    server_hostname: String,
+    server_username: String,
+    server_password: String,
+    danger_accept_invalid_certs: bool,
 }
 
 impl Drop for ImapConnection {
@@ -46,6 +58,7 @@ impl ImapConnection {
         let mut buf: [u8; 1024] = [0; 1024];
         ret.clear();
         let mut last_line_idx: usize = 0;
+        let mut connection_tries = 0;
         loop {
             match self.stream.read(&mut buf) {
                 Ok(0) => break,
@@ -77,6 +90,22 @@ impl ImapConnection {
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     continue;
+                }
+                Err(_) if connection_tries == 0 => {
+                    let server_hostname =
+                        std::mem::replace(&mut self.server_hostname, String::new());
+                    let server_username =
+                        std::mem::replace(&mut self.server_username, String::new());
+                    let server_password =
+                        std::mem::replace(&mut self.server_password, String::new());
+                    *self = ImapConnection::new_connection(
+                        server_hostname,
+                        server_username,
+                        server_password,
+                        self.danger_accept_invalid_certs,
+                    )?
+                    .1;
+                    connection_tries += 1;
                 }
                 Err(e) => return Err(MeliError::from(e)),
             }
@@ -123,6 +152,110 @@ impl ImapConnection {
     pub fn set_nonblocking(&mut self, val: bool) -> Result<()> {
         self.stream.get_mut().set_nonblocking(val)?;
         Ok(())
+    }
+
+    pub fn new_connection(
+        server_hostname: String,
+        server_username: String,
+        server_password: String,
+        danger_accept_invalid_certs: bool,
+    ) -> Result<(Capabilities, ImapConnection)> {
+        use std::io::prelude::*;
+        use std::net::TcpStream;
+        let path = &server_hostname;
+
+        let mut connector = TlsConnector::builder();
+        if danger_accept_invalid_certs {
+            connector.danger_accept_invalid_certs(true);
+        }
+        let connector = connector.build()?;
+
+        let addr = if let Ok(a) = lookup_ipv4(path, 143) {
+            a
+        } else {
+            return Err(MeliError::new(format!(
+                "Could not lookup address {}",
+                &path
+            )));
+        };
+
+        let mut socket = TcpStream::connect(&addr)?;
+        let cmd_id = 0;
+        socket.write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())?;
+
+        let mut buf = vec![0; 1024];
+        let mut response = String::with_capacity(1024);
+        let mut cap_flag = false;
+        loop {
+            let len = socket.read(&mut buf)?;
+            response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
+            if !cap_flag {
+                if response.starts_with("* OK [CAPABILITY") {
+                    cap_flag = true;
+                    if let Some(pos) = response.as_bytes().find(b"\r\n") {
+                        response.drain(0..pos + 2);
+                    }
+                } else if response.starts_with("* OK ") && response.find("\r\n").is_some() {
+                    if let Some(pos) = response.as_bytes().find(b"\r\n") {
+                        response.drain(0..pos + 2);
+                    }
+                }
+            } else if response.starts_with("* OK [CAPABILITY") {
+                if let Some(pos) = response.as_bytes().find(b"\r\n") {
+                    response.drain(0..pos + 2);
+                }
+            }
+            if cap_flag && response == "M0 OK Begin TLS negotiation now.\r\n" {
+                break;
+            }
+        }
+
+        socket
+            .set_nonblocking(true)
+            .expect("set_nonblocking call failed");
+        socket.set_read_timeout(Some(std::time::Duration::new(120, 0)))?;
+        let stream = {
+            let mut conn_result = connector.connect(path, socket);
+            if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) = conn_result {
+                let mut midhandshake_stream = Some(midhandshake_stream);
+                loop {
+                    match midhandshake_stream.take().unwrap().handshake() {
+                        Ok(r) => {
+                            conn_result = Ok(r);
+                            break;
+                        }
+                        Err(native_tls::HandshakeError::WouldBlock(stream)) => {
+                            midhandshake_stream = Some(stream);
+                        }
+                        p => {
+                            p?;
+                        }
+                    }
+                }
+            }
+            conn_result?
+        };
+        let mut ret = ImapConnection {
+            cmd_id,
+            stream,
+            server_hostname,
+            server_username,
+            server_password,
+            danger_accept_invalid_certs,
+        };
+        ret.send_command(
+            format!(
+                "LOGIN \"{}\" \"{}\"",
+                &ret.server_username, &ret.server_password
+            )
+            .as_bytes(),
+        )?;
+        let mut res = String::with_capacity(8 * 1024);
+        ret.read_lines(&mut res, String::new())?;
+        let capabilities = protocol_parser::capabilities(res.as_bytes()).to_full_result()?;
+        let capabilities = FnvHashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
+
+        Ok((capabilities, ret))
     }
 }
 
@@ -177,4 +310,17 @@ impl Iterator for ImapBlockingConnection {
             }
         }
     }
+}
+
+fn lookup_ipv4(host: &str, port: u16) -> Result<SocketAddr> {
+    use std::net::ToSocketAddrs;
+
+    let addrs = (host, port).to_socket_addrs()?;
+    for addr in addrs {
+        if let SocketAddr::V4(_) = addr {
+            return Ok(addr);
+        }
+    }
+
+    Err(MeliError::new("Cannot lookup address"))
 }
