@@ -26,6 +26,7 @@ use super::*;
 mod widgets;
 
 pub use self::widgets::*;
+use fnv::FnvHashSet;
 
 /// A horizontally split in half container.
 #[derive(Debug)]
@@ -745,11 +746,15 @@ impl Component for StatusBar {
                 if self.ex_buffer.as_str().split_graphemes().len() <= 2 {
                     return;
                 }
+
+                let mut unique_suggestions: FnvHashSet<&str> = FnvHashSet::default();
                 let mut suggestions: Vec<AutoCompleteEntry> = self
                     .cmd_history
                     .iter()
                     .filter_map(|h| {
-                        if h.starts_with(self.ex_buffer.as_str()) {
+                        let sug = self.ex_buffer.as_str();
+                        if h.starts_with(sug) && !unique_suggestions.contains(sug) {
+                            unique_suggestions.insert(sug);
                             Some(h.clone().into())
                         } else {
                             None
