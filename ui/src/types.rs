@@ -70,6 +70,13 @@ pub enum ForkType {
 }
 
 #[derive(Debug)]
+pub enum NotificationType {
+    INFO,
+    ERROR,
+    NewMail,
+}
+
+#[derive(Debug)]
 pub enum UIEvent {
     Input(Key),
     ExInput(Key),
@@ -82,7 +89,7 @@ pub enum UIEvent {
     ChangeMailbox(usize),
     ChangeMode(UIMode),
     Command(String),
-    Notification(Option<String>, String),
+    Notification(Option<String>, String, Option<NotificationType>),
     Action(Action),
     StatusEvent(StatusEvent),
     MailboxUpdate((usize, FolderHash)), // (account_idx, mailbox_idx)

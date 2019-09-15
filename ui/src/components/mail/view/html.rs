@@ -48,9 +48,10 @@ impl HtmlView {
                 context.replies.push_back(UIEvent::Notification(
                     Some(format!(
                         "Failed to start html filter process: {}",
-                        filter_invocation
+                        filter_invocation,
                     )),
                     String::new(),
+                    Some(NotificationType::ERROR),
                 ));
                 String::from_utf8_lossy(&bytes).to_string()
             } else {
@@ -93,6 +94,7 @@ impl HtmlView {
             context.replies.push_back(UIEvent::Notification(
                 Some("Failed to find any application to use as html filter".to_string()),
                 String::new(),
+                Some(NotificationType::ERROR),
             ));
             String::from_utf8_lossy(&bytes).to_string()
         };

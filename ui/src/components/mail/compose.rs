@@ -554,6 +554,7 @@ impl Component for Composer {
                             context.replies.push_back(UIEvent::Notification(
                                 Some("Could not save draft.".into()),
                                 e.into(),
+                                Some(NotificationType::ERROR),
                             ));
                         }
                         context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
@@ -599,6 +600,7 @@ impl Component for Composer {
                                     .to_string(),
                             ),
                             e.to_string(),
+                            Some(NotificationType::ERROR),
                         ));
                         return true;
                     }
@@ -627,6 +629,7 @@ impl Component for Composer {
                     context.replies.push_back(UIEvent::Notification(
                         Some(format!("Failed to execute {}", editor)),
                         e.to_string(),
+                        Some(NotificationType::ERROR),
                     ));
                     context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                     context.restore_input();
@@ -651,6 +654,7 @@ impl Component for Composer {
                                 context.replies.push_back(UIEvent::Notification(
                                     Some("could not add attachment".to_string()),
                                     e.to_string(),
+                                    Some(NotificationType::ERROR),
                                 ));
                                 self.dirty = true;
                                 return true;
@@ -781,6 +785,7 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
             context.replies.push_back(UIEvent::Notification(
                 Some("Could not save in 'Sent' folder.".into()),
                 e.into(),
+                Some(NotificationType::ERROR),
             ));
         } else {
             failure = false;
@@ -789,9 +794,11 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
     if !failure {
         let output = msmtp.wait().expect("Failed to wait on mailer");
         if output.success() {
-            context
-                .replies
-                .push_back(UIEvent::Notification(Some("Sent.".into()), String::new()));
+            context.replies.push_back(UIEvent::Notification(
+                Some("Sent.".into()),
+                String::new(),
+                None,
+            ));
         } else {
             if let Some(exit_code) = output.code() {
                 log(

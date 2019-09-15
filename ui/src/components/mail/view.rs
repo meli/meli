@@ -145,6 +145,7 @@ impl MailView {
                                     filter_invocation,
                                 )),
                                 String::new(),
+                                Some(NotificationType::ERROR),
                             ));
                             return;
                         }
@@ -187,6 +188,7 @@ impl MailView {
                                         .to_string(),
                                 ),
                                 String::new(),
+                                Some(NotificationType::ERROR),
                             ));
                             return;
                         }
@@ -941,6 +943,7 @@ impl Component for MailView {
                                                 context.replies.push_back(UIEvent::Notification(
                                                     Some("Sent unsubscribe email.".into()),
                                                     "Sent unsubscribe email".to_string(),
+                                                    None,
                                                 ));
                                                 return true;
                                             }

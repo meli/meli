@@ -112,6 +112,7 @@ impl EnvelopeView {
                                     filter_invocation,
                                 )),
                                 String::new(),
+                                Some(NotificationType::ERROR),
                             ));
                             return;
                         }

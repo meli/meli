@@ -22,7 +22,7 @@
 /*!
 Notification handling components.
 */
-use notify_rust::Notification as notify_Notification;
+use notify_rust;
 use std::process::{Command, Stdio};
 
 use super::*;
@@ -41,15 +41,16 @@ impl fmt::Display for XDGNotifications {
 impl Component for XDGNotifications {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
-        if let UIEvent::Notification(ref title, ref body) = event {
-            notify_Notification::new()
+        if let UIEvent::Notification(ref title, ref body, ref kind) = event {
+            let mut notification = notify_rust::Notification::new();
+            notification
                 .appname("meli")
                 .icon("mail-message-new")
-                .summary(title.as_ref().map(String::as_str).unwrap_or("Event"))
+                .summary(title.as_ref().map(String::as_str).unwrap_or("meli"))
                 .body(&escape_str(body))
-                .icon("dialog-information")
-                .show()
-                .unwrap();
+                .icon("dialog-information");
+
+            notification.show().unwrap();
         }
         false
     }
@@ -121,7 +122,7 @@ impl fmt::Display for NotificationFilter {
 impl Component for NotificationFilter {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if let UIEvent::Notification(ref title, ref body) = event {
+        if let UIEvent::Notification(ref title, ref body, ref kind) = event {
             if let Some(ref bin) = context.runtime_settings.notifications.script {
                 if let Err(v) = Command::new(bin)
                     .arg(title.as_ref().map(String::as_str).unwrap_or("Event"))

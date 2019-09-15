@@ -452,7 +452,7 @@ impl Account {
                     }
                     let env = self.get_env(&env_hash);
                     return Some(Notification(
-                        Some("new mail".into()),
+                        Some("new e-mail".into()),
                         format!(
                             "{} {:.15}:\n\nFrom: {:.15}\nSubject: {:.15}",
                             self.name,
@@ -460,6 +460,7 @@ impl Account {
                             env.subject(),
                             env.field_from_to_string(),
                         ),
+                        Some(crate::types::NotificationType::NewMail),
                     ));
                 }
                 RefreshEventKind::Remove(envelope_hash) => {
