@@ -40,8 +40,9 @@ impl fmt::Display for XDGNotifications {
 
 impl Component for XDGNotifications {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
-    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::Notification(ref title, ref body, ref kind) = event {
+            let settings = &context.runtime_settings.notifications;
             let mut notification = notify_rust::Notification::new();
             notification
                 .appname("meli")
@@ -49,6 +50,23 @@ impl Component for XDGNotifications {
                 .summary(title.as_ref().map(String::as_str).unwrap_or("meli"))
                 .body(&escape_str(body))
                 .icon("dialog-information");
+            match kind {
+                Some(NotificationType::NewMail) => {
+                    notification.hint(notify_rust::hints::NotificationHint::Category(
+                        "email".to_owned(),
+                    ));
+                }
+                _ => {}
+            }
+            if settings.play_sound.is_true() {
+                if let Some(ref sound_path) = settings.sound_file {
+                    notification.hint(notify_rust::hints::NotificationHint::SoundFile(
+                        sound_path.to_owned(),
+                    ));
+                } else {
+                    notification.sound_name("message-new-email");
+                }
+            }
 
             notification.show().unwrap();
         }

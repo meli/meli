@@ -470,6 +470,10 @@ mod default_vals {
     pub(in crate::conf) fn none<T>() -> Option<T> {
         None
     }
+
+    pub(in crate::conf) fn internal_value_false() -> super::ToggleFlag {
+        super::ToggleFlag::InternalVal(false)
+    }
 }
 
 impl<'de> Deserialize<'de> for IndexStyle {
