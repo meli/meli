@@ -787,16 +787,30 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
         }
     }
     if !failure {
-        context.replies.push_back(UIEvent::Notification(
-            Some("Sent.".into()),
-            format!(
-                "Mailer output: {:#?}",
-                msmtp
-                    .wait_with_output()
-                    .expect("Failed to wait on filter")
-                    .stdout
-            ),
-        ));
+        let output = msmtp.wait().expect("Failed to wait on mailer");
+        if output.success() {
+            context
+                .replies
+                .push_back(UIEvent::Notification(Some("Sent.".into()), String::new()));
+        } else {
+            if let Some(exit_code) = output.code() {
+                log(
+                    format!(
+                        "Could not send e-mail using `{}`: Process exited with {}",
+                        cmd, exit_code
+                    ),
+                    ERROR,
+                );
+            } else {
+                log(
+                    format!(
+                        "Could not send e-mail using `{}`: Process was killed by signal",
+                        cmd
+                    ),
+                    ERROR,
+                );
+            }
+        }
     }
     !failure
 }

@@ -199,6 +199,7 @@ impl State {
             })
             .collect();
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
+        log(format!("Initialized {} accounts.", accounts.len()), INFO);
 
         let _stdout = std::io::stdout();
         _stdout.lock();
