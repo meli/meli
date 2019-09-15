@@ -723,9 +723,17 @@ impl ThreadView {
                 grid[(x, y)].set_bg(Color::Default);
                 grid[(x, y)].set_fg(Color::Default);
             }
-            //context.dirty_areas.push_back(((0,0), set_y(bottom_right, y)));
+            context
+                .dirty_areas
+                .push_back((upper_left, set_y(bottom_right, y + 2)));
             y + 2
         };
+
+        for x in get_x(upper_left)..=get_x(bottom_right) {
+            set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
+            grid[(x, y - 1)].set_fg(Color::Default);
+            grid[(x, y - 1)].set_bg(Color::Default);
+        }
 
         let (width, height) = self.content.size();
         if height == 0 || height == self.cursor_pos || width == 0 {
@@ -735,11 +743,11 @@ impl ThreadView {
         /* if this is the first ever draw, there is nothing on the grid to update so populate it
          * first */
         if !self.initiated {
-            clear_area(grid, (set_y(upper_left, y - 1), bottom_right));
+            clear_area(grid, (set_y(upper_left, y), bottom_right));
             let (width, height) = self.content.size();
 
             if self.show_mailview {
-                let area = (set_y(upper_left, y), set_y(bottom_right, mid - 1));
+                let area = (set_y(upper_left, y), set_y(bottom_right, mid));
                 let upper_left = upper_left!(area);
                 let bottom_right = bottom_right!(area);
 
@@ -753,9 +761,6 @@ impl ThreadView {
                     area,
                     ((0, 2 * top_idx), (width - 1, height - 1)),
                 );
-                for x in get_x(upper_left)..=get_x(bottom_right) {
-                    set_and_join_box(grid, (x, mid), HORZ_BOUNDARY);
-                }
             } else {
                 let area = (set_y(upper_left, y), bottom_right);
                 let upper_left = upper_left!(area);
@@ -775,20 +780,20 @@ impl ThreadView {
         }
 
         if self.show_mailview {
-            self.draw_list(
-                grid,
-                (set_y(upper_left, y), set_y(bottom_right, mid - 1)),
-                context,
-            );
+            let area = (set_y(upper_left, mid), set_y(bottom_right, mid));
+            context.dirty_areas.push_back(area);
+            for x in get_x(upper_left)..=get_x(bottom_right) {
+                set_and_join_box(grid, (x, mid), HORZ_BOUNDARY);
+                grid[(x, mid)].set_fg(Color::Default);
+                grid[(x, mid)].set_bg(Color::Default);
+            }
+            let area = (set_y(upper_left, y), set_y(bottom_right, mid - 1));
+            self.draw_list(grid, area, context);
             self.mailview
                 .draw(grid, (set_y(upper_left, mid + 1), bottom_right), context);
         } else {
             self.dirty = true;
             self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
-        }
-
-        for x in get_x(upper_left)..=get_x(bottom_right) {
-            set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
         }
     }
 
