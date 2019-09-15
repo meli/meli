@@ -263,7 +263,7 @@ impl Component for VSplit {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum PageMovement {
     Home,
     PageUp,
@@ -274,7 +274,7 @@ pub enum PageMovement {
 /// A pager for text.
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is called, it draws the
 /// current view of the text. It is responsible for scrolling etc.
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Pager {
     text: String,
     cursor_pos: usize,
@@ -1393,7 +1393,7 @@ impl Component for Tabbed {
 
 type EntryIdentifier = Vec<u8>;
 /// Shows selection to user
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Selector {
     single_only: bool,
     /// allow only one selection

@@ -44,7 +44,7 @@ struct ThreadEntry {
     heading: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ThreadView {
     new_cursor_pos: usize,
     cursor_pos: usize,
@@ -896,9 +896,24 @@ impl Component for ThreadView {
         }
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        match event {
+            UIEvent::Action(Listing(OpenInNewTab)) => {
+                /* Handle this before self.mailview does */
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(Self {
+                        initiated: false,
+                        ..self.clone()
+                    }))))));
+                return true;
+            }
+            _ => {}
+        }
+
         if self.show_mailview && self.mailview.process_event(event, context) {
             return true;
         }
+
         let shortcuts = &self.get_shortcuts(context)[ThreadView::DESCRIPTION];
         match *event {
             UIEvent::Input(Key::Char('R')) => {
@@ -1102,7 +1117,15 @@ impl Component for ThreadView {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn kill(&mut self, id: ComponentId, context: &mut Context) {
+        debug_assert!(self.id == id);
+        context
+            .replies
+            .push_back(UIEvent::Action(Tab(Kill(self.id))));
     }
 }

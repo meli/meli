@@ -42,6 +42,7 @@ pub enum ListingAction {
     SetSeen,
     SetUnseen,
     Delete,
+    OpenInNewTab,
 }
 
 #[derive(Debug)]

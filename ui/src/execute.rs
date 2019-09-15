@@ -285,6 +285,17 @@ define_commands!([
                               )
                       );
                   )
+                },
+                { tags: ["open-in-tab"],
+                  desc: "opens envelope view in new tab",
+                  parser:(
+                      named!( open_in_new_tab<Action>,
+                              do_parse!(
+                                  ws!(tag!("open-in-tab"))
+                                  >> (Listing(OpenInNewTab))
+                              )
+                      );
+                  )
                 }
 ]);
 
@@ -334,7 +345,7 @@ named!(
 
 named!(
     listing_action<Action>,
-    alt_complete!(toggle | envelope_action | filter | toggle_thread_snooze)
+    alt_complete!(toggle | envelope_action | filter | toggle_thread_snooze | open_in_new_tab)
 );
 
 named!(

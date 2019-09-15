@@ -37,7 +37,7 @@ pub use self::envelope::*;
 
 use mime_apps::query_default_app;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 enum ViewMode {
     Normal,
     Url,
@@ -75,6 +75,18 @@ pub struct MailView {
 
     cmd_buf: String,
     id: ComponentId,
+}
+
+impl Clone for MailView {
+    fn clone(&self) -> Self {
+        MailView {
+            subview: None,
+            cmd_buf: String::with_capacity(4),
+            pager: self.pager.clone(),
+            mode: self.mode.clone(),
+            ..*self
+        }
+    }
 }
 
 impl fmt::Display for MailView {
@@ -974,6 +986,12 @@ impl Component for MailView {
                     }
                 }
             }
+            UIEvent::Action(Listing(OpenInNewTab)) => {
+                context
+                    .replies
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(self.clone()))))));
+                return true;
+            }
             _ => {}
         }
         false
@@ -1035,7 +1053,15 @@ impl Component for MailView {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn kill(&mut self, id: ComponentId, context: &mut Context) {
+        debug_assert!(self.id == id);
+        context
+            .replies
+            .push_back(UIEvent::Action(Tab(Kill(self.id))));
     }
 }
