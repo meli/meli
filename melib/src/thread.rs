@@ -139,12 +139,14 @@ macro_rules! make {
         }
         let child_date = $buf[&$c].date;
         let child_len = $buf[&$c].len;
+        let has_unseen = $buf[&$c].has_unseen;
         $buf.entry($c).and_modify(|e| {
             e.parent = Some($p);
         });
         $buf.entry($p).and_modify(|e| {
             e.len += child_len + 1;
             e.date = std::cmp::max(e.date, child_date);
+            e.has_unseen |= has_unseen;
         });
         union($buf, $c, $p);
         prev_parent
@@ -698,6 +700,7 @@ impl Threads {
 
     pub fn update_envelope(
         &mut self,
+        envelopes: &Envelopes,
         old_hash: EnvelopeHash,
         new_hash: EnvelopeHash,
     ) -> Result<(), ()> {
@@ -705,15 +708,36 @@ impl Threads {
          * - hash_set
          * - message fields in thread_nodes
          */
-        if let Some(node) = self
+        let thread_hash = if let Some((key, _)) = self
             .thread_nodes
-            .values_mut()
-            .find(|n| n.message.map(|n| n == old_hash).unwrap_or(false))
+            .iter()
+            .find(|(_, n)| n.message.map(|n| n == old_hash).unwrap_or(false))
         {
-            node.message = Some(new_hash);
+            *key
         } else {
             return Err(());
         };
+
+        self.thread_nodes.get_mut(&thread_hash).unwrap().message = Some(new_hash);
+        self.thread_nodes.get_mut(&thread_hash).unwrap().has_unseen = !envelopes[&new_hash]
+            .is_seen()
+            || self.thread_nodes[&thread_hash]
+                .children
+                .iter()
+                .fold(false, |acc, x| acc || self.thread_nodes[x].has_unseen);
+
+        let mut thread_hash_iter = thread_hash;
+        while self.thread_nodes[&thread_hash_iter].parent.is_some() {
+            let parent_hash = self.thread_nodes[&thread_hash_iter].parent.unwrap();
+
+            self.thread_nodes.get_mut(&parent_hash).unwrap().has_unseen = self.thread_nodes
+                [&parent_hash]
+                .children
+                .iter()
+                .fold(false, |acc, x| acc || self.thread_nodes[x].has_unseen);
+            thread_hash_iter = parent_hash;
+        }
+
         self.hash_set.remove(&old_hash);
         self.hash_set.insert(new_hash);
         Ok(())
@@ -760,7 +784,12 @@ impl Threads {
     }
 
     /// Update show_subject details of ThreadNode
-    pub fn update_node(&mut self, id: ThreadHash, env_hash: EnvelopeHash, envelopes: &Envelopes) {
+    pub fn update_show_subject(
+        &mut self,
+        id: ThreadHash,
+        env_hash: EnvelopeHash,
+        envelopes: &Envelopes,
+    ) {
         let mut subject = envelopes[&env_hash].subject();
         let mut subject = subject.to_mut().as_bytes();
         let stripped_subject = subject.strip_prefixes();
@@ -818,6 +847,7 @@ impl Threads {
                 message: Some(env_hash),
                 parent: reply_to_id,
                 date: envelopes[&env_hash].date(),
+                has_unseen: !envelopes[&env_hash].is_seen(),
                 ..ThreadNode::new(new_id)
             },
         );
@@ -854,7 +884,7 @@ impl Threads {
             }
             self.tree_insert_root(new_id, envelopes);
         }
-        self.update_node(new_id, env_hash, envelopes);
+        self.update_show_subject(new_id, env_hash, envelopes);
     }
 
     /* Insert or update */
@@ -904,7 +934,7 @@ impl Threads {
                     }
                 }
             }
-            self.update_node(id, env_hash, envelopes);
+            self.update_show_subject(id, env_hash, envelopes);
             true
         } else if let Some(reply_to_id) = reply_to_id {
             let new_id = ThreadHash::new();
@@ -914,6 +944,7 @@ impl Threads {
                     message: Some(env_hash),
                     parent: Some(reply_to_id),
                     date: envelopes[&env_hash].date(),
+                    has_unseen: !envelopes[&env_hash].is_seen(),
                     ..ThreadNode::new(new_id)
                 },
             );
@@ -927,7 +958,7 @@ impl Threads {
             self.hash_set.insert(env_hash);
             self.union(reply_to_id, new_id);
             make!((reply_to_id) parent of (new_id), &mut self.thread_nodes);
-            self.update_node(new_id, env_hash, envelopes);
+            self.update_show_subject(new_id, env_hash, envelopes);
             true
         } else {
             false

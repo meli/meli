@@ -99,7 +99,7 @@ impl Collection {
                 .threads
                 .entry(folder_hash)
                 .or_default()
-                .update_envelope(old_hash, new_hash)
+                .update_envelope(&self.envelopes, old_hash, new_hash)
                 .is_ok()
             {
                 return;
@@ -114,7 +114,9 @@ impl Collection {
             if *h == folder_hash {
                 continue;
             }
-            t.update_envelope(old_hash, new_hash).ok().take();
+            t.update_envelope(&self.envelopes, old_hash, new_hash)
+                .ok()
+                .take();
         }
     }
 
@@ -227,15 +229,22 @@ impl Collection {
         }
     }
 
-    pub fn update(&mut self, old_hash: EnvelopeHash, envelope: Envelope, folder_hash: FolderHash) {
-        self.envelopes.remove(&old_hash);
+    pub fn update(
+        &mut self,
+        old_hash: EnvelopeHash,
+        mut envelope: Envelope,
+        folder_hash: FolderHash,
+    ) {
+        let old_env = self.envelopes.remove(&old_hash).unwrap();
+        envelope.set_thread(old_env.thread());
         let new_hash = envelope.hash();
         self.message_ids
             .insert(envelope.message_id().raw().to_vec(), new_hash);
         self.envelopes.insert(new_hash, envelope);
         if self.sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
             for (_, t) in self.threads.iter_mut() {
-                t.update_envelope(old_hash, new_hash).unwrap_or(());
+                t.update_envelope(&self.envelopes, old_hash, new_hash)
+                    .unwrap_or(());
             }
         }
         {
@@ -243,7 +252,7 @@ impl Collection {
                 .threads
                 .entry(folder_hash)
                 .or_default()
-                .update_envelope(old_hash, new_hash)
+                .update_envelope(&self.envelopes, old_hash, new_hash)
                 .is_ok()
             {
                 return;
@@ -258,7 +267,9 @@ impl Collection {
             if *h == folder_hash {
                 continue;
             }
-            t.update_envelope(old_hash, new_hash).ok().take();
+            t.update_envelope(&self.envelopes, old_hash, new_hash)
+                .ok()
+                .take();
         }
     }
 
