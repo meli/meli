@@ -929,29 +929,7 @@ impl Component for StatusBar {
             return true;
         }
 
-        match &event {
-            UIEvent::RefreshMailbox((ref idx_a, ref idx_f)) => {
-                match context.accounts[*idx_a].status(*idx_f) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        return false;
-                    }
-                }
-                let account = &context.accounts[*idx_a];
-                let m = &account[*idx_f].unwrap();
-                self.status = format!(
-                    "{} | Mailbox: {}, Messages: {}, New: {}",
-                    self.mode,
-                    m.folder.name(),
-                    m.envelopes.len(),
-                    m.envelopes
-                        .iter()
-                        .map(|h| &account.collection[&h])
-                        .filter(|e| !e.is_seen())
-                        .count()
-                );
-                self.dirty = true;
-            }
+        match event {
             UIEvent::ChangeMode(m) => {
                 let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
                 self.status.replace_range(..offset, &format!("{} ", m));
@@ -1036,6 +1014,10 @@ impl Component for StatusBar {
             }
             UIEvent::StatusEvent(StatusEvent::BufSet(s)) => {
                 self.display_buffer = s.clone();
+                self.dirty = true;
+            }
+            UIEvent::StatusEvent(StatusEvent::UpdateStatus(ref mut s)) => {
+                self.status = format!("{} | {}", self.mode, std::mem::replace(s, String::new()));
                 self.dirty = true;
             }
             _ => {}
@@ -1321,6 +1303,13 @@ impl Component for Tabbed {
         match *event {
             UIEvent::Input(Key::Char('T')) => {
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        self.children[self.cursor_pos]
+                            .get_status(context)
+                            .unwrap_or_default(),
+                    )));
                 self.set_dirty();
                 return true;
             }

@@ -295,6 +295,11 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        self.get_status(context).unwrap(),
+                    )));
                 return true;
             }
             UIEvent::Input(ref k)
@@ -335,6 +340,11 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        self.get_status(context).unwrap(),
+                    )));
                 return true;
             }
             UIEvent::Action(ref action) => match action {
@@ -365,6 +375,11 @@ impl Component for Listing {
                         .position(|&h| h == folder_hash)
                         .unwrap_or(0),
                 );
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        self.get_status(context).unwrap(),
+                    )));
                 self.dirty = true;
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
@@ -385,9 +400,19 @@ impl Component for Listing {
             }
             UIEvent::StartupCheck(_) => {
                 self.dirty = true;
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        self.get_status(context).unwrap(),
+                    )));
             }
             UIEvent::MailboxUpdate(_) => {
                 self.dirty = true;
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                        self.get_status(context).unwrap(),
+                    )));
             }
             _ => {}
         }
@@ -488,6 +513,38 @@ impl Component for Listing {
             Threaded(ref mut l) => l.set_id(id),
             Conversations(ref mut l) => l.set_id(id),
         }
+    }
+
+    fn get_status(&self, context: &Context) -> Option<String> {
+        Some({
+            let folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
+                .folders_order
+                .get(self.cursor_pos.1)
+            {
+                *h
+            } else {
+                return Some(String::new());
+            };
+            if !context.accounts[self.cursor_pos.0].folders[&folder_hash].is_available() {
+                return Some(String::new());
+            }
+            let account = &context.accounts[self.cursor_pos.0];
+            let m = if account[self.cursor_pos.1].is_available() {
+                account[self.cursor_pos.1].unwrap()
+            } else {
+                return Some(String::new());
+            };
+            format!(
+                "Mailbox: {}, Messages: {}, New: {}",
+                m.folder.name(),
+                m.envelopes.len(),
+                m.envelopes
+                    .iter()
+                    .map(|h| &account.collection[&h])
+                    .filter(|e| !e.is_seen())
+                    .count()
+            )
+        })
     }
 }
 

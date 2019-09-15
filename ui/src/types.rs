@@ -38,6 +38,7 @@ pub enum StatusEvent {
     DisplayMessage(String),
     BufClear,
     BufSet(String),
+    UpdateStatus(String),
 }
 
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads

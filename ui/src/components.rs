@@ -100,6 +100,10 @@ pub trait Component: Display + Debug + Send {
     fn get_shortcuts(&self, _context: &Context) -> ShortcutMaps {
         Default::default()
     }
+
+    fn get_status(&self, _context: &Context) -> Option<String> {
+        None
+    }
 }
 
 /*
