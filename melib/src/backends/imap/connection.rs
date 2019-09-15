@@ -21,6 +21,7 @@
 
 use crate::email::parser::BytesExt;
 use crate::error::*;
+use crate::logging::{LoggingLevel::*, *};
 use std::io::Read;
 use std::io::Write;
 extern crate native_tls;
@@ -98,6 +99,13 @@ impl ImapConnection {
                         std::mem::replace(&mut self.server_username, String::new());
                     let server_password =
                         std::mem::replace(&mut self.server_password, String::new());
+                    log(
+                        format!(
+                            "IMAP connection to `{}` failed. Retrying one more time...",
+                            &server_hostname
+                        ),
+                        ERROR,
+                    );
                     *self = ImapConnection::new_connection(
                         server_hostname,
                         server_username,
@@ -107,7 +115,13 @@ impl ImapConnection {
                     .1;
                     connection_tries += 1;
                 }
-                Err(e) => return Err(MeliError::from(e)),
+                Err(e) => {
+                    log(
+                        format!("IMAP connection to `{}` failed.", &self.server_hostname),
+                        FATAL,
+                    );
+                    return Err(MeliError::from(e));
+                }
             }
         }
         Ok(())
