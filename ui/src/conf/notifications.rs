@@ -33,6 +33,11 @@ pub struct NotificationsSettings {
     /// Default: None
     #[serde(default = "none")]
     pub script: Option<String>,
+    /// A file location which has its size changed when new mail arrives (max 128 bytes). Can be
+    /// used to trigger new mail notifications eg with `xbiff(1)`
+    /// Default: None
+    #[serde(default = "none")]
+    pub xbiff_file_path: Option<String>,
     #[serde(deserialize_with = "toggleflag_de", default = "internal_value_false")]
     pub play_sound: super::ToggleFlag,
     #[serde(default = "none")]

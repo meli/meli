@@ -152,6 +152,22 @@ impl Component for NotificationFilter {
                     debug!("{:?}", v);
                 }
             }
+
+            match kind {
+                Some(NotificationType::NewMail) => {
+                    if let Some(ref path) = context.runtime_settings.notifications.xbiff_file_path {
+                        let mut file = std::fs::OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
+                         .create(true) /* a new file will be created if the file does not yet already exist.*/
+                         .open(path).unwrap();
+                        if file.metadata().unwrap().len() > 128 {
+                            file.set_len(0).unwrap();
+                        } else {
+                            std::io::Write::write_all(&mut file, b"z").unwrap();
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
         false
     }
