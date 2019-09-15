@@ -86,6 +86,11 @@ pub mod dbg {
 
 extern crate text_processing;
 
+#[macro_use]
+mod logging;
+pub use self::logging::LoggingLevel::*;
+pub use self::logging::*;
+
 pub mod addressbook;
 pub mod async_workers;
 pub mod backends;
