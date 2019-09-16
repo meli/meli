@@ -49,7 +49,9 @@ When launched for the first time, meli will search for its configuration directo
 .Pa $XDG_CONFIG_HOME/meli/ Ns
 \&. If it doesn't exist, you will be asked if you want to create one along with a sample configuration. The sample configuration
 .Pa $XDG_CONFIG_HOME/meli/config
-includes comments with the basic settings required for setting up accounts allowing you to copy and edit right away.
+includes comments with the basic settings required for setting up accounts allowing you to copy and edit right away. See
+.Xr meli.conf 5
+for the available configuration options.
 .Pp
 At any time, you can press
 .Cm \&?
@@ -59,7 +61,7 @@ The main visual navigation tool is the left-side sidebar. The menu's visibility 
 .Cm ` Ns
 ).
 .Pp
-The view into each folder has 3 modes: plain, threaded and compact. Plain views each mail indvidually, threaded shows their thread relationship visually, and compact includes one entry per thread of emails.
+The view into each folder has 4 modes: plain, threaded, conversations and compact. Plain views each mail indvidually, threaded shows their thread relationship visually, and conversations includes one entry per thread of emails (compact is one row per thread).
 .Bd -literal
          ^^      .-=-=-=-.  ^^
      ^^        (`-=-=-=-=-`)         ^^
@@ -77,35 +79,54 @@ The view into each folder has 3 modes: plain, threaded and compact. Plain views 
 .Ed
 .Sh EXECUTE mode
 Commands are issued in EXECUTE mode, by default started with the space character and exited with Escape key.
-.Bl -tag -width "Cm subsort Op Ar subject | date Op asc | desc"
-.It Cm set Ar plain | threaded | compact
+.Pp
+the following commands are valid in the mail listing context:
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
+.It Ic set Ar plain | threaded | compact | conversations
 set the way mailboxes are displayed
-.Bl -tag -width "threaded" -compact
+.Bl -tag -width "conversations" -compact
 .It Cm plain
 shows one row per mail, regardless of threading
 .It Cm threaded
 shows threads as a tree structure, with one row per thread entry
+.It Cm conversations
+shows one entry per thread
 .It Cm compact
 shows one row per thread
 .El
-.It Cm sort Ar subject | date \  Ar asc | desc
+.It Ic sort Ar subject | date \  Ar asc | desc
 sort mail listing
-.It Cm subsort Ar subject | date \  Ar asc | desc
+.It Ic subsort Ar subject | date \  Ar asc | desc
 sorts only the first level of replies.
-.It Cm close
-closes closeable tabs
-.It Cm go Ar n
+.It Ic go Ar n
 where
 .Ar n
 is a mailbox prefixed with the
 .Ar n
 number in the side menu for the current account
-.It Cm toggle_thread_snooze
+.It Ic toggle_thread_snooze
 don't issue notifications for thread under cursor in thread listing
-.It Cm filter Ar STRING
+.It Ic filter Ar STRING
 filter mailbox with
 .Ar STRING
 key. Escape exits filter results
+.It Ic set read, set unread
+.It Ic create-folder Ar ACCOUNT Ar FOLDER_PATH
+create folder with given path. be careful with backends and separator sensitivity (eg IMAP)
+.It Ic subscribe-folder Ar ACCOUNT Ar FOLDER_PATH
+subscribe to folder with given path
+.It Ic unsubscribe-folder Ar ACCOUNT Ar FOLDER_PATH
+unsubscribe to folder with given path
+.It Ic rename-folder Ar ACCOUNT Ar FOLDER_PATH_SRC Ar FOLDER_PATH_DEST
+rename folder
+.It Ic delete-folder Ar ACCOUNT Ar FOLDER_PATH
+delete folder
+.El
+.Pp
+envelope view commands:
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
+.It Cm pipe Ar EXECUTABLE Ar ARGS
+pipe pager contents to binary
 .It Cm list-post
 post in list of currently viewed envelope
 .It Cm list-unsubscribe
@@ -113,19 +134,36 @@ unsubscribe automatically from list of currently viewed envelope
 .It Cm list-archive
 open list archive with
 .Cm xdg-open
-.It Cm set read, set unread
+.El
+.Pp
+composing mail commands:
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
+.It Ic add-attachment Ar PATH
+in composer, add
+.Ar PATH
+as an attachment
+.It Ic remove-attachment Ar INDEX
+remove attachment with given index
+.El
+.Pp
+generic commands:
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
+.It Cm open-in-tab
+opens envelope view in new tab
+.It Ic close
+closes closeable tabs
 .It Cm setenv Ar KEY=VALUE
 set environment variable
 .Ar KEY
 to
 .Ar VALUE
-.It Cm printenv KEY
+.It Cm printenv Ar KEY
 print environment variable
 .Ar KEY
 .El
 .Sh SHORTCUTS
 Non-complete list of shortcuts and their default values.
-.Bl -tag -width "create_contact" -offset indent
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
 .It Cm open_thread
 \&'\\n'
 .It Cm exit_thread
@@ -156,8 +194,12 @@ PageDown
 PageUp
 .It Cm page_down
 PageDown
+.It Cm toggle-menu-visibility
+\&'`'
+.It Cm select
+\&'v'
 .El
-.Bl -tag -width "<n>a" -offset indent
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
 .It Cm `
 toggles hiding of sidebar in mail listings
 .It Cm \&?
@@ -178,6 +220,8 @@ opens the
 .Ar n Ns
 th
 attachment.
+.It Cm v
+(un)selects mail entries in mail listings
 .El
 .Sh EXIT STATUS
 .Nm
@@ -187,7 +231,7 @@ exits with 0 on a successful run. Other exit statuses are:
 catchall for general errors
 .El
 .Sh ENVIRONMENT
-.Bl -tag -width "Ev MELI_CONFIG" -offset indent
+.Bl -tag -width "$XDG_CONFIG_HOME/meli/plugins/*" -offset indent
 .It Ev EDITOR
 Specifies the editor to use
 .It Ev MELI_CONFIG
@@ -195,7 +239,7 @@ Override the configuration file
 .El
 .Sh FILES
 meli uses the following parts of the XDG standard:
-.Bl -tag -width "XDG_CONFIG_HOME" -offset indent
+.Bl -tag -width "$XDG_CONFIG_HOME/meli/plugins/*" -offset indent
 .It Ev XDG_CONFIG_HOME
 defaults to
 .Pa ~/.config/
@@ -209,18 +253,25 @@ and appropriates the following locations:
 .It Pa $XDG_CONFIG_HOME/meli/
 User configuration directory.
 .It Pa $XDG_CONFIG_HOME/meli/config
-User configuration file.
+User configuration file. See
+.Xr meli.conf 5
+for its syntax and values.
 .It Pa $XDG_CONFIG_HOME/meli/hooks/*
 Reserved for event hooks.
 .It Pa $XDG_CONFIG_HOME/meli/plugins/*
 Reserved for plugin files.
 .It Pa $XDG_CACHE_HOME/meli/*
 Internal cached data used by meli.
+.It Pa $XDG_DATA_HOME/meli/*
+Internal data used by meli.
+.It Pa $XDG_DATA_HOME/meli/meli.log
+Operation log.
 .It Pa /tmp/meli/*
 Temporary files generated by meli.
 .El
 .Sh SEE ALSO
-.Xr xdg-open 1
+.Xr xdg-open 1 ,
+.Xr meli.conf 5
 .Sh CONFORMING TO
 XDG Standard
 .Aq https://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html Ns

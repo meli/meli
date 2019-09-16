@@ -1,10 +1,8 @@
 # Setting up a Maildir account
 #[accounts.account-name]
 #root_folder = "/path/to/root/folder"
-#sent_folder = "/path/to/sent/folder" # optional
-#draft_folder = "Drafts"
 #format = "Maildir"
-#index = "Compact" # [plain, threaded, compact]
+#index_style = "Compact" # [plain, threaded, compact]
 #identity="Name <email@address.tld>"
 #display_name = "Name"
 
@@ -17,18 +15,21 @@
 # Setting up an mbox account
 #[accounts.mbox]
 #root_folder = "/var/mail/username"
-#draft_folder = ""
-#sent_folder = ""
 #format = "mbox"
-#index = "Compact"
+#index_style = "Compact"
 #identity="username@hostname.local"
 
 #[pager]
-#pager_ratio = 80
 #filter = "/usr/bin/pygmentize"
+#pager_context = 0 # default, optional
+#headers_sticky = true # default, optional
 
 #[notifications]
+#enable = true # default, optional
 #script = "notify-send"
+#xbiff_file_path = PATH # for use with xbiff(1)
+#play_sound = true # default, optional
+#sound_file = PATH # optional
 
 #[shortcuts]
 # Compact mail listing defaults:
