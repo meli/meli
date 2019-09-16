@@ -11,6 +11,10 @@
         terminal mail user agent   {|||)<
                                     / \
                                     `-'  
+DOCUMENTATION
+=============
+
+After installing meli, see meli(1) and meli.conf(5) for documentation.
 
 BUILDING
 ========
@@ -22,9 +26,19 @@ https://doc.rust-lang.org/cargo/getting-started/installation.html
 
 With Cargo available, the project can be built with 
 
-# cargo build --release
+# make
 
 The resulting binary will then be found under target/release/meli
+
+Run:
+
+# make install
+
+to install the binary and man pages. This requires root, so I suggest you override the default paths and install it in your $HOME:
+
+# make PREFIX=$HOME/.local install
+
+See meli(1) and meli.conf(5) for documentation.
 
 You can build and run meli with one command:
 
