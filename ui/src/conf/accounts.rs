@@ -650,9 +650,23 @@ impl Account {
                 self.name.as_str()
             )));
         }
+        let draft_folder = self
+            .settings
+            .folder_confs
+            .iter()
+            .find(|(_, f)| f.usage == Some(SpecialUseMailbox::Drafts));
+        if draft_folder.is_none() {
+            return Err(MeliError::new(format!(
+                "Account {} has no draft folder set.",
+                self.name.as_str()
+            )));
+        }
+
+        let draft_folder = draft_folder.unwrap();
+
         let finalize = draft.finalise()?;
         self.backend
-            .save(&finalize.as_bytes(), &self.settings.conf.draft_folder, None)
+            .save(&finalize.as_bytes(), draft_folder.0, None)
     }
     pub fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
         if self.settings.account.read_only() {
@@ -735,6 +749,19 @@ impl Account {
 
     pub fn folder_confs(&self, folder_hash: FolderHash) -> &FolderConf {
         &self.folder_confs[&folder_hash]
+    }
+
+    pub fn sent_folder(&self) -> &str {
+        let sent_folder = self
+            .settings
+            .folder_confs
+            .iter()
+            .find(|(_, f)| f.usage == Some(SpecialUseMailbox::Sent));
+        if let Some(sent_folder) = sent_folder.as_ref() {
+            sent_folder.0
+        } else {
+            ""
+        }
     }
 }
 

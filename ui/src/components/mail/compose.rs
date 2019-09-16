@@ -775,10 +775,7 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
             .expect("Failed to write to stdin");
         if let Err(e) = context.accounts[account_cursor].save(
             draft.as_bytes(),
-            &context.accounts[account_cursor]
-                .settings
-                .conf()
-                .sent_folder(),
+            &context.accounts[account_cursor].sent_folder(),
             Some(Flag::SEEN),
         ) {
             debug!("{:?} could not save sent msg", e);

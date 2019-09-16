@@ -287,7 +287,7 @@ impl Component for Listing {
                 if let Some(index_style) = context
                     .accounts
                     .get(self.cursor_pos.0)
-                    .and_then(|account| account.folder_confs(folder_hash).conf_override.index)
+                    .and_then(|account| account.folder_confs(folder_hash).conf_override.index_style)
                 {
                     self.component.set_style(index_style);
                 };
@@ -332,7 +332,7 @@ impl Component for Listing {
                 if let Some(index_style) = context
                     .accounts
                     .get(self.cursor_pos.0)
-                    .and_then(|account| account.folder_confs(folder_hash).conf_override.index)
+                    .and_then(|account| account.folder_confs(folder_hash).conf_override.index_style)
                 {
                     self.component.set_style(index_style);
                 };
@@ -572,10 +572,9 @@ impl Listing {
             .collect();
         /* Check if per-folder configuration overrides general configuration */
         let component = if let Some(index_style) = accounts.get(0).and_then(|account| {
-            account
-                .folders_order
-                .get(0)
-                .and_then(|folder_hash| account.folder_confs(*folder_hash).conf_override.index)
+            account.folders_order.get(0).and_then(|folder_hash| {
+                account.folder_confs(*folder_hash).conf_override.index_style
+            })
         }) {
             ListingComponent::from(index_style)
         } else {

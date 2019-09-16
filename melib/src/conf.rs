@@ -25,7 +25,6 @@ pub struct AccountSettings {
     pub name: String,
     pub root_folder: String,
     pub format: String,
-    pub sent_folder: String,
     pub identity: String,
     pub read_only: bool,
     pub display_name: Option<String>,

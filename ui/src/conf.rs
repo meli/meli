@@ -96,7 +96,7 @@ pub struct MailUIConf {
     pub shortcuts: Option<Shortcuts>,
     pub mailer: Option<MailerSettings>,
     pub identity: Option<String>,
-    pub index: Option<IndexStyle>,
+    pub index_style: Option<IndexStyle>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,15 +137,13 @@ impl FolderConf {
 pub struct FileAccount {
     root_folder: String,
     format: String,
-    sent_folder: String,
-    draft_folder: String,
     identity: String,
     #[serde(flatten)]
     pub extra: HashMap<String, String>,
 
     #[serde(default = "none")]
     display_name: Option<String>,
-    index: IndexStyle,
+    index_style: IndexStyle,
 
     /// A command to pipe html output before displaying it in a pager
     /// Default: None
@@ -161,7 +159,6 @@ pub struct FileAccount {
 impl From<FileAccount> for AccountConf {
     fn from(x: FileAccount) -> Self {
         let format = x.format.to_lowercase();
-        let sent_folder = x.sent_folder.clone();
         let root_folder = x.root_folder.clone();
         let identity = x.identity.clone();
         let display_name = x.display_name.clone();
@@ -170,7 +167,6 @@ impl From<FileAccount> for AccountConf {
             name: String::new(),
             root_folder,
             format,
-            sent_folder,
             identity,
             read_only: x.read_only,
             display_name,
@@ -252,15 +248,15 @@ impl FileAccount {
     pub fn folders(&self) -> Option<&HashMap<String, FolderConf>> {
         self.folders.as_ref()
     }
+
     pub fn folder(&self) -> &str {
         &self.root_folder
     }
-    pub fn index(&self) -> IndexStyle {
-        self.index
+
+    pub fn index_style(&self) -> IndexStyle {
+        self.index_style
     }
-    pub fn sent_folder(&self) -> &str {
-        self.sent_folder.as_str()
-    }
+
     pub fn html_filter(&self) -> Option<&str> {
         self.html_filter.as_ref().map(String::as_str)
     }
