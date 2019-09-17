@@ -471,7 +471,7 @@ impl MailBackend for MaildirType {
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
         for f in self.folders.values() {
-            if f.name == folder {
+            if f.name == folder || f.path.to_str().unwrap() == folder {
                 let mut path = f.fs_path.clone();
                 path.push("cur");
                 {
