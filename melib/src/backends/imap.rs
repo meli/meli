@@ -65,7 +65,6 @@ pub struct ImapType {
     danger_accept_invalid_certs: bool,
     connection: Arc<Mutex<ImapConnection>>,
 
-    capabilities: Capabilities,
     folders: FnvHashMap<FolderHash, ImapFolder>,
     hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
     uid_index: Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
@@ -174,15 +173,19 @@ impl MailBackend for ImapType {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
-        let has_idle: bool = self.capabilities.contains(&b"IDLE"[0..]);
+        let has_idle: bool = self
+            .connection
+            .lock()
+            .unwrap()
+            .capabilities
+            .contains(&b"IDLE"[0..]);
         let folders = self.folders.clone();
         let conn = ImapConnection::new_connection(
             self.server_hostname.clone(),
             self.server_username.clone(),
             self.server_password.clone(),
             self.danger_accept_invalid_certs,
-        )?
-        .1;
+        );
         let main_conn = self.connection.clone();
         let hash_index = self.hash_index.clone();
         let uid_index = self.uid_index.clone();
@@ -385,31 +388,6 @@ macro_rules! get_conf_val {
     };
 }
 
-macro_rules! exit_on_error {
-    ($s:ident, $($result:expr)+) => {
-        $(if let Err(e) = $result {
-            eprintln!(
-                "IMAP error ({}): {}",
-                $s.name.as_str(),
-                e.to_string(),
-            );
-            std::process::exit(1);
-        })+
-    };
-    ($s:ident returning $result:expr) => {
-        match $result {
-            Err(e) => {
-                eprintln!(
-                    "IMAP error ({}): {}",
-                    $s.name.as_str(),
-                    e.to_string(),
-                );
-                std::process::exit(1);
-            },
-            Ok(v) => v,
-        }
-    }
-}
 impl ImapType {
     pub fn new(s: &AccountSettings, is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
         debug!(s);
@@ -418,7 +396,12 @@ impl ImapType {
         let server_password = get_conf_val!(s["server_password"]);
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false);
-        let (capabilities, connection) = exit_on_error!(s returning ImapConnection::new_connection(server_hostname.to_string(), server_username.to_string(), server_password.to_string(), danger_accept_invalid_certs));
+        let connection = ImapConnection::new_connection(
+            server_hostname.to_string(),
+            server_username.to_string(),
+            server_password.to_string(),
+            danger_accept_invalid_certs,
+        );
 
         let mut m = ImapType {
             account_name: s.name().to_string(),
@@ -430,15 +413,8 @@ impl ImapType {
             danger_accept_invalid_certs,
             hash_index: Default::default(),
             uid_index: Default::default(),
-            capabilities,
             byte_cache: Default::default(),
         };
-
-        debug!(m
-            .capabilities
-            .iter()
-            .map(|s| String::from_utf8(s.to_vec()).unwrap())
-            .collect::<Vec<String>>());
 
         m.folders = m.imap_folders();
         m.folders.retain(|_, f| is_subscribed(f.path()));
@@ -459,9 +435,7 @@ impl ImapType {
             self.server_username.clone(),
             self.server_password.clone(),
             self.danger_accept_invalid_certs,
-        )
-        .unwrap()
-        .1;
+        );
         let mut res = String::with_capacity(8 * 1024);
         conn.read_response(&mut res).unwrap();
         debug!("out: {}", &res);
