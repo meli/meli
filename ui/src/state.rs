@@ -184,9 +184,11 @@ impl State {
         let mut accounts: Vec<Account> = settings
             .accounts
             .iter()
-            .map(|(n, a_s)| {
+            .enumerate()
+            .map(|(index, (n, a_s))| {
                 let sender = sender.clone();
                 Account::new(
+                    index,
                     n.to_string(),
                     a_s.clone(),
                     &backends,
@@ -199,7 +201,6 @@ impl State {
             })
             .collect();
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
-        log(format!("Initialized {} accounts.", accounts.len()), INFO);
 
         let _stdout = std::io::stdout();
         _stdout.lock();

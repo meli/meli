@@ -116,6 +116,7 @@ impl MailboxEntry {
 
 #[derive(Debug)]
 pub struct Account {
+    pub index: usize,
     name: String,
     pub(crate) folders: FnvHashMap<FolderHash, MailboxEntry>,
     pub(crate) folder_confs: FnvHashMap<FolderHash, FolderConf>,
@@ -193,7 +194,13 @@ struct FolderNode {
 }
 
 impl Account {
-    pub fn new(name: String, settings: AccountConf, map: &Backends, notify_fn: NotifyFn) -> Self {
+    pub fn new(
+        index: usize,
+        name: String,
+        settings: AccountConf,
+        map: &Backends,
+        notify_fn: NotifyFn,
+    ) -> Self {
         let s = settings.clone();
         let mut backend = map.get(settings.account().format())(
             settings.account(),
@@ -303,6 +310,7 @@ impl Account {
         };
 
         Account {
+            index,
             name,
             folders,
             folder_confs,
@@ -444,11 +452,11 @@ impl Account {
                     let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
                     let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
                     if folder_conf.ignore.is_true() {
-                        return None;
+                        return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
                     let (_, thread_node) = self.mail_and_thread(env_hash, folder_hash);
                     if thread_node.snoozed() {
-                        return None;
+                        return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
                     let env = self.get_env(&env_hash);
                     return Some(Notification(
