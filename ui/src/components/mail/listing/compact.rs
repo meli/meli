@@ -101,7 +101,7 @@ pub struct CompactListing {
 
 impl ListingTrait for CompactListing {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
-        (self.cursor_pos.0, self.cursor_pos.1, None)
+        (self.new_cursor_pos.0, self.new_cursor_pos.1, None)
     }
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
@@ -498,9 +498,6 @@ impl CompactListing {
             self.dirty = false;
             return;
         };
-        context
-            .replies
-            .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
 
         // Get mailbox as a reference.
         //

@@ -51,9 +51,9 @@ pub struct ThreadListing {
 impl ListingTrait for ThreadListing {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
         (
-            self.cursor_pos.0,
-            self.cursor_pos.1,
-            Some(self.locations[self.cursor_pos.2]),
+            self.new_cursor_pos.0,
+            self.new_cursor_pos.1,
+            Some(self.locations[self.new_cursor_pos.2]),
         )
     }
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
