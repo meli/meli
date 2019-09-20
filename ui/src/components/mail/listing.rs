@@ -290,11 +290,13 @@ impl Component for Listing {
                     .and_then(|account| account.folder_confs(folder_hash).conf_override.index_style)
                 {
                     self.component.set_style(index_style);
-                };
-                // Inform State that we changed the current folder view.
-                context
-                    .replies
-                    .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
+                } else if let Some(index_style) = context
+                    .accounts
+                    .get(self.cursor_pos.0)
+                    .and_then(|account| Some(account.settings.conf.index_style()))
+                {
+                    self.component.set_style(index_style);
+                }
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -335,11 +337,13 @@ impl Component for Listing {
                     .and_then(|account| account.folder_confs(folder_hash).conf_override.index_style)
                 {
                     self.component.set_style(index_style);
-                };
-                // Inform State that we changed the current folder view.
-                context
-                    .replies
-                    .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
+                } else if let Some(index_style) = context
+                    .accounts
+                    .get(self.cursor_pos.0)
+                    .and_then(|account| Some(account.settings.conf.index_style()))
+                {
+                    self.component.set_style(index_style);
+                }
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -576,6 +580,11 @@ impl Listing {
                 account.folder_confs(*folder_hash).conf_override.index_style
             })
         }) {
+            ListingComponent::from(index_style)
+        } else if let Some(index_style) = accounts
+            .get(0)
+            .and_then(|account| Some(account.settings.conf.index_style()))
+        {
             ListingComponent::from(index_style)
         } else {
             Conversations(Default::default())
