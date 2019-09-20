@@ -209,9 +209,9 @@ impl fmt::Debug for MessageID {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-struct References {
-    raw: Vec<u8>,
-    refs: Vec<MessageID>,
+pub struct References {
+    pub raw: Vec<u8>,
+    pub refs: Vec<MessageID>,
 }
 
 impl fmt::Debug for References {
