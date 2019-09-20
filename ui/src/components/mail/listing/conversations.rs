@@ -483,11 +483,11 @@ impl ConversationsListing {
             id: ComponentId::new_v4(),
         }
     }
-    fn make_entry_string(e: &Envelope, len: usize, is_snoozed: bool) -> EntryStrings {
-        if len > 0 {
+    fn make_entry_string(e: &Envelope, thread_node: &ThreadNode, is_snoozed: bool) -> EntryStrings {
+        if thread_node.len() > 0 {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(e)),
-                subject: SubjectString(format!("{} ({})", e.subject(), len,)),
+                date: DateString(ConversationsListing::format_date(thread_node)),
+                subject: SubjectString(format!("{} ({})", e.subject(), thread_node.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
                     if e.has_attachments() { "📎" } else { "" },
@@ -497,7 +497,7 @@ impl ConversationsListing {
             }
         } else {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(e)),
+                date: DateString(ConversationsListing::format_date(thread_node)),
                 subject: SubjectString(e.subject().to_string()),
                 flag: FlagString(format!(
                     "{}{}",
@@ -597,7 +597,7 @@ impl ConversationsListing {
 
             let strings = ConversationsListing::make_entry_string(
                 root_envelope,
-                thread_node.len(),
+                thread_node,
                 threads.is_snoozed(root_idx),
             );
             max_entry_columns = std::cmp::max(
@@ -719,8 +719,8 @@ impl ConversationsListing {
         }
     }
 
-    fn format_date(envelope: &Envelope) -> String {
-        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
+    fn format_date(thread_node: &ThreadNode) -> String {
+        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(thread_node.date());
         let now: std::time::Duration = std::time::SystemTime::now()
             .duration_since(d)
             .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
@@ -728,7 +728,10 @@ impl ConversationsListing {
             n if n < 10 * 60 * 60 => format!("{} hours ago", n / (60 * 60)),
             n if n < 24 * 60 * 60 => format!("{} hours ago", n / (60 * 60)),
             n if n < 4 * 24 * 60 * 60 => format!("{} days ago", n / (24 * 60 * 60),),
-            _ => envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),
+            _ => thread_node
+                .datetime()
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string(),
         }
     }
 
