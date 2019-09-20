@@ -607,7 +607,11 @@ impl State {
                 match w {
                     Ok(Some(_)) => true,
                     Ok(None) => false,
-                    Err(_) => {
+                    Err(e) => {
+                        log(
+                            format!("Failed to wait on editor process: {}", e.to_string()),
+                            ERROR,
+                        );
                         return None;
                     }
                 }
@@ -617,7 +621,11 @@ impl State {
                 match w {
                     Ok(Some(_)) => true,
                     Ok(None) => false,
-                    Err(_) => {
+                    Err(e) => {
+                        log(
+                            format!("Failed to wait on child process: {}", e.to_string()),
+                            ERROR,
+                        );
                         return None;
                     }
                 }
