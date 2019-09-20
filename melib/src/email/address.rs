@@ -65,6 +65,16 @@ impl Address {
             Address::Group(_) => None,
         }
     }
+
+    pub fn get_tags(&self, separator: char) -> Vec<String> {
+        let mut ret = Vec::new();
+        if let email = self.get_email() {
+            let at_pos = email.as_bytes().iter().position(|&b| b == b'@').unwrap();
+            let email: &str = email[..at_pos].into();
+            ret.extend(email.split(separator).skip(1).map(str::to_string));
+        }
+        ret
+    }
 }
 
 impl Eq for Address {}
