@@ -51,7 +51,8 @@ shortcut_key_values! { "compact_listing",
     /// Shortcut listing for a mail listing in compact mode.
     pub struct CompactListingShortcuts {
             open_thread: Key |> "Open thread.",
-            exit_thread: Key |> "Exit thread view."
+            exit_thread: Key |> "Exit thread view.",
+            set_seen: Key |> "Set thread as seen."
     }
 }
 
@@ -60,6 +61,7 @@ impl Default for CompactListingShortcuts {
         CompactListingShortcuts {
             open_thread: Key::Char('\n'),
             exit_thread: Key::Char('i'),
+            set_seen: Key::Char('n'),
         }
     }
 }

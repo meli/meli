@@ -417,8 +417,23 @@ impl ThreadNode {
         self.has_unseen
     }
 
+    pub fn set_has_unseen(&mut self, new_val: bool) {
+        self.has_unseen = new_val;
+    }
+
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn date(&self) -> UnixTimestamp {
+        self.date
+    }
+
+    pub fn datetime(&self) -> chrono::DateTime<chrono::Utc> {
+        use chrono::{TimeZone, Utc};
+        use std::convert::TryInto;
+
+        Utc.timestamp(self.date.try_into().unwrap_or(0), 0)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -575,12 +590,12 @@ impl<'a> Iterator for RootIterator<'a> {
     }
 }
 
-fn find_ref(buf: &FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
+pub fn find_thread_group(buf: &FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
     if buf[&h].thread_group == h {
         return h;
     }
     let p = buf[&h].thread_group;
-    find_ref(buf, p)
+    find_thread_group(buf, p)
 }
 fn find(buf: &mut FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
     if buf[&h].thread_group == h {
@@ -617,7 +632,7 @@ fn union(buf: &mut FnvHashMap<ThreadHash, ThreadNode>, x: ThreadHash, y: ThreadH
 
 impl Threads {
     pub fn is_snoozed(&self, h: ThreadHash) -> bool {
-        let root = find_ref(&self.thread_nodes, h);
+        let root = find_thread_group(&self.thread_nodes, h);
         self.thread_nodes[&root].snoozed()
     }
     pub fn find(&mut self, i: ThreadHash) -> ThreadHash {

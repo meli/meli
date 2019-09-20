@@ -21,6 +21,7 @@
 
 use super::*;
 use crate::components::utilities::PageMovement;
+use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
 const MAX_COLS: usize = 500;
@@ -892,6 +893,71 @@ impl ConversationsListing {
             self.filtered_selection[cursor]
         }
     }
+
+    fn perform_action(
+        &mut self,
+        context: &mut Context,
+        thread_hash: ThreadHash,
+        a: &ListingAction,
+    ) {
+        let account = &mut context.accounts[self.cursor_pos.0];
+        let mut envs_to_set: StackVec<EnvelopeHash> = StackVec::new();
+        {
+            let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+            let mut stack = StackVec::new();
+            stack.push(thread_hash);
+            while let Some(thread_iter) = stack.pop() {
+                {
+                    let threads = account.collection.threads.get_mut(&folder_hash).unwrap();
+                    threads
+                        .thread_nodes
+                        .entry(thread_iter)
+                        .and_modify(|t| t.set_has_unseen(false));
+                }
+                let threads = &account.collection.threads[&folder_hash];
+                if let Some(env_hash) = threads[&thread_iter].message() {
+                    if !account.contains_key(env_hash) {
+                        /* The envelope has been renamed or removed, so wait for the appropriate event to
+                         * arrive */
+                        continue;
+                    }
+                    envs_to_set.push(env_hash);
+                }
+                for c in 0..threads[&thread_iter].children().len() {
+                    let c = threads[&thread_iter].children()[c];
+                    stack.push(c);
+                }
+            }
+        }
+        for env_hash in envs_to_set {
+            match a {
+                ListingAction::SetSeen => {
+                    let hash = account.get_env(&env_hash).hash();
+                    let op = account.operation(hash);
+                    let envelope: &mut Envelope = &mut account.get_env_mut(&env_hash);
+                    if let Err(e) = envelope.set_seen(op) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(e.to_string()),
+                        ));
+                    }
+                    self.row_updates.push(thread_hash);
+                }
+                ListingAction::SetUnseen => {
+                    let hash = account.get_env(&env_hash).hash();
+                    let op = account.operation(hash);
+                    let envelope: &mut Envelope = &mut account.get_env_mut(&env_hash);
+                    if let Err(e) = envelope.set_unseen(op) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(e.to_string()),
+                        ));
+                    }
+                    self.row_updates.push(thread_hash);
+                }
+                ListingAction::Delete => { /* do nothing */ }
+                _ => unreachable!(),
+            }
+        }
+    }
 }
 
 impl Component for ConversationsListing {
@@ -1074,6 +1140,12 @@ impl Component for ConversationsListing {
                 self.movement = Some(PageMovement::End);
                 self.set_dirty();
             }
+            UIEvent::Input(ref key) if *key == shortcuts["set_seen"] => {
+                let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                self.perform_action(context, thread_hash, &ListingAction::SetSeen);
+                self.row_updates.push(thread_hash);
+                self.set_dirty();
+            }
             UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
                 self.unfocused = false;
                 self.dirty = true;
@@ -1116,14 +1188,35 @@ impl Component for ConversationsListing {
                 if !threads.thread_nodes.contains_key(&new_env_thread_hash) {
                     return false;
                 }
-                let thread_group = threads.thread_nodes[&new_env_thread_hash].thread_group();
-                let (&thread_hash, _): (&ThreadHash, &usize) = self
+                let thread_group = melib::find_thread_group(
+                    &threads.thread_nodes,
+                    threads.thread_nodes[&new_env_thread_hash].thread_group(),
+                );
+                let (&thread_hash, &row): (&ThreadHash, &usize) = self
                     .order
                     .iter()
-                    .find(|(n, _)| threads.thread_nodes[&n].thread_group() == thread_group)
+                    .find(|(n, _)| {
+                        melib::find_thread_group(
+                            &threads.thread_nodes,
+                            threads.thread_nodes[&n].thread_group(),
+                        ) == thread_group
+                    })
                     .unwrap();
 
-                self.row_updates.push(thread_hash);
+                let new_thread_hash = threads.root_set(row);
+                self.row_updates.push(new_thread_hash);
+                if let Some(row) = self.order.remove(&thread_hash) {
+                    self.order.insert(new_thread_hash, row);
+                    let selection_status = self.selection.remove(&thread_hash).unwrap();
+                    self.selection.insert(new_thread_hash, selection_status);
+                    for h in self.filtered_selection.iter_mut() {
+                        if *h == thread_hash {
+                            *h = new_thread_hash;
+                            break;
+                        }
+                    }
+                }
+
                 self.dirty = true;
 
                 self.view
@@ -1182,10 +1275,6 @@ impl Component for ConversationsListing {
                 | Action::Listing(a @ ListingAction::Delete)
                     if !self.unfocused =>
                 {
-                    /* Iterate over selection if exists, else only over the envelope under the
-                     * cursor. Using two iterators allows chaining them which results into a Chain
-                     * type. We can't conditonally select either a slice iterator or a Map iterator
-                     * because of the type system */
                     let is_selection_empty =
                         self.selection.values().cloned().any(std::convert::identity);
                     let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
@@ -1200,60 +1289,11 @@ impl Component for ConversationsListing {
                     let iter = sel_iter
                         .into_iter()
                         .flatten()
-                        .chain(cursor_iter.into_iter().flatten());
-                    for &i in iter {
-                        let account = &mut context.accounts[self.cursor_pos.0];
-                        let mut envs_to_set: StackVec<EnvelopeHash> = StackVec::new();
-                        {
-                            let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                            let threads = &account.collection.threads[&folder_hash];
-                            let mut stack = StackVec::new();
-                            stack.push(i);
-                            while let Some(thread_iter) = stack.pop() {
-                                if let Some(env_hash) = threads[&thread_iter].message() {
-                                    if !account.contains_key(env_hash) {
-                                        /* The envelope has been renamed or removed, so wait for the appropriate event to
-                                         * arrive */
-                                        continue;
-                                    }
-                                    envs_to_set.push(env_hash);
-                                }
-                                for c in 0..threads[&thread_iter].children().len() {
-                                    let c = threads[&thread_iter].children()[c];
-                                    stack.push(c);
-                                }
-                            }
-                        }
-                        for env_hash in envs_to_set {
-                            match a {
-                                ListingAction::SetSeen => {
-                                    let hash = account.get_env(&env_hash).hash();
-                                    let op = account.operation(hash);
-                                    let envelope: &mut Envelope =
-                                        &mut account.get_env_mut(&env_hash);
-                                    if let Err(e) = envelope.set_seen(op) {
-                                        context.replies.push_back(UIEvent::StatusEvent(
-                                            StatusEvent::DisplayMessage(e.to_string()),
-                                        ));
-                                    }
-                                    self.row_updates.push(i);
-                                }
-                                ListingAction::SetUnseen => {
-                                    let hash = account.get_env(&env_hash).hash();
-                                    let op = account.operation(hash);
-                                    let envelope: &mut Envelope =
-                                        &mut account.get_env_mut(&env_hash);
-                                    if let Err(e) = envelope.set_unseen(op) {
-                                        context.replies.push_back(UIEvent::StatusEvent(
-                                            StatusEvent::DisplayMessage(e.to_string()),
-                                        ));
-                                    }
-                                    self.row_updates.push(i);
-                                }
-                                ListingAction::Delete => { /* do nothing */ }
-                                _ => unreachable!(),
-                            }
-                        }
+                        .chain(cursor_iter.into_iter().flatten())
+                        .cloned();
+                    let stack = StackVec::from_iter(iter.into_iter());
+                    for i in stack {
+                        self.perform_action(context, i, a);
                     }
                     self.dirty = true;
                     for v in self.selection.values_mut() {
@@ -1342,6 +1382,14 @@ impl Component for ConversationsListing {
                         (*key).clone()
                     } else {
                         Key::Char('v')
+                    },
+                ),
+                (
+                    "set_seen",
+                    if let Some(key) = config_map.get("set_seen") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('n')
                     },
                 ),
             ]
