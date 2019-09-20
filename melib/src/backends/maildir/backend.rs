@@ -37,7 +37,7 @@ use std::sync::mpsc::channel;
 //use std::sync::mpsc::sync_channel;
 //use std::sync::mpsc::SyncSender;
 //use std::time::Duration;
-use fnv::{FnvHashMap, FnvHasher};
+use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
 use std::fs;
@@ -600,21 +600,14 @@ impl MaildirType {
             std::process::exit(1);
         }
 
-        match MaildirFolder::new(
+        if let Ok(f) = MaildirFolder::new(
             root_path.to_str().unwrap().to_string(),
             root_path.file_name().unwrap().to_str().unwrap().to_string(),
             None,
             Vec::with_capacity(0),
             settings,
         ) {
-            Ok(f) => {
-                folders.insert(f.hash, f);
-            }
-            Err(e) => {
-                eprint!("{}: ", settings.name());
-                eprintln!("{}", e.to_string());
-                std::process::exit(1);
-            }
+            folders.insert(f.hash, f);
         }
 
         if folders.is_empty() {
@@ -633,6 +626,10 @@ impl MaildirType {
             folders.get_mut(&root_hash).map(|f| f.children = children);
         }
         folders.retain(|_, f| is_subscribed(f.path()));
+        let keys = folders.keys().cloned().collect::<FnvHashSet<FolderHash>>();
+        for f in folders.values_mut() {
+            f.children.retain(|c| keys.contains(c));
+        }
 
         let hash_indexes = Arc::new(Mutex::new(FnvHashMap::with_capacity_and_hasher(
             folders.len(),
