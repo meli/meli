@@ -35,6 +35,8 @@
 use crate::email::parser::BytesExt;
 use crate::email::*;
 use crate::structs::StackVec;
+
+#[cfg(feature = "unicode_algorithms")]
 use text_processing::grapheme_clusters::*;
 use uuid::Uuid;
 
@@ -504,10 +506,19 @@ impl ThreadNode {
                         buf.get(&probe).map(|n| n.message.as_ref()).unwrap_or(None),
                         buf.get(&child).map(|n| n.message.as_ref()).unwrap_or(None),
                     ) {
-                        (Some(p), Some(c)) => envelopes[p]
-                            .subject()
-                            .split_graphemes()
-                            .cmp(&envelopes[c].subject().split_graphemes()),
+                        (Some(p), Some(c)) => {
+                            #[cfg(feature = "unicode_algorithms")]
+                            {
+                                envelopes[p]
+                                    .subject()
+                                    .split_graphemes()
+                                    .cmp(&envelopes[c].subject().split_graphemes())
+                            }
+                            #[cfg(not(feature = "unicode_algorithms"))]
+                            {
+                                envelopes[p].subject().cmp(&envelopes[c].subject())
+                            }
+                        }
                         (Some(_), None) => Ordering::Greater,
                         (None, Some(_)) => Ordering::Less,
                         (None, None) => Ordering::Equal,
@@ -523,10 +534,19 @@ impl ThreadNode {
                         buf.get(&probe).map(|n| n.message.as_ref()).unwrap_or(None),
                         buf.get(&child).map(|n| n.message.as_ref()).unwrap_or(None),
                     ) {
-                        (Some(p), Some(c)) => envelopes[c]
-                            .subject()
-                            .split_graphemes()
-                            .cmp(&envelopes[p].subject().split_graphemes()),
+                        (Some(p), Some(c)) => {
+                            #[cfg(feature = "unicode_algorithms")]
+                            {
+                                envelopes[c]
+                                    .subject()
+                                    .split_graphemes()
+                                    .cmp(&envelopes[p].subject().split_graphemes())
+                            }
+                            #[cfg(not(feature = "unicode_algorithms"))]
+                            {
+                                envelopes[c].subject().cmp(&envelopes[p].subject())
+                            }
+                        }
                         (Some(_), None) => Ordering::Less,
                         (None, Some(_)) => Ordering::Greater,
                         (None, None) => Ordering::Equal,
@@ -1078,9 +1098,16 @@ impl Threads {
                 }
                 let ma = &envelopes[&a.unwrap()];
                 let mb = &envelopes[&b.unwrap()];
-                ma.subject()
-                    .split_graphemes()
-                    .cmp(&mb.subject().split_graphemes())
+                #[cfg(feature = "unicode_algorithms")]
+                {
+                    ma.subject()
+                        .split_graphemes()
+                        .cmp(&mb.subject().split_graphemes())
+                }
+                #[cfg(not(feature = "unicode_algorithms"))]
+                {
+                    ma.subject().cmp(&mb.subject())
+                }
             }
             (SortField::Subject, SortOrder::Asc) => {
                 let a = &self.thread_nodes[&a].message();
@@ -1100,10 +1127,18 @@ impl Threads {
                 }
                 let ma = &envelopes[&a.unwrap()];
                 let mb = &envelopes[&b.unwrap()];
-                mb.subject()
-                    .as_ref()
-                    .split_graphemes()
-                    .cmp(&ma.subject().split_graphemes())
+                #[cfg(feature = "unicode_algorithms")]
+                {
+                    mb.subject()
+                        .as_ref()
+                        .split_graphemes()
+                        .cmp(&ma.subject().split_graphemes())
+                }
+
+                #[cfg(not(feature = "unicode_algorithms"))]
+                {
+                    mb.subject().as_ref().cmp(&ma.subject())
+                }
             }
         });
     }

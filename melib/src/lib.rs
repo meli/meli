@@ -84,6 +84,7 @@ pub mod dbg {
     }
 }
 
+#[cfg(feature = "unicode_algorithms")]
 extern crate text_processing;
 
 #[macro_use]
@@ -113,7 +114,6 @@ extern crate nom;
 extern crate chrono;
 extern crate data_encoding;
 extern crate encoding;
-extern crate memmap;
 
 #[macro_use]
 extern crate bitflags;

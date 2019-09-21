@@ -18,16 +18,22 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+#[cfg(feature = "imap_backend")]
 pub mod imap;
+#[cfg(feature = "maildir_backend")]
 pub mod maildir;
+#[cfg(feature = "mbox_backend")]
 pub mod mbox;
 
+#[cfg(feature = "imap_backend")]
 pub use self::imap::ImapType;
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::error::{MeliError, Result};
-//use mailbox::backends::imap::ImapType;
+
+#[cfg(feature = "maildir_backend")]
 use self::maildir::MaildirType;
+#[cfg(feature = "mbox_backend")]
 use self::mbox::MboxType;
 use super::email::{Envelope, EnvelopeHash, Flag};
 use std::fmt;
@@ -57,18 +63,27 @@ impl Backends {
         let mut b = Backends {
             map: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
         };
-        b.register(
-            "maildir".to_string(),
-            Box::new(|| Box::new(|f, i| Box::new(MaildirType::new(f, i)))),
-        );
-        b.register(
-            "mbox".to_string(),
-            Box::new(|| Box::new(|f, i| Box::new(MboxType::new(f, i)))),
-        );
-        b.register(
-            "imap".to_string(),
-            Box::new(|| Box::new(|f, i| Box::new(ImapType::new(f, i)))),
-        );
+        #[cfg(feature = "maildir_backend")]
+        {
+            b.register(
+                "maildir".to_string(),
+                Box::new(|| Box::new(|f, i| Box::new(MaildirType::new(f, i)))),
+            );
+        }
+        #[cfg(feature = "mbox_backend")]
+        {
+            b.register(
+                "mbox".to_string(),
+                Box::new(|| Box::new(|f, i| Box::new(MboxType::new(f, i)))),
+            );
+        }
+        #[cfg(feature = "imap_backend")]
+        {
+            b.register(
+                "imap".to_string(),
+                Box::new(|| Box::new(|f, i| Box::new(ImapType::new(f, i)))),
+            );
+        }
         b
     }
 

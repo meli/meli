@@ -12,16 +12,24 @@ crossbeam = "0.7.2"
 data-encoding = "2.1.1"
 encoding = "0.2.33"
 fnv = "1.0.3"
-memmap = "0.5.2"
+memmap = { version = "0.5.2", optional = true }
 nom = "3.2.0"
-notify = "4.0.1"
-notify-rust = "^3"
+notify = { version = "4.0.1", optional = true }
+notify-rust = { version = "^3", optional = true }
 termion = "1.5.1"
 xdg = "2.1.0"
-native-tls = "0.2"
+native-tls = { version ="0.2", optional=true }
 serde = "1.0.71"
 serde_derive = "1.0.71"
 bincode = "1.0.1"
 uuid = { version = "0.6", features = ["serde", "v4"] }
-text_processing = { path = "../text_processing", version = "*" }
+text_processing = { path = "../text_processing", version = "*", optional= true }
 libc = {version = "0.2.59", features = ["extra_traits",]}
+
+[features]
+default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend"]
+
+unicode_algorithms = ["text_processing"]
+imap_backend = ["native-tls"]
+maildir_backend = ["notify", "notify-rust", "memmap"]
+mbox_backend = ["notify", "notify-rust", "memmap"]
