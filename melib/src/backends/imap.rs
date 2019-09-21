@@ -55,15 +55,22 @@ pub struct EnvelopeCache {
     flags: Option<Flag>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ImapServerConf {
+    pub server_hostname: String,
+    pub server_username: String,
+    pub server_password: String,
+    pub server_port: u16,
+    pub use_starttls: bool,
+    pub danger_accept_invalid_certs: bool,
+}
+
 type Capabilities = FnvHashSet<Vec<u8>>;
 #[derive(Debug)]
 pub struct ImapType {
     account_name: String,
-    server_hostname: String,
-    server_username: String,
-    server_password: String,
-    danger_accept_invalid_certs: bool,
     connection: Arc<Mutex<ImapConnection>>,
+    server_conf: ImapServerConf,
 
     folders: FnvHashMap<FolderHash, ImapFolder>,
     hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
@@ -180,12 +187,7 @@ impl MailBackend for ImapType {
             .capabilities
             .contains(&b"IDLE"[0..]);
         let folders = self.folders.clone();
-        let conn = ImapConnection::new_connection(
-            self.server_hostname.clone(),
-            self.server_username.clone(),
-            self.server_password.clone(),
-            self.danger_accept_invalid_certs,
-        );
+        let conn = ImapConnection::new_connection(&self.server_conf);
         let main_conn = self.connection.clone();
         let hash_index = self.hash_index.clone();
         let uid_index = self.uid_index.clone();
@@ -394,23 +396,32 @@ impl ImapType {
         let server_hostname = get_conf_val!(s["server_hostname"]);
         let server_username = get_conf_val!(s["server_username"]);
         let server_password = get_conf_val!(s["server_password"]);
+        let server_port = get_conf_val!(s["server_port"], 143);
+        let use_starttls = get_conf_val!(s["use_starttls"], {
+            if server_port == 993 {
+                false
+            } else {
+                true
+            }
+        });
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false);
-        let connection = ImapConnection::new_connection(
-            server_hostname.to_string(),
-            server_username.to_string(),
-            server_password.to_string(),
+        let server_conf = ImapServerConf {
+            server_hostname: server_hostname.to_string(),
+            server_username: server_username.to_string(),
+            server_password: server_password.to_string(),
+            server_port,
+            use_starttls,
             danger_accept_invalid_certs,
-        );
+        };
+        let connection = ImapConnection::new_connection(&server_conf);
 
         let mut m = ImapType {
             account_name: s.name().to_string(),
-            server_hostname: get_conf_val!(s["server_hostname"]).to_string(),
-            server_username: get_conf_val!(s["server_username"]).to_string(),
-            server_password: get_conf_val!(s["server_password"]).to_string(),
+            server_conf,
+
             folders: Default::default(),
             connection: Arc::new(Mutex::new(connection)),
-            danger_accept_invalid_certs,
             hash_index: Default::default(),
             uid_index: Default::default(),
             byte_cache: Default::default(),
@@ -430,12 +441,7 @@ impl ImapType {
     }
 
     pub fn shell(&mut self) {
-        let mut conn = ImapConnection::new_connection(
-            self.server_hostname.clone(),
-            self.server_username.clone(),
-            self.server_password.clone(),
-            self.danger_accept_invalid_certs,
-        );
+        let mut conn = ImapConnection::new_connection(&self.server_conf);
         let mut res = String::with_capacity(8 * 1024);
         conn.read_response(&mut res).unwrap();
         debug!("out: {}", &res);

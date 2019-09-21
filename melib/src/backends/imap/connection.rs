@@ -30,7 +30,7 @@ use std::iter::FromIterator;
 use std::net::SocketAddr;
 
 use super::protocol_parser;
-use super::Capabilities;
+use super::{Capabilities, ImapServerConf};
 
 #[derive(Debug)]
 pub struct ImapStream {
@@ -41,10 +41,7 @@ pub struct ImapStream {
 #[derive(Debug)]
 pub struct ImapConnection {
     pub stream: Result<ImapStream>,
-    server_hostname: String,
-    server_username: String,
-    server_password: String,
-    danger_accept_invalid_certs: bool,
+    pub server_conf: ImapServerConf,
     pub capabilities: Capabilities,
 }
 
@@ -145,23 +142,18 @@ impl ImapStream {
         Ok(())
     }
 
-    pub fn new_connection(
-        server_hostname: &str,
-        server_username: &str,
-        server_password: &str,
-        danger_accept_invalid_certs: bool,
-    ) -> Result<(Capabilities, ImapStream)> {
+    pub fn new_connection(server_conf: &ImapServerConf) -> Result<(Capabilities, ImapStream)> {
         use std::io::prelude::*;
         use std::net::TcpStream;
-        let path = &server_hostname;
+        let path = &server_conf.server_hostname;
 
         let mut connector = TlsConnector::builder();
-        if danger_accept_invalid_certs {
+        if server_conf.danger_accept_invalid_certs {
             connector.danger_accept_invalid_certs(true);
         }
         let connector = connector.build()?;
 
-        let addr = if let Ok(a) = lookup_ipv4(path, 143) {
+        let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
             a
         } else {
             return Err(MeliError::new(format!(
@@ -172,32 +164,34 @@ impl ImapStream {
 
         let mut socket = TcpStream::connect(&addr)?;
         let cmd_id = 0;
-        socket.write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())?;
+        if server_conf.use_starttls {
+            socket.write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())?;
 
-        let mut buf = vec![0; 1024];
-        let mut response = String::with_capacity(1024);
-        let mut cap_flag = false;
-        loop {
-            let len = socket.read(&mut buf)?;
-            response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
-            if !cap_flag {
-                if response.starts_with("* OK [CAPABILITY") {
-                    cap_flag = true;
-                    if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                        response.drain(0..pos + 2);
+            let mut buf = vec![0; 1024];
+            let mut response = String::with_capacity(1024);
+            let mut cap_flag = false;
+            loop {
+                let len = socket.read(&mut buf)?;
+                response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
+                if !cap_flag {
+                    if response.starts_with("* OK [CAPABILITY") {
+                        cap_flag = true;
+                        if let Some(pos) = response.as_bytes().find(b"\r\n") {
+                            response.drain(0..pos + 2);
+                        }
+                    } else if response.starts_with("* OK ") && response.find("\r\n").is_some() {
+                        if let Some(pos) = response.as_bytes().find(b"\r\n") {
+                            response.drain(0..pos + 2);
+                        }
                     }
-                } else if response.starts_with("* OK ") && response.find("\r\n").is_some() {
+                } else if response.starts_with("* OK [CAPABILITY") {
                     if let Some(pos) = response.as_bytes().find(b"\r\n") {
                         response.drain(0..pos + 2);
                     }
                 }
-            } else if response.starts_with("* OK [CAPABILITY") {
-                if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                    response.drain(0..pos + 2);
+                if cap_flag && response == "M0 OK Begin TLS negotiation now.\r\n" {
+                    break;
                 }
-            }
-            if cap_flag && response == "M0 OK Begin TLS negotiation now.\r\n" {
-                break;
             }
         }
 
@@ -228,7 +222,11 @@ impl ImapStream {
         };
         let mut ret = ImapStream { cmd_id, stream };
         ret.send_command(
-            format!("LOGIN \"{}\" \"{}\"", &server_username, &server_password).as_bytes(),
+            format!(
+                "LOGIN \"{}\" \"{}\"",
+                &server_conf.server_username, &server_conf.server_password
+            )
+            .as_bytes(),
         )?;
         let mut res = String::with_capacity(8 * 1024);
         ret.read_lines(&mut res, String::new())?;
@@ -240,18 +238,10 @@ impl ImapStream {
 }
 
 impl ImapConnection {
-    pub fn new_connection(
-        server_hostname: String,
-        server_username: String,
-        server_password: String,
-        danger_accept_invalid_certs: bool,
-    ) -> ImapConnection {
+    pub fn new_connection(server_conf: &ImapServerConf) -> ImapConnection {
         ImapConnection {
             stream: Err(MeliError::new("Offline".to_string())),
-            server_hostname,
-            server_username,
-            server_password,
-            danger_accept_invalid_certs,
+            server_conf: server_conf.clone(),
             capabilities: Capabilities::default(),
         }
     }
@@ -260,12 +250,7 @@ impl ImapConnection {
         if let Ok(ref mut stream) = self.stream {
             return stream.read_response(ret);
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(
-            &self.server_hostname,
-            &self.server_username,
-            &self.server_password,
-            self.danger_accept_invalid_certs,
-        )?;
+        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.read_response(ret);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -278,12 +263,7 @@ impl ImapConnection {
         if let Ok(ref mut stream) = self.stream {
             return stream.read_lines(ret, termination_string);
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(
-            &self.server_hostname,
-            &self.server_username,
-            &self.server_password,
-            self.danger_accept_invalid_certs,
-        )?;
+        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.read_lines(ret, termination_string);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -296,12 +276,7 @@ impl ImapConnection {
         if let Ok(ref mut stream) = self.stream {
             return stream.wait_for_continuation_request();
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(
-            &self.server_hostname,
-            &self.server_username,
-            &self.server_password,
-            self.danger_accept_invalid_certs,
-        )?;
+        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.wait_for_continuation_request();
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -314,12 +289,7 @@ impl ImapConnection {
         if let Ok(ref mut stream) = self.stream {
             return stream.send_command(command);
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(
-            &self.server_hostname,
-            &self.server_username,
-            &self.server_password,
-            self.danger_accept_invalid_certs,
-        )?;
+        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.send_command(command);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -332,12 +302,7 @@ impl ImapConnection {
         if let Ok(ref mut stream) = self.stream {
             return stream.send_literal(data);
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(
-            &self.server_hostname,
-            &self.server_username,
-            &self.server_password,
-            self.danger_accept_invalid_certs,
-        )?;
+        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.send_literal(data);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -350,12 +315,7 @@ impl ImapConnection {
         if let Ok(ref mut stream) = self.stream {
             return stream.send_raw(raw);
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(
-            &self.server_hostname,
-            &self.server_username,
-            &self.server_password,
-            self.danger_accept_invalid_certs,
-        )?;
+        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
 
         let ret = stream.send_raw(raw);
         if ret.is_ok() {
@@ -369,12 +329,7 @@ impl ImapConnection {
         if let Ok(ref mut stream) = self.stream {
             return stream.set_nonblocking(val);
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(
-            &self.server_hostname,
-            &self.server_username,
-            &self.server_password,
-            self.danger_accept_invalid_certs,
-        )?;
+        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.set_nonblocking(val);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -423,12 +378,7 @@ impl Iterator for ImapBlockingConnection {
         } = self;
         loop {
             if conn.stream.is_err() {
-                if let Ok((_, stream)) = ImapStream::new_connection(
-                    &conn.server_hostname,
-                    &conn.server_username,
-                    &conn.server_password,
-                    conn.danger_accept_invalid_certs,
-                ) {
+                if let Ok((_, stream)) = ImapStream::new_connection(&conn.server_conf) {
                     conn.stream = Ok(stream);
                 } else {
                     debug!(&conn.stream);
