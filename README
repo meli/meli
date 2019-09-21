@@ -1,49 +1,3 @@
-    __
- __/  \__
-/  \__/  \__                       .
-\__/  \__/  \    , _ , _     ___   │   '
-/  \__   \__/    │' `│  `┒ .'   `  │   │
-\__/  \__/  \    │   │   │ |────'  │   │
-   \__/  \__/    │       / `.___, /\__ /
-      \__/                       
-                                    ,-.  
-                                    \_/   
-        terminal mail user agent   {|||)<
-                                    / \
-                                    `-'  
-DOCUMENTATION
-=============
-
-After installing meli, see meli(1) and meli.conf(5) for documentation.
-
-BUILDING
-========
-
-meli requires rust 1.34 and rust's package manager, Cargo. Information on how
-to get it on your system can be found here:
-
-https://doc.rust-lang.org/cargo/getting-started/installation.html
-
-With Cargo available, the project can be built with 
-
-# make
-
-The resulting binary will then be found under target/release/meli
-
-Run:
-
-# make install
-
-to install the binary and man pages. This requires root, so I suggest you override the default paths and install it in your $HOME:
-
-# make PREFIX=$HOME/.local install
-
-See meli(1) and meli.conf(5) for documentation.
-
-You can build and run meli with one command:
-
-# cargo run --release
-
 While the project is in early development, meli will only be developed for the
 linux kernel and respected linux distributions. Support for more UNIX-like OSes
 is on the roadmap.
@@ -54,10 +8,11 @@ DEVELOPMENT
 Development builds can be built and/or run with
 
 # cargo build
-# cargo run 2> debug.log
+# cargo run
 
-The debug logs can be disabled by setting debug-assertions to false in the
-development profile in Cargo.toml. In the future debug logs will be a feature.
+There is a debug/tracing log feature that can be enabled by using the flag
+`--feature debug-tracing` or in a development profile in Cargo.toml. The logs
+are printed in stderr, thus you can run meli with a redirection (i.e `2> log`)
 
 CONFIG
 ======
@@ -68,7 +23,7 @@ meli by default looks for a configuration file in this location:
 You can run meli with arbitrary configuration files by setting the MELI_CONFIG
 environment variable to their locations, ie:
 
-# MELI_CONFIG=./test_config cargo run 2> debug.log
+# MELI_CONFIG=./test_config cargo run
 
 TESTING
 =======

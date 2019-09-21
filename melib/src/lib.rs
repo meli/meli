@@ -25,7 +25,7 @@ pub mod dbg {
     macro_rules! debug {
         ($val:literal) => {
             {
-            if cfg!(debug_assertions) {
+            if cfg!(feature="debug-tracing") {
                 eprint!(
                     "[{:?}] {}:{}_{}:	",
                     std::thread::current()
@@ -42,7 +42,7 @@ pub mod dbg {
         }
         };
         ($val:expr) => {
-            if cfg!(debug_assertions) {
+            if cfg!(feature="debug-tracing") {
                 let stringify = stringify!($val);
                 // Use of `match` here is intentional because it affects the lifetimes
                 // of temporaries - https://stackoverflow.com/a/48732525/1063961
@@ -67,7 +67,7 @@ pub mod dbg {
             }
         };
         ($fmt:literal, $($arg:tt)*) => {
-            if cfg!(debug_assertions) {
+            if cfg!(feature="debug-tracing") {
                 eprint!(
                     "[{:?}] {}:{}_{}:	",
                     std::thread::current()

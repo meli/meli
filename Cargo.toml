@@ -22,3 +22,9 @@ debug = false
 
 [workspace]
 members = ["melib", "ui", "debug_printer", "testing", "text_processing"]
+
+[features]
+default = []
+
+# Print tracing logs as meli runs
+debug-tracing = []
