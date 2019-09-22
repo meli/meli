@@ -365,6 +365,11 @@ impl State {
     pub fn receiver(&self) -> Receiver<ThreadEvent> {
         self.context.receiver.clone()
     }
+
+    pub fn sender(&self) -> Sender<ThreadEvent> {
+        self.context.sender.clone()
+    }
+
     pub fn restore_input(&mut self) {
         self.context.restore_input();
     }

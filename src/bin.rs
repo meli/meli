@@ -45,12 +45,24 @@ use xdg;
 
 fn notify(
     signals: &[c_int],
+    sender: crossbeam::channel::Sender<ThreadEvent>,
 ) -> std::result::Result<crossbeam::channel::Receiver<c_int>, std::io::Error> {
     let (s, r) = crossbeam::channel::bounded(100);
     let signals = signal_hook::iterator::Signals::new(signals)?;
     std::thread::spawn(move || {
-        for signal in signals.forever() {
-            s.send(signal).unwrap();
+        let mut ctr = 0;
+        loop {
+            ctr %= 3;
+            if ctr == 0 {
+                sender.send(ThreadEvent::Pulse).unwrap();
+            }
+
+            for signal in signals.pending() {
+                s.send(signal).unwrap();
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            ctr += 1;
         }
     });
     Ok(r)
@@ -175,18 +187,19 @@ fn main() -> std::result::Result<(), std::io::Error> {
         std::env::set_var("MELI_CONFIG", config_location);
     }
 
+    /* Create the application State. */
+    let mut state = State::new();
+
+    let receiver = state.receiver();
+    let sender = state.sender();
+
     /* Catch SIGWINCH to handle terminal resizing */
     let signals = &[
         /* Catch SIGWINCH to handle terminal resizing */
         signal_hook::SIGWINCH,
     ];
 
-    let signal_recvr = notify(signals)?;
-
-    /* Create the application State. This is the 'System' part of an ECS architecture */
-    let mut state = State::new();
-
-    let receiver = state.receiver();
+    let signal_recvr = notify(signals, sender)?;
 
     /* Register some reasonably useful interfaces */
     let window = Box::new(Tabbed::new(vec![
@@ -219,7 +232,11 @@ fn main() -> std::result::Result<(), std::io::Error> {
             /* Poll on all channels. Currently we have the input channel for stdin, watching events and the signal watcher. */
             crossbeam::select! {
                 recv(receiver) -> r => {
-                    match debug!(r.unwrap()) {
+                    match r {
+                         Ok(ThreadEvent::Pulse) => {},
+                        _ => {debug!(&r);}
+                    }
+                    match r.unwrap() {
                         ThreadEvent::Input(Key::Ctrl('z')) => {
                             state.switch_to_main_screen();
                             //_thread_handler.join().expect("Couldn't join on the associated thread");
