@@ -606,6 +606,7 @@ pub struct StatusBar {
     container: Box<dyn Component>,
     status: String,
     notifications: VecDeque<String>,
+    cur_notification: Option<(std::time::Instant, String)>,
     ex_buffer: Field,
     display_buffer: String,
     mode: UIMode,
@@ -630,6 +631,7 @@ impl StatusBar {
             container,
             status: String::with_capacity(256),
             notifications: VecDeque::new(),
+            cur_notification: None,
             ex_buffer: Field::Text(UText::new(String::with_capacity(256)), None),
             display_buffer: String::with_capacity(8),
             dirty: true,
@@ -656,20 +658,43 @@ impl StatusBar {
         for x in get_x(upper_left!(area))..get_x(upper_left!(area)) + offset {
             grid[(x, y)].set_attrs(Attr::Bold);
         }
-        if let Some(n) = self.notifications.pop_front() {
-            write_string_to_grid(
-                &n,
-                grid,
-                Color::Byte(219),
-                Color::Byte(88),
-                Attr::Default,
-                (
-                    (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
-                    bottom_right!(area),
-                ),
-                false,
-            );
+        if self.cur_notification.is_some() {
+            let (t, n) = self.cur_notification.as_ref().unwrap();
+            if std::time::Instant::now().duration_since(*t) < std::time::Duration::new(5, 0) {
+                write_string_to_grid(
+                    n,
+                    grid,
+                    Color::Byte(219),
+                    Color::Byte(88),
+                    Attr::Default,
+                    (
+                        (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
+                        bottom_right!(area),
+                    ),
+                    false,
+                );
+            } else {
+                self.cur_notification = None;
+            }
         }
+        if self.cur_notification.is_none() {
+            if let Some(n) = self.notifications.pop_front() {
+                write_string_to_grid(
+                    &n,
+                    grid,
+                    Color::Byte(219),
+                    Color::Byte(88),
+                    Attr::Default,
+                    (
+                        (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
+                        bottom_right!(area),
+                    ),
+                    false,
+                );
+                self.cur_notification = Some((std::time::Instant::now(), n));
+            }
+        }
+
         let (x, y) = bottom_right!(area);
         for (idx, c) in self.display_buffer.chars().rev().enumerate() {
             if let Some(cell) = grid.get_mut(x.saturating_sub(idx).saturating_sub(1), y) {
