@@ -25,3 +25,9 @@ uuid = { version = "0.6", features = ["serde", "v4"] }
 unicode-segmentation = "1.2.1" # >:c
 text_processing = { path = "../text_processing", version = "*" }
 libc = {version = "0.2.59", features = ["extra_traits",]}
+
+[features]
+default = []
+
+# Print tracing logs as meli runs
+debug-tracing = []

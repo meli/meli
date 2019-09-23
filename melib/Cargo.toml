@@ -29,6 +29,7 @@ libc = {version = "0.2.59", features = ["extra_traits",]}
 [features]
 default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend"]
 
+debug-tracing = []
 unicode_algorithms = ["text_processing"]
 imap_backend = ["native-tls"]
 maildir_backend = ["notify", "notify-rust", "memmap"]
