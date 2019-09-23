@@ -771,6 +771,19 @@ impl Account {
             ""
         }
     }
+
+    pub fn special_use_folder(&self, special_use: SpecialUseMailbox) -> &str {
+        let ret = self
+            .settings
+            .folder_confs
+            .iter()
+            .find(|(_, f)| f.usage == Some(special_use));
+        if let Some(ret) = ret.as_ref() {
+            ret.0
+        } else {
+            ""
+        }
+    }
 }
 
 impl Index<FolderHash> for Account {

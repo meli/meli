@@ -134,7 +134,7 @@ impl Component for HtmlView {
             // scripts)
             let binary = query_default_app("text/html");
             if let Ok(binary) = binary {
-                let p = create_temp_file(&self.bytes, None, None);
+                let p = create_temp_file(&self.bytes, None, None, true);
                 Command::new(&binary)
                     .arg(p.path())
                     .stdin(Stdio::piped())

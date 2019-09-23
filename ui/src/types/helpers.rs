@@ -29,12 +29,15 @@ use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct File {
-    path: PathBuf,
+    pub path: PathBuf,
+    delete_on_drop: bool,
 }
 
 impl Drop for File {
     fn drop(&mut self) {
-        std::fs::remove_file(self.path()).unwrap_or_else(|_| {});
+        if self.delete_on_drop {
+            std::fs::remove_file(self.path()).unwrap_or_else(|_| {});
+        }
     }
 }
 
@@ -61,9 +64,14 @@ impl File {
     }
 }
 
-/// Returned `File` will be deleted when dropped, so make sure to add it on `context.temp_files`
+/// Returned `File` will be deleted when dropped if delete_on_drop is set, so make sure to add it on `context.temp_files`
 /// to reap it later.
-pub fn create_temp_file(bytes: &[u8], filename: Option<String>, path: Option<&PathBuf>) -> File {
+pub fn create_temp_file(
+    bytes: &[u8],
+    filename: Option<String>,
+    path: Option<&PathBuf>,
+    delete_on_drop: bool,
+) -> File {
     let mut dir = std::env::temp_dir();
 
     let path = if let Some(p) = path {
@@ -87,5 +95,8 @@ pub fn create_temp_file(bytes: &[u8], filename: Option<String>, path: Option<&Pa
 
     f.write_all(bytes).unwrap();
     f.flush().unwrap();
-    File { path: path.clone() }
+    File {
+        path: path.clone(),
+        delete_on_drop,
+    }
 }

@@ -616,6 +616,7 @@ impl Component for Composer {
                     self.draft.to_string().unwrap().as_str().as_bytes(),
                     None,
                     None,
+                    true,
                 );
 
                 // TODO: check exit status
@@ -773,47 +774,63 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
         stdin
             .write_all(draft.as_bytes())
             .expect("Failed to write to stdin");
-        if let Err(e) = context.accounts[account_cursor].save(
-            draft.as_bytes(),
-            &context.accounts[account_cursor].sent_folder(),
-            Some(Flag::SEEN),
-        ) {
-            debug!("{:?} could not save sent msg", e);
+        for folder in &[
+            &context.accounts[account_cursor].special_use_folder(SpecialUseMailbox::Sent),
+            &context.accounts[account_cursor].special_use_folder(SpecialUseMailbox::Inbox),
+            &context.accounts[account_cursor].special_use_folder(SpecialUseMailbox::Normal),
+        ] {
+            if let Err(e) =
+                context.accounts[account_cursor].save(draft.as_bytes(), folder, Some(Flag::SEEN))
+            {
+                debug!("{:?} could not save sent msg", e);
+                context.replies.push_back(UIEvent::Notification(
+                    Some(format!("Could not save in '{}' folder.", folder)),
+                    e.into(),
+                    Some(NotificationType::ERROR),
+                ));
+            } else {
+                failure = false;
+                break;
+            }
+        }
+
+        if failure {
+            let file = create_temp_file(draft.as_bytes(), None, None, false);
+            debug!("message saved in {}", file.path.display());
             context.replies.push_back(UIEvent::Notification(
-                Some("Could not save in 'Sent' folder.".into()),
-                e.into(),
-                Some(NotificationType::ERROR),
+                Some("Could not save in any folder".into()),
+                format!(
+                    "Message was stored in {} so that you can restore it manually.",
+                    file.path.display()
+                ),
+                Some(NotificationType::INFO),
             ));
-        } else {
-            failure = false;
         }
     }
-    if !failure {
-        let output = msmtp.wait().expect("Failed to wait on mailer");
-        if output.success() {
-            context.replies.push_back(UIEvent::Notification(
-                Some("Sent.".into()),
-                String::new(),
-                None,
-            ));
+    let output = msmtp.wait().expect("Failed to wait on mailer");
+    if output.success() {
+        context.replies.push_back(UIEvent::Notification(
+            Some("Sent.".into()),
+            String::new(),
+            None,
+        ));
+    } else {
+        if let Some(exit_code) = output.code() {
+            log(
+                format!(
+                    "Could not send e-mail using `{}`: Process exited with {}",
+                    cmd, exit_code
+                ),
+                ERROR,
+            );
         } else {
-            if let Some(exit_code) = output.code() {
-                log(
-                    format!(
-                        "Could not send e-mail using `{}`: Process exited with {}",
-                        cmd, exit_code
-                    ),
-                    ERROR,
-                );
-            } else {
-                log(
-                    format!(
-                        "Could not send e-mail using `{}`: Process was killed by signal",
-                        cmd
-                    ),
-                    ERROR,
-                );
-            }
+            log(
+                format!(
+                    "Could not send e-mail using `{}`: Process was killed by signal",
+                    cmd
+                ),
+                ERROR,
+            );
         }
     }
     !failure

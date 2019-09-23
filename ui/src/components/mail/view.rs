@@ -785,6 +785,7 @@ impl Component for MailView {
                                         &decode(u, None),
                                         name.as_ref().map(|n| n.clone()),
                                         None,
+                                        true,
                                     );
                                     Command::new(&binary)
                                         .arg(p.path())
