@@ -554,7 +554,7 @@ impl Component for Pager {
                         "Pager text piped to '{}{}{}'",
                         &bin,
                         if args.is_empty() { "" } else { " " },
-                        args.join(", ")
+                        args.join(" ")
                     ))));
                 return true;
             }
@@ -1121,6 +1121,9 @@ impl Component for Progress {
         false
     }
     fn set_dirty(&mut self) {}
+    fn is_dirty(&self) -> bool {
+        false
+    }
 
     fn id(&self) -> ComponentId {
         self.id

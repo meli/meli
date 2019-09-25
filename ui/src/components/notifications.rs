@@ -73,6 +73,9 @@ impl Component for XDGNotifications {
         false
     }
     fn set_dirty(&mut self) {}
+    fn is_dirty(&self) -> bool {
+        false
+    }
 
     fn id(&self) -> ComponentId {
         ComponentId::nil()
@@ -173,6 +176,9 @@ impl Component for NotificationFilter {
     }
     fn id(&self) -> ComponentId {
         ComponentId::nil()
+    }
+    fn is_dirty(&self) -> bool {
+        false
     }
     fn set_dirty(&mut self) {}
     fn set_id(&mut self, _id: ComponentId) {}

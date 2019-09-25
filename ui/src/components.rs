@@ -86,9 +86,7 @@ pub type ShortcutMaps = FnvHashMap<String, ShortcutMap>;
 pub trait Component: Display + Debug + Send {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool;
-    fn is_dirty(&self) -> bool {
-        true
-    }
+    fn is_dirty(&self) -> bool;
     fn is_visible(&self) -> bool {
         true
     }

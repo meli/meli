@@ -341,6 +341,7 @@ impl Component for MailView {
             if !account.contains_key(self.coordinates.2) {
                 /* The envelope has been renamed or removed, so wait for the appropriate event to
                  * arrive */
+                self.dirty = false;
                 return;
             }
             let (hash, is_seen) = {
@@ -638,7 +639,6 @@ impl Component for MailView {
                     self.subview = None;
                 }
             };
-            self.dirty = false;
         }
         match self.mode {
             ViewMode::Subview if self.subview.is_some() => {
@@ -656,6 +656,7 @@ impl Component for MailView {
                 }
             }
         }
+        self.dirty = false;
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {

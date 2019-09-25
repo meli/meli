@@ -243,7 +243,7 @@ impl WorkController {
                             } else if static_threads.contains_key(&thread_id) {
                                 static_threads.entry(thread_id).and_modify(|e| e.name = new_name);
                             } else {
-                                unreachable!()
+                                 static_threads.insert(thread_id, new_name.into());
                             }
                             pulse.send(ThreadEvent::Pulse).unwrap();
                         }
@@ -258,7 +258,7 @@ impl WorkController {
                                 static_threads.entry(thread_id).and_modify(|e| e.status = new_status);
                                 debug!(&static_threads[&thread_id]);
                             } else {
-                                unreachable!()
+                                 static_threads.insert(thread_id, Worker { status: new_status, .. String::new().into() });
                             }
                             pulse.send(ThreadEvent::Pulse).unwrap();
                         }
@@ -272,7 +272,7 @@ impl WorkController {
                             } else if static_threads.contains_key(&thread_id) {
                                 static_threads.remove(&thread_id);
                             } else {
-                                unreachable!()
+                                /* Nothing to do */
                             }
                             pulse.send(ThreadEvent::Pulse).unwrap();
                         }

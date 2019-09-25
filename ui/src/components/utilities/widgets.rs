@@ -195,7 +195,7 @@ impl Component for Field {
         true
     }
     fn is_dirty(&self) -> bool {
-        true
+        false
     }
     fn set_dirty(&mut self) {}
 
@@ -477,6 +477,7 @@ where
 
     result: Option<T>,
     cursor: usize,
+    dirty: bool,
     id: ComponentId,
 }
 
@@ -499,6 +500,7 @@ where
             buttons: vec![init_val].into_iter().collect(),
             result: None,
             cursor: 0,
+            dirty: true,
             id: ComponentId::new_v4(),
         }
     }
@@ -518,28 +520,31 @@ where
     T: std::fmt::Debug + Default + Send,
 {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, _context: &mut Context) {
-        let upper_left = upper_left!(area);
+        if self.dirty {
+            let upper_left = upper_left!(area);
 
-        let mut len = 0;
-        for (i, k) in self.layout.iter().enumerate() {
-            let cur_len = k.len();
-            write_string_to_grid(
-                k.as_str(),
-                grid,
-                Color::Default,
-                if i == self.cursor {
-                    Color::Byte(246)
-                } else {
-                    Color::Default
-                },
-                Attr::Default,
-                (
-                    pos_inc(upper_left, (len, 0)),
-                    pos_inc(upper_left, (cur_len + len, 0)),
-                ),
-                false,
-            );
-            len += cur_len + 3;
+            let mut len = 0;
+            for (i, k) in self.layout.iter().enumerate() {
+                let cur_len = k.len();
+                write_string_to_grid(
+                    k.as_str(),
+                    grid,
+                    Color::Default,
+                    if i == self.cursor {
+                        Color::Byte(246)
+                    } else {
+                        Color::Default
+                    },
+                    Attr::Default,
+                    (
+                        pos_inc(upper_left, (len, 0)),
+                        pos_inc(upper_left, (cur_len + len, 0)),
+                    ),
+                    false,
+                );
+                len += cur_len + 3;
+            }
+            self.dirty = false;
         }
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
@@ -550,25 +555,26 @@ where
                         .remove(&self.layout[self.cursor])
                         .unwrap_or_default(),
                 );
-                return true;
             }
             UIEvent::Input(Key::Left) => {
                 self.cursor = self.cursor.saturating_sub(1);
-                return true;
             }
             UIEvent::Input(Key::Right) if self.cursor < self.layout.len().saturating_sub(1) => {
                 self.cursor += 1;
-                return true;
             }
-            _ => {}
+            _ => {
+                return false;
+            }
         }
-
-        false
-    }
-    fn is_dirty(&self) -> bool {
+        self.set_dirty();
         true
     }
-    fn set_dirty(&mut self) {}
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+    fn set_dirty(&mut self) {
+        self.dirty = true;
+    }
 
     fn id(&self) -> ComponentId {
         self.id
@@ -695,7 +701,7 @@ impl AutoComplete {
 
     pub fn set_suggestions(&mut self, entries: Vec<AutoCompleteEntry>) -> bool {
         if entries.len() == self.entries.len() && entries == self.entries {
-            return false;;
+            return false;
         }
 
         let mut content = CellBuffer::new(

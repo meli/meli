@@ -839,7 +839,7 @@ fn add_path_to_index(
     let hash = get_file_hash(path);
     {
         let mut map = hash_index.lock().unwrap();
-        let map = map.entry(folder_hash).or_default();;
+        let map = map.entry(folder_hash).or_default();
         map.insert(hash, path.to_path_buf().into());
         debug!(
             "inserted {} in {} map, len={}",

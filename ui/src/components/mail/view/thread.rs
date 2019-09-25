@@ -414,11 +414,14 @@ impl ThreadView {
         let bottom_right = bottom_right!(area);
         let (width, height) = self.content.size();
         if height == 0 {
-            clear_area(grid, area);
             context.dirty_areas.push_back(area);
             return;
         }
         let rows = (get_y(bottom_right) - get_y(upper_left)).wrapping_div(2);
+        if rows == 0 {
+            context.dirty_areas.push_back(area);
+            return;
+        }
         if let Some(mvm) = self.movement.take() {
             match mvm {
                 PageMovement::PageUp => {
@@ -751,7 +754,10 @@ impl ThreadView {
                 let upper_left = upper_left!(area);
                 let bottom_right = bottom_right!(area);
 
-                let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 2;
+                let rows = (get_y(bottom_right).saturating_sub(get_y(upper_left) + 1)) / 2;
+                if rows == 0 {
+                    return;
+                }
                 let page_no = (self.new_cursor_pos).wrapping_div(rows);
                 let top_idx = page_no * rows;
 
@@ -765,7 +771,10 @@ impl ThreadView {
                 let area = (set_y(upper_left, y), bottom_right);
                 let upper_left = upper_left!(area);
 
-                let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 2;
+                let rows = (get_y(bottom_right).saturating_sub(get_y(upper_left) + 1)) / 2;
+                if rows == 0 {
+                    return;
+                }
                 let page_no = (self.new_cursor_pos).wrapping_div(rows);
                 let top_idx = page_no * rows;
                 copy_area(
@@ -875,6 +884,7 @@ impl Component for ThreadView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let total_cols = width!(area);
         if self.entries.is_empty() {
+            self.dirty = false;
             return;
         }
 
@@ -891,6 +901,7 @@ impl Component for ThreadView {
 
         if self.entries.len() == 1 {
             self.mailview.draw(grid, area, context);
+            self.dirty = false;
             return;
         }
 
@@ -899,6 +910,7 @@ impl Component for ThreadView {
         } else {
             self.draw_horz(grid, area, context);
         }
+        self.dirty = false;
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event {
@@ -959,6 +971,7 @@ impl Component for ThreadView {
             UIEvent::Input(Key::Up) => {
                 if self.cursor_pos > 0 {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
+                    self.dirty = true;
                 }
                 return true;
             }
@@ -966,24 +979,25 @@ impl Component for ThreadView {
                 let height = self.visible_entries.iter().flat_map(|v| v.iter()).count();
                 if height > 0 && self.new_cursor_pos + 1 < height {
                     self.new_cursor_pos += 1;
+                    self.dirty = true;
                 }
                 return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["prev_page"] => {
                 self.movement = Some(PageMovement::PageUp);
-                self.set_dirty();
+                self.dirty = true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
                 self.movement = Some(PageMovement::PageDown);
-                self.set_dirty();
+                self.dirty = true;
             }
             UIEvent::Input(ref key) if *key == Key::Home => {
                 self.movement = Some(PageMovement::Home);
-                self.set_dirty();
+                self.dirty = true;
             }
             UIEvent::Input(ref key) if *key == Key::End => {
                 self.movement = Some(PageMovement::End);
-                self.set_dirty();
+                self.dirty = true;
             }
             UIEvent::Input(Key::Char('\n')) => {
                 if self.entries.len() < 2 {
@@ -1066,9 +1080,7 @@ impl Component for ThreadView {
         false
     }
     fn is_dirty(&self) -> bool {
-        (self.cursor_pos != self.new_cursor_pos)
-            || self.dirty
-            || (self.show_mailview && self.mailview.is_dirty())
+        self.dirty || (self.show_mailview && self.mailview.is_dirty())
     }
     fn set_dirty(&mut self) {
         self.dirty = true;

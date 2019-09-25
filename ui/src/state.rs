@@ -403,6 +403,9 @@ impl State {
             self.draw_component(i);
         }
         let mut areas: Vec<Area> = self.context.dirty_areas.drain(0..).collect();
+        if areas.is_empty() {
+            return;
+        }
         /* Sort by x_start, ie upper_left corner's x coordinate */
         areas.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
         /* draw each dirty area */
@@ -510,9 +513,11 @@ impl State {
             );
         }
     }
+
     pub fn register_component(&mut self, component: Box<dyn Component>) {
         self.components.push(component);
     }
+
     /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: &str) {
         let result = parse_command(&cmd.as_bytes()).to_full_result();
