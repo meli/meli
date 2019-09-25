@@ -1140,6 +1140,9 @@ pub struct Tabbed {
     cursor_pos: usize,
 
     show_shortcuts: bool,
+    help_screen_cursor: (usize, usize),
+    help_content: CellBuffer,
+    help_curr_views: ShortcutMaps,
 
     dirty: bool,
     id: ComponentId,
@@ -1153,6 +1156,9 @@ impl Tabbed {
             children,
             cursor_pos: 0,
             show_shortcuts: false,
+            help_content: CellBuffer::default(),
+            help_screen_cursor: (0, 0),
+            help_curr_views: ShortcutMaps::default(),
             dirty: true,
             id: ComponentId::new_v4(),
         }
@@ -1232,9 +1238,18 @@ impl Component for Tabbed {
                     set_x(upper_left!(area), get_x(bottom_right!(area))),
                 ),
             );
-            self.dirty = false;
+            context.dirty_areas.push_back((
+                upper_left!(area),
+                set_x(upper_left!(area), get_x(bottom_right!(area))),
+            ));
         }
 
+        /* If children are dirty but self isn't and the shortcuts panel is visible, it will get
+         * overwritten. */
+        let must_redraw_shortcuts: bool = self.show_shortcuts && !self.dirty && self.is_dirty();
+
+        /* children should be drawn after the shortcuts/help panel lest they overwrite the panel on
+         * the grid. the drawing order is determined by the dirty_areas queue which is LIFO */
         if self.children.len() > 1 {
             self.draw_tabs(
                 grid,
@@ -1254,7 +1269,7 @@ impl Component for Tabbed {
             self.children[self.cursor_pos].draw(grid, area, context);
         }
 
-        if self.show_shortcuts {
+        if (self.show_shortcuts && self.dirty) || must_redraw_shortcuts {
             let area = (
                 pos_inc(upper_left!(area), (2, 1)),
                 set_x(
@@ -1262,70 +1277,139 @@ impl Component for Tabbed {
                     get_x(bottom_right!(area)).saturating_sub(2),
                 ),
             );
+            context.dirty_areas.push_back(area);
             clear_area(grid, area);
             create_box(grid, area);
-
-            let mut idx = 0;
-            // TODO: print into a pager
-            for (desc, shortcuts) in self.children[self.cursor_pos]
-                .get_shortcuts(context)
-                .into_iter()
-            {
-                write_string_to_grid(
-                    &desc,
+            let area = (
+                pos_inc(upper_left!(area), (3, 2)),
+                set_x(
+                    bottom_right!(area),
+                    get_x(bottom_right!(area)).saturating_sub(3),
+                ),
+            );
+            let children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+            if children_maps.is_empty() {
+                return;
+            }
+            if (children_maps == self.help_curr_views) && must_redraw_shortcuts {
+                let (width, height) = self.help_content.size();
+                let (cols, rows) = (width!(area), height!(area));
+                copy_area(
                     grid,
+                    &self.help_content,
+                    area,
+                    (
+                        (
+                            std::cmp::min(
+                                (width - 1).saturating_sub(cols),
+                                self.help_screen_cursor.0,
+                            ),
+                            std::cmp::min(
+                                (height - 1).saturating_sub(rows),
+                                self.help_screen_cursor.1,
+                            ),
+                        ),
+                        (
+                            std::cmp::min(self.help_screen_cursor.0 + cols, width - 1),
+                            std::cmp::min(self.help_screen_cursor.1 + rows, height - 1),
+                        ),
+                    ),
+                );
+                self.dirty = false;
+                return;
+            }
+            self.help_curr_views = children_maps;
+            let mut max_length = 5;
+            let mut max_width = "Use Up, Down, Left, Right to scroll.".len() + 3;
+            for (desc, shortcuts) in self.help_curr_views.iter() {
+                max_length += shortcuts.len() + 3;
+                max_width = std::cmp::max(
+                    max_width,
+                    std::cmp::max(
+                        desc.len(),
+                        shortcuts.keys().map(|k| k.len() + 5).max().unwrap_or(0),
+                    ),
+                );
+            }
+            self.help_content = CellBuffer::new(max_width, max_length + 2, Cell::default());
+            let (width, height) = self.help_content.size();
+            let (cols, rows) = (width!(area), height!(area));
+            if cols == 0 || rows == 0 {
+                return;
+            }
+            /* trim cursor if it's bigger than the help screen */
+            self.help_screen_cursor = (
+                std::cmp::min(width.saturating_sub(cols), self.help_screen_cursor.0),
+                std::cmp::min(height.saturating_sub(rows), self.help_screen_cursor.1),
+            );
+
+            /* In this case we will be scrolling, so show the user how to do it */
+            if height.wrapping_div(rows) > 0 || width.wrapping_div(cols) > 0 {
+                write_string_to_grid(
+                    "Use Up, Down, Left, Right to scroll.",
+                    &mut self.help_content,
                     Color::Default,
                     Color::Default,
                     Attr::Default,
-                    (
-                        pos_inc(upper_left!(area), (2, 1 + idx)),
-                        set_x(
-                            bottom_right!(area),
-                            get_x(bottom_right!(area)).saturating_sub(2),
-                        ),
-                    ),
+                    ((2, 0), (max_width.saturating_sub(2), max_length - 1)),
+                    false,
+                );
+            }
+            let mut idx = 0;
+            for (desc, shortcuts) in self.help_curr_views.iter() {
+                write_string_to_grid(
+                    desc,
+                    &mut self.help_content,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
                     false,
                 );
                 idx += 2;
-                let mut shortcuts = shortcuts.into_iter().collect::<Vec<_>>();
+                let mut shortcuts = shortcuts.iter().collect::<Vec<_>>();
                 shortcuts.sort_unstable_by_key(|(ref k, _)| *k);
                 for (k, v) in shortcuts {
+                    debug!(&(k, v));
                     let (x, y) = write_string_to_grid(
                         &k,
-                        grid,
+                        &mut self.help_content,
                         Color::Byte(29),
                         Color::Default,
                         Attr::Default,
-                        (
-                            pos_inc(upper_left!(area), (2, 1 + idx)),
-                            set_x(
-                                bottom_right!(area),
-                                get_x(bottom_right!(area)).saturating_sub(2),
-                            ),
-                        ),
+                        ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
                         false,
                     );
                     write_string_to_grid(
                         &format!("{}", v),
-                        grid,
+                        &mut self.help_content,
                         Color::Default,
                         Color::Default,
                         Attr::Default,
-                        (
-                            (x + 2, y),
-                            set_x(
-                                bottom_right!(area),
-                                get_x(bottom_right!(area)).saturating_sub(2),
-                            ),
-                        ),
+                        ((x + 2, y), (max_width.saturating_sub(2), max_length - 1)),
                         false,
                     );
                     idx += 1;
                 }
                 idx += 1;
             }
-            context.dirty_areas.push_back(area);
+            copy_area(
+                grid,
+                &self.help_content,
+                area,
+                (
+                    (
+                        std::cmp::min((width - 1).saturating_sub(cols), self.help_screen_cursor.0),
+                        std::cmp::min((height - 1).saturating_sub(rows), self.help_screen_cursor.1),
+                    ),
+                    (
+                        std::cmp::min(self.help_screen_cursor.0 + cols, width - 1),
+                        std::cmp::min(self.help_screen_cursor.1 + rows, height - 1),
+                    ),
+                ),
+            );
         }
+        self.dirty = false;
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match *event {
@@ -1342,8 +1426,12 @@ impl Component for Tabbed {
                 return true;
             }
             UIEvent::Input(Key::Char('?')) => {
+                if self.show_shortcuts {
+                    /* children below the shortcut overlay must be redrawn */
+                    self.set_dirty();
+                }
                 self.show_shortcuts = !self.show_shortcuts;
-                self.set_dirty();
+                self.dirty = true;
                 return true;
             }
             UIEvent::Action(Tab(NewDraft(account_idx, ref draft))) => {
@@ -1398,6 +1486,31 @@ impl Component for Tabbed {
                         id, self.children
                     );
                 }
+            }
+            UIEvent::Resize => {
+                self.dirty = true;
+            }
+            UIEvent::Input(ref k) if self.show_shortcuts => {
+                match k {
+                    Key::Up => {
+                        self.help_screen_cursor.1 = self.help_screen_cursor.1.saturating_sub(1);
+                    }
+                    Key::Down => {
+                        self.help_screen_cursor.1 = self.help_screen_cursor.1 + 1;
+                    }
+                    Key::Left => {
+                        self.help_screen_cursor.0 = self.help_screen_cursor.0.saturating_sub(1);
+                    }
+                    Key::Right => {
+                        self.help_screen_cursor.0 = self.help_screen_cursor.0 + 1;
+                    }
+                    _ => {
+                        /* ignore, don't pass to components below the shortcut panel */
+                        return false;
+                    }
+                }
+                self.dirty = true;
+                return true;
             }
             _ => {}
         }
