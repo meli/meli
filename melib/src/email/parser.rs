@@ -761,7 +761,10 @@ fn parts_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<&'a [u
             }
             ret.push(&input[0..end - 2]);
             input = &input[end + boundary.len()..];
-            if input.len() < 2 || input[0] != b'\n' || &input[0..2] == b"--" {
+            if input.len() < 2
+                || (input[0] != b'\n' && &input[0..2] != b"\r\n")
+                || &input[0..2] == b"--"
+            {
                 break;
             }
             if input[0] == b'\n' {
