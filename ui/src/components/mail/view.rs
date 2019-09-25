@@ -193,6 +193,45 @@ impl MailView {
                             return;
                         }
                     }
+                } else if a.is_signed() {
+                    v.clear();
+                    match melib::signatures::verify_signature(a) {
+                        Ok((bytes, sig)) => {
+                            let bytes_file = create_temp_file(&bytes, None, None, true);
+                            let signature_file = create_temp_file(sig, None, None, true);
+                            if let Ok(gpg) = Command::new("gpg2")
+                                .args(&[
+                                    "--output",
+                                    "-",
+                                    "--verify",
+                                    signature_file.path.to_str().unwrap(),
+                                    bytes_file.path.to_str().unwrap(),
+                                ])
+                                .stdin(Stdio::piped())
+                                .stderr(Stdio::piped())
+                                .spawn()
+                            {
+                                v.extend(gpg.wait_with_output().unwrap().stderr);
+                            } else {
+                                context.replies.push_back(UIEvent::Notification(
+                                    Some(
+                                        "Failed to find an application to verify PGP signature"
+                                            .to_string(),
+                                    ),
+                                    String::new(),
+                                    Some(NotificationType::ERROR),
+                                ));
+                                return;
+                            }
+                        }
+                        Err(e) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(e.to_string()),
+                                String::new(),
+                                Some(NotificationType::ERROR),
+                            ));
+                        }
+                    }
                 }
             })),
         ))
@@ -765,7 +804,7 @@ impl Component for MailView {
                                 return true;
                             }
 
-                            ContentType::Text { .. } => {
+                            ContentType::Text { .. } | ContentType::PGPSignature => {
                                 self.mode = ViewMode::Attachment(lidx);
                                 self.dirty = true;
                             }
@@ -819,14 +858,6 @@ impl Component for MailView {
                                         "Failed to open {}. application/octet-stream isn't supported yet",
                                         name.as_ref().map(|n| n.as_str()).unwrap_or("file")
                                         )
-                                    ),
-                                ));
-                                return true;
-                            }
-                            ContentType::PGPSignature => {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(
-                                        "Signatures aren't supported yet".to_string(),
                                     ),
                                 ));
                                 return true;

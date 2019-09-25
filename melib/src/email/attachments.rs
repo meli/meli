@@ -411,7 +411,7 @@ impl Attachment {
 
     fn get_text_recursive(&self, text: &mut Vec<u8>) {
         match self.content_type {
-            ContentType::Text { .. } => {
+            ContentType::Text { .. } | ContentType::PGPSignature => {
                 text.extend(decode(self, None));
             }
             ContentType::Multipart {
@@ -536,6 +536,16 @@ impl Attachment {
             _ => false,
         }
     }
+
+    pub fn is_signed(&self) -> bool {
+        match self.content_type {
+            ContentType::Multipart {
+                kind: MultipartType::Signed,
+                ..
+            } => true,
+            _ => false,
+        }
+    }
 }
 
 pub fn interpret_format_flowed(_t: &str) -> String {
@@ -559,7 +569,7 @@ fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> 
             .unwrap_or_else(|| a.mime_type())
             .to_string()
             .into_bytes(),
-        ContentType::PGPSignature => a.content_type.to_string().into_bytes(),
+        ContentType::PGPSignature => Vec::new(),
         ContentType::MessageRfc822 => {
             let temp = decode_rfc822(a.body());
             decode_rec(&temp, None)
@@ -579,6 +589,14 @@ fn decode_rec_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> 
                     }
                 }
                 decode_helper(a, filter)
+            }
+            MultipartType::Signed => {
+                let mut vec = Vec::new();
+                for a in parts {
+                    vec.extend(decode_rec_helper(a, filter));
+                }
+                vec.extend(decode_helper(a, filter));
+                vec
             }
             _ => {
                 let mut vec = Vec::new();

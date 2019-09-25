@@ -35,6 +35,7 @@ mod address;
 pub mod parser;
 use crate::parser::BytesExt;
 pub use address::*;
+pub mod signatures;
 
 use crate::backends::BackendOp;
 use crate::error::{MeliError, Result};
