@@ -213,7 +213,7 @@ impl MailView {
                 }
                 t
             }
-            ViewMode::Raw => String::from_utf8_lossy(body.raw()).into_owned(),
+            ViewMode::Raw => String::from_utf8_lossy(body.body()).into_owned(),
             ViewMode::Url => {
                 let mut t = body_text.to_string();
                 for (lidx, l) in finder.links(&body.text()).enumerate() {
@@ -745,7 +745,7 @@ impl Component for MailView {
                     if let Some(u) = envelope.body(op).attachments().get(lidx) {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
-                                match EnvelopeWrapper::new(u.raw().to_vec()) {
+                                match EnvelopeWrapper::new(u.body().to_vec()) {
                                     Ok(wrapper) => {
                                         context.replies.push_back(UIEvent::Action(Tab(New(Some(
                                             Box::new(EnvelopeView::new(

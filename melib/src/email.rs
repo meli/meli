@@ -274,16 +274,25 @@ impl Envelope {
                 }
             } else if name.eq_ignore_ascii_case(b"content-type") {
                 match parser::content_type(value).to_full_result() {
-                    Ok((ct, cst, _))
+                    Ok((ct, cst, ref params))
                         if ct.eq_ignore_ascii_case(b"multipart")
                             && cst.eq_ignore_ascii_case(b"mixed") =>
                     {
-                        let mut builder = AttachmentBuilder::new(body);
+                        let mut builder = AttachmentBuilder::default();
                         builder.set_content_type_from_bytes(value);
-                        let b = builder.build();
-                        let subs = b.attachments();
-
-                        self.has_attachments = subs.iter().any(|sub| !sub.is_text());
+                        let mut boundary = None;
+                        for (n, v) in params {
+                            if n == b"boundary" {
+                                boundary = Some(v);
+                                break;
+                            }
+                        }
+                        if let Some(boundary) = boundary {
+                            self.has_attachments =
+                                Attachment::check_if_has_attachments_quick(body, boundary);
+                        } else {
+                            debug!("{:?} has no boundary field set in multipart/mixed content-type field.", &self);
+                        }
                     }
                     _ => {}
                 }
@@ -373,31 +382,7 @@ impl Envelope {
             .unwrap_or_else(|_| Vec::new())
     }
     pub fn body_bytes(&self, bytes: &[u8]) -> Attachment {
-        if bytes.is_empty() {
-            let builder = AttachmentBuilder::new(bytes);
-            return builder.build();
-        }
-
-        let (headers, body) = match parser::mail(bytes).to_full_result() {
-            Ok(v) => v,
-            Err(_) => {
-                debug!("error in parsing mail\n");
-                let error_msg = b"Mail cannot be shown because of errors.";
-                let builder = AttachmentBuilder::new(error_msg);
-                return builder.build();
-            }
-        };
-        let mut builder = AttachmentBuilder::new(body);
-        for (name, value) in headers {
-            if value.len() == 1 && value.is_empty() {
-                continue;
-            }
-            if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
-                builder.set_content_transfer_encoding(ContentTransferEncoding::from(value));
-            } else if name.eq_ignore_ascii_case(b"content-type") {
-                builder.set_content_type_from_bytes(value);
-            }
-        }
+        let builder = AttachmentBuilder::new(bytes);
         builder.build()
     }
     pub fn headers<'a>(&self, bytes: &'a [u8]) -> Result<Vec<(&'a str, &'a str)>> {

@@ -20,6 +20,7 @@
  */
 use crate::email::attachments::{Attachment, AttachmentBuilder};
 use crate::email::parser::BytesExt;
+
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
 
@@ -123,7 +124,7 @@ pub enum ContentType {
     Multipart {
         boundary: Vec<u8>,
         kind: MultipartType,
-        subattachments: Vec<Attachment>,
+        parts: Vec<Attachment>,
     },
     MessageRfc822,
     PGPSignature,
@@ -178,7 +179,7 @@ impl ContentType {
         }
     }
 
-    pub fn make_boundary(subattachments: &Vec<AttachmentBuilder>) -> String {
+    pub fn make_boundary(parts: &Vec<AttachmentBuilder>) -> String {
         use crate::email::compose::random::gen_boundary;
         let mut boundary = "bzz_bzz__bzz__".to_string();
         let mut random_boundary = gen_boundary();
@@ -186,7 +187,7 @@ impl ContentType {
         let mut loop_counter = 4096;
         'loo: loop {
             let mut flag = true;
-            for sub in subattachments {
+            for sub in parts {
                 'sub_loop: loop {
                     if sub.raw().find(random_boundary.as_bytes()).is_some() {
                         random_boundary = gen_boundary();

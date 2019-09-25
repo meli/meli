@@ -259,13 +259,13 @@ impl Draft {
         ret.push_str("MIME-Version: 1.0\n");
 
         if !self.attachments.is_empty() {
-            let mut subattachments = Vec::with_capacity(self.attachments.len() + 1);
+            let mut parts = Vec::with_capacity(self.attachments.len() + 1);
             let attachments = std::mem::replace(&mut self.attachments, Vec::new());
             let mut body_attachment = AttachmentBuilder::default();
             body_attachment.set_raw(self.body.as_bytes().to_vec());
-            subattachments.push(body_attachment);
-            subattachments.extend(attachments.into_iter());
-            build_multipart(&mut ret, MultipartType::Mixed, subattachments);
+            parts.push(body_attachment);
+            parts.extend(attachments.into_iter());
+            build_multipart(&mut ret, MultipartType::Mixed, parts);
         } else {
             if self.body.is_ascii() {
                 ret.push('\n');
@@ -309,9 +309,9 @@ fn ignore_header(header: &[u8]) -> bool {
     }
 }
 
-fn build_multipart(ret: &mut String, kind: MultipartType, subattachments: Vec<AttachmentBuilder>) {
+fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentBuilder>) {
     use ContentType::*;
-    let boundary = ContentType::make_boundary(&subattachments);
+    let boundary = ContentType::make_boundary(&parts);
     ret.extend(
         format!(
             "Content-Type: {}; charset=\"utf-8\"; boundary=\"{}\"\n",
@@ -322,7 +322,7 @@ fn build_multipart(ret: &mut String, kind: MultipartType, subattachments: Vec<At
     ret.push('\n');
     /* rfc1341 */
     ret.extend("This is a MIME formatted message with attachments. Use a MIME-compliant client to view it properly.\n".chars());
-    for sub in subattachments {
+    for sub in parts {
         ret.push_str("--");
         ret.extend(boundary.chars());
         ret.push('\n');
@@ -347,12 +347,12 @@ fn build_multipart(ret: &mut String, kind: MultipartType, subattachments: Vec<At
             Multipart {
                 boundary: _boundary,
                 kind,
-                subattachments: subsubattachments,
+                parts: subparts,
             } => {
                 build_multipart(
                     ret,
                     kind,
-                    subsubattachments
+                    subparts
                         .into_iter()
                         .map(|s| s.into())
                         .collect::<Vec<AttachmentBuilder>>(),

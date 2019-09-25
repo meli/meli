@@ -28,6 +28,17 @@ pub(super) use nom::{ErrorKind, IResult, Needed};
 use encoding::all::*;
 use std;
 
+macro_rules! is_ctl_or_space {
+    ($var:ident) => {
+        /* <any ASCII control character and DEL> */
+        $var < 33 || $var == 127
+    };
+    ($var:expr) => {
+        /* <any ASCII control character and DEL> */
+        $var < 33 || $var == 127
+    };
+}
+
 macro_rules! is_whitespace {
     ($var:ident) => {
         $var == b' ' || $var == b'\t' || $var == b'\n' || $var == b'\r'
@@ -138,11 +149,14 @@ fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
     }
     let mut ptr = 0;
     let mut name: &[u8] = &input[0..0];
+    /* field-name  =  1*<any CHAR, excluding CTLs, SPACE, and ":"> */
     for (i, x) in input.iter().enumerate() {
         if *x == b':' {
             name = &input[0..i];
             ptr = i + 1;
             break;
+        } else if is_ctl_or_space!(*x) {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
     }
     if name.is_empty() {
@@ -184,6 +198,8 @@ fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
     }
     let mut ptr = 0;
     let mut name: &[u8] = &input[0..0];
+    let mut has_colon = false;
+    /* field-name  =  1*<any CHAR, excluding CTLs, SPACE, and ":"> */
     for (i, x) in input.iter().enumerate() {
         if input[i..].starts_with(b"\r\n") {
             name = &input[0..i];
@@ -191,8 +207,11 @@ fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
             break;
         } else if *x == b':' || *x == b'\n' {
             name = &input[0..i];
+            has_colon = true;
             ptr = i;
             break;
+        } else if is_ctl_or_space!(*x) {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
     }
     if name.is_empty() {
@@ -200,10 +219,16 @@ fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
     }
     if input[ptr] == b':' {
         ptr += 1;
+        has_colon = true;
         if ptr >= input.len() {
             return IResult::Incomplete(Needed::Unknown);
         }
     }
+
+    if !has_colon {
+        return IResult::Incomplete(Needed::Unknown);
+    }
+
     while input[ptr] == b' ' {
         ptr += 1;
         if ptr >= input.len() {
@@ -265,10 +290,10 @@ named!(pub body_raw<&[u8]>,
 
 named!(pub mail<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
        separated_pair!(headers, alt_complete!(tag!(b"\n") | tag!(b"\r\n")), take_while!(call!(|_| true))));
+
 named!(pub attachment<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
        do_parse!(
-            opt!(is_a!(" \n\t\r")) >>
-       pair: pair!(many0!(complete!(header)), take_while!(call!(|_| true))) >>
+       pair: separated_pair!(many0!(complete!(header)), alt_complete!(tag!(b"\n") | tag!(b"\r\n")), take_while!(call!(|_| true))) >>
        ( { pair } )));
 
 /* Header parsers */
@@ -636,9 +661,73 @@ fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
 
 named!(pub references<Vec<&[u8]>>, separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
 
-fn attachments_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<&'a [u8]>> {
+pub fn multipart_parts<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<StrBuilder>> {
+    let mut ret: Vec<_> = Vec::new();
+    let mut input = input;
+    let mut offset = 0;
+    loop {
+        let b_start = if let Some(v) = input.find(boundary) {
+            v
+        } else {
+            return IResult::Error(error_code!(ErrorKind::Custom(39)));
+        };
+
+        if b_start < 2 {
+            return IResult::Error(error_code!(ErrorKind::Custom(40)));
+        }
+        offset += b_start - 2;
+        input = &input[b_start - 2..];
+        if &input[0..2] == b"--" {
+            offset += 2 + boundary.len();
+            input = &input[2 + boundary.len()..];
+            if input[0] == b'\n' {
+                offset += 1;
+                input = &input[1..];
+            } else if input[0..].starts_with(b"\r\n") {
+                offset += 2;
+                input = &input[2..];
+            } else {
+                continue;
+            }
+            break;
+        }
+    }
+
+    loop {
+        if input.len() < boundary.len() + 4 {
+            return IResult::Error(error_code!(ErrorKind::Custom(41)));
+        }
+        if let Some(end) = input.find(boundary) {
+            if &input[end - 2..end] != b"--" {
+                return IResult::Error(error_code!(ErrorKind::Custom(42)));
+            }
+            ret.push(StrBuilder {
+                offset,
+                length: end - 2,
+            });
+            offset += end + boundary.len();
+            input = &input[end + boundary.len()..];
+            if input.len() < 2 || input[0] != b'\n' || &input[0..2] == b"--" {
+                break;
+            }
+            if input[0] == b'\n' {
+                offset += 1;
+                input = &input[1..];
+            } else if input[0..].starts_with(b"\r\n") {
+                offset += 2;
+                input = &input[2..];
+            }
+            continue;
+        } else {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        }
+    }
+    IResult::Done(input, ret)
+}
+
+fn parts_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<&'a [u8]>> {
     let mut ret: Vec<&[u8]> = Vec::new();
-    let mut input = input.ltrim();
+    let mut input = input;
     loop {
         let b_start = if let Some(v) = input.find(boundary) {
             v
@@ -652,10 +741,13 @@ fn attachments_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<
         input = &input[b_start - 2..];
         if &input[0..2] == b"--" {
             input = &input[2 + boundary.len()..];
-            if input[0] != b'\n' && !input[0..].starts_with(b"\r\n") {
+            if input[0] == b'\n' {
+                input = &input[1..];
+            } else if input[0..].starts_with(b"\r\n") {
+                input = &input[2..];
+            } else {
                 continue;
             }
-            input = &input[1..];
             break;
         }
     }
@@ -672,7 +764,11 @@ fn attachments_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<
             if input.len() < 2 || input[0] != b'\n' || &input[0..2] == b"--" {
                 break;
             }
-            input = &input[1..];
+            if input[0] == b'\n' {
+                input = &input[1..];
+            } else if input[0..].starts_with(b"\r\n") {
+                input = &input[2..];
+            }
             continue;
         } else {
             return IResult::Error(error_code!(ErrorKind::Custom(43)));
@@ -681,8 +777,8 @@ fn attachments_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<
     IResult::Done(input, ret)
 }
 
-named_args!(pub attachments<'a>(boundary: &'a [u8]) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
-            alt_complete!(call!(attachments_f, boundary) | do_parse!(
+named_args!(pub parts<'a>(boundary: &'a [u8]) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
+            alt_complete!(call!(parts_f, boundary) | do_parse!(
                         take_until_and_consume!(&b"--"[..]) >>
                         take_until_and_consume!(boundary) >>
                         ( { Vec::<&[u8]>::new() } ))
@@ -890,6 +986,30 @@ pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
     )
 }
 
+//alt_complete!(call!(header_without_val) | call!(header_with_val))
+
+pub struct HeaderIterator<'a>(pub &'a [u8]);
+
+impl<'a> Iterator for HeaderIterator<'a> {
+    type Item = (&'a [u8], &'a [u8]);
+    fn next(&mut self) -> Option<(&'a [u8], &'a [u8])> {
+        if self.0.is_empty() {
+            return None;
+        }
+
+        match header(self.0) {
+            IResult::Done(rest, value) => {
+                self.0 = rest;
+                Some(value)
+            }
+            _ => {
+                self.0 = &[];
+                None
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1009,7 +1129,7 @@ mod tests {
             Ok(v) => v,
             Err(_) => panic!(),
         };
-        let attachments = attachments(body, boundary).to_full_result().unwrap();
+        let attachments = parts(body, boundary).to_full_result().unwrap();
         assert_eq!(attachments.len(), 4);
         let v: Vec<&str> = attachments
             .iter()

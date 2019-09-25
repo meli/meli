@@ -129,7 +129,7 @@ impl fmt::Debug for Address {
 }
 
 /// Helper struct to return slices from a struct field on demand.
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq, Copy)]
 pub struct StrBuilder {
     pub offset: usize,
     pub length: usize,
@@ -146,12 +146,13 @@ pub trait StrBuild {
 }
 
 impl StrBuilder {
-    fn display<'a>(&self, s: &'a [u8]) -> String {
+    pub fn display<'a>(&self, s: &'a [u8]) -> String {
         let offset = self.offset;
         let length = self.length;
         String::from_utf8(s[offset..offset + length].to_vec()).unwrap()
     }
-    fn display_bytes<'a>(&self, b: &'a [u8]) -> &'a [u8] {
+
+    pub fn display_bytes<'a>(&self, b: &'a [u8]) -> &'a [u8] {
         &b[self.offset..(self.offset + self.length)]
     }
 }
