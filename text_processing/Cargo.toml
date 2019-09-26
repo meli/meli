@@ -1,6 +1,6 @@
 [package]
 name = "text_processing"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 workspace = ".."
 edition = "2018"
