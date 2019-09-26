@@ -33,6 +33,7 @@ use crate::conf::AccountSettings;
 use crate::email::parser::BytesExt;
 use crate::email::*;
 use crate::error::{MeliError, Result};
+use crate::shellexpand::ShellExpandTrait;
 use fnv::FnvHashMap;
 use libc;
 use memmap::{Mmap, Protection};
@@ -548,7 +549,7 @@ impl MailBackend for MboxType {
 
 impl MboxType {
     pub fn new(s: &AccountSettings, _is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
-        let path = Path::new(s.root_folder.as_str());
+        let path = Path::new(s.root_folder.as_str()).expand();
         if !path.exists() {
             panic!(
                 "\"root_folder\" {} for account {} is not a valid path.",
@@ -557,7 +558,7 @@ impl MboxType {
             );
         }
         let ret = MboxType {
-            path: PathBuf::from(path),
+            path,
             ..Default::default()
         };
         let name: String = ret
@@ -565,12 +566,12 @@ impl MboxType {
             .file_name()
             .map(|f| f.to_string_lossy().into())
             .unwrap_or(String::new());
-        let hash = get_path_hash!(path);
+        let hash = get_path_hash!(&ret.path);
         ret.folders.lock().unwrap().insert(
             hash,
             MboxFolder {
                 hash,
-                path: PathBuf::from(path),
+                path: ret.path.clone(),
                 name,
                 content: Vec::new(),
                 children: Vec::new(),

@@ -27,6 +27,7 @@ use crate::backends::*;
 use crate::email::parser;
 use crate::email::{Envelope, Flag};
 use crate::error::{MeliError, Result};
+use crate::shellexpand::ShellExpandTrait;
 
 use memmap::{Mmap, Protection};
 use std::collections::hash_map::DefaultHasher;
@@ -208,6 +209,7 @@ impl MaildirFolder {
          * mailboxes in user configuration */
         let fname = if let Ok(fname) = pathbuf.strip_prefix(
             PathBuf::from(&settings.root_folder)
+                .expand()
                 .parent()
                 .unwrap_or_else(|| &Path::new("/")),
         ) {

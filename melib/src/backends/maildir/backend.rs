@@ -28,6 +28,7 @@ use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{MeliError, Result};
+use crate::shellexpand::ShellExpandTrait;
 
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
@@ -583,7 +584,7 @@ impl MaildirType {
             }
             children
         };
-        let root_path = PathBuf::from(settings.root_folder());
+        let root_path = PathBuf::from(settings.root_folder()).expand();
         if !root_path.exists() {
             eprintln!(
                 "Configuration error ({}): root_path `{}` is not a valid directory.",
@@ -651,7 +652,7 @@ impl MaildirType {
             name: settings.name().to_string(),
             folders,
             hash_indexes,
-            path: PathBuf::from(settings.root_folder()),
+            path: root_path,
         }
     }
     fn owned_folder_idx(&self, folder: &Folder) -> FolderHash {

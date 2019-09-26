@@ -128,3 +128,47 @@ pub use crate::email::{Envelope, Flag};
 pub use crate::error::{MeliError, Result};
 
 pub use crate::addressbook::*;
+
+pub use shellexpand::ShellExpandTrait;
+pub mod shellexpand {
+
+    use std::path::*;
+
+    pub trait ShellExpandTrait {
+        fn expand(&self) -> PathBuf;
+    }
+
+    impl ShellExpandTrait for Path {
+        fn expand(&self) -> PathBuf {
+            let mut ret = PathBuf::new();
+            for c in self.components() {
+                let c_to_str = c.as_os_str().to_str();
+                match c_to_str {
+                    Some("~") => {
+                        if let Some(home_dir) = std::env::var("HOME").ok() {
+                            ret.push(home_dir)
+                        } else {
+                            return PathBuf::new();
+                        }
+                    }
+                    Some(var) if var.starts_with("$") => {
+                        let env_name = var.split_at(1).1;
+                        if env_name.chars().all(char::is_uppercase) {
+                            ret.push(std::env::var(env_name).unwrap_or(String::new()));
+                        } else {
+                            ret.push(c);
+                        }
+                    }
+                    Some(_) => {
+                        ret.push(c);
+                    }
+                    None => {
+                        /* path is invalid */
+                        return PathBuf::new();
+                    }
+                }
+            }
+            ret
+        }
+    }
+}
