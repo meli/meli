@@ -54,10 +54,13 @@ DEVELOPMENT
 Development builds can be built and/or run with
 
 # cargo build
-# cargo run 2> debug.log
+# cargo run
 
-The debug logs can be disabled by setting debug-assertions to false in the
-development profile in Cargo.toml. In the future debug logs will be a feature.
+There is a debug/tracing log feature that can be enabled by using the flag
+`--feature debug-tracing` after uncommenting the features in `Cargo.toml`. The logs
+are printed in stderr, thus you can run meli with a redirection (i.e `2> log`)
+
+Code style follows the default rustfmt profile.
 
 CONFIG
 ======
@@ -68,7 +71,7 @@ meli by default looks for a configuration file in this location:
 You can run meli with arbitrary configuration files by setting the MELI_CONFIG
 environment variable to their locations, ie:
 
-# MELI_CONFIG=./test_config cargo run 2> debug.log
+# MELI_CONFIG=./test_config cargo run
 
 TESTING
 =======
