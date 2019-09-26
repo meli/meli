@@ -41,7 +41,7 @@ Newline means LF (0x0A) or CRLF (0x0D 0x0A).
 .Pp
 Refer to TOML documentation for valid TOML syntax.
 .Sh SECTIONS
-The top level sections of the config are accounts, shortcuts, notifications, pager, mailer.
+The top level sections of the config are accounts, shortcuts, notifications, pager, mailer, pgp.
 .Pp
 .Sy example configuration
 .Bd -literal
@@ -50,7 +50,8 @@ The top level sections of the config are accounts, shortcuts, notifications, pag
 root_folder = "/path/to/root/folder"
 format = "Maildir"
 index_style = "Compact"
-identity="Name <email@address.tld>"
+identity="email@address.tld"
+subscribed_folders = ["folder", "folder/Sent"]
 display_name = "Name"
 
 # Set folder-specific settings
@@ -273,6 +274,25 @@ enable freedesktop-spec notifications. this is usually what you want
 (optional) a command to pipe mail output through for viewing in pager.
 .\" default value
 .Pq Em none
+.El
+.Sh PGP
+.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
+.It Cm auto_verify_signatures Ar boolean
+auto verify signed e-mail according to RFC3156
+.\" default value
+.Pq Em true
+.It Cm auto_sign Ar boolean
+(optional) always sign sent messages
+.\" default value
+.Pq Em false
+.It Cm key Ar String
+(optional) key to be used when signing/encrypting (not functional yet)
+.\" default value
+.Pq Em none
+.It Cm gpg_binary Ar String
+(optional) gpg binary name or file location to use
+.\" default value
+.Pq Em "gpg2"
 .El
 .Sh SEE ALSO
 .Xr meli 1

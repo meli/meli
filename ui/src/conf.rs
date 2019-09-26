@@ -27,11 +27,13 @@ extern crate xdg;
 pub mod mailer;
 pub mod notifications;
 pub mod pager;
+pub mod pgp;
 pub mod shortcuts;
 
 pub mod accounts;
 pub use self::accounts::Account;
 pub use self::mailer::*;
+pub use self::pgp::*;
 pub use self::shortcuts::*;
 
 use self::default_vals::*;
@@ -272,6 +274,8 @@ struct FileSettings {
     #[serde(default)]
     shortcuts: Shortcuts,
     mailer: MailerSettings,
+    #[serde(default)]
+    pgp: PGPSettings,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -300,6 +304,7 @@ pub struct Settings {
     pub notifications: NotificationsSettings,
     pub shortcuts: Shortcuts,
     pub mailer: MailerSettings,
+    pub pgp: PGPSettings,
 }
 
 impl FileSettings {
@@ -387,6 +392,7 @@ impl Settings {
             notifications: fs.notifications,
             shortcuts: fs.shortcuts,
             mailer: fs.mailer,
+            pgp: fs.pgp,
         }
     }
 }
