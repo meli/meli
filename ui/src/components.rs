@@ -90,6 +90,9 @@ pub trait Component: Display + Debug + Send {
     fn is_visible(&self) -> bool {
         true
     }
+    fn can_quit_cleanly(&mut self) -> bool {
+        true
+    }
     fn set_dirty(&mut self);
     fn kill(&mut self, _id: ComponentId, _context: &mut Context) {}
     fn set_id(&mut self, _id: ComponentId) {}

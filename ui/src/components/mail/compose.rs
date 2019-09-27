@@ -756,6 +756,13 @@ impl Component for Composer {
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }
+
+    fn can_quit_cleanly(&mut self) -> bool {
+        /* Play it safe and ask user for confirmation */
+        self.mode = ViewMode::Discard(self.id);
+        self.set_dirty();
+        false
+    }
 }
 
 pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) -> bool {

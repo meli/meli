@@ -1066,6 +1066,10 @@ impl Component for StatusBar {
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }
+
+    fn can_quit_cleanly(&mut self) -> bool {
+        self.container.can_quit_cleanly()
+    }
 }
 
 #[derive(Debug)]
@@ -1529,6 +1533,17 @@ impl Component for Tabbed {
     }
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn can_quit_cleanly(&mut self) -> bool {
+        for (i, c) in self.children.iter_mut().enumerate() {
+            if !c.can_quit_cleanly() {
+                self.cursor_pos = i;
+                self.set_dirty();
+                return false;
+            }
+        }
+        true
     }
 }
 

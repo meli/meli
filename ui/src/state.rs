@@ -514,6 +514,10 @@ impl State {
         }
     }
 
+    pub fn can_quit_cleanly(&mut self) -> bool {
+        self.components.iter_mut().all(|c| c.can_quit_cleanly())
+    }
+
     pub fn register_component(&mut self, component: Box<dyn Component>) {
         self.components.push(component);
     }

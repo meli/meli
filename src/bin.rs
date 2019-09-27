@@ -254,8 +254,12 @@ fn main() -> std::result::Result<(), std::io::Error> {
                                 UIMode::Normal => {
                                     match k {
                                         Key::Char('q') | Key::Char('Q') => {
-                                            drop(state);
-                                            break 'main;
+                                            if state.can_quit_cleanly() {
+                                                drop(state);
+                                                break 'main;
+                                            } else {
+                                                state.redraw();
+                                            }
                                         },
                                         Key::Char(' ') => {
                                             state.mode = UIMode::Execute;
