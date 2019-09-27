@@ -309,9 +309,7 @@ impl State {
                 accounts[idxa].reload(event, hash, (work_controller, sender, replies))
             {
                 if let UIEvent::Notification(_, _, _) = notification {
-                    self.context
-                        .replies
-                        .push_back(UIEvent::MailboxUpdate((idxa, hash)));
+                    self.rcv_event(UIEvent::MailboxUpdate((idxa, hash)));
                 }
                 self.rcv_event(notification);
             }

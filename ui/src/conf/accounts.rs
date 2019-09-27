@@ -459,14 +459,17 @@ impl Account {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
                     let env = self.get_env(&env_hash);
+                    if env.is_seen() || env.flags().contains(Flag::DRAFT) {
+                        return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
+                    }
+
                     return Some(Notification(
-                        Some("new e-mail".into()),
+                        Some(format!("new e-mail from: {}", env.field_from_to_string())),
                         format!(
-                            "{} {:.15}:\n\nFrom: {:.15}\nSubject: {:.15}",
+                            "{}\n{} {}",
+                            env.subject(),
                             self.name,
                             ref_folders[&folder_hash].name(),
-                            env.subject(),
-                            env.field_from_to_string(),
                         ),
                         Some(crate::types::NotificationType::NewMail),
                     ));
