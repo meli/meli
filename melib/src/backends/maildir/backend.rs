@@ -165,7 +165,7 @@ pub(super) fn get_file_hash(file: &Path) -> EnvelopeHash {
     hasher.finish()
 }
 
-fn move_to_cur(p: PathBuf) -> PathBuf {
+fn move_to_cur(p: PathBuf) -> Result<PathBuf> {
     let mut new = p.clone();
     let file_name = p.to_string_lossy();
     let slash_pos = file_name.bytes().rposition(|c| c == b'/').unwrap() + 1;
@@ -178,8 +178,8 @@ fn move_to_cur(p: PathBuf) -> PathBuf {
         new.set_extension(":2,");
     }
     debug!("moved to cur: {}", new.display());
-    fs::rename(&p, &new).unwrap();
-    new
+    fs::rename(&p, &new)?;
+    Ok(new)
 }
 
 impl MailBackend for MaildirType {
@@ -229,7 +229,15 @@ impl MailBackend for MaildirType {
                                 if path_is_new!(pathbuf) {
                                     debug!("path_is_new");
                                     /* This creates a Rename event that we will receive later */
-                                    pathbuf = move_to_cur(pathbuf);
+                                    pathbuf = match move_to_cur(pathbuf) {
+                                        Ok(p) => p,
+                                        Err(e) => {
+                                            debug!("error: {}", e.to_string());
+                                            continue;
+                                        }
+                                    };
+
+
                                 }
                                 let folder_hash = get_path_hash!(pathbuf);
                                 let file_name = pathbuf
@@ -696,7 +704,7 @@ impl MaildirType {
                     path.push("new");
                     for d in path.read_dir()? {
                         if let Ok(p) = d {
-                            move_to_cur(p.path());
+                            move_to_cur(p.path()).ok().take();
                         }
                     }
                     path.pop();
