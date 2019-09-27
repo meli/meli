@@ -787,6 +787,7 @@ named_args!(pub parts<'a>(boundary: &'a [u8]) < Vec<&'this_is_probably_unique_i_
                         ( { Vec::<&[u8]>::new() } ))
                     ));
 
+/* Caution: values should be passed through phrase() */
 named!(
     content_type_parameter<(&[u8], &[u8])>,
     do_parse!(
@@ -1190,5 +1191,4 @@ mod tests {
             }
         }
     }
-
 }

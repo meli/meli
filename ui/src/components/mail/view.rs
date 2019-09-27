@@ -875,13 +875,18 @@ impl Component for MailView {
                             ContentType::Other { ref name, .. } => {
                                 let attachment_type = u.mime_type();
                                 let binary = query_default_app(&attachment_type);
+                                let mut name_opt = name.as_ref().and_then(|n| {
+                                    melib::email::parser::phrase(n.as_bytes())
+                                        .to_full_result()
+                                        .ok()
+                                        .and_then(|n| String::from_utf8(n).ok())
+                                });
+                                if name_opt.is_none() {
+                                    name_opt = name.as_ref().map(|n| n.clone());
+                                }
                                 if let Ok(binary) = binary {
-                                    let p = create_temp_file(
-                                        &decode(u, None),
-                                        name.as_ref().map(|n| n.clone()),
-                                        None,
-                                        true,
-                                    );
+                                    let p =
+                                        create_temp_file(&decode(u, None), name_opt, None, true);
                                     Command::new(&binary)
                                         .arg(p.path())
                                         .stdin(Stdio::piped())
