@@ -74,7 +74,7 @@ enum ViewMode {
     Discard(Uuid),
     Edit,
     //Selector(Selector),
-    Overview,
+    ThreadView,
 }
 
 impl ViewMode {
@@ -94,8 +94,8 @@ impl ViewMode {
         }
     }
 
-    fn is_overview(&self) -> bool {
-        if let ViewMode::Overview = self {
+    fn is_threadview(&self) -> bool {
+        if let ViewMode::ThreadView = self {
             true
         } else {
             false
@@ -314,11 +314,11 @@ impl Component for Composer {
 
             if self.reply_context.is_some() {
                 for i in get_y(upper_left) - 1..=get_y(bottom_right) {
-                    set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
+                    //set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
                     grid[(mid, i)].set_fg(Color::Default);
                     grid[(mid, i)].set_bg(Color::Default);
                 }
-                grid[set_x(bottom_right, mid)].set_ch(VERT_BOUNDARY); // Enforce full vert bar at the bottom
+                //grid[set_x(bottom_right, mid)].set_ch(VERT_BOUNDARY); // Enforce full vert bar at the bottom
                 grid[set_x(bottom_right, mid)].set_fg(Color::Byte(240));
             }
 
@@ -413,7 +413,7 @@ impl Component for Composer {
         self.form.draw(grid, header_area, context);
 
         match self.mode {
-            ViewMode::Overview | ViewMode::Edit => {
+            ViewMode::ThreadView | ViewMode::Edit => {
                 self.pager.set_dirty();
                 self.pager.draw(grid, body_area, context);
             }
@@ -484,7 +484,7 @@ impl Component for Composer {
         match (&mut self.mode, &mut self.reply_context, &event) {
             // don't pass Reply command to thread view in reply_context
             (_, _, UIEvent::Input(Key::Char('R'))) => {}
-            (ViewMode::Overview, Some((_, ref mut view)), _) => {
+            (ViewMode::ThreadView, Some((_, ref mut view)), _) => {
                 if view.process_event(event, context) {
                     self.dirty = true;
                     return true;
@@ -494,7 +494,7 @@ impl Component for Composer {
                     return true;
                 }
             }
-            (ViewMode::Overview, _, _) => {
+            (ViewMode::ThreadView, _, _) => {
                 /* Cannot mutably borrow in pattern guard, pah! */
                 if self.pager.process_event(event, context) {
                     return true;
@@ -614,23 +614,23 @@ impl Component for Composer {
                         return false;
                     }
                 }
-                self.mode = ViewMode::Overview;
+                self.mode = ViewMode::ThreadView;
                 self.set_dirty();
                 return true;
             }
-            /* Switch to Overview mode if we're on Edit mode */
+            /* Switch to thread view mode if we're on Edit mode */
             UIEvent::Input(Key::Char('v')) if self.mode.is_edit() => {
-                self.mode = ViewMode::Overview;
+                self.mode = ViewMode::ThreadView;
                 self.set_dirty();
                 return true;
             }
-            /* Switch to Edit mode if we're on Overview mode */
-            UIEvent::Input(Key::Char('o')) if self.mode.is_overview() => {
+            /* Switch to Edit mode if we're on ThreadView mode */
+            UIEvent::Input(Key::Char('o')) if self.mode.is_threadview() => {
                 self.mode = ViewMode::Edit;
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Char('s')) if self.mode.is_overview() => {
+            UIEvent::Input(Key::Char('s')) => {
                 self.update_draft();
                 if send_draft(context, self.account_cursor, self.draft.clone()) {
                     context
@@ -776,7 +776,7 @@ impl Component for Composer {
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = if self.mode.is_overview() {
+        let mut map = if self.mode.is_threadview() {
             self.pager.get_shortcuts(context)
         } else {
             Default::default()
@@ -787,13 +787,13 @@ impl Component for Composer {
         }
 
         let mut our_map: ShortcutMap = Default::default();
-        if self.mode.is_overview() {
-            our_map.insert("Switch to edit mode.", Key::Char('o'));
-            our_map.insert("Deliver draft to mailer.", Key::Char('s'));
+        if self.mode.is_threadview() {
+            our_map.insert("Switch to right panel (draft editing).", Key::Char('o'));
         }
-        if self.mode.is_edit() {
-            our_map.insert("Switch to overview", Key::Char('v'));
+        if self.mode.is_edit() && self.reply_context.is_some() {
+            our_map.insert("Switch to left panel (thread view)", Key::Char('v'));
         }
+        our_map.insert("Deliver draft to mailer.", Key::Char('s'));
         our_map.insert("Edit in $EDITOR", Key::Char('e'));
         map.insert(Composer::DESCRIPTION.to_string(), our_map);
 
