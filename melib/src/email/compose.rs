@@ -113,7 +113,7 @@ impl str::FromStr for Draft {
 }
 
 impl Draft {
-    pub fn edit(envelope: &Envelope, mut op: Box<dyn BackendOp>) -> Self {
+    pub fn edit(envelope: &Envelope, mut op: Box<dyn BackendOp>) -> Result<Self> {
         let mut ret = Draft::default();
         //TODO: Inform user if error
         {
@@ -128,10 +128,11 @@ impl Draft {
             }
         }
 
-        ret.body = envelope.body(op).text();
+        ret.body = envelope.body(op)?.text();
 
-        ret
+        Ok(ret)
     }
+
     pub fn set_header(&mut self, header: &str, value: String) {
         if self.headers.insert(header.to_string(), value).is_none() {
             self.header_order.push(header.to_string());

@@ -1455,7 +1455,28 @@ impl Component for Tabbed {
                 return true;
             }
             UIEvent::Action(Tab(Edit(account_pos, msg))) => {
-                self.add_component(Box::new(Composer::edit(account_pos, msg, context)));
+                let composer = match Composer::edit(account_pos, msg, context) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Failed to open e-mail".to_string()),
+                            e.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        log(
+                            format!(
+                                "Failed to open envelope {}: {}",
+                                context.accounts[account_pos]
+                                    .get_env(&msg)
+                                    .message_id_display(),
+                                e.to_string()
+                            ),
+                            ERROR,
+                        );
+                        return true;
+                    }
+                };
+                self.add_component(Box::new(composer));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty();
                 return true;

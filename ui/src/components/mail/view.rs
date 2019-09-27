@@ -597,7 +597,25 @@ impl Component for MailView {
                 let account = &mut context.accounts[self.coordinates.0];
                 let envelope: &Envelope = &account.get_env(&self.coordinates.2);
                 let op = account.operation(envelope.hash());
-                envelope.body(op)
+                match envelope.body(op) {
+                    Ok(body) => body,
+                    Err(e) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Failed to open e-mail".to_string()),
+                            e.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        log(
+                            format!(
+                                "Failed to open envelope {}: {}",
+                                envelope.message_id_display(),
+                                e.to_string()
+                            ),
+                            ERROR,
+                        );
+                        return;
+                    }
+                }
             };
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
@@ -799,7 +817,27 @@ impl Component for MailView {
                     let account = &mut context.accounts[self.coordinates.0];
                     let envelope: &Envelope = &account.get_env(&self.coordinates.2);
                     let op = account.operation(envelope.hash());
-                    if let Some(u) = envelope.body(op).attachments().get(lidx) {
+
+                    let attachments = match envelope.body(op) {
+                        Ok(body) => body.attachments(),
+                        Err(e) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Failed to open e-mail".to_string()),
+                                e.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            log(
+                                format!(
+                                    "Failed to open envelope {}: {}",
+                                    envelope.message_id_display(),
+                                    e.to_string()
+                                ),
+                                ERROR,
+                            );
+                            return true;
+                        }
+                    };
+                    if let Some(u) = attachments.get(lidx) {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
                                 match EnvelopeWrapper::new(u.body().to_vec()) {
@@ -910,7 +948,25 @@ impl Component for MailView {
                     let envelope: &Envelope = &account.get_env(&self.coordinates.2);
                     let finder = LinkFinder::new();
                     let op = account.operation(envelope.hash());
-                    let t = envelope.body(op).text().to_string();
+                    let t = match envelope.body(op) {
+                        Ok(body) => body.text().to_string(),
+                        Err(e) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Failed to open e-mail".to_string()),
+                                e.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            log(
+                                format!(
+                                    "Failed to open envelope {}: {}",
+                                    envelope.message_id_display(),
+                                    e.to_string()
+                                ),
+                                ERROR,
+                            );
+                            return true;
+                        }
+                    };
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {
                         u.as_str().to_string()

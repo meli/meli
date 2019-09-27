@@ -417,7 +417,13 @@ impl ListingTrait for ConversationsListing {
                 continue;
             }
             let op = account.operation(env_hash);
-            let body = envelope.body(op);
+            let body = match envelope.body(op) {
+                Ok(b) => b,
+                Err(e) => {
+                    error = Some(e);
+                    break;
+                }
+            };
             let decoded = decode_rec(&body, None);
             let body_text = String::from_utf8_lossy(&decoded);
             if body_text.contains(&filter_term) {

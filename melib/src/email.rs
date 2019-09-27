@@ -376,16 +376,18 @@ impl Envelope {
         let _strings: Vec<String> = self.to.iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
     }
-    pub fn bytes(&self, mut operation: Box<dyn BackendOp>) -> Vec<u8> {
-        operation
-            .as_bytes()
-            .map(|v| v.into())
-            .unwrap_or_else(|_| Vec::new())
+
+    /// Requests bytes from backend and thus can fail
+    pub fn bytes(&self, mut operation: Box<dyn BackendOp>) -> Result<Vec<u8>> {
+        operation.as_bytes().map(|v| v.to_vec())
     }
+
     pub fn body_bytes(&self, bytes: &[u8]) -> Attachment {
         let builder = AttachmentBuilder::new(bytes);
         builder.build()
     }
+
+    /// Requests bytes from backend and thus can fail
     pub fn headers<'a>(&self, bytes: &'a [u8]) -> Result<Vec<(&'a str, &'a str)>> {
         let ret = parser::headers(bytes).to_full_result()?;
         let len = ret.len();
@@ -397,34 +399,14 @@ impl Envelope {
                 })
             })
     }
-    pub fn body(&self, mut operation: Box<dyn BackendOp>) -> Attachment {
+
+    /// Requests bytes from backend and thus can fail
+    pub fn body(&self, mut operation: Box<dyn BackendOp>) -> Result<Attachment> {
         debug!("searching body for {:?}", self.message_id_display());
-        let file = operation.as_bytes();
-        self.body_bytes(file.unwrap())
-        /*
-        let (headers, body) = match parser::mail(file.unwrap()).to_full_result() {
-            Ok(v) => v,
-            Err(_) => {
-            debug!("2error in parsing mail\n");
-                let error_msg = b"Mail cannot be shown because of errors.";
-                let mut builder = AttachmentBuilder::new(error_msg);
-                return builder.build();
-            }
-        };
-        let mut builder = AttachmentBuilder::new(body);
-        for (name, value) in headers {
-            if value.len() == 1 && value.is_empty() {
-                continue;
-            }
-            if name.eq_ignore_ascii_case(b"content-transfer-encoding") {
-                builder.content_transfer_encoding(value);
-            } else if name.eq_ignore_ascii_case(b"content-type") {
-                builder.content_type(value);
-            }
-        }
-        builder.build()
-        */
+        let file = operation.as_bytes()?;
+        Ok(self.body_bytes(file))
     }
+
     pub fn subject(&self) -> Cow<str> {
         match self.subject {
             Some(ref s) => String::from_utf8_lossy(s),

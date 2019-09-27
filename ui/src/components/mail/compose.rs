@@ -128,15 +128,15 @@ impl Composer {
      * msg: index of message we reply to in thread_nodes
      * context: current context
      */
-    pub fn edit(account_pos: usize, h: EnvelopeHash, context: &Context) -> Self {
+    pub fn edit(account_pos: usize, h: EnvelopeHash, context: &Context) -> Result<Self> {
         let mut ret = Composer::default();
         let op = context.accounts[account_pos].operation(h);
         let envelope: &Envelope = context.accounts[account_pos].get_env(&h);
 
-        ret.draft = Draft::edit(envelope, op);
+        ret.draft = Draft::edit(envelope, op)?;
 
         ret.account_cursor = account_pos;
-        ret
+        Ok(ret)
     }
     pub fn with_context(
         coordinates: (usize, usize, usize),

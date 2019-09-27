@@ -352,6 +352,7 @@ impl ListingTrait for CompactListing {
         }
         self.filter_term.clear();
 
+        let mut error: Option<(EnvelopeHash, MeliError)> = None;
         for (i, h) in self.order.keys().enumerate() {
             let account = &context.accounts[self.cursor_pos.0];
             let envelope = &account.collection[h];
@@ -367,8 +368,14 @@ impl ListingTrait for CompactListing {
                 self.selection.insert(*h, false);
                 continue;
             }
-            let op = account.operation(*h);
-            let body = envelope.body(op);
+            let op = account.operation(env_hash);
+            let body = match envelope.body(op) {
+                Ok(b) => b,
+                Err(e) => {
+                    error = Some((env_hash, e));
+                    break;
+                }
+            };
             let decoded = decode_rec(&body, None);
             let body_text = String::from_utf8_lossy(&decoded);
             if body_text.contains(&filter_term) {
@@ -377,22 +384,45 @@ impl ListingTrait for CompactListing {
                 self.selection.insert(*h, false);
             }
         }
-        if !self.filtered_selection.is_empty() {
-            self.filter_term = filter_term.to_string();
-            self.cursor_pos.2 = std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
-            self.length = self.filtered_selection.len();
-        } else {
+
+        if let Some((env_hash, error)) = error {
             self.length = 0;
-            let message = format!("No results for `{}`.", filter_term);
-            self.data_columns.columns[0] =
-                CellBuffer::new(message.len(), self.length + 1, Cell::with_char(' '));
+            let message = format!("Error: {}", error.to_string());
+            log(
+                format!(
+                    "Failed to open envelope {}: {}",
+                    context.accounts[self.new_cursor_pos.0]
+                        .get_env(&env_hash)
+                        .message_id_display(),
+                    error.to_string()
+                ),
+                ERROR,
+            );
+            self.data_columns.columns[0] = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
             write_string_to_grid(
                 &message,
                 &mut self.data_columns.columns[0],
                 Color::Default,
                 Color::Default,
                 Attr::Default,
-                ((0, 0), (MAX_COLS - 1, 0)),
+                ((0, 0), (message.len() - 1, 0)),
+                false,
+            );
+        } else if !self.filtered_selection.is_empty() {
+            self.filter_term = filter_term.to_string();
+            self.cursor_pos.2 = std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+            self.length = self.filtered_selection.len();
+        } else {
+            self.length = 0;
+            let message = format!("No results for `{}`.", filter_term);
+            self.data_columns.columns[0] = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+            write_string_to_grid(
+                &message,
+                &mut self.data_columns.columns[0],
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                ((0, 0), (message.len() - 1, 0)),
                 false,
             );
         }
