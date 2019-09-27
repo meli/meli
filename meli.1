@@ -77,6 +77,42 @@ The view into each folder has 4 modes: plain, threaded, conversations and compac
       ^^       (`-=-=-=-=-`)
                 `-=-=-=-=-`          ^^
 .Ed
+.Sh COMPOSING
+To send mail, press
+.Cm m
+while viewing the appropriate account to open a new composing tab. To reply to a mail, press
+.Cm R Ns
+\&. You can edit some of the header fields from within the view, by selecting with the arrow keys and pressing
+.Cm enter
+to enter
+.Ar INSERT
+mode. At any time you can press
+.Cm e
+to launch your editor (see
+.Xr meli.conf 5
+.Em COMPOSING
+for how to select which editor to launch). Attachments can be handled with the
+.Em add-attachment Ns
+,
+.Em remove-attachment
+commands (see below). Finally, pressing
+.Ar s
+will send your message by piping it into a binary of your choosing (see
+.Xr meli.conf 5
+.Em COMPOSING Ns
+, setting
+.Em mailer_cmd Ns
+). To save your draft without sending it, issue command
+.Cm close
+and select 'save as draft'.
+.Pp
+If there is no Draft or Sent folder, meli tries first saving mail in your INBOX and then at any other folder. On complete failure to save your draft or sent message it will be saved in your
+.Em tmp
+directory instead and you will be notified of its location.
+.Pp
+To open a draft for editing later, select your draft in the mail listing and press
+.Cm e Ns
+\&.
 .Sh EXECUTE mode
 Commands are issued in EXECUTE mode, by default started with the space character and exited with Escape key.
 .Pp

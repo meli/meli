@@ -589,22 +589,24 @@ impl Component for Composer {
                 }
                 return true;
             }
-            UIEvent::Input(Key::Char('e')) if self.cursor == Cursor::Body => {
+            UIEvent::Input(Key::Char('e')) => {
                 /* Edit draft in $EDITOR */
                 use std::process::{Command, Stdio};
-                let editor = match std::env::var("EDITOR") {
-                    Err(e) => {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some(
-                                "$EDITOR is not set. You can change an envvar's value with setenv"
-                                    .to_string(),
-                            ),
-                            e.to_string(),
+                let settings = &context.settings;
+                let editor = if let Some(editor_cmd) = settings.composing.editor_cmd.as_ref() {
+                    editor_cmd.to_string()
+                } else {
+                    match std::env::var("EDITOR") {
+                        Err(e) => {
+                            context.replies.push_back(UIEvent::Notification(
+                            Some(e.to_string()),
+                            "$EDITOR is not set. You can change an envvar's value with setenv or set composing.editor_cmd setting in your configuration.".to_string(),
                             Some(NotificationType::ERROR),
                         ));
-                        return true;
+                            return true;
+                        }
+                        Ok(v) => v,
                     }
-                    Ok(v) => v,
                 };
                 /* Kill input thread so that spawned command can be sole receiver of stdin */
                 {
@@ -619,9 +621,10 @@ impl Component for Composer {
                     true,
                 );
 
-                // TODO: check exit status
-                if let Err(e) = Command::new(&editor)
-                    .arg("+/^$")
+                let parts = split_command!(editor);
+                let (cmd, args) = (parts[0], &parts[1..]);
+                if let Err(e) = Command::new(cmd)
+                    .args(args)
                     .arg(&f.path())
                     .stdin(Stdio::inherit())
                     .stdout(Stdio::inherit())
@@ -760,7 +763,7 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
     use std::process::{Command, Stdio};
     let mut failure = true;
     let settings = &context.settings;
-    let parts = split_command!(settings.mailer.mailer_cmd);
+    let parts = split_command!(settings.composing.mailer_cmd);
     let (cmd, args) = (parts[0], &parts[1..]);
     let mut msmtp = Command::new(cmd)
         .args(args)

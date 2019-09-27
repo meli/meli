@@ -41,7 +41,7 @@ Newline means LF (0x0A) or CRLF (0x0D 0x0A).
 .Pp
 Refer to TOML documentation for valid TOML syntax.
 .Sh SECTIONS
-The top level sections of the config are accounts, shortcuts, notifications, pager, mailer, pgp.
+The top level sections of the config are accounts, shortcuts, notifications, pager, composing, pgp.
 .Pp
 .Sy example configuration
 .Bd -literal
@@ -74,9 +74,10 @@ filter = "/usr/bin/pygmentize"
 [notifications]
 script = "notify-send"
 
-[mailer]
+[composing]
 # required for sending e-mail
 mailer_cmd = 'msmtp --read-recipients --read-envelope-from'
+editor_cmd = 'vim +/^$'
 
 [shortcuts]
 scroll_up = 'k'
@@ -172,7 +173,7 @@ example:
 otherwise usage is inferred from the folder title.
 .It Cm conf_override Ar boolean
 (optional) override global settings for this folder. available sections to override are
-.Em pager, notifications, shortcuts, mailer
+.Em pager, notifications, shortcuts, composing
 and the account options
 .Em identity and index_style Ns
 \&. example:
@@ -183,10 +184,12 @@ and the account options
     filter = ""
 .Ed
 .El
-.Sh MAILER
+.Sh COMPOSING
 .Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
 .It Cm mailer_cmd Ar String
 command to pipe new mail to, exit code must be 0 for success.
+.It Cm editor_cmd Ar String
+command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
 .El
 .Sh SHORTCUTS
 Shortcuts can take the following values:

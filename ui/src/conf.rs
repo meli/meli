@@ -24,7 +24,7 @@ extern crate serde;
 extern crate toml;
 extern crate xdg;
 
-pub mod mailer;
+pub mod composing;
 pub mod notifications;
 pub mod pager;
 pub mod pgp;
@@ -32,7 +32,7 @@ pub mod shortcuts;
 
 pub mod accounts;
 pub use self::accounts::Account;
-pub use self::mailer::*;
+pub use self::composing::*;
 pub use self::pgp::*;
 pub use self::shortcuts::*;
 
@@ -96,7 +96,7 @@ pub struct MailUIConf {
     pub pager: Option<PagerSettings>,
     pub notifications: Option<NotificationsSettings>,
     pub shortcuts: Option<Shortcuts>,
-    pub mailer: Option<MailerSettings>,
+    pub composing: Option<ComposingSettings>,
     pub identity: Option<String>,
     pub index_style: Option<IndexStyle>,
 }
@@ -273,7 +273,7 @@ struct FileSettings {
     notifications: NotificationsSettings,
     #[serde(default)]
     shortcuts: Shortcuts,
-    mailer: MailerSettings,
+    composing: ComposingSettings,
     #[serde(default)]
     pgp: PGPSettings,
 }
@@ -303,7 +303,7 @@ pub struct Settings {
     pub pager: PagerSettings,
     pub notifications: NotificationsSettings,
     pub shortcuts: Shortcuts,
-    pub mailer: MailerSettings,
+    pub composing: ComposingSettings,
     pub pgp: PGPSettings,
 }
 
@@ -391,7 +391,7 @@ impl Settings {
             pager: fs.pager,
             notifications: fs.notifications,
             shortcuts: fs.shortcuts,
-            mailer: fs.mailer,
+            composing: fs.composing,
             pgp: fs.pgp,
         }
     }

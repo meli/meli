@@ -1,5 +1,5 @@
 /*
- * meli - notifications conf module
+ * meli - conf module
  *
  * Copyright 2019 Manos Pitsidianakis
  *
@@ -19,10 +19,12 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/// Settings for the mailer function.
+/// Settings for writing and sending new e-mail
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
-pub struct MailerSettings {
+pub struct ComposingSettings {
     /// A command to pipe new emails to
     /// Required
     pub mailer_cmd: String,
+    /// Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
+    pub editor_cmd: Option<String>,
 }

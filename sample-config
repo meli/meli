@@ -54,6 +54,7 @@
 #page_up = PageUp,
 #page_down = PageDown,
 
-#[mailer]
+#[composing]
 # required for sending e-mail
 #mailer_cmd = 'msmtp --read-recipients --read-envelope-from'
+#editor_cmd = 'vim +/^$' # optional, by default $EDITOR is used.
