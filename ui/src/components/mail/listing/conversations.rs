@@ -26,11 +26,11 @@ use std::ops::{Deref, DerefMut};
 
 const MAX_COLS: usize = 500;
 
-struct EntryStrings {
-    date: DateString,
-    subject: SubjectString,
-    flag: FlagString,
-    from: FromString,
+pub(super) struct EntryStrings {
+    pub(super) date: DateString,
+    pub(super) subject: SubjectString,
+    pub(super) flag: FlagString,
+    pub(super) from: FromString,
 }
 
 macro_rules! address_list {
@@ -52,7 +52,7 @@ macro_rules! address_list {
 macro_rules! column_str {
     (
         struct $name:ident(String)) => {
-        pub struct $name(String);
+        pub(super) struct $name(pub String);
 
         impl Deref for $name {
             type Target = String;
@@ -387,6 +387,7 @@ impl ListingTrait for ConversationsListing {
         }
         self.filter_term.clear();
 
+        let mut error = None;
         for (i, h) in self.order.keys().enumerate() {
             let account = &context.accounts[self.cursor_pos.0];
             let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
@@ -432,7 +433,20 @@ impl ListingTrait for ConversationsListing {
                 self.selection.insert(*h, false);
             }
         }
-        if !self.filtered_selection.is_empty() {
+        if let Some(error) = error {
+            self.length = 0;
+            let message = format!("Error: {}", error.to_string());
+            self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+            write_string_to_grid(
+                &message,
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                ((0, 0), (message.len() - 1, 0)),
+                false,
+            );
+        } else if !self.filtered_selection.is_empty() {
             self.filter_term = filter_term.to_string();
             self.cursor_pos.2 = std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
             self.length = self.filtered_selection.len();
@@ -490,7 +504,11 @@ impl ConversationsListing {
             id: ComponentId::new_v4(),
         }
     }
-    fn make_entry_string(e: &Envelope, thread_node: &ThreadNode, is_snoozed: bool) -> EntryStrings {
+    pub(super) fn make_entry_string(
+        e: &Envelope,
+        thread_node: &ThreadNode,
+        is_snoozed: bool,
+    ) -> EntryStrings {
         if thread_node.len() > 0 {
             EntryStrings {
                 date: DateString(ConversationsListing::format_date(thread_node)),
@@ -711,7 +729,8 @@ impl ConversationsListing {
             }
         }
         if self.length == 0 {
-            let message = format!("Folder `{}` is empty.", mailbox.folder.name());
+            let mailbox = &account[self.cursor_pos.1];
+            let message = mailbox.to_string();
             self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
             write_string_to_grid(
                 &message,
@@ -726,15 +745,27 @@ impl ConversationsListing {
         }
     }
 
-    fn format_date(thread_node: &ThreadNode) -> String {
+    pub(super) fn format_date(thread_node: &ThreadNode) -> String {
         let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(thread_node.date());
         let now: std::time::Duration = std::time::SystemTime::now()
             .duration_since(d)
             .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
         match now.as_secs() {
-            n if n < 10 * 60 * 60 => format!("{} hours ago", n / (60 * 60)),
-            n if n < 24 * 60 * 60 => format!("{} hours ago", n / (60 * 60)),
-            n if n < 4 * 24 * 60 * 60 => format!("{} days ago", n / (24 * 60 * 60),),
+            n if n < 60 * 60 => format!(
+                "{} minute{} ago",
+                n / (60),
+                if n / 60 == 1 { "" } else { "s" }
+            ),
+            n if n < 24 * 60 * 60 => format!(
+                "{} hour{} ago",
+                n / (60 * 60),
+                if n / (60 * 60) == 1 { "" } else { "s" }
+            ),
+            n if n < 7 * 24 * 60 * 60 => format!(
+                "{} day{} ago",
+                n / (24 * 60 * 60),
+                if n / (24 * 60 * 60) == 1 { "" } else { "s" }
+            ),
             _ => thread_node
                 .datetime()
                 .format("%Y-%m-%d %H:%M:%S")
