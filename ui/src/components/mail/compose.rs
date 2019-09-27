@@ -547,14 +547,64 @@ impl Component for Composer {
                     }
                     ('n', _) => {}
                     ('y', ViewMode::Discard(u)) => {
-                        let account = &context.accounts[self.account_cursor];
+                        let mut failure = true;
                         let draft = std::mem::replace(&mut self.draft, Draft::default());
-                        if let Err(e) = account.save_draft(draft) {
-                            debug!("{:?} could not save draft", e);
+
+                        let draft = draft.finalise().unwrap();
+                        for folder in &[
+                            &context.accounts[self.account_cursor]
+                                .special_use_folder(SpecialUseMailbox::Drafts),
+                            &context.accounts[self.account_cursor]
+                                .special_use_folder(SpecialUseMailbox::Inbox),
+                            &context.accounts[self.account_cursor]
+                                .special_use_folder(SpecialUseMailbox::Normal),
+                        ] {
+                            if folder.is_none() {
+                                continue;
+                            }
+                            let folder = folder.unwrap();
+                            if let Err(e) = context.accounts[self.account_cursor].save(
+                                draft.as_bytes(),
+                                folder,
+                                Some(Flag::SEEN | Flag::DRAFT),
+                            ) {
+                                debug!("{:?} could not save draft msg", e);
+                                log(
+                                    format!(
+                                        "Could not save draft in '{}' folder: {}.",
+                                        folder,
+                                        e.to_string()
+                                    ),
+                                    ERROR,
+                                );
+                                context.replies.push_back(UIEvent::Notification(
+                                    Some(format!("Could not save draft in '{}' folder.", folder)),
+                                    e.into(),
+                                    Some(NotificationType::ERROR),
+                                ));
+                            } else {
+                                failure = false;
+                                break;
+                            }
+                        }
+
+                        if failure {
+                            let file = create_temp_file(draft.as_bytes(), None, None, false);
+                            debug!("message saved in {}", file.path.display());
+                            log(
+                                format!(
+                                    "Message was stored in {} so that you can restore it manually.",
+                                    file.path.display()
+                                ),
+                                INFO,
+                            );
                             context.replies.push_back(UIEvent::Notification(
-                                Some("Could not save draft.".into()),
-                                e.into(),
-                                Some(NotificationType::ERROR),
+                                Some("Could not save in any folder".into()),
+                                format!(
+                                    "Message was stored in {} so that you can restore it manually.",
+                                    file.path.display()
+                                ),
+                                Some(NotificationType::INFO),
                             ));
                         }
                         context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
@@ -789,10 +839,18 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
             &context.accounts[account_cursor].special_use_folder(SpecialUseMailbox::Inbox),
             &context.accounts[account_cursor].special_use_folder(SpecialUseMailbox::Normal),
         ] {
+            if folder.is_none() {
+                continue;
+            }
+            let folder = folder.unwrap();
             if let Err(e) =
                 context.accounts[account_cursor].save(draft.as_bytes(), folder, Some(Flag::SEEN))
             {
                 debug!("{:?} could not save sent msg", e);
+                log(
+                    format!("Could not save in '{}' folder: {}.", folder, e.to_string()),
+                    ERROR,
+                );
                 context.replies.push_back(UIEvent::Notification(
                     Some(format!("Could not save in '{}' folder.", folder)),
                     e.into(),
@@ -807,6 +865,13 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
         if failure {
             let file = create_temp_file(draft.as_bytes(), None, None, false);
             debug!("message saved in {}", file.path.display());
+            log(
+                format!(
+                    "Message was stored in {} so that you can restore it manually.",
+                    file.path.display()
+                ),
+                INFO,
+            );
             context.replies.push_back(UIEvent::Notification(
                 Some("Could not save in any folder".into()),
                 format!(
