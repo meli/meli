@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use crate::shellexpand::ShellExpandTrait;
 use chrono::offset::Local;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
@@ -100,6 +101,7 @@ pub fn get_log_level() -> LoggingLevel {
 
 pub fn change_log_dest(path: PathBuf) {
     LOG.with(|f| {
+        let path = path.expand(); // expand shell stuff
         let mut backend = f.lock().unwrap();
         backend.dest = BufWriter::new(OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
                          .create(true) /* a new file will be created if the file does not yet already exist.*/
