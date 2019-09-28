@@ -33,6 +33,8 @@ pub use crate::view::*;
 mod compose;
 pub use self::compose::*;
 
+pub mod pgp;
+
 mod accounts;
 pub use self::accounts::*;
 

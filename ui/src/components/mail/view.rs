@@ -196,58 +196,7 @@ impl MailView {
                 } else if a.is_signed() {
                     v.clear();
                     if context.settings.pgp.auto_verify_signatures {
-                        match melib::signatures::verify_signature(a) {
-                            Ok((bytes, sig)) => {
-                                let bytes_file = create_temp_file(&bytes, None, None, true);
-                                let signature_file = create_temp_file(sig, None, None, true);
-                                if let Ok(gpg) = Command::new(
-                                    context
-                                        .settings
-                                        .pgp
-                                        .gpg_binary
-                                        .as_ref()
-                                        .map(String::as_str)
-                                        .unwrap_or("gpg2"),
-                                )
-                                .args(&[
-                                    "--output",
-                                    "-",
-                                    "--verify",
-                                    signature_file.path.to_str().unwrap(),
-                                    bytes_file.path.to_str().unwrap(),
-                                ])
-                                .stdin(Stdio::piped())
-                                .stderr(Stdio::piped())
-                                .spawn()
-                                {
-                                    v.extend(gpg.wait_with_output().unwrap().stderr);
-                                } else {
-                                    context.replies.push_back(UIEvent::Notification(
-                                        Some(format!(
-                                            "Failed to launch {} to verify PGP signature",
-                                            context
-                                                .settings
-                                                .pgp
-                                                .gpg_binary
-                                                .as_ref()
-                                                .map(String::as_str)
-                                                .unwrap_or("gpg2"),
-                                        )),
-                                        "see meli.conf(5) for configuration setting pgp.gpg_binary"
-                                            .to_string(),
-                                        Some(NotificationType::ERROR),
-                                    ));
-                                    return;
-                                }
-                            }
-                            Err(e) => {
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some(e.to_string()),
-                                    String::new(),
-                                    Some(NotificationType::ERROR),
-                                ));
-                            }
-                        }
+                        v.extend(crate::mail::pgp::verify_signature(a, context).into_iter());
                     }
                 }
             })),
@@ -1041,6 +990,7 @@ impl Component for MailView {
                                                 ),
                                             );
                                             if super::compose::send_draft(
+                                                ToggleFlag::False,
                                                 /* FIXME: refactor to avoid unsafe.
                                                  *
                                                  * actions contains byte slices from the envelope's

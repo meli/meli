@@ -214,6 +214,17 @@ define_commands!([
                       );
                   )
                 },
+                { tags: ["toggle sign "],
+                  desc: "switch between sign/unsign for this draft",
+                  parser:(
+                      named!( toggle_sign<Action>,
+                              do_parse!(
+                                  ws!(tag!("toggle sign"))
+                                  >> (Compose(ToggleSign))
+                              )
+                      );
+                  )
+                },
                 { tags: ["create-folder "],
                   desc: "create-folder ACCOUNT FOLDER_PATH",
                   parser:(
@@ -350,7 +361,7 @@ named!(
 
 named!(
     compose_action<Action>,
-    alt_complete!(add_attachment | remove_attachment)
+    alt_complete!(add_attachment | remove_attachment | toggle_sign)
 );
 
 named!(pub parse_command<Action>,

@@ -18,11 +18,11 @@ use fnv::FnvHashMap;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Draft {
-    headers: FnvHashMap<String, String>,
-    header_order: Vec<String>,
-    body: String,
+    pub headers: FnvHashMap<String, String>,
+    pub header_order: Vec<String>,
+    pub body: String,
 
-    attachments: Vec<AttachmentBuilder>,
+    pub attachments: Vec<AttachmentBuilder>,
 }
 
 impl Default for Draft {
@@ -259,7 +259,19 @@ impl Draft {
         }
         ret.push_str("MIME-Version: 1.0\n");
 
-        if !self.attachments.is_empty() {
+        if self.attachments.is_empty() {
+            let content_type: ContentType = Default::default();
+            let content_transfer_encoding: ContentTransferEncoding = ContentTransferEncoding::_8Bit;
+            ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", content_type).chars());
+            ret.extend(
+                format!("Content-Transfer-Encoding: {}\n", content_transfer_encoding).chars(),
+            );
+            ret.push('\n');
+            ret.push_str(&self.body);
+        } else if self.attachments.len() == 1 && self.body.is_empty() {
+            let attachment: Attachment = self.attachments.remove(0).into();
+            ret.extend(attachment.into_raw().chars());
+        } else {
             let mut parts = Vec::with_capacity(self.attachments.len() + 1);
             let attachments = std::mem::replace(&mut self.attachments, Vec::new());
             let mut body_attachment = AttachmentBuilder::default();
@@ -267,24 +279,6 @@ impl Draft {
             parts.push(body_attachment);
             parts.extend(attachments.into_iter());
             build_multipart(&mut ret, MultipartType::Mixed, parts);
-        } else {
-            if self.body.is_ascii() {
-                ret.push('\n');
-                ret.push_str(&self.body);
-            } else {
-                let content_type: ContentType = Default::default();
-                let content_transfer_encoding: ContentTransferEncoding =
-                    ContentTransferEncoding::Base64;
-
-                ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", content_type).chars());
-                ret.extend(
-                    format!("Content-Transfer-Encoding: {}\n", content_transfer_encoding).chars(),
-                );
-                ret.push('\n');
-
-                ret.push_str(&BASE64_MIME.encode(&self.body.as_bytes()).trim());
-                ret.push('\n');
-            }
         }
 
         Ok(ret)

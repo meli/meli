@@ -44,6 +44,7 @@ pub struct Composer {
     form: FormWidget,
 
     mode: ViewMode,
+    sign_mail: ToggleFlag,
     dirty: bool,
     initialized: bool,
     id: ComponentId,
@@ -62,6 +63,7 @@ impl Default for Composer {
             form: FormWidget::default(),
 
             mode: ViewMode::Edit,
+            sign_mail: ToggleFlag::Unset,
             dirty: true,
             initialized: false,
             id: ComponentId::new_v4(),
@@ -217,11 +219,20 @@ impl Composer {
         }
     }
 
-    fn draw_attachments(&self, grid: &mut CellBuffer, area: Area, _context: &mut Context) {
+    fn draw_attachments(&self, grid: &mut CellBuffer, area: Area, context: &Context) {
         let attachments_no = self.draft.attachments().len();
-        if attachments_no == 0 {
+        if self.sign_mail.is_true() {
             write_string_to_grid(
-                "no attachments",
+                &format!(
+                    "☑ sign with {}",
+                    context
+                        .settings
+                        .pgp
+                        .key
+                        .as_ref()
+                        .map(String::as_str)
+                        .unwrap_or("default key")
+                ),
                 grid,
                 Color::Default,
                 Color::Default,
@@ -231,12 +242,33 @@ impl Composer {
             );
         } else {
             write_string_to_grid(
-                &format!("{} attachments ", attachments_no),
+                "☐ don't sign",
                 grid,
                 Color::Default,
                 Color::Default,
                 Attr::Default,
                 (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
+                false,
+            );
+        }
+        if attachments_no == 0 {
+            write_string_to_grid(
+                "no attachments",
+                grid,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
+                false,
+            );
+        } else {
+            write_string_to_grid(
+                &format!("{} attachments ", attachments_no),
+                grid,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
                 false,
             );
             for (i, a) in self.draft.attachments().iter().enumerate() {
@@ -253,7 +285,7 @@ impl Composer {
                         Color::Default,
                         Color::Default,
                         Attr::Default,
-                        (pos_inc(upper_left!(area), (0, 2 + i)), bottom_right!(area)),
+                        (pos_inc(upper_left!(area), (0, 3 + i)), bottom_right!(area)),
                         false,
                     );
                 } else {
@@ -263,7 +295,7 @@ impl Composer {
                         Color::Default,
                         Color::Default,
                         Attr::Default,
-                        (pos_inc(upper_left!(area), (0, 2 + i)), bottom_right!(area)),
+                        (pos_inc(upper_left!(area), (0, 3 + i)), bottom_right!(area)),
                         false,
                     );
                 }
@@ -291,6 +323,9 @@ impl Component for Composer {
         };
 
         if !self.initialized {
+            if self.sign_mail.is_unset() {
+                self.sign_mail = ToggleFlag::InternalVal(context.settings.pgp.auto_sign);
+            }
             if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
             {
                 self.draft.headers_mut().insert(
@@ -632,7 +667,12 @@ impl Component for Composer {
             }
             UIEvent::Input(Key::Char('s')) => {
                 self.update_draft();
-                if send_draft(context, self.account_cursor, self.draft.clone()) {
+                if send_draft(
+                    self.sign_mail,
+                    context,
+                    self.account_cursor,
+                    self.draft.clone(),
+                ) {
                     context
                         .replies
                         .push_back(UIEvent::Action(Tab(Kill(self.id))));
@@ -743,6 +783,12 @@ impl Component for Composer {
                         self.dirty = true;
                         return true;
                     }
+                    Action::Compose(ComposeAction::ToggleSign) => {
+                        let is_true = self.sign_mail.is_true();
+                        self.sign_mail = ToggleFlag::from(!is_true);
+                        self.dirty = true;
+                        return true;
+                    }
                     _ => {}
                 }
             }
@@ -815,7 +861,12 @@ impl Component for Composer {
     }
 }
 
-pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) -> bool {
+pub fn send_draft(
+    sign_mail: ToggleFlag,
+    context: &mut Context,
+    account_cursor: usize,
+    mut draft: Draft,
+) -> bool {
     use std::io::Write;
     use std::process::{Command, Stdio};
     let mut failure = true;
@@ -830,6 +881,55 @@ pub fn send_draft(context: &mut Context, account_cursor: usize, draft: Draft) ->
         .expect("Failed to start mailer command");
     {
         let stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
+        if sign_mail.is_true() {
+            let mut body: AttachmentBuilder = Attachment::new(
+                Default::default(),
+                Default::default(),
+                std::mem::replace(&mut draft.body, String::new()).into_bytes(),
+            )
+            .into();
+            if !draft.attachments.is_empty() {
+                let mut parts = std::mem::replace(&mut draft.attachments, Vec::new());
+                parts.insert(0, body);
+                let boundary = ContentType::make_boundary(&parts);
+                body = Attachment::new(
+                    ContentType::Multipart {
+                        boundary: boundary.into_bytes(),
+                        kind: MultipartType::Mixed,
+                        parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+                    },
+                    Default::default(),
+                    Vec::new(),
+                )
+                .into();
+            }
+            let output = crate::components::mail::pgp::sign(
+                body.into(),
+                context.settings.pgp.gpg_binary.as_ref().map(String::as_str),
+                context.settings.pgp.key.as_ref().map(String::as_str),
+            );
+            if let Err(e) = &output {
+                debug!("{:?} could not sign draft msg", e);
+                log(
+                    format!(
+                        "Could not sign draft in account `{}`: {}.",
+                        context.accounts[account_cursor].name(),
+                        e.to_string()
+                    ),
+                    ERROR,
+                );
+                context.replies.push_back(UIEvent::Notification(
+                    Some(format!(
+                        "Could not sign draft in account `{}`.",
+                        context.accounts[account_cursor].name()
+                    )),
+                    e.to_string(),
+                    Some(NotificationType::ERROR),
+                ));
+                return false;
+            }
+            draft.attachments.push(output.unwrap());
+        }
         let draft = draft.finalise().unwrap();
         stdin
             .write_all(draft.as_bytes())

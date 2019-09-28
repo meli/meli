@@ -273,6 +273,23 @@ impl From<Attachment> for AttachmentBuilder {
     }
 }
 
+impl From<AttachmentBuilder> for Attachment {
+    fn from(val: AttachmentBuilder) -> Self {
+        let AttachmentBuilder {
+            content_type,
+            content_transfer_encoding,
+            raw,
+            body,
+        } = val;
+        Attachment {
+            content_type,
+            content_transfer_encoding,
+            raw,
+            body,
+        }
+    }
+}
+
 /// Immutable attachment type.
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct Attachment {
@@ -545,6 +562,73 @@ impl Attachment {
             } => true,
             _ => false,
         }
+    }
+
+    pub fn into_raw(&self) -> String {
+        let mut ret = String::with_capacity(2 * self.raw.len());
+        fn into_raw_helper(a: &Attachment, ret: &mut String) {
+            ret.extend(
+                format!(
+                    "Content-Transfer-Encoding: {}\n",
+                    a.content_transfer_encoding
+                )
+                .chars(),
+            );
+            match &a.content_type {
+                ContentType::Text { kind: _, charset } => {
+                    ret.extend(
+                        format!("Content-Type: {}; charset={}\n\n", a.content_type, charset)
+                            .chars(),
+                    );
+                    ret.extend(String::from_utf8_lossy(a.body()).chars());
+                }
+                ContentType::Multipart {
+                    boundary,
+                    kind,
+                    parts,
+                } => {
+                    let boundary = String::from_utf8_lossy(boundary);
+                    ret.extend(format!("Content-Type: {}; boundary={}", kind, boundary).chars());
+                    if *kind == MultipartType::Signed {
+                        ret.extend(
+                            "; micalg=pgp-sha512; protocol=\"application/pgp-signature\"".chars(),
+                        );
+                    }
+                    ret.push('\n');
+
+                    let boundary_start = format!("\n--{}\n", boundary);
+                    for p in parts {
+                        ret.extend(boundary_start.chars());
+                        into_raw_helper(p, ret);
+                    }
+                    ret.extend(format!("--{}--\n\n", boundary).chars());
+                }
+                ContentType::MessageRfc822 => {
+                    ret.extend(format!("Content-Type: {}\n\n", a.content_type).chars());
+                    ret.extend(String::from_utf8_lossy(a.body()).chars());
+                }
+                ContentType::PGPSignature => {
+                    ret.extend(format!("Content-Type: {}\n\n", a.content_type).chars());
+                    ret.extend(String::from_utf8_lossy(a.body()).chars());
+                }
+                ContentType::OctetStream { ref name } => {
+                    if let Some(name) = name {
+                        ret.extend(
+                            format!("Content-Type: {}; name={}\n\n", a.content_type, name).chars(),
+                        );
+                    } else {
+                        ret.extend(format!("Content-Type: {}\n\n", a.content_type).chars());
+                    }
+                    ret.push_str(&BASE64_MIME.encode(a.body()).trim());
+                }
+                _ => {
+                    ret.extend(format!("Content-Type: {}\n\n", a.content_type).chars());
+                    ret.extend(String::from_utf8_lossy(a.body()).chars());
+                }
+            }
+        }
+        into_raw_helper(self, &mut ret);
+        ret
     }
 }
 

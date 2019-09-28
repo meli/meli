@@ -71,6 +71,7 @@ pub enum PagerAction {
 pub enum ComposeAction {
     AddAttachment(String),
     RemoveAttachment(usize),
+    ToggleSign,
 }
 
 #[derive(Debug)]

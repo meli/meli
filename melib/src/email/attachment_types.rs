@@ -74,6 +74,27 @@ impl<'a> From<&'a [u8]> for Charset {
     }
 }
 
+impl Display for Charset {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            Charset::Ascii => write!(f, "us-ascii"),
+            Charset::UTF8 => write!(f, "utf-8"),
+            Charset::UTF16 => write!(f, "utf-16"),
+            Charset::ISO8859_1 => write!(f, "iso-8859-1"),
+            Charset::ISO8859_2 => write!(f, "iso-8859-2"),
+            Charset::ISO8859_7 => write!(f, "iso-8859-7"),
+            Charset::ISO8859_15 => write!(f, "iso-8859-15"),
+            Charset::Windows1251 => write!(f, "windows-1251"),
+            Charset::Windows1252 => write!(f, "windows-1252"),
+            Charset::Windows1253 => write!(f, "windows-1253"),
+            Charset::GBK => write!(f, "GBK"),
+            Charset::GB2312 => write!(f, "gb2312"),
+            Charset::BIG5 => write!(f, "BIG5"),
+            Charset::ISO2022JP => write!(f, "ISO-2022-JP"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum MultipartType {
     Mixed,
@@ -264,7 +285,7 @@ pub enum ContentTransferEncoding {
 
 impl Default for ContentTransferEncoding {
     fn default() -> Self {
-        ContentTransferEncoding::_7Bit
+        ContentTransferEncoding::_8Bit
     }
 }
 

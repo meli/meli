@@ -58,12 +58,22 @@ macro_rules! split_command {
     }};
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Copy, Debug, Clone, PartialEq)]
 pub enum ToggleFlag {
     Unset,
     InternalVal(bool),
     False,
     True,
+}
+
+impl From<bool> for ToggleFlag {
+    fn from(val: bool) -> Self {
+        if val {
+            ToggleFlag::True
+        } else {
+            ToggleFlag::False
+        }
+    }
 }
 
 impl Default for ToggleFlag {
