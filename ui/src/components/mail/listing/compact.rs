@@ -1093,6 +1093,12 @@ impl Component for CompactListing {
                 self.movement = Some(PageMovement::End);
                 self.set_dirty();
             }
+            UIEvent::Input(ref key) if *key == shortcuts["set_seen"] => {
+                let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                self.perform_action(context, thread_hash, &ListingAction::SetSeen);
+                self.row_updates.push(thread_hash);
+                self.set_dirty();
+            }
             UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
                 self.unfocused = false;
                 self.dirty = true;
@@ -1329,6 +1335,14 @@ impl Component for CompactListing {
                         (*key).clone()
                     } else {
                         Key::Char('v')
+                    },
+                ),
+                (
+                    "set_seen",
+                    if let Some(key) = config_map.get("set_seen") {
+                        (*key).clone()
+                    } else {
+                        Key::Char('n')
                     },
                 ),
             ]
