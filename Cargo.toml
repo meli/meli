@@ -15,9 +15,6 @@ signal-hook = "0.1.10"
 nix = "*"
 melib = { path = "melib", version = "*" }
 ui = { path = "ui", version = "*" }
-#enable for debug tracing logs
-#melib = { path = "melib", version = "*", features=["debug-tracing",] }
-#ui = { path = "ui", version = "*", features=["debug-tracing",] }
 
 [profile.release]
 lto = true
@@ -28,7 +25,7 @@ members = ["melib", "ui", "debug_printer", "testing", "text_processing"]
 
 [features]
 default = []
+
 # Print tracing logs as meli runs in stderr
-#
-# enable for debug tracing logs
-# debug-tracing = []
+# enable for debug tracing logs: build with --features=debug-tracing
+debug-tracing = ["melib/debug-tracing", "ui/debug-tracing"]
