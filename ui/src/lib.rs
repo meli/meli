@@ -76,6 +76,9 @@ pub mod username {
     /* taken from whoami-0.1.1 */
     fn getpwuid() -> libc::passwd {
         let mut pwentp = null_mut();
+        #[cfg(target_arch = "aarch64")]
+        let mut buffer = [0u8; 16384]; // from the man page
+        #[cfg(not(target_arch = "aarch64"))]
         let mut buffer = [0i8; 16384]; // from the man page
         #[cfg(any(
             target_os = "macos",
@@ -135,6 +138,22 @@ pub mod username {
             pwent
         }
     }
+    #[cfg(target_arch = "aarch64")]
+    fn ptr_to_string(name: *mut u8) -> String {
+        let uname = name as *const u8;
+
+        let s;
+        let string;
+
+        unsafe {
+            s = ::std::slice::from_raw_parts(uname, libc::strlen(name));
+            string = String::from_utf8_lossy(s).to_string();
+        }
+
+        string
+    }
+
+    #[cfg(not(target_arch = "aarch64"))]
     fn ptr_to_string(name: *mut i8) -> String {
         let uname = name as *mut _ as *mut u8;
 
