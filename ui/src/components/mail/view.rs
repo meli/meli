@@ -44,7 +44,7 @@ enum ViewMode {
     Attachment(usize),
     Raw,
     Subview,
-    ContactSelector(Selector),
+    ContactSelector(Selector<Card>),
 }
 
 impl Default for ViewMode {
@@ -57,6 +57,12 @@ impl ViewMode {
     fn is_attachment(&self) -> bool {
         match self {
             ViewMode::Attachment(_) => true,
+            _ => false,
+        }
+    }
+    fn is_contact_selector(&self) -> bool {
+        match self {
+            ViewMode::ContactSelector(_) => true,
             _ => false,
         }
     }
@@ -630,15 +636,14 @@ impl Component for MailView {
                     s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
                 }
             }
-            ViewMode::ContactSelector(ref mut s) => {
-                clear_area(grid, (set_y(upper_left, y + 1), bottom_right));
-                s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-            }
             _ => {
                 if let Some(p) = self.pager.as_mut() {
                     p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
                 }
             }
+        }
+        if let ViewMode::ContactSelector(ref mut s) = self.mode {
+            s.draw(grid, center_area(area, s.content.size()), context);
         }
         self.dirty = false;
     }
@@ -654,6 +659,19 @@ impl Component for MailView {
             }
             ViewMode::ContactSelector(ref mut s) => {
                 if s.process_event(event, context) {
+                    if s.is_done() {
+                        if let ViewMode::ContactSelector(s) =
+                            std::mem::replace(&mut self.mode, ViewMode::Normal)
+                        {
+                            let account = &mut context.accounts[self.coordinates.0];
+                            {
+                                for card in s.collect() {
+                                    account.address_book.add_card(card);
+                                }
+                            }
+                        }
+                        self.set_dirty();
+                    }
                     return true;
                 }
             }
@@ -667,55 +685,22 @@ impl Component for MailView {
         }
 
         match *event {
-            UIEvent::Input(Key::Char('c')) => {
-                if let ViewMode::ContactSelector(_) = self.mode {
-                    if let ViewMode::ContactSelector(s) =
-                        std::mem::replace(&mut self.mode, ViewMode::Normal)
-                    {
-                        let account = &mut context.accounts[self.coordinates.0];
-                        let mut results = Vec::new();
-                        {
-                            let envelope: &Envelope = &account.get_env(&self.coordinates.2);
-                            for c in s.collect() {
-                                let c = usize::from_ne_bytes({
-                                    [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]
-                                });
-                                for (idx, env) in envelope
-                                    .from()
-                                    .iter()
-                                    .chain(envelope.to().iter())
-                                    .enumerate()
-                                {
-                                    if idx != c {
-                                        continue;
-                                    }
-
-                                    let mut new_card: Card = Card::new();
-                                    new_card.set_email(env.get_email());
-                                    new_card.set_name(env.get_display_name());
-                                    results.push(new_card);
-                                }
-                            }
-                        }
-                        for c in results {
-                            account.address_book.add_card(c);
-                        }
-                    }
-                    return true;
-                }
+            UIEvent::Input(Key::Char('c')) if !self.mode.is_contact_selector() => {
                 let account = &mut context.accounts[self.coordinates.0];
                 let envelope: &Envelope = &account.get_env(&self.coordinates.2);
 
                 let mut entries = Vec::new();
-                for (idx, env) in envelope
-                    .from()
-                    .iter()
-                    .chain(envelope.to().iter())
-                    .enumerate()
-                {
-                    entries.push((idx.to_ne_bytes().to_vec(), format!("{}", env)));
+                for addr in envelope.from().iter().chain(envelope.to().iter()) {
+                    let mut new_card: Card = Card::new();
+                    new_card.set_email(addr.get_email());
+                    new_card.set_name(addr.get_display_name());
+                    entries.push((new_card, format!("{}", addr)));
                 }
-                self.mode = ViewMode::ContactSelector(Selector::new(entries, true));
+                self.mode = ViewMode::ContactSelector(Selector::new(
+                    "select contacts to add",
+                    entries,
+                    false,
+                ));
                 self.dirty = true;
                 return true;
             }

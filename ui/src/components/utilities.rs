@@ -1568,29 +1568,44 @@ impl Component for Tabbed {
     }
 }
 
-type EntryIdentifier = Vec<u8>;
-/// Shows selection to user
+#[derive(Debug, Copy, PartialEq, Clone)]
+enum SelectorCursor {
+    /// Cursor is at an entry
+    Entry(usize),
+    /// Cursor is located on the Ok button
+    Ok,
+    /// Cursor is located on the Cancel button
+    Cancel,
+}
+
+/// Shows a little window with options for user to select.
+///
+/// Instantiate with Selector::new(). Set single_only to true if user should only choose one of the
+/// options. After passing input events to this component, check Selector::is_done to see if the
+/// user has finalised their choices. Collect the choices by consuming the Selector with
+/// Selector::collect()
 #[derive(Debug, PartialEq, Clone)]
-pub struct Selector {
-    single_only: bool,
+pub struct Selector<T: PartialEq + Debug + Clone + Sync + Send> {
     /// allow only one selection
-    entries: Vec<(EntryIdentifier, bool)>,
-    selected_entry_count: u32,
-    content: CellBuffer,
+    single_only: bool,
+    entries: Vec<(T, bool)>,
+    pub content: CellBuffer,
 
-    cursor: usize,
+    cursor: SelectorCursor,
 
+    /// If true, user has finished their selection
+    done: bool,
     dirty: bool,
     id: ComponentId,
 }
 
-impl fmt::Display for Selector {
+impl<T: PartialEq + Debug + Clone + Sync + Send> fmt::Display for Selector<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt("Selector", f)
     }
 }
 
-impl Component for Selector {
+impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let (width, height) = self.content.size();
         copy_area_with_break(grid, &self.content, area, ((0, 0), (width, height)));
@@ -1598,17 +1613,24 @@ impl Component for Selector {
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         let (width, height) = self.content.size();
-        match *event {
-            UIEvent::Input(Key::Char('\t')) => {
-                self.entries[self.cursor].1 = !self.entries[self.cursor].1;
-                if self.entries[self.cursor].1 {
+        match (event, self.cursor) {
+            (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
+                /* User can only select one entry, so Enter key finalises the selection */
+                self.done = true;
+                return true;
+            }
+            (UIEvent::Input(Key::Char('\n')), SelectorCursor::Entry(c)) if !self.single_only => {
+                /* User can select multiple entries, so Enter key toggles the entry under the
+                 * cursor */
+                self.entries[c].1 = !self.entries[c].1;
+                if self.entries[c].1 {
                     write_string_to_grid(
                         "x",
                         &mut self.content,
                         Color::Default,
                         Color::Default,
                         Attr::Default,
-                        ((1, self.cursor), (width, self.cursor)),
+                        ((3, c + 2), (width - 2, c + 2)),
                         false,
                     );
                 } else {
@@ -1618,23 +1640,170 @@ impl Component for Selector {
                         Color::Default,
                         Color::Default,
                         Attr::Default,
-                        ((1, self.cursor), (width, self.cursor)),
+                        ((3, c + 2), (width - 2, c + 2)),
                         false,
                     );
                 }
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Up) if self.cursor > 0 => {
-                self.cursor -= 1;
+            (UIEvent::Input(Key::Char('\n')), SelectorCursor::Ok) if !self.single_only => {
+                self.done = true;
+                return true;
+            }
+            (UIEvent::Input(Key::Char('\n')), SelectorCursor::Cancel) if !self.single_only => {
+                for e in self.entries.iter_mut() {
+                    e.1 = false;
+                }
+                self.done = true;
+                return true;
+            }
+            (UIEvent::Input(Key::Up), SelectorCursor::Entry(c)) if c > 0 => {
+                if self.single_only {
+                    // Redraw selection
+                    change_colors(
+                        &mut self.content,
+                        ((2, c + 2), (width - 2, c + 2)),
+                        Color::Default,
+                        Color::Default,
+                    );
+                    change_colors(
+                        &mut self.content,
+                        ((2, c + 1), (width - 2, c + 1)),
+                        Color::Default,
+                        Color::Byte(8),
+                    );
+                    self.entries[c].1 = false;
+                    self.entries[c - 1].1 = true;
+                } else {
+                    // Redraw cursor
+                    change_colors(
+                        &mut self.content,
+                        ((2, c + 2), (4, c + 2)),
+                        Color::Default,
+                        Color::Default,
+                    );
+                    change_colors(
+                        &mut self.content,
+                        ((2, c + 1), (4, c + 1)),
+                        Color::Default,
+                        Color::Byte(8),
+                    );
+                }
+                self.cursor = SelectorCursor::Entry(c - 1);
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Down) if self.cursor < height.saturating_sub(1) => {
-                self.cursor += 1;
+            (UIEvent::Input(Key::Up), SelectorCursor::Ok)
+            | (UIEvent::Input(Key::Up), SelectorCursor::Cancel) => {
+                change_colors(
+                    &mut self.content,
+                    ((width / 2, height - 2), (width - 1, height - 2)),
+                    Color::Default,
+                    Color::Default,
+                );
+                let c = self.entries.len().saturating_sub(1);
+                self.cursor = SelectorCursor::Entry(c);
+                change_colors(
+                    &mut self.content,
+                    ((2, c + 2), (4, c + 2)),
+                    Color::Default,
+                    Color::Byte(8),
+                );
                 self.dirty = true;
                 return true;
             }
+            (UIEvent::Input(Key::Down), SelectorCursor::Entry(c))
+                if c < self.entries.len().saturating_sub(1) =>
+            {
+                if self.single_only {
+                    // Redraw selection
+                    change_colors(
+                        &mut self.content,
+                        ((2, c + 2), (width - 2, c + 2)),
+                        Color::Default,
+                        Color::Default,
+                    );
+                    change_colors(
+                        &mut self.content,
+                        ((2, c + 3), (width - 2, c + 3)),
+                        Color::Default,
+                        Color::Byte(8),
+                    );
+                    self.entries[c].1 = false;
+                    self.entries[c + 1].1 = true;
+                } else {
+                    // Redraw cursor
+                    change_colors(
+                        &mut self.content,
+                        ((2, c + 2), (4, c + 2)),
+                        Color::Default,
+                        Color::Default,
+                    );
+                    change_colors(
+                        &mut self.content,
+                        ((2, c + 3), (4, c + 3)),
+                        Color::Default,
+                        Color::Byte(8),
+                    );
+                }
+                self.cursor = SelectorCursor::Entry(c + 1);
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(Key::Down), SelectorCursor::Entry(c)) if !self.single_only => {
+                self.cursor = SelectorCursor::Ok;
+                change_colors(
+                    &mut self.content,
+                    ((2, c + 2), (4, c + 2)),
+                    Color::Default,
+                    Color::Default,
+                );
+                change_colors(
+                    &mut self.content,
+                    ((width / 2, height - 2), (width / 2 + 1, height - 2)),
+                    Color::Default,
+                    Color::Byte(8),
+                );
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(Key::Down), _) | (UIEvent::Input(Key::Up), _) => return true,
+            (UIEvent::Input(Key::Right), SelectorCursor::Ok) => {
+                self.cursor = SelectorCursor::Cancel;
+                change_colors(
+                    &mut self.content,
+                    ((width / 2, height - 2), (width / 2 + 1, height - 2)),
+                    Color::Default,
+                    Color::Default,
+                );
+                change_colors(
+                    &mut self.content,
+                    ((width / 2 + 6, height - 2), (width / 2 + 11, height - 2)),
+                    Color::Default,
+                    Color::Byte(8),
+                );
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(Key::Left), SelectorCursor::Cancel) => {
+                self.cursor = SelectorCursor::Ok;
+                change_colors(
+                    &mut self.content,
+                    ((width / 2, height - 2), (width / 2 + 1, height - 2)),
+                    Color::Default,
+                    Color::Byte(8),
+                );
+                change_colors(
+                    &mut self.content,
+                    ((width / 2 + 6, height - 2), (width / 2 + 11, height - 2)),
+                    Color::Default,
+                    Color::Default,
+                );
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(Key::Left), _) | (UIEvent::Input(Key::Right), _) => return true,
             _ => {}
         }
 
@@ -1655,44 +1824,179 @@ impl Component for Selector {
     }
 }
 
-impl Selector {
-    pub fn new(mut entries: Vec<(EntryIdentifier, String)>, single_only: bool) -> Selector {
-        let width = entries
-            .iter()
-            .max_by_key(|e| e.1.len())
-            .map(|v| v.1.len())
-            .unwrap_or(0)
-            + 4;
-        let height = entries.len();
+impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
+    pub fn new(title: &str, entries: Vec<(T, String)>, single_only: bool) -> Selector<T> {
+        let width = std::cmp::max(
+            "OK    Cancel".len(),
+            std::cmp::max(
+                entries
+                    .iter()
+                    .max_by_key(|e| e.1.len())
+                    .map(|v| v.1.len())
+                    .unwrap_or(0),
+                title.len(),
+            ),
+        ) + 7;
+        let height = entries.len()
+            + 4
+            + if single_only {
+                0
+            } else {
+                /* Extra room for buttons Okay/Cancel */
+                3
+            };
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        let identifiers = entries
-            .iter_mut()
-            .map(|(id, _)| (std::mem::replace(&mut *id, Vec::new()), false))
-            .collect();
-        for (i, e) in entries.into_iter().enumerate() {
+        write_string_to_grid(
+            "┏━",
+            &mut content,
+            Color::Byte(8),
+            Color::Default,
+            Attr::Default,
+            ((0, 0), (width - 1, 0)),
+            false,
+        );
+        let (x, _) = write_string_to_grid(
+            title,
+            &mut content,
+            Color::Default,
+            Color::Default,
+            Attr::Default,
+            ((2, 0), (width - 1, 0)),
+            false,
+        );
+        for i in 1..(width - title.len() - 1) {
             write_string_to_grid(
-                &format!("[ ] {}", e.1),
+                "━",
                 &mut content,
+                Color::Byte(8),
                 Color::Default,
+                Attr::Default,
+                ((x + i, 0), (width - 1, 0)),
+                false,
+            );
+        }
+        write_string_to_grid(
+            "┓",
+            &mut content,
+            Color::Byte(8),
+            Color::Default,
+            Attr::Default,
+            ((width - 1, 0), (width - 1, 0)),
+            false,
+        );
+        write_string_to_grid(
+            "┗",
+            &mut content,
+            Color::Byte(8),
+            Color::Default,
+            Attr::Default,
+            ((0, height - 1), (width - 1, height - 1)),
+            false,
+        );
+        write_string_to_grid(
+            &"━".repeat(width - 2),
+            &mut content,
+            Color::Byte(8),
+            Color::Default,
+            Attr::Default,
+            ((1, height - 1), (width - 2, height - 1)),
+            false,
+        );
+        write_string_to_grid(
+            "┛",
+            &mut content,
+            Color::Byte(8),
+            Color::Default,
+            Attr::Default,
+            ((width - 1, height - 1), (width - 1, height - 1)),
+            false,
+        );
+        for i in 1..height - 1 {
+            write_string_to_grid(
+                "┃",
+                &mut content,
+                Color::Byte(8),
                 Color::Default,
                 Attr::Default,
                 ((0, i), (width - 1, i)),
                 false,
             );
+            write_string_to_grid(
+                "┃",
+                &mut content,
+                Color::Byte(8),
+                Color::Default,
+                Attr::Default,
+                ((width - 1, i), (width - 1, i)),
+                false,
+            );
+        }
+        if single_only {
+            for (i, e) in entries.iter().enumerate() {
+                write_string_to_grid(
+                    &e.1,
+                    &mut content,
+                    Color::Default,
+                    if i == 0 {
+                        Color::Byte(8)
+                    } else {
+                        Color::Default
+                    },
+                    Attr::Default,
+                    ((2, i + 2), (width - 1, i + 2)),
+                    false,
+                );
+            }
+        } else {
+            for (i, e) in entries.iter().enumerate() {
+                write_string_to_grid(
+                    &format!("[ ] {}", e.1),
+                    &mut content,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((2, i + 2), (width - 1, i + 2)),
+                    false,
+                );
+                if i == 0 {
+                    content[(2, i + 2)].set_bg(Color::Byte(8));
+                    content[(3, i + 2)].set_bg(Color::Byte(8));
+                    content[(4, i + 2)].set_bg(Color::Byte(8));
+                }
+            }
+            write_string_to_grid(
+                "OK    Cancel",
+                &mut content,
+                Color::Default,
+                Color::Default,
+                Attr::Bold,
+                ((width / 2, height - 2), (width - 1, height - 2)),
+                false,
+            );
+        }
+        let mut identifiers: Vec<(T, bool)> =
+            entries.into_iter().map(|(id, _)| (id, false)).collect();
+        if single_only {
+            /* set default option */
+            identifiers[0].1 = true;
         }
 
         Selector {
             single_only,
             entries: identifiers,
-            selected_entry_count: 0,
             content,
-            cursor: 0,
+            cursor: SelectorCursor::Entry(0),
+            done: false,
             dirty: true,
             id: ComponentId::new_v4(),
         }
     }
 
-    pub fn collect(self) -> Vec<EntryIdentifier> {
+    pub fn is_done(&self) -> bool {
+        self.done
+    }
+
+    pub fn collect(self) -> Vec<T> {
         self.entries
             .into_iter()
             .filter(|v| v.1)

@@ -799,3 +799,21 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area) {
         }
     }
 }
+
+pub fn center_area(area: Area, (width, height): (usize, usize)) -> Area {
+    let mid_x = { std::cmp::max(width!(area) / 2, width / 2) - width / 2 };
+    let mid_y = { std::cmp::max(height!(area) / 2, height / 2) - height / 2 };
+
+    let (upper_x, upper_y) = upper_left!(area);
+    let (max_x, max_y) = bottom_right!(area);
+    (
+        (
+            std::cmp::min(max_x, upper_x + mid_x),
+            std::cmp::min(max_y, upper_y + mid_y),
+        ),
+        (
+            std::cmp::min(max_x, upper_x + mid_x + width),
+            std::cmp::min(max_y, upper_y + mid_y + height),
+        ),
+    )
+}

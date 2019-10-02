@@ -73,21 +73,13 @@ impl Default for Composer {
 
 #[derive(Debug)]
 enum ViewMode {
-    Discard(Uuid),
+    Discard(Uuid, Selector<char>),
     Edit,
     //Selector(Selector),
     ThreadView,
 }
 
 impl ViewMode {
-    fn is_discard(&self) -> bool {
-        if let ViewMode::Discard(_) = self {
-            true
-        } else {
-            false
-        }
-    }
-
     fn is_edit(&self) -> bool {
         if let ViewMode::Edit = self {
             true
@@ -452,62 +444,11 @@ impl Component for Composer {
                 self.pager.set_dirty();
                 self.pager.draw(grid, body_area, context);
             }
-            ViewMode::Discard(_) => {
+            ViewMode::Discard(_, ref mut s) => {
+                self.pager.set_dirty();
+                self.pager.draw(grid, body_area, context);
                 /* Let user choose whether to quit with/without saving or cancel */
-                let mid_x = { std::cmp::max(width!(area) / 2, width / 2) - width / 2 };
-                let mid_y = { std::cmp::max(height!(area) / 2, 11) - 11 };
-
-                let upper_left = upper_left!(body_area);
-                let bottom_right = bottom_right!(body_area);
-                let area = (
-                    pos_inc(upper_left, (mid_x, mid_y)),
-                    pos_dec(bottom_right, (mid_x, mid_y)),
-                );
-                create_box(grid, area);
-                let area = (
-                    pos_inc(upper_left, (mid_x + 2, mid_y + 2)),
-                    pos_dec(
-                        bottom_right,
-                        (mid_x.saturating_sub(2), mid_y.saturating_sub(2)),
-                    ),
-                );
-
-                let (_, y) = write_string_to_grid(
-                    &format!("Draft \"{:10}\"", self.draft.headers()["Subject"]),
-                    grid,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
-                    area,
-                    true,
-                );
-                let (_, y) = write_string_to_grid(
-                    "[x] quit without saving",
-                    grid,
-                    Color::Byte(124),
-                    Color::Default,
-                    Attr::Default,
-                    (set_y(upper_left!(area), y + 2), bottom_right!(area)),
-                    true,
-                );
-                let (_, y) = write_string_to_grid(
-                    "[y] save draft and quit",
-                    grid,
-                    Color::Byte(124),
-                    Color::Default,
-                    Attr::Default,
-                    (set_y(upper_left!(area), y + 1), bottom_right!(area)),
-                    true,
-                );
-                write_string_to_grid(
-                    "[n] cancel",
-                    grid,
-                    Color::Byte(124),
-                    Color::Default,
-                    Attr::Default,
-                    (set_y(upper_left!(area), y + 1), bottom_right!(area)),
-                    true,
-                );
+                s.draw(grid, center_area(area, s.content.size()), context);
             }
         }
 
@@ -532,6 +473,95 @@ impl Component for Composer {
             (ViewMode::ThreadView, _, _) => {
                 /* Cannot mutably borrow in pattern guard, pah! */
                 if self.pager.process_event(event, context) {
+                    return true;
+                }
+            }
+            (ViewMode::Discard(_, ref mut selector), _, _) => {
+                if selector.process_event(event, context) {
+                    if selector.is_done() {
+                        let (u, s) = match std::mem::replace(&mut self.mode, ViewMode::ThreadView) {
+                            ViewMode::Discard(u, s) => (u, s),
+                            _ => unreachable!(),
+                        };
+                        let key = s.collect()[0] as char;
+                        match key {
+                            'x' => {
+                                context.replies.push_back(UIEvent::Action(Tab(Kill(u))));
+                                return true;
+                            }
+                            'n' => {}
+                            'y' => {
+                                let mut failure = true;
+                                let draft = std::mem::replace(&mut self.draft, Draft::default());
+
+                                let draft = draft.finalise().unwrap();
+                                for folder in &[
+                                    &context.accounts[self.account_cursor]
+                                        .special_use_folder(SpecialUseMailbox::Drafts),
+                                    &context.accounts[self.account_cursor]
+                                        .special_use_folder(SpecialUseMailbox::Inbox),
+                                    &context.accounts[self.account_cursor]
+                                        .special_use_folder(SpecialUseMailbox::Normal),
+                                ] {
+                                    if folder.is_none() {
+                                        continue;
+                                    }
+                                    let folder = folder.unwrap();
+                                    if let Err(e) = context.accounts[self.account_cursor].save(
+                                        draft.as_bytes(),
+                                        folder,
+                                        Some(Flag::SEEN | Flag::DRAFT),
+                                    ) {
+                                        debug!("{:?} could not save draft msg", e);
+                                        log(
+                                            format!(
+                                                "Could not save draft in '{}' folder: {}.",
+                                                folder,
+                                                e.to_string()
+                                            ),
+                                            ERROR,
+                                        );
+                                        context.replies.push_back(UIEvent::Notification(
+                                            Some(format!(
+                                                "Could not save draft in '{}' folder.",
+                                                folder
+                                            )),
+                                            e.into(),
+                                            Some(NotificationType::ERROR),
+                                        ));
+                                    } else {
+                                        failure = false;
+                                        break;
+                                    }
+                                }
+
+                                if failure {
+                                    let file =
+                                        create_temp_file(draft.as_bytes(), None, None, false);
+                                    debug!("message saved in {}", file.path.display());
+                                    log(
+                                        format!(
+                                    "Message was stored in {} so that you can restore it manually.",
+                                    file.path.display()
+                                ),
+                                        INFO,
+                                    );
+                                    context.replies.push_back(UIEvent::Notification(
+                                        Some("Could not save in any folder".into()),
+                                        format!(
+                                    "Message was stored in {} so that you can restore it manually.",
+                                    file.path.display()
+                                ),
+                                        Some(NotificationType::INFO),
+                                    ));
+                                }
+                                context.replies.push_back(UIEvent::Action(Tab(Kill(u))));
+                                return true;
+                            }
+                            _ => {}
+                        }
+                        self.set_dirty();
+                    }
                     return true;
                 }
             }
@@ -573,85 +603,6 @@ impl Component for Composer {
             }
             UIEvent::Input(Key::Down) => {
                 self.cursor = Cursor::Body;
-            }
-            UIEvent::Input(Key::Char(key)) if self.mode.is_discard() => {
-                match (key, &self.mode) {
-                    ('x', ViewMode::Discard(u)) => {
-                        context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
-                        return true;
-                    }
-                    ('n', _) => {}
-                    ('y', ViewMode::Discard(u)) => {
-                        let mut failure = true;
-                        let draft = std::mem::replace(&mut self.draft, Draft::default());
-
-                        let draft = draft.finalise().unwrap();
-                        for folder in &[
-                            &context.accounts[self.account_cursor]
-                                .special_use_folder(SpecialUseMailbox::Drafts),
-                            &context.accounts[self.account_cursor]
-                                .special_use_folder(SpecialUseMailbox::Inbox),
-                            &context.accounts[self.account_cursor]
-                                .special_use_folder(SpecialUseMailbox::Normal),
-                        ] {
-                            if folder.is_none() {
-                                continue;
-                            }
-                            let folder = folder.unwrap();
-                            if let Err(e) = context.accounts[self.account_cursor].save(
-                                draft.as_bytes(),
-                                folder,
-                                Some(Flag::SEEN | Flag::DRAFT),
-                            ) {
-                                debug!("{:?} could not save draft msg", e);
-                                log(
-                                    format!(
-                                        "Could not save draft in '{}' folder: {}.",
-                                        folder,
-                                        e.to_string()
-                                    ),
-                                    ERROR,
-                                );
-                                context.replies.push_back(UIEvent::Notification(
-                                    Some(format!("Could not save draft in '{}' folder.", folder)),
-                                    e.into(),
-                                    Some(NotificationType::ERROR),
-                                ));
-                            } else {
-                                failure = false;
-                                break;
-                            }
-                        }
-
-                        if failure {
-                            let file = create_temp_file(draft.as_bytes(), None, None, false);
-                            debug!("message saved in {}", file.path.display());
-                            log(
-                                format!(
-                                    "Message was stored in {} so that you can restore it manually.",
-                                    file.path.display()
-                                ),
-                                INFO,
-                            );
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Could not save in any folder".into()),
-                                format!(
-                                    "Message was stored in {} so that you can restore it manually.",
-                                    file.path.display()
-                                ),
-                                Some(NotificationType::INFO),
-                            ));
-                        }
-                        context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
-                        return true;
-                    }
-                    _ => {
-                        return false;
-                    }
-                }
-                self.mode = ViewMode::ThreadView;
-                self.set_dirty();
-                return true;
             }
             /* Switch to thread view mode if we're on Edit mode */
             UIEvent::Input(Key::Char('v')) if self.mode.is_edit() => {
@@ -818,7 +769,18 @@ impl Component for Composer {
     }
 
     fn kill(&mut self, uuid: Uuid, _context: &mut Context) {
-        self.mode = ViewMode::Discard(uuid);
+        self.mode = ViewMode::Discard(
+            uuid,
+            Selector::new(
+                "this draft has unsaved changes",
+                vec![
+                    ('x', "quit without saving".to_string()),
+                    ('y', "save draft and quit".to_string()),
+                    ('n', "cancel".to_string()),
+                ],
+                true,
+            ),
+        );
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
@@ -855,7 +817,18 @@ impl Component for Composer {
 
     fn can_quit_cleanly(&mut self) -> bool {
         /* Play it safe and ask user for confirmation */
-        self.mode = ViewMode::Discard(self.id);
+        self.mode = ViewMode::Discard(
+            self.id,
+            Selector::new(
+                "this draft has unsaved changes",
+                vec![
+                    ('x', "quit without saving".to_string()),
+                    ('y', "save draft and quit".to_string()),
+                    ('n', "cancel".to_string()),
+                ],
+                true,
+            ),
+        );
         self.set_dirty();
         false
     }
