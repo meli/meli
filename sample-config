@@ -2,9 +2,10 @@
 #[accounts.account-name]
 #root_folder = "/path/to/root/folder"
 #format = "Maildir"
-#index_style = "Compact" # [plain, threaded, compact]
-#identity="Name <email@address.tld>"
+#index_style = "Conversations" # or [plain, threaded, compact]
+#identity="email@address.tld"
 #display_name = "Name"
+#subscribed_folders = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 
 # Set folder-specific settings
 #  [accounts.account-name.folders]
@@ -18,6 +19,20 @@
 #format = "mbox"
 #index_style = "Compact"
 #identity="username@hostname.local"
+#
+# Setting up an IMAP account
+#[accounts."imap"]
+#root_folder = "INBOX"
+#format = "imap"
+#server_hostname="mail.server.tld"
+#server_password="pha2hiLohs2eeeish2phaii1We3ood4chakaiv0hien2ahie3m"
+#server_username="username@server.tld"
+#server_port="993" # imaps
+#server_port="143" # STARTTLS
+#index_style = "Conversations"
+#identity = "username@server.tld"
+#display_name = "Name Name"
+#subscribed_folders = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 
 #[pager]
 #filter = "/usr/bin/pygmentize"
@@ -58,3 +73,9 @@
 # required for sending e-mail
 #mailer_cmd = 'msmtp --read-recipients --read-envelope-from'
 #editor_cmd = 'vim +/^$' # optional, by default $EDITOR is used.
+#
+#
+#[pgp]
+#auto_sign = false # always sign sent messages
+#auto_verify_signatures = true # always verify signatures when reading signed e-mails
+#gpg_binary = "/usr/bin/gpg2" #optional
