@@ -25,7 +25,7 @@ use linkify::{Link, LinkFinder};
 use std::convert::TryFrom;
 use std::process::{Command, Stdio};
 
-mod list_management;
+pub mod list_management;
 
 mod html;
 pub use self::html::*;

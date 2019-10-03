@@ -75,7 +75,7 @@ impl Default for Composer {
 enum ViewMode {
     Discard(Uuid, Selector<char>),
     Edit,
-    //Selector(Selector),
+    SelectRecipients(Selector<Address>),
     ThreadView,
 }
 
@@ -144,6 +144,38 @@ impl Composer {
         let mut ret = Composer::default();
         let p = &thread_nodes[&msg];
         let parent_message = &account.collection[&p.message().unwrap()];
+        /* If message is from a mailing list and we detect a List-Post header, ask user if they
+         * want to reply to the mailing list or the submitter of the message */
+        if let Some(actions) = list_management::detect(parent_message) {
+            if let Some(post) = actions.post {
+                /* Try to parse header value in this order
+                 * - <mailto:*****@*****>
+                 * - mailto:******@*****
+                 * - <***@****>
+                 */
+                if let Ok(list_address) = melib::email::parser::message_id(post.as_bytes())
+                    .to_full_result()
+                    .and_then(|b| melib::email::parser::mailto(b).to_full_result())
+                    .or(melib::email::parser::mailto(post.as_bytes()).to_full_result())
+                    .map(|m| m.address)
+                    .or(melib::email::parser::address(post.as_bytes()).to_full_result())
+                {
+                    let list_address_string = list_address.to_string();
+                    ret.mode = ViewMode::SelectRecipients(Selector::new(
+                        "select recipients",
+                        vec![
+                            (
+                                parent_message.from()[0].clone(),
+                                parent_message.field_from_to_string(),
+                            ),
+                            (list_address, list_address_string),
+                        ],
+                        false,
+                    ));
+                }
+            }
+        }
+
         let mut op = account.operation(parent_message.hash());
         let parent_bytes = op.as_bytes();
 
@@ -444,6 +476,11 @@ impl Component for Composer {
                 self.pager.set_dirty();
                 self.pager.draw(grid, body_area, context);
             }
+            ViewMode::SelectRecipients(ref mut s) => {
+                self.pager.set_dirty();
+                self.pager.draw(grid, body_area, context);
+                s.draw(grid, center_area(area, s.content.size()), context);
+            }
             ViewMode::Discard(_, ref mut s) => {
                 self.pager.set_dirty();
                 self.pager.draw(grid, body_area, context);
@@ -470,6 +507,27 @@ impl Component for Composer {
                     return true;
                 }
             }
+            (ViewMode::SelectRecipients(ref mut selector), _, _) => {
+                if selector.process_event(event, context) {
+                    if selector.is_done() {
+                        let s = match std::mem::replace(&mut self.mode, ViewMode::Edit) {
+                            ViewMode::SelectRecipients(s) => s,
+                            _ => unreachable!(),
+                        };
+                        let new_recipients = s.collect();
+                        self.draft.headers_mut().insert(
+                            "To".to_string(),
+                            new_recipients
+                                .into_iter()
+                                .map(|a| a.to_string())
+                                .collect::<Vec<String>>()
+                                .join(", "),
+                        );
+                        self.update_form();
+                    }
+                    return true;
+                }
+            }
             (ViewMode::ThreadView, _, _) => {
                 /* Cannot mutably borrow in pattern guard, pah! */
                 if self.pager.process_event(event, context) {
@@ -479,7 +537,7 @@ impl Component for Composer {
             (ViewMode::Discard(_, ref mut selector), _, _) => {
                 if selector.process_event(event, context) {
                     if selector.is_done() {
-                        let (u, s) = match std::mem::replace(&mut self.mode, ViewMode::ThreadView) {
+                        let (u, s) = match std::mem::replace(&mut self.mode, ViewMode::Edit) {
                             ViewMode::Discard(u, s) => (u, s),
                             _ => unreachable!(),
                         };

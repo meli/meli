@@ -61,7 +61,7 @@ impl<'a> Clone for UnsubscribeOption<'a> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ListActions<'a> {
     pub id: Option<&'a str>,
     pub archive: Option<&'a str>,
