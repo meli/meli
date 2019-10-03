@@ -674,6 +674,11 @@ impl Component for MailView {
                     }
                     return true;
                 }
+                if let Some(p) = self.pager.as_mut() {
+                    if p.process_event(event, context) {
+                        return true;
+                    }
+                }
             }
             _ => {
                 if let Some(p) = self.pager.as_mut() {
