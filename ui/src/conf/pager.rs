@@ -20,6 +20,7 @@
  */
 
 use super::default_vals::*;
+use super::deserializers::*;
 /// Settings for the pager function.
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct PagerSettings {
@@ -45,8 +46,13 @@ pub struct PagerSettings {
 
     /// A command to pipe mail output through for viewing in pager.
     /// Default: None
-    #[serde(default = "none")]
+    #[serde(default = "none", deserialize_with = "non_empty_string")]
     pub filter: Option<String>,
+
+    /// A command to pipe html output before displaying it in a pager
+    /// Default: None
+    #[serde(default = "none", deserialize_with = "non_empty_string")]
+    pub html_filter: Option<String>,
 
     /// Respect "format=flowed"
     /// Default: true

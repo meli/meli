@@ -134,9 +134,9 @@ impl MailView {
             Some(Box::new(move |a: &'closure Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
                     use std::io::Write;
-                    let settings = context.accounts[self.coordinates.0].runtime_settings.conf();
+                    let settings = &context.settings;
                     /* FIXME: duplication with view/html.rs */
-                    if let Some(filter_invocation) = settings.html_filter() {
+                    if let Some(filter_invocation) = settings.pager.html_filter.as_ref() {
                         let parts = split_command!(filter_invocation);
                         let (cmd, args) = (parts[0], &parts[1..]);
                         let command_obj = Command::new(cmd)
@@ -576,16 +576,11 @@ impl Component for MailView {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
                     self.pager = None;
                     let attachment = &body.attachments()[aidx];
-                    self.subview = Some(Box::new(HtmlView::new(
-                        &attachment,
-                        context,
-                        self.coordinates.0,
-                    )));
+                    self.subview = Some(Box::new(HtmlView::new(&attachment, context)));
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Normal if body.is_html() => {
-                    self.subview =
-                        Some(Box::new(HtmlView::new(&body, context, self.coordinates.0)));
+                    self.subview = Some(Box::new(HtmlView::new(&body, context)));
                     self.pager = None;
                     self.mode = ViewMode::Subview;
                 }

@@ -96,8 +96,8 @@ impl EnvelopeView {
             Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
                     use std::io::Write;
-                    let settings = context.accounts[self.account_pos].runtime_settings.conf();
-                    if let Some(filter_invocation) = settings.html_filter() {
+                    let settings = &context.settings;
+                    if let Some(filter_invocation) = settings.pager.html_filter.as_ref() {
                         let parts = split_command!(filter_invocation);
                         let (cmd, args) = (parts[0], &parts[1..]);
                         let command_obj = Command::new(cmd)
@@ -319,14 +319,10 @@ impl Component for EnvelopeView {
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
                     let attachment = &body.attachments()[aidx];
-                    self.subview = Some(Box::new(HtmlView::new(
-                        &attachment,
-                        context,
-                        self.account_pos,
-                    )));
+                    self.subview = Some(Box::new(HtmlView::new(&attachment, context)));
                 }
                 ViewMode::Normal if body.is_html() => {
-                    self.subview = Some(Box::new(HtmlView::new(&body, context, self.account_pos)));
+                    self.subview = Some(Box::new(HtmlView::new(&body, context)));
                     self.mode = ViewMode::Subview;
                 }
                 _ => {

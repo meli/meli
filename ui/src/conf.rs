@@ -157,11 +157,6 @@ pub struct FileAccount {
     display_name: Option<String>,
     index_style: IndexStyle,
 
-    /// A command to pipe html output before displaying it in a pager
-    /// Default: None
-    #[serde(default = "none", deserialize_with = "non_empty_string")]
-    html_filter: Option<String>,
-
     #[serde(default = "false_val")]
     read_only: bool,
     subscribed_folders: Vec<String>,
@@ -267,10 +262,6 @@ impl FileAccount {
 
     pub fn index_style(&self) -> IndexStyle {
         self.index_style
-    }
-
-    pub fn html_filter(&self) -> Option<&str> {
-        self.html_filter.as_ref().map(String::as_str)
     }
 }
 
@@ -421,18 +412,6 @@ impl Default for IndexStyle {
     }
 }
 
-fn non_empty_string<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = <String>::deserialize(deserializer)?;
-    if s.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(s))
-    }
-}
-
 fn toggleflag_de<'de, D>(deserializer: D) -> std::result::Result<ToggleFlag, D::Error>
 where
     D: Deserializer<'de>,
@@ -485,6 +464,23 @@ mod default_vals {
 
     pub(in crate::conf) fn internal_value_false() -> super::ToggleFlag {
         super::ToggleFlag::InternalVal(false)
+    }
+}
+
+mod deserializers {
+    use serde::{Deserialize, Deserializer};
+    pub(in crate::conf) fn non_empty_string<'de, D>(
+        deserializer: D,
+    ) -> std::result::Result<Option<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <String>::deserialize(deserializer)?;
+        if s.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(s))
+        }
     }
 }
 

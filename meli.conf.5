@@ -70,6 +70,7 @@ identity="username@hostname.local"
 
 [pager]
 filter = "/usr/bin/pygmentize"
+html_filter = "w3m -I utf-8 -T text/html"
 
 [notifications]
 script = "notify-send"
@@ -113,8 +114,6 @@ shows one row per thread
 .It Cm display_name Ar String
 (optional) a name which can be combined with your address:
 "Name <email@address.tld>"
-.It Cm html_filter Ar String
-(optional) pipe html attachments through this filter before display
 .It Cm read_only Ar boolean
 attempt to not make any changes to this account.
 .Pq Em false
@@ -273,6 +272,10 @@ enable freedesktop-spec notifications. this is usually what you want
 (optional) always show headers when scrolling.
 .\" default value
 .Pq Em false
+.It Cm html_filter Ar String
+(optional) pipe html attachments through this filter before display
+.\" default value
+.Pq Em none
 .It Cm filter Ar String
 (optional) a command to pipe mail output through for viewing in pager.
 .\" default value
