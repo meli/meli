@@ -130,6 +130,14 @@ example:
 .Qq mail.example.tld
 .It Cm server_username Ar String
 .It Cm server_password Ar String
+.It Cm server_port Ar number
+(optional)
+.\" default value
+.Pq Em 143
+.It Cm use_starttls Ar boolean
+(optional) if port is 993 and use_starttls is unspecified, it becomes false by default.
+.\" default value
+.Pq Em true
 .It Cm danger_accept_invalid_certs Ar boolean
 (optional) do not validate TLS certificates.
 .\" default value

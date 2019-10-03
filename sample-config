@@ -1,3 +1,7 @@
+# Look into meli.conf(5) for all valid configuration options, their
+# descriptions and default values
+#
+#
 # Setting up a Maildir account
 #[accounts.account-name]
 #root_folder = "/path/to/root/folder"
@@ -29,6 +33,7 @@
 #server_username="username@server.tld"
 #server_port="993" # imaps
 #server_port="143" # STARTTLS
+#use_starttls=true #optional
 #index_style = "Conversations"
 #identity = "username@server.tld"
 #display_name = "Name Name"
