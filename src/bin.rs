@@ -249,6 +249,12 @@ fn main() -> std::result::Result<(), std::io::Error> {
                             state.render();
                             state.redraw();
                         },
+                        ThreadEvent::Input(Key::Ctrl('l')) => {
+                            /* Manual screen redraw */
+                            state.update_size();
+                            state.render();
+                            state.redraw();
+                        },
                         ThreadEvent::Input(k) => {
                             match state.mode {
                                 UIMode::Normal => {
