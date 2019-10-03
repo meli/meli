@@ -1698,7 +1698,10 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
             | (UIEvent::Input(Key::Up), SelectorCursor::Cancel) => {
                 change_colors(
                     &mut self.content,
-                    ((width / 2, height - 2), (width - 1, height - 2)),
+                    (
+                        ((width - "OK    Cancel".len()) / 2, height - 3),
+                        (width - 1, height - 3),
+                    ),
                     Color::Default,
                     Color::Default,
                 );
@@ -1761,7 +1764,10 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 );
                 change_colors(
                     &mut self.content,
-                    ((width / 2, height - 2), (width / 2 + 1, height - 2)),
+                    (
+                        ((width - "OK    Cancel".len()) / 2, height - 3),
+                        ((width - "OK    Cancel".len()) / 2 + 1, height - 3),
+                    ),
                     Color::Default,
                     Color::Byte(8),
                 );
@@ -1773,13 +1779,19 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.cursor = SelectorCursor::Cancel;
                 change_colors(
                     &mut self.content,
-                    ((width / 2, height - 2), (width / 2 + 1, height - 2)),
+                    (
+                        ((width - "OK    Cancel".len()) / 2, height - 3),
+                        ((width - "OK    Cancel".len()) / 2 + 1, height - 3),
+                    ),
                     Color::Default,
                     Color::Default,
                 );
                 change_colors(
                     &mut self.content,
-                    ((width / 2 + 6, height - 2), (width / 2 + 11, height - 2)),
+                    (
+                        ((width - "OK    Cancel".len()) / 2 + 6, height - 3),
+                        ((width - "OK    Cancel".len()) / 2 + 11, height - 3),
+                    ),
                     Color::Default,
                     Color::Byte(8),
                 );
@@ -1790,13 +1802,19 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.cursor = SelectorCursor::Ok;
                 change_colors(
                     &mut self.content,
-                    ((width / 2, height - 2), (width / 2 + 1, height - 2)),
+                    (
+                        ((width - "OK    Cancel".len()) / 2, height - 3),
+                        ((width - "OK    Cancel".len()) / 2 + 1, height - 3),
+                    ),
                     Color::Default,
                     Color::Byte(8),
                 );
                 change_colors(
                     &mut self.content,
-                    ((width / 2 + 6, height - 2), (width / 2 + 11, height - 2)),
+                    (
+                        ((width - "OK    Cancel".len()) / 2 + 6, height - 3),
+                        ((width - "OK    Cancel".len()) / 2 + 11, height - 3),
+                    ),
                     Color::Default,
                     Color::Default,
                 );
@@ -1970,7 +1988,10 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                 Color::Default,
                 Color::Default,
                 Attr::Bold,
-                ((width / 2, height - 2), (width - 1, height - 2)),
+                (
+                    ((width - "OK    Cancel".len()) / 2, height - 3),
+                    (width - 1, height - 3),
+                ),
                 false,
             );
         }
