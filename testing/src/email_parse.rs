@@ -13,7 +13,7 @@ fn main() -> Result<()> {
                 "Something went wrong reading the file {}",
                 filename.display()
             ));
-            let env = Envelope::from_bytes(&buffer.as_bytes()).expect("Couldn't parse email");
+            let env = Envelope::from_bytes(&buffer.as_bytes(), None).expect("Couldn't parse email");
             debug!("Env is {:#?}", env);
             debug!(env.body_bytes(buffer.as_bytes()));
         } else {
