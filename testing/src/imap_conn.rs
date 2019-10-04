@@ -1,6 +1,4 @@
 extern crate melib;
-use melib::*;
-use std::collections::HashMap;
 
 use melib::backends::ImapType;
 use melib::AccountSettings;
