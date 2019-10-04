@@ -70,11 +70,7 @@ named!(
 named!(
     my_flags<Flag>,
     do_parse!(
-        flags:
-            separated_nonempty_list!(
-                tag!(" "),
-                preceded!(tag!("\\"), is_not!(")"))
-            )
+        flags: separated_nonempty_list!(tag!(" "), preceded!(tag!("\\"), is_not!(")")))
             >> ({
                 let mut ret = Flag::default();
                 for f in flags {
@@ -108,7 +104,7 @@ named!(
 
 /*
  *
- * * 1 FETCH (FLAGS (\Seen) UID 1 RFC822.HEADER {5224}
+ * "* 1 FETCH (FLAGS (\Seen) UID 1 RFC822.HEADER {5224}"
 */
 named!(
     pub uid_fetch_response<Vec<(usize, Option<Flag>, &[u8])>>,
@@ -250,7 +246,6 @@ named!(
         >> tag: take_until!("\r\n")
         >> tag!("\r\n")
         >> ({
-            
             use UntaggedResponse::*;
             match tag {
                 b"EXPUNGE" => Some(Expunge(num)),
@@ -265,13 +260,12 @@ named!(
     )
 );
 
-
 named!(
     pub search_results<Vec<usize>>,
     alt_complete!(do_parse!( tag!("* SEARCH")
                             >> list: separated_nonempty_list_complete!(tag!(" "), map_res!(is_not!("\r\n"), |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) }))
                             >> tag!("\r\n")
-                            >> ({ list })) | 
+                            >> ({ list })) |
     do_parse!(tag!("* SEARCH\r\n") >> ({ Vec::new() })))
 );
 
@@ -280,10 +274,9 @@ named!(
     alt_complete!(do_parse!( tag!("* SEARCH ")
                             >> list: take_until!("\r\n")
                             >> tag!("\r\n")
-                            >> ({ list })) | 
+                            >> ({ list })) |
     do_parse!(tag!("* SEARCH\r\n") >> ({ &b""[0..] })))
 );
-
 
 #[derive(Debug, Clone)]
 pub enum SelectResponse {
@@ -321,7 +314,7 @@ pub struct SelectResponseBad {
  *           S: A142 OK [READ-WRITE] SELECT completed
  */
 
-/* 
+/*
  *
  *  * FLAGS (\Answered \Flagged \Deleted \Seen \Draft)
  *  * OK [PERMANENTFLAGS (\Answered \Flagged \Deleted \Seen \Draft \*)] Flags permitted.
@@ -336,19 +329,27 @@ pub fn select_response(input: &str) -> IResult<&str, SelectResponse> {
         let mut ret = SelectResponseOk::default();
         for l in input.split("\r\n") {
             if l.starts_with("* ") && l.ends_with(" EXISTS") {
-                ret.exists = usize::from_str(&l["* ".len()..l.len()-" EXISTS".len()]).unwrap();
+                ret.exists = usize::from_str(&l["* ".len()..l.len() - " EXISTS".len()]).unwrap();
             } else if l.starts_with("* ") && l.ends_with(" RECENT") {
-                ret.recent = usize::from_str(&l["* ".len()..l.len()-" RECENT".len()]).unwrap();
+                ret.recent = usize::from_str(&l["* ".len()..l.len() - " RECENT".len()]).unwrap();
             } else if l.starts_with("* FLAGS (") {
-                ret.flags = flags(&l["* FLAGS (".len()..l.len() - ")".len()]).to_full_result().unwrap();
+                ret.flags = flags(&l["* FLAGS (".len()..l.len() - ")".len()])
+                    .to_full_result()
+                    .unwrap();
             } else if l.starts_with("* OK [UNSEEN ") {
-                ret.unseen = usize::from_str(&l["* OK [UNSEEN ".len()..l.find(']').unwrap()]).unwrap();
+                ret.unseen =
+                    usize::from_str(&l["* OK [UNSEEN ".len()..l.find(']').unwrap()]).unwrap();
             } else if l.starts_with("* OK [UIDVALIDITY ") {
-                ret.uidvalidity = usize::from_str(&l["* OK [UIDVALIDITY ".len()..l.find(']').unwrap()]).unwrap();
+                ret.uidvalidity =
+                    usize::from_str(&l["* OK [UIDVALIDITY ".len()..l.find(']').unwrap()]).unwrap();
             } else if l.starts_with("* OK [UIDNEXT ") {
-                ret.uidnext = usize::from_str(&l["* OK [UIDNEXT ".len()..l.find(']').unwrap()]).unwrap();
+                ret.uidnext =
+                    usize::from_str(&l["* OK [UIDNEXT ".len()..l.find(']').unwrap()]).unwrap();
             } else if l.starts_with("* OK [PERMANENTFLAGS (") {
-                ret.permanentflags = flags(&l["* OK [PERMANENTFLAGS (".len()..l.find(')').unwrap()]).to_full_result().unwrap();
+                ret.permanentflags =
+                    flags(&l["* OK [PERMANENTFLAGS (".len()..l.find(')').unwrap()])
+                        .to_full_result()
+                        .unwrap();
             } else if !l.is_empty() {
                 debug!("select response: {}", l);
             }
@@ -358,11 +359,13 @@ pub fn select_response(input: &str) -> IResult<&str, SelectResponse> {
         let mut ret = SelectResponseBad::default();
         for l in input.split("\r\n") {
             if l.starts_with("* ") && l.ends_with(" EXISTS") {
-                ret.exists = usize::from_str(&l["* ".len()..l.len()-" EXISTS".len()]).unwrap();
+                ret.exists = usize::from_str(&l["* ".len()..l.len() - " EXISTS".len()]).unwrap();
             } else if l.starts_with("* ") && l.ends_with(" RECENT") {
-                ret.recent = usize::from_str(&l["* ".len()..l.len()-" RECENT".len()]).unwrap();
+                ret.recent = usize::from_str(&l["* ".len()..l.len() - " RECENT".len()]).unwrap();
             } else if l.starts_with("* FLAGS (") {
-                ret.flags = flags(&l["* FLAGS (".len()..l.len() - ")".len()]).to_full_result().unwrap();
+                ret.flags = flags(&l["* FLAGS (".len()..l.len() - ")".len()])
+                    .to_full_result()
+                    .unwrap();
             } else if !l.is_empty() {
                 debug!("select response: {}", l);
             }
@@ -414,12 +417,11 @@ pub fn flags(input: &str) -> IResult<&str, Flag> {
 }
 
 pub fn byte_flags(input: &[u8]) -> IResult<&[u8], Flag> {
-    let i = unsafe{ std::str::from_utf8_unchecked(input) };
+    let i = unsafe { std::str::from_utf8_unchecked(input) };
     match flags(i) {
         IResult::Done(rest, ret) => IResult::Done(rest.as_bytes(), ret),
         IResult::Error(e) => IResult::Error(e),
         IResult::Incomplete(e) => IResult::Incomplete(e),
-
     }
 }
 
@@ -447,7 +449,7 @@ pub fn byte_flags(input: &[u8]) -> IResult<&[u8], Flag> {
 *  ((NIL NIL "minutes" "CNRI.Reston.VA.US")
 *  ("John Klensin" NIL "KLENSIN" "MIT.EDU")) NIL NIL
 *  "<B27397-0100000@cac.washington.edu>")
-*/ 
+*/
 
 named!(
     pub envelope<Envelope>,
@@ -514,23 +516,6 @@ named!(
         })
 ));
 
-#[cfg(test)]
-mod tests {
-
-    use super::*;
-
-    #[test]
-    fn test_envelope() {
-        // FIXME add a proper test
-        /*
-        use std::io::Read;
-        let mut buffer: Vec<u8> = Vec::new();
-        let _ = std::fs::File::open("/tmp/a").unwrap().read_to_end(&mut buffer);
-        debug!(envelope(&buffer));
-        */
-    }
-}
-
 /* Helper to build StrBuilder for Address structs */
 macro_rules! str_builder {
     ($offset:expr, $length:expr) => {
@@ -538,7 +523,7 @@ macro_rules! str_builder {
             offset: $offset,
             length: $length,
         }
-    }
+    };
 }
 
 // Parse a list of addresses in the format of the ENVELOPE structure
@@ -592,10 +577,11 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 
     let mut i = 1;
     while i < input.len() {
-        if input[i] == b'\"' { //&& input[i - 1] != b'\\' {
+        if input[i] == b'\"' {
+            //&& input[i - 1] != b'\\' {
             return match crate::email::parser::phrase(&input[1..i]) {
-                IResult::Done(_, out) => IResult::Done(&input[i+1..], out),
-                e=> e,
+                IResult::Done(_, out) => IResult::Done(&input[i + 1..], out),
+                e => e,
             };
         }
         i += 1;
@@ -623,4 +609,3 @@ named!(
         )
     )
 );
-
