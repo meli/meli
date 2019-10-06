@@ -2044,3 +2044,95 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             .collect()
     }
 }
+
+#[derive(Debug)]
+pub struct RawBuffer {
+    pub buf: CellBuffer,
+    cursor: (usize, usize),
+    dirty: bool,
+}
+
+impl fmt::Display for RawBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt("Raw buffer", f)
+    }
+}
+
+impl Component for RawBuffer {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.dirty {
+            clear_area(grid, area);
+            let (width, height) = self.buf.size();
+            let (cols, rows) = (width!(area), height!(area));
+            self.cursor = (
+                std::cmp::min(width.saturating_sub(cols), self.cursor.0),
+                std::cmp::min(height.saturating_sub(rows), self.cursor.1),
+            );
+            clear_area(grid, area);
+            copy_area(
+                grid,
+                &self.buf,
+                area,
+                (
+                    (
+                        std::cmp::min((width - 1).saturating_sub(cols), self.cursor.0),
+                        std::cmp::min((height - 1).saturating_sub(rows), self.cursor.1),
+                    ),
+                    (
+                        std::cmp::min(self.cursor.0 + cols, width - 1),
+                        std::cmp::min(self.cursor.1 + rows, height - 1),
+                    ),
+                ),
+            );
+            context.dirty_areas.push_back(area);
+            self.dirty = false;
+        }
+    }
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+        match *event {
+            UIEvent::Input(Key::Left) => {
+                self.cursor.0 = self.cursor.0.saturating_sub(1);
+                self.dirty = true;
+                true
+            }
+            UIEvent::Input(Key::Right) => {
+                self.cursor.0 = self.cursor.0 + 1;
+                self.dirty = true;
+                true
+            }
+            UIEvent::Input(Key::Up) => {
+                self.cursor.1 = self.cursor.1.saturating_sub(1);
+                self.dirty = true;
+                true
+            }
+            UIEvent::Input(Key::Down) => {
+                self.cursor.1 = self.cursor.1 + 1;
+                self.dirty = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    fn set_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    fn id(&self) -> ComponentId {
+        ComponentId::nil()
+    }
+}
+
+impl RawBuffer {
+    pub fn new(buf: CellBuffer) -> Self {
+        RawBuffer {
+            buf,
+            dirty: true,
+            cursor: (0, 0),
+        }
+    }
+}

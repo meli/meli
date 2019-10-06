@@ -41,7 +41,7 @@ use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use termion::{clear, cursor, style};
 
-type StateStdout = termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>;
+pub type StateStdout = termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>;
 
 struct InputHandler {
     rx: Receiver<bool>,
@@ -456,10 +456,10 @@ impl State {
         for x in x_start..=x_end {
             let c = self.grid[(x, y)];
             if c.bg() != Color::Default {
-                write!(self.stdout(), "{}", termion::color::Bg(c.bg().as_termion())).unwrap();
+                c.bg().write_bg(self.stdout()).unwrap();
             }
             if c.fg() != Color::Default {
-                write!(self.stdout(), "{}", termion::color::Fg(c.fg().as_termion())).unwrap();
+                c.fg().write_fg(self.stdout()).unwrap();
             }
             if c.attrs() != Attr::Default {
                 write!(self.stdout(), "\x1B[{}m", c.attrs() as u8).unwrap();

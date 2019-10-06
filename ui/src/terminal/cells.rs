@@ -31,7 +31,7 @@ use text_processing::wcwidth;
 use std::convert::From;
 use std::fmt;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
-use termion::color::AnsiValue;
+use termion::color::{AnsiValue, Rgb as TermionRgb};
 
 /// Types and implementations taken from rustty for convenience.
 
@@ -161,6 +161,8 @@ impl CellBuffer {
     pub fn resize(&mut self, newcols: usize, newrows: usize, blank: Cell) {
         let newlen = newcols * newrows;
         if self.buf.len() == newlen {
+            self.cols = newcols;
+            self.rows = newrows;
             return;
         }
         let mut newbuf: Vec<Cell> = Vec::with_capacity(newlen);
@@ -527,6 +529,7 @@ pub enum Color {
     Cyan,
     White,
     Byte(u8),
+    Rgb(u8, u8, u8),
     Default,
 }
 
@@ -543,7 +546,38 @@ impl Color {
             Color::Cyan => 0x06,
             Color::White => 0x07,
             Color::Byte(b) => b,
+            Color::Rgb(_, _, _) => unreachable!(),
             Color::Default => 0x00,
+        }
+    }
+
+    pub fn from_byte(val: u8) -> Self {
+        match val {
+            0x00 => Color::Black,
+            0x01 => Color::Red,
+            0x02 => Color::Green,
+            0x03 => Color::Yellow,
+            0x04 => Color::Blue,
+            0x05 => Color::Magenta,
+            0x06 => Color::Cyan,
+            0x07 => Color::White,
+            _ => Color::Default,
+        }
+    }
+
+    pub fn write_fg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
+        use std::io::Write;
+        match self {
+            Color::Rgb(r, g, b) => write!(stdout, "{}", termion::color::Fg(TermionRgb(r, g, b))),
+            _ => write!(stdout, "{}", termion::color::Fg(self.as_termion())),
+        }
+    }
+
+    pub fn write_bg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
+        use std::io::Write;
+        match self {
+            Color::Rgb(r, g, b) => write!(stdout, "{}", termion::color::Bg(TermionRgb(r, g, b))),
+            _ => write!(stdout, "{}", termion::color::Bg(self.as_termion())),
         }
     }
 
@@ -559,6 +593,7 @@ impl Color {
             | b @ Color::White
             | b @ Color::Default => AnsiValue(b.as_byte()),
             Color::Byte(b) => AnsiValue(b as u8),
+            Color::Rgb(_, _, _) => AnsiValue(0),
         }
     }
 }
@@ -832,4 +867,223 @@ pub fn center_area(area: Area, (width, height): (usize, usize)) -> Area {
             std::cmp::min(max_y, upper_y + mid_y + height),
         ),
     )
+}
+
+pub mod ansi {
+    use super::{Cell, CellBuffer, Color};
+    pub fn ansi_to_cellbuffer(s: &str) -> Option<CellBuffer> {
+        let mut buf: Vec<Cell> = Vec::with_capacity(2048);
+
+        enum State {
+            Start,
+            Csi,
+            SetFg,
+            SetBg,
+        }
+        use State::*;
+
+        let mut rows = 0;
+        let mut cols = 0;
+        let mut current_fg = Color::Default;
+        let mut current_bg = Color::Default;
+        let mut cur_cell;
+        let mut state: State;
+        for l in s.lines() {
+            cur_cell = Cell::default();
+            state = State::Start;
+            let mut chars = l.chars().peekable();
+            cols = 0;
+            rows += 1;
+            'line_loop: loop {
+                let c = chars.next();
+                if c.is_none() {
+                    break 'line_loop;
+                }
+                match (&state, c.unwrap()) {
+                    (Start, '\x1b') => {
+                        if chars.next() != Some('[') {
+                            return None;
+                        }
+                        state = Csi;
+                    }
+                    (Start, c) => {
+                        cur_cell.set_ch(c);
+                        cur_cell.set_fg(current_fg);
+                        cur_cell.set_bg(current_bg);
+                        buf.push(cur_cell);
+                        cur_cell = Cell::default();
+
+                        cols += 1;
+                    }
+                    (Csi, 'm') => {
+                        /* Reset styles */
+                        current_fg = Color::Default;
+                        current_bg = Color::Default;
+                        state = Start;
+                    }
+                    (Csi, '0') => {
+                        if chars.next() != Some('m') {
+                            return None;
+                        }
+                        /* Reset styles */
+                        current_fg = Color::Default;
+                        current_bg = Color::Default;
+                        state = Start;
+                    }
+                    (Csi, '3') => {
+                        match chars.next() {
+                            Some('8') => {
+                                /* Set foreground color */
+                                if chars.next() == Some(';') {
+                                    state = SetFg;
+                                    /* Next arguments are 5;n or 2;r;g;b */
+                                    continue;
+                                }
+                                return None;
+                            }
+                            Some(c) if c >= '0' && c < '8' => {
+                                current_fg = Color::from_byte(c as u8 - 0x30);
+                                if chars.next() != Some('m') {
+                                    return None;
+                                }
+                                state = Start;
+                            }
+                            _ => return None,
+                        }
+                    }
+                    (Csi, '4') => {
+                        match chars.next() {
+                            Some('8') => {
+                                /* Set background color */
+                                if chars.next() == Some(';') {
+                                    state = SetBg;
+                                    /* Next arguments are 5;n or 2;r;g;b */
+                                    continue;
+                                }
+                                return None;
+                            }
+                            Some(c) if c >= '0' && c < '8' => {
+                                current_bg = Color::from_byte(c as u8 - 0x30);
+                                if chars.next() != Some('m') {
+                                    return None;
+                                }
+                                state = Start;
+                            }
+                            _ => return None,
+                        }
+                    }
+                    (SetFg, '5') => {
+                        if chars.next() != Some(';') {
+                            return None;
+                        }
+                        let mut accum = 0;
+                        while chars.peek().is_some() && chars.peek() != Some(&'m') {
+                            let c = chars.next().unwrap();
+                            accum *= 10;
+                            accum += c as u8 - 0x30;
+                        }
+                        if chars.next() != Some('m') {
+                            return None;
+                        }
+                        current_fg = Color::from_byte(accum);
+                        state = Start;
+                    }
+                    (SetFg, '2') => {
+                        if chars.next() != Some(';') {
+                            return None;
+                        }
+                        let mut rgb_color = Color::Rgb(0, 0, 0);
+                        if let Color::Rgb(ref mut r, ref mut g, ref mut b) = rgb_color {
+                            'rgb_fg: for val in &mut [r, g, b] {
+                                let mut accum = 0;
+                                while chars.peek().is_some()
+                                    && chars.peek() != Some(&';')
+                                    && chars.peek() != Some(&'m')
+                                {
+                                    let c = chars.next().unwrap();
+                                    accum *= 10;
+                                    accum += c as u8 - 0x30;
+                                }
+                                **val = accum;
+                                match chars.peek() {
+                                    Some(&'m') => {
+                                        break 'rgb_fg;
+                                    }
+                                    Some(&';') => {
+                                        chars.next();
+                                    }
+                                    _ => return None,
+                                }
+                            }
+                        }
+                        if chars.next() != Some('m') {
+                            return None;
+                        }
+                        current_fg = rgb_color;
+                        state = Start;
+                    }
+                    (SetBg, '5') => {
+                        if chars.next() != Some(';') {
+                            return None;
+                        }
+                        let mut accum = 0;
+                        while chars.peek().is_some() && chars.peek() != Some(&'m') {
+                            let c = chars.next().unwrap();
+                            accum *= 10;
+                            accum += c as u8 - 0x30;
+                        }
+                        if chars.next() != Some('m') {
+                            return None;
+                        }
+                        current_bg = Color::from_byte(accum);
+                        state = Start;
+                    }
+                    (SetBg, '2') => {
+                        if chars.next() != Some(';') {
+                            return None;
+                        }
+                        let mut rgb_color = Color::Rgb(0, 0, 0);
+                        if let Color::Rgb(ref mut r, ref mut g, ref mut b) = rgb_color {
+                            'rgb_bg: for val in &mut [r, g, b] {
+                                let mut accum = 0;
+                                while chars.peek().is_some()
+                                    && chars.peek() != Some(&';')
+                                    && chars.peek() != Some(&'m')
+                                {
+                                    let c = chars.next().unwrap();
+                                    accum *= 10;
+                                    accum += c as u8 - 0x30;
+                                }
+                                **val = accum;
+                                match chars.peek() {
+                                    Some(&'m') => {
+                                        break 'rgb_bg;
+                                    }
+                                    Some(&';') => {
+                                        chars.next();
+                                    }
+                                    _ => return None,
+                                }
+                            }
+                        }
+                        if chars.next() != Some('m') {
+                            return None;
+                        }
+                        current_bg = rgb_color;
+                        state = Start;
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+        if buf.len() != rows * cols {
+            debug!("rows: {} cols: {}, buf.len() = {}", rows, cols, buf.len());
+        }
+        Some(CellBuffer {
+            buf,
+            rows,
+            cols,
+            ascii_drawing: false,
+        })
+    }
 }
