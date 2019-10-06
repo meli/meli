@@ -473,7 +473,7 @@ impl Component for MailView {
                             (set_y(upper_left, y), bottom_right),
                             false,
                         );
-                        let (_x, _) = write_string_to_grid(
+                        let (_x, _y) = write_string_to_grid(
                             id,
                             grid,
                             Color::Default,
@@ -483,54 +483,75 @@ impl Component for MailView {
                             false,
                         );
                         x = _x;
+                        if _y != y {
+                            x = get_x(upper_left);
+                        }
+                        y = _y;
                     }
                     if archive.is_some() || post.is_some() || unsubscribe.is_some() {
-                        let (_x, _) = write_string_to_grid(
+                        let (_x, _y) = write_string_to_grid(
                             " Available actions: [ ",
                             grid,
                             header_fg,
                             Color::Default,
                             Attr::Default,
                             ((x, y), bottom_right),
-                            false,
+                            true,
                         );
                         x = _x;
+                        if _y != y {
+                            x = get_x(upper_left);
+                        }
+
+                        y = _y;
                     }
                     if archive.is_some() {
-                        let (_x, _) = write_string_to_grid(
+                        let (_x, _y) = write_string_to_grid(
                             "list-archive, ",
                             grid,
                             Color::Default,
                             Color::Default,
                             Attr::Default,
                             ((x, y), bottom_right),
-                            false,
+                            true,
                         );
                         x = _x;
+                        if _y != y {
+                            x = get_x(upper_left);
+                        }
+                        y = _y;
                     }
                     if post.is_some() {
-                        let (_x, _) = write_string_to_grid(
+                        let (_x, _y) = write_string_to_grid(
                             "list-post, ",
                             grid,
                             Color::Default,
                             Color::Default,
                             Attr::Default,
                             ((x, y), bottom_right),
-                            false,
+                            true,
                         );
                         x = _x;
+                        if _y != y {
+                            x = get_x(upper_left);
+                        }
+                        y = _y;
                     }
                     if unsubscribe.is_some() {
-                        let (_x, _) = write_string_to_grid(
+                        let (_x, _y) = write_string_to_grid(
                             "list-unsubscribe, ",
                             grid,
                             Color::Default,
                             Color::Default,
                             Attr::Default,
                             ((x, y), bottom_right),
-                            false,
+                            true,
                         );
                         x = _x;
+                        if _y != y {
+                            x = get_x(upper_left);
+                        }
+                        y = _y;
                     }
                     if archive.is_some() || post.is_some() || unsubscribe.is_some() {
                         grid[(x - 2, y)].set_ch(' ');
