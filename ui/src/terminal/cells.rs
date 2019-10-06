@@ -25,6 +25,7 @@
 */
 
 use super::position::*;
+use crate::state::Context;
 use text_processing::wcwidth;
 
 use std::convert::From;
@@ -105,6 +106,7 @@ pub struct CellBuffer {
     cols: usize,
     rows: usize,
     buf: Vec<Cell>,
+    pub ascii_drawing: bool,
 }
 
 impl fmt::Debug for CellBuffer {
@@ -137,7 +139,21 @@ impl CellBuffer {
             cols,
             rows,
             buf: vec![cell; cols * rows],
+            ascii_drawing: false,
         }
+    }
+
+    pub fn new_with_context(cols: usize, rows: usize, cell: Cell, context: &Context) -> CellBuffer {
+        CellBuffer {
+            cols,
+            rows,
+            buf: vec![cell; cols * rows],
+            ascii_drawing: context.settings.terminal.ascii_drawing,
+        }
+    }
+
+    pub fn set_ascii_drawing(&mut self, new_val: bool) {
+        self.ascii_drawing = new_val;
     }
 
     /// Resizes `CellBuffer` to the given number of rows and columns, using the given `Cell` as

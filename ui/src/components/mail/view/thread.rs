@@ -222,7 +222,7 @@ impl ThreadView {
             e.heading = string;
             width = cmp::max(width, e.index.0 * 4 + e.heading.grapheme_width() + 2);
         }
-        let mut content = CellBuffer::new(width, height, Cell::default());
+        let mut content = CellBuffer::new_with_context(width, height, Cell::default(), context);
         if self.reversed {
             for (y, e) in self.entries.iter().rev().enumerate() {
                 /* Box character drawing stuff */

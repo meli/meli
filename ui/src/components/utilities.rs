@@ -305,7 +305,9 @@ impl Pager {
 
         let height = lines.len() + 1;
         let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
+        let ascii_drawing = self.content.ascii_drawing;
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        content.set_ascii_drawing(ascii_drawing);
         Pager::print_string(&mut content, lines);
         self.text = text.to_string();
         self.content = content;
@@ -361,7 +363,11 @@ impl Pager {
 
             let height = lines.len() + 1;
             let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
-            let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+            let mut content = if let Some(context) = context {
+                CellBuffer::new_with_context(width, height, Cell::with_char(' '), context)
+            } else {
+                CellBuffer::new(width, height, Cell::with_char(' '))
+            };
             //interpret_format_flowed(&text);
             Pager::print_string(&mut content, lines);
             content
@@ -479,7 +485,8 @@ impl Component for Pager {
             let height = lines.len() + 1;
             self.width = width;
             self.height = height;
-            self.content = CellBuffer::new(width, height, Cell::with_char(' '));
+            self.content =
+                CellBuffer::new_with_context(width, height, Cell::with_char(' '), context);
             Pager::print_string(&mut self.content, lines);
         }
         if self.cursor_pos + height >= self.height {
@@ -1067,8 +1074,8 @@ impl Component for StatusBar {
         self.id = id;
     }
 
-    fn can_quit_cleanly(&mut self) -> bool {
-        self.container.can_quit_cleanly()
+    fn can_quit_cleanly(&mut self, context: &Context) -> bool {
+        self.container.can_quit_cleanly(context)
     }
 }
 
@@ -1335,7 +1342,8 @@ impl Component for Tabbed {
                     ),
                 );
             }
-            self.help_content = CellBuffer::new(max_width, max_length + 2, Cell::default());
+            self.help_content =
+                CellBuffer::new_with_context(max_width, max_length + 2, Cell::default(), context);
             let (width, height) = self.help_content.size();
             let (cols, rows) = (width!(area), height!(area));
             if cols == 0 || rows == 0 {
@@ -1556,9 +1564,9 @@ impl Component for Tabbed {
         self.id = id;
     }
 
-    fn can_quit_cleanly(&mut self) -> bool {
+    fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         for (i, c) in self.children.iter_mut().enumerate() {
-            if !c.can_quit_cleanly() {
+            if !c.can_quit_cleanly(context) {
                 self.cursor_pos = i;
                 self.set_dirty();
                 return false;
@@ -1843,7 +1851,12 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
 }
 
 impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
-    pub fn new(title: &str, entries: Vec<(T, String)>, single_only: bool) -> Selector<T> {
+    pub fn new(
+        title: &str,
+        entries: Vec<(T, String)>,
+        single_only: bool,
+        context: &Context,
+    ) -> Selector<T> {
         let width = std::cmp::max(
             "OK    Cancel".len(),
             std::cmp::max(
@@ -1863,9 +1876,11 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                 /* Extra room for buttons Okay/Cancel */
                 3
             };
-        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        let mut content =
+            CellBuffer::new_with_context(width, height, Cell::with_char(' '), context);
+        let ascii_drawing = context.settings.terminal.ascii_drawing;
         write_string_to_grid(
-            "┏━",
+            if ascii_drawing { "+-" } else { "┏━" },
             &mut content,
             Color::Byte(8),
             Color::Default,
@@ -1884,7 +1899,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
         );
         for i in 1..(width - title.len() - 1) {
             write_string_to_grid(
-                "━",
+                if ascii_drawing { "-" } else { "━" },
                 &mut content,
                 Color::Byte(8),
                 Color::Default,
@@ -1894,7 +1909,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             );
         }
         write_string_to_grid(
-            "┓",
+            if ascii_drawing { "+" } else { "┓" },
             &mut content,
             Color::Byte(8),
             Color::Default,
@@ -1903,7 +1918,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             false,
         );
         write_string_to_grid(
-            "┗",
+            if ascii_drawing { "+" } else { "┗" },
             &mut content,
             Color::Byte(8),
             Color::Default,
@@ -1912,7 +1927,11 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             false,
         );
         write_string_to_grid(
-            &"━".repeat(width - 2),
+            &if ascii_drawing {
+                "-".repeat(width - 2)
+            } else {
+                "━".repeat(width - 2)
+            },
             &mut content,
             Color::Byte(8),
             Color::Default,
@@ -1921,7 +1940,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             false,
         );
         write_string_to_grid(
-            "┛",
+            if ascii_drawing { "+" } else { "┛" },
             &mut content,
             Color::Byte(8),
             Color::Default,
@@ -1931,7 +1950,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
         );
         for i in 1..height - 1 {
             write_string_to_grid(
-                "┃",
+                if ascii_drawing { "|" } else { "┃" },
                 &mut content,
                 Color::Byte(8),
                 Color::Default,
@@ -1940,7 +1959,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                 false,
             );
             write_string_to_grid(
-                "┃",
+                if ascii_drawing { "|" } else { "┃" },
                 &mut content,
                 Color::Byte(8),
                 Color::Default,

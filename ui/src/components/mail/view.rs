@@ -706,6 +706,7 @@ impl Component for MailView {
                     "select contacts to add",
                     entries,
                     false,
+                    context,
                 ));
                 self.dirty = true;
                 return true;

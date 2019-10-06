@@ -171,6 +171,7 @@ impl Composer {
                             (list_address, list_address_string),
                         ],
                         false,
+                        context,
                     ));
                 }
             }
@@ -826,7 +827,7 @@ impl Component for Composer {
         }
     }
 
-    fn kill(&mut self, uuid: Uuid, _context: &mut Context) {
+    fn kill(&mut self, uuid: Uuid, context: &mut Context) {
         self.mode = ViewMode::Discard(
             uuid,
             Selector::new(
@@ -837,6 +838,7 @@ impl Component for Composer {
                     ('n', "cancel".to_string()),
                 ],
                 true,
+                context,
             ),
         );
     }
@@ -873,7 +875,7 @@ impl Component for Composer {
         self.id = id;
     }
 
-    fn can_quit_cleanly(&mut self) -> bool {
+    fn can_quit_cleanly(&mut self, context: &Context) -> bool {
         /* Play it safe and ask user for confirmation */
         self.mode = ViewMode::Discard(
             self.id,
@@ -885,6 +887,7 @@ impl Component for Composer {
                     ('n', "cancel".to_string()),
                 ],
                 true,
+                context,
             ),
         );
         self.set_dirty();

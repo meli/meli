@@ -235,6 +235,10 @@ impl State {
             },
             threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
         };
+        if s.context.settings.terminal.ascii_drawing {
+            s.grid.set_ascii_drawing(true);
+        }
+
         for a in s.context.accounts.iter_mut() {
             for worker in a.workers.values_mut() {
                 if let Some(worker) = worker.as_mut() {
@@ -513,7 +517,12 @@ impl State {
     }
 
     pub fn can_quit_cleanly(&mut self) -> bool {
-        self.components.iter_mut().all(|c| c.can_quit_cleanly())
+        let State {
+            ref mut components,
+            ref context,
+            ..
+        } = self;
+        components.iter_mut().all(|c| c.can_quit_cleanly(context))
     }
 
     pub fn register_component(&mut self, component: Box<dyn Component>) {

@@ -405,7 +405,8 @@ impl ListingTrait for CompactListing {
                 ),
                 ERROR,
             );
-            self.data_columns.columns[0] = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+            self.data_columns.columns[0] =
+                CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
             write_string_to_grid(
                 &message,
                 &mut self.data_columns.columns[0],
@@ -422,7 +423,8 @@ impl ListingTrait for CompactListing {
         } else {
             self.length = 0;
             let message = format!("No results for `{}`.", filter_term);
-            self.data_columns.columns[0] = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+            self.data_columns.columns[0] =
+                CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
             write_string_to_grid(
                 &message,
                 &mut self.data_columns.columns[0],
@@ -530,7 +532,7 @@ impl CompactListing {
             Err(_) => {
                 let message: String = context.accounts[self.cursor_pos.0][folder_hash].to_string();
                 self.data_columns.columns[0] =
-                    CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+                    CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
                 self.length = 0;
                 write_string_to_grid(
                     message.as_str(),
@@ -610,19 +612,19 @@ impl CompactListing {
 
         /* index column */
         self.data_columns.columns[0] =
-            CellBuffer::new(min_width.0, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.0, rows.len(), Cell::with_char(' '), context);
         /* date column */
         self.data_columns.columns[1] =
-            CellBuffer::new(min_width.1, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.1, rows.len(), Cell::with_char(' '), context);
         /* from column */
         self.data_columns.columns[2] =
-            CellBuffer::new(min_width.2, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.2, rows.len(), Cell::with_char(' '), context);
         /* flags column */
         self.data_columns.columns[3] =
-            CellBuffer::new(min_width.3, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.3, rows.len(), Cell::with_char(' '), context);
         /* subject column */
         self.data_columns.columns[4] =
-            CellBuffer::new(min_width.4, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.4, rows.len(), Cell::with_char(' '), context);
 
         for ((idx, root_idx), strings) in threads.root_iter().enumerate().zip(rows) {
             let thread_node = &threads.thread_nodes()[&root_idx];
@@ -750,8 +752,12 @@ impl CompactListing {
         if self.length == 0 {
             let mailbox = &account[self.cursor_pos.1];
             let message = mailbox.to_string();
-            self.data_columns.columns[0] =
-                CellBuffer::new(message.len(), self.length + 1, Cell::with_char(' '));
+            self.data_columns.columns[0] = CellBuffer::new_with_context(
+                message.len(),
+                self.length + 1,
+                Cell::with_char(' '),
+                context,
+            );
             write_string_to_grid(
                 &message,
                 &mut self.data_columns.columns[0],
@@ -803,19 +809,19 @@ impl CompactListing {
 
         /* index column */
         self.data_columns.columns[0] =
-            CellBuffer::new(min_width.0, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.0, rows.len(), Cell::with_char(' '), context);
         /* date column */
         self.data_columns.columns[1] =
-            CellBuffer::new(min_width.1, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.1, rows.len(), Cell::with_char(' '), context);
         /* from column */
         self.data_columns.columns[2] =
-            CellBuffer::new(min_width.2, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.2, rows.len(), Cell::with_char(' '), context);
         /* flags column */
         self.data_columns.columns[3] =
-            CellBuffer::new(min_width.3, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.3, rows.len(), Cell::with_char(' '), context);
         /* subject column */
         self.data_columns.columns[4] =
-            CellBuffer::new(min_width.4, rows.len(), Cell::with_char(' '));
+            CellBuffer::new_with_context(min_width.4, rows.len(), Cell::with_char(' '), context);
 
         for ((idx, thread_hash), strings) in self.filtered_selection.iter().enumerate().zip(rows) {
             let i = threads.thread_nodes()[thread_hash].message().unwrap();

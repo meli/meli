@@ -448,7 +448,8 @@ impl ListingTrait for ConversationsListing {
         if let Some(error) = error {
             self.length = 0;
             let message = format!("Error: {}", error.to_string());
-            self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+            self.content =
+                CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
             write_string_to_grid(
                 &message,
                 &mut self.content,
@@ -465,7 +466,8 @@ impl ListingTrait for ConversationsListing {
         } else {
             self.length = 0;
             let message = format!("No results for `{}`.", filter_term);
-            self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+            self.content =
+                CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
             write_string_to_grid(
                 &message,
                 &mut self.content,
@@ -576,7 +578,8 @@ impl ConversationsListing {
             Ok(()) => {}
             Err(_) => {
                 let message: String = context.accounts[self.cursor_pos.0][folder_hash].to_string();
-                self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+                self.content =
+                    CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
                 self.length = 0;
                 write_string_to_grid(
                     message.as_str(),
@@ -653,7 +656,8 @@ impl ConversationsListing {
         selection.retain(|e, _| order.contains_key(e));
 
         let width = std::cmp::min(MAX_COLS, max_entry_columns);
-        self.content = CellBuffer::new(width, 4 * rows.len(), Cell::with_char(' '));
+        self.content =
+            CellBuffer::new_with_context(width, 4 * rows.len(), Cell::with_char(' '), context);
 
         let padding_fg = if context.settings.terminal.theme == "light" {
             Color::Byte(254)
@@ -749,7 +753,8 @@ impl ConversationsListing {
         if self.length == 0 {
             let mailbox = &account[self.cursor_pos.1];
             let message = mailbox.to_string();
-            self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+            self.content =
+                CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
             write_string_to_grid(
                 &message,
                 &mut self.content,

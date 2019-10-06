@@ -25,12 +25,15 @@ pub struct TerminalSettings {
     #[serde(default)]
     /// light, dark
     pub theme: String,
+    #[serde(default)]
+    pub ascii_drawing: bool,
 }
 
 impl Default for TerminalSettings {
     fn default() -> Self {
         TerminalSettings {
             theme: "dark".to_string(),
+            ascii_drawing: false,
         }
     }
 }
