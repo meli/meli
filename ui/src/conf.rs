@@ -29,6 +29,7 @@ pub mod notifications;
 pub mod pager;
 pub mod pgp;
 pub mod shortcuts;
+pub mod terminal;
 
 pub mod accounts;
 pub use self::accounts::Account;
@@ -38,6 +39,7 @@ pub use self::shortcuts::*;
 
 use self::default_vals::*;
 use self::notifications::NotificationsSettings;
+use self::terminal::TerminalSettings;
 use crate::pager::PagerSettings;
 use melib::backends::SpecialUseMailbox;
 use melib::conf::AccountSettings;
@@ -277,6 +279,8 @@ struct FileSettings {
     composing: ComposingSettings,
     #[serde(default)]
     pgp: PGPSettings,
+    #[serde(default)]
+    terminal: TerminalSettings,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -306,6 +310,7 @@ pub struct Settings {
     pub shortcuts: Shortcuts,
     pub composing: ComposingSettings,
     pub pgp: PGPSettings,
+    pub terminal: TerminalSettings,
 }
 
 impl FileSettings {
@@ -394,6 +399,7 @@ impl Settings {
             shortcuts: fs.shortcuts,
             composing: fs.composing,
             pgp: fs.pgp,
+            terminal: fs.terminal,
         }
     }
 }

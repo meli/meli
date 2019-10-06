@@ -334,6 +334,12 @@ impl Component for MailView {
             }
             let envelope: &Envelope = &account.get_env(&self.coordinates.2);
 
+            let header_fg = if context.settings.terminal.theme == "light" {
+                Color::Black
+            } else {
+                Color::Byte(33)
+            };
+
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area);
                 context.dirty_areas.push_back(area);
@@ -342,7 +348,7 @@ impl Component for MailView {
                 let (x, y) = write_string_to_grid(
                     &format!("Date: {}", envelope.date_as_str()),
                     grid,
-                    Color::Byte(33),
+                    header_fg,
                     Color::Default,
                     Attr::Default,
                     area,
@@ -356,7 +362,7 @@ impl Component for MailView {
                 let (x, y) = write_string_to_grid(
                     &format!("From: {}", envelope.field_from_to_string()),
                     grid,
-                    Color::Byte(33),
+                    header_fg,
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
@@ -370,7 +376,7 @@ impl Component for MailView {
                 let (x, y) = write_string_to_grid(
                     &format!("To: {}", envelope.field_to_to_string()),
                     grid,
-                    Color::Byte(33),
+                    header_fg,
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
@@ -384,7 +390,7 @@ impl Component for MailView {
                 let (x, y) = write_string_to_grid(
                     &format!("Subject: {}", envelope.subject()),
                     grid,
-                    Color::Byte(33),
+                    header_fg,
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
@@ -398,7 +404,7 @@ impl Component for MailView {
                 let (x, mut y) = write_string_to_grid(
                     &format!("Message-ID: <{}>", envelope.message_id_raw()),
                     grid,
-                    Color::Byte(33),
+                    header_fg,
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
@@ -413,7 +419,7 @@ impl Component for MailView {
                     let (x, _y) = write_string_to_grid(
                         &format!("In-Reply-To: {}", envelope.in_reply_to_display().unwrap()),
                         grid,
-                        Color::Byte(33),
+                        header_fg,
                         Color::Default,
                         Attr::Default,
                         (set_y(upper_left, y + 1), bottom_right),
@@ -435,7 +441,7 @@ impl Component for MailView {
                                 .join(", ")
                         ),
                         grid,
-                        Color::Byte(33),
+                        header_fg,
                         Color::Default,
                         Attr::Default,
                         (set_y(upper_left, _y + 1), bottom_right),
@@ -461,7 +467,7 @@ impl Component for MailView {
                         let (_x, _) = write_string_to_grid(
                             "List-ID: ",
                             grid,
-                            Color::Byte(33),
+                            header_fg,
                             Color::Default,
                             Attr::Default,
                             (set_y(upper_left, y), bottom_right),
@@ -482,7 +488,7 @@ impl Component for MailView {
                         let (_x, _) = write_string_to_grid(
                             " Available actions: [ ",
                             grid,
-                            Color::Byte(33),
+                            header_fg,
                             Color::Default,
                             Attr::Default,
                             ((x, y), bottom_right),
@@ -528,7 +534,7 @@ impl Component for MailView {
                     }
                     if archive.is_some() || post.is_some() || unsubscribe.is_some() {
                         grid[(x - 2, y)].set_ch(' ');
-                        grid[(x - 1, y)].set_fg(Color::Byte(33));
+                        grid[(x - 1, y)].set_fg(header_fg);
                         grid[(x - 1, y)].set_bg(Color::Default);
                         grid[(x - 1, y)].set_ch(']');
                     }

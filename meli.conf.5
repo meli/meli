@@ -41,7 +41,7 @@ Newline means LF (0x0A) or CRLF (0x0D 0x0A).
 .Pp
 Refer to TOML documentation for valid TOML syntax.
 .Sh SECTIONS
-The top level sections of the config are accounts, shortcuts, notifications, pager, composing, pgp.
+The top level sections of the config are accounts, shortcuts, notifications, pager, composing, pgp, terminal.
 .Pp
 .Sy example configuration
 .Bd -literal
@@ -85,6 +85,9 @@ scroll_up = 'k'
 scroll_down = 'j'
 page_up = PageUp
 page_down = PageDown
+
+[terminal]
+theme = "light"
 .Ed
 .Pp
 available options are listed below.
@@ -308,6 +311,12 @@ auto verify signed e-mail according to RFC3156
 .\" default value
 .Pq Em "gpg2"
 .El
+.Sh TERMINAL
+.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
+.It Cm theme Ar String
+(optional) select between these themes: light / dark
+.\" default value
+.Pq Em dark
 .Sh SEE ALSO
 .Xr meli 1
 .Sh CONFORMING TO

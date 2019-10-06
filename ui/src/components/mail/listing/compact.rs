@@ -93,14 +93,26 @@ impl ListingTrait for CompactListing {
         let thread_node = &threads.thread_nodes[&i];
 
         let fg_color = self.data_columns.columns[0][(0, idx)].fg();
-        let bg_color = if self.cursor_pos.2 == idx {
-            Color::Byte(246)
-        } else if self.selection[&i] {
-            Color::Byte(210)
-        } else if thread_node.has_unseen() {
-            Color::Byte(251)
+        let bg_color = if context.settings.terminal.theme == "light" {
+            if self.cursor_pos.2 == idx {
+                Color::Byte(244)
+            } else if self.selection[&i] {
+                Color::Byte(210)
+            } else if thread_node.has_unseen() {
+                Color::Byte(251)
+            } else {
+                self.data_columns.columns[0][(0, idx)].bg()
+            }
         } else {
-            self.data_columns.columns[0][(0, idx)].bg()
+            if self.cursor_pos.2 == idx {
+                Color::Byte(246)
+            } else if self.selection[&i] {
+                Color::Byte(210)
+            } else if thread_node.has_unseen() {
+                Color::Byte(251)
+            } else {
+                self.data_columns.columns[0][(0, idx)].bg()
+            }
         };
 
         let (upper_left, bottom_right) = area;
@@ -639,12 +651,22 @@ impl CompactListing {
             } else {
                 Color::Default
             };
-            let bg_color = if thread_node.has_unseen() {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(236)
+            let bg_color = if context.settings.terminal.theme == "light" {
+                if thread_node.has_unseen() {
+                    Color::Byte(251)
+                } else if idx % 2 == 0 {
+                    Color::Byte(252)
+                } else {
+                    Color::Default
+                }
             } else {
-                Color::Default
+                if thread_node.has_unseen() {
+                    Color::Byte(253)
+                } else if idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                }
             };
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),

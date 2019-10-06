@@ -146,6 +146,12 @@ impl ListingTrait for ConversationsListing {
             ((0, 3 * idx), pos_dec(self.content.size(), (1, 1))),
         );
 
+        let padding_fg = if context.settings.terminal.theme == "light" {
+            Color::Byte(254)
+        } else {
+            Color::Byte(235)
+        };
+
         let (upper_left, bottom_right) = area;
         let width = self.content.size().0;
         let (x, y) = upper_left;
@@ -157,7 +163,7 @@ impl ListingTrait for ConversationsListing {
                 grid[(x, y + 1)].set_fg(fg_color);
                 grid[(x, y + 1)].set_bg(bg_color);
 
-                grid[(x, y + 2)].set_fg(Color::Byte(235));
+                grid[(x, y + 2)].set_fg(padding_fg);
                 grid[(x, y + 2)].set_bg(bg_color);
             }
         } else if width < width!(area) {
@@ -169,7 +175,7 @@ impl ListingTrait for ConversationsListing {
                 grid[(x, y + 1)].set_fg(fg_color);
                 grid[(x, y + 1)].set_bg(bg_color);
 
-                grid[(x, y + 2)].set_fg(Color::Byte(235));
+                grid[(x, y + 2)].set_fg(padding_fg);
                 grid[(x, y + 2)].set_bg(bg_color);
             }
         }
@@ -362,6 +368,12 @@ impl ListingTrait for ConversationsListing {
 
         /* fill any remaining columns, if our view is wider than self.content */
         let width = self.content.size().0;
+        let padding_fg = if context.settings.terminal.theme == "light" {
+            Color::Byte(254)
+        } else {
+            Color::Byte(235)
+        };
+
         if width < width!(area) {
             let y_offset = get_y(upper_left);
             for y in 0..rows {
@@ -372,7 +384,7 @@ impl ListingTrait for ConversationsListing {
                     grid[(x, y_offset + 3 * y + 2)].set_fg(Color::Default);
                     grid[(x, y_offset + 3 * y + 1)].set_bg(bg_color);
                     grid[(x, y_offset + 3 * y + 2)].set_ch('▓');
-                    grid[(x, y_offset + 3 * y + 2)].set_fg(Color::Byte(235));
+                    grid[(x, y_offset + 3 * y + 2)].set_fg(padding_fg);
                     grid[(x, y_offset + 3 * y + 2)].set_bg(bg_color);
                 }
             }
@@ -643,6 +655,12 @@ impl ConversationsListing {
         let width = std::cmp::min(MAX_COLS, max_entry_columns);
         self.content = CellBuffer::new(width, 4 * rows.len(), Cell::with_char(' '));
 
+        let padding_fg = if context.settings.terminal.theme == "light" {
+            Color::Byte(254)
+        } else {
+            Color::Byte(235)
+        };
+
         for ((idx, root_idx), strings) in threads.root_iter().enumerate().zip(rows) {
             let thread_node = &threads.thread_nodes()[&root_idx];
             let i = if let Some(i) = thread_node.message() {
@@ -724,7 +742,7 @@ impl ConversationsListing {
             }
             for x in 0..width {
                 self.content[(x, 3 * idx + 2)].set_ch('▓');
-                self.content[(x, 3 * idx + 2)].set_fg(Color::Byte(235));
+                self.content[(x, 3 * idx + 2)].set_fg(padding_fg);
                 self.content[(x, 3 * idx + 2)].set_bg(bg_color);
             }
         }
@@ -1074,10 +1092,15 @@ impl Component for ConversationsListing {
                         fg_color,
                         bg_color,
                     );
+                    let padding_fg = if context.settings.terminal.theme == "light" {
+                        Color::Byte(254)
+                    } else {
+                        Color::Byte(235)
+                    };
                     change_colors(
                         &mut self.content,
                         ((0, 3 * row + 2), (width - 1, 3 * row + 2)),
-                        Color::Byte(235),
+                        padding_fg,
                         bg_color,
                     );
                     let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;

@@ -102,14 +102,26 @@ impl ListingTrait for PlainListing {
         } else {
             Color::Default
         };
-        let bg_color = if self.cursor_pos.2 == idx {
-            Color::Byte(246)
-        } else if !envelope.is_seen() {
-            Color::Byte(251)
-        } else if idx % 2 == 0 {
-            Color::Byte(236)
+        let bg_color = if context.settings.terminal.theme == "light" {
+            if self.cursor_pos.2 == idx {
+                Color::Byte(246)
+            } else if !envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(252)
+            } else {
+                Color::Default
+            }
         } else {
-            Color::Default
+            if self.cursor_pos.2 == idx {
+                Color::Byte(246)
+            } else if !envelope.is_seen() {
+                Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            }
         };
         change_colors(grid, area, fg_color, bg_color);
     }
@@ -369,12 +381,22 @@ impl PlainListing {
             } else {
                 Color::Default
             };
-            let bg_color = if !envelope.is_seen() {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(236)
+            let bg_color = if context.settings.terminal.theme == "light" {
+                if !envelope.is_seen() {
+                    Color::Byte(251)
+                } else if idx % 2 == 0 {
+                    Color::Byte(252)
+                } else {
+                    Color::Default
+                }
             } else {
-                Color::Default
+                if !envelope.is_seen() {
+                    Color::Byte(251)
+                } else if idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                }
             };
             let (x, _) = write_string_to_grid(
                 &rows[idx].0,
@@ -432,12 +454,20 @@ impl PlainListing {
         }
     }
 
-    fn unhighlight_line(&mut self, idx: usize) {
+    fn unhighlight_line(&mut self, idx: usize, context: &Context) {
         let fg_color = Color::Default;
-        let bg_color = if idx % 2 == 0 {
-            Color::Byte(236)
+        let bg_color = if context.settings.terminal.theme == "light" {
+            if idx % 2 == 0 {
+                Color::Byte(252)
+            } else {
+                Color::Default
+            }
         } else {
-            Color::Default
+            if idx % 2 == 0 {
+                Color::Byte(236)
+            } else {
+                Color::Default
+            }
         };
         change_colors(
             &mut self.content,
@@ -503,7 +533,7 @@ impl Component for PlainListing {
                 }
             };
             if must_unhighlight {
-                self.unhighlight_line(idx);
+                self.unhighlight_line(idx, context);
             }
             let mid = get_y(upper_left) + total_rows - bottom_entity_rows;
             self.draw_list(
