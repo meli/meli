@@ -376,6 +376,10 @@ impl Envelope {
         let _strings: Vec<String> = self.to.iter().map(|a| format!("{}", a)).collect();
         _strings.join(", ")
     }
+    pub fn field_references_to_string(&self) -> String {
+        let _strings: Vec<String> = self.references().iter().map(|a| a.to_string()).collect();
+        _strings.join(", ")
+    }
 
     /// Requests bytes from backend and thus can fail
     pub fn bytes(&self, mut operation: Box<dyn BackendOp>) -> Result<Vec<u8>> {

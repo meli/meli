@@ -98,6 +98,29 @@ impl MailboxEntry {
             false
         }
     }
+
+    pub fn as_result(&self) -> Result<&Mailbox> {
+        match self {
+            MailboxEntry::Available(ref m) => Ok(m),
+            MailboxEntry::Parsing(ref m, _, _) => Ok(m),
+            MailboxEntry::Failed(ref e) => Err(MeliError::new(format!(
+                "Mailbox is not available: {}",
+                e.to_string()
+            ))),
+        }
+    }
+
+    pub fn as_mut_result(&mut self) -> Result<&mut Mailbox> {
+        match self {
+            MailboxEntry::Available(ref mut m) => Ok(m),
+            MailboxEntry::Parsing(ref mut m, _, _) => Ok(m),
+            MailboxEntry::Failed(ref e) => Err(MeliError::new(format!(
+                "Mailbox is not available: {}",
+                e.to_string()
+            ))),
+        }
+    }
+
     pub fn unwrap_mut(&mut self) -> &mut Mailbox {
         match self {
             MailboxEntry::Available(ref mut m) => m,
@@ -105,6 +128,7 @@ impl MailboxEntry {
             e => panic!(format!("mailbox is not available! {:#}", e)),
         }
     }
+
     pub fn unwrap(&self) -> &Mailbox {
         match self {
             MailboxEntry::Available(ref m) => m,

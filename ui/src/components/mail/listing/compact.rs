@@ -343,6 +343,7 @@ impl ListingTrait for CompactListing {
         }
         context.dirty_areas.push_back(area);
     }
+
     fn filter(&mut self, filter_term: &str, context: &Context) {
         self.filtered_order.clear();
         self.filtered_selection.clear();
@@ -351,84 +352,57 @@ impl ListingTrait for CompactListing {
         }
         self.filter_term.clear();
 
-        let mut error: Option<(EnvelopeHash, MeliError)> = None;
-        for (i, h) in self.order.keys().enumerate() {
-            let account = &context.accounts[self.cursor_pos.0];
-            let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-            let threads = &account.collection.threads[&folder_hash];
-            let env_hash = {
-                let thread_node = &threads.thread_nodes()[h];
-                if let Some(i) = thread_node.message() {
-                    i
-                } else {
-                    let mut iter_ptr = thread_node.children()[0];
-                    while threads.thread_nodes()[&iter_ptr].message().is_none() {
-                        iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+        let account = &context.accounts[self.cursor_pos.0];
+        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+        match crate::search::filter(filter_term, context, self.cursor_pos.0, folder_hash) {
+            Ok(results) => {
+                let threads = &account.collection.threads[&folder_hash];
+                for env_hash in results {
+                    if !account.collection.envelopes.contains_key(&env_hash) {
+                        continue;
                     }
-                    threads.thread_nodes()[&iter_ptr].message().unwrap()
+                    let env_hash_thread_hash = account.get_env(&env_hash).thread();
+                    if !threads.thread_nodes.contains_key(&env_hash_thread_hash) {
+                        continue;
+                    }
+                    let thread_group = melib::find_thread_group(
+                        &threads.thread_nodes,
+                        threads.thread_nodes[&env_hash_thread_hash].thread_group(),
+                    );
+                    if let Some(row) = self.order.get(&thread_group) {
+                        self.filtered_selection.push(thread_group);
+                        self.filtered_order.insert(thread_group, *row);
+                    }
                 }
-            };
-            let envelope = &account.collection[&env_hash];
-            if envelope.subject().contains(&filter_term) {
-                self.filtered_selection.push(*h);
-                self.filtered_order.insert(*h, i);
-                self.selection.insert(*h, false);
-                continue;
             }
-            if envelope.field_from_to_string().contains(&filter_term) {
-                self.filtered_selection.push(*h);
-                self.filtered_order.insert(*h, i);
-                self.selection.insert(*h, false);
-                continue;
-            }
-            let op = account.operation(env_hash);
-            let body = match envelope.body(op) {
-                Ok(b) => b,
-                Err(e) => {
-                    error = Some((env_hash, e));
-                    break;
-                }
-            };
-            let decoded = decode_rec(&body, None);
-            let body_text = String::from_utf8_lossy(&decoded);
-            if body_text.contains(&filter_term) {
-                self.filtered_selection.push(*h);
-                self.filtered_order.insert(*h, i);
-                self.selection.insert(*h, false);
+            Err(e) => {
+                self.length = 0;
+                let message = format!("Error: {}", e);
+                log(
+                    format!("Failed to search for term {}: {}", filter_term, e,),
+                    ERROR,
+                );
+                self.data_columns.columns[0] =
+                    CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
+                write_string_to_grid(
+                    &message,
+                    &mut self.data_columns.columns[0],
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((0, 0), (message.len() - 1, 0)),
+                    false,
+                );
             }
         }
 
-        if let Some((env_hash, error)) = error {
-            self.length = 0;
-            let message = format!("Error: {}", error.to_string());
-            log(
-                format!(
-                    "Failed to open envelope {}: {}",
-                    context.accounts[self.new_cursor_pos.0]
-                        .get_env(&env_hash)
-                        .message_id_display(),
-                    error.to_string()
-                ),
-                ERROR,
-            );
-            self.data_columns.columns[0] =
-                CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
-            write_string_to_grid(
-                &message,
-                &mut self.data_columns.columns[0],
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                ((0, 0), (message.len() - 1, 0)),
-                false,
-            );
-        } else if !self.filtered_selection.is_empty() {
+        if !self.filtered_selection.is_empty() {
             self.filter_term = filter_term.to_string();
             self.cursor_pos.2 = std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
             self.length = self.filtered_selection.len();
         } else {
             self.length = 0;
-            let message = format!("No results for `{}`.", filter_term);
+            let message = format!("No results for `{}`. Press ESC to go back.", filter_term);
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
             write_string_to_grid(

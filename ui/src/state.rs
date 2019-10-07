@@ -529,6 +529,14 @@ impl State {
 
     /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: &str) {
+        if cmd == "insert" {
+            crate::sqlite3::insert(&self.context).unwrap();
+            return;
+        } else if cmd.starts_with("_from") {
+            debug!(crate::sqlite3::from(&cmd["_from".len()..]));
+            return;
+        }
+
         let result = parse_command(&cmd.as_bytes()).to_full_result();
 
         if let Ok(v) = result {

@@ -69,6 +69,11 @@ pub use crate::conf::*;
 pub mod workers;
 pub use crate::workers::*;
 
+#[cfg(feature = "sqlite3")]
+pub mod sqlite3;
+
+pub mod search;
+
 pub use crate::username::*;
 pub mod username {
     use libc;
