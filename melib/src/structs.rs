@@ -60,7 +60,8 @@ impl<T: Default + Copy + std::fmt::Debug> StackVec<T> {
         }
     }
     pub fn remove(&mut self, i: usize) -> T {
-        if self.len > self.array.len() {
+        if self.len >= self.array.len() {
+            self.len -= 1;
             self.heap_vec.remove(i)
         } else {
             let ret = std::mem::replace(&mut self.array[i], T::default());
@@ -74,7 +75,7 @@ impl<T: Default + Copy + std::fmt::Debug> StackVec<T> {
 
     pub fn set(&mut self, i: usize, val: T) {
         debug_assert!(i < self.len);
-        if self.len > self.array.len() {
+        if self.len >= self.array.len() {
             self.heap_vec[i] = val;
             if i + 1 < self.array.len() {
                 self.array[i] = val;
@@ -82,6 +83,10 @@ impl<T: Default + Copy + std::fmt::Debug> StackVec<T> {
         } else {
             self.array[i] = val;
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.len = 0;
     }
 }
 
@@ -120,7 +125,7 @@ impl<T: Default + Copy + std::fmt::Debug> Index<usize> for StackVec<T> {
     type Output = T;
 
     fn index(&self, idx: usize) -> &T {
-        if self.len > self.array.len() {
+        if self.len >= self.array.len() {
             &self.heap_vec[idx]
         } else {
             &self.array[idx]
