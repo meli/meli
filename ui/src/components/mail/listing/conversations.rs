@@ -111,6 +111,10 @@ impl ListingTrait for ConversationsListing {
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
+        self.filtered_selection.clear();
+        self.filtered_order.clear();
+        self.filter_term.clear();
+        self.row_updates.clear();
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {

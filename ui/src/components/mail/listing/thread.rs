@@ -58,6 +58,9 @@ impl ListingTrait for ThreadListing {
     }
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
+        self.unfocused = false;
+        self.locations.clear();
+        self.initialised = false;
     }
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0

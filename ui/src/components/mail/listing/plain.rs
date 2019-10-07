@@ -92,6 +92,8 @@ impl ListingTrait for PlainListing {
     }
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
+        self.unfocused = false;
+        self.local_collection.clear();
     }
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
         let account = &context.accounts[self.cursor_pos.0];
