@@ -133,3 +133,10 @@ impl From<native_tls::Error> for MeliError {
         MeliError::new(format!("{}", kind))
     }
 }
+
+impl From<&str> for MeliError {
+    #[inline]
+    fn from(kind: &str) -> MeliError {
+        MeliError::new(kind.to_string())
+    }
+}

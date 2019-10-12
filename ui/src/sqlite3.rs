@@ -19,10 +19,49 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use crate::search::Query;
 use crate::state::Context;
-use melib::{backends::FolderHash, email::EnvelopeHash, MeliError, Result, StackVec};
+use melib::{
+    backends::FolderHash,
+    email::EnvelopeHash,
+    thread::{SortField, SortOrder},
+    MeliError, Result, StackVec,
+};
 use rusqlite::{params, Connection};
+use std::borrow::Cow;
 use std::convert::TryInto;
+
+#[inline(always)]
+fn escape_double_quote(w: &str) -> Cow<str> {
+    if w.contains('"') {
+        Cow::from(w.replace('"', "\"\""))
+    } else {
+        Cow::from(w)
+    }
+}
+
+#[inline(always)]
+fn fts5_bareword(w: &str) -> Cow<str> {
+    if w == "AND" || w == "OR" || w == "NOT" {
+        Cow::from(w)
+    } else {
+        if !w.is_ascii() {
+            Cow::from(format!("\"{}\"", escape_double_quote(w)))
+        } else {
+            for &b in w.as_bytes() {
+                if !(b > 0x2f && b < 0x3a)
+                    || !(b > 0x40 && b < 0x5b)
+                    || !(b > 0x60 && b < 0x7b)
+                    || b != 0x60
+                    || b != 26
+                {
+                    return Cow::from(format!("\"{}\"", escape_double_quote(w)));
+                }
+            }
+            Cow::from(w)
+        }
+    }
+}
 
 pub fn open_db(context: &crate::state::Context) -> Result<Connection> {
     let data_dir =
@@ -64,14 +103,31 @@ pub fn open_db(context: &crate::state::Context) -> Result<Connection> {
                     id               INTEGER PRIMARY KEY,
                     hash             BLOB NOT NULL,
                     date             TEXT NOT NULL,
-                    _from             TEXT NOT NULL,
-                    _to               TEXT NOT NULL,
-                    cc              TEXT NOT NULL,
+                    _from            TEXT NOT NULL,
+                    _to              TEXT NOT NULL,
+                    cc               TEXT NOT NULL,
                     bcc              TEXT NOT NULL,
                     subject          TEXT NOT NULL,
                     message_id       TEXT NOT NULL,
                     in_reply_to      TEXT NOT NULL,
-                    _references       TEXT NOT NULL,
+                    _references      TEXT NOT NULL,
+                    flags            INTEGER NOT NULL,
+                    has_attachments  BOOLEAN NOT NULL,
+                    body_text        TEXT NOT NULL,
+                    timestamp        BLOB NOT NULL
+                  );
+        CREATE TABLE IF NOT EXISTS folders (
+                    id               INTEGER PRIMARY KEY,
+                    hash             BLOB NOT NULL,
+                    date             TEXT NOT NULL,
+                    _from            TEXT NOT NULL,
+                    _to              TEXT NOT NULL,
+                    cc               TEXT NOT NULL,
+                    bcc              TEXT NOT NULL,
+                    subject          TEXT NOT NULL,
+                    message_id       TEXT NOT NULL,
+                    in_reply_to      TEXT NOT NULL,
+                    _references      TEXT NOT NULL,
                     flags            INTEGER NOT NULL,
                     has_attachments  BOOLEAN NOT NULL,
                     body_text        TEXT NOT NULL,
@@ -122,7 +178,7 @@ pub fn insert(context: &crate::state::Context) -> Result<()> {
             conn.execute(
                 "INSERT OR REPLACE INTO envelopes (hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                params![e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, String::from("sdfsa"), e.hash().to_be_bytes().to_vec()],
+                params![e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, String::from("sdfsa"), e.date().to_be_bytes().to_vec()],
             )
             .map_err(|e| MeliError::new(e.to_string()))?;
         }
@@ -135,6 +191,7 @@ pub fn search(
     term: &str,
     _context: &Context,
     _account_idx: usize,
+    (sort_field, sort_order): (SortField, SortOrder),
     _folder_hash: FolderHash,
 ) -> Result<StackVec<EnvelopeHash>> {
     let data_dir =
@@ -145,12 +202,24 @@ pub fn search(
             .map_err(|e| MeliError::new(e.to_string()))?,
     )
     .map_err(|e| MeliError::new(e.to_string()))?;
-    let mut stmt=        conn.prepare(
-                "SELECT hash FROM envelopes INNER JOIN fts ON fts.rowid = envelopes.id WHERE fts MATCH ?;")
+
+    let sort_field = match debug!(sort_field) {
+        SortField::Subject => "subject",
+        SortField::Date => "timestamp",
+    };
+
+    let sort_order = match debug!(sort_order) {
+        SortOrder::Asc => "ASC",
+        SortOrder::Desc => "DESC",
+    };
+
+    debug!("SELECT hash FROM envelopes INNER JOIN fts ON fts.rowid = envelopes.id WHERE fts MATCH ? ORDER BY {} {};", sort_field, sort_order);
+    let mut stmt = conn.prepare(
+                format!("SELECT hash FROM envelopes INNER JOIN fts ON fts.rowid = envelopes.id WHERE fts MATCH ? ORDER BY {} {};", sort_field, sort_order).as_str())
     .map_err(|e| MeliError::new(e.to_string()))?;
 
     let results = stmt
-        .query_map(&[term], |row| Ok(row.get(0)?))
+        .query_map(&[fts5_bareword(term)], |row| Ok(row.get(0)?))
         .map_err(|e| MeliError::new(e.to_string()))?
         .map(|r: std::result::Result<Vec<u8>, rusqlite::Error>| {
             Ok(u64::from_be_bytes(

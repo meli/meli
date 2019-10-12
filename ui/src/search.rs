@@ -20,17 +20,46 @@
  */
 
 use crate::state::Context;
-use melib::{backends::FolderHash, email::EnvelopeHash, error::Result, StackVec};
+use melib::{
+    backends::FolderHash,
+    email::{EnvelopeHash, Flag, UnixTimestamp},
+    error::Result,
+    thread::{SortField, SortOrder},
+    StackVec,
+};
+
+#[derive(Debug)]
+pub enum Query {
+    Before(UnixTimestamp),
+    After(UnixTimestamp),
+    Between(UnixTimestamp, UnixTimestamp),
+    On(UnixTimestamp),
+    /* * * * */
+    From(String),
+    To(String),
+    Cc(String),
+    Bcc(String),
+    InReplyTo(String),
+    References(String),
+    AllAddresses(String),
+    /* * * * */
+    Body(String),
+    Subject(String),
+    AllText(String),
+    /* * * * */
+    Flag(Flag),
+}
 
 pub fn filter(
     filter_term: &str,
     context: &Context,
     account_idx: usize,
+    sort: (SortField, SortOrder),
     folder_hash: FolderHash,
 ) -> Result<StackVec<EnvelopeHash>> {
     #[cfg(feature = "sqlite3")]
     {
-        crate::sqlite3::search(filter_term, context, account_idx, folder_hash)
+        crate::sqlite3::search(filter_term, context, account_idx, sort, folder_hash)
     }
 
     #[cfg(not(feature = "sqlite3"))]

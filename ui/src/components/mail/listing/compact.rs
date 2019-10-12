@@ -360,7 +360,13 @@ impl ListingTrait for CompactListing {
 
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        match crate::search::filter(filter_term, context, self.cursor_pos.0, folder_hash) {
+        match crate::search::filter(
+            filter_term,
+            context,
+            self.cursor_pos.0,
+            self.sort,
+            folder_hash,
+        ) {
             Ok(results) => {
                 let threads = &account.collection.threads[&folder_hash];
                 for env_hash in results {
@@ -385,6 +391,11 @@ impl ListingTrait for CompactListing {
                     }
                 }
                 if !self.filtered_selection.is_empty() {
+                    threads.vec_inner_sort_by(
+                        &mut self.filtered_selection,
+                        self.sort,
+                        &context.accounts[self.cursor_pos.0].collection,
+                    );
                     self.new_cursor_pos.2 =
                         std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
                 } else {
@@ -1080,6 +1091,17 @@ impl Component for CompactListing {
                     debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
                     if !self.filtered_selection.is_empty() {
+                        let folder_hash = context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+                            .unwrap()
+                            .folder
+                            .hash();
+                        let threads =
+                            &context.accounts[self.cursor_pos.0].collection.threads[&folder_hash];
+                        threads.vec_inner_sort_by(
+                            &mut self.filtered_selection,
+                            self.sort,
+                            &context.accounts[self.cursor_pos.0].collection,
+                        );
                         self.dirty = true;
                     } else {
                         self.refresh_mailbox(context);

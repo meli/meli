@@ -1067,6 +1067,85 @@ impl Threads {
         */
     }
 
+    pub fn vec_inner_sort_by(
+        &self,
+        vec: &mut Vec<ThreadHash>,
+        sort: (SortField, SortOrder),
+        envelopes: &Envelopes,
+    ) {
+        vec.sort_by(|b, a| match sort {
+            (SortField::Date, SortOrder::Desc) => {
+                let a = &self.thread_nodes[&a];
+                let b = &self.thread_nodes[&b];
+                b.date.cmp(&a.date)
+            }
+            (SortField::Date, SortOrder::Asc) => {
+                let a = &self.thread_nodes[&a];
+                let b = &self.thread_nodes[&b];
+                a.date.cmp(&b.date)
+            }
+            (SortField::Subject, SortOrder::Desc) => {
+                let a = &self.thread_nodes[&a].message();
+                let b = &self.thread_nodes[&b].message();
+
+                match (a, b) {
+                    (Some(_), Some(_)) => {}
+                    (Some(_), None) => {
+                        return Ordering::Greater;
+                    }
+                    (None, Some(_)) => {
+                        return Ordering::Less;
+                    }
+                    (None, None) => {
+                        return Ordering::Equal;
+                    }
+                }
+                let ma = &envelopes[&a.unwrap()];
+                let mb = &envelopes[&b.unwrap()];
+                #[cfg(feature = "unicode_algorithms")]
+                {
+                    ma.subject()
+                        .split_graphemes()
+                        .cmp(&mb.subject().split_graphemes())
+                }
+                #[cfg(not(feature = "unicode_algorithms"))]
+                {
+                    ma.subject().cmp(&mb.subject())
+                }
+            }
+            (SortField::Subject, SortOrder::Asc) => {
+                let a = &self.thread_nodes[&a].message();
+                let b = &self.thread_nodes[&b].message();
+
+                match (a, b) {
+                    (Some(_), Some(_)) => {}
+                    (Some(_), None) => {
+                        return Ordering::Less;
+                    }
+                    (None, Some(_)) => {
+                        return Ordering::Greater;
+                    }
+                    (None, None) => {
+                        return Ordering::Equal;
+                    }
+                }
+                let ma = &envelopes[&a.unwrap()];
+                let mb = &envelopes[&b.unwrap()];
+                #[cfg(feature = "unicode_algorithms")]
+                {
+                    mb.subject()
+                        .as_ref()
+                        .split_graphemes()
+                        .cmp(&ma.subject().split_graphemes())
+                }
+
+                #[cfg(not(feature = "unicode_algorithms"))]
+                {
+                    mb.subject().as_ref().cmp(&ma.subject())
+                }
+            }
+        });
+    }
     fn inner_sort_by(&self, sort: (SortField, SortOrder), envelopes: &Envelopes) {
         let tree = &mut self.tree_index.borrow_mut();
         tree.sort_by(|b, a| match sort {
