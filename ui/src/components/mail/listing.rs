@@ -417,7 +417,7 @@ impl Component for Listing {
                 self.component.set_movement(PageMovement::End);
                 return true;
             }
-            UIEvent::Input(ref k) if k == shortcuts["toggle-menu-visibility"] => {
+            UIEvent::Input(ref k) if k == shortcuts["toggle_menu_visibility"] => {
                 self.menu_visibility = !self.menu_visibility;
                 self.set_dirty();
             }
@@ -426,6 +426,17 @@ impl Component for Listing {
                     .replies
                     .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0, None))));
                 return true;
+            }
+            UIEvent::Input(ref key) if *key == shortcuts["set_seen"] => {
+                let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
+                if match self.component {
+                    Plain(ref mut l) => l.process_event(&mut event, context),
+                    Compact(ref mut l) => l.process_event(&mut event, context),
+                    Threaded(ref mut l) => l.process_event(&mut event, context),
+                    Conversations(ref mut l) => l.process_event(&mut event, context),
+                } {
+                    return true;
+                }
             }
             UIEvent::StartupCheck(_) => {
                 self.dirty = true;
@@ -476,52 +487,10 @@ impl Component for Listing {
         let config_map = context.settings.shortcuts.listing.key_values();
         map.insert(
             Listing::DESCRIPTION.to_string(),
-            [
-                (
-                    "new_mail",
-                    if let Some(key) = config_map.get("new_mail") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('m')
-                    },
-                ),
-                (
-                    "prev_folder",
-                    if let Some(key) = config_map.get("prev_folder") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('K')
-                    },
-                ),
-                (
-                    "next_folder",
-                    if let Some(key) = config_map.get("next_folder") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('J')
-                    },
-                ),
-                (
-                    "prev_account",
-                    if let Some(key) = config_map.get("prev_account") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('l')
-                    },
-                ),
-                (
-                    "next_account",
-                    if let Some(key) = config_map.get("next_account") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('h')
-                    },
-                ),
-                ("toggle-menu-visibility", Key::Char('`')),
-            ]
-            .iter()
-            .cloned()
-            .collect(),
+            config_map
+                .into_iter()
+                .map(|(k, v)| (k, v.clone()))
+                .collect(),
         );
 
         map

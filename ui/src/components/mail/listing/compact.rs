@@ -1116,12 +1116,6 @@ impl Component for CompactListing {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["set_seen"] => {
-                let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
-                self.perform_action(context, thread_hash, &ListingAction::SetSeen);
-                self.row_updates.push(thread_hash);
-                self.set_dirty();
-            }
             UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
                 self.unfocused = false;
                 self.dirty = true;
@@ -1319,59 +1313,10 @@ impl Component for CompactListing {
         let config_map = context.settings.shortcuts.compact_listing.key_values();
         map.insert(
             CompactListing::DESCRIPTION.to_string(),
-            [
-                (
-                    "open_thread",
-                    if let Some(key) = config_map.get("open_thread") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('\n')
-                    },
-                ),
-                (
-                    "prev_page",
-                    if let Some(key) = config_map.get("prev_page") {
-                        (*key).clone()
-                    } else {
-                        Key::PageUp
-                    },
-                ),
-                (
-                    "next_page",
-                    if let Some(key) = config_map.get("next_page") {
-                        (*key).clone()
-                    } else {
-                        Key::PageDown
-                    },
-                ),
-                (
-                    "exit_thread",
-                    if let Some(key) = config_map.get("exit_thread") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('i')
-                    },
-                ),
-                (
-                    "select_entry",
-                    if let Some(key) = config_map.get("select_entry") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('v')
-                    },
-                ),
-                (
-                    "set_seen",
-                    if let Some(key) = config_map.get("set_seen") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('n')
-                    },
-                ),
-            ]
-            .iter()
-            .cloned()
-            .collect(),
+            config_map
+                .into_iter()
+                .map(|(k, v)| (k, v.clone()))
+                .collect(),
         );
 
         map
