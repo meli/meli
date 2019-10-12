@@ -53,6 +53,7 @@ pub struct CompactListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
+    all_threads: fnv::FnvHashSet<ThreadHash>,
     order: FnvHashMap<ThreadHash, usize>,
     /// Cache current view.
     data_columns: DataColumns,
@@ -345,12 +346,17 @@ impl ListingTrait for CompactListing {
     }
 
     fn filter(&mut self, filter_term: &str, context: &Context) {
-        self.filtered_order.clear();
+        if filter_term.is_empty() {
+            return;
+        }
+
         self.filtered_selection.clear();
+        self.filtered_order.clear();
+        self.filter_term.clear();
+        self.row_updates.clear();
         for v in self.selection.values_mut() {
             *v = false;
         }
-        self.filter_term.clear();
 
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
@@ -369,17 +375,32 @@ impl ListingTrait for CompactListing {
                         &threads.thread_nodes,
                         threads.thread_nodes[&env_hash_thread_hash].thread_group(),
                     );
-                    if let Some(row) = self.order.get(&thread_group) {
-                        self.filtered_selection.push(thread_group);
-                        self.filtered_order.insert(thread_group, *row);
+                    if self.filtered_order.contains_key(&thread_group) {
+                        continue;
                     }
+                    if self.all_threads.contains(&thread_group) {
+                        self.filtered_selection.push(thread_group);
+                        self.filtered_order
+                            .insert(thread_group, self.filtered_selection.len() - 1);
+                    }
+                }
+                if !self.filtered_selection.is_empty() {
+                    self.new_cursor_pos.2 =
+                        std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+                } else {
+                    self.data_columns.columns[0] =
+                        CellBuffer::new_with_context(0, 0, Cell::with_char(' '), context);
                 }
             }
             Err(e) => {
-                self.length = 0;
-                let message = format!("Error: {}", e);
+                self.cursor_pos.2 = 0;
+                self.new_cursor_pos.2 = 0;
+                let message = format!(
+                    "Encountered an error while searching for `{}`: {}.",
+                    filter_term, e
+                );
                 log(
-                    format!("Failed to search for term {}: {}", filter_term, e,),
+                    format!("Failed to search for term {}: {}", filter_term, e),
                     ERROR,
                 );
                 self.data_columns.columns[0] =
@@ -395,26 +416,8 @@ impl ListingTrait for CompactListing {
                 );
             }
         }
-
-        if !self.filtered_selection.is_empty() {
-            self.filter_term = filter_term.to_string();
-            self.cursor_pos.2 = std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
-            self.length = self.filtered_selection.len();
-        } else {
-            self.length = 0;
-            let message = format!("No results for `{}`. Press ESC to go back.", filter_term);
-            self.data_columns.columns[0] =
-                CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
-            write_string_to_grid(
-                &message,
-                &mut self.data_columns.columns[0],
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                ((0, 0), (message.len() - 1, 0)),
-                false,
-            );
-        }
+        self.filter_term = filter_term.to_string();
+        self.redraw_list(context);
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
@@ -444,6 +447,7 @@ impl CompactListing {
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (SortField::Date, SortOrder::Desc),
+            all_threads: fnv::FnvHashSet::default(),
             order: FnvHashMap::default(),
             filter_term: String::new(),
             filtered_selection: Vec::new(),
@@ -537,6 +541,10 @@ impl CompactListing {
             self.view = ThreadView::new(self.new_cursor_pos, None, context);
         }
 
+        self.redraw_list(context);
+    }
+
+    fn redraw_list(&mut self, context: &Context) {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = &account[self.cursor_pos.1].unwrap();
 
@@ -548,7 +556,17 @@ impl CompactListing {
         let mut min_width = (0, 0, 0, 0, 0);
 
         threads.sort_by(self.sort, self.subsort, &account.collection);
-        for (idx, root_idx) in threads.root_iter().enumerate() {
+
+        let mut refresh_mailbox = false;
+        let threads_iter = if self.filter_term.is_empty() {
+            refresh_mailbox = true;
+            self.all_threads.clear();
+            Box::new(threads.root_iter()) as Box<dyn Iterator<Item = ThreadHash>>
+        } else {
+            Box::new(self.filtered_selection.iter().map(|h| *h))
+                as Box<dyn Iterator<Item = ThreadHash>>
+        };
+        for (idx, root_idx) in threads_iter.enumerate() {
             self.length += 1;
             let thread_node = &threads.thread_nodes()[&root_idx];
             let i = if let Some(i) = thread_node.message() {
@@ -583,6 +601,10 @@ impl CompactListing {
             min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
             min_width.4 = cmp::max(min_width.4, entry_strings.subject.grapheme_width()); /* subject */
             rows.push(entry_strings);
+            if refresh_mailbox {
+                self.all_threads.insert(root_idx);
+            }
+
             self.order.insert(root_idx, idx);
             self.selection.insert(root_idx, false);
         }
@@ -610,8 +632,14 @@ impl CompactListing {
         /* subject column */
         self.data_columns.columns[4] =
             CellBuffer::new_with_context(min_width.4, rows.len(), Cell::with_char(' '), context);
+        let threads_iter = if self.filter_term.is_empty() {
+            Box::new(threads.root_iter()) as Box<dyn Iterator<Item = ThreadHash>>
+        } else {
+            Box::new(self.filtered_selection.iter().map(|h| *h))
+                as Box<dyn Iterator<Item = ThreadHash>>
+        };
 
-        for ((idx, root_idx), strings) in threads.root_iter().enumerate().zip(rows) {
+        for ((idx, root_idx), strings) in threads_iter.enumerate().zip(rows) {
             let thread_node = &threads.thread_nodes()[&root_idx];
             let i = if let Some(i) = thread_node.message() {
                 i
@@ -734,7 +762,7 @@ impl CompactListing {
                 (false, false) => {}
             }
         }
-        if self.length == 0 {
+        if self.length == 0 && self.filter_term.is_empty() {
             let mailbox = &account[self.cursor_pos.1];
             let message = mailbox.to_string();
             self.data_columns.columns[0] = CellBuffer::new_with_context(
@@ -752,155 +780,6 @@ impl CompactListing {
                 ((0, 0), (MAX_COLS - 1, 0)),
                 false,
             );
-            return;
-        }
-    }
-
-    fn draw_filtered_selection(&mut self, context: &mut Context) {
-        if self.filtered_selection.is_empty() {
-            return;
-        }
-        let account = &context.accounts[self.cursor_pos.0];
-        let mailbox = if account[self.cursor_pos.1].is_available() {
-            account[self.cursor_pos.1].unwrap()
-        } else {
-            return;
-        };
-
-        let threads = &account.collection.threads[&mailbox.folder.hash()];
-        self.length = 0;
-        let mut rows = Vec::with_capacity(1024);
-        let mut min_width = (0, 0, 0, 0, 0);
-
-        for thread_hash in self.filtered_selection.iter() {
-            self.length += 1;
-            let thread_node = &threads.thread_nodes()[thread_hash];
-            let i = thread_node.message().unwrap();
-            let root_envelope: &Envelope = &context.accounts[self.cursor_pos.0].get_env(&i);
-            let t_idx = root_envelope.thread();
-            let entry_strings = ConversationsListing::make_entry_string(
-                root_envelope,
-                thread_node,
-                threads.is_snoozed(t_idx),
-            );
-            min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
-            min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
-            min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
-            min_width.4 = cmp::max(min_width.4, entry_strings.subject.grapheme_width()); /* subject */
-            rows.push(entry_strings);
-        }
-
-        min_width.0 = self.length.saturating_sub(1).to_string().len();
-
-        /* index column */
-        self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, rows.len(), Cell::with_char(' '), context);
-        /* date column */
-        self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, rows.len(), Cell::with_char(' '), context);
-        /* from column */
-        self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, rows.len(), Cell::with_char(' '), context);
-        /* flags column */
-        self.data_columns.columns[3] =
-            CellBuffer::new_with_context(min_width.3, rows.len(), Cell::with_char(' '), context);
-        /* subject column */
-        self.data_columns.columns[4] =
-            CellBuffer::new_with_context(min_width.4, rows.len(), Cell::with_char(' '), context);
-
-        for ((idx, thread_hash), strings) in self.filtered_selection.iter().enumerate().zip(rows) {
-            let i = threads.thread_nodes()[thread_hash].message().unwrap();
-            let root_envelope: &Envelope = &context.accounts[self.cursor_pos.0].get_env(&i);
-            let fg_color = if !root_envelope.is_seen() {
-                Color::Byte(0)
-            } else {
-                Color::Default
-            };
-            let bg_color = if self.selection[thread_hash] {
-                Color::Byte(210)
-            } else if !root_envelope.is_seen() {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(236)
-            } else {
-                Color::Default
-            };
-            let (x, _) = write_string_to_grid(
-                &idx.to_string(),
-                &mut self.data_columns.columns[0],
-                fg_color,
-                bg_color,
-                Attr::Default,
-                ((0, idx), (min_width.0, idx)),
-                false,
-            );
-            for x in x..min_width.0 {
-                self.data_columns.columns[0][(x, idx)].set_bg(bg_color);
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.date,
-                &mut self.data_columns.columns[1],
-                fg_color,
-                bg_color,
-                Attr::Default,
-                ((0, idx), (min_width.1, idx)),
-                false,
-            );
-            for x in x..min_width.1 {
-                self.data_columns.columns[1][(x, idx)].set_bg(bg_color);
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.from,
-                &mut self.data_columns.columns[2],
-                fg_color,
-                bg_color,
-                Attr::Default,
-                ((0, idx), (min_width.2, idx)),
-                false,
-            );
-            for x in x..min_width.2 {
-                self.data_columns.columns[2][(x, idx)].set_bg(bg_color);
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.flag,
-                &mut self.data_columns.columns[3],
-                fg_color,
-                bg_color,
-                Attr::Default,
-                ((0, idx), (min_width.3, idx)),
-                false,
-            );
-            for x in x..min_width.3 {
-                self.data_columns.columns[3][(x, idx)].set_bg(bg_color);
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.subject,
-                &mut self.data_columns.columns[4],
-                fg_color,
-                bg_color,
-                Attr::Default,
-                ((0, idx), (min_width.4, idx)),
-                false,
-            );
-            for x in x..min_width.4 {
-                self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
-            }
-            match (
-                threads.is_snoozed(root_envelope.thread()),
-                root_envelope.has_attachments(),
-            ) {
-                (true, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
-                    self.data_columns.columns[3][(2, idx)].set_fg(Color::Red);
-                }
-                (true, false) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
-                }
-                (false, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
-                }
-                (false, false) => {}
-            }
         }
     }
 
@@ -908,7 +787,7 @@ impl CompactListing {
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
-        if self.filtered_selection.is_empty() {
+        if self.filter_term.is_empty() {
             threads.root_set(cursor)
         } else {
             self.filtered_selection[cursor]
@@ -987,11 +866,14 @@ impl Component for CompactListing {
             if !self.is_dirty() {
                 return;
             }
-            if !self.filtered_selection.is_empty() {
-                self.draw_filtered_selection(context);
-                let (upper_left, bottom_right) = area;
+            let mut area = area;
+            if !self.filter_term.is_empty() {
                 let (x, y) = write_string_to_grid(
-                    &format!("Filter (Press ESC to exit): {}", self.filter_term),
+                    &format!(
+                        "{} results for `{}` (Press ESC to exit)",
+                        self.filtered_selection.len(),
+                        self.filter_term
+                    ),
                     grid,
                     Color::Default,
                     Color::Default,
@@ -999,15 +881,15 @@ impl Component for CompactListing {
                     area,
                     true,
                 );
+                let (upper_left, bottom_right) = area;
                 clear_area(grid, ((x, y), set_y(bottom_right, y)));
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 1)));
 
-                self.draw_list(grid, (set_y(upper_left, y + 1), bottom_right), context);
-                self.dirty = false;
-                return;
+                area = (set_y(upper_left, y + 1), bottom_right);
             }
+
             if !self.row_updates.is_empty() {
                 let (upper_left, bottom_right) = area;
                 while let Some(row) = self.row_updates.pop() {
@@ -1017,15 +899,12 @@ impl Component for CompactListing {
 
                     let top_idx = page_no * rows;
                     if row >= top_idx && row <= top_idx + rows {
-                        self.highlight_line(
-                            grid,
-                            (
-                                set_y(upper_left, get_y(upper_left) + (row % rows)),
-                                set_y(bottom_right, get_y(upper_left) + (row % rows)),
-                            ),
-                            row,
-                            context,
+                        let area = (
+                            set_y(upper_left, get_y(upper_left) + (row % rows)),
+                            set_y(bottom_right, get_y(upper_left) + (row % rows)),
                         );
+                        self.highlight_line(grid, area, row, context);
+                        context.dirty_areas.push_back(area);
                     }
                 }
                 if self.force_draw {
@@ -1189,13 +1068,22 @@ impl Component for CompactListing {
                 Action::SubSort(field, order) if !self.unfocused => {
                     debug!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
-                    self.refresh_mailbox(context);
+                    //if !self.filtered_selection.is_empty() {
+                    //    let threads = &account.collection.threads[&folder_hash];
+                    //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
+                    //} else {
+                    //    self.refresh_mailbox(context);
+                    //}
                     return true;
                 }
                 Action::Sort(field, order) if !self.unfocused => {
                     debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
-                    self.refresh_mailbox(context);
+                    if !self.filtered_selection.is_empty() {
+                        self.dirty = true;
+                    } else {
+                        self.refresh_mailbox(context);
+                    }
                     return true;
                 }
                 Action::ToggleThreadSnooze if !self.unfocused => {
@@ -1248,13 +1136,8 @@ impl Component for CompactListing {
 
                 _ => {}
             },
-            UIEvent::Input(Key::Esc) if !self.unfocused && !self.filtered_selection.is_empty() => {
-                self.filter_term.clear();
-                self.filtered_selection.clear();
-                for v in self.selection.values_mut() {
-                    *v = false;
-                }
-                self.filtered_order.clear();
+            UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
+                self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1, None));
                 self.refresh_mailbox(context);
                 return true;
             }

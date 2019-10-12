@@ -83,6 +83,7 @@ pub struct ConversationsListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
+    all_threads: fnv::FnvHashSet<ThreadHash>,
     order: FnvHashMap<ThreadHash, usize>,
     /// Cache current view.
     content: CellBuffer,
@@ -280,67 +281,6 @@ impl ListingTrait for ConversationsListing {
             ),
             ((0, 3 * top_idx), pos_dec(self.content.size(), (1, 1))),
         );
-        /*
-        let mut flag_x = 0;
-            let column_width = self.data_columns.columns[i].size().0;
-            if i == 3 {
-                flag_x = x;
-            }
-            copy_area(
-                grid,
-                &self.content,
-                (
-                    set_x(upper_left, x),
-                    set_x(
-                        bottom_right,
-                        std::cmp::min(get_x(bottom_right), x + (self.content)),
-                    ),
-                ),
-                (
-                    (0, top_idx),
-                    (column_width.saturating_sub(1), self.length - 1),
-                ),
-            );
-            x += self.content + 2; // + SEPARATOR
-            if x > get_x(bottom_right) {
-                break;
-            }
-        for r in 0..cmp::min(self.length - top_idx, rows) {
-            let (fg_color, bg_color) = {
-                let c = &self.content[(0, r + top_idx)];
-                (c.fg(), c.bg())
-            };
-            change_colors(
-                grid,
-                (
-                    pos_inc(upper_left, (0, r)),
-                    (flag_x.saturating_sub(1), get_y(upper_left) + r),
-                ),
-                fg_color,
-                bg_color,
-            );
-            for x in flag_x
-                ..std::cmp::min(
-                    get_x(bottom_right),
-                    flag_x + 2 + self.content,
-                )
-            {
-                grid[(x, get_y(upper_left) + r)].set_bg(bg_color);
-            }
-            change_colors(
-                grid,
-                (
-                    (
-                        flag_x + 2 + self.content,
-                        get_y(upper_left) + r,
-                    ),
-                    (get_x(bottom_right), get_y(upper_left) + r),
-                ),
-                fg_color,
-                bg_color,
-            );
-        }
-        */
 
         /* TODO: highlight selected entries */
         self.highlight_line(
@@ -395,13 +335,19 @@ impl ListingTrait for ConversationsListing {
         }
         context.dirty_areas.push_back(area);
     }
+
     fn filter(&mut self, filter_term: &str, context: &Context) {
-        self.filtered_order.clear();
+        if filter_term.is_empty() {
+            return;
+        }
+
         self.filtered_selection.clear();
+        self.filtered_order.clear();
+        self.filter_term.clear();
+        self.row_updates.clear();
         for v in self.selection.values_mut() {
             *v = false;
         }
-        self.filter_term.clear();
 
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
@@ -420,17 +366,32 @@ impl ListingTrait for ConversationsListing {
                         &threads.thread_nodes,
                         threads.thread_nodes[&env_hash_thread_hash].thread_group(),
                     );
-                    if let Some(row) = self.order.get(&thread_group) {
-                        self.filtered_selection.push(thread_group);
-                        self.filtered_order.insert(thread_group, *row);
+                    if self.filtered_order.contains_key(&thread_group) {
+                        continue;
                     }
+                    if self.all_threads.contains(&thread_group) {
+                        self.filtered_selection.push(thread_group);
+                        self.filtered_order
+                            .insert(thread_group, self.filtered_selection.len() - 1);
+                    }
+                }
+                if !self.filtered_selection.is_empty() {
+                    self.new_cursor_pos.2 =
+                        std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+                } else {
+                    self.content =
+                        CellBuffer::new_with_context(0, 0, Cell::with_char(' '), context);
                 }
             }
             Err(e) => {
-                self.length = 0;
-                let message = format!("No results for `{}`.", filter_term);
+                self.cursor_pos.2 = 0;
+                self.new_cursor_pos.2 = 0;
+                let message = format!(
+                    "Encountered an error while searching for `{}`: {}.",
+                    filter_term, e
+                );
                 log(
-                    format!("Failed to search for term {}: {}", filter_term, e,),
+                    format!("Failed to search for term {}: {}", filter_term, e),
                     ERROR,
                 );
                 self.content =
@@ -446,26 +407,8 @@ impl ListingTrait for ConversationsListing {
                 );
             }
         }
-
-        if !self.filtered_selection.is_empty() {
-            self.filter_term = filter_term.to_string();
-            self.cursor_pos.2 = std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
-            self.length = self.filtered_selection.len();
-        } else {
-            self.length = 0;
-            let message = format!("No results for `{}`.", filter_term);
-            self.content =
-                CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
-            write_string_to_grid(
-                &message,
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                ((0, 0), (message.len() - 1, 0)),
-                false,
-            );
-        }
+        self.filter_term = filter_term.to_string();
+        self.redraw_list(context);
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
@@ -496,6 +439,7 @@ impl ConversationsListing {
             sort: (Default::default(), Default::default()),
             subsort: (SortField::Date, SortOrder::Desc),
             order: FnvHashMap::default(),
+            all_threads: fnv::FnvHashSet::default(),
             filter_term: String::new(),
             filtered_selection: Vec::new(),
             filtered_order: FnvHashMap::default(),
@@ -595,7 +539,7 @@ impl ConversationsListing {
         self.redraw_list(context);
     }
 
-    fn redraw_list(&mut self, context: &mut Context) {
+    fn redraw_list(&mut self, context: &Context) {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = &account[self.cursor_pos.1].unwrap();
 
@@ -608,7 +552,10 @@ impl ConversationsListing {
 
         threads.sort_by(self.sort, self.subsort, &account.collection);
 
-        let mut threads_iter = if self.filtered_selection.is_empty() {
+        let mut refresh_mailbox = false;
+        let threads_iter = if self.filter_term.is_empty() {
+            refresh_mailbox = true;
+            self.all_threads.clear();
             Box::new(threads.root_iter()) as Box<dyn Iterator<Item = ThreadHash>>
         } else {
             Box::new(self.filtered_selection.iter().map(|h| *h))
@@ -649,6 +596,10 @@ impl ConversationsListing {
                 strings.flag.len() + 3 + strings.subject.len(),
             );
             rows.push(strings);
+            if refresh_mailbox {
+                self.all_threads.insert(root_idx);
+            }
+
             self.order.insert(root_idx, idx);
             self.selection.insert(root_idx, false);
         }
@@ -668,8 +619,14 @@ impl ConversationsListing {
         } else {
             Color::Byte(235)
         };
+        let threads_iter = if self.filter_term.is_empty() {
+            Box::new(threads.root_iter()) as Box<dyn Iterator<Item = ThreadHash>>
+        } else {
+            Box::new(self.filtered_selection.iter().map(|h| *h))
+                as Box<dyn Iterator<Item = ThreadHash>>
+        };
 
-        for ((idx, root_idx), strings) in threads.root_iter().enumerate().zip(rows) {
+        for ((idx, root_idx), strings) in threads_iter.enumerate().zip(rows) {
             let thread_node = &threads.thread_nodes()[&root_idx];
             let i = if let Some(i) = thread_node.message() {
                 i
@@ -754,7 +711,7 @@ impl ConversationsListing {
                 self.content[(x, 3 * idx + 2)].set_bg(bg_color);
             }
         }
-        if self.length == 0 {
+        if self.length == 0 && self.filter_term.is_empty() {
             let mailbox = &account[self.cursor_pos.1];
             let message = mailbox.to_string();
             self.content =
@@ -768,7 +725,6 @@ impl ConversationsListing {
                 ((0, 0), (message.len() - 1, 0)),
                 false,
             );
-            return;
         }
     }
 
@@ -804,7 +760,7 @@ impl ConversationsListing {
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
-        if self.filtered_selection.is_empty() {
+        if self.filter_term.is_empty() {
             threads.root_set(cursor)
         } else {
             self.filtered_selection[cursor]
@@ -884,7 +840,7 @@ impl Component for ConversationsListing {
         }
         let (upper_left, bottom_right) = area;
         {
-            let area = if self.unfocused {
+            let mut area = if self.unfocused {
                 clear_area(
                     grid,
                     (
@@ -904,10 +860,13 @@ impl Component for ConversationsListing {
                 area
             };
 
-            if !self.filtered_selection.is_empty() {
-                self.redraw_list(context);
+            if !self.filter_term.is_empty() {
                 let (x, y) = write_string_to_grid(
-                    &format!("Filter (Press ESC to exit): {}", self.filter_term),
+                    &format!(
+                        "{} results for `{}` (Press ESC to exit)",
+                        self.filtered_selection.len(),
+                        self.filter_term
+                    ),
                     grid,
                     Color::Default,
                     Color::Default,
@@ -920,8 +879,7 @@ impl Component for ConversationsListing {
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 1)));
 
-                self.draw_list(grid, (set_y(upper_left, y + 1), bottom_right), context);
-                self.dirty = false;
+                area = (set_y(upper_left, y + 1), bottom_right);
             }
             if !self.row_updates.is_empty() {
                 /* certain rows need to be updated (eg an unseen message was just set seen)
@@ -1025,9 +983,13 @@ impl Component for ConversationsListing {
                 return true;
             }
             UIEvent::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
-                if self.filtered_selection.is_empty() {
+                if self.length == 0 {
+                    return true;
+                }
+
+                if self.filter_term.is_empty() {
                     self.view = ThreadView::new(self.cursor_pos, None, context);
-                } else {
+                } else if !self.filtered_selection.is_empty() {
                     let mut temp = self.cursor_pos;
                     let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
                     let account = &context.accounts[self.cursor_pos.0];
@@ -1138,21 +1100,29 @@ impl Component for ConversationsListing {
                     {
                         return true;
                     }
-                    self.filtered_selection.clear();
-                    self.new_cursor_pos.1 = *idx;
+                    self.set_coordinates((self.new_cursor_pos.0, *idx, None));
                     self.refresh_mailbox(context);
                     return true;
                 }
                 Action::SubSort(field, order) if !self.unfocused => {
                     debug!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
-                    self.refresh_mailbox(context);
+                    //if !self.filtered_selection.is_empty() {
+                    //    let threads = &account.collection.threads[&folder_hash];
+                    //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
+                    //} else {
+                    //    self.refresh_mailbox(context);
+                    //}
                     return true;
                 }
                 Action::Sort(field, order) if !self.unfocused => {
                     debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
-                    self.refresh_mailbox(context);
+                    if !self.filtered_selection.is_empty() {
+                        self.dirty = true;
+                    } else {
+                        self.refresh_mailbox(context);
+                    }
                     return true;
                 }
                 Action::ToggleThreadSnooze if !self.unfocused => {
@@ -1203,17 +1173,14 @@ impl Component for ConversationsListing {
                     }
                     return true;
                 }
-
                 _ => {}
             },
-            UIEvent::Input(Key::Esc) if !self.unfocused && !self.filtered_selection.is_empty() => {
-                self.filter_term.clear();
-                self.filtered_selection.clear();
-                for v in self.selection.values_mut() {
-                    *v = false;
-                }
-                self.filtered_order.clear();
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char(''))
+                if !self.unfocused && !&self.filter_term.is_empty() =>
+            {
+                self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1, None));
                 self.refresh_mailbox(context);
+                self.force_draw = false;
                 return true;
             }
             _ => {}
