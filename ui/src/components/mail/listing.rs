@@ -427,6 +427,15 @@ impl Component for Listing {
                     .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0, None))));
                 return true;
             }
+            UIEvent::Input(ref key) if *key == shortcuts["search"] => {
+                context
+                    .replies
+                    .push_back(UIEvent::ExInput(Key::Paste("filter ".to_string())));
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Execute));
+                return true;
+            }
             UIEvent::Input(ref key) if *key == shortcuts["set_seen"] => {
                 let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
                 if match self.component {
