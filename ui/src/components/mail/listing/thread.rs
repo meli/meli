@@ -197,6 +197,11 @@ impl ListingTrait for ThreadListing {
             change_colors(grid, area, fg_color, bg_color);
         }
     }
+
+    fn set_movement(&mut self, mvm: PageMovement) {
+        self.movement = Some(mvm);
+        self.set_dirty();
+    }
 }
 
 impl Default for ThreadListing {

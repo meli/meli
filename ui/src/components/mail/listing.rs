@@ -58,6 +58,7 @@ trait ListingTrait {
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
     fn filter(&mut self, _filter_term: &str, _context: &Context) {}
+    fn set_movement(&mut self, mvm: PageMovement);
 }
 
 #[derive(Debug)]
@@ -100,6 +101,14 @@ impl ListingTrait for ListingComponent {
             Plain(ref mut l) => l.highlight_line(grid, area, idx, context),
             Threaded(ref mut l) => l.highlight_line(grid, area, idx, context),
             Conversations(ref mut l) => l.highlight_line(grid, area, idx, context),
+        }
+    }
+    fn set_movement(&mut self, mvm: PageMovement) {
+        match self {
+            Compact(ref mut l) => l.set_movement(mvm),
+            Plain(ref mut l) => l.set_movement(mvm),
+            Threaded(ref mut l) => l.set_movement(mvm),
+            Conversations(ref mut l) => l.set_movement(mvm),
         }
     }
 }
@@ -391,6 +400,22 @@ impl Component for Listing {
             }
             UIEvent::Resize => {
                 self.dirty = true;
+            }
+            UIEvent::Input(ref key) if *key == shortcuts["prev_page"] => {
+                self.component.set_movement(PageMovement::PageUp);
+                return true;
+            }
+            UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
+                self.component.set_movement(PageMovement::PageDown);
+                return true;
+            }
+            UIEvent::Input(ref key) if *key == Key::Home => {
+                self.component.set_movement(PageMovement::Home);
+                return true;
+            }
+            UIEvent::Input(ref key) if *key == Key::End => {
+                self.component.set_movement(PageMovement::End);
+                return true;
             }
             UIEvent::Input(ref k) if k == shortcuts["toggle-menu-visibility"] => {
                 self.menu_visibility = !self.menu_visibility;

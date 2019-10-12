@@ -213,6 +213,11 @@ impl ListingTrait for PlainListing {
         );
         context.dirty_areas.push_back(area);
     }
+
+    fn set_movement(&mut self, mvm: PageMovement) {
+        self.movement = Some(mvm);
+        self.set_dirty();
+    }
 }
 
 impl Default for PlainListing {

@@ -442,6 +442,11 @@ impl ListingTrait for CompactListing {
             );
         }
     }
+
+    fn set_movement(&mut self, mvm: PageMovement) {
+        self.movement = Some(mvm);
+        self.set_dirty();
+    }
 }
 
 impl fmt::Display for CompactListing {
@@ -1110,22 +1115,6 @@ impl Component for CompactListing {
                 self.unfocused = true;
                 self.dirty = true;
                 return true;
-            }
-            UIEvent::Input(ref key) if *key == shortcuts["prev_page"] => {
-                self.movement = Some(PageMovement::PageUp);
-                self.set_dirty();
-            }
-            UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
-                self.movement = Some(PageMovement::PageDown);
-                self.set_dirty();
-            }
-            UIEvent::Input(ref key) if *key == Key::Home => {
-                self.movement = Some(PageMovement::Home);
-                self.set_dirty();
-            }
-            UIEvent::Input(ref key) if *key == Key::End => {
-                self.movement = Some(PageMovement::End);
-                self.set_dirty();
             }
             UIEvent::Input(ref key) if *key == shortcuts["set_seen"] => {
                 let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
