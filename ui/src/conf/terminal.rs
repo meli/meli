@@ -21,11 +21,10 @@
 
 /// Settings for terminal display
 #[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(default)]
 pub struct TerminalSettings {
-    #[serde(default)]
     /// light, dark
     pub theme: String,
-    #[serde(default)]
     pub ascii_drawing: bool,
 }
 

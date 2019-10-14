@@ -113,14 +113,15 @@ pub struct MailUIConf {
     pub index_style: Option<IndexStyle>,
 }
 
+#[serde(default)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FolderConf {
     pub rename: Option<String>,
     #[serde(default = "true_val")]
     pub autoload: bool,
-    #[serde(deserialize_with = "toggleflag_de", default)]
+    #[serde(deserialize_with = "toggleflag_de")]
     pub subscribe: ToggleFlag,
-    #[serde(deserialize_with = "toggleflag_de", default)]
+    #[serde(deserialize_with = "toggleflag_de")]
     pub ignore: ToggleFlag,
     #[serde(default = "none")]
     pub usage: Option<SpecialUseMailbox>,
