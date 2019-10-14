@@ -1425,6 +1425,21 @@ impl Component for Tabbed {
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match *event {
+            UIEvent::Input(Key::Alt(no)) if no >= '1' && no <= '9' => {
+                let no = no as usize - '1' as usize;
+                if no < self.children.len() {
+                    self.cursor_pos = no % self.children.len();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.children[self.cursor_pos]
+                                .get_status(context)
+                                .unwrap_or_default(),
+                        )));
+                    self.set_dirty();
+                }
+                return true;
+            }
             UIEvent::Input(Key::Char('T')) => {
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
                 context
