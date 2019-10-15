@@ -39,7 +39,7 @@ use std::result;
 use std::thread;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
-use termion::{clear, cursor, style};
+use termion::{clear, cursor};
 
 pub type StateStdout = termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>;
 
@@ -142,17 +142,7 @@ pub struct State {
 impl Drop for State {
     fn drop(&mut self) {
         // When done, restore the defaults to avoid messing with the terminal.
-        write!(
-            self.stdout(),
-            "{}{}{}{}{}",
-            clear::All,
-            style::Reset,
-            cursor::Goto(1, 1),
-            cursor::Show,
-            BracketModeEnd,
-        )
-        .unwrap();
-        self.flush();
+        self.switch_to_main_screen();
     }
 }
 
@@ -202,15 +192,11 @@ impl State {
             .collect();
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
 
-        let _stdout = std::io::stdout();
-        _stdout.lock();
-        let stdout = AlternateScreen::from(_stdout.into_raw_mode().unwrap());
-
         let mut s = State {
             cols,
             rows,
             grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
-            stdout: Some(stdout),
+            stdout: None,
             child: None,
             mode: UIMode::Normal,
             components: Vec::with_capacity(1),
@@ -249,16 +235,7 @@ impl State {
             }
         }
 
-        write!(
-            s.stdout(),
-            "{}{}{}{}",
-            BracketModeStart,
-            cursor::Hide,
-            clear::All,
-            cursor::Goto(1, 1)
-        )
-        .unwrap();
-        s.flush();
+        s.switch_to_alternate_screen();
         debug!("inserting mailbox hashes:");
         {
             /* Account::watch() needs
@@ -285,7 +262,7 @@ impl State {
                 account.watch((work_controller, sender, replies));
             }
         }
-        s.restore_input();
+        s.context.restore_input();
         s
     }
 
@@ -338,29 +315,41 @@ impl State {
     pub fn switch_to_main_screen(&mut self) {
         write!(
             self.stdout(),
-            "{}{}",
+            "{}{}{}{}",
             termion::screen::ToMainScreen,
-            cursor::Show
+            cursor::Show,
+            RestoreWindowTitleIconFromStack,
+            BracketModeEnd,
         )
         .unwrap();
         self.flush();
         self.stdout = None;
         self.context.input.kill();
     }
+
     pub fn switch_to_alternate_screen(&mut self) {
         let s = std::io::stdout();
-        s.lock();
-        self.stdout = Some(AlternateScreen::from(s.into_raw_mode().unwrap()));
+
+        let mut stdout = AlternateScreen::from(s.into_raw_mode().unwrap());
 
         write!(
-            self.stdout(),
-            "{}{}{}{}",
+            &mut stdout,
+            "{save_title_to_stack}{}{}{}{window_title}{}{}",
             termion::screen::ToAlternateScreen,
             cursor::Hide,
             clear::All,
-            cursor::Goto(1, 1)
+            cursor::Goto(1, 1),
+            BracketModeStart,
+            save_title_to_stack = SaveWindowTitleIconToStack,
+            window_title = if let Some(ref title) = self.context.settings.terminal.window_title {
+                format!("\x1b]2;{}\x07", title)
+            } else {
+                String::new()
+            },
         )
         .unwrap();
+
+        self.stdout = Some(stdout);
         self.flush();
     }
 

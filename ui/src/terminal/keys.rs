@@ -22,7 +22,6 @@
 use super::*;
 use crossbeam::{channel::Receiver, select};
 use serde::{Serialize, Serializer};
-use std::fmt;
 use std::io;
 use termion::event::Event as TermionEvent;
 use termion::event::Key as TermionKey;
@@ -191,58 +190,6 @@ pub fn get_events(
         }
     }
 }
-
-/*
- * CSI events we use
- */
-
-// Some macros taken from termion:
-/// Create a CSI-introduced sequence.
-macro_rules! csi {
-    ($( $l:expr ),*) => { concat!("\x1B[", $( $l ),*) };
-}
-
-/// Derive a CSI sequence struct.
-macro_rules! derive_csi_sequence {
-    ($(#[$outer:meta])*
-    ($name:ident, $value:expr)) => {
-        $(#[$outer])*
-        #[derive(Copy, Clone)]
-        pub struct $name;
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, csi!($value))
-            }
-        }
-
-        impl AsRef<[u8]> for $name {
-            fn as_ref(&self) -> &'static [u8] {
-                csi!($value).as_bytes()
-            }
-        }
-
-        impl AsRef<str> for $name {
-            fn as_ref(&self) -> &'static str {
-                csi!($value)
-            }
-        }
-    };
-}
-
-derive_csi_sequence!(
-    #[doc = "Empty struct with a Display implementation that returns the byte sequence to start [Bracketed Paste Mode](http://www.xfree86.org/current/ctlseqs.html#Bracketed%20Paste%20Mode)"]
-    (BracketModeStart, "?2004h")
-);
-
-derive_csi_sequence!(
-    #[doc = "Empty struct with a Display implementation that returns the byte sequence to end [Bracketed Paste Mode](http://www.xfree86.org/current/ctlseqs.html#Bracketed%20Paste%20Mode)"]
-    (BracketModeEnd, "?2003l")
-);
-
-pub const BRACKET_PASTE_START: &[u8] = b"\x1B[200~";
-pub const BRACKET_PASTE_END: &[u8] = b"\x1B[201~";
-
 const FIELDS: &[&str] = &[];
 
 impl<'de> Deserialize<'de> for Key {
