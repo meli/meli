@@ -18,6 +18,10 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
+#[cfg(feature = "vcard")]
+pub mod vcard;
+
 use chrono::{DateTime, Local};
 use fnv::FnvHashMap;
 use uuid::Uuid;
