@@ -118,7 +118,7 @@ mod tests {
     fn test_escape_str() {
         let title: &str = "& > Title τίτλος";
         let body: &str = "& > Body σώμα";
-        notify_Notification::new()
+        notify_rust::Notification::new()
             .appname("meli")
             .icon("mail-message-new")
             .summary(title)
