@@ -65,7 +65,7 @@ pub struct ContentLine {
 impl CardDeserializer {
     pub fn from_str(mut input: &str) -> Result<VCard<impl VCardVersion>> {
         input = if !input.starts_with(HEADER) || !input.ends_with(FOOTER) {
-            return Err(MeliError::new(format!("Error while parsing vcard: input does not start or end with correct header and footer. input is:\n{}", input)));
+            return Err(MeliError::new(format!("Error while parsing vcard: input does not start or end with correct header and footer. input is:\n{:?}", input)));
         } else {
             &input[HEADER.len()..input.len() - FOOTER.len()]
         };

@@ -238,6 +238,7 @@ impl FormWidget {
             focus: FormFocus::Fields,
             hide_buttons: false,
             id: ComponentId::new_v4(),
+            dirty: true,
             ..Default::default()
         }
     }
@@ -310,75 +311,100 @@ impl Component for FormWidget {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        for (i, k) in self.layout.iter().enumerate() {
-            let v = self.fields.get_mut(k).unwrap();
-            /* Write field label */
-            write_string_to_grid(
-                k.as_str(),
-                grid,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                (
-                    pos_inc(upper_left, (1, i)),
-                    set_y(bottom_right, i + get_y(upper_left)),
-                ),
-                false,
-            );
-            /* draw field */
-            v.draw(
+        if self.dirty {
+            clear_area(
                 grid,
                 (
-                    pos_inc(upper_left, (self.field_name_max_length + 3, i)),
-                    set_y(bottom_right, i + get_y(upper_left)),
+                    upper_left,
+                    set_y(bottom_right, get_y(upper_left) + self.layout.len()),
                 ),
-                context,
             );
 
-            /* Highlight if necessary */
-            if i == self.cursor {
-                if self.focus == FormFocus::Fields {
-                    change_colors(
-                        grid,
-                        (
-                            pos_inc(upper_left, (0, i)),
-                            set_y(bottom_right, i + get_y(upper_left)),
-                        ),
-                        Color::Default,
-                        Color::Byte(246),
-                    );
-                }
-                if self.focus == FormFocus::TextInput {
-                    v.draw_cursor(
-                        grid,
-                        (
-                            pos_inc(upper_left, (self.field_name_max_length + 3, i)),
+            for (i, k) in self.layout.iter().enumerate() {
+                let v = self.fields.get_mut(k).unwrap();
+                /* Write field label */
+                write_string_to_grid(
+                    k.as_str(),
+                    grid,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Bold,
+                    (
+                        pos_inc(upper_left, (1, i)),
+                        set_y(bottom_right, i + get_y(upper_left)),
+                    ),
+                    false,
+                );
+                /* draw field */
+                v.draw(
+                    grid,
+                    (
+                        pos_inc(upper_left, (self.field_name_max_length + 3, i)),
+                        set_y(bottom_right, i + get_y(upper_left)),
+                    ),
+                    context,
+                );
+
+                /* Highlight if necessary */
+                if i == self.cursor {
+                    if self.focus == FormFocus::Fields {
+                        change_colors(
+                            grid,
                             (
-                                get_x(upper_left) + self.field_name_max_length + 3,
-                                i + get_y(upper_left),
+                                pos_inc(upper_left, (0, i)),
+                                set_y(bottom_right, i + get_y(upper_left)),
                             ),
-                        ),
-                        (
-                            pos_inc(upper_left, (self.field_name_max_length + 3, i + 1)),
-                            bottom_right,
-                        ),
-                        context,
-                    );
+                            Color::Default,
+                            Color::Byte(246),
+                        );
+                    }
+                    if self.focus == FormFocus::TextInput {
+                        v.draw_cursor(
+                            grid,
+                            (
+                                pos_inc(upper_left, (self.field_name_max_length + 3, i)),
+                                (
+                                    get_x(upper_left) + self.field_name_max_length + 3,
+                                    i + get_y(upper_left),
+                                ),
+                            ),
+                            (
+                                pos_inc(upper_left, (self.field_name_max_length + 3, i + 1)),
+                                bottom_right,
+                            ),
+                            context,
+                        );
+                    }
                 }
             }
-        }
-        if !self.hide_buttons {
+
             let length = self.layout.len();
-            self.buttons.draw(
+            clear_area(
                 grid,
                 (
-                    pos_inc(upper_left, (1, length * 2 + 3)),
-                    set_y(bottom_right, length * 2 + 3 + get_y(upper_left)),
+                    pos_inc(upper_left, (0, length)),
+                    set_y(bottom_right, length + 2 + get_y(upper_left)),
                 ),
-                context,
             );
+            if !self.hide_buttons {
+                self.buttons.draw(
+                    grid,
+                    (
+                        pos_inc(upper_left, (1, length + 3)),
+                        set_y(bottom_right, length + 3 + get_y(upper_left)),
+                    ),
+                    context,
+                );
+            }
+            clear_area(
+                grid,
+                (
+                    set_y(upper_left, length + 4 + get_y(upper_left)),
+                    bottom_right,
+                ),
+            );
+            self.dirty = false;
         }
-        self.dirty = false;
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
@@ -389,6 +415,7 @@ impl Component for FormWidget {
         match *event {
             UIEvent::Input(Key::Up) if self.focus == FormFocus::Buttons => {
                 self.focus = FormFocus::Fields;
+                self.buttons.set_focus(false);
             }
             UIEvent::InsertInput(Key::Up) if self.focus == FormFocus::TextInput => {
                 let field = self.fields.get_mut(&self.layout[self.cursor]).unwrap();
@@ -406,6 +433,7 @@ impl Component for FormWidget {
             }
             UIEvent::Input(Key::Down) if self.focus == FormFocus::Fields => {
                 self.focus = FormFocus::Buttons;
+                self.buttons.set_focus(true);
                 if self.hide_buttons {
                     self.set_dirty();
                     return false;
@@ -453,10 +481,11 @@ impl Component for FormWidget {
         true
     }
     fn is_dirty(&self) -> bool {
-        self.dirty
+        self.dirty || self.buttons.is_dirty()
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
+        self.buttons.set_dirty();
     }
 
     fn id(&self) -> ComponentId {
@@ -477,6 +506,8 @@ where
 
     result: Option<T>,
     cursor: usize,
+    /// Is the button widget focused, i.e do we need to draw the highlighting?
+    focus: bool,
     dirty: bool,
     id: ComponentId,
 }
@@ -500,6 +531,7 @@ where
             buttons: vec![init_val].into_iter().collect(),
             result: None,
             cursor: 0,
+            focus: false,
             dirty: true,
             id: ComponentId::new_v4(),
         }
@@ -513,6 +545,10 @@ where
     pub fn is_resolved(&self) -> bool {
         self.result.is_some()
     }
+
+    pub fn set_focus(&mut self, new_val: bool) {
+        self.focus = new_val;
+    }
 }
 
 impl<T> Component for ButtonWidget<T>
@@ -521,6 +557,7 @@ where
 {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, _context: &mut Context) {
         if self.dirty {
+            clear_area(grid, area);
             let upper_left = upper_left!(area);
 
             let mut len = 0;
@@ -530,12 +567,12 @@ where
                     k.as_str(),
                     grid,
                     Color::Default,
-                    if i == self.cursor {
+                    if i == self.cursor && self.focus {
                         Color::Byte(246)
                     } else {
                         Color::Default
                     },
-                    Attr::Default,
+                    Attr::Bold,
                     (
                         pos_inc(upper_left, (len, 0)),
                         pos_inc(upper_left, (cur_len + len, 0)),

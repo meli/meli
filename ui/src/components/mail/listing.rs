@@ -34,9 +34,9 @@ mod plain;
 pub use self::plain::*;
 
 #[derive(Debug, Default, Clone)]
-pub(in crate::listing) struct DataColumns {
-    columns: [CellBuffer; 12],
-    widths: [usize; 12], // widths of columns calculated in first draw and after size changes
+pub struct DataColumns {
+    pub columns: [CellBuffer; 12],
+    pub widths: [usize; 12], // widths of columns calculated in first draw and after size changes
 }
 
 #[derive(Debug)]
@@ -52,7 +52,7 @@ pub(in crate::listing) struct CachedSearchStrings {
     body: String,
 }
 
-trait ListingTrait {
+pub trait ListingTrait {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>);
     fn set_coordinates(&mut self, _: (usize, usize, Option<EnvelopeHash>));
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);

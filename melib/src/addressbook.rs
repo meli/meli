@@ -81,6 +81,9 @@ pub struct Card {
     color: u8,
     last_edited: DateTime<Local>,
     extra_properties: FnvHashMap<String, String>,
+
+    /// If true, we can't make any changes because we do not manage this resource.
+    external_resource: bool,
 }
 
 impl AddressBook {
@@ -134,6 +137,7 @@ impl Card {
             key: String::new(),
 
             last_edited: Local::now(),
+            external_resource: false,
             extra_properties: FnvHashMap::default(),
             color: 0,
         }
@@ -202,37 +206,50 @@ impl Card {
     pub fn set_extra_property(&mut self, key: &str, value: String) {
         self.extra_properties.insert(key.to_string(), value);
     }
+
     pub fn extra_property(&self, key: &str) -> Option<&str> {
         self.extra_properties.get(key).map(String::as_str)
+    }
+
+    pub fn extra_properties(&self) -> &FnvHashMap<String, String> {
+        &self.extra_properties
+    }
+
+    pub fn set_external_resource(&mut self, new_val: bool) {
+        self.external_resource = new_val;
+    }
+
+    pub fn external_resource(&self) -> bool {
+        self.external_resource
     }
 }
 
 impl From<FnvHashMap<String, String>> for Card {
     fn from(mut map: FnvHashMap<String, String>) -> Card {
         let mut card = Card::new();
-        if let Some(val) = map.remove("Title") {
+        if let Some(val) = map.remove("TITLE") {
             card.title = val;
         }
-        if let Some(val) = map.remove("Name") {
+        if let Some(val) = map.remove("NAME") {
             card.name = val;
         }
-        if let Some(val) = map.remove("Additional Name") {
+        if let Some(val) = map.remove("ADDITIONAL NAME") {
             card.additionalname = val;
         }
-        if let Some(val) = map.remove("Name Prefix") {
+        if let Some(val) = map.remove("NAME PREFIX") {
             card.name_prefix = val;
         }
-        if let Some(val) = map.remove("Name Suffix") {
+        if let Some(val) = map.remove("NAME SUFFIX") {
             card.name_suffix = val;
         }
 
-        if let Some(val) = map.remove("E-mail") {
+        if let Some(val) = map.remove("E-MAIL") {
             card.email = val;
         }
-        if let Some(val) = map.remove("url") {
+        if let Some(val) = map.remove("URL") {
             card.url = val;
         }
-        if let Some(val) = map.remove("key") {
+        if let Some(val) = map.remove("KEY") {
             card.key = val;
         }
         card.extra_properties = map;
