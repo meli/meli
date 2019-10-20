@@ -7,7 +7,7 @@ const MAX_COLS: usize = 500;
 #[derive(Debug, PartialEq)]
 enum ViewMode {
     List,
-    View(CardId),
+    View(ComponentId),
 }
 
 #[derive(Debug)]

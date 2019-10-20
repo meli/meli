@@ -28,7 +28,33 @@ use uuid::Uuid;
 
 use std::ops::Deref;
 
-pub type CardId = Uuid;
+#[derive(Hash, Debug, PartialEq, Eq, Clone, Copy, Deserialize, Serialize)]
+#[serde(from = "String")]
+#[serde(into = "String")]
+pub enum CardId {
+    Uuid(Uuid),
+    Hash(u64),
+}
+
+impl Into<String> for CardId {
+    fn into(self) -> String {
+        match self {
+            CardId::Uuid(u) => u.to_string(),
+            CardId::Hash(u) => u.to_string(),
+        }
+    }
+}
+
+impl From<String> for CardId {
+    fn from(s: String) -> CardId {
+        if let Ok(u) = uuid::Uuid::parse_str(s.as_str()) {
+            CardId::Uuid(u)
+        } else {
+            use std::str::FromStr;
+            CardId::Hash(u64::from_str(&s).unwrap())
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AddressBook {
@@ -95,7 +121,7 @@ impl Deref for AddressBook {
 impl Card {
     pub fn new() -> Card {
         Card {
-            id: Uuid::new_v4(),
+            id: CardId::Uuid(Uuid::new_v4()),
             title: String::new(),
             name: String::new(),
             additionalname: String::new(),
@@ -145,8 +171,8 @@ impl Card {
         self.last_edited.to_rfc2822()
     }
 
-    pub fn set_id(&mut self, new: Uuid) {
-        self.id = new;
+    pub fn set_id(&mut self, new_val: CardId) {
+        self.id = new_val;
     }
     pub fn set_title(&mut self, new: String) {
         self.title = new;

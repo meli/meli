@@ -20,7 +20,7 @@
  */
 
 /// Convert VCard strings to meli Cards (contacts).
-use super::Card;
+use super::*;
 use crate::chrono::TimeZone;
 use crate::error::{MeliError, Result};
 use fnv::FnvHashMap;
@@ -137,11 +137,25 @@ impl CardDeserializer {
     }
 }
 
-impl std::convert::TryInto<Card> for VCard<VCardVersion4> {
+impl<V: VCardVersion> std::convert::TryInto<Card> for VCard<V> {
     type Error = crate::error::MeliError;
 
     fn try_into(mut self) -> crate::error::Result<Card> {
         let mut card = Card::new();
+        card.set_id(CardId::Hash({
+            use std::hash::Hasher;
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            if let Some(val) = self.0.get("FN") {
+                hasher.write(val.value.as_bytes());
+            }
+            if let Some(val) = self.0.get("N") {
+                hasher.write(val.value.as_bytes());
+            }
+            if let Some(val) = self.0.get("EMAIL") {
+                hasher.write(val.value.as_bytes());
+            }
+            hasher.finish()
+        }));
         if let Some(val) = self.0.remove("FN") {
             card.set_name(val.value);
         } else {
