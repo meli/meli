@@ -86,7 +86,7 @@ pub fn create_temp_file(
             dir.push(filename)
         } else {
             let u = Uuid::new_v4();
-            dir.push(u.hyphenated().to_string());
+            dir.push(u.to_hyphenated().to_string());
         }
         &dir
     };

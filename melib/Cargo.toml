@@ -22,7 +22,7 @@ native-tls = { version ="0.2", optional=true }
 serde = "1.0.71"
 serde_derive = "1.0.71"
 bincode = "1.2.0"
-uuid = { version = "0.6", features = ["serde", "v4"] }
+uuid = { version = "0.7.4", features = ["serde", "v4"] }
 text_processing = { path = "../text_processing", version = "*", optional= true }
 libc = {version = "0.2.59", features = ["extra_traits",]}
 
