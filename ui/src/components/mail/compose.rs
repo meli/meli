@@ -46,6 +46,7 @@ pub struct Composer {
     mode: ViewMode,
     sign_mail: ToggleFlag,
     dirty: bool,
+    has_changes: bool,
     initialized: bool,
     id: ComponentId,
 }
@@ -65,6 +66,7 @@ impl Default for Composer {
             mode: ViewMode::Edit,
             sign_mail: ToggleFlag::Unset,
             dirty: true,
+            has_changes: false,
             initialized: false,
             id: ComponentId::new_v4(),
         }
@@ -246,6 +248,7 @@ impl Composer {
 
     fn draw_attachments(&self, grid: &mut CellBuffer, area: Area, context: &Context) {
         let attachments_no = self.draft.attachments().len();
+        clear_area(grid, area);
         if self.sign_mail.is_true() {
             write_string_to_grid(
                 &format!(
@@ -331,7 +334,6 @@ impl Composer {
 
 impl Component for Composer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        clear_area(grid, area);
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
@@ -459,6 +461,7 @@ impl Component for Composer {
             ),
             false,
         );
+        clear_area(grid, ((x, y), (set_y(bottom_right, y))));
         change_colors(
             grid,
             (
@@ -468,28 +471,63 @@ impl Component for Composer {
             Color::Byte(189),
             Color::Byte(167),
         );
+        if mid != 0 {
+            clear_area(
+                grid,
+                (
+                    pos_dec(upper_left, (0, 1)),
+                    set_x(bottom_right, get_x(upper_left) + mid),
+                ),
+            );
+            clear_area(
+                grid,
+                (
+                    (
+                        get_x(bottom_right).saturating_sub(mid),
+                        get_y(upper_left) - 1,
+                    ),
+                    bottom_right,
+                ),
+            );
+        }
 
         /* Regardless of view mode, do the following */
         self.form.draw(grid, header_area, context);
+        self.pager.set_dirty();
+        self.pager.draw(grid, body_area, context);
+        if self.cursor == Cursor::Body {
+            change_colors(
+                grid,
+                (
+                    set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
+                    bottom_right!(body_area),
+                ),
+                Color::Default,
+                Color::Byte(237),
+            );
+        } else {
+            change_colors(
+                grid,
+                (
+                    set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
+                    bottom_right!(body_area),
+                ),
+                Color::Default,
+                Color::Default,
+            );
+        }
 
         match self.mode {
-            ViewMode::ThreadView | ViewMode::Edit => {
-                self.pager.set_dirty();
-                self.pager.draw(grid, body_area, context);
-            }
+            ViewMode::ThreadView | ViewMode::Edit => {}
             ViewMode::SelectRecipients(ref mut s) => {
-                self.pager.set_dirty();
-                self.pager.draw(grid, body_area, context);
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
             ViewMode::Discard(_, ref mut s) => {
-                self.pager.set_dirty();
-                self.pager.draw(grid, body_area, context);
                 /* Let user choose whether to quit with/without saving or cancel */
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
         }
-
+        self.dirty = false;
         self.draw_attachments(grid, attachment_area, context);
         context.dirty_areas.push_back(area);
     }
@@ -626,7 +664,10 @@ impl Component for Composer {
             }
             _ => {}
         }
-        if self.form.process_event(event, context) {
+        if self.cursor == Cursor::Headers && self.form.process_event(event, context) {
+            if let UIEvent::InsertInput(_) = event {
+                self.has_changes = true;
+            }
             return true;
         }
 
@@ -659,9 +700,12 @@ impl Component for Composer {
             }*/
             UIEvent::Input(Key::Up) => {
                 self.cursor = Cursor::Headers;
+                self.form.process_event(event, context);
+                self.dirty = true;
             }
             UIEvent::Input(Key::Down) => {
                 self.cursor = Cursor::Body;
+                self.dirty = true;
             }
             /* Switch to thread view mode if we're on Edit mode */
             UIEvent::Input(Key::Char('v')) if self.mode.is_edit() => {
@@ -742,6 +786,9 @@ impl Component for Composer {
                 let result = f.read_to_string();
                 let mut new_draft = Draft::from_str(result.as_str()).unwrap();
                 std::mem::swap(self.draft.attachments_mut(), new_draft.attachments_mut());
+                if self.draft != new_draft {
+                    self.has_changes = true;
+                }
                 self.draft = new_draft;
                 self.initialized = false;
                 context.replies.push_back(UIEvent::Fork(ForkType::Finished));
@@ -828,6 +875,11 @@ impl Component for Composer {
     }
 
     fn kill(&mut self, uuid: Uuid, context: &mut Context) {
+        if !self.has_changes {
+            context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
+            return;
+        }
+
         self.mode = ViewMode::Discard(
             uuid,
             Selector::new(
@@ -876,6 +928,10 @@ impl Component for Composer {
     }
 
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {
+        if !self.has_changes {
+            return true;
+        }
+
         /* Play it safe and ask user for confirmation */
         self.mode = ViewMode::Discard(
             self.id,

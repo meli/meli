@@ -24,7 +24,7 @@ use crate::email::parser::BytesExt;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Charset {
     Ascii,
     UTF8,
@@ -95,7 +95,7 @@ impl Display for Charset {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MultipartType {
     Mixed,
     Alternative,
@@ -136,7 +136,7 @@ impl From<&[u8]> for MultipartType {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ContentType {
     Text {
         kind: Text,
@@ -245,7 +245,7 @@ impl ContentType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Text {
     Plain,
     Html,
@@ -274,7 +274,7 @@ impl Display for Text {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ContentTransferEncoding {
     _8Bit,
     _7Bit,

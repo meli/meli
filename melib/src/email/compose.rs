@@ -17,7 +17,7 @@ pub mod random;
 use super::parser;
 use fnv::FnvHashMap;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Draft {
     pub headers: FnvHashMap<String, String>,
     pub header_order: Vec<String>,

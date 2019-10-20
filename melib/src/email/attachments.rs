@@ -28,7 +28,7 @@ use data_encoding::BASE64_MIME;
 
 pub use crate::email::attachment_types::*;
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AttachmentBuilder {
     pub content_type: ContentType,
     pub content_transfer_encoding: ContentTransferEncoding,
@@ -291,7 +291,7 @@ impl From<AttachmentBuilder> for Attachment {
 }
 
 /// Immutable attachment type.
-#[derive(Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Attachment {
     pub content_type: ContentType,
     pub content_transfer_encoding: ContentTransferEncoding,
