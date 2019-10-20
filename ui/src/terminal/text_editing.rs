@@ -10,9 +10,9 @@ pub struct UText {
 impl UText {
     pub fn new(content: String) -> Self {
         UText {
+            cursor_pos: content.len(),
+            grapheme_cursor_pos: content.split_graphemes().len(),
             content,
-            cursor_pos: 0,
-            grapheme_cursor_pos: 0,
         }
     }
 
