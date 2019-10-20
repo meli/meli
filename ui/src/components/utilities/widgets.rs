@@ -187,6 +187,17 @@ impl Component for Field {
                     }
                 }
             }
+            UIEvent::InsertInput(Key::Ctrl('a')) => {
+                if let Text(ref mut s, _) = self {
+                    s.set_cursor(0);
+                }
+            }
+            UIEvent::InsertInput(Key::Ctrl('e')) => {
+                if let Text(ref mut s, _) = self {
+                    s.set_cursor(s.as_str().len());
+                }
+            }
+            /* TODO: add rest of readline shortcuts */
             _ => {
                 return false;
             }
