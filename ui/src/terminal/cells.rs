@@ -757,7 +757,7 @@ macro_rules! inspect_bounds {
     ($grid:ident, $area:ident, $x: ident, $y: ident, $line_break:ident) => {
         let bounds = $grid.size();
         let (upper_left, bottom_right) = $area;
-        if $x == (get_x(bottom_right)) + 1 || $x > get_x(bounds) {
+        if $x > (get_x(bottom_right)) || $x > get_x(bounds) {
             $x = get_x(upper_left);
             $y += 1;
             if $y > (get_y(bottom_right)) || $y > get_y(bounds) {
