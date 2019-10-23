@@ -471,7 +471,7 @@ impl Component for Composer {
             Color::Byte(189),
             Color::Byte(167),
         );
-        if mid != 0 {
+        if mid != 0 && self.reply_context.is_none() {
             clear_area(
                 grid,
                 (
@@ -487,6 +487,17 @@ impl Component for Composer {
                         get_y(upper_left) - 1,
                     ),
                     bottom_right,
+                ),
+            );
+        } else if mid != 0 {
+            clear_area(
+                grid,
+                (
+                    (
+                        get_x(bottom_right).saturating_sub(mid),
+                        get_y(upper_left) - 1,
+                    ),
+                    (get_x(bottom_right).saturating_sub(mid), get_y(bottom_right)),
                 ),
             );
         }
