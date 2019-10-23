@@ -6,3 +6,4 @@ target/
 **/*.rs.bk
 .gdb_history
 *.log
+src/manuals
