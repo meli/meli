@@ -48,6 +48,12 @@ While the project is in early development, meli will only be developed for the
 linux kernel and respected linux distributions. Support for more UNIX-like OSes
 is on the roadmap.
 
+BUILDING IN DEBIAN
+==================
+
+Building with Debian's packaged cargo might require the installation of these
+two packages: librust-openssl-sys-dev and librust-libdbus-sys-dev
+
 DEVELOPMENT
 ===========
 
