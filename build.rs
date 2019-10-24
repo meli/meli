@@ -30,23 +30,48 @@ fn main() -> Result<(), std::io::Error> {
             Err(e)?;
         }
     }
+    let mut build_flag = false;
     let meli_1_metadata = std::fs::metadata("meli.1")?;
     if let Ok(metadata) = std::fs::metadata("src/manuals/meli.txt") {
         if metadata.modified()? < meli_1_metadata.modified()? {
-            let output = Command::new("mandoc").args(&["meli.1"]).output()?;
-            let man_path = PathBuf::from("src/manuals/meli.txt");
-            let file = File::create(&man_path)?;
-            BufWriter::new(file).write_all(&output.stdout)?;
+            build_flag = true;
         }
+    } else {
+        /* Doesn't exist */
+        build_flag = true;
     }
+
+    if build_flag {
+        let output = if let Ok(output) = Command::new("mandoc").args(&["meli.1"]).output() {
+            output.stdout
+        } else {
+            b"mandoc was not found on your system. It's required in order to compile the manual pages into plain text for use with the --*manual command line flags.".to_vec()
+        };
+        let man_path = PathBuf::from("src/manuals/meli.txt");
+        let file = File::create(&man_path)?;
+        BufWriter::new(file).write_all(&output)?;
+    }
+
+    let mut build_flag = false;
     let meli_conf_5_metadata = std::fs::metadata("meli.conf.5")?;
     if let Ok(metadata) = std::fs::metadata("src/manuals/meli_conf.txt") {
         if metadata.modified()? < meli_conf_5_metadata.modified()? {
-            let output = Command::new("mandoc").args(&["meli.conf.5"]).output()?;
-            let man_path = PathBuf::from("src/manuals/meli_conf.txt");
-            let file = File::create(&man_path)?;
-            BufWriter::new(file).write_all(&output.stdout)?;
+            build_flag = true;
         }
+    } else {
+        /* Doesn't exist */
+        build_flag = true;
+    }
+
+    if build_flag {
+        let output = if let Ok(output) = Command::new("mandoc").args(&["meli.conf.5"]).output() {
+            output.stdout
+        } else {
+            b"mandoc was not found on your system. It's required in order to compile the manual pages into plain text for use with the --*manual command line flags.".to_vec()
+        };
+        let man_path = PathBuf::from("src/manuals/meli_conf.txt");
+        let file = File::create(&man_path)?;
+        BufWriter::new(file).write_all(&output)?;
     }
     Ok(())
 }
