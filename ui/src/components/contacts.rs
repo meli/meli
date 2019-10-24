@@ -99,7 +99,7 @@ impl ContactManager {
             self.mode = ViewMode::ReadOnly;
             self.content
                 .resize(self.content.size().0, 2, Cell::default());
-            let (x, y) = write_string_to_grid(
+            write_string_to_grid(
                 "This contact's origin is external and cannot be edited within meli.",
                 &mut self.content,
                 Color::Byte(250),

@@ -108,7 +108,7 @@ impl ContactList {
             Cell::with_char(' '),
             context,
         );
-        let (x, _) = write_string_to_grid(
+        write_string_to_grid(
             "NAME",
             &mut self.data_columns.columns[0],
             Color::Black,
@@ -142,7 +142,7 @@ impl ContactList {
         for (idx, c) in book.values().enumerate() {
             self.id_positions.push(*c.id());
 
-            let (x, _) = write_string_to_grid(
+            write_string_to_grid(
                 c.name(),
                 &mut self.data_columns.columns[0],
                 Color::Default,
@@ -152,7 +152,7 @@ impl ContactList {
                 false,
             );
 
-            let (x, _) = write_string_to_grid(
+            write_string_to_grid(
                 c.email(),
                 &mut self.data_columns.columns[1],
                 Color::Default,
@@ -162,7 +162,7 @@ impl ContactList {
                 false,
             );
 
-            let (x, _) = write_string_to_grid(
+            write_string_to_grid(
                 c.url(),
                 &mut self.data_columns.columns[2],
                 Color::Default,
@@ -195,9 +195,6 @@ impl ContactList {
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize) {
-        let upper_left = upper_left!(area);
-        let bottom_right = bottom_right!(area);
-
         /* Reset previously highlighted line */
         let fg_color = Color::Default;
         let bg_color = if idx == self.new_cursor_pos {
