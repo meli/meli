@@ -39,7 +39,7 @@ use crossbeam::{
 use std::fmt;
 use std::sync::Arc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WorkContext {
     pub new_work: Sender<Work>,
     pub set_name: Sender<(std::thread::ThreadId, String)>,

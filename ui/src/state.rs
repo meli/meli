@@ -171,6 +171,8 @@ impl State {
         let termrows = termsize.map(|(_, h)| h);
         let cols = termcols.unwrap_or(0) as usize;
         let rows = termrows.unwrap_or(0) as usize;
+
+        let work_controller = WorkController::new(sender.clone());
         let mut accounts: Vec<Account> = settings
             .accounts
             .iter()
@@ -182,6 +184,7 @@ impl State {
                     n.to_string(),
                     a_s.clone(),
                     &backends,
+                    work_controller.get_context(),
                     NotifyFn::new(Box::new(move |f: FolderHash| {
                         sender
                             .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
@@ -210,7 +213,7 @@ impl State {
                 dirty_areas: VecDeque::with_capacity(5),
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),
-                work_controller: WorkController::new(sender.clone()),
+                work_controller,
 
                 sender,
                 receiver,
@@ -223,16 +226,6 @@ impl State {
         };
         if s.context.settings.terminal.ascii_drawing {
             s.grid.set_ascii_drawing(true);
-        }
-
-        for a in s.context.accounts.iter_mut() {
-            for worker in a.workers.values_mut() {
-                if let Some(worker) = worker.as_mut() {
-                    if let Some(w) = worker.work() {
-                        s.context.work_controller.queue.add_work(w);
-                    }
-                }
-            }
         }
 
         s.switch_to_alternate_screen();

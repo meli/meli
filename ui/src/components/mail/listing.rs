@@ -184,6 +184,10 @@ impl fmt::Display for Listing {
 
 impl Component for Listing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        for a in context.accounts.iter_mut() {
+            a.is_online();
+        }
+
         if !self.is_dirty() {
             return;
         }
@@ -218,7 +222,22 @@ impl Component for Listing {
                 .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
         }
         self.dirty = false;
+
         if right_component_width == total_cols {
+            if !context.accounts[self.cursor_pos.0].is_online() {
+                clear_area(grid, area);
+                write_string_to_grid(
+                    "offline",
+                    grid,
+                    Color::Byte(243),
+                    Color::Default,
+                    Attr::Default,
+                    area,
+                    false,
+                );
+                context.dirty_areas.push_back(area);
+                return;
+            }
             match self.component {
                 Compact(ref mut l) => l.draw(grid, area, context),
                 Plain(ref mut l) => l.draw(grid, area, context),
@@ -229,6 +248,20 @@ impl Component for Listing {
             self.draw_menu(grid, area, context);
         } else {
             self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
+            if !context.accounts[self.cursor_pos.0].is_online() {
+                clear_area(grid, (set_x(upper_left, mid + 1), bottom_right));
+                write_string_to_grid(
+                    "offline",
+                    grid,
+                    Color::Byte(243),
+                    Color::Default,
+                    Attr::Default,
+                    (set_x(upper_left, mid + 1), bottom_right),
+                    false,
+                );
+                context.dirty_areas.push_back(area);
+                return;
+            }
             match self.component {
                 Compact(ref mut l) => {
                     l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
@@ -337,21 +370,26 @@ impl Component for Listing {
                     }
                     _ => return false,
                 }
-                let folder_hash =
-                    context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
-                /* Check if per-folder configuration overrides general configuration */
-                if let Some(index_style) = context
-                    .accounts
-                    .get(self.cursor_pos.0)
-                    .and_then(|account| account.folder_confs(folder_hash).conf_override.index_style)
+
+                /* Account might have no folders yet if it's offline */
+                if let Some(&folder_hash) = context.accounts[self.cursor_pos.0]
+                    .folders_order
+                    .get(self.cursor_pos.1)
                 {
-                    self.component.set_style(index_style);
-                } else if let Some(index_style) = context
-                    .accounts
-                    .get(self.cursor_pos.0)
-                    .and_then(|account| Some(account.settings.conf.index_style()))
-                {
-                    self.component.set_style(index_style);
+                    /* Check if per-folder configuration overrides general configuration */
+                    if let Some(index_style) =
+                        context.accounts.get(self.cursor_pos.0).and_then(|account| {
+                            account.folder_confs(folder_hash).conf_override.index_style
+                        })
+                    {
+                        self.component.set_style(index_style);
+                    } else if let Some(index_style) = context
+                        .accounts
+                        .get(self.cursor_pos.0)
+                        .and_then(|account| Some(account.settings.conf.index_style()))
+                    {
+                        self.component.set_style(index_style);
+                    }
                 }
                 context
                     .replies
@@ -740,6 +778,15 @@ impl Listing {
         );
 
         if lines.is_empty() {
+            write_string_to_grid(
+                "offline",
+                grid,
+                Color::Byte(243),
+                Color::Default,
+                Attr::Default,
+                (pos_inc(upper_left, (0, 1)), bottom_right),
+                false,
+            );
             return 0;
         }
 

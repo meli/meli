@@ -183,6 +183,9 @@ fn move_to_cur(p: PathBuf) -> Result<PathBuf> {
 }
 
 impl MailBackend for MaildirType {
+    fn is_online(&self) -> bool {
+        true
+    }
     fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
         self.folders
             .iter()

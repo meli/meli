@@ -65,14 +65,30 @@ pub struct ImapServerConf {
     pub danger_accept_invalid_certs: bool,
 }
 
+struct IsSubscribedFn(Box<dyn Fn(&str) -> bool + Send + Sync>);
+
+impl std::fmt::Debug for IsSubscribedFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "IsSubscribedFn Box")
+    }
+}
+
+impl std::ops::Deref for IsSubscribedFn {
+    type Target = Box<dyn Fn(&str) -> bool + Send + Sync>;
+    fn deref(&self) -> &Box<dyn Fn(&str) -> bool + Send + Sync> {
+        &self.0
+    }
+}
 type Capabilities = FnvHashSet<Vec<u8>>;
 #[derive(Debug)]
 pub struct ImapType {
     account_name: String,
+    online: Arc<Mutex<bool>>,
+    is_subscribed: Arc<IsSubscribedFn>,
     connection: Arc<Mutex<ImapConnection>>,
     server_conf: ImapServerConf,
 
-    folders: FnvHashMap<FolderHash, ImapFolder>,
+    folders: Arc<Mutex<FnvHashMap<FolderHash, ImapFolder>>>,
     hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
     uid_index: Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
 
@@ -80,6 +96,9 @@ pub struct ImapType {
 }
 
 impl MailBackend for ImapType {
+    fn is_online(&self) -> bool {
+        *self.online.lock().unwrap()
+    }
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         macro_rules! exit_on_error {
             ($tx:expr,$($result:expr)+) => {
@@ -97,7 +116,7 @@ impl MailBackend for ImapType {
             let uid_index = self.uid_index.clone();
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
-            let folder_exists = self.folders[&folder_hash].exists.clone();
+            let folder_exists = self.folders.lock().unwrap()[&folder_hash].exists.clone();
             let connection = self.connection.clone();
             let closure = move |_work_context| {
                 let connection = connection.clone();
@@ -189,6 +208,7 @@ impl MailBackend for ImapType {
         let folders = self.folders.clone();
         let conn = ImapConnection::new_connection(&self.server_conf);
         let main_conn = self.connection.clone();
+        let is_online = self.online.clone();
         let hash_index = self.hash_index.clone();
         let uid_index = self.uid_index.clone();
         let handle = std::thread::Builder::new()
@@ -201,6 +221,7 @@ impl MailBackend for ImapType {
                     .unwrap();
                 let kit = ImapWatchKit {
                     conn,
+                    is_online,
                     main_conn,
                     hash_index,
                     uid_index,
@@ -218,55 +239,20 @@ impl MailBackend for ImapType {
     }
 
     fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
-        if !self.folders.is_empty() {
-            return self
-                .folders
+        let mut folders = self.folders.lock().unwrap();
+        if !folders.is_empty() {
+            return folders
                 .iter()
                 .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
                 .collect();
         }
-
-        let mut folders: FnvHashMap<FolderHash, ImapFolder> = Default::default();
-        let mut res = String::with_capacity(8 * 1024);
-        let mut conn = self.connection.lock().unwrap();
-        conn.send_command(b"LIST \"\" \"*\"").unwrap();
-        conn.read_response(&mut res).unwrap();
-        debug!("out: {}", &res);
-        for l in res.lines().map(|l| l.trim()) {
-            if let Ok(mut folder) =
-                protocol_parser::list_folder_result(l.as_bytes()).to_full_result()
-            {
-                if let Some(parent) = folder.parent {
-                    if folders.contains_key(&parent) {
-                        folders
-                            .entry(parent)
-                            .and_modify(|e| e.children.push(folder.hash));
-                    } else {
-                        /* Insert dummy parent entry, populating only the children field. Later
-                         * when we encounter the parent entry we will swap its children with
-                         * dummy's */
-                        folders.insert(
-                            parent,
-                            ImapFolder {
-                                children: vec![folder.hash],
-                                ..ImapFolder::default()
-                            },
-                        );
-                    }
-                }
-
-                if folders.contains_key(&folder.hash) {
-                    let entry = folders.entry(folder.hash).or_default();
-                    std::mem::swap(&mut entry.children, &mut folder.children);
-                    std::mem::swap(entry, &mut folder);
-                } else {
-                    folders.insert(folder.hash, folder);
-                }
-            } else {
-                debug!("parse error for {:?}", l);
-            }
+        *folders = ImapType::imap_folders(&self.connection);
+        folders.retain(|_, f| (self.is_subscribed)(f.path()));
+        let keys = folders.keys().cloned().collect::<FnvHashSet<FolderHash>>();
+        for f in folders.values_mut() {
+            f.children.retain(|c| keys.contains(c));
         }
-        debug!(&folders);
+        *self.online.lock().unwrap() = true;
         folders
             .iter()
             .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
@@ -277,25 +263,31 @@ impl MailBackend for ImapType {
         let (uid, folder_hash) = self.hash_index.lock().unwrap()[&hash];
         Box::new(ImapOp::new(
             uid,
-            self.folders[&folder_hash].path().to_string(),
+            self.folders.lock().unwrap()[&folder_hash]
+                .path()
+                .to_string(),
             self.connection.clone(),
             self.byte_cache.clone(),
         ))
     }
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
-        let path = self
-            .folders
-            .values()
-            .find(|v| v.name == folder)
-            .ok_or(MeliError::new(""))?;
+        let path = {
+            let folders = self.folders.lock().unwrap();
+
+            folders
+                .values()
+                .find(|v| v.name == folder)
+                .map(|v| v.path().to_string())
+                .ok_or(MeliError::new(""))?
+        };
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock().unwrap();
         let flags = flags.unwrap_or(Flag::empty());
         conn.send_command(
             format!(
                 "APPEND \"{}\" ({}) {{{}}}",
-                path.path(),
+                &path,
                 flags_to_imap_list!(flags),
                 bytes.len()
             )
@@ -311,7 +303,14 @@ impl MailBackend for ImapType {
     fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
         use FolderOperation::*;
 
-        match (&op, self.folders.values().any(|f| f.path == path)) {
+        match (
+            &op,
+            self.folders
+                .lock()
+                .unwrap()
+                .values()
+                .any(|f| f.path == path),
+        ) {
             (Create, true) => {
                 return Err(MeliError::new(format!(
                     "Folder named `{}` in account `{}` already exists.",
@@ -391,7 +390,10 @@ macro_rules! get_conf_val {
 }
 
 impl ImapType {
-    pub fn new(s: &AccountSettings, is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
+    pub fn new(
+        s: &AccountSettings,
+        is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
+    ) -> Self {
         debug!(s);
         let server_hostname = get_conf_val!(s["server_hostname"]);
         let server_username = get_conf_val!(s["server_username"]);
@@ -416,28 +418,18 @@ impl ImapType {
         };
         let connection = ImapConnection::new_connection(&server_conf);
 
-        let mut m = ImapType {
+        ImapType {
             account_name: s.name().to_string(),
+            online: Arc::new(Mutex::new(false)),
             server_conf,
+            is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
 
-            folders: Default::default(),
+            folders: Arc::new(Mutex::new(Default::default())),
             connection: Arc::new(Mutex::new(connection)),
             hash_index: Default::default(),
             uid_index: Default::default(),
             byte_cache: Default::default(),
-        };
-
-        m.folders = m.imap_folders();
-        m.folders.retain(|_, f| is_subscribed(f.path()));
-        let keys = m
-            .folders
-            .keys()
-            .cloned()
-            .collect::<FnvHashSet<FolderHash>>();
-        for f in m.folders.values_mut() {
-            f.children.retain(|c| keys.contains(c));
         }
-        m
     }
 
     pub fn shell(&mut self) {
@@ -472,10 +464,12 @@ impl ImapType {
         }
     }
 
-    pub fn imap_folders(&self) -> FnvHashMap<FolderHash, ImapFolder> {
+    pub fn imap_folders(
+        connection: &Arc<Mutex<ImapConnection>>,
+    ) -> FnvHashMap<FolderHash, ImapFolder> {
         let mut folders: FnvHashMap<FolderHash, ImapFolder> = Default::default();
         let mut res = String::with_capacity(8 * 1024);
-        let mut conn = self.connection.lock().unwrap();
+        let mut conn = connection.lock().unwrap();
         conn.send_command(b"LIST \"\" \"*\"").unwrap();
         conn.read_response(&mut res).unwrap();
         debug!("out: {}", &res);

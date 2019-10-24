@@ -44,7 +44,7 @@ use fnv::FnvHashMap;
 use std;
 
 pub type BackendCreator =
-    Box<dyn Fn(&AccountSettings, Box<dyn Fn(&str) -> bool>) -> Box<dyn MailBackend>>;
+    Box<dyn Fn(&AccountSettings, Box<dyn Fn(&str) -> bool + Send + Sync>) -> Box<dyn MailBackend>>;
 
 /// A hashmap containing all available mail backends.
 /// An abstraction over any available backends.
@@ -108,7 +108,7 @@ pub enum RefreshEventKind {
     /// Rename(old_hash, new_hash)
     Rename(EnvelopeHash, EnvelopeHash),
     Create(Box<Envelope>),
-    Remove(FolderHash),
+    Remove(EnvelopeHash),
     Rescan,
     Failure(MeliError),
 }
@@ -177,6 +177,7 @@ pub enum FolderOperation {
 type NewFolderName = String;
 
 pub trait MailBackend: ::std::fmt::Debug {
+    fn is_online(&self) -> bool;
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(
         &self,

@@ -367,6 +367,9 @@ pub struct MboxType {
 }
 
 impl MailBackend for MboxType {
+    fn is_online(&self) -> bool {
+        true
+    }
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let handle = {

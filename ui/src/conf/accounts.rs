@@ -25,7 +25,7 @@
 
 use super::{AccountConf, FolderConf};
 use fnv::FnvHashMap;
-use melib::async_workers::{Async, AsyncBuilder, AsyncStatus};
+use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
     BackendOp, Backends, Folder, FolderHash, FolderOperation, MailBackend, NotifyFn, ReadOnlyOp,
     RefreshEvent, RefreshEventConsumer, RefreshEventKind, SpecialUseMailbox,
@@ -118,6 +118,7 @@ impl MailboxEntry {
 pub struct Account {
     pub index: usize,
     name: String,
+    is_online: bool,
     pub(crate) folders: FnvHashMap<FolderHash, MailboxEntry>,
     pub(crate) folder_confs: FnvHashMap<FolderHash, FolderConf>,
     pub(crate) folders_order: Vec<FolderHash>,
@@ -129,6 +130,7 @@ pub struct Account {
     pub(crate) address_book: AddressBook,
 
     pub(crate) workers: FnvHashMap<FolderHash, Worker>,
+    pub(crate) work_context: WorkContext,
 
     pub(crate) settings: AccountConf,
     pub(crate) runtime_settings: AccountConf,
@@ -199,40 +201,84 @@ impl Account {
         name: String,
         settings: AccountConf,
         map: &Backends,
+        work_context: WorkContext,
         notify_fn: NotifyFn,
     ) -> Self {
         let s = settings.clone();
-        let mut backend = map.get(settings.account().format())(
+        let backend = map.get(settings.account().format())(
             settings.account(),
             Box::new(move |path: &str| {
                 s.folder_confs.contains_key(path) && s.folder_confs[path].subscribe.is_true()
             }),
         );
-        let mut ref_folders: FnvHashMap<FolderHash, Folder> = backend.folders();
+        let notify_fn = Arc::new(notify_fn);
+
+        let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
+        let address_book = if let Ok(data) = data_dir.place_data_file("addressbook") {
+            if data.exists() {
+                let reader = io::BufReader::new(fs::File::open(data).unwrap());
+                let result: result::Result<AddressBook, _> = serde_json::from_reader(reader);
+                if let Ok(data_t) = result {
+                    data_t
+                } else {
+                    AddressBook::new(name.clone())
+                }
+            } else {
+                AddressBook::new(name.clone())
+            }
+        } else {
+            AddressBook::new(name.clone())
+        };
+        let mut ret = Account {
+            index,
+            name,
+            is_online: false,
+            folders: Default::default(),
+            folder_confs: Default::default(),
+            folders_order: Default::default(),
+            folder_names: Default::default(),
+            tree: Default::default(),
+            address_book,
+            sent_folder: Default::default(),
+            collection: Default::default(),
+            workers: Default::default(),
+            work_context,
+            runtime_settings: settings.clone(),
+            settings,
+            backend,
+            notify_fn,
+
+            event_queue: VecDeque::with_capacity(8),
+        };
+
+        ret.is_online();
+        ret
+    }
+    fn init(&mut self) {
+        let mut ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
         let mut folders: FnvHashMap<FolderHash, MailboxEntry> =
             FnvHashMap::with_capacity_and_hasher(ref_folders.len(), Default::default());
         let mut folders_order: Vec<FolderHash> = Vec::with_capacity(ref_folders.len());
         let mut workers: FnvHashMap<FolderHash, Worker> = FnvHashMap::default();
-        let notify_fn = Arc::new(notify_fn);
         let mut folder_names = FnvHashMap::default();
         let mut folder_confs = FnvHashMap::default();
 
         let mut sent_folder = None;
         for f in ref_folders.values_mut() {
-            if !settings.folder_confs.contains_key(f.path())
-                || settings.folder_confs[f.path()].subscribe.is_false()
+            if !self.settings.folder_confs.contains_key(f.path())
+                || self.settings.folder_confs[f.path()].subscribe.is_false()
             {
                 /* Skip unsubscribed folder */
                 continue;
             }
 
-            match settings.folder_confs[f.path()].usage {
+            match self.settings.folder_confs[f.path()].usage {
                 Some(SpecialUseMailbox::Sent) => {
                     sent_folder = Some(f.hash());
                 }
                 _ => {}
             }
-            folder_confs.insert(f.hash(), settings.folder_confs[f.path()].clone());
+            folder_confs.insert(f.hash(), self.settings.folder_confs[f.path()].clone());
             folder_names.insert(f.hash(), f.path().to_string());
         }
 
@@ -240,8 +286,8 @@ impl Account {
         let mut tree: Vec<FolderNode> = Vec::new();
         let mut collection: Collection = Collection::new(Default::default());
         for (h, f) in ref_folders.iter() {
-            if !settings.folder_confs.contains_key(f.path())
-                || settings.folder_confs[f.path()].subscribe.is_false()
+            if !self.settings.folder_confs.contains_key(f.path())
+                || self.settings.folder_confs[f.path()].subscribe.is_false()
             {
                 /* Skip unsubscribed folder */
                 continue;
@@ -274,7 +320,13 @@ impl Account {
             );
             workers.insert(
                 *h,
-                Account::new_worker(&settings, f.clone(), &mut backend, notify_fn.clone()),
+                Account::new_worker(
+                    &self.settings,
+                    f.clone(),
+                    &mut self.backend,
+                    &self.work_context,
+                    self.notify_fn.clone(),
+                ),
             );
             collection.threads.insert(*h, Threads::default());
         }
@@ -292,47 +344,21 @@ impl Account {
             }
         }
 
-        let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
-        let address_book = if let Ok(data) = data_dir.place_data_file("addressbook") {
-            if data.exists() {
-                let reader = io::BufReader::new(fs::File::open(data).unwrap());
-                let result: result::Result<AddressBook, _> = serde_json::from_reader(reader);
-                if let Ok(data_t) = result {
-                    data_t
-                } else {
-                    AddressBook::new(name.clone())
-                }
-            } else {
-                AddressBook::new(name.clone())
-            }
-        } else {
-            AddressBook::new(name.clone())
-        };
-
-        Account {
-            index,
-            name,
-            folders,
-            folder_confs,
-            folders_order,
-            folder_names,
-            tree,
-            address_book,
-            sent_folder,
-            collection,
-            workers,
-            settings: settings.clone(),
-            runtime_settings: settings,
-            backend,
-            notify_fn,
-
-            event_queue: VecDeque::with_capacity(8),
-        }
+        self.folders = folders;
+        self.folder_confs = folder_confs;
+        self.folders_order = folders_order;
+        self.folder_names = folder_names;
+        self.tree = tree;
+        self.sent_folder = sent_folder;
+        self.collection = collection;
+        self.workers = workers;
     }
+
     fn new_worker(
         settings: &AccountConf,
         folder: Folder,
         backend: &mut Box<dyn MailBackend>,
+        work_context: &WorkContext,
         notify_fn: Arc<NotifyFn>,
     ) -> Worker {
         let mailbox_handle = backend.get(&folder);
@@ -361,7 +387,7 @@ impl Account {
          * threads' closures this could be avoided, but it requires green threads.
          */
         builder.set_priority(priority).set_is_static(true);
-        let w = builder.build(Box::new(move |work_context| {
+        let mut w = builder.build(Box::new(move |work_context| {
             let name = format!("Parsing {}", folder.path());
             let mut mailbox_handle = mailbox_handle.clone();
             let work = mailbox_handle.work().unwrap();
@@ -397,6 +423,9 @@ impl Account {
                 }
             }
         }));
+        if let Some(w) = w.work() {
+            work_context.new_work.send(w).unwrap();
+        }
         Some(w)
     }
     pub fn reload(
@@ -485,6 +514,7 @@ impl Account {
                         &self.settings,
                         ref_folders[&folder_hash].clone(),
                         &mut self.backend,
+                        &self.work_context,
                         self.notify_fn.clone(),
                     );
                     self.workers.insert(folder_hash, handle);
@@ -757,6 +787,15 @@ impl Account {
             .iter()
             .find(|(_, f)| f.usage == Some(special_use));
         ret.as_ref().map(|r| r.0.as_str())
+    }
+
+    pub fn is_online(&mut self) -> bool {
+        let ret = self.backend.is_online();
+        if ret != self.is_online && ret {
+            self.init();
+        }
+        self.is_online = ret;
+        ret
     }
 }
 

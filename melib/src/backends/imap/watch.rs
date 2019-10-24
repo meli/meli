@@ -24,10 +24,11 @@ use std::sync::{Arc, Mutex};
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
     pub conn: ImapConnection,
+    pub is_online: Arc<Mutex<bool>>,
     pub main_conn: Arc<Mutex<ImapConnection>>,
     pub hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
     pub uid_index: Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
-    pub folders: FnvHashMap<FolderHash, ImapFolder>,
+    pub folders: Arc<Mutex<FnvHashMap<FolderHash, ImapFolder>>>,
     pub sender: RefreshEventConsumer,
     pub work_context: WorkContext,
 }
@@ -49,6 +50,7 @@ macro_rules! exit_on_error {
 pub fn poll_with_examine(kit: ImapWatchKit) {
     debug!("poll with examine");
     let ImapWatchKit {
+        is_online,
         mut conn,
         main_conn,
         hash_index,
@@ -57,6 +59,12 @@ pub fn poll_with_examine(kit: ImapWatchKit) {
         sender,
         work_context,
     } = kit;
+    loop {
+        if *is_online.lock().unwrap() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
     let mut response = String::with_capacity(8 * 1024);
     let thread_id: std::thread::ThreadId = std::thread::current().id();
     loop {
@@ -65,6 +73,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) {
             .send((thread_id, "sleeping...".to_string()))
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(5 * 60 * 1000));
+        let folders = folders.lock().unwrap();
         for folder in folders.values() {
             work_context
                 .set_status
@@ -94,6 +103,7 @@ pub fn idle(kit: ImapWatchKit) {
      * minutes wake up and poll the others */
     let ImapWatchKit {
         mut conn,
+        is_online,
         main_conn,
         hash_index,
         uid_index,
@@ -101,10 +111,19 @@ pub fn idle(kit: ImapWatchKit) {
         sender,
         work_context,
     } = kit;
+    loop {
+        if *is_online.lock().unwrap() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
     let thread_id: std::thread::ThreadId = std::thread::current().id();
-    let folder: &ImapFolder = folders
+    let folder: ImapFolder = folders
+        .lock()
+        .unwrap()
         .values()
         .find(|f| f.parent.is_none() && f.path().eq_ignore_ascii_case("INBOX"))
+        .map(std::clone::Clone::clone)
         .unwrap();
     let folder_hash = folder.hash();
     let mut response = String::with_capacity(8 * 1024);
@@ -185,7 +204,7 @@ pub fn idle(kit: ImapWatchKit) {
                     iter.conn.send_raw(b"DONE")
                     iter.conn.read_response(&mut response)
                 );
-                for (hash, folder) in &folders {
+                for (hash, folder) in folders.lock().unwrap().iter() {
                     if *hash == folder_hash {
                         /* Skip INBOX */
                         continue;
