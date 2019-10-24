@@ -81,8 +81,6 @@ struct CommandLineArguments {
     config: Option<String>,
     help: bool,
     version: bool,
-    manual: bool,
-    conf_manual: bool,
 }
 
 fn main() -> std::result::Result<(), std::io::Error> {
@@ -97,8 +95,6 @@ fn main() -> std::result::Result<(), std::io::Error> {
         config: None,
         help: false,
         version: false,
-        manual: false,
-        conf_manual: false,
     };
 
     for i in std::env::args().skip(1) {
@@ -122,12 +118,6 @@ fn main() -> std::result::Result<(), std::io::Error> {
             }
             "--version" | "-v" => {
                 args.version = true;
-            }
-            "--manual" => {
-                args.manual = true;
-            }
-            "--conf-manual" => {
-                args.conf_manual = true;
             }
             e => match prev {
                 None => error_and_exit!("error: value without command {}", e),
@@ -154,43 +144,11 @@ fn main() -> std::result::Result<(), std::io::Error> {
         println!("\t--version, -v\t\tprint version and exit");
         println!("\t--create-config[ PATH]\tCreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config");
         println!("\t--config PATH, -c PATH\tUse specified configuration file");
-        println!("\t--manual\t\tshow manual for meli");
-        println!("\t--conf-manual\t\tshow manual for meli configuration file");
         std::process::exit(0);
     }
 
     if args.version {
         println!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0"));
-        std::process::exit(0);
-    }
-
-    if args.manual {
-        let man_contents = include_str!("manuals/meli.txt");
-        let pager = option_env!("PAGER").unwrap_or("less");
-        let (read_end, write_end) = nix::unistd::pipe()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-        use std::os::unix::io::FromRawFd;
-        unsafe { std::fs::File::from_raw_fd(write_end) }.write_all(man_contents.as_bytes())?;
-        let mut handle = std::process::Command::new(pager)
-            .stdin(unsafe { std::process::Stdio::from_raw_fd(read_end) })
-            .stdout(std::process::Stdio::inherit())
-            .spawn()?;
-        handle.wait()?;
-        std::process::exit(0);
-    }
-
-    if args.conf_manual {
-        let man_contents = include_str!("manuals/meli_conf.txt");
-        let pager = option_env!("PAGER").unwrap_or("less");
-        let (read_end, write_end) = nix::unistd::pipe()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-        use std::os::unix::io::FromRawFd;
-        unsafe { std::fs::File::from_raw_fd(write_end) }.write_all(man_contents.as_bytes())?;
-        let mut handle = std::process::Command::new(pager)
-            .stdin(unsafe { std::process::Stdio::from_raw_fd(read_end) })
-            .stdout(std::process::Stdio::inherit())
-            .spawn()?;
-        handle.wait()?;
         std::process::exit(0);
     }
 
