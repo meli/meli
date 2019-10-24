@@ -276,18 +276,10 @@ impl AccountsPanel {
                     self.content[(2, h + y + 1)].set_ch(' ');
                 }
             }
-            let (x, _) = write_string_to_grid(
-                "- Settings",
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                ((5, y + 3), (120 - 2, y + 3)),
-                true,
-            );
             write_string_to_grid(
                 &format!(
-                    "total {}",
+                    "Messages total {}, unseen {}",
+                    a.collection.len(),
                     a.collection
                         .envelopes
                         .values()
@@ -298,25 +290,16 @@ impl AccountsPanel {
                 Color::Default,
                 Color::Default,
                 Attr::Default,
-                ((10 + x, y + 3), (120 - 2, y + 3)),
+                ((5, y + 3), (120 - 2, y + 3)),
                 true,
             );
             write_string_to_grid(
-                "- Contacts",
+                &format!("Contacts total {}", a.address_book.len()),
                 &mut self.content,
                 Color::Default,
                 Color::Default,
                 Attr::Default,
                 ((5, y + 4), (120 - 2, y + 4)),
-                true,
-            );
-            write_string_to_grid(
-                "- Mailing Lists",
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                ((5, y + 5), (120 - 2, y + 5)),
                 true,
             );
         }
