@@ -127,7 +127,7 @@ impl ContactManager {
         self.form.push(("URL".into(), self.card.url().to_string()));
         self.form.push(("KEY".into(), self.card.key().to_string()));
         for (k, v) in self.card.extra_properties() {
-            self.form.push((k.into(), v.to_string()));
+            self.form.push((k.to_string(), v.to_string()));
         }
     }
 
