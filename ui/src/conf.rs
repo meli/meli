@@ -148,13 +148,15 @@ impl FolderConf {
     }
 }
 
+use crate::conf::deserializers::extra_settings;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FileAccount {
     root_folder: String,
     format: String,
     identity: String,
     #[serde(flatten)]
-    pub extra: HashMap<String, String>,
+    #[serde(deserialize_with = "extra_settings")]
+    pub extra: HashMap<String, String>, /* use custom deserializer to convert any given value (eg bool, number, etc) to string */
 
     #[serde(default = "none")]
     display_name: Option<String>,
@@ -488,6 +490,37 @@ mod deserializers {
         } else {
             Ok(Some(s))
         }
+    }
+
+    use toml::Value;
+    fn any_of<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v: Value = Deserialize::deserialize(deserializer)?;
+        let mut ret = v.to_string();
+        if ret.starts_with('"') && ret.ends_with('"') {
+            ret.drain(0..1).count();
+            ret.drain(ret.len() - 1..).count();
+        }
+        Ok(ret)
+    }
+
+    use std::collections::HashMap;
+    pub(in crate::conf) fn extra_settings<'de, D>(
+        deserializer: D,
+    ) -> std::result::Result<HashMap<String, String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        /* Why is this needed? If the user gives a configuration value such as key = true, the
+         * parsing will fail since it expects string values. We want to accept key = true as well
+         * as key = "true". */
+        #[derive(Deserialize)]
+        struct Wrapper(#[serde(deserialize_with = "any_of")] String);
+
+        let v = <HashMap<String, Wrapper>>::deserialize(deserializer)?;
+        Ok(v.into_iter().map(|(k, Wrapper(v))| (k, v)).collect())
     }
 }
 
