@@ -35,8 +35,8 @@ pub use self::compose::*;
 
 pub mod pgp;
 
-mod accounts;
-pub use self::accounts::*;
+mod status;
+pub use self::status::*;
 
 fn get_display_name(context: &Context, idx: usize) -> String {
     let settings = context.accounts[idx].runtime_settings.account();

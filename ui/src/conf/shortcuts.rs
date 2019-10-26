@@ -84,7 +84,10 @@ shortcut_key_values! { "contact-list",
     /// Shortcut listing for the contact list view
     pub struct ContactListShortcuts {
         create_contact: Key |> "Create new contact." |> Key::Char('c'),
-        edit_contact: Key |> "Edit contact under cursor." |> Key::Char('e')
+        edit_contact: Key |> "Edit contact under cursor." |> Key::Char('e'),
+        toggle_menu_visibility: Key |> "Toggle visibility of side menu in mail list." |> Key::Char('`'),
+        prev_account: Key |> "Go to previous account." |> Key::Char('l'),
+        next_account: Key |> "Go to next account." |> Key::Char('h')
     }
 }
 

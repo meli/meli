@@ -1,5 +1,5 @@
 /*
- * meli - accounts module.
+ * meli - status tab module.
  *
  * Copyright 2019 Manos Pitsidianakis
  *
@@ -23,25 +23,23 @@ use super::*;
 use std::fmt;
 
 #[derive(Debug)]
-pub struct AccountsPanel {
+pub struct StatusPanel {
     cursor: (usize, usize),
-    account_cursor: usize,
     content: CellBuffer,
     dirty: bool,
     id: ComponentId,
 }
 
-impl fmt::Display for AccountsPanel {
+impl fmt::Display for StatusPanel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "accounts")
+        write!(f, "status")
     }
 }
 
-impl Component for AccountsPanel {
+impl Component for StatusPanel {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if self.dirty {
-            self.initialize(context);
-            self.dirty = false;
+        if !self.dirty {
+            return;
         }
         let (width, height) = self.content.size();
         {
@@ -145,22 +143,11 @@ impl Component for AccountsPanel {
                 ),
             ),
         );
+        self.dirty = false;
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match *event {
-            UIEvent::Input(Key::Char('k')) => {
-                self.account_cursor = self.account_cursor.saturating_sub(1);
-                self.dirty = true;
-                return true;
-            }
-            UIEvent::Input(Key::Char('j')) => {
-                if self.account_cursor + 1 < context.accounts.len() {
-                    self.account_cursor += 1;
-                    self.dirty = true;
-                }
-                return true;
-            }
             UIEvent::Input(Key::Left) => {
                 self.cursor.0 = self.cursor.0.saturating_sub(1);
                 self.dirty = true;
@@ -179,14 +166,6 @@ impl Component for AccountsPanel {
             UIEvent::Input(Key::Down) => {
                 self.cursor.1 = self.cursor.1 + 1;
                 self.dirty = true;
-                return true;
-            }
-            UIEvent::Input(Key::Char('\n')) => {
-                context
-                    .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(
-                        ContactList::for_account(self.account_cursor),
-                    ))))));
                 return true;
             }
             UIEvent::MailboxUpdate(_) => {
@@ -212,96 +191,15 @@ impl Component for AccountsPanel {
     }
 }
 
-impl AccountsPanel {
-    pub fn new(context: &Context) -> AccountsPanel {
-        let content = CellBuffer::new(120, 40 + context.accounts.len() * 20, Cell::default());
+impl StatusPanel {
+    pub fn new() -> StatusPanel {
+        let content = CellBuffer::new(120, 40, Cell::default());
 
-        AccountsPanel {
+        StatusPanel {
             cursor: (0, 0),
-            account_cursor: 0,
             content,
             dirty: true,
             id: ComponentId::new_v4(),
-        }
-    }
-    fn initialize(&mut self, context: &Context) {
-        write_string_to_grid(
-            "Accounts",
-            &mut self.content,
-            Color::Default,
-            Color::Default,
-            Attr::Default,
-            ((2, 10), (120 - 1, 10)),
-            true,
-        );
-
-        for (i, a) in context.accounts.iter().enumerate() {
-            for x in 2..(120 - 1) {
-                set_and_join_box(&mut self.content, (x, 12 + i * 10), HORZ_BOUNDARY);
-            }
-            //create_box(&mut self.content, ((2, 5 + i * 10), (120 - 1, 15 + i * 10)));
-            let (x, y) = write_string_to_grid(
-                a.name(),
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Bold,
-                ((3, 12 + i * 10), (120 - 2, 12 + i * 10)),
-                true,
-            );
-            write_string_to_grid(
-                " ▒██▒ ",
-                &mut self.content,
-                Color::Byte(32),
-                Color::Default,
-                Attr::Default,
-                ((x, y), (120 - 2, 12 + i * 10)),
-                true,
-            );
-            write_string_to_grid(
-                &a.runtime_settings.account().identity,
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                ((4, y + 2), (120 - 2, y + 2)),
-                true,
-            );
-            if i == self.account_cursor {
-                for h in 1..8 {
-                    self.content[(2, h + y + 1)].set_ch('*');
-                }
-            } else {
-                for h in 1..8 {
-                    self.content[(2, h + y + 1)].set_ch(' ');
-                }
-            }
-            write_string_to_grid(
-                &format!(
-                    "Messages total {}, unseen {}",
-                    a.collection.len(),
-                    a.collection
-                        .envelopes
-                        .values()
-                        .filter(|e| !e.is_seen())
-                        .count()
-                ),
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                ((5, y + 3), (120 - 2, y + 3)),
-                true,
-            );
-            write_string_to_grid(
-                &format!("Contacts total {}", a.address_book.len()),
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                ((5, y + 4), (120 - 2, y + 4)),
-                true,
-            );
         }
     }
 }

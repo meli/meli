@@ -201,11 +201,10 @@ fn main() -> std::result::Result<(), std::io::Error> {
 
     let signal_recvr = notify(signals, sender)?;
 
-    /* Register some reasonably useful interfaces */
     let window = Box::new(Tabbed::new(vec![
         Box::new(listing::Listing::new(&state.context.accounts)),
-        Box::new(AccountsPanel::new(&state.context)),
-        Box::new(ContactList::default()),
+        Box::new(ContactList::new(&state.context)),
+        Box::new(StatusPanel::new()),
     ]));
 
     let status_bar = Box::new(StatusBar::new(window));

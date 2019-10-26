@@ -12,7 +12,15 @@ enum ViewMode {
 }
 
 #[derive(Debug)]
+struct AccountMenuEntry {
+    name: String,
+    // Index in the config account vector.
+    index: usize,
+}
+
+#[derive(Debug)]
 pub struct ContactList {
+    accounts: Vec<AccountMenuEntry>,
     cursor_pos: usize,
     new_cursor_pos: usize,
     account_pos: usize,
@@ -24,15 +32,12 @@ pub struct ContactList {
 
     mode: ViewMode,
     dirty: bool,
+    show_divider: bool,
+    menu_visibility: bool,
     movement: Option<PageMovement>,
     view: Option<ContactManager>,
+    ratio: usize, // right/(container width) * 100
     id: ComponentId,
-}
-
-impl Default for ContactList {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl fmt::Display for ContactList {
@@ -43,8 +48,18 @@ impl fmt::Display for ContactList {
 
 impl ContactList {
     const DESCRIPTION: &'static str = "contact list";
-    pub fn new() -> Self {
+    pub fn new(context: &Context) -> Self {
+        let accounts = context
+            .accounts
+            .iter()
+            .enumerate()
+            .map(|(i, a)| AccountMenuEntry {
+                name: a.name().to_string(),
+                index: i,
+            })
+            .collect();
         ContactList {
+            accounts,
             cursor_pos: 0,
             new_cursor_pos: 0,
             length: 0,
@@ -56,14 +71,17 @@ impl ContactList {
             dirty: true,
             movement: None,
             view: None,
+            ratio: 90,
+            show_divider: false,
+            menu_visibility: true,
             id: ComponentId::new_v4(),
         }
     }
 
-    pub fn for_account(pos: usize) -> Self {
+    pub fn for_account(pos: usize, context: &Context) -> Self {
         ContactList {
             account_pos: pos,
-            ..Self::new()
+            ..Self::new(context)
         }
     }
 
@@ -204,23 +222,109 @@ impl ContactList {
         };
         change_colors(grid, area, fg_color, bg_color);
     }
-}
 
-impl Component for ContactList {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if let Some(mgr) = self.view.as_mut() {
-            mgr.draw(grid, area, context);
+    fn draw_menu(&mut self, grid: &mut CellBuffer, mut area: Area, context: &mut Context) {
+        if !self.is_dirty() {
             return;
         }
-
-        if !self.dirty {
-            return;
-        }
+        clear_area(grid, area);
+        /* visually divide menu and listing */
+        area = (area.0, pos_dec(area.1, (1, 0)));
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
         self.dirty = false;
-        if !self.initialized {
-            self.initialize(context);
+        let mut y = get_y(upper_left);
+        for a in &self.accounts {
+            self.print_account(grid, (set_y(upper_left, y), bottom_right), &a, context);
+            y += 1;
         }
 
+        context.dirty_areas.push_back(area);
+    }
+    /*
+     * Print a single account in the menu area.
+     */
+    fn print_account(
+        &self,
+        grid: &mut CellBuffer,
+        area: Area,
+        a: &AccountMenuEntry,
+        context: &mut Context,
+    ) {
+        if !is_valid_area!(area) {
+            debug!("BUG: invalid area in print_account");
+        }
+
+        let width = width!(area);
+        let must_highlight_account: bool = self.account_pos == a.index;
+        let (fg_color, bg_color) = if must_highlight_account {
+            if self.account_pos == a.index {
+                (Color::Byte(233), Color::Byte(15))
+            } else {
+                (Color::Byte(15), Color::Byte(233))
+            }
+        } else {
+            (Color::Default, Color::Default)
+        };
+
+        let s = format!(" [{}]", context.accounts[a.index].address_book.len());
+
+        if a.name.grapheme_len() + s.len() > width + 1 {
+            /* Print account name */
+            write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::Bold, area, false);
+            write_string_to_grid(
+                &s,
+                grid,
+                fg_color,
+                bg_color,
+                Attr::Bold,
+                (
+                    pos_dec(
+                        (get_x(bottom_right!(area)), get_y(upper_left!(area))),
+                        (s.len() - 1, 0),
+                    ),
+                    bottom_right!(area),
+                ),
+                false,
+            );
+            write_string_to_grid(
+                "…",
+                grid,
+                fg_color,
+                bg_color,
+                Attr::Bold,
+                (
+                    pos_dec(
+                        (get_x(bottom_right!(area)), get_y(upper_left!(area))),
+                        (s.len() - 1, 0),
+                    ),
+                    bottom_right!(area),
+                ),
+                false,
+            );
+        } else {
+            /* Print account name */
+
+            write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::Bold, area, false);
+            write_string_to_grid(
+                &s,
+                grid,
+                fg_color,
+                bg_color,
+                Attr::Bold,
+                (
+                    pos_dec(
+                        (get_x(bottom_right!(area)), get_y(upper_left!(area))),
+                        (s.len() - 1, 0),
+                    ),
+                    bottom_right!(area),
+                ),
+                false,
+            );
+        }
+    }
+
+    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
@@ -371,6 +475,60 @@ impl Component for ContactList {
         );
         context.dirty_areas.push_back(area);
     }
+}
+
+impl Component for ContactList {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if let Some(mgr) = self.view.as_mut() {
+            mgr.draw(grid, area, context);
+            return;
+        }
+
+        if !self.dirty {
+            return;
+        }
+        if !self.initialized {
+            self.initialize(context);
+        }
+
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        let total_cols = get_x(bottom_right) - get_x(upper_left);
+
+        let right_component_width = if self.menu_visibility {
+            (self.ratio * total_cols) / 100
+        } else {
+            total_cols
+        };
+        let mid = get_x(bottom_right) - right_component_width;
+        if self.dirty && mid != get_x(upper_left) {
+            if self.show_divider {
+                for i in get_y(upper_left)..=get_y(bottom_right) {
+                    grid[(mid, i)].set_ch(VERT_BOUNDARY);
+                    grid[(mid, i)].set_fg(Color::Default);
+                    grid[(mid, i)].set_bg(Color::Default);
+                }
+            } else {
+                for i in get_y(upper_left)..=get_y(bottom_right) {
+                    grid[(mid, i)].set_fg(Color::Default);
+                    grid[(mid, i)].set_bg(Color::Default);
+                }
+            }
+            context
+                .dirty_areas
+                .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
+        }
+
+        if right_component_width == total_cols {
+            self.draw_list(grid, area, context);
+        } else if right_component_width == 0 {
+            self.draw_menu(grid, area, context);
+        } else {
+            self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
+            self.draw_list(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+        }
+        self.dirty = false;
+    }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let Some(ref mut v) = self.view {
@@ -409,24 +567,53 @@ impl Component for ContactList {
 
                 return true;
             }
-            UIEvent::Input(Key::Char('n')) if self.view.is_none() => {
-                let card = Card::new();
-                let mut manager = ContactManager::default();
-                manager.set_parent_id(self.id);
-                manager.card = card;
-                manager.account_pos = self.account_pos;
-
-                self.mode = ViewMode::View(manager.id());
-                self.view = Some(manager);
+            UIEvent::Input(ref key) if *key == shortcuts["next_account"] && self.view.is_none() => {
+                if self.accounts.is_empty() {
+                    return true;
+                }
+                if self.account_pos < self.accounts.len() - 1 {
+                    self.account_pos += 1;
+                    self.set_dirty();
+                    self.initialized = false;
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.get_status(context).unwrap(),
+                        )));
+                }
 
                 return true;
             }
-            UIEvent::Input(Key::Up) => {
+            UIEvent::Input(ref key) if *key == shortcuts["prev_account"] && self.view.is_none() => {
+                if self.accounts.is_empty() {
+                    return true;
+                }
+                if self.account_pos > 0 {
+                    self.account_pos -= 1;
+                    self.set_dirty();
+                    self.initialized = false;
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.get_status(context).unwrap(),
+                        )));
+                }
+                return true;
+            }
+            UIEvent::Input(ref k)
+                if k == shortcuts["toggle_menu_visibility"] && self.view.is_none() =>
+            {
+                self.menu_visibility = !self.menu_visibility;
+                self.set_dirty();
+            }
+            UIEvent::Input(Key::Up) if self.view.is_none() => {
                 self.set_dirty();
                 self.new_cursor_pos = self.cursor_pos.saturating_sub(1);
                 return true;
             }
-            UIEvent::Input(Key::Down) if self.cursor_pos < self.length.saturating_sub(1) => {
+            UIEvent::Input(Key::Down)
+                if self.cursor_pos < self.length.saturating_sub(1) && self.view.is_none() =>
+            {
                 self.set_dirty();
                 self.new_cursor_pos += 1;
                 return true;
@@ -495,5 +682,12 @@ impl Component for ContactList {
             .as_mut()
             .map(|p| p.can_quit_cleanly(context))
             .unwrap_or(true)
+    }
+
+    fn get_status(&self, context: &Context) -> Option<String> {
+        Some(format!(
+            "{} entries",
+            context.accounts[self.account_pos].address_book.len()
+        ))
     }
 }
