@@ -54,10 +54,10 @@ impl Drop for ImapStream {
 impl ImapStream {
     pub fn read_response(&mut self, ret: &mut String) -> Result<()> {
         let id = format!("M{} ", self.cmd_id - 1);
-        self.read_lines(ret, id)
+        self.read_lines(ret, &id)
     }
 
-    pub fn read_lines(&mut self, ret: &mut String, termination_string: String) -> Result<()> {
+    pub fn read_lines(&mut self, ret: &mut String, termination_string: &str) -> Result<()> {
         let mut buf: [u8; 1024] = [0; 1024];
         ret.clear();
         let mut last_line_idx: usize = 0;
@@ -78,7 +78,7 @@ impl ImapStream {
                         }
                         if pos + "\r\n".len() == ret[last_line_idx..].len() {
                             if !termination_string.is_empty()
-                                && ret[last_line_idx..].starts_with(termination_string.as_str())
+                                && ret[last_line_idx..].starts_with(termination_string)
                             {
                                 debug!(&ret[last_line_idx..]);
                                 ret.replace_range(last_line_idx.., "");
@@ -104,7 +104,7 @@ impl ImapStream {
     pub fn wait_for_continuation_request(&mut self) -> Result<()> {
         let term = "+ ".to_string();
         let mut ret = String::new();
-        self.read_lines(&mut ret, term)
+        self.read_lines(&mut ret, &term)
     }
 
     pub fn send_command(&mut self, command: &[u8]) -> Result<usize> {
@@ -229,7 +229,7 @@ impl ImapStream {
             .as_bytes(),
         )?;
         let mut res = String::with_capacity(8 * 1024);
-        ret.read_lines(&mut res, String::new())?;
+        ret.read_lines(&mut res, &String::new())?;
         let capabilities = protocol_parser::capabilities(res.as_bytes()).to_full_result()?;
         let capabilities = FnvHashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
 
@@ -248,7 +248,9 @@ impl ImapConnection {
 
     pub fn read_response(&mut self, ret: &mut String) -> Result<()> {
         if let Ok(ref mut stream) = self.stream {
-            return stream.read_response(ret);
+            if let Ok(_) = stream.read_response(ret) {
+                return Ok(());
+            }
         }
         let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.read_response(ret);
@@ -261,10 +263,12 @@ impl ImapConnection {
 
     pub fn read_lines(&mut self, ret: &mut String, termination_string: String) -> Result<()> {
         if let Ok(ref mut stream) = self.stream {
-            return stream.read_lines(ret, termination_string);
+            if let Ok(_) = stream.read_lines(ret, &termination_string) {
+                return Ok(());
+            }
         }
         let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
-        let ret = stream.read_lines(ret, termination_string);
+        let ret = stream.read_lines(ret, &termination_string);
         if ret.is_ok() {
             self.stream = Ok(stream);
             self.capabilities = capabilities;
@@ -274,7 +278,9 @@ impl ImapConnection {
 
     pub fn wait_for_continuation_request(&mut self) -> Result<()> {
         if let Ok(ref mut stream) = self.stream {
-            return stream.wait_for_continuation_request();
+            if let Ok(_) = stream.wait_for_continuation_request() {
+                return Ok(());
+            }
         }
         let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.wait_for_continuation_request();
@@ -287,7 +293,9 @@ impl ImapConnection {
 
     pub fn send_command(&mut self, command: &[u8]) -> Result<usize> {
         if let Ok(ref mut stream) = self.stream {
-            return stream.send_command(command);
+            if let Ok(ret) = stream.send_command(command) {
+                return Ok(ret);
+            }
         }
         let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.send_command(command);
@@ -300,7 +308,9 @@ impl ImapConnection {
 
     pub fn send_literal(&mut self, data: &[u8]) -> Result<()> {
         if let Ok(ref mut stream) = self.stream {
-            return stream.send_literal(data);
+            if let Ok(_) = stream.send_literal(data) {
+                return Ok(());
+            }
         }
         let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.send_literal(data);
@@ -313,7 +323,9 @@ impl ImapConnection {
 
     pub fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
         if let Ok(ref mut stream) = self.stream {
-            return stream.send_raw(raw);
+            if let Ok(_) = stream.send_raw(raw) {
+                return Ok(());
+            }
         }
         let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
 
@@ -327,7 +339,9 @@ impl ImapConnection {
 
     pub fn set_nonblocking(&mut self, val: bool) -> Result<()> {
         if let Ok(ref mut stream) = self.stream {
-            return stream.set_nonblocking(val);
+            if let Ok(_) = stream.set_nonblocking(val) {
+                return Ok(());
+            }
         }
         let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
         let ret = stream.set_nonblocking(val);
@@ -396,6 +410,7 @@ impl Iterator for ImapBlockingConnection {
                     }
                 }
                 Err(e) => {
+                    debug!(&conn.stream);
                     debug!(e);
                     return None;
                 }
