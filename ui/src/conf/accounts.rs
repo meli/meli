@@ -32,7 +32,7 @@ use melib::backends::{
 };
 use melib::error::{MeliError, Result};
 use melib::mailbox::*;
-use melib::thread::{ThreadHash, ThreadNode, Threads};
+use melib::thread::{SortField, SortOrder, ThreadHash, ThreadNode, Threads};
 use melib::AddressBook;
 use melib::StackVec;
 
@@ -820,6 +820,43 @@ impl Account {
         }
         self.is_online = ret;
         ret
+    }
+
+    pub fn search(
+        &self,
+        search_term: &str,
+        sort: (SortField, SortOrder),
+        folder_hash: FolderHash,
+    ) -> Result<StackVec<EnvelopeHash>> {
+        #[cfg(feature = "sqlite3")]
+        {
+            crate::sqlite3::search(search_term, sort)
+        }
+
+        #[cfg(not(feature = "sqlite3"))]
+        {
+            let mut ret = StackVec::new();
+
+            for env_hash in self.folders[folder_hash].as_result()?.envelopes {
+                let envelope = &account.collection[&env_hash];
+                if envelope.subject().contains(&search_term) {
+                    ret.push(env_hash);
+                    continue;
+                }
+                if envelope.field_from_to_string().contains(&search_term) {
+                    ret.push(env_hash);
+                    continue;
+                }
+                let op = self.operation(env_hash);
+                let body = envelope.body(op)?;
+                let decoded = decode_rec(&body, None);
+                let body_text = String::from_utf8_lossy(&decoded);
+                if body_text.contains(&search_term) {
+                    ret.push(env_hash);
+                }
+            }
+            ret
+        }
     }
 }
 

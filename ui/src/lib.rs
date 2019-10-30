@@ -72,7 +72,7 @@ pub use crate::workers::*;
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3;
 
-pub mod search;
+pub mod cache;
 
 pub use crate::username::*;
 pub mod username {

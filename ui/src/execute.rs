@@ -27,6 +27,7 @@ use nom::{digit, not_line_ending};
 use std;
 pub mod actions;
 pub mod history;
+pub use crate::actions::AccountAction::{self, *};
 pub use crate::actions::Action::{self, *};
 pub use crate::actions::ComposeAction::{self, *};
 pub use crate::actions::ListingAction::{self, *};
@@ -297,6 +298,18 @@ define_commands!([
                       );
                   )
                 },
+                { tags: ["reindex "],
+                  desc: "reindex ACCOUNT, rebuild account cache in the background",
+                  parser:(
+                      named!( reindex<Action>,
+                              do_parse!(
+                                  ws!(tag!("reindex"))
+                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> (AccountAction(account.to_string(), ReIndex))
+                              )
+                      );
+                  )
+                },
                 { tags: ["open-in-tab"],
                   desc: "opens envelope view in new tab",
                   parser:(
@@ -364,6 +377,8 @@ named!(
     alt_complete!(add_attachment | remove_attachment | toggle_sign)
 );
 
+named!(account_action<Action>, alt_complete!(reindex));
+
 named!(pub parse_command<Action>,
-       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | pipe | compose_action | create_folder | sub_folder | unsub_folder | delete_folder | rename_folder)
+       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | pipe | compose_action | create_folder | sub_folder | unsub_folder | delete_folder | rename_folder | account_action )
 );

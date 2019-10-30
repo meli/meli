@@ -19,10 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::search::Query;
-use crate::state::Context;
 use melib::{
-    backends::FolderHash,
     email::EnvelopeHash,
     thread::{SortField, SortOrder},
     MeliError, Result, StackVec,
@@ -189,10 +186,7 @@ pub fn insert(context: &crate::state::Context) -> Result<()> {
 
 pub fn search(
     term: &str,
-    _context: &Context,
-    _account_idx: usize,
     (sort_field, sort_order): (SortField, SortOrder),
-    _folder_hash: FolderHash,
 ) -> Result<StackVec<EnvelopeHash>> {
     let data_dir =
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;

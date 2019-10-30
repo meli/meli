@@ -75,6 +75,11 @@ pub enum ComposeAction {
 }
 
 #[derive(Debug)]
+pub enum AccountAction {
+    ReIndex,
+}
+
+#[derive(Debug)]
 pub enum Action {
     Listing(ListingAction),
     ViewMailbox(usize),
@@ -88,6 +93,7 @@ pub enum Action {
     PrintEnv(String),
     Compose(ComposeAction),
     Folder(AccountName, FolderPath, FolderOperation),
+    AccountAction(AccountName, AccountAction),
 }
 
 type AccountName = String;

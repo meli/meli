@@ -360,13 +360,7 @@ impl ListingTrait for CompactListing {
 
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        match crate::search::filter(
-            filter_term,
-            context,
-            self.cursor_pos.0,
-            self.sort,
-            folder_hash,
-        ) {
+        match account.search(filter_term, self.sort, folder_hash) {
             Ok(results) => {
                 let threads = &account.collection.threads[&folder_hash];
                 for env_hash in results {

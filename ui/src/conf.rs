@@ -553,3 +553,24 @@ impl Serialize for IndexStyle {
         }
     }
 }
+
+#[derive(Debug)]
+pub enum IndexCache {
+    Nothing,
+    #[cfg(feature = "sqlite3")]
+    Sqlite3,
+    Backend,
+}
+
+impl Default for IndexCache {
+    fn default() -> Self {
+        #[cfg(feature = "sqlite3")]
+        {
+            IndexCache::Sqlite3
+        }
+        #[cfg(not(feature = "sqlite3"))]
+        {
+            IndexCache::Nothing
+        }
+    }
+}
