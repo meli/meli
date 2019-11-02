@@ -355,10 +355,10 @@ impl ListingTrait for ConversationsListing {
             Ok(results) => {
                 let threads = &account.collection.threads[&folder_hash];
                 for env_hash in results {
-                    if !account.collection.envelopes.contains_key(&env_hash) {
+                    if !account.collection.contains_key(&env_hash) {
                         continue;
                     }
-                    let env_hash_thread_hash = account.get_env(&env_hash).thread();
+                    let env_hash_thread_hash = account.collection.get_env(env_hash).thread();
                     if !threads.thread_nodes.contains_key(&env_hash_thread_hash) {
                         continue;
                     }
@@ -379,7 +379,7 @@ impl ListingTrait for ConversationsListing {
                     threads.vec_inner_sort_by(
                         &mut self.filtered_selection,
                         self.sort,
-                        &context.accounts[self.cursor_pos.0].collection,
+                        &context.accounts[self.cursor_pos.0].collection.envelopes,
                     );
                     self.new_cursor_pos.2 =
                         std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
@@ -555,7 +555,7 @@ impl ConversationsListing {
         let mut rows = Vec::with_capacity(1024);
         let mut max_entry_columns = 0;
 
-        threads.sort_by(self.sort, self.subsort, &account.collection);
+        threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);
 
         let mut refresh_mailbox = false;
         let threads_iter = if self.filter_term.is_empty() {
@@ -589,7 +589,8 @@ impl ConversationsListing {
 
                 panic!();
             }
-            let root_envelope: &Envelope = &context.accounts[self.cursor_pos.0].get_env(&i);
+            let root_envelope: &EnvelopeRef =
+                &context.accounts[self.cursor_pos.0].collection.get_env(i);
 
             let strings = ConversationsListing::make_entry_string(
                 root_envelope,
@@ -808,32 +809,31 @@ impl ConversationsListing {
             }
         }
         for env_hash in envs_to_set {
+            let hash = account.collection.get_env(env_hash).hash();
+            let op = account.operation(hash);
+            let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
             match a {
                 ListingAction::SetSeen => {
-                    let hash = account.get_env(&env_hash).hash();
-                    let op = account.operation(hash);
-                    let envelope: &mut Envelope = &mut account.get_env_mut(&env_hash);
                     if let Err(e) = envelope.set_seen(op) {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(e.to_string()),
                         ));
                     }
-                    self.row_updates.push(thread_hash);
                 }
                 ListingAction::SetUnseen => {
-                    let hash = account.get_env(&env_hash).hash();
-                    let op = account.operation(hash);
-                    let envelope: &mut Envelope = &mut account.get_env_mut(&env_hash);
                     if let Err(e) = envelope.set_unseen(op) {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(e.to_string()),
                         ));
                     }
-                    self.row_updates.push(thread_hash);
                 }
-                ListingAction::Delete => { /* do nothing */ }
+                ListingAction::Delete => {
+                    /* do nothing */
+                    continue;
+                }
                 _ => unreachable!(),
             }
+            self.row_updates.push(thread_hash);
         }
     }
 }
@@ -1049,10 +1049,10 @@ impl Component for ConversationsListing {
                 let account = &context.accounts[self.cursor_pos.0];
                 let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
                 let threads = &account.collection.threads[&folder_hash];
-                if !account.collection.envelopes.contains_key(&new_hash) {
+                if !account.collection.contains_key(&new_hash) {
                     return false;
                 }
-                let new_env_thread_hash = account.get_env(new_hash).thread();
+                let new_env_thread_hash = account.collection.get_env(*new_hash).thread();
                 if !threads.thread_nodes.contains_key(&new_env_thread_hash) {
                     return false;
                 }
@@ -1133,7 +1133,7 @@ impl Component for ConversationsListing {
                         threads.vec_inner_sort_by(
                             &mut self.filtered_selection,
                             self.sort,
-                            &context.accounts[self.cursor_pos.0].collection,
+                            &context.accounts[self.cursor_pos.0].collection.envelopes,
                         );
                         self.dirty = true;
                     } else {

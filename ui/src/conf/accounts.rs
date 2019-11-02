@@ -484,7 +484,7 @@ impl Account {
                 }
                 RefreshEventKind::Create(envelope) => {
                     let env_hash = envelope.hash();
-                    if self.collection.envelopes.contains_key(&env_hash)
+                    if self.collection.contains_key(&env_hash)
                         && mailbox!(&folder_hash, self.folders)
                             .envelopes
                             .contains(&env_hash)
@@ -492,6 +492,14 @@ impl Account {
                         return None;
                     }
                     mailbox!(&folder_hash, self.folders).insert(env_hash);
+                    let (is_seen, is_draft) =
+                        { (envelope.is_seen(), envelope.flags().contains(Flag::DRAFT)) };
+                    let (subject, from) = {
+                        (
+                            envelope.subject().into_owned(),
+                            envelope.field_from_to_string(),
+                        )
+                    };
                     self.collection.insert(*envelope, folder_hash);
                     if self
                         .sent_folder
@@ -507,20 +515,23 @@ impl Account {
                     if folder_conf.ignore.is_true() {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
-                    let (_, thread_node) = self.mail_and_thread(env_hash, folder_hash);
+
+                    let thread_node = {
+                        let thread_hash = &mut self.collection.get_env(env_hash).thread();
+                        &self.collection.threads[&folder_hash][&thread_hash]
+                    };
                     if thread_node.snoozed() {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
-                    let env = self.get_env(&env_hash);
-                    if env.is_seen() || env.flags().contains(Flag::DRAFT) {
+                    if is_seen || is_draft {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
 
                     return Some(Notification(
-                        Some(format!("new e-mail from: {}", env.field_from_to_string())),
+                        Some(format!("new e-mail from: {}", from)),
                         format!(
                             "{}\n{} {}",
-                            env.subject(),
+                            subject,
                             self.name,
                             ref_folders[&folder_hash].name(),
                         ),
@@ -725,12 +736,6 @@ impl Account {
         }
     }
 
-    pub fn get_env(&self, h: &EnvelopeHash) -> &Envelope {
-        &self.collection[h]
-    }
-    pub fn get_env_mut(&mut self, h: &EnvelopeHash) -> &mut Envelope {
-        self.collection.entry(*h).or_default()
-    }
     pub fn contains_key(&self, h: EnvelopeHash) -> bool {
         self.collection.contains_key(&h)
     }
@@ -752,33 +757,10 @@ impl Account {
         }
         debug!("didn't find {}", h);
         debug!(&self.folders);
-        debug!(&self.collection.envelopes);
+        //debug!(&self.collection.envelopes);
         unreachable!()
     }
-    pub fn thread_to_mail_mut(&mut self, h: ThreadHash, f: FolderHash) -> &mut Envelope {
-        self.collection
-            .envelopes
-            .entry(self.collection.threads[&f].thread_to_mail(h))
-            .or_default()
-    }
-    pub fn thread_to_mail(&self, h: ThreadHash, f: FolderHash) -> &Envelope {
-        &self.collection.envelopes[&self.collection.threads[&f].thread_to_mail(h)]
-    }
-    pub fn threaded_mail(&self, h: ThreadHash, f: FolderHash) -> EnvelopeHash {
-        self.collection.threads[&f].thread_to_mail(h)
-    }
-    pub fn mail_and_thread(
-        &mut self,
-        i: EnvelopeHash,
-        f: FolderHash,
-    ) -> (&mut Envelope, &ThreadNode) {
-        let thread;
-        {
-            let x = &mut self.collection.envelopes.entry(i).or_default();
-            thread = &self.collection.threads[&f][&x.thread()];
-        }
-        (self.collection.envelopes.entry(i).or_default(), thread)
-    }
+
     pub fn thread(&self, h: ThreadHash, f: FolderHash) -> &ThreadNode {
         &self.collection.threads[&f].thread_nodes()[&h]
     }
@@ -836,9 +818,11 @@ impl Account {
         #[cfg(not(feature = "sqlite3"))]
         {
             let mut ret = StackVec::new();
+            let envelopes = self.collection.envelopes.clone().read();
+            let envelopes = envelopes.unwrap();
 
             for env_hash in self.folders[folder_hash].as_result()?.envelopes {
-                let envelope = &account.collection[&env_hash];
+                let envelope = &envelopes[&env_hash];
                 if envelope.subject().contains(&search_term) {
                     ret.push(env_hash);
                     continue;

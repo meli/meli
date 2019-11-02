@@ -579,13 +579,15 @@ impl Component for Listing {
             } else {
                 return Some(String::new());
             };
+            let envelopes = account.collection.envelopes.clone();
+            let envelopes = envelopes.read().unwrap();
             format!(
                 "Mailbox: {}, Messages: {}, New: {}",
                 m.folder.name(),
                 m.envelopes.len(),
                 m.envelopes
                     .iter()
-                    .map(|h| &account.collection[&h])
+                    .map(|h| &envelopes[&h])
                     .filter(|e| !e.is_seen())
                     .count()
             )
@@ -714,8 +716,8 @@ impl Listing {
                         .unwrap()
                         .envelopes
                         .iter()
-                        .filter_map(|h| {
-                            if account.collection[&h].is_seen() {
+                        .filter_map(|&h| {
+                            if account.collection.get_env(h).is_seen() {
                                 None
                             } else {
                                 Some(())

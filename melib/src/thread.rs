@@ -50,8 +50,9 @@ use std::ops::Index;
 use std::result::Result as StdResult;
 use std::str::FromStr;
 use std::string::ToString;
+use std::sync::{Arc, RwLock};
 
-type Envelopes = FnvHashMap<EnvelopeHash, Envelope>;
+type Envelopes = Arc<RwLock<FnvHashMap<EnvelopeHash, Envelope>>>;
 
 #[derive(PartialEq, Hash, Eq, Copy, Clone, Serialize, Deserialize, Default)]
 pub struct ThreadHash(Uuid);
@@ -485,6 +486,7 @@ impl ThreadNode {
         buf: &FnvHashMap<ThreadHash, ThreadNode>,
         envelopes: &Envelopes,
     ) -> usize {
+        let envelopes = envelopes.read().unwrap();
         match sort {
             (SortField::Date, SortOrder::Asc) => {
                 match vec.binary_search_by(|probe| buf[&probe].date.cmp(&buf[&child].date)) {
@@ -682,25 +684,25 @@ impl Threads {
         x_root
     }
 
-    pub fn new(envelopes: &mut Envelopes) -> Threads {
+    pub fn new(length: usize) -> Threads {
         /* To reconstruct thread information from the mails we need: */
 
         /* a vector to hold thread members */
         let thread_nodes: FnvHashMap<ThreadHash, ThreadNode> = FnvHashMap::with_capacity_and_hasher(
-            (envelopes.len() as f64 * 1.2) as usize,
+            (length as f64 * 1.2) as usize,
             Default::default(),
         );
         /* A hash table of Message IDs */
         let message_ids: FnvHashMap<Vec<u8>, ThreadHash> =
-            FnvHashMap::with_capacity_and_hasher(envelopes.len(), Default::default());
+            FnvHashMap::with_capacity_and_hasher(length, Default::default());
         /* A hash set of Message IDs we haven't encountered yet as an Envelope */
         let missing_message_ids: FnvHashSet<Vec<u8>> =
-            FnvHashSet::with_capacity_and_hasher(envelopes.len(), Default::default());
+            FnvHashSet::with_capacity_and_hasher(length, Default::default());
         /* A hash set of Message IDs we have encountered as a MessageID */
         let message_ids_set: FnvHashSet<Vec<u8>> =
-            FnvHashSet::with_capacity_and_hasher(envelopes.len(), Default::default());
+            FnvHashSet::with_capacity_and_hasher(length, Default::default());
         let hash_set: FnvHashSet<EnvelopeHash> =
-            FnvHashSet::with_capacity_and_hasher(envelopes.len(), Default::default());
+            FnvHashSet::with_capacity_and_hasher(length, Default::default());
 
         Threads {
             thread_nodes,
@@ -754,12 +756,12 @@ impl Threads {
         };
 
         self.thread_nodes.get_mut(&thread_hash).unwrap().message = Some(new_hash);
-        self.thread_nodes.get_mut(&thread_hash).unwrap().has_unseen = !envelopes[&new_hash]
-            .is_seen()
-            || self.thread_nodes[&thread_hash]
-                .children
-                .iter()
-                .fold(false, |acc, x| acc || self.thread_nodes[x].has_unseen);
+        self.thread_nodes.get_mut(&thread_hash).unwrap().has_unseen =
+            !envelopes.read().unwrap()[&new_hash].is_seen()
+                || self.thread_nodes[&thread_hash]
+                    .children
+                    .iter()
+                    .fold(false, |acc, x| acc || self.thread_nodes[x].has_unseen);
 
         let mut thread_hash_iter = thread_hash;
         while self.thread_nodes[&thread_hash_iter].parent.is_some() {
@@ -802,18 +804,20 @@ impl Threads {
     }
 
     pub fn amend(&mut self, envelopes: &mut Envelopes) {
-        let new_hash_set = FnvHashSet::from_iter(envelopes.keys().cloned());
+        let envelopes_lck = envelopes.read().unwrap();
+        let new_hash_set = FnvHashSet::from_iter(envelopes_lck.keys().cloned());
 
         let difference: Vec<EnvelopeHash> =
             self.hash_set.difference(&new_hash_set).cloned().collect();
         for h in difference {
             self.remove(h);
         }
+        drop(envelopes_lck);
 
         let difference: Vec<EnvelopeHash> =
             new_hash_set.difference(&self.hash_set).cloned().collect();
         for h in difference {
-            debug!("inserting {}", envelopes[&h].subject());
+            //debug!("inserting {}", envelopes_lck[&h].subject());
             self.insert(envelopes, h);
         }
     }
@@ -825,6 +829,7 @@ impl Threads {
         env_hash: EnvelopeHash,
         envelopes: &Envelopes,
     ) {
+        let envelopes = envelopes.read().unwrap();
         let mut subject = envelopes[&env_hash].subject();
         let mut subject = subject.to_mut().as_bytes();
         let stripped_subject = subject.strip_prefixes();
@@ -861,17 +866,18 @@ impl Threads {
     }
 
     pub fn insert(&mut self, envelopes: &mut Envelopes, env_hash: EnvelopeHash) {
+        let envelopes_lck = envelopes.read().unwrap();
         if self
             .message_ids
-            .contains_key(envelopes[&env_hash].message_id().raw())
+            .contains_key(envelopes_lck[&env_hash].message_id().raw())
             && !self
                 .missing_message_ids
-                .contains(envelopes[&env_hash].message_id().raw())
+                .contains(envelopes_lck[&env_hash].message_id().raw())
         {
             return;
         }
 
-        let reply_to_id: Option<ThreadHash> = envelopes[&env_hash]
+        let reply_to_id: Option<ThreadHash> = envelopes_lck[&env_hash]
             .in_reply_to()
             .map(crate::email::StrBuild::raw)
             .and_then(|r| self.message_ids.get(r).cloned());
@@ -881,24 +887,28 @@ impl Threads {
             ThreadNode {
                 message: Some(env_hash),
                 parent: reply_to_id,
-                date: envelopes[&env_hash].date(),
-                has_unseen: !envelopes[&env_hash].is_seen(),
+                date: envelopes_lck[&env_hash].date(),
+                has_unseen: !envelopes_lck[&env_hash].is_seen(),
                 ..ThreadNode::new(new_id)
             },
         );
         self.message_ids
-            .insert(envelopes[&env_hash].message_id().raw().to_vec(), new_id);
-        self.message_ids_set
-            .insert(envelopes[&env_hash].message_id().raw().to_vec().to_vec());
+            .insert(envelopes_lck[&env_hash].message_id().raw().to_vec(), new_id);
+        self.message_ids_set.insert(
+            envelopes_lck[&env_hash]
+                .message_id()
+                .raw()
+                .to_vec()
+                .to_vec(),
+        );
         self.missing_message_ids
-            .remove(envelopes[&env_hash].message_id().raw());
-        envelopes.get_mut(&env_hash).unwrap().set_thread(new_id);
+            .remove(envelopes_lck[&env_hash].message_id().raw());
         self.hash_set.insert(env_hash);
         if let Some(reply_to_id) = reply_to_id {
             self.union(reply_to_id, new_id);
             make!((reply_to_id) parent of (new_id), &mut self.thread_nodes);
         } else {
-            if let Some(r) = envelopes[&env_hash]
+            if let Some(r) = envelopes_lck[&env_hash]
                 .in_reply_to()
                 .map(crate::email::StrBuild::raw)
             {
@@ -906,7 +916,7 @@ impl Threads {
                 self.thread_nodes.insert(
                     reply_to_id,
                     ThreadNode {
-                        date: envelopes[&env_hash].date(),
+                        date: envelopes_lck[&env_hash].date(),
                         thread_group: reply_to_id,
                         ..ThreadNode::new(reply_to_id)
                     },
@@ -919,23 +929,31 @@ impl Threads {
             }
             self.tree_insert_root(new_id, envelopes);
         }
+        drop(envelopes_lck);
         self.update_show_subject(new_id, env_hash, envelopes);
+        envelopes
+            .write()
+            .unwrap()
+            .get_mut(&env_hash)
+            .unwrap()
+            .set_thread(new_id);
     }
 
     /* Insert or update */
     pub fn insert_reply(&mut self, envelopes: &mut Envelopes, env_hash: EnvelopeHash) -> bool {
-        let reply_to_id: Option<ThreadHash> = envelopes[&env_hash]
+        let mut envelopes_lck = envelopes.write().unwrap();
+        let reply_to_id: Option<ThreadHash> = envelopes_lck[&env_hash]
             .in_reply_to()
             .map(crate::email::StrBuild::raw)
             .and_then(|r| self.message_ids.get(r).cloned());
         if let Some(id) = self
             .message_ids
-            .get(envelopes[&env_hash].message_id().raw())
+            .get(envelopes_lck[&env_hash].message_id().raw())
             .cloned()
         {
             self.thread_nodes.entry(id).and_modify(|n| {
                 n.message = Some(env_hash);
-                n.date = envelopes[&env_hash].date();
+                n.date = envelopes_lck[&env_hash].date();
                 n.pruned = false;
                 if n.parent.is_none() {
                     if let Some(reply_to_id) = reply_to_id {
@@ -951,13 +969,19 @@ impl Threads {
             }
 
             self.message_ids
-                .insert(envelopes[&env_hash].message_id().raw().to_vec(), id);
-            self.message_ids_set
-                .insert(envelopes[&env_hash].message_id().raw().to_vec().to_vec());
+                .insert(envelopes_lck[&env_hash].message_id().raw().to_vec(), id);
+            self.message_ids_set.insert(
+                envelopes_lck[&env_hash]
+                    .message_id()
+                    .raw()
+                    .to_vec()
+                    .to_vec(),
+            );
             self.missing_message_ids
-                .remove(envelopes[&env_hash].message_id().raw());
-            envelopes.get_mut(&env_hash).unwrap().set_thread(id);
+                .remove(envelopes_lck[&env_hash].message_id().raw());
+            envelopes_lck.get_mut(&env_hash).unwrap().set_thread(id);
             self.hash_set.insert(env_hash);
+            drop(envelopes_lck);
             if self.thread_nodes[&id].parent.is_none() {
                 self.tree_insert_root(id, envelopes);
             }
@@ -978,21 +1002,27 @@ impl Threads {
                 ThreadNode {
                     message: Some(env_hash),
                     parent: Some(reply_to_id),
-                    date: envelopes[&env_hash].date(),
-                    has_unseen: !envelopes[&env_hash].is_seen(),
+                    date: envelopes_lck[&env_hash].date(),
+                    has_unseen: !envelopes_lck[&env_hash].is_seen(),
                     ..ThreadNode::new(new_id)
                 },
             );
             self.message_ids
-                .insert(envelopes[&env_hash].message_id().raw().to_vec(), new_id);
-            self.message_ids_set
-                .insert(envelopes[&env_hash].message_id().raw().to_vec().to_vec());
+                .insert(envelopes_lck[&env_hash].message_id().raw().to_vec(), new_id);
+            self.message_ids_set.insert(
+                envelopes_lck[&env_hash]
+                    .message_id()
+                    .raw()
+                    .to_vec()
+                    .to_vec(),
+            );
             self.missing_message_ids
-                .remove(envelopes[&env_hash].message_id().raw());
-            envelopes.get_mut(&env_hash).unwrap().set_thread(new_id);
+                .remove(envelopes_lck[&env_hash].message_id().raw());
+            envelopes_lck.get_mut(&env_hash).unwrap().set_thread(new_id);
             self.hash_set.insert(env_hash);
             self.union(reply_to_id, new_id);
             make!((reply_to_id) parent of (new_id), &mut self.thread_nodes);
+            drop(envelopes_lck);
             self.update_show_subject(new_id, env_hash, envelopes);
             true
         } else {
@@ -1073,6 +1103,7 @@ impl Threads {
         sort: (SortField, SortOrder),
         envelopes: &Envelopes,
     ) {
+        let envelopes = envelopes.read().unwrap();
         vec.sort_by(|b, a| match sort {
             (SortField::Date, SortOrder::Desc) => {
                 let a = &self.thread_nodes[&a];
@@ -1148,6 +1179,7 @@ impl Threads {
     }
     fn inner_sort_by(&self, sort: (SortField, SortOrder), envelopes: &Envelopes) {
         let tree = &mut self.tree_index.borrow_mut();
+        let envelopes = envelopes.read().unwrap();
         tree.sort_by(|b, a| match sort {
             (SortField::Date, SortOrder::Desc) => {
                 let a = &self.thread_nodes[&a];

@@ -97,7 +97,7 @@ impl ListingTrait for PlainListing {
     }
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
         let account = &context.accounts[self.cursor_pos.0];
-        let envelope: &Envelope = &account.get_env(&self.local_collection[idx]);
+        let envelope: EnvelopeRef = account.collection.get_env(self.local_collection[idx]);
 
         let fg_color = if !envelope.is_seen() {
             Color::Byte(0)
@@ -323,27 +323,28 @@ impl PlainListing {
             );
             return;
         }
-        self.local_collection = account.collection.keys().cloned().collect();
+        let envelopes = account.collection.envelopes.read().unwrap();
+        self.local_collection = envelopes.keys().cloned().collect();
         let sort = self.sort;
         self.local_collection.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
-                let ma = &account.get_env(a);
-                let mb = &account.get_env(b);
+                let ma = &envelopes[a];
+                let mb = &envelopes[b];
                 mb.date().cmp(&ma.date())
             }
             (SortField::Date, SortOrder::Asc) => {
-                let ma = &account.get_env(a);
-                let mb = &account.get_env(b);
+                let ma = &envelopes[a];
+                let mb = &envelopes[b];
                 ma.date().cmp(&mb.date())
             }
             (SortField::Subject, SortOrder::Desc) => {
-                let ma = &account.get_env(a);
-                let mb = &account.get_env(b);
+                let ma = &envelopes[a];
+                let mb = &envelopes[b];
                 ma.subject().cmp(&mb.subject())
             }
             (SortField::Subject, SortOrder::Asc) => {
-                let ma = &account.get_env(a);
-                let mb = &account.get_env(b);
+                let ma = &envelopes[a];
+                let mb = &envelopes[b];
                 mb.subject().cmp(&ma.subject())
             }
         });
@@ -353,9 +354,9 @@ impl PlainListing {
         let widths: (usize, usize, usize);
 
         for idx in 0..self.local_collection.len() {
-            let envelope: &Envelope = &account.get_env(&self.local_collection[idx]);
+            let envelope: EnvelopeRef = account.collection.get_env(self.local_collection[idx]);
 
-            let strings = PlainListing::make_entry_string(envelope, idx);
+            let strings = PlainListing::make_entry_string(&envelope, idx);
             min_width.0 = cmp::max(min_width.0, strings.0.len()); /* index */
             min_width.1 = cmp::max(min_width.1, strings.2.split_graphemes().len()); /* date */
             min_width.2 = cmp::max(min_width.2, strings.3.split_graphemes().len()); /* subject */
@@ -381,7 +382,7 @@ impl PlainListing {
                 break;
             }
             /* Write an entire line for each envelope entry. */
-            let envelope: &Envelope = &account.get_env(&self.local_collection[idx]);
+            let envelope: EnvelopeRef = account.collection.get_env(self.local_collection[idx]);
 
             let fg_color = if !envelope.is_seen() {
                 Color::Byte(0)
@@ -533,9 +534,9 @@ impl Component for PlainListing {
                 if self.length == 0 {
                     false
                 } else {
-                    let account = &mut context.accounts[self.cursor_pos.0];
-                    let envelope: &mut Envelope =
-                        &mut account.get_env_mut(&self.local_collection[idx]);
+                    let account = &context.accounts[self.cursor_pos.0];
+                    let envelope: EnvelopeRef =
+                        account.collection.get_env(self.local_collection[idx]);
                     !envelope.is_seen()
                 }
             };

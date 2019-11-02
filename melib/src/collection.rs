@@ -4,12 +4,45 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use fnv::FnvHashMap;
 
+pub struct EnvelopeRef<'g> {
+    guard: RwLockReadGuard<'g, FnvHashMap<EnvelopeHash, Envelope>>,
+    env_hash: EnvelopeHash,
+}
+
+impl Deref for EnvelopeRef<'_> {
+    type Target = Envelope;
+
+    fn deref(&self) -> &Envelope {
+        self.guard.get(&self.env_hash).unwrap()
+    }
+}
+
+pub struct EnvelopeRefMut<'g> {
+    guard: RwLockWriteGuard<'g, FnvHashMap<EnvelopeHash, Envelope>>,
+    env_hash: EnvelopeHash,
+}
+
+impl Deref for EnvelopeRefMut<'_> {
+    type Target = Envelope;
+
+    fn deref(&self) -> &Envelope {
+        self.guard.get(&self.env_hash).unwrap()
+    }
+}
+
+impl DerefMut for EnvelopeRefMut<'_> {
+    fn deref_mut(&mut self) -> &mut Envelope {
+        self.guard.get_mut(&self.env_hash).unwrap()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Default, Serialize)]
 pub struct Collection {
-    pub envelopes: FnvHashMap<EnvelopeHash, Envelope>,
+    pub envelopes: Arc<RwLock<FnvHashMap<EnvelopeHash, Envelope>>>,
     message_ids: FnvHashMap<Vec<u8>, EnvelopeHash>,
     date_index: BTreeMap<UnixTimestamp, EnvelopeHash>,
     subject_index: Option<BTreeMap<String, EnvelopeHash>>,
@@ -48,7 +81,7 @@ impl Collection {
         let threads = FnvHashMap::with_capacity_and_hasher(16, Default::default());
 
         Collection {
-            envelopes,
+            envelopes: Arc::new(RwLock::new(envelopes)),
             date_index,
             message_ids,
             subject_index,
@@ -58,16 +91,16 @@ impl Collection {
     }
 
     pub fn len(&self) -> usize {
-        self.envelopes.len()
+        self.envelopes.read().unwrap().len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.envelopes.is_empty()
+        self.envelopes.read().unwrap().is_empty()
     }
 
     pub fn remove(&mut self, envelope_hash: EnvelopeHash, folder_hash: FolderHash) {
         debug!("DEBUG: Removing {}", envelope_hash);
-        self.envelopes.remove(&envelope_hash);
+        self.envelopes.write().unwrap().remove(&envelope_hash);
         self.threads
             .entry(folder_hash)
             .or_default()
@@ -86,14 +119,14 @@ impl Collection {
         new_hash: EnvelopeHash,
         folder_hash: FolderHash,
     ) {
-        if !self.envelopes.contains_key(&old_hash) {
+        if !self.envelopes.write().unwrap().contains_key(&old_hash) {
             return;
         }
-        let mut env = self.envelopes.remove(&old_hash).unwrap();
+        let mut env = self.envelopes.write().unwrap().remove(&old_hash).unwrap();
         env.set_hash(new_hash);
         self.message_ids
             .insert(env.message_id().raw().to_vec(), new_hash);
-        self.envelopes.insert(new_hash, env);
+        self.envelopes.write().unwrap().insert(new_hash, env);
         {
             if self
                 .threads
@@ -150,9 +183,9 @@ impl Collection {
         } = self;
 
         if !threads.contains_key(&folder_hash) {
-            threads.insert(folder_hash, Threads::new(&mut new_envelopes));
+            threads.insert(folder_hash, Threads::new(new_envelopes.len()));
             for (h, e) in new_envelopes {
-                envelopes.insert(h, e);
+                envelopes.write().unwrap().insert(h, e);
             }
         } else {
             threads.entry(folder_hash).and_modify(|t| {
@@ -165,7 +198,10 @@ impl Collection {
                         .unwrap()
                 });
                 for h in ordered_hash_set {
-                    envelopes.insert(h, new_envelopes.remove(&h).unwrap());
+                    envelopes
+                        .write()
+                        .unwrap()
+                        .insert(h, new_envelopes.remove(&h).unwrap());
                     t.insert(envelopes, h);
                 }
             });
@@ -178,17 +214,19 @@ impl Collection {
                 continue;
             }
             if sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
+                let envelopes_lck = envelopes.read().unwrap();
                 let mut ordered_hash_set = threads[&folder_hash]
                     .hash_set
                     .iter()
                     .cloned()
                     .collect::<Vec<EnvelopeHash>>();
                 ordered_hash_set.sort_by(|a, b| {
-                    envelopes[a]
+                    envelopes_lck[a]
                         .date()
-                        .partial_cmp(&envelopes[b].date())
+                        .partial_cmp(&envelopes_lck[b].date())
                         .unwrap()
                 });
+                drop(envelopes_lck);
                 let mut updated = false;
                 for h in ordered_hash_set {
                     updated |= threads.entry(t_fh).or_default().insert_reply(envelopes, h);
@@ -199,17 +237,19 @@ impl Collection {
                 continue;
             }
             if sent_folder.map(|f| f == t_fh).unwrap_or(false) {
+                let envelopes_lck = envelopes.read().unwrap();
                 let mut ordered_hash_set = threads[&t_fh]
                     .hash_set
                     .iter()
                     .cloned()
                     .collect::<Vec<EnvelopeHash>>();
                 ordered_hash_set.sort_by(|a, b| {
-                    envelopes[a]
+                    envelopes_lck[a]
                         .date()
-                        .partial_cmp(&envelopes[b].date())
+                        .partial_cmp(&envelopes_lck[b].date())
                         .unwrap()
                 });
+                drop(envelopes_lck);
                 let mut updated = false;
                 for h in ordered_hash_set {
                     updated |= threads
@@ -235,12 +275,12 @@ impl Collection {
         mut envelope: Envelope,
         folder_hash: FolderHash,
     ) {
-        let old_env = self.envelopes.remove(&old_hash).unwrap();
+        let old_env = self.envelopes.write().unwrap().remove(&old_hash).unwrap();
         envelope.set_thread(old_env.thread());
         let new_hash = envelope.hash();
         self.message_ids
             .insert(envelope.message_id().raw().to_vec(), new_hash);
-        self.envelopes.insert(new_hash, envelope);
+        self.envelopes.write().unwrap().insert(new_hash, envelope);
         if self.sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
             for (_, t) in self.threads.iter_mut() {
                 t.update_envelope(&self.envelopes, old_hash, new_hash)
@@ -273,11 +313,11 @@ impl Collection {
         }
     }
 
-    pub fn insert(&mut self, envelope: Envelope, folder_hash: FolderHash) -> &Envelope {
+    pub fn insert(&mut self, envelope: Envelope, folder_hash: FolderHash) {
         let hash = envelope.hash();
         self.message_ids
             .insert(envelope.message_id().raw().to_vec(), hash);
-        self.envelopes.insert(hash, envelope);
+        self.envelopes.write().unwrap().insert(hash, envelope);
         if !self
             .threads
             .entry(folder_hash)
@@ -289,26 +329,26 @@ impl Collection {
                 .or_default()
                 .insert(&mut self.envelopes, hash);
         }
-        &self.envelopes[&hash]
     }
+
     pub fn insert_reply(&mut self, env_hash: EnvelopeHash) {
-        debug_assert!(self.envelopes.contains_key(&env_hash));
+        debug_assert!(self.envelopes.read().unwrap().contains_key(&env_hash));
         for (_, t) in self.threads.iter_mut() {
             t.insert_reply(&mut self.envelopes, env_hash);
         }
     }
-}
 
-impl Deref for Collection {
-    type Target = FnvHashMap<EnvelopeHash, Envelope>;
-
-    fn deref(&self) -> &FnvHashMap<EnvelopeHash, Envelope> {
-        &self.envelopes
+    pub fn get_env<'g>(&'g self, env_hash: EnvelopeHash) -> EnvelopeRef<'g> {
+        let guard: RwLockReadGuard<'g, _> = self.envelopes.read().unwrap();
+        EnvelopeRef { guard, env_hash }
     }
-}
 
-impl DerefMut for Collection {
-    fn deref_mut(&mut self) -> &mut FnvHashMap<EnvelopeHash, Envelope> {
-        &mut self.envelopes
+    pub fn get_env_mut<'g>(&'g mut self, env_hash: EnvelopeHash) -> EnvelopeRefMut<'g> {
+        let guard = self.envelopes.write().unwrap();
+        EnvelopeRefMut { guard, env_hash }
+    }
+
+    pub fn contains_key(&self, env_hash: &EnvelopeHash) -> bool {
+        self.envelopes.read().unwrap().contains_key(env_hash)
     }
 }

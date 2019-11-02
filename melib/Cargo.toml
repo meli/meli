@@ -19,7 +19,7 @@ notify-rust = { version = "^3", optional = true }
 termion = "1.5.1"
 xdg = "2.1.0"
 native-tls = { version ="0.2", optional=true }
-serde = "1.0.71"
+serde = { version = "1.0.71", features = ["rc", ] }
 serde_derive = "1.0.71"
 bincode = "1.2.0"
 uuid = { version = "0.7.4", features = ["serde", "v4"] }

@@ -165,7 +165,7 @@ impl ThreadView {
         self.entries.clear();
         for (line, (ind, thread_hash)) in thread_iter.enumerate() {
             let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_hash].message() {
-                let seen: bool = account.get_env(&msg_hash).is_seen();
+                let seen: bool = account.collection.get_env(msg_hash).is_seen();
                 self.make_entry((ind, thread_hash, line), msg_hash, seen)
             } else {
                 continue;
@@ -190,7 +190,9 @@ impl ThreadView {
         let mut highlight_reply_subjects: Vec<Option<usize>> =
             Vec::with_capacity(self.entries.len());
         for e in &mut self.entries {
-            let envelope: &Envelope = &context.accounts[self.coordinates.0].get_env(&e.msg_hash);
+            let envelope: EnvelopeRef = context.accounts[self.coordinates.0]
+                .collection
+                .get_env(e.msg_hash);
             let thread_node = &threads.thread_nodes()[&e.index.1];
             let string = if thread_node.show_subject() {
                 let subject = envelope.subject();
@@ -265,8 +267,9 @@ impl ThreadView {
                     true,
                 );
                 {
-                    let envelope: &Envelope =
-                        &context.accounts[self.coordinates.0].get_env(&e.msg_hash);
+                    let envelope: EnvelopeRef = context.accounts[self.coordinates.0]
+                        .collection
+                        .get_env(e.msg_hash);
                     if envelope.has_attachments() {
                         content[(e.index.0 * 4 + e.heading.grapheme_width(), 2 * y)]
                             .set_fg(Color::Byte(103));
@@ -342,8 +345,9 @@ impl ThreadView {
                     false,
                 );
                 {
-                    let envelope: &Envelope =
-                        &context.accounts[self.coordinates.0].get_env(&e.msg_hash);
+                    let envelope: EnvelopeRef = context.accounts[self.coordinates.0]
+                        .collection
+                        .get_env(e.msg_hash);
                     if envelope.has_attachments() {
                         content[(e.index.0 * 4 + e.heading.grapheme_width(), 2 * y)]
                             .set_fg(Color::Byte(103));
@@ -624,7 +628,7 @@ impl ThreadView {
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
-            let envelope: &Envelope = account.get_env(&i);
+            let envelope: EnvelopeRef = account.collection.get_env(i);
 
             let (x, y) = write_string_to_grid(
                 &envelope.subject(),
@@ -710,7 +714,7 @@ impl ThreadView {
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             };
-            let envelope: &Envelope = account.get_env(&i);
+            let envelope: EnvelopeRef = account.collection.get_env(i);
 
             let (x, y) = write_string_to_grid(
                 &envelope.subject(),
@@ -954,7 +958,7 @@ impl Component for ThreadView {
                             .message()
                             .unwrap()
                     };
-                    let envelope: &Envelope = &account.get_env(&i);
+                    let envelope: EnvelopeRef = account.collection.get_env(i);
                     let op = account.operation(envelope.hash());
                     debug!(
                         "sending action edit for {}, {}",
@@ -1061,7 +1065,7 @@ impl Component for ThreadView {
                 for e in self.entries.iter_mut() {
                     if e.msg_hash == *old_hash {
                         e.msg_hash = *new_hash;
-                        let seen: bool = account.get_env(&new_hash).is_seen();
+                        let seen: bool = account.collection.get_env(*new_hash).is_seen();
                         if seen != e.seen {
                             self.dirty = true;
                         }

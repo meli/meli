@@ -169,17 +169,19 @@ pub fn insert(context: &crate::state::Context) -> Result<()> {
             .map_err(|e| MeliError::new(e.to_string()))?,
     )
     .map_err(|e| MeliError::new(e.to_string()))?;
-    for acc in context.accounts.iter() {
-        debug!("inserting {} envelopes", acc.collection.envelopes.len());
-        for e in acc.collection.envelopes.values() {
-            conn.execute(
-                "INSERT OR REPLACE INTO envelopes (hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
-              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                params![e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, String::from("sdfsa"), e.date().to_be_bytes().to_vec()],
-            )
-            .map_err(|e| MeliError::new(e.to_string()))?;
+    /*
+        for acc in context.accounts.iter() {
+            debug!("inserting {} envelopes", acc.collection.envelopes.len());
+            for e in acc.collection.envelopes.values() {
+                conn.execute(
+                    "INSERT OR REPLACE INTO envelopes (hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
+                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                    params![e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, String::from("sdfsa"), e.date().to_be_bytes().to_vec()],
+                )
+                .map_err(|e| MeliError::new(e.to_string()))?;
+            }
         }
-    }
+    */
 
     Ok(())
 }

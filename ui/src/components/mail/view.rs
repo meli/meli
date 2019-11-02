@@ -317,12 +317,13 @@ impl Component for MailView {
                 return;
             }
             let (hash, is_seen) = {
-                let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
                 (envelope.hash(), envelope.is_seen())
             };
             if !is_seen {
                 let op = account.operation(hash);
-                let envelope: &mut Envelope = &mut account.get_env_mut(&self.coordinates.2);
+                let mut envelope: EnvelopeRefMut =
+                    account.collection.get_env_mut(self.coordinates.2);
                 if let Err(e) = envelope.set_seen(op) {
                     context
                         .replies
@@ -332,7 +333,7 @@ impl Component for MailView {
                         ))));
                 }
             }
-            let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+            let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
 
             let header_fg = if context.settings.terminal.theme == "light" {
                 Color::Black
@@ -459,7 +460,7 @@ impl Component for MailView {
                     ref archive,
                     ref post,
                     ref unsubscribe,
-                }) = list_management::detect(envelope)
+                }) = list_management::detect(&envelope)
                 {
                     let mut x = get_x(upper_left);
                     y += 1;
@@ -577,7 +578,7 @@ impl Component for MailView {
         if self.dirty {
             let body = {
                 let account = &mut context.accounts[self.coordinates.0];
-                let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
                 let op = account.operation(envelope.hash());
                 match envelope.body(op) {
                     Ok(body) => body,
@@ -615,7 +616,7 @@ impl Component for MailView {
                 ViewMode::Raw => {
                     let text = {
                         let account = &mut context.accounts[self.coordinates.0];
-                        let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                        let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
                         let mut op = account.operation(envelope.hash());
                         op.as_bytes()
                             .map(|v| String::from_utf8_lossy(v).into_owned())
@@ -714,7 +715,7 @@ impl Component for MailView {
         match *event {
             UIEvent::Input(Key::Char('c')) if !self.mode.is_contact_selector() => {
                 let account = &mut context.accounts[self.coordinates.0];
-                let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
 
                 let mut entries = Vec::new();
                 for addr in envelope.from().iter().chain(envelope.to().iter()) {
@@ -723,6 +724,7 @@ impl Component for MailView {
                     new_card.set_name(addr.get_display_name());
                     entries.push((new_card, format!("{}", addr)));
                 }
+                drop(envelope);
                 self.mode = ViewMode::ContactSelector(Selector::new(
                     "select contacts to add",
                     entries,
@@ -777,7 +779,7 @@ impl Component for MailView {
 
                 {
                     let account = &mut context.accounts[self.coordinates.0];
-                    let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                    let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
                     let op = account.operation(envelope.hash());
 
                     let attachments = match envelope.body(op) {
@@ -912,7 +914,7 @@ impl Component for MailView {
                     .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                 let url = {
                     let account = &mut context.accounts[self.coordinates.0];
-                    let envelope: &Envelope = &account.get_env(&self.coordinates.2);
+                    let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
                     let finder = LinkFinder::new();
                     let op = account.operation(envelope.hash());
                     let t = match envelope.body(op) {
@@ -973,8 +975,8 @@ impl Component for MailView {
                      * arrive */
                     return true;
                 }
-                let envelope: &Envelope = &account.get_env(&self.coordinates.2);
-                if let Some(actions) = list_management::detect(envelope) {
+                let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
+                if let Some(actions) = list_management::detect(&envelope) {
                     match e {
                         MailingListAction::ListPost if actions.post.is_some() => {
                             /* open composer */

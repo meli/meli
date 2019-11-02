@@ -50,6 +50,7 @@ enum CacheType {
     Sqlite3,
 }
 
+/*
 pub struct Cache {
     collection: Collection,
     kind: CacheType,
@@ -108,3 +109,4 @@ impl Cache {
         &self.collection.threads[&f].thread_nodes()[&h]
     }
 }
+*/

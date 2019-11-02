@@ -177,8 +177,9 @@ impl ListingTrait for ThreadListing {
         }
 
         if self.locations[idx] != 0 {
-            let envelope: &Envelope =
-                &context.accounts[self.cursor_pos.0].get_env(&self.locations[idx]);
+            let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
+                .collection
+                .get_env(self.locations[idx]);
 
             let fg_color = if !envelope.is_seen() {
                 Color::Byte(0)
@@ -297,7 +298,7 @@ impl ThreadListing {
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let mut thread_idx = 0; // needed for alternate thread colors
                                 /* Draw threaded view. */
-        threads.sort_by(self.sort, self.subsort, &account.collection);
+        threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);
         let thread_nodes: &FnvHashMap<ThreadHash, ThreadNode> = &threads.thread_nodes();
         let mut iter = threads.threads_iter().peekable();
         /* This is just a desugared for loop so that we can use .peek() */
@@ -309,7 +310,8 @@ impl ThreadListing {
                 thread_idx += 1;
             }
             if thread_node.has_message() {
-                let envelope: &Envelope = &account.get_env(&thread_node.message().unwrap());
+                let envelope: EnvelopeRef =
+                    account.collection.get_env(thread_node.message().unwrap());
                 self.locations.push(envelope.hash());
                 let fg_color = if !envelope.is_seen() {
                     Color::Byte(0)
@@ -325,7 +327,7 @@ impl ThreadListing {
                 };
                 let (x, _) = write_string_to_grid(
                     &ThreadListing::make_thread_entry(
-                        envelope,
+                        &envelope,
                         idx,
                         indentation,
                         thread_hash,
@@ -378,8 +380,9 @@ impl ThreadListing {
             return;
         }
         if self.locations[idx] != 0 {
-            let envelope: &Envelope =
-                &context.accounts[self.cursor_pos.0].get_env(&self.locations[idx]);
+            let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
+                .collection
+                .get_env(self.locations[idx]);
 
             let fg_color = if !envelope.is_seen() {
                 Color::Byte(0)
@@ -509,8 +512,10 @@ impl Component for ThreadListing {
                 if self.length == 0 {
                     false
                 } else {
-                    let account = &mut context.accounts[self.cursor_pos.0];
-                    let envelope: &Envelope = &account.get_env(&self.locations[self.cursor_pos.2]);
+                    let account = &context.accounts[self.cursor_pos.0];
+                    let envelope: EnvelopeRef = account
+                        .collection
+                        .get_env(self.locations[self.cursor_pos.2]);
                     envelope.is_seen()
                 }
             };

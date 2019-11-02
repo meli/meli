@@ -1533,7 +1533,8 @@ impl Component for Tabbed {
                             format!(
                                 "Failed to open envelope {}: {}",
                                 context.accounts[account_pos]
-                                    .get_env(&msg)
+                                    .collection
+                                    .get_env(msg)
                                     .message_id_display(),
                                 e.to_string()
                             ),

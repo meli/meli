@@ -169,9 +169,9 @@ impl Composer {
     pub fn edit(account_pos: usize, h: EnvelopeHash, context: &Context) -> Result<Self> {
         let mut ret = Composer::default();
         let op = context.accounts[account_pos].operation(h);
-        let envelope: &Envelope = context.accounts[account_pos].get_env(&h);
+        let envelope: EnvelopeRef = context.accounts[account_pos].collection.get_env(h);
 
-        ret.draft = Draft::edit(envelope, op)?;
+        ret.draft = Draft::edit(&envelope, op)?;
 
         ret.account_cursor = account_pos;
         Ok(ret)
@@ -187,10 +187,10 @@ impl Composer {
         let thread_nodes = &threads.thread_nodes();
         let mut ret = Composer::default();
         let p = &thread_nodes[&msg];
-        let parent_message = &account.collection[&p.message().unwrap()];
+        let parent_message = account.collection.get_env(p.message().unwrap());
         /* If message is from a mailing list and we detect a List-Post header, ask user if they
          * want to reply to the mailing list or the submitter of the message */
-        if let Some(actions) = list_management::detect(parent_message) {
+        if let Some(actions) = list_management::detect(&parent_message) {
             if let Some(post) = actions.post {
                 /* Try to parse header value in this order
                  * - <mailto:*****@*****>
@@ -224,16 +224,24 @@ impl Composer {
         let mut op = account.operation(parent_message.hash());
         let parent_bytes = op.as_bytes();
 
-        ret.draft = Draft::new_reply(parent_message, parent_bytes.unwrap());
+        ret.draft = Draft::new_reply(&parent_message, parent_bytes.unwrap());
         ret.draft.headers_mut().insert(
             "Subject".into(),
             if p.show_subject() {
                 format!(
                     "Re: {}",
-                    account.get_env(&p.message().unwrap()).subject().clone()
+                    account
+                        .collection
+                        .get_env(p.message().unwrap())
+                        .subject()
+                        .clone()
                 )
             } else {
-                account.get_env(&p.message().unwrap()).subject().into()
+                account
+                    .collection
+                    .get_env(p.message().unwrap())
+                    .subject()
+                    .into()
             },
         );
 
