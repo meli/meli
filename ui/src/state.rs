@@ -530,7 +530,6 @@ impl State {
     /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: &str) {
         if cmd == "insert" {
-            crate::sqlite3::insert(&self.context).unwrap();
             return;
         } else if cmd.starts_with("_from") {
             debug!(crate::sqlite3::from(&cmd["_from".len()..]));
@@ -572,6 +571,22 @@ impl State {
                         ));
                     }
                 }
+                AccountAction(_, ReIndex) => match crate::sqlite3::insert(&mut self.context) {
+                    Ok(()) => {
+                        self.context.replies.push_back(UIEvent::Notification(
+                            None,
+                            "Message index rebuild started.".to_string(),
+                            Some(NotificationType::INFO),
+                        ));
+                    }
+                    Err(e) => {
+                        self.context.replies.push_back(UIEvent::Notification(
+                            None,
+                            format!("Message index rebuild failed: {}.", e),
+                            Some(NotificationType::ERROR),
+                        ));
+                    }
+                },
                 v => {
                     self.rcv_event(UIEvent::Action(v));
                 }

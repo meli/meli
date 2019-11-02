@@ -19,14 +19,16 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use fnv::FnvHashMap;
 use melib::{
-    email::EnvelopeHash,
+    email::{Envelope, EnvelopeHash},
     thread::{SortField, SortOrder},
     MeliError, Result, StackVec,
 };
 use rusqlite::{params, Connection};
 use std::borrow::Cow;
 use std::convert::TryInto;
+use std::sync::{Arc, RwLock};
 
 #[inline(always)]
 fn escape_double_quote(w: &str) -> Cow<str> {
@@ -160,7 +162,7 @@ END; ",
     Ok(conn)
 }
 
-pub fn insert(context: &crate::state::Context) -> Result<()> {
+pub fn insert(context: &mut crate::state::Context) -> Result<()> {
     let data_dir =
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
     let conn = Connection::open(

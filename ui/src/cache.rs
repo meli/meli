@@ -23,6 +23,7 @@ use melib::backends::{FolderHash, MailBackend};
 use melib::email::{EnvelopeHash, Flag, UnixTimestamp};
 use melib::mailbox::*;
 use melib::thread::{ThreadHash, ThreadNode};
+use std::sync::RwLock;
 
 #[derive(Debug)]
 pub enum Query {
@@ -56,6 +57,7 @@ pub struct Cache {
     kind: CacheType,
     backend: Box<dyn MailBackend>,
 }
+/*
 
 impl Cache {
     pub fn build_index(&mut self) {
