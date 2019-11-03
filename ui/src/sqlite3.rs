@@ -19,11 +19,11 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use fnv::FnvHashMap;
 use melib::{
-    email::{Envelope, EnvelopeHash},
+    email::EnvelopeHash,
+    log,
     thread::{SortField, SortOrder},
-    MeliError, Result, StackVec,
+    MeliError, Result, StackVec, ERROR,
 };
 use rusqlite::{params, Connection};
 use std::borrow::Cow;
@@ -171,19 +171,93 @@ pub fn insert(context: &mut crate::state::Context) -> Result<()> {
             .map_err(|e| MeliError::new(e.to_string()))?,
     )
     .map_err(|e| MeliError::new(e.to_string()))?;
-    /*
-        for acc in context.accounts.iter() {
-            debug!("inserting {} envelopes", acc.collection.envelopes.len());
-            for e in acc.collection.envelopes.values() {
-                conn.execute(
-                    "INSERT OR REPLACE INTO envelopes (hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
-                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                    params![e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, String::from("sdfsa"), e.date().to_be_bytes().to_vec()],
-                )
-                .map_err(|e| MeliError::new(e.to_string()))?;
+    let work_context = context.work_controller().get_context();
+    let mutexes = context
+        .accounts
+        .iter()
+        .map(|acc| (acc.collection.envelopes.clone(), acc.backend.clone()))
+        .collect::<Vec<(Arc<RwLock<_>>, Arc<_>)>>();
+    let env_hashes = mutexes
+        .iter()
+        .map(|m| m.0.read().unwrap().keys().cloned().collect::<Vec<_>>())
+        .collect::<Vec<Vec<_>>>();
+
+    /* Sleep, index and repeat in order not to block the main process */
+    let handle = std::thread::Builder::new().name(String::from("rebuilding index")).spawn(move || {
+        let thread_id = std::thread::current().id();
+
+        let sleep_dur = std::time::Duration::from_millis(20);
+        for ((acc_mutex, backend_mutex), env_hashes) in mutexes.into_iter().zip(env_hashes.into_iter())  {
+            let mut ctr = 0;
+            debug!("{}", format!("Rebuilding index. {}/{}", ctr, env_hashes.len()));
+            work_context
+                .set_status
+                .send((thread_id, format!("Rebuilding index. {}/{}", ctr, env_hashes.len())))
+                .unwrap();
+            for chunk in env_hashes.chunks(200) {
+                ctr += chunk.len();
+                let envelopes_lck = acc_mutex.read().unwrap();
+                let backend_lck = backend_mutex.read().unwrap();
+                for env_hash in chunk {
+                    if let Some(e) = envelopes_lck.get(&env_hash) {
+                        let op = backend_lck.operation(e.hash());
+                        let body = match e.body(op) {
+                            Ok(body) => body.text(),
+                            Err(err) => {
+                                debug!("{}",
+                                    format!(
+                                        "Failed to open envelope {}: {}",
+                                        e.message_id_display(),
+                                        err.to_string()
+                                    ));
+                                log(
+                                    format!(
+                                        "Failed to open envelope {}: {}",
+                                        e.message_id_display(),
+                                        err.to_string()
+                                    ),
+                                    ERROR,
+                                );
+                                return;
+                            }
+                        };
+                        if let Err(err) = conn.execute(
+                            "INSERT OR REPLACE INTO envelopes (hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
+              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+              params![e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, body, e.date().to_be_bytes().to_vec()],
+                        )
+                            .map_err(|e| MeliError::new(e.to_string())) {
+                                debug!("{}",
+                                    format!(
+                                        "Failed to insert envelope {}: {}",
+                                        e.message_id_display(),
+                                        err.to_string()
+                                    ));
+                                log(
+                                    format!(
+                                        "Failed to insert envelope {}: {}",
+                                        e.message_id_display(),
+                                        err.to_string()
+                                    ),
+                                    ERROR,
+                                );
+              }
+                    }
+                }
+                drop(envelopes_lck);
+                work_context
+                    .set_status
+                    .send((thread_id, format!("Rebuilding index. {}/{}", ctr, env_hashes.len())))
+                    .unwrap();
+                std::thread::sleep(sleep_dur);
             }
         }
-    */
+        work_context.finished.send(thread_id).unwrap();
+    })?;
+    context.work_controller().static_threads.lock()?.insert(
+        handle.thread().id(),
+        String::from("Rebuilding sqlite3 index").into(),
+    );
 
     Ok(())
 }

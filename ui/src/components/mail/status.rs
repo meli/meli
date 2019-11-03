@@ -38,9 +38,6 @@ impl fmt::Display for StatusPanel {
 
 impl Component for StatusPanel {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !self.dirty {
-            return;
-        }
         let (width, height) = self.content.size();
         {
             let (_, y) = write_string_to_grid(
@@ -143,7 +140,6 @@ impl Component for StatusPanel {
                 ),
             ),
         );
-        self.dirty = false;
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {

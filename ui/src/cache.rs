@@ -19,11 +19,13 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+/*
 use melib::backends::{FolderHash, MailBackend};
-use melib::email::{EnvelopeHash, Flag, UnixTimestamp};
 use melib::mailbox::*;
 use melib::thread::{ThreadHash, ThreadNode};
 use std::sync::RwLock;
+*/
+use melib::email::{Flag, UnixTimestamp};
 
 #[derive(Debug)]
 pub enum Query {
@@ -47,17 +49,16 @@ pub enum Query {
     Flag(Flag),
 }
 
+/*
 enum CacheType {
     Sqlite3,
 }
 
-/*
 pub struct Cache {
     collection: Collection,
     kind: CacheType,
     backend: Box<dyn MailBackend>,
 }
-/*
 
 impl Cache {
     pub fn build_index(&mut self) {
