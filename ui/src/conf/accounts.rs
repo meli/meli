@@ -740,25 +740,12 @@ impl Account {
         self.collection.contains_key(&h)
     }
     pub fn operation(&self, h: EnvelopeHash) -> Box<dyn BackendOp> {
-        for mailbox in self.folders.values() {
-            match mailbox {
-                MailboxEntry::Available(ref m) | MailboxEntry::Parsing(ref m, _, _) => {
-                    if m.envelopes.contains(&h) {
-                        let operation = self.backend.operation(h, m.folder.hash());
-                        if self.settings.account.read_only() {
-                            return ReadOnlyOp::new(operation);
-                        } else {
-                            return operation;
-                        }
-                    }
-                }
-                _ => {}
-            }
+        let operation = self.backend.operation(h);
+        if self.settings.account.read_only() {
+            ReadOnlyOp::new(operation)
+        } else {
+            operation
         }
-        debug!("didn't find {}", h);
-        debug!(&self.folders);
-        //debug!(&self.collection.envelopes);
-        unreachable!()
     }
 
     pub fn thread(&self, h: ThreadHash, f: FolderHash) -> &ThreadNode {

@@ -259,7 +259,7 @@ impl MailBackend for ImapType {
             .collect()
     }
 
-    fn operation(&self, hash: EnvelopeHash, _folder_hash: FolderHash) -> Box<dyn BackendOp> {
+    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
         let (uid, folder_hash) = self.hash_index.lock().unwrap()[&hash];
         Box::new(ImapOp::new(
             uid,

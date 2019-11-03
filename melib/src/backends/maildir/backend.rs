@@ -114,7 +114,7 @@ pub type HashIndexes = Arc<Mutex<FnvHashMap<FolderHash, HashIndex>>>;
 pub struct MaildirType {
     name: String,
     folders: FnvHashMap<FolderHash, MaildirFolder>,
-    //folder_index: FnvHashMap<FolderHash, usize>,
+    folder_index: Arc<Mutex<FnvHashMap<EnvelopeHash, FolderHash>>>,
     hash_indexes: HashIndexes,
     path: PathBuf,
 }
@@ -207,6 +207,7 @@ impl MailBackend for MaildirType {
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
         debug!("watching {:?}", root_path);
         let hash_indexes = self.hash_indexes.clone();
+        let folder_index = self.folder_index.clone();
         let handle = thread::Builder::new()
             .name("folder watch".to_string())
             .spawn(move || {
@@ -255,6 +256,7 @@ impl MailBackend for MaildirType {
                                     &cache_dir,
                                     file_name,
                                 ) {
+                                    folder_index.lock().unwrap().insert(env.hash(),folder_hash);
                                     debug!(
                                         "Create event {} {} {}",
                                         env.hash(),
@@ -300,6 +302,7 @@ impl MailBackend for MaildirType {
                                             &cache_dir,
                                             file_name,
                                         ) {
+                                            folder_index.lock().unwrap().insert(env.hash(),folder_hash);
                                             sender.send(RefreshEvent {
                                                 hash: folder_hash,
                                                 kind: Create(Box::new(env)),
@@ -398,6 +401,7 @@ impl MailBackend for MaildirType {
                                         hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
                                     });
+                                    folder_index.lock().unwrap().insert(new_hash,get_path_hash!(dest) );
                                     index_lock.insert(new_hash, dest.into());
                                     continue;
                                 } else if !index_lock.contains_key(&new_hash)
@@ -434,6 +438,7 @@ impl MailBackend for MaildirType {
                                         &cache_dir,
                                         file_name,
                                     ) {
+                                        folder_index.lock().unwrap().insert(env.hash(),folder_hash);
                                         debug!(
                                             "Create event {} {} {}",
                                             env.hash(),
@@ -477,8 +482,12 @@ impl MailBackend for MaildirType {
         Ok(handle.thread().id())
     }
 
-    fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<dyn BackendOp> {
-        Box::new(MaildirOp::new(hash, self.hash_indexes.clone(), folder_hash))
+    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
+        Box::new(MaildirOp::new(
+            hash,
+            self.hash_indexes.clone(),
+            self.folder_index.lock().unwrap()[&hash],
+        ))
     }
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
@@ -663,6 +672,7 @@ impl MaildirType {
             name: settings.name().to_string(),
             folders,
             hash_indexes,
+            folder_index: Default::default(),
             path: root_path,
         }
     }
@@ -689,6 +699,7 @@ impl MaildirType {
             let name = format!("parsing {:?}", folder.name());
             let root_path = self.path.to_path_buf();
             let map = self.hash_indexes.clone();
+            let folder_index = self.folder_index.clone();
 
             let closure = move |work_context: crate::async_workers::WorkContext| {
                 let name = name.clone();
@@ -698,6 +709,7 @@ impl MaildirType {
                     .unwrap();
                 let root_path = root_path.clone();
                 let map = map.clone();
+                let folder_index = folder_index.clone();
                 let tx = tx.clone();
                 let cache_dir = cache_dir.clone();
                 let path = path.clone();
@@ -737,6 +749,7 @@ impl MaildirType {
                                 let cache_dir = cache_dir.clone();
                                 let tx = tx.clone();
                                 let map = map.clone();
+                                let folder_index = folder_index.clone();
                                 let root_path = root_path.clone();
                                 let s = scope.builder().name(name.clone()).spawn(move |_| {
                                     let len = chunk.len();
@@ -746,6 +759,7 @@ impl MaildirType {
                                     for c in chunk.chunks(size) {
                                         //thread::yield_now();
                                         let map = map.clone();
+                                        let folder_index = folder_index.clone();
                                         let len = c.len();
                                         for file in c {
                                             /* Check if we have a cache file with this email's
@@ -768,6 +782,10 @@ impl MaildirType {
                                                     let map = map.entry(folder_hash).or_default();
                                                     let hash = env.hash();
                                                     map.insert(hash, file.clone().into());
+                                                    folder_index
+                                                        .lock()
+                                                        .unwrap()
+                                                        .insert(hash, folder_hash);
                                                     local_r.push(env);
                                                     continue;
                                                 }
@@ -784,6 +802,10 @@ impl MaildirType {
                                                 folder_hash,
                                             ));
                                             if let Some(e) = Envelope::from_token(op, hash) {
+                                                folder_index
+                                                    .lock()
+                                                    .unwrap()
+                                                    .insert(e.hash(), folder_hash);
                                                 if let Ok(cached) =
                                                     cache_dir.place_cache_file(file_name)
                                                 {

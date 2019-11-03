@@ -537,7 +537,7 @@ impl MailBackend for MboxType {
             .map(|(h, f)| (*h, f.clone() as Folder))
             .collect()
     }
-    fn operation(&self, hash: EnvelopeHash, _folder_hash: FolderHash) -> Box<dyn BackendOp> {
+    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
         let (offset, length) = {
             let index = self.index.lock().unwrap();
             index[&hash]

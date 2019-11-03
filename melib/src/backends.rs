@@ -176,7 +176,7 @@ pub enum FolderOperation {
 
 type NewFolderName = String;
 
-pub trait MailBackend: ::std::fmt::Debug {
+pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online(&self) -> bool;
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(
@@ -185,7 +185,7 @@ pub trait MailBackend: ::std::fmt::Debug {
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId>;
     fn folders(&self) -> FnvHashMap<FolderHash, Folder>;
-    fn operation(&self, hash: EnvelopeHash, folder_hash: FolderHash) -> Box<dyn BackendOp>;
+    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp>;
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()>;
     fn folder_operation(&mut self, _path: &str, _op: FolderOperation) -> Result<()> {
