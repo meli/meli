@@ -67,7 +67,7 @@ pub fn open_db(context: &crate::state::Context) -> Result<Connection> {
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
     let conn = Connection::open(
         data_dir
-            .place_data_file("meli.db")
+            .place_data_file("index.db")
             .map_err(|e| MeliError::new(e.to_string()))?,
     )
     .map_err(|e| MeliError::new(e.to_string()))?;
@@ -167,7 +167,7 @@ pub fn insert(context: &mut crate::state::Context) -> Result<()> {
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
     let conn = Connection::open(
         data_dir
-            .place_data_file("meli.db")
+            .place_data_file("index.db")
             .map_err(|e| MeliError::new(e.to_string()))?,
     )
     .map_err(|e| MeliError::new(e.to_string()))?;
@@ -271,7 +271,7 @@ pub fn search(
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
     let conn = Connection::open(
         data_dir
-            .place_data_file("meli.db")
+            .place_data_file("index.db")
             .map_err(|e| MeliError::new(e.to_string()))?,
     )
     .map_err(|e| MeliError::new(e.to_string()))?;
@@ -311,7 +311,7 @@ pub fn from(term: &str) -> Result<StackVec<EnvelopeHash>> {
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
     let conn = Connection::open_with_flags(
         data_dir
-            .place_data_file("meli.db")
+            .place_data_file("index.db")
             .map_err(|e| MeliError::new(e.to_string()))?,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
