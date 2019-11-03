@@ -264,7 +264,7 @@ impl State {
             } = &mut s.context;
 
             for (x, account) in accounts.iter_mut().enumerate() {
-                for folder in account.backend.folders().values() {
+                for folder in account.backend.read().unwrap().folders().values() {
                     debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
                     mailbox_hashes.insert(folder.hash(), x);
                 }

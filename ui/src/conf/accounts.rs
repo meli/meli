@@ -44,7 +44,7 @@ use std::fs;
 use std::io;
 use std::ops::{Index, IndexMut};
 use std::result;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 pub type Worker = Option<Async<Result<Vec<Envelope>>>>;
 
@@ -158,7 +158,7 @@ pub struct Account {
 
     pub(crate) settings: AccountConf,
     pub(crate) runtime_settings: AccountConf,
-    pub(crate) backend: Box<dyn MailBackend>,
+    pub(crate) backend: Arc<RwLock<Box<dyn MailBackend>>>,
 
     event_queue: VecDeque<(FolderHash, RefreshEvent)>,
     notify_fn: Arc<NotifyFn>,
@@ -269,7 +269,7 @@ impl Account {
             work_context,
             runtime_settings: settings.clone(),
             settings,
-            backend,
+            backend: Arc::new(RwLock::new(backend)),
             notify_fn,
 
             event_queue: VecDeque::with_capacity(8),
@@ -279,7 +279,8 @@ impl Account {
         ret
     }
     fn init(&mut self) {
-        let mut ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
+        let mut ref_folders: FnvHashMap<FolderHash, Folder> =
+            self.backend.read().unwrap().folders();
         let mut folders: FnvHashMap<FolderHash, MailboxEntry> =
             FnvHashMap::with_capacity_and_hasher(ref_folders.len(), Default::default());
         let mut folders_order: Vec<FolderHash> = Vec::with_capacity(ref_folders.len());
@@ -381,11 +382,11 @@ impl Account {
     fn new_worker(
         settings: &AccountConf,
         folder: Folder,
-        backend: &mut Box<dyn MailBackend>,
+        backend: &Arc<RwLock<Box<dyn MailBackend>>>,
         work_context: &WorkContext,
         notify_fn: Arc<NotifyFn>,
     ) -> Worker {
-        let mailbox_handle = backend.get(&folder);
+        let mailbox_handle = backend.write().unwrap().get(&folder);
         let mut builder = AsyncBuilder::new();
         let our_tx = builder.tx();
         let folder_hash = folder.hash();
@@ -510,7 +511,8 @@ impl Account {
                         self.collection.insert_reply(env_hash);
                     }
 
-                    let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
+                    let ref_folders: FnvHashMap<FolderHash, Folder> =
+                        self.backend.read().unwrap().folders();
                     let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
                     if folder_conf.ignore.is_true() {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
@@ -544,7 +546,8 @@ impl Account {
                     return Some(EnvelopeRemove(envelope_hash));
                 }
                 RefreshEventKind::Rescan => {
-                    let ref_folders: FnvHashMap<FolderHash, Folder> = self.backend.folders();
+                    let ref_folders: FnvHashMap<FolderHash, Folder> =
+                        self.backend.read().unwrap().folders();
                     let handle = Account::new_worker(
                         &self.settings,
                         ref_folders[&folder_hash].clone(),
@@ -575,7 +578,12 @@ impl Account {
         let r = RefreshEventConsumer::new(Box::new(move |r| {
             sender.send(ThreadEvent::from(r)).unwrap();
         }));
-        match self.backend.watch(r, work_controller.get_context()) {
+        match self
+            .backend
+            .read()
+            .unwrap()
+            .watch(r, work_controller.get_context())
+        {
             Ok(id) => {
                 work_controller
                     .static_threads
@@ -599,7 +607,7 @@ impl Account {
         self.folders.is_empty()
     }
     pub fn list_folders(&self) -> Vec<Folder> {
-        let mut folders = self.backend.folders();
+        let mut folders = self.backend.read().unwrap().folders();
         if let Some(folder_confs) = self.settings.conf().folders() {
             //debug!("folder renames: {:?}", folder_renames);
             for f in folders.values_mut() {
@@ -726,7 +734,7 @@ impl Account {
                 self.name.as_str()
             )));
         }
-        self.backend.save(bytes, folder, flags)
+        self.backend.write().unwrap().save(bytes, folder, flags)
     }
     pub fn iter_mailboxes(&self) -> MailboxIterator {
         MailboxIterator {
@@ -740,7 +748,7 @@ impl Account {
         self.collection.contains_key(&h)
     }
     pub fn operation(&self, h: EnvelopeHash) -> Box<dyn BackendOp> {
-        let operation = self.backend.operation(h);
+        let operation = self.backend.read().unwrap().operation(h);
         if self.settings.account.read_only() {
             ReadOnlyOp::new(operation)
         } else {
@@ -753,7 +761,7 @@ impl Account {
     }
 
     pub fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
-        self.backend.folder_operation(path, op)
+        self.backend.write().unwrap().folder_operation(path, op)
     }
 
     pub fn folder_confs(&self, folder_hash: FolderHash) -> &FolderConf {
@@ -783,7 +791,7 @@ impl Account {
     }
 
     pub fn is_online(&mut self) -> bool {
-        let ret = self.backend.is_online();
+        let ret = self.backend.read().unwrap().is_online();
         if ret != self.is_online && ret {
             self.init();
         }
