@@ -175,6 +175,7 @@ pub fn insert(context: &mut crate::state::Context) -> Result<()> {
     let mutexes = context
         .accounts
         .iter()
+        .filter(|acc| acc.settings.account().format() != "imap")
         .map(|acc| (acc.collection.envelopes.clone(), acc.backend.clone()))
         .collect::<Vec<(Arc<RwLock<_>>, Arc<_>)>>();
     let env_hashes = mutexes
