@@ -44,33 +44,39 @@ use termion::{clear, cursor};
 pub type StateStdout = termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>;
 
 struct InputHandler {
-    rx: Receiver<bool>,
-    tx: Sender<bool>,
+    rx: Receiver<InputCommand>,
+    tx: Sender<InputCommand>,
 }
 
 impl InputHandler {
     fn restore(&self, tx: Sender<ThreadEvent>) {
-        let stdin = std::io::stdin();
         let rx = self.rx.clone();
         thread::Builder::new()
             .name("input-thread".to_string())
             .spawn(move || {
                 get_events(
-                    stdin,
                     |k| {
                         tx.send(ThreadEvent::Input(k)).unwrap();
                     },
-                    || {
-                        tx.send(ThreadEvent::UIEvent(UIEvent::ChangeMode(UIMode::Fork)))
-                            .unwrap();
+                    |i| {
+                        tx.send(ThreadEvent::InputRaw(i)).unwrap();
                     },
                     &rx,
                 )
             })
             .unwrap();
     }
+
     fn kill(&self) {
-        self.tx.send(false).unwrap();
+        self.tx.send(InputCommand::Kill).unwrap();
+    }
+
+    fn switch_to_raw(&self) {
+        self.tx.send(InputCommand::Raw).unwrap();
+    }
+
+    fn switch_from_raw(&self) {
+        self.tx.send(InputCommand::NoRaw).unwrap();
     }
 }
 
@@ -98,9 +104,19 @@ impl Context {
     pub fn replies(&mut self) -> Vec<UIEvent> {
         self.replies.drain(0..).collect()
     }
+
     pub fn input_kill(&self) {
         self.input.kill();
     }
+
+    pub fn input_from_raw(&self) {
+        self.input.switch_from_raw();
+    }
+
+    pub fn input_to_raw(&self) {
+        self.input.switch_to_raw();
+    }
+
     pub fn restore_input(&self) {
         self.input.restore(self.sender.clone());
     }
@@ -569,25 +585,35 @@ impl State {
                 self.parse_command(&cmd);
                 return;
             }
+            UIEvent::Fork(ForkType::Finished) => {
+                /*
+                 * Fork has finished in the past.
+                 * We're back in the AlternateScreen, but the cursor is reset to Shown, so fix
+                 * it.
+                write!(self.stdout(), "{}", cursor::Hide,).unwrap();
+                self.flush();
+                 */
+                self.switch_to_main_screen();
+                self.switch_to_alternate_screen();
+                self.context.restore_input();
+                return;
+            }
             UIEvent::Fork(child) => {
                 self.mode = UIMode::Fork;
                 self.child = Some(child);
-                if let Some(ForkType::Finished) = self.child {
-                    /*
-                     * Fork has finished in the past.
-                     * We're back in the AlternateScreen, but the cursor is reset to Shown, so fix
-                     * it.
-                     */
-                    write!(self.stdout(), "{}", cursor::Hide,).unwrap();
-                    self.flush();
-                }
                 return;
             }
             UIEvent::ChangeMode(m) => {
+                if self.mode == UIMode::Embed {
+                    self.context.input_from_raw();
+                }
                 self.context
                     .sender
                     .send(ThreadEvent::UIEvent(UIEvent::ChangeMode(m)))
                     .unwrap();
+                if m == UIMode::Embed {
+                    self.context.input_to_raw();
+                }
             }
             _ => {}
         }

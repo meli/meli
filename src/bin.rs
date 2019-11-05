@@ -197,6 +197,8 @@ fn main() -> std::result::Result<(), std::io::Error> {
     let signals = &[
         /* Catch SIGWINCH to handle terminal resizing */
         signal_hook::SIGWINCH,
+        /* Catch SIGCHLD to handle embed applications status change */
+        signal_hook::SIGCHLD,
     ];
 
     let signal_recvr = notify(signals, sender)?;
@@ -303,10 +305,16 @@ fn main() -> std::result::Result<(), std::io::Error> {
                                         },
                                     }
                                 },
+                                UIMode::Embed => state.redraw(),
+
                                 UIMode::Fork => {
                                     break 'inner; // `goto` 'reap loop, and wait on child.
                                 },
                             }
+                        },
+                        ThreadEvent::InputRaw(raw_input) => {
+                            state.rcv_event(UIEvent::EmbedInput(raw_input));
+                            state.redraw();
                         },
                         ThreadEvent::RefreshMailbox(event) => {
                             state.refresh_event(*event);

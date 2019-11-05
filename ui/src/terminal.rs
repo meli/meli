@@ -29,6 +29,7 @@ mod position;
 mod cells;
 #[macro_use]
 mod keys;
+pub mod embed;
 mod text_editing;
 pub use self::cells::*;
 pub use self::keys::*;

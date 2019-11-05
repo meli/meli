@@ -48,6 +48,8 @@ pub enum ThreadEvent {
     ThreadJoin(thread::ThreadId),
     /// User input.
     Input(Key),
+    /// User input and input as raw bytes.
+    InputRaw((Key, Vec<u8>)),
     /// A watched folder has been refreshed.
     RefreshMailbox(Box<RefreshEvent>),
     UIEvent(UIEvent),
@@ -64,7 +66,10 @@ impl From<RefreshEvent> for ThreadEvent {
 
 #[derive(Debug)]
 pub enum ForkType {
-    Finished, // Already finished fork, we only want to restore input/output
+    /// Already finished fork, we only want to restore input/output
+    Finished,
+    /// Embed pty
+    Embed,
     Generic(std::process::Child),
     NewDraft(File, std::process::Child),
 }
@@ -81,6 +86,7 @@ pub enum UIEvent {
     Input(Key),
     ExInput(Key),
     InsertInput(Key),
+    EmbedInput((Key, Vec<u8>)),
     RefreshMailbox((usize, FolderHash)), //view has changed to FolderHash mailbox
     //Quit?
     Resize,
@@ -111,6 +117,8 @@ impl From<RefreshEvent> for UIEvent {
 pub enum UIMode {
     Normal,
     Insert,
+    /// Forward input to an embed pseudoterminal.
+    Embed,
     Execute,
     Fork,
 }
@@ -125,6 +133,7 @@ impl fmt::Display for UIMode {
                 UIMode::Insert => "INSERT",
                 UIMode::Execute => "EX",
                 UIMode::Fork => "FORK",
+                UIMode::Embed => "EMBED",
             }
         )
     }
