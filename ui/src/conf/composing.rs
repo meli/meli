@@ -18,13 +18,28 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+use super::default_vals::{false_val, none};
 
 /// Settings for writing and sending new e-mail
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ComposingSettings {
     /// A command to pipe new emails to
     /// Required
     pub mailer_cmd: String,
     /// Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
+    #[serde(default = "none")]
     pub editor_cmd: Option<String>,
+    /// Embed editor (for terminal interfaces) instead of forking and waiting.
+    #[serde(default = "false_val")]
+    pub embed: bool,
+}
+
+impl Default for ComposingSettings {
+    fn default() -> Self {
+        ComposingSettings {
+            mailer_cmd: String::new(),
+            editor_cmd: None,
+            embed: false,
+        }
+    }
 }
