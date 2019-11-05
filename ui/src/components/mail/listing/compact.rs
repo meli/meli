@@ -940,55 +940,140 @@ impl Component for CompactListing {
         }
 
         let shortcuts = &self.get_shortcuts(context)[CompactListing::DESCRIPTION];
-        match *event {
-            UIEvent::Input(Key::Up) => {
-                if self.cursor_pos.2 > 0 {
-                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(1);
-                    self.dirty = true;
+        if self.length > 0 {
+            match *event {
+                UIEvent::Input(Key::Up) => {
+                    if self.cursor_pos.2 > 0 {
+                        self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(1);
+                        self.dirty = true;
+                    }
+                    return true;
                 }
-                return true;
-            }
-            UIEvent::Input(Key::Down) => {
-                if self.length > 0 && self.new_cursor_pos.2 < self.length - 1 {
-                    self.new_cursor_pos.2 += 1;
-                    self.dirty = true;
+                UIEvent::Input(Key::Down) => {
+                    if self.new_cursor_pos.2 < self.length - 1 {
+                        self.new_cursor_pos.2 += 1;
+                        self.dirty = true;
+                    }
+                    return true;
                 }
-                return true;
-            }
-            UIEvent::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
-                if self.filtered_selection.is_empty() {
-                    self.view = ThreadView::new(self.cursor_pos, None, context);
-                } else {
-                    let mut temp = self.cursor_pos;
-                    let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
-                    let account = &context.accounts[self.cursor_pos.0];
-                    let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                    let threads = &account.collection.threads[&folder_hash];
-                    let root_thread_index = threads.root_iter().position(|t| t == thread_hash);
-                    if let Some(pos) = root_thread_index {
-                        temp.2 = pos;
-                        self.view = ThreadView::new(temp, Some(thread_hash), context);
+                UIEvent::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
+                    if self.filtered_selection.is_empty() {
+                        self.view = ThreadView::new(self.cursor_pos, None, context);
                     } else {
+                        let mut temp = self.cursor_pos;
+                        let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                        let account = &context.accounts[self.cursor_pos.0];
+                        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+                        let threads = &account.collection.threads[&folder_hash];
+                        let root_thread_index = threads.root_iter().position(|t| t == thread_hash);
+                        if let Some(pos) = root_thread_index {
+                            temp.2 = pos;
+                            self.view = ThreadView::new(temp, Some(thread_hash), context);
+                        } else {
+                            return true;
+                        }
+                    }
+                    self.unfocused = true;
+                    self.dirty = true;
+                    return true;
+                }
+                UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
+                    self.unfocused = false;
+                    self.dirty = true;
+                    /* If self.row_updates is not empty and we exit a thread, the row_update events
+                     * will be performed but the list will not be drawn. So force a draw in any case.
+                     * */
+                    self.force_draw = true;
+                    return true;
+                }
+                UIEvent::Input(ref key) if !self.unfocused && *key == shortcuts["select_entry"] => {
+                    let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                    self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
+                }
+                UIEvent::Action(ref action) => match action {
+                    Action::SubSort(field, order) if !self.unfocused => {
+                        debug!("SubSort {:?} , {:?}", field, order);
+                        self.subsort = (*field, *order);
+                        //if !self.filtered_selection.is_empty() {
+                        //    let threads = &account.collection.threads[&folder_hash];
+                        //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
+                        //} else {
+                        //    self.refresh_mailbox(context);
+                        //}
                         return true;
                     }
-                }
-                self.unfocused = true;
-                self.dirty = true;
-                return true;
+                    Action::Sort(field, order) if !self.unfocused => {
+                        debug!("Sort {:?} , {:?}", field, order);
+                        self.sort = (*field, *order);
+                        if !self.filtered_selection.is_empty() {
+                            let folder_hash = context.accounts[self.cursor_pos.0]
+                                [self.cursor_pos.1]
+                                .unwrap()
+                                .folder
+                                .hash();
+                            let threads = &context.accounts[self.cursor_pos.0].collection.threads
+                                [&folder_hash];
+                            threads.vec_inner_sort_by(
+                                &mut self.filtered_selection,
+                                self.sort,
+                                &context.accounts[self.cursor_pos.0].collection.envelopes,
+                            );
+                            self.dirty = true;
+                        } else {
+                            self.refresh_mailbox(context);
+                        }
+                        return true;
+                    }
+                    Action::ToggleThreadSnooze if !self.unfocused => {
+                        let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                        let account = &mut context.accounts[self.cursor_pos.0];
+                        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+                        let threads = account.collection.threads.entry(folder_hash).or_default();
+                        let root_node = threads.thread_nodes.entry(thread_hash).or_default();
+                        let is_snoozed = root_node.snoozed();
+                        root_node.set_snoozed(!is_snoozed);
+                        self.row_updates.push(thread_hash);
+                        self.refresh_mailbox(context);
+                        return true;
+                    }
+                    Action::Listing(a @ ListingAction::SetSeen)
+                    | Action::Listing(a @ ListingAction::SetUnseen)
+                    | Action::Listing(a @ ListingAction::Delete)
+                        if !self.unfocused =>
+                    {
+                        let is_selection_empty =
+                            self.selection.values().cloned().any(std::convert::identity);
+                        let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
+                        let cursor_iter;
+                        let sel_iter = if is_selection_empty {
+                            cursor_iter = None;
+                            Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
+                        } else {
+                            cursor_iter = Some(i.iter());
+                            None
+                        };
+                        let iter = sel_iter
+                            .into_iter()
+                            .flatten()
+                            .chain(cursor_iter.into_iter().flatten())
+                            .cloned();
+                        let stack = StackVec::from_iter(iter.into_iter());
+                        for i in stack {
+                            self.perform_action(context, i, a);
+                        }
+                        self.dirty = true;
+                        for v in self.selection.values_mut() {
+                            *v = false;
+                        }
+                        return true;
+                    }
+
+                    _ => {}
+                },
+                _ => {}
             }
-            UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
-                self.unfocused = false;
-                self.dirty = true;
-                /* If self.row_updates is not empty and we exit a thread, the row_update events
-                 * will be performed but the list will not be drawn. So force a draw in any case.
-                 * */
-                self.force_draw = true;
-                return true;
-            }
-            UIEvent::Input(ref key) if !self.unfocused && *key == shortcuts["select_entry"] => {
-                let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
-                self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
-            }
+        }
+        match *event {
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if (*idxa, *idxf)
                     == (
@@ -1058,6 +1143,11 @@ impl Component for CompactListing {
             UIEvent::Resize => {
                 self.dirty = true;
             }
+            UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
+                self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1, None));
+                self.refresh_mailbox(context);
+                return true;
+            }
             UIEvent::Action(ref action) => match action {
                 Action::ViewMailbox(idx) => {
                     if context.accounts[self.cursor_pos.0]
@@ -1072,93 +1162,12 @@ impl Component for CompactListing {
                     self.refresh_mailbox(context);
                     return true;
                 }
-                Action::SubSort(field, order) if !self.unfocused => {
-                    debug!("SubSort {:?} , {:?}", field, order);
-                    self.subsort = (*field, *order);
-                    //if !self.filtered_selection.is_empty() {
-                    //    let threads = &account.collection.threads[&folder_hash];
-                    //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
-                    //} else {
-                    //    self.refresh_mailbox(context);
-                    //}
-                    return true;
-                }
-                Action::Sort(field, order) if !self.unfocused => {
-                    debug!("Sort {:?} , {:?}", field, order);
-                    self.sort = (*field, *order);
-                    if !self.filtered_selection.is_empty() {
-                        let folder_hash = context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-                            .unwrap()
-                            .folder
-                            .hash();
-                        let threads =
-                            &context.accounts[self.cursor_pos.0].collection.threads[&folder_hash];
-                        threads.vec_inner_sort_by(
-                            &mut self.filtered_selection,
-                            self.sort,
-                            &context.accounts[self.cursor_pos.0].collection.envelopes,
-                        );
-                        self.dirty = true;
-                    } else {
-                        self.refresh_mailbox(context);
-                    }
-                    return true;
-                }
-                Action::ToggleThreadSnooze if !self.unfocused => {
-                    let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
-                    let account = &mut context.accounts[self.cursor_pos.0];
-                    let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                    let threads = account.collection.threads.entry(folder_hash).or_default();
-                    let root_node = threads.thread_nodes.entry(thread_hash).or_default();
-                    let is_snoozed = root_node.snoozed();
-                    root_node.set_snoozed(!is_snoozed);
-                    self.row_updates.push(thread_hash);
-                    self.refresh_mailbox(context);
-                    return true;
-                }
                 Action::Listing(Filter(ref filter_term)) if !self.unfocused => {
                     self.filter(filter_term, context);
                     self.dirty = true;
                 }
-                Action::Listing(a @ ListingAction::SetSeen)
-                | Action::Listing(a @ ListingAction::SetUnseen)
-                | Action::Listing(a @ ListingAction::Delete)
-                    if !self.unfocused =>
-                {
-                    let is_selection_empty =
-                        self.selection.values().cloned().any(std::convert::identity);
-                    let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
-                    let cursor_iter;
-                    let sel_iter = if is_selection_empty {
-                        cursor_iter = None;
-                        Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
-                    } else {
-                        cursor_iter = Some(i.iter());
-                        None
-                    };
-                    let iter = sel_iter
-                        .into_iter()
-                        .flatten()
-                        .chain(cursor_iter.into_iter().flatten())
-                        .cloned();
-                    let stack = StackVec::from_iter(iter.into_iter());
-                    for i in stack {
-                        self.perform_action(context, i, a);
-                    }
-                    self.dirty = true;
-                    for v in self.selection.values_mut() {
-                        *v = false;
-                    }
-                    return true;
-                }
-
                 _ => {}
             },
-            UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
-                self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1, None));
-                self.refresh_mailbox(context);
-                return true;
-            }
             _ => {}
         }
         false
