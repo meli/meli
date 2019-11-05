@@ -341,9 +341,12 @@ impl ListingTrait for ConversationsListing {
             return;
         }
 
+        self.order.clear();
+        self.selection.clear();
+        self.length = 0;
         self.filtered_selection.clear();
         self.filtered_order.clear();
-        self.filter_term.clear();
+        self.filter_term = filter_term.to_string();
         self.row_updates.clear();
         for v in self.selection.values_mut() {
             *v = false;
@@ -351,7 +354,7 @@ impl ListingTrait for ConversationsListing {
 
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        match account.search(filter_term, self.sort, folder_hash) {
+        match account.search(&self.filter_term, self.sort, folder_hash) {
             Ok(results) => {
                 let threads = &account.collection.threads[&folder_hash];
                 for env_hash in results {
@@ -387,16 +390,17 @@ impl ListingTrait for ConversationsListing {
                     self.content =
                         CellBuffer::new_with_context(0, 0, Cell::with_char(' '), context);
                 }
+                self.redraw_list(context);
             }
             Err(e) => {
                 self.cursor_pos.2 = 0;
                 self.new_cursor_pos.2 = 0;
                 let message = format!(
                     "Encountered an error while searching for `{}`: {}.",
-                    filter_term, e
+                    self.filter_term, e
                 );
                 log(
-                    format!("Failed to search for term {}: {}", filter_term, e),
+                    format!("Failed to search for term {}: {}", self.filter_term, e),
                     ERROR,
                 );
                 self.content =
@@ -412,8 +416,6 @@ impl ListingTrait for ConversationsListing {
                 );
             }
         }
-        self.filter_term = filter_term.to_string();
-        self.redraw_list(context);
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
