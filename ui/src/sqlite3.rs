@@ -20,7 +20,8 @@
  */
 
 use melib::{
-    email::EnvelopeHash,
+    backends::MailBackend,
+    email::{Envelope, EnvelopeHash},
     log,
     thread::{SortField, SortOrder},
     MeliError, Result, StackVec, ERROR,
@@ -62,41 +63,19 @@ fn fts5_bareword(w: &str) -> Cow<str> {
     }
 }
 
-pub fn open_db(context: &crate::state::Context) -> Result<Connection> {
+pub fn open_db() -> Result<Connection> {
     let data_dir =
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
-    let conn = Connection::open(
-        data_dir
-            .place_data_file("index.db")
-            .map_err(|e| MeliError::new(e.to_string()))?,
-    )
-    .map_err(|e| MeliError::new(e.to_string()))?;
-    //let conn = Connection::open_in_memory().map_err(|e| MeliError::new(e.to_string()))?;
-
-    /*
-         *
-    pub struct Envelope {
-        date: String,
-        from: Vec<Address>,
-        to: Vec<Address>,
-        cc: Vec<Address>,
-        bcc: Vec<Address>,
-        subject: Option<Vec<u8>>,
-        message_id: MessageID,
-        in_reply_to: Option<MessageID>,
-        references: Option<References>,
-        other_headers: FnvHashMap<String, String>,
-
-        timestamp: UnixTimestamp,
-        thread: ThreadHash,
-
-        hash: EnvelopeHash,
-
-        flags: Flag,
-        has_attachments: bool,
+    let db_path = data_dir
+        .place_data_file("index.db")
+        .map_err(|e| MeliError::new(e.to_string()))?;
+    if !db_path.exists() {
+        log(
+            format!("Creating index database in {}", db_path.display()),
+            melib::INFO,
+        );
     }
-    */
-
+    let conn = Connection::open(db_path).map_err(|e| MeliError::new(e.to_string()))?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,
@@ -162,15 +141,56 @@ END; ",
     Ok(conn)
 }
 
-pub fn insert(context: &mut crate::state::Context) -> Result<()> {
-    let data_dir =
-        xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
-    let conn = Connection::open(
-        data_dir
-            .place_data_file("index.db")
-            .map_err(|e| MeliError::new(e.to_string()))?,
-    )
-    .map_err(|e| MeliError::new(e.to_string()))?;
+pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>) -> Result<()> {
+    let conn = open_db()?;
+    let backend_lck = backend.read().unwrap();
+    let op = backend_lck.operation(envelope.hash());
+    let body = match envelope.body(op) {
+        Ok(body) => body.text(),
+        Err(err) => {
+            debug!(
+                "{}",
+                format!(
+                    "Failed to open envelope {}: {}",
+                    envelope.message_id_display(),
+                    err.to_string()
+                )
+            );
+            log(
+                format!(
+                    "Failed to open envelope {}: {}",
+                    envelope.message_id_display(),
+                    err.to_string()
+                ),
+                ERROR,
+            );
+            return Err(err);
+        }
+    };
+    if let Err(err) = conn.execute(
+            "INSERT OR REPLACE INTO envelopes (hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
+              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+              params![envelope.hash().to_be_bytes().to_vec(), envelope.date_as_str(), envelope.field_from_to_string(), envelope.field_to_to_string(), envelope.field_cc_to_string(), envelope.field_bcc_to_string(), envelope.subject().into_owned().trim_end_matches('\u{0}'), envelope.message_id_display().to_string(), envelope.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), envelope.field_references_to_string(), i64::from(envelope.flags().bits()), if envelope.has_attachments() { 1 } else { 0 }, body, envelope.date().to_be_bytes().to_vec()],
+        )
+            .map_err(|e| MeliError::new(e.to_string())) {
+                debug!(
+                        "Failed to insert envelope {}: {}",
+                        envelope.message_id_display(),
+                        err.to_string()
+                    );
+                log(
+                    format!(
+                        "Failed to insert envelope {}: {}",
+                        envelope.message_id_display(),
+                        err.to_string()
+                    ),
+                    ERROR,
+                );
+              }
+    Ok(())
+}
+pub fn index(context: &mut crate::state::Context) -> Result<()> {
+    let conn = open_db()?;
     let work_context = context.work_controller().get_context();
     let mutexes = context
         .accounts
@@ -267,14 +287,7 @@ pub fn search(
     term: &str,
     (sort_field, sort_order): (SortField, SortOrder),
 ) -> Result<StackVec<EnvelopeHash>> {
-    let data_dir =
-        xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
-    let conn = Connection::open(
-        data_dir
-            .place_data_file("index.db")
-            .map_err(|e| MeliError::new(e.to_string()))?,
-    )
-    .map_err(|e| MeliError::new(e.to_string()))?;
+    let conn = open_db()?;
 
     let sort_field = match debug!(sort_field) {
         SortField::Subject => "subject",
@@ -307,15 +320,7 @@ pub fn search(
 }
 
 pub fn from(term: &str) -> Result<StackVec<EnvelopeHash>> {
-    let data_dir =
-        xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
-    let conn = Connection::open_with_flags(
-        data_dir
-            .place_data_file("index.db")
-            .map_err(|e| MeliError::new(e.to_string()))?,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .map_err(|e| MeliError::new(e.to_string()))?;
+    let conn = open_db()?;
     let mut stmt = conn
         .prepare("SELECT hash FROM envelopes WHERE _from LIKE ?;")
         .map_err(|e| MeliError::new(e.to_string()))?;

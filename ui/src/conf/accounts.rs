@@ -501,6 +501,19 @@ impl Account {
                             envelope.field_from_to_string(),
                         )
                     };
+                    #[cfg(feature = "sqlite3")]
+                    {
+                        if let Err(err) = crate::sqlite3::insert(&envelope, &self.backend) {
+                            melib::log(
+                                format!(
+                                    "Failed to insert envelope {} in cache: {}",
+                                    envelope.message_id_display(),
+                                    err.to_string()
+                                ),
+                                melib::ERROR,
+                            );
+                        }
+                    }
                     self.collection.insert(*envelope, folder_hash);
                     if self
                         .sent_folder
@@ -799,12 +812,17 @@ impl Account {
         ret
     }
 
+    #[allow(unused_variables)]
     pub fn search(
         &self,
         search_term: &str,
         sort: (SortField, SortOrder),
         folder_hash: FolderHash,
     ) -> Result<StackVec<EnvelopeHash>> {
+        if self.settings.account().format() == "imap" {
+            return Err(MeliError::new("No search support for IMAP yet."));
+        }
+
         #[cfg(feature = "sqlite3")]
         {
             crate::sqlite3::search(search_term, sort)

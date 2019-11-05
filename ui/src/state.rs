@@ -529,13 +529,6 @@ impl State {
 
     /// Convert user commands to actions/method calls.
     fn parse_command(&mut self, cmd: &str) {
-        if cmd == "insert" {
-            return;
-        } else if cmd.starts_with("_from") {
-            debug!(crate::sqlite3::from(&cmd["_from".len()..]));
-            return;
-        }
-
         let result = parse_command(&cmd.as_bytes()).to_full_result();
 
         if let Ok(v) = result {
@@ -571,7 +564,7 @@ impl State {
                         ));
                     }
                 }
-                AccountAction(_, ReIndex) => match crate::sqlite3::insert(&mut self.context) {
+                AccountAction(_, ReIndex) => match crate::sqlite3::index(&mut self.context) {
                     Ok(()) => {
                         self.context.replies.push_back(UIEvent::Notification(
                             None,
