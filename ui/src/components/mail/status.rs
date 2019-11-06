@@ -25,6 +25,8 @@ use std::fmt;
 #[derive(Debug)]
 pub struct StatusPanel {
     cursor: (usize, usize),
+    account_cursor: usize,
+    status: Option<AccountStatus>,
     content: CellBuffer,
     dirty: bool,
     id: ComponentId,
@@ -38,6 +40,11 @@ impl fmt::Display for StatusPanel {
 
 impl Component for StatusPanel {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if let Some(ref mut status) = self.status {
+            status.draw(grid, area, context);
+            return;
+        }
+        self.draw_accounts(context);
         let (width, height) = self.content.size();
         {
             let (_, y) = write_string_to_grid(
@@ -142,8 +149,34 @@ impl Component for StatusPanel {
         );
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        if let Some(ref mut status) = self.status {
+            if status.process_event(event, context) {
+                return true;
+            }
+        }
+
         match *event {
+            UIEvent::Input(Key::Char('k')) => {
+                self.account_cursor = self.account_cursor.saturating_sub(1);
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Char('j')) => {
+                if self.account_cursor + 1 < context.accounts.len() {
+                    self.account_cursor += 1;
+                    self.dirty = true;
+                }
+                return true;
+            }
+            UIEvent::Input(Key::Char('\n')) if self.status.is_none() => {
+                self.status = Some(AccountStatus::new(self.account_cursor));
+                return true;
+            }
+            UIEvent::Input(Key::Esc) if self.status.is_some() => {
+                self.status = None;
+                return true;
+            }
             UIEvent::Input(Key::Left) => {
                 self.cursor.0 = self.cursor.0.saturating_sub(1);
                 self.dirty = true;
@@ -173,10 +206,13 @@ impl Component for StatusPanel {
         false
     }
     fn is_dirty(&self) -> bool {
-        self.dirty
+        self.dirty || self.status.as_ref().map(|s| s.is_dirty()).unwrap_or(false)
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
+        if let Some(ref mut status) = self.status {
+            status.set_dirty();
+        }
     }
 
     fn id(&self) -> ComponentId {
@@ -193,9 +229,240 @@ impl StatusPanel {
 
         StatusPanel {
             cursor: (0, 0),
+            account_cursor: 0,
+            content,
+            status: None,
+            dirty: true,
+            id: ComponentId::new_v4(),
+        }
+    }
+    fn draw_accounts(&mut self, context: &Context) {
+        self.content
+            .resize(120, 40 + context.accounts.len() * 20, Cell::default());
+        write_string_to_grid(
+            "Accounts",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            Attr::Default,
+            ((2, 10), (120 - 1, 10)),
+            true,
+        );
+
+        for (i, a) in context.accounts.iter().enumerate() {
+            for x in 2..(120 - 1) {
+                set_and_join_box(&mut self.content, (x, 12 + i * 10), HORZ_BOUNDARY);
+            }
+            //create_box(&mut self.content, ((2, 5 + i * 10), (120 - 1, 15 + i * 10)));
+            let (x, y) = write_string_to_grid(
+                a.name(),
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                Attr::Bold,
+                ((3, 12 + i * 10), (120 - 2, 12 + i * 10)),
+                true,
+            );
+            write_string_to_grid(
+                " ▒██▒ ",
+                &mut self.content,
+                Color::Byte(32),
+                Color::Default,
+                Attr::Default,
+                ((x, y), (120 - 2, 12 + i * 10)),
+                true,
+            );
+            write_string_to_grid(
+                &a.runtime_settings.account().identity,
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                ((4, y + 2), (120 - 2, y + 2)),
+                true,
+            );
+            if i == self.account_cursor {
+                for h in 1..8 {
+                    self.content[(2, h + y + 1)].set_ch('*');
+                }
+            } else {
+                for h in 1..8 {
+                    self.content[(2, h + y + 1)].set_ch(' ');
+                }
+            }
+            let (mut column_width, _) = write_string_to_grid(
+                &format!(
+                    "Messages total {}, unseen {}",
+                    a.collection.len(),
+                    a.collection
+                        .envelopes
+                        .read()
+                        .unwrap()
+                        .values()
+                        .filter(|e| !e.is_seen())
+                        .count()
+                ),
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                ((5, y + 3), (120 - 2, y + 3)),
+                true,
+            );
+            column_width = std::cmp::max(
+                column_width,
+                write_string_to_grid(
+                    &format!("Contacts total {}", a.address_book.len()),
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((5, y + 4), (120 - 2, y + 4)),
+                    true,
+                )
+                .0,
+            );
+            column_width = std::cmp::max(
+                column_width,
+                write_string_to_grid(
+                    &format!("Backend {}", a.settings.account().format()),
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((5, y + 5), (120 - 2, y + 5)),
+                    true,
+                )
+                .0,
+            );
+            /* next column */
+            write_string_to_grid(
+                &format!(
+                    "Messages total {}, unseen {}",
+                    a.collection.len(),
+                    a.collection
+                        .envelopes
+                        .read()
+                        .unwrap()
+                        .values()
+                        .filter(|e| !e.is_seen())
+                        .count()
+                ),
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                ((5 + column_width, y + 2), (120 - 2, y + 2)),
+                true,
+            );
+        }
+    }
+}
+
+impl Component for AccountStatus {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !self.dirty {
+            return;
+        }
+        self.dirty = false;
+        let (width, height) = self.content.size();
+
+        /* self.content may have been resized with write_string_to_grid() calls above since it has
+         * growable set */
+        let (width, height) = self.content.size();
+        let (cols, rows) = (width!(area), height!(area));
+        self.cursor = (
+            std::cmp::min(width.saturating_sub(cols), self.cursor.0),
+            std::cmp::min(height.saturating_sub(rows), self.cursor.1),
+        );
+        clear_area(grid, area);
+        copy_area(
+            grid,
+            &self.content,
+            area,
+            (
+                (
+                    std::cmp::min((width - 1).saturating_sub(cols), self.cursor.0),
+                    std::cmp::min((height - 1).saturating_sub(rows), self.cursor.1),
+                ),
+                (
+                    std::cmp::min(self.cursor.0 + cols, width - 1),
+                    std::cmp::min(self.cursor.1 + rows, height - 1),
+                ),
+            ),
+        );
+        context.dirty_areas.push_back(area);
+    }
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        match *event {
+            UIEvent::Resize => {
+                self.dirty = true;
+            }
+            UIEvent::Input(Key::Left) => {
+                self.cursor.0 = self.cursor.0.saturating_sub(1);
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Right) => {
+                self.cursor.0 = self.cursor.0 + 1;
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Up) => {
+                self.cursor.1 = self.cursor.1.saturating_sub(1);
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Down) => {
+                self.cursor.1 = self.cursor.1 + 1;
+                self.dirty = true;
+                return true;
+            }
+            _ => {}
+        }
+        false
+    }
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+    fn set_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
+}
+
+impl AccountStatus {
+    pub fn new(account_pos: usize) -> AccountStatus {
+        let mut content = CellBuffer::new(120, 5, Cell::default());
+        content.set_growable(true);
+
+        AccountStatus {
+            cursor: (0, 0),
+            account_pos,
             content,
             dirty: true,
             id: ComponentId::new_v4(),
         }
+    }
+}
+
+#[derive(Debug)]
+struct AccountStatus {
+    cursor: (usize, usize),
+    account_pos: usize,
+    content: CellBuffer,
+    dirty: bool,
+    id: ComponentId,
+}
+
+impl fmt::Display for AccountStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "status")
     }
 }

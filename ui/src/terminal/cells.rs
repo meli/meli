@@ -107,6 +107,7 @@ pub struct CellBuffer {
     rows: usize,
     buf: Vec<Cell>,
     pub ascii_drawing: bool,
+    growable: bool,
 }
 
 impl fmt::Debug for CellBuffer {
@@ -139,6 +140,7 @@ impl CellBuffer {
             cols,
             rows,
             buf: vec![cell; cols * rows],
+            growable: false,
             ascii_drawing: false,
         }
     }
@@ -148,12 +150,17 @@ impl CellBuffer {
             cols,
             rows,
             buf: vec![cell; cols * rows],
+            growable: false,
             ascii_drawing: context.settings.terminal.ascii_drawing,
         }
     }
 
     pub fn set_ascii_drawing(&mut self, new_val: bool) {
         self.ascii_drawing = new_val;
+    }
+
+    pub fn set_growable(&mut self, new_val: bool) {
+        self.growable = new_val;
     }
 
     /// Resizes `CellBuffer` to the given number of rows and columns, using the given `Cell` as
@@ -761,7 +768,11 @@ macro_rules! inspect_bounds {
             $x = get_x(upper_left);
             $y += 1;
             if $y > (get_y(bottom_right)) || $y > get_y(bounds) {
-                return ($x, $y - 1);
+                if $grid.growable {
+                    $grid.resize($grid.cols, $grid.rows * 2, Cell::default());
+                } else {
+                    return ($x, $y - 1);
+                }
             }
             if !$line_break {
                 break;
@@ -785,7 +796,15 @@ pub fn write_string_to_grid(
     let bottom_right = bottom_right!(area);
     let (mut x, mut y) = upper_left;
     if y == get_y(bounds) || x == get_x(bounds) {
-        return (x, y);
+        if grid.growable {
+            grid.resize(
+                std::cmp::max(grid.cols, x),
+                std::cmp::max(grid.rows, y) * 4,
+                Cell::default(),
+            );
+        } else {
+            return (x, y);
+        }
     }
 
     if y > (get_y(bottom_right))
@@ -793,8 +812,16 @@ pub fn write_string_to_grid(
         || y > get_y(bounds)
         || x > get_x(bounds)
     {
-        debug!(" Invalid area with string {} and area {:?}", s, area);
-        return (x, y);
+        if grid.growable {
+            grid.resize(
+                std::cmp::max(grid.cols, x),
+                std::cmp::max(grid.rows, y) * 4,
+                Cell::default(),
+            );
+        } else {
+            debug!(" Invalid area with string {} and area {:?}", s, area);
+            return (x, y);
+        }
     }
     for c in s.chars() {
         if c == '\r' {
@@ -1083,6 +1110,7 @@ pub mod ansi {
             buf,
             rows,
             cols,
+            growable: false,
             ascii_drawing: false,
         })
     }
