@@ -184,8 +184,8 @@ impl fmt::Display for Listing {
 
 impl Component for Listing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        for a in context.accounts.iter_mut() {
-            a.is_online();
+        for i in 0..context.accounts.len() {
+            context.is_online(i);
         }
 
         if !self.is_dirty() {
@@ -224,7 +224,7 @@ impl Component for Listing {
         self.dirty = false;
 
         if right_component_width == total_cols {
-            if !context.accounts[self.cursor_pos.0].is_online() {
+            if !context.is_online(self.cursor_pos.0) {
                 clear_area(grid, area);
                 write_string_to_grid(
                     "offline",
@@ -248,7 +248,7 @@ impl Component for Listing {
             self.draw_menu(grid, area, context);
         } else {
             self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
-            if !context.accounts[self.cursor_pos.0].is_online() {
+            if !context.is_online(self.cursor_pos.0) {
                 clear_area(grid, (set_x(upper_left, mid + 1), bottom_right));
                 write_string_to_grid(
                     "offline",

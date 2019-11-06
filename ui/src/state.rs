@@ -135,6 +135,40 @@ impl Context {
         }
     }
 
+    pub fn is_online(&mut self, account_pos: usize) -> bool {
+        let Context {
+            ref mut work_controller,
+            ref sender,
+            ref mut replies,
+            ref mut accounts,
+            ref mut mailbox_hashes,
+            ..
+        } = self;
+        if accounts[account_pos].is_online() {
+            for folder in accounts[account_pos]
+                .backend
+                .read()
+                .unwrap()
+                .folders()
+                .values()
+            {
+                debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
+                mailbox_hashes.insert(folder.hash(), account_pos);
+            }
+            /* Account::watch() needs
+             * - work_controller to pass `work_context` to the watcher threads and then add them
+             *   to the controller's static thread list,
+             * - sender to pass a RefreshEventConsumer closure to watcher threads for them to
+             *   inform the main binary that refresh events arrived
+             * - replies to report any failures to the user
+             */
+            accounts[account_pos].watch((work_controller, sender, replies));
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn work_controller(&self) -> &WorkController {
         &self.work_controller
     }
@@ -246,30 +280,8 @@ impl State {
 
         s.switch_to_alternate_screen();
         debug!("inserting mailbox hashes:");
-        {
-            /* Account::watch() needs
-             * - work_controller to pass `work_context` to the watcher threads and then add them
-             *   to the controller's static thread list,
-             * - sender to pass a RefreshEventConsumer closure to watcher threads for them to
-             *   inform the main binary that refresh events arrived
-             * - replies to report any failures to the user
-             */
-            let Context {
-                ref mut work_controller,
-                ref sender,
-                ref mut replies,
-                ref mut accounts,
-                ref mut mailbox_hashes,
-                ..
-            } = &mut s.context;
-
-            for (x, account) in accounts.iter_mut().enumerate() {
-                for folder in account.backend.read().unwrap().folders().values() {
-                    debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
-                    mailbox_hashes.insert(folder.hash(), x);
-                }
-                account.watch((work_controller, sender, replies));
-            }
+        for i in 0..s.context.accounts.len() {
+            s.context.is_online(i);
         }
         s.context.restore_input();
         s
