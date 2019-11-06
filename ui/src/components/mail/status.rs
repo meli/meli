@@ -366,6 +366,73 @@ impl Component for AccountStatus {
         }
         self.dirty = false;
         let (width, height) = self.content.size();
+        let a = &context.accounts[self.account_pos];
+        if a.settings.account().format() == "imap" {
+            let backend_lck = a.backend.read().unwrap();
+
+            let b = (*backend_lck).as_any();
+            if let Some(imap_backend) = b.downcast_ref::<melib::backends::ImapType>() {
+                write_string_to_grid(
+                    "Server Capabilities:",
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((1, 1), (width - 1, height - 1)),
+                    true,
+                );
+                let mut capabilities = imap_backend.capabilities();
+                let max_name_width = std::cmp::max(
+                    "Server Capabilities:".len(),
+                    capabilities.iter().map(String::len).max().unwrap_or(0),
+                );
+                write_string_to_grid(
+                    "meli support:",
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((max_name_width + 6, 1), (width - 1, height - 1)),
+                    true,
+                );
+                capabilities.sort();
+                for (i, cap) in capabilities.into_iter().enumerate() {
+                    let (width, height) = self.content.size();
+                    write_string_to_grid(
+                        &cap,
+                        &mut self.content,
+                        Color::Default,
+                        Color::Default,
+                        Attr::Default,
+                        ((1, 2 + i), (width - 1, height - 1)),
+                        true,
+                    );
+
+                    let (width, height) = self.content.size();
+                    if melib::backends::imap::SUPPORTED_CAPABILITIES.contains(&cap.as_str()) {
+                        write_string_to_grid(
+                            "supported",
+                            &mut self.content,
+                            Color::Green,
+                            Color::Default,
+                            Attr::Default,
+                            ((max_name_width + 6, 2 + i), (width - 1, height - 1)),
+                            true,
+                        );
+                    } else {
+                        write_string_to_grid(
+                            "not supported",
+                            &mut self.content,
+                            Color::Red,
+                            Color::Default,
+                            Attr::Default,
+                            ((max_name_width + 6, 2 + i), (width - 1, height - 1)),
+                            true,
+                        );
+                    }
+                }
+            }
+        }
 
         /* self.content may have been resized with write_string_to_grid() calls above since it has
          * growable set */
@@ -393,7 +460,7 @@ impl Component for AccountStatus {
         );
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
         match *event {
             UIEvent::Resize => {
                 self.dirty = true;

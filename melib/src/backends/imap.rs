@@ -47,6 +47,8 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 pub type UID = usize;
 
+pub static SUPPORTED_CAPABILITIES: &'static [&'static str] = &["IDLE"];
+
 #[derive(Debug, Default)]
 pub struct EnvelopeCache {
     bytes: Option<String>,
@@ -511,5 +513,15 @@ impl ImapType {
             }
         }
         debug!(folders)
+    }
+
+    pub fn capabilities(&self) -> Vec<String> {
+        self.connection
+            .lock()
+            .unwrap()
+            .capabilities
+            .iter()
+            .map(|c| String::from_utf8_lossy(c).into())
+            .collect::<Vec<String>>()
     }
 }
