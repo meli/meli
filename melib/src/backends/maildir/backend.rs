@@ -552,6 +552,10 @@ impl MailBackend for MaildirType {
             folder
         )))
     }
+
+    fn as_any(&self) -> &dyn::std::any::Any {
+        self
+    }
 }
 
 impl MaildirType {

@@ -358,6 +358,10 @@ impl MailBackend for ImapType {
         }
         Ok(())
     }
+
+    fn as_any(&self) -> &dyn::std::any::Any {
+        self
+    }
 }
 
 macro_rules! get_conf_val {

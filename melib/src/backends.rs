@@ -36,6 +36,7 @@ use self::maildir::MaildirType;
 #[cfg(feature = "mbox_backend")]
 use self::mbox::MboxType;
 use super::email::{Envelope, EnvelopeHash, Flag};
+use std::any::Any;
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -191,6 +192,8 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn folder_operation(&mut self, _path: &str, _op: FolderOperation) -> Result<()> {
         Ok(())
     }
+
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// A `BackendOp` manages common operations for the various mail backends. They only live for the
