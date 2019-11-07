@@ -166,6 +166,8 @@ pub struct FileAccount {
     read_only: bool,
     subscribed_folders: Vec<String>,
     folders: Option<HashMap<String, FolderConf>>,
+    #[serde(default)]
+    cache_type: CacheType,
 }
 
 impl From<FileAccount> for AccountConf {
@@ -267,6 +269,10 @@ impl FileAccount {
 
     pub fn index_style(&self) -> IndexStyle {
         self.index_style
+    }
+
+    pub fn cache_type(&self) -> &CacheType {
+        &self.cache_type
     }
 }
 
@@ -554,23 +560,50 @@ impl Serialize for IndexStyle {
     }
 }
 
-#[derive(Debug)]
-pub enum IndexCache {
-    Nothing,
+#[derive(Debug, Clone, PartialEq)]
+pub enum CacheType {
+    None,
     #[cfg(feature = "sqlite3")]
     Sqlite3,
-    Backend,
 }
 
-impl Default for IndexCache {
+impl Default for CacheType {
     fn default() -> Self {
         #[cfg(feature = "sqlite3")]
         {
-            IndexCache::Sqlite3
+            CacheType::Sqlite3
         }
         #[cfg(not(feature = "sqlite3"))]
         {
-            IndexCache::Nothing
+            CacheType::None
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for CacheType {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <String>::deserialize(deserializer)?;
+        match s.as_str() {
+            #[cfg(feature = "sqlite3")]
+            "sqlite3" => Ok(CacheType::Sqlite3),
+            "nothing" | "none" | "" => Ok(CacheType::None),
+            _ => Err(de::Error::custom("invalid `index_cache` value")),
+        }
+    }
+}
+
+impl Serialize for CacheType {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            #[cfg(feature = "sqlite3")]
+            CacheType::Sqlite3 => serializer.serialize_str("sqlite3"),
+            CacheType::None => serializer.serialize_str("none"),
         }
     }
 }

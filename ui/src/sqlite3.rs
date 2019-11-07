@@ -198,7 +198,7 @@ pub fn index(context: &mut crate::state::Context) -> Result<()> {
     let mutexes = context
         .accounts
         .iter()
-        .filter(|acc| acc.settings.account().format() != "imap")
+        .filter(|acc| *acc.settings.conf.cache_type() == crate::conf::CacheType::Sqlite3)
         .map(|acc| (acc.collection.envelopes.clone(), acc.backend.clone()))
         .collect::<Vec<(Arc<RwLock<_>>, Arc<_>)>>();
     let env_hashes = mutexes
