@@ -19,6 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use crate::cache::query;
+use crate::cache::Query::{self, *};
+use crate::melib::parsec::Parser;
 use melib::{
     backends::MailBackend,
     email::{Envelope, EnvelopeHash},
@@ -299,13 +302,25 @@ pub fn search(
         SortOrder::Desc => "DESC",
     };
 
+    /*
     debug!("SELECT hash FROM envelopes INNER JOIN fts ON fts.rowid = envelopes.id WHERE fts MATCH ? ORDER BY {} {};", sort_field, sort_order);
     let mut stmt = conn.prepare(
                 format!("SELECT hash FROM envelopes INNER JOIN fts ON fts.rowid = envelopes.id WHERE fts MATCH ? ORDER BY {} {};", sort_field, sort_order).as_str())
-    .map_err(|e| MeliError::new(e.to_string()))?;
+    */
+    let mut stmt = conn
+        .prepare(
+            debug!(format!(
+                "SELECT hash FROM envelopes WHERE {} ORDER BY {} {};",
+                query_to_sql(&query().parse(term)?.1),
+                sort_field,
+                sort_order
+            ))
+            .as_str(),
+        )
+        .map_err(|e| MeliError::new(e.to_string()))?;
 
     let results = stmt
-        .query_map(&[fts5_bareword(term)], |row| Ok(row.get(0)?))
+        .query_map(rusqlite::NO_PARAMS, |row| Ok(row.get(0)?))
         .map_err(|e| MeliError::new(e.to_string()))?
         .map(|r: std::result::Result<Vec<u8>, rusqlite::Error>| {
             Ok(u64::from_be_bytes(
@@ -338,4 +353,76 @@ pub fn from(term: &str) -> Result<StackVec<EnvelopeHash>> {
         })
         .collect::<Result<StackVec<EnvelopeHash>>>();
     results
+}
+
+pub fn query_to_sql(q: &Query) -> String {
+    fn rec(q: &Query, s: &mut String) {
+        match q {
+            Subject(t) => {
+                s.push_str(" subject LIKE \"%");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("%\"");
+            }
+            From(t) => {
+                s.push_str(" _from LIKE \"%");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("%\"");
+            }
+            AllText(t) => {
+                s.push_str(" body_text LIKE \"%");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("%\"");
+            }
+            And(q1, q2) => {
+                s.push_str(" (");
+                rec(q1, s);
+                s.push_str(") ");
+
+                s.push_str(" AND ");
+                s.push_str(" (");
+                rec(q2, s);
+                s.push_str(") ");
+            }
+            Or(q1, q2) => {
+                s.push_str(" (");
+                rec(q1, s);
+                s.push_str(") ");
+                s.push_str(" OR ");
+                s.push_str(" (");
+                rec(q2, s);
+                s.push_str(") ");
+            }
+            Not(q) => {
+                s.push_str(" NOT ");
+                s.push_str("(");
+                rec(q, s);
+                s.push_str(")");
+            }
+            _ => {}
+        }
+    }
+    let mut ret = String::new();
+    rec(q, &mut ret);
+    ret
+
+    //"SELECT hash FROM envelopes INNER JOIN fts ON fts.rowid = envelopes.id WHERE fts MATCH ? ORDER BY {} {};"
+}
+
+#[test]
+fn test_query_to_sql() {
+    assert_eq!(
+        " subject LIKE \"%test%\" AND  body_text LIKE \"%i%\"",
+        &query_to_sql(&query().parse_complete("subject: test and i").unwrap().1)
+    );
+    assert_eq!(
+        " subject LIKE \"%github%\" OR  ( _from LIKE \"%epilys%\" AND  ( subject LIKE \"%lib%\" OR  subject LIKE \"%meli%\") ) ",
+        &query_to_sql(
+            &query()
+                .parse_complete(
+                    "subject: github or (from: epilys and (subject:lib or subject: meli))"
+                )
+                .unwrap()
+                .1
+        )
+    );
 }

@@ -142,6 +142,8 @@ impl std::ops::BitOr for Query {
     }
 }
 
+pub use query_parser::query;
+
 pub mod query_parser {
     use super::Query::{self, *};
     use melib::parsec::*;
@@ -173,7 +175,7 @@ pub mod query_parser {
     pub fn not<'a>() -> impl Parser<'a, Query> {
         move |input| {
             whitespace_wrap(either(
-                match_literal_anycase("or"),
+                match_literal_anycase("not"),
                 match_literal_anycase("!"),
             ))
             .parse(input)
@@ -213,8 +215,8 @@ pub mod query_parser {
                 Ok(q)
             } else if let Ok(q) = from().parse(input) {
                 Ok(q)
-            } else if let Ok(q) = not().parse(input) {
-                Ok(q)
+            } else if let Ok((rest, query_a)) = not().parse(input) {
+                Ok((rest, Not(Box::new(query_a))))
             } else if let Ok((rest, query_a)) = {
                 let result = literal().parse(input);
                 if result.is_ok()
