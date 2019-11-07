@@ -19,13 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
-use melib::backends::{FolderHash, MailBackend};
-use melib::mailbox::*;
-use melib::thread::{ThreadHash, ThreadNode};
-use std::sync::RwLock;
-*/
 use melib::email::{Flag, UnixTimestamp};
+use melib::parsec::*;
+use melib::{
+    backends::{FolderHash, MailBackend},
+    email::EnvelopeHash,
+    thread::{SortField, SortOrder},
+    Result, StackVec,
+};
+use std::sync::{Arc, RwLock};
+
+pub use query_parser::query;
+use Query::*;
 
 #[derive(Debug, PartialEq)]
 pub enum Query {
@@ -52,103 +57,11 @@ pub enum Query {
     Not(Box<Query>),
 }
 
-/*
-enum CacheType {
-    Sqlite3,
-}
-
-pub struct Cache {
-    collection: Collection,
-    kind: CacheType,
-    backend: Box<dyn MailBackend>,
-}
-
-impl Cache {
-    pub fn build_index(&mut self) {
-        unimplemented!()
-    }
-
-    pub fn new(backend: Box<dyn MailBackend>) -> Self {
-        unimplemented!()
-    }
-    pub fn get_env(&self, h: &EnvelopeHash) -> &Envelope {
-        &self.collection[h]
-    }
-    pub fn get_env_mut(&mut self, h: &EnvelopeHash) -> &mut Envelope {
-        self.collection.entry(*h).or_default()
-    }
-    pub fn contains_key(&self, h: EnvelopeHash) -> bool {
-        self.collection.contains_key(&h)
-    }
-    /*
-    pub fn operation(&self, h: EnvelopeHash) -> Box<dyn BackendOp> {
-                        //let operation = self.backend.operation(h, m.folder.hash())
-                            unimplemented!()
-        unreachable!()
-    }
-    */
-    pub fn thread_to_mail_mut(&mut self, h: ThreadHash, f: FolderHash) -> &mut Envelope {
-        self.collection
-            .envelopes
-            .entry(self.collection.threads[&f].thread_to_mail(h))
-            .or_default()
-    }
-    pub fn thread_to_mail(&self, h: ThreadHash, f: FolderHash) -> &Envelope {
-        &self.collection.envelopes[&self.collection.threads[&f].thread_to_mail(h)]
-    }
-    pub fn threaded_mail(&self, h: ThreadHash, f: FolderHash) -> EnvelopeHash {
-        self.collection.threads[&f].thread_to_mail(h)
-    }
-    pub fn mail_and_thread(
-        &mut self,
-        i: EnvelopeHash,
-        f: FolderHash,
-    ) -> (&mut Envelope, &ThreadNode) {
-        let thread;
-        {
-            let x = &mut self.collection.envelopes.entry(i).or_default();
-            thread = &self.collection.threads[&f][&x.thread()];
-        }
-        (self.collection.envelopes.entry(i).or_default(), thread)
-    }
-    pub fn thread(&self, h: ThreadHash, f: FolderHash) -> &ThreadNode {
-        &self.collection.threads[&f].thread_nodes()[&h]
-    }
-}
-*/
-impl std::ops::Not for Query {
-    type Output = Query;
-    fn not(self) -> Query {
-        match self {
-            Query::Not(q) => *q,
-            q => Query::Not(Box::new(q)),
-        }
-    }
-}
-
-impl std::ops::BitAnd for Query {
-    type Output = Self;
-
-    fn bitand(self, rhs: Self) -> Self {
-        Query::And(Box::new(self), Box::new(rhs))
-    }
-}
-
-impl std::ops::BitOr for Query {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self {
-        Query::Or(Box::new(self), Box::new(rhs))
-    }
-}
-
-pub use query_parser::query;
-
 pub mod query_parser {
     use super::Query::{self, *};
     use melib::parsec::*;
 
-    pub fn subject<'a>() -> impl Parser<'a, Query> {
+    fn subject<'a>() -> impl Parser<'a, Query> {
         prefix(
             whitespace_wrap(match_literal("subject:")),
             whitespace_wrap(literal()),
@@ -156,7 +69,7 @@ pub mod query_parser {
         .map(|term| Query::Subject(term))
     }
 
-    pub fn from<'a>() -> impl Parser<'a, Query> {
+    fn from<'a>() -> impl Parser<'a, Query> {
         prefix(
             whitespace_wrap(match_literal("from:")),
             whitespace_wrap(literal()),
@@ -164,7 +77,7 @@ pub mod query_parser {
         .map(|term| Query::From(term))
     }
 
-    pub fn or<'a>() -> impl Parser<'a, Query> {
+    fn or<'a>() -> impl Parser<'a, Query> {
         move |input| {
             whitespace_wrap(match_literal_anycase("or"))
                 .parse(input)
@@ -172,7 +85,7 @@ pub mod query_parser {
         }
     }
 
-    pub fn not<'a>() -> impl Parser<'a, Query> {
+    fn not<'a>() -> impl Parser<'a, Query> {
         move |input| {
             whitespace_wrap(either(
                 match_literal_anycase("not"),
@@ -183,7 +96,7 @@ pub mod query_parser {
         }
     }
 
-    pub fn and<'a>() -> impl Parser<'a, Query> {
+    fn and<'a>() -> impl Parser<'a, Query> {
         move |input| {
             whitespace_wrap(match_literal_anycase("and"))
                 .parse(input)
@@ -191,11 +104,11 @@ pub mod query_parser {
         }
     }
 
-    pub fn literal<'a>() -> impl Parser<'a, String> {
+    fn literal<'a>() -> impl Parser<'a, String> {
         move |input| either(quoted_string(), string()).parse(input)
     }
 
-    pub fn parentheses_query<'a>() -> impl Parser<'a, Query> {
+    fn parentheses_query<'a>() -> impl Parser<'a, Query> {
         move |input| {
             delimited(
                 whitespace_wrap(match_literal("(")),
@@ -206,6 +119,18 @@ pub mod query_parser {
         }
     }
 
+    /// Parser from `String` to `Query`.
+    ///
+    /// # Invocation
+    /// ```
+    /// use ui::cache::query;
+    /// use ui::cache::Query;
+    /// use melib::parsec::Parser;
+    ///
+    /// let input = "test";
+    /// let query = query().parse(input);
+    /// assert_eq!(Ok(("", Query::AllText("test".to_string()))), query);
+    /// ```
     pub fn query<'a>() -> impl Parser<'a, Query> {
         move |input| {
             let (rest, query_a): (&'a str, Query) = if let Ok(q) = parentheses_query().parse(input)

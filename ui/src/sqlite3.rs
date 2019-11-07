@@ -43,29 +43,29 @@ fn escape_double_quote(w: &str) -> Cow<str> {
     }
 }
 
-#[inline(always)]
-fn fts5_bareword(w: &str) -> Cow<str> {
-    if w == "AND" || w == "OR" || w == "NOT" {
-        Cow::from(w)
-    } else {
-        if !w.is_ascii() {
-            Cow::from(format!("\"{}\"", escape_double_quote(w)))
-        } else {
-            for &b in w.as_bytes() {
-                if !(b > 0x2f && b < 0x3a)
-                    || !(b > 0x40 && b < 0x5b)
-                    || !(b > 0x60 && b < 0x7b)
-                    || b != 0x60
-                    || b != 26
-                {
-                    return Cow::from(format!("\"{}\"", escape_double_quote(w)));
-                }
-            }
-            Cow::from(w)
-        }
-    }
-}
-
+//#[inline(always)]
+//fn fts5_bareword(w: &str) -> Cow<str> {
+//    if w == "AND" || w == "OR" || w == "NOT" {
+//        Cow::from(w)
+//    } else {
+//        if !w.is_ascii() {
+//            Cow::from(format!("\"{}\"", escape_double_quote(w)))
+//        } else {
+//            for &b in w.as_bytes() {
+//                if !(b > 0x2f && b < 0x3a)
+//                    || !(b > 0x40 && b < 0x5b)
+//                    || !(b > 0x60 && b < 0x7b)
+//                    || b != 0x60
+//                    || b != 26
+//                {
+//                    return Cow::from(format!("\"{}\"", escape_double_quote(w)));
+//                }
+//            }
+//            Cow::from(w)
+//        }
+//    }
+//}
+//
 pub fn open_db() -> Result<Connection> {
     let data_dir =
         xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
@@ -302,11 +302,6 @@ pub fn search(
         SortOrder::Desc => "DESC",
     };
 
-    /*
-    debug!("SELECT hash FROM envelopes INNER JOIN fts ON fts.rowid = envelopes.id WHERE fts MATCH ? ORDER BY {} {};", sort_field, sort_order);
-    let mut stmt = conn.prepare(
-                format!("SELECT hash FROM envelopes INNER JOIN fts ON fts.rowid = envelopes.id WHERE fts MATCH ? ORDER BY {} {};", sort_field, sort_order).as_str())
-    */
     let mut stmt = conn
         .prepare(
             debug!(format!(
@@ -334,69 +329,43 @@ pub fn search(
     results
 }
 
-pub fn from(term: &str) -> Result<StackVec<EnvelopeHash>> {
-    let conn = open_db()?;
-    let mut stmt = conn
-        .prepare("SELECT hash FROM envelopes WHERE _from LIKE ?;")
-        .map_err(|e| MeliError::new(e.to_string()))?;
-
-    let results = stmt
-        .query_map(&[term.trim()], |row| Ok(row.get(0)?))
-        .map_err(|e| MeliError::new(e.to_string()))?
-        .map(|r: std::result::Result<Vec<u8>, rusqlite::Error>| {
-            Ok(u64::from_be_bytes(
-                r.map_err(|e| MeliError::new(e.to_string()))?
-                    .as_slice()
-                    .try_into()
-                    .map_err(|e: std::array::TryFromSliceError| MeliError::new(e.to_string()))?,
-            ))
-        })
-        .collect::<Result<StackVec<EnvelopeHash>>>();
-    results
-}
-
+/// Translates a `Query` to an Sqlite3 expression in a `String`.
 pub fn query_to_sql(q: &Query) -> String {
     fn rec(q: &Query, s: &mut String) {
         match q {
             Subject(t) => {
-                s.push_str(" subject LIKE \"%");
+                s.push_str("subject LIKE \"%");
                 s.extend(escape_double_quote(t).chars());
-                s.push_str("%\"");
+                s.push_str("%\" ");
             }
             From(t) => {
-                s.push_str(" _from LIKE \"%");
+                s.push_str("_from LIKE \"%");
                 s.extend(escape_double_quote(t).chars());
-                s.push_str("%\"");
+                s.push_str("%\" ");
             }
             AllText(t) => {
-                s.push_str(" body_text LIKE \"%");
+                s.push_str("body_text LIKE \"%");
                 s.extend(escape_double_quote(t).chars());
-                s.push_str("%\"");
+                s.push_str("%\" ");
             }
             And(q1, q2) => {
-                s.push_str(" (");
+                s.push_str("(");
                 rec(q1, s);
-                s.push_str(") ");
-
-                s.push_str(" AND ");
-                s.push_str(" (");
+                s.push_str(") AND (");
                 rec(q2, s);
                 s.push_str(") ");
             }
             Or(q1, q2) => {
-                s.push_str(" (");
+                s.push_str("(");
                 rec(q1, s);
-                s.push_str(") ");
-                s.push_str(" OR ");
-                s.push_str(" (");
+                s.push_str(") OR (");
                 rec(q2, s);
                 s.push_str(") ");
             }
             Not(q) => {
-                s.push_str(" NOT ");
-                s.push_str("(");
+                s.push_str("NOT (");
                 rec(q, s);
-                s.push_str(")");
+                s.push_str(") ");
             }
             _ => {}
         }
@@ -404,18 +373,16 @@ pub fn query_to_sql(q: &Query) -> String {
     let mut ret = String::new();
     rec(q, &mut ret);
     ret
-
-    //"SELECT hash FROM envelopes INNER JOIN fts ON fts.rowid = envelopes.id WHERE fts MATCH ? ORDER BY {} {};"
 }
 
 #[test]
 fn test_query_to_sql() {
     assert_eq!(
-        " subject LIKE \"%test%\" AND  body_text LIKE \"%i%\"",
+        "(subject LIKE \"%test%\" ) AND (body_text LIKE \"%i%\" ) ",
         &query_to_sql(&query().parse_complete("subject: test and i").unwrap().1)
     );
     assert_eq!(
-        " subject LIKE \"%github%\" OR  ( _from LIKE \"%epilys%\" AND  ( subject LIKE \"%lib%\" OR  subject LIKE \"%meli%\") ) ",
+        "(subject LIKE \"%github%\" ) OR ((_from LIKE \"%epilys%\" ) AND ((subject LIKE \"%lib%\" ) OR (subject LIKE \"%meli%\" ) ) ) ",
         &query_to_sql(
             &query()
                 .parse_complete(
