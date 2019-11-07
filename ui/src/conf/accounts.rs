@@ -142,7 +142,7 @@ impl MailboxEntry {
 pub struct Account {
     pub index: usize,
     name: String,
-    is_online: bool,
+    pub is_online: bool,
     pub(crate) folders: FnvHashMap<FolderHash, MailboxEntry>,
     pub(crate) folder_confs: FnvHashMap<FolderHash, FolderConf>,
     pub(crate) folders_order: Vec<FolderHash>,

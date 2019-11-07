@@ -232,9 +232,9 @@ impl MailBackend for ImapType {
                     work_context,
                 };
                 if has_idle {
-                    idle(kit);
+                    idle(kit).ok().take();
                 } else {
-                    poll_with_examine(kit);
+                    poll_with_examine(kit).ok().take();
                 }
             })?;
         Ok(handle.thread().id())

@@ -144,25 +144,28 @@ impl Context {
             ref mut mailbox_hashes,
             ..
         } = self;
+        let was_online = accounts[account_pos].is_online;
         if accounts[account_pos].is_online() {
-            for folder in accounts[account_pos]
-                .backend
-                .read()
-                .unwrap()
-                .folders()
-                .values()
-            {
-                debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
-                mailbox_hashes.insert(folder.hash(), account_pos);
+            if !was_online {
+                for folder in accounts[account_pos]
+                    .backend
+                    .read()
+                    .unwrap()
+                    .folders()
+                    .values()
+                {
+                    debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
+                    mailbox_hashes.insert(folder.hash(), account_pos);
+                }
+                /* Account::watch() needs
+                 * - work_controller to pass `work_context` to the watcher threads and then add them
+                 *   to the controller's static thread list,
+                 * - sender to pass a RefreshEventConsumer closure to watcher threads for them to
+                 *   inform the main binary that refresh events arrived
+                 * - replies to report any failures to the user
+                 */
+                accounts[account_pos].watch((work_controller, sender, replies));
             }
-            /* Account::watch() needs
-             * - work_controller to pass `work_context` to the watcher threads and then add them
-             *   to the controller's static thread list,
-             * - sender to pass a RefreshEventConsumer closure to watcher threads for them to
-             *   inform the main binary that refresh events arrived
-             * - replies to report any failures to the user
-             */
-            accounts[account_pos].watch((work_controller, sender, replies));
             true
         } else {
             false

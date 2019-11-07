@@ -40,14 +40,14 @@ macro_rules! exit_on_error {
             $work_context.set_status.send(($thread_id, e.to_string())).unwrap();
             $sender.send(RefreshEvent {
                 hash: $folder_hash,
-                kind: RefreshEventKind::Failure(e),
+                kind: RefreshEventKind::Failure(e.clone()),
             });
-            std::process::exit(1);
-        })+
+            Err(e)
+        } else { Ok(()) }?;)+
     };
 }
 
-pub fn poll_with_examine(kit: ImapWatchKit) {
+pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
     debug!("poll with examine");
     let ImapWatchKit {
         is_online,
@@ -89,15 +89,16 @@ pub fn poll_with_examine(kit: ImapWatchKit) {
                 &hash_index,
                 &uid_index,
                 &work_context,
-            );
+            )?;
         }
         let mut main_conn = main_conn.lock().unwrap();
         main_conn.send_command(b"NOOP").unwrap();
         main_conn.read_response(&mut response).unwrap();
     }
+    Ok(())
 }
 
-pub fn idle(kit: ImapWatchKit) {
+pub fn idle(kit: ImapWatchKit) -> Result<()> {
     debug!("IDLE");
     /* IDLE only watches the connection's selected mailbox. We will IDLE on INBOX and every ~5
      * minutes wake up and poll the others */
@@ -464,6 +465,7 @@ pub fn idle(kit: ImapWatchKit) {
                 .unwrap();
         }
     }
+    Ok(())
 }
 
 fn examine_updates(
@@ -473,7 +475,7 @@ fn examine_updates(
     hash_index: &Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
     uid_index: &Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
     work_context: &WorkContext,
-) {
+) -> Result<()> {
     let thread_id: std::thread::ThreadId = std::thread::current().id();
     let folder_hash = folder.hash();
     debug!("examining folder {} {}", folder_hash, folder.path());
@@ -627,4 +629,5 @@ fn examine_updates(
             panic!("could not select mailbox");
         }
     };
+    Ok(())
 }
