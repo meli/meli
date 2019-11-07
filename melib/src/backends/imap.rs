@@ -525,17 +525,25 @@ impl ImapType {
             .collect::<Vec<String>>()
     }
 
-    pub fn search(&self, query: String) -> Result<crate::structs::StackVec<EnvelopeHash>> {
+    pub fn search(
+        &self,
+        query: String,
+        folder_hash: FolderHash,
+    ) -> Result<crate::structs::StackVec<EnvelopeHash>> {
+        let folders_lck = self.folders.lock()?;
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock()?;
+        conn.send_command(format!("EXAMINE {}", folders_lck[&folder_hash].path()).as_bytes())?;
+        conn.read_response(&mut response)?;
         conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query).as_bytes())?;
         conn.read_response(&mut response)?;
+        debug!(&response);
 
         let mut lines = response.lines();
         for l in lines.by_ref() {
             if l.starts_with("* SEARCH") {
                 use std::iter::FromIterator;
-                let uid_index = self.uid_index.lock().unwrap();
+                let uid_index = self.uid_index.lock()?;
                 return Ok(crate::structs::StackVec::from_iter(
                     l["* SEARCH".len()..]
                         .trim()

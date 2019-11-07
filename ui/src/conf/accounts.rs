@@ -812,7 +812,6 @@ impl Account {
         ret
     }
 
-    #[allow(unused_variables)]
     pub fn search(
         &self,
         search_term: &str,
@@ -820,7 +819,7 @@ impl Account {
         folder_hash: FolderHash,
     ) -> Result<StackVec<EnvelopeHash>> {
         if self.settings.account().format() == "imap" {
-            return crate::cache::imap_search(search_term, sort, &self.backend);
+            return crate::cache::imap_search(search_term, sort, folder_hash, &self.backend);
         }
 
         #[cfg(feature = "sqlite3")]

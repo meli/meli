@@ -407,6 +407,7 @@ pub fn query_to_imap(q: &Query) -> String {
 pub fn imap_search(
     term: &str,
     (sort_field, sort_order): (SortField, SortOrder),
+    folder_hash: FolderHash,
     backend: &Arc<RwLock<Box<dyn MailBackend>>>,
 ) -> Result<StackVec<EnvelopeHash>> {
     let query = query().parse(term)?.1;
@@ -414,7 +415,7 @@ pub fn imap_search(
 
     let b = (*backend_lck).as_any();
     if let Some(imap_backend) = b.downcast_ref::<melib::backends::ImapType>() {
-        imap_backend.search(query_to_imap(&query))
+        imap_backend.search(query_to_imap(&query), folder_hash)
     } else {
         panic!("Could not downcast ImapType backend. BUG");
     }
