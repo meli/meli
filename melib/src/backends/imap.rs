@@ -524,4 +524,29 @@ impl ImapType {
             .map(|c| String::from_utf8_lossy(c).into())
             .collect::<Vec<String>>()
     }
+
+    pub fn search(&self, query: String) -> Result<crate::structs::StackVec<EnvelopeHash>> {
+        let mut response = String::with_capacity(8 * 1024);
+        let mut conn = self.connection.lock()?;
+        conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query).as_bytes())?;
+        conn.read_response(&mut response)?;
+
+        let mut lines = response.lines();
+        for l in lines.by_ref() {
+            if l.starts_with("* SEARCH") {
+                use std::iter::FromIterator;
+                let uid_index = self.uid_index.lock().unwrap();
+                return Ok(crate::structs::StackVec::from_iter(
+                    l["* SEARCH".len()..]
+                        .trim()
+                        .split_whitespace()
+                        .map(usize::from_str)
+                        .filter_map(std::result::Result::ok)
+                        .filter_map(|uid| uid_index.get(&uid))
+                        .map(|env_hash_ref| *env_hash_ref),
+                ));
+            }
+        }
+        Err(MeliError::new(response))
+    }
 }

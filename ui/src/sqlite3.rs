@@ -35,7 +35,7 @@ use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 
 #[inline(always)]
-fn escape_double_quote(w: &str) -> Cow<str> {
+pub fn escape_double_quote(w: &str) -> Cow<str> {
     if w.contains('"') {
         Cow::from(w.replace('"', "\"\""))
     } else {

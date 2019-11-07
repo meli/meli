@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::email::{Flag, UnixTimestamp};
+use melib::email::UnixTimestamp;
 use melib::parsec::*;
 use melib::{
     backends::{FolderHash, MailBackend},
@@ -51,15 +51,14 @@ pub enum Query {
     Subject(String),
     AllText(String),
     /* * * * */
-    Flag(Flag),
+    Flags(Vec<String>),
     And(Box<Query>, Box<Query>),
     Or(Box<Query>, Box<Query>),
     Not(Box<Query>),
 }
 
 pub mod query_parser {
-    use super::Query::{self, *};
-    use melib::parsec::*;
+    use super::*;
 
     fn subject<'a>() -> impl Parser<'a, Query> {
         prefix(
@@ -75,6 +74,30 @@ pub mod query_parser {
             whitespace_wrap(literal()),
         )
         .map(|term| Query::From(term))
+    }
+
+    fn to<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("to:")),
+            whitespace_wrap(literal()),
+        )
+        .map(|term| Query::To(term))
+    }
+
+    fn cc<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("cc:")),
+            whitespace_wrap(literal()),
+        )
+        .map(|term| Query::Cc(term))
+    }
+
+    fn bcc<'a>() -> impl Parser<'a, Query> {
+        prefix(
+            whitespace_wrap(match_literal("bcc:")),
+            whitespace_wrap(literal()),
+        )
+        .map(|term| Query::Bcc(term))
     }
 
     fn or<'a>() -> impl Parser<'a, Query> {
@@ -119,6 +142,35 @@ pub mod query_parser {
         }
     }
 
+    fn flags<'a>() -> impl Parser<'a, Query> {
+        move |input| {
+            whitespace_wrap(match_literal_anycase("flags:"))
+                .parse(input)
+                .and_then(|(rest, _)| {
+                    map(one_or_more(pred(any_char, |c| *c != ' ')), |chars| {
+                        chars.into_iter().collect::<String>()
+                    })
+                    .parse(rest)
+                })
+                .and_then(|(rest, flags_list)| {
+                    if let Ok(r) = flags_list
+                        .split(",")
+                        .map(|t| {
+                            either(quoted_string(), string())
+                                .parse_complete(t)
+                                .map(|(_, r)| r)
+                        })
+                        .collect::<std::result::Result<Vec<String>, &str>>()
+                        .map(|v| Flags(v))
+                    {
+                        Ok((rest, r))
+                    } else {
+                        Err(rest)
+                    }
+                })
+        }
+    }
+
     /// Parser from `String` to `Query`.
     ///
     /// # Invocation
@@ -133,12 +185,15 @@ pub mod query_parser {
     /// ```
     pub fn query<'a>() -> impl Parser<'a, Query> {
         move |input| {
-            let (rest, query_a): (&'a str, Query) = if let Ok(q) = parentheses_query().parse(input)
+            let (rest, query_a): (&'a str, Query) = if let Ok(q) = parentheses_query()
+                .parse(input)
+                .or(from().parse(input))
+                .or(to().parse(input))
+                .or(cc().parse(input))
+                .or(bcc().parse(input))
+                .or(subject().parse(input))
+                .or(flags().parse(input))
             {
-                Ok(q)
-            } else if let Ok(q) = subject().parse(input) {
-                Ok(q)
-            } else if let Ok(q) = from().parse(input) {
                 Ok(q)
             } else if let Ok((rest, query_a)) = not().parse(input) {
                 Ok((rest, Not(Box::new(query_a))))
@@ -250,5 +305,117 @@ pub mod query_parser {
                 "(from: Manos and (subject:foo or subject: bar) and (from:woo or from:my))"
             )
         );
+        assert_eq!(
+            Ok(("", Flags(vec!["test".to_string(), "testtest".to_string()]))),
+            query().parse_complete("flags:test,testtest")
+        );
+    }
+}
+
+pub fn query_to_imap(q: &Query) -> String {
+    fn rec(q: &Query, s: &mut String) {
+        use crate::sqlite3::escape_double_quote;
+        match q {
+            Subject(t) => {
+                s.push_str(" SUBJECT \"");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("\"");
+            }
+            From(t) => {
+                s.push_str(" FROM \"");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("\"");
+            }
+            To(t) => {
+                s.push_str(" TO \"");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("\"");
+            }
+            Cc(t) => {
+                s.push_str(" CC \"");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("\"");
+            }
+            Bcc(t) => {
+                s.push_str(" BCC \"");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("\"");
+            }
+            AllText(t) => {
+                s.push_str(" TEXT \"");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("\"");
+            }
+            Flags(v) => {
+                for f in v {
+                    match f.as_str() {
+                        "draft" => {
+                            s.push_str(" DRAFT ");
+                        }
+                        "deleted" => {
+                            s.push_str(" DELETED ");
+                        }
+                        "flagged" => {
+                            s.push_str(" FLAGGED ");
+                        }
+                        "recent" => {
+                            s.push_str(" RECENT ");
+                        }
+                        "seen" | "read" => {
+                            s.push_str(" SEEN ");
+                        }
+                        "unseen" | "unread" => {
+                            s.push_str(" UNSEEN ");
+                        }
+                        "answered" => {
+                            s.push_str(" ANSWERED ");
+                        }
+                        "unanswered" => {
+                            s.push_str(" UNANSWERED ");
+                        }
+                        keyword => {
+                            s.push_str(" ");
+                            s.extend(keyword.chars());
+                            s.push_str(" ");
+                        }
+                    }
+                }
+            }
+            And(q1, q2) => {
+                rec(q1, s);
+                s.push_str(" ");
+                rec(q2, s);
+            }
+            Or(q1, q2) => {
+                s.push_str(" OR ");
+                rec(q1, s);
+                s.push_str(" ");
+                rec(q2, s);
+            }
+            Not(q) => {
+                s.push_str(" NOT ");
+                rec(q, s);
+            }
+            _ => {}
+        }
+    }
+    let mut ret = String::new();
+    rec(q, &mut ret);
+    ret
+}
+
+pub fn imap_search(
+    term: &str,
+    (sort_field, sort_order): (SortField, SortOrder),
+    backend: &Arc<RwLock<Box<dyn MailBackend>>>,
+) -> Result<StackVec<EnvelopeHash>> {
+    let query = query().parse(term)?.1;
+    let backend_lck = backend.read().unwrap();
+
+    let b = (*backend_lck).as_any();
+    if let Some(imap_backend) = b.downcast_ref::<melib::backends::ImapType>() {
+        imap_backend.search(query_to_imap(&query))
+    } else {
+        panic!("Could not downcast ImapType backend. BUG");
     }
 }

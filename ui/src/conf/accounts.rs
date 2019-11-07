@@ -820,7 +820,7 @@ impl Account {
         folder_hash: FolderHash,
     ) -> Result<StackVec<EnvelopeHash>> {
         if self.settings.account().format() == "imap" {
-            return Err(MeliError::new("No search support for IMAP yet."));
+            return crate::cache::imap_search(search_term, sort, &self.backend);
         }
 
         #[cfg(feature = "sqlite3")]
