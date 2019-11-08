@@ -615,6 +615,7 @@ pub struct StatusBar {
     notifications: VecDeque<String>,
     cur_notification: Option<(std::time::Instant, String)>,
     ex_buffer: Field,
+    ex_buffer_cmd_history_pos: Option<usize>,
     display_buffer: String,
     mode: UIMode,
     height: usize,
@@ -640,6 +641,7 @@ impl StatusBar {
             notifications: VecDeque::new(),
             cur_notification: None,
             ex_buffer: Field::Text(UText::new(String::with_capacity(256)), None),
+            ex_buffer_cmd_history_pos: None,
             display_buffer: String::with_capacity(8),
             dirty: true,
             mode: UIMode::Normal,
@@ -1032,6 +1034,47 @@ impl Component for StatusBar {
             UIEvent::ExInput(Key::Down) => {
                 self.auto_complete.inc_cursor();
                 self.dirty = true;
+            }
+            UIEvent::ExInput(Key::Ctrl('p')) => {
+                let pos = self.ex_buffer_cmd_history_pos.map(|p| p + 1).unwrap_or(0);
+                let pos = Some(std::cmp::min(pos, self.cmd_history.len().saturating_sub(1)));
+                if pos != self.ex_buffer_cmd_history_pos {
+                    let mut utext = UText::new(
+                        self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos.unwrap()]
+                            .clone(),
+                    );
+                    let len = utext.as_str().len();
+                    utext.set_cursor(len);
+                    self.container.set_dirty();
+                    self.set_dirty();
+                    self.ex_buffer = Field::Text(utext, None);
+                    self.ex_buffer_cmd_history_pos = pos;
+                    self.dirty = true;
+                }
+
+                return true;
+            }
+            UIEvent::ExInput(Key::Ctrl('n')) => {
+                if Some(0) == self.ex_buffer_cmd_history_pos {
+                    self.ex_buffer_cmd_history_pos = None;
+                    self.ex_buffer.clear();
+                    self.dirty = true;
+                } else if self.ex_buffer_cmd_history_pos.is_some() {
+                    let pos = self.ex_buffer_cmd_history_pos.map(|p| p - 1);
+                    let mut utext = UText::new(
+                        self.cmd_history[self.cmd_history.len().saturating_sub(1) - pos.unwrap()]
+                            .clone(),
+                    );
+                    let len = utext.as_str().len();
+                    utext.set_cursor(len);
+                    self.container.set_dirty();
+                    self.set_dirty();
+                    self.ex_buffer = Field::Text(utext, None);
+                    self.ex_buffer_cmd_history_pos = pos;
+                    self.dirty = true;
+                }
+
+                return true;
             }
             UIEvent::Resize => {
                 self.dirty = true;
