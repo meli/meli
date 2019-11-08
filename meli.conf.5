@@ -120,6 +120,9 @@ shows one row per thread
 .It Cm read_only Ar boolean
 attempt to not make any changes to this account.
 .Pq Em false
+.It Cm cache_type Ar String
+choose which cache backend to use. Available options are 'none' and 'sqlite3'
+.Pq Em "sqlite3"
 .It Cm folders Ar folder_config
 (optional) configuration for each folder. Its format is described below in
 .Sx FOLDERS Ns

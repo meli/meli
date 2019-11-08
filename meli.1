@@ -119,6 +119,38 @@ directory instead and you will be notified of its location.
 To open a draft for editing later, select your draft in the mail listing and press
 .Cm e Ns
 \&.
+.Sh SEARCH
+meli, if built with sqlite3, includes the ability to perform full text search on the following fields: From, To, Cc, Bcc, In-Reply-To, References, Subject and Date. The message body (in plain text human readable form) and the flags can also be queried. To create the sqlite3 index issue command
+.Ic index Ar ACCOUNT_NAME Ns \&.
+
+To search in the message body type your keywords without any special formatting.
+To search in specific fields, prepend your search keyword with "field:" like so:
+.Pp
+.D1 subject:helloooo or subject:\&"call for help\&" or \&"You remind me today of a small, Mexican chihuahua.\&"
+.Pp
+.D1 not ((from:unrealistic and (to:complex or not "query")) or flags:seen,draft)
+.Pp
+.D1 alladdresses:mailing@list.tld and cc:me@domain.tld
+.Pp
+Boolean operators are
+.Em or Ns
+,
+.Em and
+and
+.Em not
+.Po
+alias: 
+.Em !
+.Pc
+String keywords with spaces must be quoted. Quotes should always be escaped.
+
+.Sy Important Notice about IMAP
+
+To prevent downloading all your messages from your IMAP server, don't set 
+.Em cache_type
+to
+.Em sqlite3 Ns
+\&. meli will relay your queries to the IMAP server. Expect a delay between query and response. Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable delay.
 .Sh EXECUTE mode
 Commands are issued in EXECUTE mode, by default started with the space character and exited with Escape key.
 .Pp
