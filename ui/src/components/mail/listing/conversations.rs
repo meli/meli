@@ -464,6 +464,7 @@ impl ConversationsListing {
     }
     pub(super) fn make_entry_string(
         e: &Envelope,
+        from: &Vec<Address>,
         thread_node: &ThreadNode,
         is_snoozed: bool,
     ) -> EntryStrings {
@@ -476,7 +477,7 @@ impl ConversationsListing {
                     if e.has_attachments() { "📎" } else { "" },
                     if is_snoozed { "💤" } else { "" }
                 )),
-                from: FromString(address_list!((e.from()) as comma_sep_list)),
+                from: FromString(address_list!((from) as comma_sep_list)),
             }
         } else {
             EntryStrings {
@@ -487,7 +488,7 @@ impl ConversationsListing {
                     if e.has_attachments() { "📎" } else { "" },
                     if is_snoozed { "💤" } else { "" }
                 )),
-                from: FromString(address_list!((e.from()) as comma_sep_list)),
+                from: FromString(address_list!((from) as comma_sep_list)),
             }
         }
     }
@@ -568,6 +569,10 @@ impl ConversationsListing {
             Box::new(self.filtered_selection.iter().map(|h| *h))
                 as Box<dyn Iterator<Item = ThreadHash>>
         };
+
+        let mut from_address_list = Vec::new();
+        let mut from_address_set: std::collections::HashSet<Vec<u8>> =
+            std::collections::HashSet::new();
         for (idx, root_idx) in threads_iter.enumerate() {
             self.length += 1;
             let thread_node = &threads.thread_nodes()[&root_idx];
@@ -591,11 +596,38 @@ impl ConversationsListing {
 
                 panic!();
             }
+            from_address_list.clear();
+            from_address_set.clear();
+            let mut stack = StackVec::new();
+            stack.push(root_idx);
+            while let Some(h) = stack.pop() {
+                let env_hash = if let Some(h) = threads.thread_nodes()[&h].message() {
+                    h
+                } else {
+                    break;
+                };
+
+                let envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
+                    .collection
+                    .get_env(env_hash);
+                for addr in envelope.from().iter() {
+                    if from_address_set.contains(addr.raw()) {
+                        continue;
+                    }
+                    from_address_set.insert(addr.raw().to_vec());
+                    from_address_list.push(addr.clone());
+                }
+                for c in threads.thread_nodes()[&h].children() {
+                    stack.push(*c);
+                }
+            }
+
             let root_envelope: &EnvelopeRef =
                 &context.accounts[self.cursor_pos.0].collection.get_env(i);
 
             let strings = ConversationsListing::make_entry_string(
                 root_envelope,
+                &from_address_list,
                 thread_node,
                 threads.is_snoozed(root_idx),
             );

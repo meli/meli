@@ -42,6 +42,12 @@ pub enum Address {
 }
 
 impl Address {
+    pub fn raw(&self) -> &[u8] {
+        match self {
+            Address::Mailbox(m) => m.raw.as_slice(),
+            Address::Group(g) => g.raw.as_slice(),
+        }
+    }
     pub fn get_display_name(&self) -> String {
         match self {
             Address::Mailbox(m) => m.display_name.display(&m.raw),
