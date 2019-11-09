@@ -277,8 +277,7 @@ pub enum PageMovement {
 #[derive(Default, Debug, Clone)]
 pub struct Pager {
     text: String,
-    cursor_pos: usize,
-    max_cursor_pos: Option<usize>,
+    cursor: (usize, usize),
     height: usize,
     width: usize,
     dirty: bool,
@@ -314,8 +313,7 @@ impl Pager {
         self.height = height;
         self.width = width;
         self.dirty = true;
-        self.cursor_pos = 0;
-        self.max_cursor_pos = None;
+        self.cursor = (0, 0);
     }
     pub fn from_string(
         mut text: String,
@@ -374,7 +372,7 @@ impl Pager {
         };
         Pager {
             text,
-            cursor_pos: cursor_pos.unwrap_or(0),
+            cursor: (0, cursor_pos.unwrap_or(0)),
             height: content.size().1,
             width: content.size().0,
             dirty: true,
@@ -397,7 +395,7 @@ impl Pager {
         Pager::print_string(&mut content, lines);
         Pager {
             text: text.to_string(),
-            cursor_pos: cursor_pos.unwrap_or(0),
+            cursor: (0, cursor_pos.unwrap_or(0)),
             height,
             width,
             dirty: true,
@@ -410,7 +408,7 @@ impl Pager {
         let (width, height) = content.size();
         Pager {
             text: String::new(),
-            cursor_pos: cursor_pos.unwrap_or(0),
+            cursor: (0, cursor_pos.unwrap_or(0)),
             height,
             width,
             dirty: true,
@@ -434,7 +432,7 @@ impl Pager {
         }
     }
     pub fn cursor_pos(&self) -> usize {
-        self.cursor_pos
+        self.cursor.1
     }
 }
 
@@ -453,18 +451,18 @@ impl Component for Pager {
         if let Some(mvm) = self.movement.take() {
             match mvm {
                 PageMovement::PageUp => {
-                    self.cursor_pos = self.cursor_pos.saturating_sub(height);
+                    self.cursor.1 = self.cursor.1.saturating_sub(height);
                 }
                 PageMovement::PageDown => {
-                    if self.cursor_pos + height < self.height {
-                        self.cursor_pos += height;
+                    if self.cursor.1 + height < self.height {
+                        self.cursor.1 += height;
                     }
                 }
                 PageMovement::Home => {
-                    self.cursor_pos = 0;
+                    self.cursor.1 = 0;
                 }
                 PageMovement::End => {
-                    self.cursor_pos = (self.height / height) * height;
+                    self.cursor.1 = (self.height / height) * height;
                 }
             }
         }
@@ -474,29 +472,26 @@ impl Component for Pager {
         }
 
         clear_area(grid, area);
-        //let pager_context: usize = context.settings.pager.pager_context;
-        //let pager_stop: bool = context.settings.pager.pager_stop;
-        //let rows = y(bottom_right) - y(upper_left);
-        //let page_length = rows / self.height;
-        let width = width!(area);
-        if width != self.width {
-            // Reflow text.
-            let lines: Vec<&str> = word_break_string(self.text.as_str(), width);
-            let height = lines.len() + 1;
-            self.width = width;
-            self.height = height;
-            self.content =
-                CellBuffer::new_with_context(width, height, Cell::with_char(' '), context);
-            Pager::print_string(&mut self.content, lines);
-        }
-        if self.cursor_pos + height >= self.height {
-            self.cursor_pos = self.height.saturating_sub(height);
-        };
-        copy_area_with_break(
+        let (width, height) = self.content.size();
+        let (cols, rows) = (width!(area), height!(area));
+        self.cursor = (
+            std::cmp::min(width.saturating_sub(cols), self.cursor.0),
+            std::cmp::min(height.saturating_sub(rows), self.cursor.1),
+        );
+        copy_area(
             grid,
             &self.content,
             area,
-            ((0, self.cursor_pos), (self.width - 1, self.height - 1)),
+            (
+                (
+                    std::cmp::min((width - 1).saturating_sub(cols), self.cursor.0),
+                    std::cmp::min((height - 1).saturating_sub(rows), self.cursor.1),
+                ),
+                (
+                    std::cmp::min(self.cursor.0 + cols, width - 1),
+                    std::cmp::min(self.cursor.1 + rows, height - 1),
+                ),
+            ),
         );
         context.dirty_areas.push_back(area);
     }
@@ -504,17 +499,23 @@ impl Component for Pager {
         let shortcuts = &self.get_shortcuts(context)[Self::DESCRIPTION];
         match event {
             UIEvent::Input(ref key) if *key == shortcuts["scroll_up"] => {
-                if self.cursor_pos > 0 {
-                    self.cursor_pos -= 1;
-                    self.dirty = true;
-                }
+                self.cursor.1 = self.cursor.1.saturating_sub(1);
+                self.dirty = true;
                 return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["scroll_down"] => {
-                if self.height > 0 && self.cursor_pos + 1 < self.height {
-                    self.cursor_pos += 1;
-                    self.dirty = true;
-                }
+                self.cursor.1 = self.cursor.1 + 1;
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Left) => {
+                self.cursor.0 = self.cursor.0.saturating_sub(1);
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Right) => {
+                self.cursor.0 = self.cursor.0 + 1;
+                self.dirty = true;
                 return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["page_up"] => {
@@ -567,7 +568,6 @@ impl Component for Pager {
             }
             UIEvent::Resize => {
                 self.dirty = true;
-                self.max_cursor_pos = None;
             }
             _ => {}
         }
