@@ -26,13 +26,15 @@ use crate::error::{MeliError, Result};
 use fnv::FnvHashMap;
 
 /* Supported vcard versions */
-pub trait VCardVersion {}
+pub trait VCardVersion: core::fmt::Debug {}
 
 /// https://tools.ietf.org/html/rfc6350
+#[derive(Debug)]
 pub struct VCardVersion4;
 impl VCardVersion for VCardVersion4 {}
 
 /// https://tools.ietf.org/html/rfc2426
+#[derive(Debug)]
 pub struct VCardVersion3;
 impl VCardVersion for VCardVersion3 {}
 
@@ -41,6 +43,7 @@ pub struct CardDeserializer;
 static HEADER: &'static str = "BEGIN:VCARD\r\nVERSION:4.0\r\n";
 static FOOTER: &'static str = "END:VCARD\r\n";
 
+#[derive(Debug)]
 pub struct VCard<T: VCardVersion>(
     fnv::FnvHashMap<String, ContentLine>,
     std::marker::PhantomData<*const T>,
