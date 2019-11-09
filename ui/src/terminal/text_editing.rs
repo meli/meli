@@ -1,4 +1,4 @@
-use text_processing::Graphemes;
+use text_processing::TextProcessing;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UText {

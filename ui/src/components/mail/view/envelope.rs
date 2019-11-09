@@ -339,12 +339,7 @@ impl Component for EnvelopeView {
                     } else {
                         self.pager.as_ref().map(Pager::cursor_pos)
                     };
-                    self.pager = Some(Pager::from_string(
-                        text,
-                        Some(context),
-                        cursor_pos,
-                        Some(width!(area)),
-                    ));
+                    self.pager = Some(Pager::from_string(text, Some(context), cursor_pos, None));
                 }
             };
             self.dirty = false;

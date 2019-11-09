@@ -1,7 +1,7 @@
 use super::*;
 
 #[cfg(feature = "unicode_algorithms")]
-use text_processing::grapheme_clusters::Graphemes;
+use text_processing::grapheme_clusters::TextProcessing;
 
 pub fn encode_header(value: &str) -> String {
     let mut ret = String::with_capacity(value.len());

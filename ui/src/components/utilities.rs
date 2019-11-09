@@ -297,10 +297,10 @@ impl fmt::Display for Pager {
 impl Pager {
     const DESCRIPTION: &'static str = "pager";
     pub fn update_from_str(&mut self, text: &str, width: Option<usize>) {
-        let lines: Vec<&str> = if let Some(width) = width {
-            word_break_string(text, width)
+        let lines: Vec<String> = if let Some(width) = width {
+            text.split_lines(width)
         } else {
-            text.trim().split('\n').collect()
+            text.trim().split('\n').map(str::to_string).collect()
         };
 
         let height = lines.len() + 1;
@@ -355,10 +355,10 @@ impl Pager {
         }
 
         let content = {
-            let lines: Vec<&str> = if let Some(width) = width {
-                word_break_string(text.as_str(), width)
+            let lines: Vec<String> = if let Some(width) = width {
+                text.split_lines(width)
             } else {
-                text.trim().split('\n').collect()
+                text.trim().split('\n').map(str::to_string).collect()
             };
 
             let height = lines.len() + 1;
@@ -384,10 +384,10 @@ impl Pager {
         }
     }
     pub fn from_str(text: &str, cursor_pos: Option<usize>, width: Option<usize>) -> Self {
-        let lines: Vec<&str> = if let Some(width) = width {
-            word_break_string(text, width)
+        let lines: Vec<String> = if let Some(width) = width {
+            text.split_lines(width)
         } else {
-            text.trim().split('\n').collect()
+            text.trim().split('\n').map(str::to_string).collect()
         };
 
         let height = lines.len() + 1;
@@ -419,7 +419,7 @@ impl Pager {
             ..Default::default()
         }
     }
-    pub fn print_string(content: &mut CellBuffer, lines: Vec<&str>) {
+    pub fn print_string(content: &mut CellBuffer, lines: Vec<String>) {
         let width = content.size().0;
         for (i, l) in lines.iter().enumerate() {
             write_string_to_grid(

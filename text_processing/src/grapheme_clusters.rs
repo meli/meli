@@ -12,7 +12,7 @@ use crate::wcwidth::{wcwidth, CodePointsIter};
 extern crate unicode_segmentation;
 use self::unicode_segmentation::UnicodeSegmentation;
 
-pub trait Graphemes: UnicodeSegmentation + CodePointsIter {
+pub trait TextProcessing: UnicodeSegmentation + CodePointsIter {
     fn split_graphemes<'a>(&'a self) -> Vec<&'a str> {
         UnicodeSegmentation::graphemes(self, true).collect::<Vec<&str>>()
     }
@@ -41,9 +41,15 @@ pub trait Graphemes: UnicodeSegmentation + CodePointsIter {
     fn grapheme_len(&self) -> usize {
         self.split_graphemes().len()
     }
+
+    fn split_lines(&self, width: usize) -> Vec<String>;
 }
 
-impl Graphemes for str {}
+impl TextProcessing for str {
+    fn split_lines(&self, width: usize) -> Vec<String> {
+        crate::line_break::linear(self, width)
+    }
+}
 
 pub struct WordBreakIter<'s> {
     input: &'s str,

@@ -622,12 +622,7 @@ impl Component for MailView {
                             .map(|v| String::from_utf8_lossy(v).into_owned())
                             .unwrap_or_else(|e| e.to_string())
                     };
-                    self.pager = Some(Pager::from_string(
-                        text,
-                        Some(context),
-                        None,
-                        Some(width!(area)),
-                    ));
+                    self.pager = Some(Pager::from_string(text, Some(context), None, None));
                     self.subview = None;
                 }
                 _ => {
@@ -643,12 +638,7 @@ impl Component for MailView {
                     } else {
                         self.pager.as_mut().map(|p| p.cursor_pos())
                     };
-                    self.pager = Some(Pager::from_string(
-                        text,
-                        Some(context),
-                        cursor_pos,
-                        Some(width!(area)),
-                    ));
+                    self.pager = Some(Pager::from_string(text, Some(context), cursor_pos, None));
                     self.subview = None;
                 }
             };
