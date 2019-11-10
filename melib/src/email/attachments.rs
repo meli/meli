@@ -172,7 +172,15 @@ impl AttachmentBuilder {
                     let mut name: Option<String> = None;
                     for (n, v) in params {
                         if n.eq_ignore_ascii_case(b"name") {
-                            name = Some(String::from_utf8_lossy(v).into());
+                            if let Ok(v) = crate::email::parser::phrase(v.trim())
+                                .to_full_result()
+                                .as_ref()
+                                .and_then(|r| Ok(String::from_utf8_lossy(r).to_string()))
+                            {
+                                name = Some(v);
+                            } else {
+                                name = Some(String::from_utf8_lossy(v).into());
+                            }
                             break;
                         }
                     }
@@ -334,6 +342,10 @@ impl fmt::Display for Attachment {
             ContentType::OctetStream { ref name } => {
                 write!(f, "{}", name.clone().unwrap_or_else(|| self.mime_type()))
             }
+            ContentType::Other {
+                name: Some(ref name),
+                ..
+            } => write!(f, "\"{}\", [{}]", name, self.mime_type()),
             ContentType::Other { .. } => write!(f, "Data attachment of type {}", self.mime_type()),
             ContentType::Text { .. } => write!(f, "Text attachment of type {}", self.mime_type()),
             ContentType::Multipart {

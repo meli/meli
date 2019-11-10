@@ -32,8 +32,8 @@ pub use crate::actions::Action::{self, *};
 pub use crate::actions::ComposeAction::{self, *};
 pub use crate::actions::ListingAction::{self, *};
 pub use crate::actions::MailingListAction::{self, *};
-pub use crate::actions::PagerAction::{self, *};
 pub use crate::actions::TabAction::{self, *};
+pub use crate::actions::ViewAction::{self, *};
 use std::str::FromStr;
 
 /* Create a const table with every command part that can be auto-completed and its description */
@@ -180,12 +180,12 @@ define_commands!([
                                   >> is_a!(" ")
                                   >> args: separated_list!(is_a!(" "), is_not!(" "))
                                   >> ({
-                                      Pager(Pipe(bin.to_string(), args.into_iter().map(|v| String::from_utf8(v.to_vec()).unwrap()).collect::<Vec<String>>()))
+                                      View(Pipe(bin.to_string(), args.into_iter().map(|v| String::from_utf8(v.to_vec()).unwrap()).collect::<Vec<String>>()))
                                   })) | do_parse!(
                                           ws!(tag!("pipe"))
                                           >> bin: ws!(map_res!(is_not!(" "), std::str::from_utf8))
                                           >> ({
-                                              Pager(Pipe(bin.to_string(), Vec::new()))
+                                              View(Pipe(bin.to_string(), Vec::new()))
                                           })
                                   ))
                       );
@@ -320,6 +320,19 @@ define_commands!([
                               )
                       );
                   )
+                },
+                { tags: ["save-attachment "],
+                  desc: "save-attachment INDEX PATH",
+                  parser:(
+                      named!( save_attachment<Action>,
+                              do_parse!(
+                                  ws!(tag!("save-attachment"))
+                                  >> idx: map_res!(map_res!(is_not!(" "), std::str::from_utf8), usize::from_str)
+                                  >> path: ws!(map_res!(call!(not_line_ending), std::str::from_utf8))
+                                  >> (View(SaveAttachment(idx, path.to_string())))
+                              )
+                      );
+                  )
                 }
 ]);
 
@@ -379,6 +392,8 @@ named!(
 
 named!(account_action<Action>, alt_complete!(reindex));
 
+named!(view<Action>, alt_complete!(pipe | save_attachment));
+
 named!(pub parse_command<Action>,
-       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | pipe | compose_action | create_folder | sub_folder | unsub_folder | delete_folder | rename_folder | account_action )
+       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | view | compose_action | create_folder | sub_folder | unsub_folder | delete_folder | rename_folder | account_action )
 );

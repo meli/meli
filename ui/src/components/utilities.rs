@@ -531,7 +531,7 @@ impl Component for Pager {
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }
-            UIEvent::Action(Pager(Pipe(ref bin, ref args))) => {
+            UIEvent::Action(View(Pipe(ref bin, ref args))) => {
                 use std::io::Write;
                 use std::process::{Command, Stdio};
                 let mut command_obj = match Command::new(bin)
@@ -987,6 +987,7 @@ impl Component for StatusBar {
                             self.cmd_history.push(self.ex_buffer.as_str().to_string());
                         }
                         self.ex_buffer.clear();
+                        self.ex_buffer_cmd_history_pos.take();
                     }
                     UIMode::Execute => {
                         self.height = 2;
@@ -1019,6 +1020,7 @@ impl Component for StatusBar {
             UIEvent::ExInput(Key::Ctrl('u')) => {
                 self.dirty = true;
                 self.ex_buffer.clear();
+                self.ex_buffer_cmd_history_pos.take();
                 return true;
             }
             UIEvent::ExInput(k @ Key::Backspace) | UIEvent::ExInput(k @ Key::Ctrl('h')) => {

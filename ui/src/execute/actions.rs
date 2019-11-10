@@ -63,8 +63,9 @@ pub enum MailingListAction {
 }
 
 #[derive(Debug)]
-pub enum PagerAction {
+pub enum ViewAction {
     Pipe(String, Vec<String>),
+    SaveAttachment(usize, String),
 }
 
 #[derive(Debug)]
@@ -88,7 +89,7 @@ pub enum Action {
     Tab(TabAction),
     ToggleThreadSnooze,
     MailingListAction(MailingListAction),
-    Pager(PagerAction),
+    View(ViewAction),
     SetEnv(String, String),
     PrintEnv(String),
     Compose(ComposeAction),

@@ -957,6 +957,112 @@ impl Component for MailView {
             UIEvent::EnvelopeRename(old_hash, new_hash) if self.coordinates.2 == old_hash => {
                 self.coordinates.2 = new_hash;
             }
+            UIEvent::Action(View(ViewAction::SaveAttachment(a_i, ref path))) => {
+                use std::io::Write;
+                let account = &mut context.accounts[self.coordinates.0];
+                let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
+                let op = account.operation(envelope.hash());
+
+                let attachments = match envelope.body(op) {
+                    Ok(body) => body.attachments(),
+                    Err(e) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Failed to open e-mail".to_string()),
+                            e.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        log(
+                            format!(
+                                "Failed to open envelope {}: {}",
+                                envelope.message_id_display(),
+                                e.to_string()
+                            ),
+                            ERROR,
+                        );
+                        return true;
+                    }
+                };
+                if let Some(u) = attachments.get(a_i) {
+                    match u.content_type() {
+                        ContentType::MessageRfc822
+                        | ContentType::Text { .. }
+                        | ContentType::PGPSignature => {
+                            debug!(path);
+                            let mut f = match std::fs::File::create(path) {
+                                Err(e) => {
+                                    context.replies.push_back(UIEvent::Notification(
+                                        Some(format!("Failed to create file at {}", path)),
+                                        e.to_string(),
+                                        Some(NotificationType::ERROR),
+                                    ));
+                                    log(
+                                        format!(
+                                            "Failed to create file at {}: {}",
+                                            path,
+                                            e.to_string()
+                                        ),
+                                        ERROR,
+                                    );
+                                    return true;
+                                }
+                                Ok(f) => f,
+                            };
+
+                            f.write_all(&decode(u, None)).unwrap();
+                            f.flush().unwrap();
+                        }
+
+                        ContentType::Multipart { .. } => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(
+                                    "Multipart attachments are not supported yet.".to_string(),
+                                ),
+                            ));
+                            return true;
+                        }
+                        ContentType::OctetStream { name: ref _name }
+                        | ContentType::Other {
+                            name: ref _name, ..
+                        } => {
+                            let mut f = match std::fs::File::create(path.trim()) {
+                                Err(e) => {
+                                    context.replies.push_back(UIEvent::Notification(
+                                        Some(format!("Failed to create file at {}", path)),
+                                        e.to_string(),
+                                        Some(NotificationType::ERROR),
+                                    ));
+                                    log(
+                                        format!(
+                                            "Failed to create file at {}: {}",
+                                            path,
+                                            e.to_string()
+                                        ),
+                                        ERROR,
+                                    );
+                                    return true;
+                                }
+                                Ok(f) => f,
+                            };
+
+                            f.write_all(&decode(u, None)).unwrap();
+                            f.flush().unwrap();
+                        }
+                    }
+                    context.replies.push_back(UIEvent::Notification(
+                        None,
+                        format!("Saved at {}", &path),
+                        Some(NotificationType::INFO),
+                    ));
+                } else {
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
+                            "Attachment `{}` not found.",
+                            a_i
+                        ))));
+                    return true;
+                }
+            }
             UIEvent::Action(MailingListAction(ref e)) => {
                 let unsafe_context = context as *mut Context;
                 let account = &context.accounts[self.coordinates.0];
