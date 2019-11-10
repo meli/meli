@@ -323,7 +323,6 @@ impl Pager {
     ) -> Self {
         let pager_filter: Option<&String> = if let Some(context) = context {
             context.settings.pager.filter.as_ref()
-        //let format_flowed: bool = context.settings.pager.format_flowed;
         } else {
             None
         };
@@ -366,7 +365,6 @@ impl Pager {
             } else {
                 CellBuffer::new(width, height, Cell::with_char(' '))
             };
-            //interpret_format_flowed(&text);
             Pager::print_string(&mut content, lines);
             content
         };
@@ -426,7 +424,7 @@ impl Pager {
                 Color::Default,
                 Color::Default,
                 Attr::Default,
-                ((0, i), (width - 1, i)),
+                ((0, i), (width.saturating_sub(1), i)),
                 true,
             );
         }
