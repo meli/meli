@@ -82,6 +82,15 @@ impl std::ops::Deref for IsSubscribedFn {
     }
 }
 type Capabilities = FnvHashSet<Vec<u8>>;
+
+#[derive(Debug)]
+pub struct UIDStore {
+    uidvalidity: Arc<Mutex<FnvHashMap<FolderHash, UID>>>,
+    hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
+    uid_index: Arc<Mutex<FnvHashMap<UID, EnvelopeHash>>>,
+
+    byte_cache: Arc<Mutex<FnvHashMap<UID, EnvelopeCache>>>,
+}
 #[derive(Debug)]
 pub struct ImapType {
     account_name: String,
@@ -89,12 +98,9 @@ pub struct ImapType {
     is_subscribed: Arc<IsSubscribedFn>,
     connection: Arc<Mutex<ImapConnection>>,
     server_conf: ImapServerConf,
+    uid_store: Arc<UIDStore>,
 
     folders: Arc<Mutex<FnvHashMap<FolderHash, ImapFolder>>>,
-    hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
-    uid_index: Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
-
-    byte_cache: Arc<Mutex<FnvHashMap<UID, EnvelopeCache>>>,
 }
 
 impl MailBackend for ImapType {
@@ -114,8 +120,7 @@ impl MailBackend for ImapType {
         let mut w = AsyncBuilder::new();
         let handle = {
             let tx = w.tx();
-            let hash_index = self.hash_index.clone();
-            let uid_index = self.uid_index.clone();
+            let uid_store = self.uid_store.clone();
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
             let folder_exists = self.folders.lock().unwrap()[&folder_hash].exists.clone();
@@ -133,14 +138,18 @@ impl MailBackend for ImapType {
                                conn.send_command(format!("EXAMINE {}", folder_path).as_bytes())
                                conn.read_response(&mut response)
                 );
-                let examine_response = protocol_parser::select_response(&response)
-                    .to_full_result()
-                    .map_err(MeliError::from);
+                let examine_response = protocol_parser::select_response(&response);
                 exit_on_error!(&tx, examine_response);
-                let mut exists: usize = match examine_response.unwrap() {
-                    SelectResponse::Ok(ok) => ok.uidnext - 1,
-                    SelectResponse::Bad(b) => b.exists,
-                };
+                let examine_response = examine_response.unwrap();
+                let mut exists: usize = examine_response.uidnext - 1;
+                {
+                    let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
+
+                    let v = uidvalidities
+                        .entry(folder_hash)
+                        .or_insert(examine_response.uidvalidity);
+                    *v = examine_response.uidvalidity;
+                }
                 {
                     let mut folder_exists = folder_exists.lock().unwrap();
                     *folder_exists = exists;
@@ -171,11 +180,12 @@ impl MailBackend for ImapType {
                                 if let Some(flags) = flags {
                                     env.set_flags(flags);
                                 }
-                                hash_index
+                                uid_store
+                                    .hash_index
                                     .lock()
                                     .unwrap()
                                     .insert(env.hash(), (uid, folder_hash));
-                                uid_index.lock().unwrap().insert(uid, env.hash());
+                                uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
                                 envelopes.push(env);
                             }
                         }
@@ -211,8 +221,7 @@ impl MailBackend for ImapType {
         let conn = ImapConnection::new_connection(&self.server_conf);
         let main_conn = self.connection.clone();
         let is_online = self.online.clone();
-        let hash_index = self.hash_index.clone();
-        let uid_index = self.uid_index.clone();
+        let uid_store = self.uid_store.clone();
         let handle = std::thread::Builder::new()
             .name(format!("{} imap connection", self.account_name.as_str(),))
             .spawn(move || {
@@ -225,8 +234,7 @@ impl MailBackend for ImapType {
                     conn,
                     is_online,
                     main_conn,
-                    hash_index,
-                    uid_index,
+                    uid_store,
                     folders,
                     sender,
                     work_context,
@@ -262,14 +270,14 @@ impl MailBackend for ImapType {
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
-        let (uid, folder_hash) = self.hash_index.lock().unwrap()[&hash];
+        let (uid, folder_hash) = self.uid_store.hash_index.lock().unwrap()[&hash];
         Box::new(ImapOp::new(
             uid,
             self.folders.lock().unwrap()[&folder_hash]
                 .path()
                 .to_string(),
             self.connection.clone(),
-            self.byte_cache.clone(),
+            self.uid_store.clone(),
         ))
     }
 
@@ -432,9 +440,12 @@ impl ImapType {
 
             folders: Arc::new(Mutex::new(Default::default())),
             connection: Arc::new(Mutex::new(connection)),
-            hash_index: Default::default(),
-            uid_index: Default::default(),
-            byte_cache: Default::default(),
+            uid_store: Arc::new(UIDStore {
+                uidvalidity: Default::default(),
+                hash_index: Default::default(),
+                uid_index: Default::default(),
+                byte_cache: Default::default(),
+            }),
         }
     }
 
@@ -543,7 +554,7 @@ impl ImapType {
         for l in lines.by_ref() {
             if l.starts_with("* SEARCH") {
                 use std::iter::FromIterator;
-                let uid_index = self.uid_index.lock()?;
+                let uid_index = self.uid_store.uid_index.lock()?;
                 return Ok(crate::structs::StackVec::from_iter(
                     l["* SEARCH".len()..]
                         .trim()

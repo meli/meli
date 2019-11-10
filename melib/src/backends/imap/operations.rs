@@ -37,7 +37,7 @@ pub struct ImapOp {
     folder_path: String,
     flags: Cell<Option<Flag>>,
     connection: Arc<Mutex<ImapConnection>>,
-    byte_cache: Arc<Mutex<FnvHashMap<UID, EnvelopeCache>>>,
+    uid_store: Arc<UIDStore>,
 }
 
 impl ImapOp {
@@ -45,7 +45,7 @@ impl ImapOp {
         uid: usize,
         folder_path: String,
         connection: Arc<Mutex<ImapConnection>>,
-        byte_cache: Arc<Mutex<FnvHashMap<UID, EnvelopeCache>>>,
+        uid_store: Arc<UIDStore>,
     ) -> Self {
         ImapOp {
             uid,
@@ -55,7 +55,7 @@ impl ImapOp {
             body: None,
             folder_path,
             flags: Cell::new(None),
-            byte_cache,
+            uid_store,
         }
     }
 }
@@ -67,7 +67,7 @@ impl BackendOp for ImapOp {
 
     fn as_bytes(&mut self) -> Result<&[u8]> {
         if self.bytes.is_none() {
-            let mut bytes_cache = self.byte_cache.lock()?;
+            let mut bytes_cache = self.uid_store.byte_cache.lock()?;
             let cache = bytes_cache.entry(self.uid).or_default();
             if cache.bytes.is_some() {
                 self.bytes = cache.bytes.clone();
@@ -122,7 +122,7 @@ impl BackendOp for ImapOp {
             return Ok(result);
         }
         if self.headers.is_none() {
-            let mut bytes_cache = self.byte_cache.lock()?;
+            let mut bytes_cache = self.uid_store.byte_cache.lock()?;
             let cache = bytes_cache.entry(self.uid).or_default();
             if cache.headers.is_some() {
                 self.headers = cache.headers.clone();
@@ -175,7 +175,7 @@ impl BackendOp for ImapOp {
             return Ok(result);
         }
         if self.body.is_none() {
-            let mut bytes_cache = self.byte_cache.lock()?;
+            let mut bytes_cache = self.uid_store.byte_cache.lock()?;
             let cache = bytes_cache.entry(self.uid).or_default();
             if cache.body.is_some() {
                 self.body = cache.body.clone();
@@ -223,7 +223,7 @@ impl BackendOp for ImapOp {
         if self.flags.get().is_some() {
             return self.flags.get().unwrap();
         }
-        let mut bytes_cache = self.byte_cache.lock().unwrap();
+        let mut bytes_cache = self.uid_store.byte_cache.lock().unwrap();
         let cache = bytes_cache.entry(self.uid).or_default();
         if cache.flags.is_some() {
             self.flags.set(cache.flags);
@@ -295,7 +295,7 @@ impl BackendOp for ImapOp {
         }
         conn.send_command(format!("EXAMINE \"{}\"", &self.folder_path,).as_bytes())?;
         conn.read_response(&mut response)?;
-        let mut bytes_cache = self.byte_cache.lock()?;
+        let mut bytes_cache = self.uid_store.byte_cache.lock()?;
         let cache = bytes_cache.entry(self.uid).or_default();
         cache.flags = Some(flag);
         Ok(())

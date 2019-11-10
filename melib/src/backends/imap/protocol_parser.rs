@@ -278,14 +278,8 @@ named!(
     do_parse!(tag!("* SEARCH\r\n") >> ({ &b""[0..] })))
 );
 
-#[derive(Debug, Clone)]
-pub enum SelectResponse {
-    Ok(SelectResponseOk),
-    Bad(SelectResponseBad),
-}
-
 #[derive(Debug, Default, Clone)]
-pub struct SelectResponseOk {
+pub struct SelectResponse {
     pub exists: usize,
     pub recent: usize,
     pub flags: Flag,
@@ -293,13 +287,6 @@ pub struct SelectResponseOk {
     pub uidvalidity: usize,
     pub uidnext: usize,
     pub permanentflags: Flag,
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct SelectResponseBad {
-    pub exists: usize,
-    pub recent: usize,
-    pub flags: Flag,
 }
 
 /*
@@ -324,9 +311,9 @@ pub struct SelectResponseBad {
  *  * OK [UIDVALIDITY 1554422056] UIDs valid
  *  * OK [UIDNEXT 50] Predicted next UID
  */
-pub fn select_response(input: &str) -> IResult<&str, SelectResponse> {
+pub fn select_response(input: &str) -> Result<SelectResponse> {
     if input.contains("* OK") {
-        let mut ret = SelectResponseOk::default();
+        let mut ret = SelectResponse::default();
         for l in input.split("\r\n") {
             if l.starts_with("* ") && l.ends_with(" EXISTS") {
                 ret.exists = usize::from_str(&l["* ".len()..l.len() - " EXISTS".len()]).unwrap();
@@ -354,23 +341,10 @@ pub fn select_response(input: &str) -> IResult<&str, SelectResponse> {
                 debug!("select response: {}", l);
             }
         }
-        IResult::Done(&""[0..], SelectResponse::Ok(ret))
+        Ok(ret)
     } else {
-        let mut ret = SelectResponseBad::default();
-        for l in input.split("\r\n") {
-            if l.starts_with("* ") && l.ends_with(" EXISTS") {
-                ret.exists = usize::from_str(&l["* ".len()..l.len() - " EXISTS".len()]).unwrap();
-            } else if l.starts_with("* ") && l.ends_with(" RECENT") {
-                ret.recent = usize::from_str(&l["* ".len()..l.len() - " RECENT".len()]).unwrap();
-            } else if l.starts_with("* FLAGS (") {
-                ret.flags = flags(&l["* FLAGS (".len()..l.len() - ")".len()])
-                    .to_full_result()
-                    .unwrap();
-            } else if !l.is_empty() {
-                debug!("select response: {}", l);
-            }
-        }
-        IResult::Done(&""[0..], SelectResponse::Bad(ret))
+        debug!("BAD/NO response in select: {}", input);
+        Err(MeliError::new(input))
     }
 }
 

@@ -26,8 +26,7 @@ pub struct ImapWatchKit {
     pub conn: ImapConnection,
     pub is_online: Arc<Mutex<bool>>,
     pub main_conn: Arc<Mutex<ImapConnection>>,
-    pub hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
-    pub uid_index: Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
+    pub uid_store: Arc<UIDStore>,
     pub folders: Arc<Mutex<FnvHashMap<FolderHash, ImapFolder>>>,
     pub sender: RefreshEventConsumer,
     pub work_context: WorkContext,
@@ -53,8 +52,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         is_online,
         mut conn,
         main_conn,
-        hash_index,
-        uid_index,
+        uid_store,
         folders,
         sender,
         work_context,
@@ -82,14 +80,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
                     format!("examining `{}` for updates...", folder.path()),
                 ))
                 .unwrap();
-            examine_updates(
-                folder,
-                &sender,
-                &mut conn,
-                &hash_index,
-                &uid_index,
-                &work_context,
-            )?;
+            examine_updates(folder, &sender, &mut conn, &uid_store, &work_context)?;
         }
         let mut main_conn = main_conn.lock().unwrap();
         main_conn.send_command(b"NOOP").unwrap();
@@ -106,8 +97,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         mut conn,
         is_online,
         main_conn,
-        hash_index,
-        uid_index,
+        uid_store,
         folders,
         sender,
         work_context,
@@ -139,15 +129,37 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     debug!("select response {}", &response);
     {
         let mut prev_exists = folder.exists.lock().unwrap();
-        *prev_exists = match protocol_parser::select_response(&response)
-            .to_full_result()
-            .map_err(MeliError::from)
-        {
-            Ok(SelectResponse::Bad(bad)) => {
-                debug!(bad);
-                panic!("could not select mailbox");
-            }
-            Ok(SelectResponse::Ok(ok)) => {
+        *prev_exists = match protocol_parser::select_response(&response) {
+            Ok(ok) => {
+                {
+                    let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
+
+                    if let Some(v) = uidvalidities.get_mut(&folder_hash) {
+                        if *v != ok.uidvalidity {
+                            sender.send(RefreshEvent {
+                                hash: folder_hash,
+                                kind: RefreshEventKind::Rescan,
+                            });
+                            uid_store.uid_index.lock().unwrap().clear();
+                            uid_store.hash_index.lock().unwrap().clear();
+                            uid_store.byte_cache.lock().unwrap().clear();
+                            *v = ok.uidvalidity;
+                        }
+                    } else {
+                        sender.send(RefreshEvent {
+                            hash: folder_hash,
+                            kind: RefreshEventKind::Rescan,
+                        });
+                        sender.send(RefreshEvent {
+                            hash: folder_hash,
+                            kind: RefreshEventKind::Failure(MeliError::new(format!(
+                                "Unknown mailbox: {} {}",
+                                folder.path(),
+                                folder_hash
+                            ))),
+                        });
+                    }
+                }
                 debug!(&ok);
                 ok.exists
             }
@@ -216,14 +228,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         format!("examining `{}` for updates...", folder.path()),
                     ))
                     .unwrap();
-                examine_updates(
-                    folder,
-                    &sender,
-                    &mut iter.conn,
-                    &hash_index,
-                    &uid_index,
-                    &work_context,
-                );
+                examine_updates(folder, &sender, &mut iter.conn, &uid_store, &work_context);
             }
             work_context
                 .set_status
@@ -299,11 +304,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         .unwrap();
                                     if let Ok(env) = Envelope::from_bytes(&b, flags) {
                                         ctr += 1;
-                                        hash_index
+                                        uid_store
+                                            .hash_index
                                             .lock()
                                             .unwrap()
                                             .insert(env.hash(), (uid, folder_hash));
-                                        uid_index.lock().unwrap().insert(uid, env.hash());
+                                        uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
                                         debug!(
                                             "Create event {} {} {}",
                                             env.hash(),
@@ -407,17 +413,18 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         format!("parsing {}/{} envelopes..", ctr, len),
                                     ))
                                     .unwrap();
-                                if uid_index.lock().unwrap().contains_key(&uid) {
+                                if uid_store.uid_index.lock().unwrap().contains_key(&uid) {
                                     ctr += 1;
                                     continue;
                                 }
                                 if let Ok(env) = Envelope::from_bytes(&b, flags) {
                                     ctr += 1;
-                                    hash_index
+                                    uid_store
+                                        .hash_index
                                         .lock()
                                         .unwrap()
                                         .insert(env.hash(), (uid, folder_hash));
-                                    uid_index.lock().unwrap().insert(uid, env.hash());
+                                    uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
                                     debug!(
                                         "Create event {} {} {}",
                                         env.hash(),
@@ -476,8 +483,7 @@ fn examine_updates(
     folder: &ImapFolder,
     sender: &RefreshEventConsumer,
     conn: &mut ImapConnection,
-    hash_index: &Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
-    uid_index: &Arc<Mutex<FnvHashMap<usize, EnvelopeHash>>>,
+    uid_store: &Arc<UIDStore>,
     work_context: &WorkContext,
 ) -> Result<()> {
     let thread_id: std::thread::ThreadId = std::thread::current().id();
@@ -492,16 +498,39 @@ fn examine_updates(
         conn.send_command(format!("EXAMINE {}", folder.path()).as_bytes())
         conn.read_response(&mut response)
     );
-    match protocol_parser::select_response(&response)
-        .to_full_result()
-        .map_err(MeliError::from)
-    {
-        Ok(SelectResponse::Bad(bad)) => {
-            debug!(bad);
-            panic!("could not select mailbox");
-        }
-        Ok(SelectResponse::Ok(ok)) => {
+    match protocol_parser::select_response(&response) {
+        Ok(ok) => {
             debug!(&ok);
+            {
+                let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
+
+                if let Some(v) = uidvalidities.get_mut(&folder_hash) {
+                    if *v != ok.uidvalidity {
+                        sender.send(RefreshEvent {
+                            hash: folder_hash,
+                            kind: RefreshEventKind::Rescan,
+                        });
+                        uid_store.uid_index.lock().unwrap().clear();
+                        uid_store.hash_index.lock().unwrap().clear();
+                        uid_store.byte_cache.lock().unwrap().clear();
+                        *v = ok.uidvalidity;
+                    }
+                } else {
+                    // FIXME: Handle this case in ui/src/conf/accounts.rs
+                    sender.send(RefreshEvent {
+                        hash: folder_hash,
+                        kind: RefreshEventKind::Rescan,
+                    });
+                    sender.send(RefreshEvent {
+                        hash: folder_hash,
+                        kind: RefreshEventKind::Failure(MeliError::new(format!(
+                            "Unknown mailbox: {} {}",
+                            folder.path(),
+                            folder_hash
+                        ))),
+                    });
+                }
+            }
             let mut prev_exists = folder.exists.lock().unwrap();
             let n = ok.exists;
             if ok.recent > 0 {
@@ -542,11 +571,16 @@ fn examine_updates(
                                 Ok(v) => {
                                     for (uid, flags, b) in v {
                                         if let Ok(env) = Envelope::from_bytes(&b, flags) {
-                                            hash_index
+                                            uid_store
+                                                .hash_index
                                                 .lock()
                                                 .unwrap()
                                                 .insert(env.hash(), (uid, folder_hash));
-                                            uid_index.lock().unwrap().insert(uid, env.hash());
+                                            uid_store
+                                                .uid_index
+                                                .lock()
+                                                .unwrap()
+                                                .insert(uid, env.hash());
                                             debug!(
                                                 "Create event {} {} {}",
                                                 env.hash(),
@@ -600,11 +634,12 @@ fn examine_updates(
                     Ok(v) => {
                         for (uid, flags, b) in v {
                             if let Ok(env) = Envelope::from_bytes(&b, flags) {
-                                hash_index
+                                uid_store
+                                    .hash_index
                                     .lock()
                                     .unwrap()
                                     .insert(env.hash(), (uid, folder_hash));
-                                uid_index.lock().unwrap().insert(uid, env.hash());
+                                uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
                                 debug!(
                                     "Create event {} {} {}",
                                     env.hash(),
