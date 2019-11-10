@@ -182,6 +182,7 @@ pub struct MaildirFolder {
     path: PathBuf,
     parent: Option<FolderHash>,
     children: Vec<FolderHash>,
+    permissions: FolderPermissions,
 }
 
 impl MaildirFolder {
@@ -229,6 +230,12 @@ impl MaildirFolder {
             None
         };
 
+        let read_only = if let Ok(metadata) = std::fs::metadata(&pathbuf) {
+            metadata.permissions().readonly()
+        } else {
+            true
+        };
+
         let ret = MaildirFolder {
             hash: h.finish(),
             name: file_name,
@@ -236,6 +243,16 @@ impl MaildirFolder {
             fs_path: pathbuf,
             parent,
             children,
+            permissions: FolderPermissions {
+                create_messages: !read_only,
+                remove_messages: !read_only,
+                set_flags: !read_only,
+                create_child: !read_only,
+                rename_messages: !read_only,
+                delete_messages: !read_only,
+                delete_mailbox: !read_only,
+                change_permissions: false,
+            },
         };
         ret.is_valid()?;
         Ok(ret)
@@ -290,10 +307,15 @@ impl BackendFolder for MaildirFolder {
             path: self.path.clone(),
             children: self.children.clone(),
             parent: self.parent,
+            permissions: self.permissions,
         })
     }
 
     fn parent(&self) -> Option<FolderHash> {
         self.parent
+    }
+
+    fn permissions(&self) -> FolderPermissions {
+        self.permissions
     }
 }

@@ -27,7 +27,8 @@ use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
 use crate::backends::FolderHash;
 use crate::backends::{
-    BackendFolder, Folder, MailBackend, RefreshEvent, RefreshEventConsumer, RefreshEventKind,
+    BackendFolder, Folder, FolderPermissions, MailBackend, RefreshEvent, RefreshEventConsumer,
+    RefreshEventKind,
 };
 use crate::conf::AccountSettings;
 use crate::email::parser::BytesExt;
@@ -86,6 +87,7 @@ struct MboxFolder {
     content: Vec<u8>,
     children: Vec<FolderHash>,
     parent: Option<FolderHash>,
+    permissions: FolderPermissions,
 }
 
 impl BackendFolder for MboxFolder {
@@ -114,6 +116,7 @@ impl BackendFolder for MboxFolder {
             content: self.content.clone(),
             children: self.children.clone(),
             parent: self.parent,
+            permissions: self.permissions,
         })
     }
 
@@ -123,6 +126,10 @@ impl BackendFolder for MboxFolder {
 
     fn parent(&self) -> Option<FolderHash> {
         self.parent
+    }
+
+    fn permissions(&self) -> FolderPermissions {
+        self.permissions
     }
 }
 
@@ -574,6 +581,13 @@ impl MboxType {
             .map(|f| f.to_string_lossy().into())
             .unwrap_or(String::new());
         let hash = get_path_hash!(&ret.path);
+
+        let read_only = if let Ok(metadata) = std::fs::metadata(&ret.path) {
+            metadata.permissions().readonly()
+        } else {
+            true
+        };
+
         ret.folders.lock().unwrap().insert(
             hash,
             MboxFolder {
@@ -583,6 +597,16 @@ impl MboxType {
                 content: Vec::new(),
                 children: Vec::new(),
                 parent: None,
+                permissions: FolderPermissions {
+                    create_messages: !read_only,
+                    remove_messages: !read_only,
+                    set_flags: !read_only,
+                    create_child: !read_only,
+                    rename_messages: !read_only,
+                    delete_messages: !read_only,
+                    delete_mailbox: !read_only,
+                    change_permissions: false,
+                },
             },
         );
         /*

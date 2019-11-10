@@ -123,7 +123,10 @@ impl MailBackend for ImapType {
             let uid_store = self.uid_store.clone();
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
-            let folder_exists = self.folders.lock().unwrap()[&folder_hash].exists.clone();
+            let (permissions, folder_exists) = {
+                let f = &self.folders.lock().unwrap()[&folder_hash];
+                (f.permissions.clone(), f.exists.clone())
+            };
             let connection = self.connection.clone();
             let closure = move |_work_context| {
                 let connection = connection.clone();
@@ -134,13 +137,19 @@ impl MailBackend for ImapType {
                 let mut conn = conn.unwrap();
                 debug!("locked for get {}", folder_path);
 
+                /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
+                 * returns READ-ONLY for both cases) */
                 exit_on_error!(&tx,
-                               conn.send_command(format!("EXAMINE {}", folder_path).as_bytes())
+                               conn.send_command(format!("SELECT {}", folder_path).as_bytes())
                                conn.read_response(&mut response)
                 );
                 let examine_response = protocol_parser::select_response(&response);
                 exit_on_error!(&tx, examine_response);
                 let examine_response = examine_response.unwrap();
+                debug!(
+                    "folder: {} examine_response: {:?}",
+                    folder_path, examine_response
+                );
                 let mut exists: usize = examine_response.uidnext - 1;
                 {
                     let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
@@ -149,11 +158,22 @@ impl MailBackend for ImapType {
                         .entry(folder_hash)
                         .or_insert(examine_response.uidvalidity);
                     *v = examine_response.uidvalidity;
-                }
-                {
+
+                    let mut permissions = permissions.lock().unwrap();
+                    permissions.create_messages = !examine_response.read_only;
+                    permissions.remove_messages = !examine_response.read_only;
+                    permissions.set_flags = !examine_response.read_only;
+                    permissions.rename_messages = !examine_response.read_only;
+                    permissions.delete_messages = !examine_response.read_only;
+                    permissions.delete_messages = !examine_response.read_only;
                     let mut folder_exists = folder_exists.lock().unwrap();
                     *folder_exists = exists;
                 }
+                /* reselecting the same mailbox with EXAMINE prevents expunging it */
+                exit_on_error!(&tx,
+                               conn.send_command(format!("EXAMINE {}", folder_path).as_bytes())
+                               conn.read_response(&mut response)
+                );
 
                 while exists > 1 {
                     let mut envelopes = vec![];
@@ -285,11 +305,23 @@ impl MailBackend for ImapType {
         let path = {
             let folders = self.folders.lock().unwrap();
 
-            folders
-                .values()
-                .find(|v| v.name == folder)
+            let f_result = folders.values().find(|v| v.name == folder);
+            if f_result
+                .map(|f| !f.permissions.lock().unwrap().create_messages)
+                .unwrap_or(false)
+            {
+                return Err(MeliError::new(format!(
+                    "You are not allowed to create messages in folder {}",
+                    folder
+                )));
+            }
+
+            f_result
                 .map(|v| v.path().to_string())
-                .ok_or(MeliError::new(""))?
+                .ok_or(MeliError::new(format!(
+                    "Folder with name {} not found.",
+                    folder
+                )))?
         };
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock().unwrap();
@@ -364,6 +396,9 @@ impl MailBackend for ImapType {
                 let mut conn = self.connection.lock()?;
                 conn.send_command(format!("UNSUBSCRIBE \"{}\"", path,).as_bytes())?;
                 conn.read_response(&mut response)?;
+            }
+            SetPermissions(_new_val) => {
+                unimplemented!();
             }
         }
         Ok(())

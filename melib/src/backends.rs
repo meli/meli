@@ -173,6 +173,7 @@ pub enum FolderOperation {
     Subscribe,
     Unsubscribe,
     Rename(NewFolderName),
+    SetPermissions(FolderPermissions),
 }
 
 type NewFolderName = String;
@@ -309,6 +310,8 @@ pub trait BackendFolder: Debug {
     fn clone(&self) -> Folder;
     fn children(&self) -> &Vec<FolderHash>;
     fn parent(&self) -> Option<FolderHash>;
+
+    fn permissions(&self) -> FolderPermissions;
 }
 
 #[derive(Debug)]
@@ -342,6 +345,10 @@ impl BackendFolder for DummyFolder {
     fn parent(&self) -> Option<FolderHash> {
         None
     }
+
+    fn permissions(&self) -> FolderPermissions {
+        FolderPermissions::default()
+    }
 }
 
 pub fn folder_default() -> Folder {
@@ -362,5 +369,32 @@ impl Clone for Folder {
 impl Default for Folder {
     fn default() -> Self {
         folder_default()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct FolderPermissions {
+    pub create_messages: bool,
+    pub remove_messages: bool,
+    pub set_flags: bool,
+    pub create_child: bool,
+    pub rename_messages: bool,
+    pub delete_messages: bool,
+    pub delete_mailbox: bool,
+    pub change_permissions: bool,
+}
+
+impl Default for FolderPermissions {
+    fn default() -> Self {
+        FolderPermissions {
+            create_messages: false,
+            remove_messages: false,
+            set_flags: false,
+            create_child: false,
+            rename_messages: false,
+            delete_messages: false,
+            delete_mailbox: false,
+            change_permissions: false,
+        }
     }
 }

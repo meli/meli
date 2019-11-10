@@ -287,6 +287,7 @@ pub struct SelectResponse {
     pub uidvalidity: usize,
     pub uidnext: usize,
     pub permanentflags: Flag,
+    pub read_only: bool,
 }
 
 /*
@@ -337,6 +338,10 @@ pub fn select_response(input: &str) -> Result<SelectResponse> {
                     flags(&l["* OK [PERMANENTFLAGS (".len()..l.find(')').unwrap()])
                         .to_full_result()
                         .unwrap();
+            } else if l.contains("OK [READ-WRITE]") {
+                ret.read_only = false;
+            } else if l.contains("OK [READ-ONLY]") {
+                ret.read_only = true;
             } else if !l.is_empty() {
                 debug!("select response: {}", l);
             }
