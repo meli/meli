@@ -163,6 +163,8 @@ impl ImapStream {
         };
 
         let mut socket = TcpStream::connect(&addr)?;
+        socket.set_read_timeout(Some(std::time::Duration::new(120, 0)))?;
+        socket.set_write_timeout(Some(std::time::Duration::new(120, 0)))?;
         let cmd_id = 0;
         if server_conf.use_starttls {
             socket.write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())?;
@@ -170,7 +172,10 @@ impl ImapStream {
             let mut buf = vec![0; 1024];
             let mut response = String::with_capacity(1024);
             let mut cap_flag = false;
-            loop {
+            let mut broken = false;
+            let now = std::time::Instant::now();
+
+            while now.elapsed().as_secs() < 3 {
                 let len = socket.read(&mut buf)?;
                 response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
                 if !cap_flag {
@@ -190,15 +195,21 @@ impl ImapStream {
                     }
                 }
                 if cap_flag && response == "M0 OK Begin TLS negotiation now.\r\n" {
+                    broken = true;
                     break;
                 }
+            }
+            if !broken {
+                return Err(MeliError::new(format!(
+                    "Could not initiate TLS negotiation to {}.",
+                    path
+                )));
             }
         }
 
         socket
             .set_nonblocking(true)
             .expect("set_nonblocking call failed");
-        socket.set_read_timeout(Some(std::time::Duration::new(120, 0)))?;
         let stream = {
             let mut conn_result = connector.connect(path, socket);
             if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) = conn_result {
@@ -364,6 +375,18 @@ impl From<ImapConnection> for ImapBlockingConnection {
     fn from(mut conn: ImapConnection) -> Self {
         conn.set_nonblocking(false)
             .expect("set_nonblocking call failed");
+        conn.stream.as_mut().map(|s| {
+            s.stream
+                .get_mut()
+                .set_write_timeout(Some(std::time::Duration::new(5 * 60, 0)))
+                .expect("set_write_timeout call failed")
+        });
+        conn.stream.as_mut().map(|s| {
+            s.stream
+                .get_mut()
+                .set_read_timeout(Some(std::time::Duration::new(5 * 60, 0)))
+                .expect("set_read_timeout call failed")
+        });
         ImapBlockingConnection {
             buf: [0; 1024],
             conn,
@@ -392,12 +415,8 @@ impl Iterator for ImapBlockingConnection {
         } = self;
         loop {
             if conn.stream.is_err() {
-                if let Ok((_, stream)) = ImapStream::new_connection(&conn.server_conf) {
-                    conn.stream = Ok(stream);
-                } else {
-                    debug!(&conn.stream);
-                    return None;
-                }
+                debug!(&conn.stream);
+                return None;
             }
             match conn.stream.as_mut().unwrap().stream.read(buf) {
                 Ok(0) => continue,
