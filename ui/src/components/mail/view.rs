@@ -209,7 +209,7 @@ impl MailView {
         ))
         .into_owned();
         match self.mode {
-            ViewMode::Normal | ViewMode::Subview => {
+            ViewMode::Normal | ViewMode::Subview | ViewMode::ContactSelector(_) => {
                 let mut t = body_text.to_string();
                 t.push('\n');
                 if body.count_attachments() > 1 {
@@ -257,7 +257,6 @@ impl MailView {
                 ret.push_str(&attachments[aidx].text());
                 ret
             }
-            ViewMode::ContactSelector(_) => unimplemented!(),
         }
     }
     pub fn plain_text_to_buf(s: &str, highlight_urls: bool) -> CellBuffer {
@@ -722,6 +721,13 @@ impl Component for MailView {
                     context,
                 ));
                 self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
+                if self.mode.is_contact_selector() =>
+            {
+                self.mode = ViewMode::Normal;
+                self.set_dirty();
                 return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) => {
