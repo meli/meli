@@ -225,7 +225,8 @@ impl Component for StatusPanel {
 
 impl StatusPanel {
     pub fn new() -> StatusPanel {
-        let content = CellBuffer::new(120, 40, Cell::default());
+        let mut content = CellBuffer::new(120, 40, Cell::default());
+        content.set_growable(true);
 
         StatusPanel {
             cursor: (0, 0),

@@ -765,17 +765,21 @@ macro_rules! inspect_bounds {
         let bounds = $grid.size();
         let (upper_left, bottom_right) = $area;
         if $x > (get_x(bottom_right)) || $x > get_x(bounds) {
-            $x = get_x(upper_left);
-            $y += 1;
-            if $y > (get_y(bottom_right)) || $y > get_y(bounds) {
-                if $grid.growable {
-                    $grid.resize($grid.cols, $grid.rows * 2, Cell::default());
-                } else {
-                    return ($x, $y - 1);
+            if $grid.growable {
+                $grid.resize($grid.cols * 2, $grid.rows, Cell::default());
+            } else {
+                $x = get_x(upper_left);
+                $y += 1;
+                if !$line_break {
+                    break;
                 }
             }
-            if !$line_break {
-                break;
+        }
+        if $y > (get_y(bottom_right)) || $y > get_y(bounds) {
+            if $grid.growable {
+                $grid.resize($grid.cols, $grid.rows * 2, Cell::default());
+            } else {
+                return ($x, $y - 1);
             }
         }
     };
