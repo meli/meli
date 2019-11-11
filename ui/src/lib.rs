@@ -74,6 +74,8 @@ pub mod sqlite3;
 
 pub mod cache;
 
+pub mod mailcap;
+
 pub use crate::username::*;
 pub mod username {
     use libc;

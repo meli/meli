@@ -642,6 +642,27 @@ impl Attachment {
         into_raw_helper(self, &mut ret);
         ret
     }
+
+    pub fn parameters(&self) -> Vec<(&[u8], &[u8])> {
+        let mut ret = Vec::new();
+        let (headers, _) = match parser::attachment(&self.raw).to_full_result() {
+            Ok(v) => v,
+            Err(_) => return ret,
+        };
+        for (name, value) in headers {
+            if name.eq_ignore_ascii_case(b"content-type") {
+                match parser::content_type(value).to_full_result() {
+                    Ok((_, _, params)) => {
+                        ret = params;
+                    }
+                    _ => {}
+                }
+                break;
+            }
+        }
+
+        ret
+    }
 }
 
 pub fn interpret_format_flowed(_t: &str) -> String {

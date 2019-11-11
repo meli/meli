@@ -701,8 +701,12 @@ impl Component for MailView {
             }
         }
 
+        let shortcuts = &self.get_shortcuts(context)[MailView::DESCRIPTION];
         match *event {
-            UIEvent::Input(Key::Char('c')) if !self.mode.is_contact_selector() => {
+            UIEvent::Input(ref key)
+                if !self.mode.is_contact_selector()
+                    && *key == shortcuts["add_addresses_to_contacts"] =>
+            {
                 let account = &mut context.accounts[self.coordinates.0];
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
 
@@ -746,25 +750,87 @@ impl Component for MailView {
                     )));
                 return true;
             }
-            UIEvent::Input(Key::Alt('r'))
-                if self.mode == ViewMode::Normal || self.mode == ViewMode::Subview =>
+            UIEvent::Input(ref key)
+                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
+                    && *key == shortcuts["view_raw_source"] =>
             {
                 self.mode = ViewMode::Raw;
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Char('r'))
-                if self.mode.is_attachment()
+            UIEvent::Input(ref key)
+                if (self.mode.is_attachment()
                     || self.mode == ViewMode::Subview
                     || self.mode == ViewMode::Url
-                    || self.mode == ViewMode::Raw =>
+                    || self.mode == ViewMode::Raw)
+                    && *key == shortcuts["return_to_normal_view"] =>
             {
                 self.mode = ViewMode::Normal;
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Char('a'))
-                if !self.cmd_buf.is_empty()
+            UIEvent::Input(ref key)
+                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
+                    && !self.cmd_buf.is_empty()
+                    && *key == shortcuts["open_mailcap"] =>
+            {
+                let lidx = self.cmd_buf.parse::<usize>().unwrap();
+                self.cmd_buf.clear();
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+
+                {
+                    let account = &mut context.accounts[self.coordinates.0];
+                    let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
+                    let op = account.operation(envelope.hash());
+
+                    let attachments = match envelope.body(op) {
+                        Ok(body) => body.attachments(),
+                        Err(e) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Failed to open e-mail".to_string()),
+                                e.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            log(
+                                format!(
+                                    "Failed to open envelope {}: {}",
+                                    envelope.message_id_display(),
+                                    e.to_string()
+                                ),
+                                ERROR,
+                            );
+                            return true;
+                        }
+                    };
+                    drop(envelope);
+                    drop(account);
+                    if let Some(u) = attachments.get(lidx) {
+                        if let Ok(()) = crate::mailcap::MailcapEntry::execute(u, context) {
+                            self.set_dirty();
+                        } else {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(format!(
+                                    "no mailcap entry found for {}",
+                                    u.content_type()
+                                )),
+                            ));
+                        }
+                    } else {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!(
+                                "Attachment `{}` not found.",
+                                lidx
+                            )),
+                        ));
+                    }
+                    return true;
+                }
+            }
+            UIEvent::Input(ref key)
+                if *key == shortcuts["open_attachment"]
+                    && !self.cmd_buf.is_empty()
                     && (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview) =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
@@ -895,13 +961,15 @@ impl Component for MailView {
                     }
                 };
             }
-            UIEvent::Input(Key::Char('h')) => {
+            UIEvent::Input(ref key) if *key == shortcuts["toggle_expand_headers"] => {
                 self.expand_headers = !self.expand_headers;
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('g'))
-                if !self.cmd_buf.is_empty() && self.mode == ViewMode::Url =>
+            UIEvent::Input(ref key)
+                if !self.cmd_buf.is_empty()
+                    && self.mode == ViewMode::Url
+                    && *key == shortcuts["go_to_url"] =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -943,15 +1011,24 @@ impl Component for MailView {
                     }
                 };
 
-                Command::new("xdg-open")
+                if let Err(e) = Command::new("xdg-open")
                     .arg(url)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
-                    .expect("Failed to start xdg_open");
+                {
+                    context.replies.push_back(UIEvent::Notification(
+                        Some("Failed to launch xdg-open".to_string()),
+                        e.to_string(),
+                        Some(NotificationType::ERROR),
+                    ));
+                }
                 return true;
             }
-            UIEvent::Input(Key::Char('u')) => {
+            UIEvent::Input(ref key)
+                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Url)
+                    && *key == shortcuts["toggle_url_mode"] =>
+            {
                 match self.mode {
                     ViewMode::Normal => self.mode = ViewMode::Url,
                     ViewMode::Url => self.mode = ViewMode::Normal,
@@ -1220,12 +1297,14 @@ impl Component for MailView {
             our_map.insert("return_to_normal_view", Key::Char('r'));
         }
         our_map.insert("open_attachment", Key::Char('a'));
+        our_map.insert("open_mailcap", Key::Char('m'));
         if self.mode == ViewMode::Url {
             our_map.insert("go_to_url", Key::Char('g'));
         }
         if self.mode == ViewMode::Normal || self.mode == ViewMode::Url {
             our_map.insert("toggle_url_mode", Key::Char('u'));
         }
+        our_map.insert("toggle_expand_headers", Key::Char('h'));
         map.insert(MailView::DESCRIPTION.to_string(), our_map);
 
         map

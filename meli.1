@@ -24,7 +24,7 @@
 .Nm meli
 .Nd Meli Mail User Agent. meli is the Greek word for honey.
 .Sh SYNOPSIS
-.Nm meli
+.Nm
 .Op Fl -help | h
 .Op Fl -version | v
 .Op Fl -create-config Op Ar path
@@ -45,7 +45,9 @@ if given, or at
 Start meli with given configuration file.
 .El
 .Sh STARTING WITH meli
-When launched for the first time, meli will search for its configuration directory,
+When launched for the first time, 
+.Nm
+will search for its configuration directory,
 .Pa $XDG_CONFIG_HOME/meli/ Ns
 \&. If it doesn't exist, you will be asked if you want to create one along with a sample configuration. The sample configuration
 .Pa $XDG_CONFIG_HOME/meli/config
@@ -83,6 +85,21 @@ section of your configuration.
       ^^       (`-=-=-=-=-`)
                 `-=-=-=-=-`          ^^
 .Ed
+.Sh VIEWING MAIL
+Open attachments by typing their index in the attachments list and then
+.Cm a Ns
+\&.
+.Ns
+.Nm
+will attempt to open text inside its pager and other content via
+.Cm xdg-open Ns
+\&. Press
+.Cm m
+instead to use the mailcap entry for the MIME type of the attachment, if any. See
+.Sx FILES
+for the location of the mailcap files and 
+.Xr mailcap 5
+for their syntax.
 .Sh COMPOSING
 To send mail, press
 .Cm m
@@ -112,7 +129,9 @@ will send your message by piping it into a binary of your choosing (see
 .Cm close
 and select 'save as draft'.
 .Pp
-If there is no Draft or Sent folder, meli tries first saving mail in your INBOX and then at any other folder. On complete failure to save your draft or sent message it will be saved in your
+If there is no Draft or Sent folder, 
+.Nm 
+tries first saving mail in your INBOX and then at any other folder. On complete failure to save your draft or sent message it will be saved in your
 .Em tmp
 directory instead and you will be notified of its location.
 .Pp
@@ -120,7 +139,8 @@ To open a draft for editing later, select your draft in the mail listing and pre
 .Cm e Ns
 \&.
 .Sh SEARCH
-meli, if built with sqlite3, includes the ability to perform full text search on the following fields: From, To, Cc, Bcc, In-Reply-To, References, Subject and Date. The message body (in plain text human readable form) and the flags can also be queried. To create the sqlite3 index issue command
+.Nm Ns
+, if built with sqlite3, includes the ability to perform full text search on the following fields: From, To, Cc, Bcc, In-Reply-To, References, Subject and Date. The message body (in plain text human readable form) and the flags can also be queried. To create the sqlite3 index issue command
 .Ic index Ar ACCOUNT_NAME Ns \&.
 
 To search in the message body type your keywords without any special formatting.
@@ -150,7 +170,9 @@ To prevent downloading all your messages from your IMAP server, don't set
 .Em cache_type
 to
 .Em sqlite3 Ns
-\&. meli will relay your queries to the IMAP server. Expect a delay between query and response. Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable delay.
+\&. 
+.Nm
+will relay your queries to the IMAP server. Expect a delay between query and response. Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable delay.
 .Sh EXECUTE mode
 Commands are issued in EXECUTE mode, by default started with the space character and exited with Escape key.
 .Pp
@@ -198,7 +220,7 @@ delete folder
 .El
 .Pp
 envelope view commands:
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
 .It Cm pipe Ar EXECUTABLE Ar ARGS
 pipe pager contents to binary
 .It Cm list-post
@@ -211,7 +233,7 @@ open list archive with
 .El
 .Pp
 composing mail commands:
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
 .It Ic add-attachment Ar PATH
 in composer, add
 .Ar PATH
@@ -223,7 +245,7 @@ toggle between signing and not signing this message. If the gpg invocation fails
 .El
 .Pp
 generic commands:
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
 .It Cm open-in-tab
 opens envelope view in new tab
 .It Ic close
@@ -239,7 +261,7 @@ print environment variable
 .El
 .Sh SHORTCUTS
 Non-complete list of shortcuts and their default values.
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
 .It Cm open_thread
 \&'\\n'
 .It Cm exit_thread
@@ -275,7 +297,7 @@ PageDown
 .It Cm select
 \&'v'
 .El
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST" -offset indent
+.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
 .It Cm `
 toggles hiding of sidebar in mail listings
 .It Cm \&?
@@ -296,6 +318,11 @@ opens the
 .Ar n Ns
 th
 attachment.
+.It Ar n Ns Cm m
+opens the
+.Ar n Ns
+th
+attachment according to its mailcap entry.
 .It Cm v
 (un)selects mail entries in mail listings
 .El
@@ -314,7 +341,8 @@ Specifies the editor to use
 Override the configuration file
 .El
 .Sh FILES
-meli uses the following parts of the XDG standard:
+.Nm
+uses the following parts of the XDG standard:
 .Bl -tag -width "$XDG_CONFIG_HOME/meli/plugins/*" -offset indent
 .It Ev XDG_CONFIG_HOME
 defaults to
@@ -343,16 +371,37 @@ Internal data used by meli.
 .It Pa $XDG_DATA_HOME/meli/meli.log
 Operation log.
 .It Pa /tmp/meli/*
-Temporary files generated by meli.
+Temporary files generated by
+.Nm Ns
+\&.
+.El
+.Pp
+Mailcap entries are searched for in the following files, in this order:
+.Pp
+.Bl -enum -compact -offset indent
+.It 
+.Pa $XDG_CONFIG_HOME/meli/mailcap
+.It
+.Pa $XDG_CONFIG_HOME/.mailcap
+.It
+.Pa $HOME/.mailcap
+.It
+.Pa /etc/mailcap
+.It
+.Pa /usr/etc/mailcap
+.It
+.Pa /usr/local/etc/mailcap
 .El
 .Sh SEE ALSO
+.Xr meli.conf 5 ,
 .Xr xdg-open 1 ,
-.Xr meli.conf 5
+.Xr mailcap 5
 .Sh CONFORMING TO
 XDG Standard
 .Aq https://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html Ns
 , maildir
-.Aq https://cr.yp.to/proto/maildir.html
+.Aq https://cr.yp.to/proto/maildir.html Ns
+, IMAPv4rev1 RFC3501.
 .Sh AUTHORS
 Copyright 2017-2019
 .An Manos Pitsidianakis Aq epilys@nessuent.xyz
