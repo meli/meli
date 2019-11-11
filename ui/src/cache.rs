@@ -144,30 +144,33 @@ pub mod query_parser {
 
     fn flags<'a>() -> impl Parser<'a, Query> {
         move |input| {
-            whitespace_wrap(match_literal_anycase("flags:"))
-                .parse(input)
-                .and_then(|(rest, _)| {
-                    map(one_or_more(pred(any_char, |c| *c != ' ')), |chars| {
-                        chars.into_iter().collect::<String>()
+            whitespace_wrap(either(
+                match_literal_anycase("flags:"),
+                match_literal_anycase("is:"),
+            ))
+            .parse(input)
+            .and_then(|(rest, _)| {
+                map(one_or_more(pred(any_char, |c| *c != ' ')), |chars| {
+                    chars.into_iter().collect::<String>()
+                })
+                .parse(rest)
+            })
+            .and_then(|(rest, flags_list)| {
+                if let Ok(r) = flags_list
+                    .split(",")
+                    .map(|t| {
+                        either(quoted_string(), string())
+                            .parse_complete(t)
+                            .map(|(_, r)| r)
                     })
-                    .parse(rest)
-                })
-                .and_then(|(rest, flags_list)| {
-                    if let Ok(r) = flags_list
-                        .split(",")
-                        .map(|t| {
-                            either(quoted_string(), string())
-                                .parse_complete(t)
-                                .map(|(_, r)| r)
-                        })
-                        .collect::<std::result::Result<Vec<String>, &str>>()
-                        .map(|v| Flags(v))
-                    {
-                        Ok((rest, r))
-                    } else {
-                        Err(rest)
-                    }
-                })
+                    .collect::<std::result::Result<Vec<String>, &str>>()
+                    .map(|v| Flags(v))
+                {
+                    Ok((rest, r))
+                } else {
+                    Err(rest)
+                }
+            })
         }
     }
 
