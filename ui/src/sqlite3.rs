@@ -418,6 +418,49 @@ pub fn query_to_sql(q: &Query) -> String {
                 rec(q, s);
                 s.push_str(") ");
             }
+            Flags(v) => {
+                let total = v.len();
+                if total > 1 {
+                    s.push_str("(");
+                }
+                for (i, f) in v.iter().enumerate() {
+                    match f.as_str() {
+                        "draft" => {
+                            s.push_str(" (flags & 8 > 0) ");
+                        }
+                        "deleted" | "trashed" => {
+                            s.push_str(" (flags & 6 > 0) ");
+                        }
+                        "flagged" => {
+                            s.push_str(" (flags & 16 > 0) ");
+                        }
+                        "recent" => {
+                            s.push_str(" (flags & 4 == 0) ");
+                        }
+                        "seen" | "read" => {
+                            s.push_str(" (flags & 4 > 0) ");
+                        }
+                        "unseen" | "unread" => {
+                            s.push_str(" (flags & 4 == 0) ");
+                        }
+                        "answered" | "replied" => {
+                            s.push_str(" (flags & 2 > 0) ");
+                        }
+                        "unanswered" => {
+                            s.push_str(" (flags & 2 == 0) ");
+                        }
+                        _ => {
+                            continue;
+                        }
+                    }
+                    if total > 1 && i != total - 1 {
+                        s.push_str(" AND ");
+                    }
+                }
+                if total > 1 {
+                    s.push_str(") ");
+                }
+            }
             _ => {}
         }
     }
