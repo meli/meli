@@ -82,6 +82,7 @@ pub fn open_db() -> Result<Connection> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,
+                    account_id       INTEGER REFERENCES accounts ON UPDATE CASCADE,
                     hash             BLOB NOT NULL,
                     date             TEXT NOT NULL,
                     _from            TEXT NOT NULL,
@@ -96,24 +97,28 @@ pub fn open_db() -> Result<Connection> {
                     has_attachments  BOOLEAN NOT NULL,
                     body_text        TEXT NOT NULL,
                     timestamp        BLOB NOT NULL
-                  );
+                   );
         CREATE TABLE IF NOT EXISTS folders (
                     id               INTEGER PRIMARY KEY,
+                    account_id       INTEGER NOT NULL REFERENCES accounts ON UPDATE CASCADE,
                     hash             BLOB NOT NULL,
                     date             TEXT NOT NULL,
-                    _from            TEXT NOT NULL,
-                    _to              TEXT NOT NULL,
-                    cc               TEXT NOT NULL,
-                    bcc              TEXT NOT NULL,
-                    subject          TEXT NOT NULL,
-                    message_id       TEXT NOT NULL,
-                    in_reply_to      TEXT NOT NULL,
-                    _references      TEXT NOT NULL,
-                    flags            INTEGER NOT NULL,
-                    has_attachments  BOOLEAN NOT NULL,
-                    body_text        TEXT NOT NULL,
-                    timestamp        BLOB NOT NULL
+                    name             TEXT NOT NULL
                   );
+        CREATE TABLE IF NOT EXISTS accounts (
+                    id               INTEGER PRIMARY KEY,
+                    name             TEXT NOT NULL
+                  );
+        CREATE TABLE IF NOT EXISTS folder_and_envelope (
+                    folder_id        INTEGER NOT NULL,
+                    envelope_id      INTEGER NOT NULL,
+                    PRIMARY KEY (folder_id, envelope_id),
+                    FOREIGN KEY(folder_id) REFERENCES folders(id) ON UPDATE CASCADE,
+                    FOREIGN KEY(envelope_id) REFERENCES envelopes(id) ON UPDATE CASCADE
+                  );
+      CREATE INDEX IF NOT EXISTS folder_env_idx ON folder_and_envelope(folder_id);
+      CREATE INDEX IF NOT EXISTS env_folder_idx ON folder_and_envelope(envelope_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS acc_idx ON accounts(name);
 
 
 CREATE INDEX IF NOT EXISTS envelope_timestamp_index ON envelopes (timestamp);
@@ -144,7 +149,7 @@ END; ",
     Ok(conn)
 }
 
-pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>) -> Result<()> {
+pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>, acc_name: &str) -> Result<()> {
     let conn = open_db()?;
     let backend_lck = backend.read().unwrap();
     let op = backend_lck.operation(envelope.hash());
@@ -170,10 +175,15 @@ pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>) 
             return Err(err);
         }
     };
+            let account_id: i32 = {
+                let mut stmt = conn.prepare("SELECT id FROM accounts WHERE name = ?").unwrap();
+                let x = stmt.query_map(params![acc_name], |row| row.get(0)).unwrap().next().unwrap().unwrap();
+                x
+            };
     if let Err(err) = conn.execute(
-            "INSERT OR REPLACE INTO envelopes (hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
-              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-              params![envelope.hash().to_be_bytes().to_vec(), envelope.date_as_str(), envelope.field_from_to_string(), envelope.field_to_to_string(), envelope.field_cc_to_string(), envelope.field_bcc_to_string(), envelope.subject().into_owned().trim_end_matches('\u{0}'), envelope.message_id_display().to_string(), envelope.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), envelope.field_references_to_string(), i64::from(envelope.flags().bits()), if envelope.has_attachments() { 1 } else { 0 }, body, envelope.date().to_be_bytes().to_vec()],
+            "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
+              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+              params![acc_name, envelope.hash().to_be_bytes().to_vec(), envelope.date_as_str(), envelope.field_from_to_string(), envelope.field_to_to_string(), envelope.field_cc_to_string(), envelope.field_bcc_to_string(), envelope.subject().into_owned().trim_end_matches('\u{0}'), envelope.message_id_display().to_string(), envelope.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), envelope.field_references_to_string(), i64::from(envelope.flags().bits()), if envelope.has_attachments() { 1 } else { 0 }, body, envelope.date().to_be_bytes().to_vec()],
         )
             .map_err(|e| MeliError::new(e.to_string())) {
                 debug!(
@@ -199,11 +209,17 @@ pub fn index(context: &mut crate::state::Context) -> Result<()> {
         .accounts
         .iter()
         .filter(|acc| *acc.settings.conf.cache_type() == crate::conf::CacheType::Sqlite3)
-        .map(|acc| (acc.collection.envelopes.clone(), acc.backend.clone()))
-        .collect::<Vec<(Arc<RwLock<_>>, Arc<_>)>>();
+        .map(|acc| {
+            (
+                acc.name().to_string(),
+                acc.collection.envelopes.clone(),
+                acc.backend.clone(),
+            )
+        })
+        .collect::<Vec<(String, Arc<RwLock<_>>, Arc<_>)>>();
     let env_hashes = mutexes
         .iter()
-        .map(|m| m.0.read().unwrap().keys().cloned().collect::<Vec<_>>())
+        .map(|m| m.1.read().unwrap().keys().cloned().collect::<Vec<_>>())
         .collect::<Vec<Vec<_>>>();
 
     /* Sleep, index and repeat in order not to block the main process */
@@ -211,12 +227,32 @@ pub fn index(context: &mut crate::state::Context) -> Result<()> {
         let thread_id = std::thread::current().id();
 
         let sleep_dur = std::time::Duration::from_millis(20);
-        for ((acc_mutex, backend_mutex), env_hashes) in mutexes.into_iter().zip(env_hashes.into_iter())  {
+        for ((acc_name, acc_mutex, backend_mutex), env_hashes) in mutexes.into_iter().zip(env_hashes.into_iter())  {
+            if let Err(err) = conn.execute(
+                "INSERT OR REPLACE INTO accounts (name) VALUES (?1)", params![acc_name.as_str(),],).map_err(|e| MeliError::new(e.to_string())) {
+                debug!("{}",
+                    format!(
+                        "Failed to update index: {}",
+                        err.to_string()
+                    ));
+                log(
+                    format!(
+                        "Failed to update index: {}",
+                        err.to_string()
+                    ),
+                    ERROR,
+                );
+            } 
+            let account_id: i32 = {
+                let mut stmt = conn.prepare("SELECT id FROM accounts WHERE name = ?").unwrap();
+                let x = stmt.query_map(params![acc_name.as_str()], |row| row.get(0)).unwrap().next().unwrap().unwrap();
+                x
+            };
             let mut ctr = 0;
-            debug!("{}", format!("Rebuilding index. {}/{}", ctr, env_hashes.len()));
+            debug!("{}", format!("Rebuilding {} index. {}/{}", acc_name, ctr, env_hashes.len()));
             work_context
                 .set_status
-                .send((thread_id, format!("Rebuilding index. {}/{}", ctr, env_hashes.len())))
+                .send((thread_id, format!("Rebuilding {} index. {}/{}", acc_name, ctr, env_hashes.len())))
                 .unwrap();
             for chunk in env_hashes.chunks(200) {
                 ctr += chunk.len();
@@ -246,9 +282,9 @@ pub fn index(context: &mut crate::state::Context) -> Result<()> {
                             }
                         };
                         if let Err(err) = conn.execute(
-                            "INSERT OR REPLACE INTO envelopes (hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
-              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-              params![e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, body, e.date().to_be_bytes().to_vec()],
+                            "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
+              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+              params![account_id, e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, body, e.date().to_be_bytes().to_vec()],
                         )
                             .map_err(|e| MeliError::new(e.to_string())) {
                                 debug!("{}",
@@ -271,7 +307,7 @@ pub fn index(context: &mut crate::state::Context) -> Result<()> {
                 drop(envelopes_lck);
                 work_context
                     .set_status
-                    .send((thread_id, format!("Rebuilding index. {}/{}", ctr, env_hashes.len())))
+                    .send((thread_id, format!("Rebuilding {} index. {}/{}", acc_name, ctr, env_hashes.len())))
                     .unwrap();
                 std::thread::sleep(sleep_dur);
             }
@@ -340,6 +376,21 @@ pub fn query_to_sql(q: &Query) -> String {
             }
             From(t) => {
                 s.push_str("_from LIKE \"%");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("%\" ");
+            }
+            To(t) => {
+                s.push_str("_to LIKE \"%");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("%\" ");
+            }
+            Cc(t) => {
+                s.push_str("cc LIKE \"%");
+                s.extend(escape_double_quote(t).chars());
+                s.push_str("%\" ");
+            }
+            Bcc(t) => {
+                s.push_str("bcc LIKE \"%");
                 s.extend(escape_double_quote(t).chars());
                 s.push_str("%\" ");
             }

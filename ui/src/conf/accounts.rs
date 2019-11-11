@@ -223,7 +223,7 @@ impl Account {
     pub fn new(
         index: usize,
         name: String,
-        settings: AccountConf,
+        mut settings: AccountConf,
         map: &Backends,
         work_context: WorkContext,
         notify_fn: NotifyFn,
@@ -253,6 +253,10 @@ impl Account {
         } else {
             AddressBook::new(name.clone())
         };
+        if settings.account().format() == "imap" {
+            settings.conf.cache_type = crate::conf::CacheType::None;
+        }
+
         let mut ret = Account {
             index,
             name,
@@ -503,7 +507,9 @@ impl Account {
                     };
                     #[cfg(feature = "sqlite3")]
                     {
-                        if let Err(err) = crate::sqlite3::insert(&envelope, &self.backend) {
+                        if let Err(err) =
+                            crate::sqlite3::insert(&envelope, &self.backend, &self.name)
+                        {
                             melib::log(
                                 format!(
                                     "Failed to insert envelope {} in cache: {}",
