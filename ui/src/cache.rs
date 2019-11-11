@@ -52,6 +52,7 @@ pub enum Query {
     AllText(String),
     /* * * * */
     Flags(Vec<String>),
+    HasAttachment,
     And(Box<Query>, Box<Query>),
     Or(Box<Query>, Box<Query>),
     Not(Box<Query>),
@@ -127,6 +128,14 @@ pub mod query_parser {
         }
     }
 
+    fn has_attachment<'a>() -> impl Parser<'a, Query> {
+        move |input| {
+            whitespace_wrap(match_literal_anycase("has:attachment"))
+                .map(|()| Query::HasAttachment)
+                .parse(input)
+        }
+    }
+
     fn literal<'a>() -> impl Parser<'a, String> {
         move |input| either(quoted_string(), string()).parse(input)
     }
@@ -196,6 +205,7 @@ pub mod query_parser {
                 .or(bcc().parse(input))
                 .or(subject().parse(input))
                 .or(flags().parse(input))
+                .or(has_attachment().parse(input))
             {
                 Ok(q)
             } else if let Ok((rest, query_a)) = not().parse(input) {

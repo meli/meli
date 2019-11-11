@@ -461,6 +461,9 @@ pub fn query_to_sql(q: &Query) -> String {
                     s.push_str(") ");
                 }
             }
+            HasAttachment => {
+                s.push_str("has_attachments == 1 ");
+            }
             _ => {}
         }
     }
