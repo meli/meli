@@ -279,7 +279,6 @@ impl Account {
             event_queue: VecDeque::with_capacity(8),
         };
 
-        ret.is_online();
         ret
     }
     fn init(&mut self) {
@@ -809,6 +808,8 @@ impl Account {
         ret.as_ref().map(|r| r.0.as_str())
     }
 
+    /* Call only in Context::is_online, since only Context can launch the watcher threads if an
+     * account goes from offline to online. */
     pub fn is_online(&mut self) -> bool {
         let ret = self.backend.read().unwrap().is_online();
         if ret != self.is_online && ret {
