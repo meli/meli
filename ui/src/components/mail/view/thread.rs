@@ -428,16 +428,29 @@ impl ThreadView {
         }
         if let Some(mvm) = self.movement.take() {
             match mvm {
-                PageMovement::PageUp => {
-                    self.new_cursor_pos = self.new_cursor_pos.saturating_sub(rows);
+                PageMovement::Up(amount) => {
+                    self.new_cursor_pos = self.new_cursor_pos.saturating_sub(amount);
                 }
-                PageMovement::PageDown => {
-                    if self.new_cursor_pos + rows + 1 < height {
-                        self.new_cursor_pos += rows;
+                PageMovement::PageUp(multiplier) => {
+                    self.new_cursor_pos = self.new_cursor_pos.saturating_sub(rows * multiplier);
+                }
+                PageMovement::Down(amount) => {
+                    if self.new_cursor_pos + amount + 1 < height {
+                        self.new_cursor_pos += amount;
+                    } else if self.new_cursor_pos + amount > height {
+                        self.new_cursor_pos = height - 1;
                     } else {
                         self.new_cursor_pos = (height / rows) * rows;
                     }
                 }
+                PageMovement::PageDown(multiplier) => {
+                    if self.new_cursor_pos + rows * multiplier + 1 < height {
+                        self.new_cursor_pos += rows * multiplier;
+                    } else {
+                        self.new_cursor_pos = (height / rows) * rows;
+                    }
+                }
+                PageMovement::Right(_) | PageMovement::Left(_) => {}
                 PageMovement::Home => {
                     self.new_cursor_pos = 0;
                 }
@@ -988,11 +1001,11 @@ impl Component for ThreadView {
                 return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["prev_page"] => {
-                self.movement = Some(PageMovement::PageUp);
+                self.movement = Some(PageMovement::PageUp(1));
                 self.dirty = true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
-                self.movement = Some(PageMovement::PageDown);
+                self.movement = Some(PageMovement::PageDown(1));
                 self.dirty = true;
             }
             UIEvent::Input(ref key) if *key == Key::Home => {

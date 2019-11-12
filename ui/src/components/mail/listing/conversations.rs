@@ -209,27 +209,34 @@ impl ListingTrait for ConversationsListing {
 
         if let Some(mvm) = self.movement.take() {
             match mvm {
-                PageMovement::PageUp => {
-                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows);
+                PageMovement::Up(amount) => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(amount);
                 }
-                PageMovement::PageDown => {
-                    if self.new_cursor_pos.2 + rows + 1 < self.length {
-                        self.new_cursor_pos.2 += rows;
-                    } else if self.new_cursor_pos.2 + rows > self.length {
+                PageMovement::PageUp(multiplier) => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows * multiplier);
+                }
+                PageMovement::Down(amount) => {
+                    if self.new_cursor_pos.2 + amount + 1 < self.length {
+                        self.new_cursor_pos.2 += amount;
+                    } else {
+                        self.new_cursor_pos.2 = self.length - 1;
+                    }
+                }
+                PageMovement::PageDown(multiplier) => {
+                    if self.new_cursor_pos.2 + rows * multiplier + 1 < self.length {
+                        self.new_cursor_pos.2 += rows * multiplier;
+                    } else if self.new_cursor_pos.2 + rows * multiplier > self.length {
                         self.new_cursor_pos.2 = self.length - 1;
                     } else {
                         self.new_cursor_pos.2 = (self.length / rows) * rows;
                     }
                 }
+                PageMovement::Right(_) | PageMovement::Left(_) => {}
                 PageMovement::Home => {
                     self.new_cursor_pos.2 = 0;
                 }
                 PageMovement::End => {
-                    if self.new_cursor_pos.2 + rows > self.length {
-                        self.new_cursor_pos.2 = self.length - 1;
-                    } else {
-                        self.new_cursor_pos.2 = (self.length / rows) * rows;
-                    }
+                    self.new_cursor_pos.2 = self.length - 1;
                 }
             }
         }
@@ -1008,20 +1015,6 @@ impl Component for ConversationsListing {
         let shortcuts = &self.get_shortcuts(context)[ConversationsListing::DESCRIPTION];
         if self.length > 0 {
             match *event {
-                UIEvent::Input(Key::Up) => {
-                    if self.cursor_pos.2 > 0 {
-                        self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(1);
-                        self.dirty = true;
-                    }
-                    return true;
-                }
-                UIEvent::Input(Key::Down) => {
-                    if self.length > 0 && self.new_cursor_pos.2 < self.length - 1 {
-                        self.new_cursor_pos.2 += 1;
-                        self.dirty = true;
-                    }
-                    return true;
-                }
                 UIEvent::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
                     if self.length == 0 {
                         return true;

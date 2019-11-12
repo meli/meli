@@ -265,9 +265,13 @@ impl Component for VSplit {
 
 #[derive(Debug, Clone, Copy)]
 pub enum PageMovement {
+    Up(usize),
+    Right(usize),
+    Left(usize),
+    Down(usize),
+    PageUp(usize),
+    PageDown(usize),
     Home,
-    PageUp,
-    PageDown,
     End,
 }
 
@@ -448,14 +452,23 @@ impl Component for Pager {
         let height = height!(area);
         if let Some(mvm) = self.movement.take() {
             match mvm {
-                PageMovement::PageUp => {
-                    self.cursor.1 = self.cursor.1.saturating_sub(height);
+                PageMovement::Up(amount) => {
+                    self.cursor.1 = self.cursor.1.saturating_sub(amount);
                 }
-                PageMovement::PageDown => {
-                    if self.cursor.1 + height < self.height {
-                        self.cursor.1 += height;
+                PageMovement::PageUp(multiplier) => {
+                    self.cursor.1 = self.cursor.1.saturating_sub(height * multiplier);
+                }
+                PageMovement::Down(amount) => {
+                    if self.cursor.1 + amount < self.height {
+                        self.cursor.1 += amount;
                     }
                 }
+                PageMovement::PageDown(multiplier) => {
+                    if self.cursor.1 + height * multiplier < self.height {
+                        self.cursor.1 += height * multiplier;
+                    }
+                }
+                PageMovement::Right(_) | PageMovement::Left(_) => {}
                 PageMovement::Home => {
                     self.cursor.1 = 0;
                 }
@@ -517,12 +530,12 @@ impl Component for Pager {
                 return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["page_up"] => {
-                self.movement = Some(PageMovement::PageUp);
+                self.movement = Some(PageMovement::PageUp(1));
                 self.dirty = true;
                 return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["page_down"] => {
-                self.movement = Some(PageMovement::PageDown);
+                self.movement = Some(PageMovement::PageDown(1));
                 self.dirty = true;
                 return true;
             }

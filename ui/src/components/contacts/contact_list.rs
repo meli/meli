@@ -35,6 +35,7 @@ pub struct ContactList {
     show_divider: bool,
     menu_visibility: bool,
     movement: Option<PageMovement>,
+    cmd_buf: String,
     view: Option<ContactManager>,
     ratio: usize, // right/(container width) * 100
     id: ComponentId,
@@ -70,6 +71,7 @@ impl ContactList {
             initialized: false,
             dirty: true,
             movement: None,
+            cmd_buf: String::with_capacity(8),
             view: None,
             ratio: 90,
             show_divider: false,
@@ -343,18 +345,29 @@ impl ContactList {
 
         if let Some(mvm) = self.movement.take() {
             match mvm {
-                PageMovement::PageUp => {
-                    self.new_cursor_pos = self.new_cursor_pos.saturating_sub(rows);
+                PageMovement::Up(amount) => {
+                    self.new_cursor_pos = self.new_cursor_pos.saturating_sub(amount);
                 }
-                PageMovement::PageDown => {
-                    if self.new_cursor_pos + rows + 1 < self.length {
-                        self.new_cursor_pos += rows;
-                    } else if self.new_cursor_pos + rows > self.length {
+                PageMovement::PageUp(multiplier) => {
+                    self.new_cursor_pos = self.new_cursor_pos.saturating_sub(rows * multiplier);
+                }
+                PageMovement::Down(amount) => {
+                    if self.new_cursor_pos + amount + 1 < self.length {
+                        self.new_cursor_pos += amount;
+                    } else {
+                        self.new_cursor_pos = self.length - 1;
+                    }
+                }
+                PageMovement::PageDown(multiplier) => {
+                    if self.new_cursor_pos + rows * multiplier + 1 < self.length {
+                        self.new_cursor_pos += rows * multiplier;
+                    } else if self.new_cursor_pos + rows * multiplier > self.length {
                         self.new_cursor_pos = self.length - 1;
                     } else {
                         self.new_cursor_pos = (self.length / rows) * rows;
                     }
                 }
+                PageMovement::Right(_) | PageMovement::Left(_) => {}
                 PageMovement::Home => {
                     self.new_cursor_pos = 0;
                 }
@@ -568,11 +581,26 @@ impl Component for ContactList {
                 return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["next_account"] && self.view.is_none() => {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
                 if self.accounts.is_empty() {
                     return true;
                 }
-                if self.account_pos < self.accounts.len() - 1 {
-                    self.account_pos += 1;
+                if self.account_pos + amount < self.accounts.len() {
+                    self.account_pos += amount;
                     self.set_dirty();
                     self.initialized = false;
                     context
@@ -585,11 +613,26 @@ impl Component for ContactList {
                 return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["prev_account"] && self.view.is_none() => {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
                 if self.accounts.is_empty() {
                     return true;
                 }
-                if self.account_pos > 0 {
-                    self.account_pos -= 1;
+                if self.account_pos >= amount {
+                    self.account_pos -= amount;
                     self.set_dirty();
                     self.initialized = false;
                     context
@@ -606,16 +649,62 @@ impl Component for ContactList {
                 self.menu_visibility = !self.menu_visibility;
                 self.set_dirty();
             }
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) => {
+                self.cmd_buf.clear();
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                return true;
+            }
+            UIEvent::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
+                self.cmd_buf.push(c);
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                        self.cmd_buf.clone(),
+                    )));
+                return true;
+            }
             UIEvent::Input(Key::Up) if self.view.is_none() => {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
+                self.movement = Some(PageMovement::Up(amount));
                 self.set_dirty();
-                self.new_cursor_pos = self.cursor_pos.saturating_sub(1);
                 return true;
             }
             UIEvent::Input(Key::Down)
                 if self.cursor_pos < self.length.saturating_sub(1) && self.view.is_none() =>
             {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
                 self.set_dirty();
-                self.new_cursor_pos += 1;
+                self.movement = Some(PageMovement::Down(amount));
                 return true;
             }
             UIEvent::ComponentKill(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {

@@ -78,27 +78,34 @@ impl ListingTrait for ThreadListing {
         let rows = get_y(bottom_right) - get_y(upper_left) + 1;
         if let Some(mvm) = self.movement.take() {
             match mvm {
-                PageMovement::PageUp => {
-                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows);
+                PageMovement::Up(amount) => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(amount);
                 }
-                PageMovement::PageDown => {
-                    if self.new_cursor_pos.2 + rows + 1 < self.length {
-                        self.new_cursor_pos.2 += rows;
-                    } else if self.new_cursor_pos.2 + rows > self.length {
+                PageMovement::PageUp(multiplier) => {
+                    self.new_cursor_pos.2 = self.new_cursor_pos.2.saturating_sub(rows * multiplier);
+                }
+                PageMovement::Down(amount) => {
+                    if self.new_cursor_pos.2 + amount + 1 < self.length {
+                        self.new_cursor_pos.2 += amount;
+                    } else {
+                        self.new_cursor_pos.2 = self.length - 1;
+                    }
+                }
+                PageMovement::PageDown(multiplier) => {
+                    if self.new_cursor_pos.2 + rows * multiplier + 1 < self.length {
+                        self.new_cursor_pos.2 += rows * multiplier;
+                    } else if self.new_cursor_pos.2 + rows * multiplier > self.length {
                         self.new_cursor_pos.2 = self.length - 1;
                     } else {
                         self.new_cursor_pos.2 = (self.length / rows) * rows;
                     }
                 }
+                PageMovement::Right(_) | PageMovement::Left(_) => {}
                 PageMovement::Home => {
                     self.new_cursor_pos.2 = 0;
                 }
                 PageMovement::End => {
-                    if self.new_cursor_pos.2 + rows > self.length {
-                        self.new_cursor_pos.2 = self.length - 1;
-                    } else {
-                        self.new_cursor_pos.2 = (self.length / rows) * rows;
-                    }
+                    self.new_cursor_pos.2 = self.length - 1;
                 }
             }
         }
@@ -588,36 +595,6 @@ impl Component for ThreadListing {
             }
         }
         match *event {
-            UIEvent::Input(Key::Up) => {
-                if self.cursor_pos.2 > 0 {
-                    self.new_cursor_pos.2 -= 1;
-                    self.dirty = true;
-                }
-                return true;
-            }
-            UIEvent::Input(Key::Down) => {
-                if self.length > 0 && self.new_cursor_pos.2 < self.length - 1 {
-                    self.new_cursor_pos.2 += 1;
-                    self.dirty = true;
-                }
-                return true;
-            }
-            UIEvent::Input(ref key) if *key == Key::PageUp => {
-                self.movement = Some(PageMovement::PageUp);
-                self.set_dirty();
-            }
-            UIEvent::Input(ref key) if *key == Key::PageDown => {
-                self.movement = Some(PageMovement::PageDown);
-                self.set_dirty();
-            }
-            UIEvent::Input(ref key) if *key == Key::Home => {
-                self.movement = Some(PageMovement::Home);
-                self.set_dirty();
-            }
-            UIEvent::Input(ref key) if *key == Key::End => {
-                self.movement = Some(PageMovement::End);
-                self.set_dirty();
-            }
             UIEvent::Input(Key::Char('\n')) if !self.unfocused => {
                 self.unfocused = true;
                 self.dirty = true;

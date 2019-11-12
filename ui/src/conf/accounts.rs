@@ -257,7 +257,7 @@ impl Account {
             settings.conf.cache_type = crate::conf::CacheType::None;
         }
 
-        let mut ret = Account {
+        Account {
             index,
             name,
             is_online: false,
@@ -277,10 +277,9 @@ impl Account {
             notify_fn,
 
             event_queue: VecDeque::with_capacity(8),
-        };
-
-        ret
+        }
     }
+
     fn init(&mut self) {
         let mut ref_folders: FnvHashMap<FolderHash, Folder> =
             self.backend.read().unwrap().folders();

@@ -167,6 +167,7 @@ pub struct Listing {
 
     show_divider: bool,
     menu_visibility: bool,
+    cmd_buf: String,
     /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
 }
@@ -293,11 +294,26 @@ impl Component for Listing {
             UIEvent::Input(ref k)
                 if k == shortcuts["next_folder"] || k == shortcuts["prev_folder"] =>
             {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
                 let folder_length = context.accounts[self.cursor_pos.0].len();
                 match k {
                     k if k == shortcuts["next_folder"] && folder_length > 0 => {
-                        if self.cursor_pos.1 < folder_length - 1 {
-                            self.cursor_pos.1 += 1;
+                        if self.cursor_pos.1 + amount < folder_length {
+                            self.cursor_pos.1 += amount;
                             self.component.set_coordinates((
                                 self.cursor_pos.0,
                                 self.cursor_pos.1,
@@ -309,8 +325,8 @@ impl Component for Listing {
                         }
                     }
                     k if k == shortcuts["prev_folder"] => {
-                        if self.cursor_pos.1 > 0 {
-                            self.cursor_pos.1 -= 1;
+                        if self.cursor_pos.1 >= amount {
+                            self.cursor_pos.1 -= amount;
                             self.component.set_coordinates((
                                 self.cursor_pos.0,
                                 self.cursor_pos.1,
@@ -349,10 +365,25 @@ impl Component for Listing {
             UIEvent::Input(ref k)
                 if k == shortcuts["next_account"] || k == shortcuts["prev_account"] =>
             {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
                 match k {
                     k if k == shortcuts["next_account"] => {
-                        if self.cursor_pos.0 < self.accounts.len() - 1 {
-                            self.cursor_pos = (self.cursor_pos.0 + 1, 0);
+                        if self.cursor_pos.0 + amount < self.accounts.len() {
+                            self.cursor_pos = (self.cursor_pos.0 + amount, 0);
                             self.component.set_coordinates((self.cursor_pos.0, 0, None));
                             self.set_dirty();
                         } else {
@@ -360,8 +391,8 @@ impl Component for Listing {
                         }
                     }
                     k if k == shortcuts["prev_account"] => {
-                        if self.cursor_pos.0 > 0 {
-                            self.cursor_pos = (self.cursor_pos.0 - 1, 0);
+                        if self.cursor_pos.0 >= amount {
+                            self.cursor_pos = (self.cursor_pos.0 - amount, 0);
                             self.component.set_coordinates((self.cursor_pos.0, 0, None));
                             self.set_dirty();
                         } else {
@@ -439,12 +470,80 @@ impl Component for Listing {
             UIEvent::Resize => {
                 self.dirty = true;
             }
+            UIEvent::Input(Key::Up) => {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
+                self.component.set_movement(PageMovement::Up(amount));
+                return true;
+            }
+            UIEvent::Input(Key::Down) => {
+                let amount = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    amount
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
+                self.component.set_movement(PageMovement::Down(amount));
+                return true;
+            }
             UIEvent::Input(ref key) if *key == shortcuts["prev_page"] => {
-                self.component.set_movement(PageMovement::PageUp);
+                let mult = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    mult
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
+                self.component.set_movement(PageMovement::PageUp(mult));
                 return true;
             }
             UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
-                self.component.set_movement(PageMovement::PageDown);
+                let mult = if self.cmd_buf.is_empty() {
+                    1
+                } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    mult
+                } else {
+                    self.cmd_buf.clear();
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                    return true;
+                };
+                self.component.set_movement(PageMovement::PageDown(mult));
                 return true;
             }
             UIEvent::Input(ref key) if *key == Key::Home => {
@@ -500,6 +599,22 @@ impl Component for Listing {
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
                         self.get_status(context).unwrap(),
                     )));
+            }
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) => {
+                self.cmd_buf.clear();
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                return true;
+            }
+            UIEvent::Input(Key::Char(c)) if c >= '0' && c <= '9' => {
+                self.cmd_buf.push(c);
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::BufSet(
+                        self.cmd_buf.clone(),
+                    )));
+                return true;
             }
             _ => {}
         }
@@ -642,6 +757,7 @@ impl Listing {
             show_divider: false,
             menu_visibility: true,
             ratio: 90,
+            cmd_buf: String::with_capacity(4),
         }
     }
 
