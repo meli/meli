@@ -477,6 +477,21 @@ impl Account {
             match kind {
                 RefreshEventKind::Update(old_hash, envelope) => {
                     mailbox!(&folder_hash, self.folders).rename(old_hash, envelope.hash());
+                    #[cfg(feature = "sqlite3")]
+                    {
+                        if let Err(err) = crate::sqlite3::remove(old_hash).and_then(|_| {
+                            crate::sqlite3::insert(&envelope, &self.backend, &self.name)
+                        }) {
+                            melib::log(
+                                format!(
+                                    "Failed to update envelope {} in cache: {}",
+                                    envelope.message_id_display(),
+                                    err.to_string()
+                                ),
+                                melib::ERROR,
+                            );
+                        }
+                    }
                     self.collection.update(old_hash, *envelope, folder_hash);
                     return Some(EnvelopeUpdate(old_hash));
                 }
@@ -484,6 +499,23 @@ impl Account {
                     debug!("rename {} to {}", old_hash, new_hash);
                     mailbox!(&folder_hash, self.folders).rename(old_hash, new_hash);
                     self.collection.rename(old_hash, new_hash, folder_hash);
+                    #[cfg(feature = "sqlite3")]
+                    {
+                        let envelopes = self.collection.envelopes.read();
+                        let envelopes = envelopes.unwrap();
+                        if let Err(err) = crate::sqlite3::remove(old_hash).and_then(|_| {
+                            crate::sqlite3::insert(&envelopes[&new_hash], &self.backend, &self.name)
+                        }) {
+                            melib::log(
+                                format!(
+                                    "Failed to update envelope {} in cache: {}",
+                                    &envelopes[&new_hash].message_id_display(),
+                                    err.to_string()
+                                ),
+                                melib::ERROR,
+                            );
+                        }
+                    }
                     return Some(EnvelopeRename(old_hash, new_hash));
                 }
                 RefreshEventKind::Create(envelope) => {
@@ -560,6 +592,22 @@ impl Account {
                 }
                 RefreshEventKind::Remove(envelope_hash) => {
                     mailbox!(&folder_hash, self.folders).remove(envelope_hash);
+                    #[cfg(feature = "sqlite3")]
+                    {
+                        let envelopes = self.collection.envelopes.read();
+                        let envelopes = envelopes.unwrap();
+                        if let Err(err) = crate::sqlite3::remove(envelope_hash) {
+                            melib::log(
+                                format!(
+                                    "Failed to remove envelope {} [{}] in cache: {}",
+                                    &envelopes[&envelope_hash].message_id_display(),
+                                    envelope_hash,
+                                    err.to_string()
+                                ),
+                                melib::ERROR,
+                            );
+                        }
+                    }
                     self.collection.remove(envelope_hash, folder_hash);
                     return Some(EnvelopeRemove(envelope_hash));
                 }

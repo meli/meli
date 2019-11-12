@@ -83,7 +83,7 @@ pub fn open_db() -> Result<Connection> {
         "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,
                     account_id       INTEGER REFERENCES accounts ON UPDATE CASCADE,
-                    hash             BLOB NOT NULL,
+                    hash             BLOB NOT NULL UNIQUE,
                     date             TEXT NOT NULL,
                     _from            TEXT NOT NULL,
                     _to              TEXT NOT NULL,
@@ -202,6 +202,31 @@ pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>, 
               }
     Ok(())
 }
+
+pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
+    let conn = open_db()?;
+    if let Err(err) = conn.execute(
+        "DELETE FROM envelopes WHERE hash = ?",
+        params![env_hash.to_be_bytes().to_vec(), ])
+        .map_err(|e| MeliError::new(e.to_string())) {
+            debug!(
+                "Failed to remove envelope {}: {}",
+                env_hash,
+                err.to_string()
+            );
+            log(
+                format!(
+                    "Failed to remove envelope {}: {}",
+                    env_hash,
+                    err.to_string()
+                ),
+                ERROR,
+            );
+            return Err(err);
+    }
+    Ok(())
+}
+
 pub fn index(context: &mut crate::state::Context) -> Result<()> {
     let conn = open_db()?;
     let work_context = context.work_controller().get_context();
