@@ -206,21 +206,9 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
             beat = now;
         }
         if now.duration_since(watch) >= _5_mins {
-            /* Time to poll the other inboxes */
-            exit_on_error!(
-                sender,
-                folder_hash,
-                work_context,
-                thread_id,
-                iter.conn.set_nonblocking(true)
-                iter.conn.send_raw(b"DONE")
-                iter.conn.read_response(&mut response)
-            );
+            /* Time to poll all inboxes */
+            let mut conn = main_conn.lock().unwrap();
             for (hash, folder) in folders.lock().unwrap().iter() {
-                if *hash == folder_hash {
-                    /* Skip INBOX */
-                    continue;
-                }
                 work_context
                     .set_status
                     .send((
@@ -228,22 +216,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         format!("examining `{}` for updates...", folder.path()),
                     ))
                     .unwrap();
-                examine_updates(folder, &sender, &mut iter.conn, &uid_store, &work_context);
+                examine_updates(folder, &sender, &mut conn, &uid_store, &work_context);
             }
             work_context
                 .set_status
                 .send((thread_id, "done examining mailboxes.".to_string()))
                 .unwrap();
-            exit_on_error!(
-                sender,
-                folder_hash,
-                work_context,
-                thread_id,
-                iter.conn.send_command(b"IDLE")
-                iter.conn.set_nonblocking(false)
-                main_conn.lock().unwrap().send_command(b"NOOP")
-                main_conn.lock().unwrap().read_response(&mut response)
-            );
             watch = now;
         }
         match protocol_parser::untagged_responses(line.as_slice())
@@ -251,6 +229,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
             .map_err(MeliError::from)
         {
             Ok(Some(Recent(r))) => {
+                let mut conn = main_conn.lock().unwrap();
                 work_context
                     .set_status
                     .send((thread_id, format!("got `{} RECENT` notification", r)))
@@ -261,11 +240,10 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     folder_hash,
                     work_context,
                     thread_id,
-                    iter.conn.set_nonblocking(true)
-                    iter.conn.send_raw(b"DONE")
-                    iter.conn.read_response(&mut response)
-                    iter.conn.send_command(b"UID SEARCH RECENT")
-                    iter.conn.read_response(&mut response)
+                    conn.send_command(b"EXAMINE INBOX")
+                    conn.read_response(&mut response)
+                    conn.send_command(b"UID SEARCH RECENT")
+                    conn.read_response(&mut response)
                 );
                 match protocol_parser::search_results_raw(response.as_bytes())
                     .to_full_result()
@@ -280,11 +258,11 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                             folder_hash,
                             work_context,
                             thread_id,
-                            iter.conn.send_command(
+                            conn.send_command(
                                 &[b"UID FETCH", v, b"(FLAGS RFC822.HEADER)"]
                                 .join(&b' '),
                                 )
-                            iter.conn.read_response(&mut response)
+                            conn.read_response(&mut response)
                         );
                         debug!(&response);
                         match protocol_parser::uid_fetch_response(response.as_bytes())
@@ -340,14 +318,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         );
                     }
                 }
-                exit_on_error!(
-                    sender,
-                    folder_hash,
-                    work_context,
-                    thread_id,
-                    iter.conn.send_command(b"IDLE")
-                    iter.conn.set_nonblocking(false)
-                );
             }
             Ok(Some(Expunge(n))) => {
                 work_context
@@ -357,15 +327,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 debug!("expunge {}", n);
             }
             Ok(Some(Exists(n))) => {
-                exit_on_error!(
-                    sender,
-                    folder_hash,
-                    work_context,
-                    thread_id,
-                    iter.conn.set_nonblocking(true)
-                    iter.conn.send_raw(b"DONE")
-                    iter.conn.read_response(&mut response)
-                );
+                let mut conn = main_conn.lock().unwrap();
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
                  * */
                 let mut prev_exists = folder.exists.lock().unwrap();
@@ -388,7 +350,9 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         folder_hash,
                         work_context,
                         thread_id,
-                        iter.conn.send_command(
+                        conn.send_command(b"EXAMINE INBOX")
+                        conn.read_response(&mut response)
+                        conn.send_command(
                             &[
                             b"FETCH",
                             format!("{}:{}", *prev_exists + 1, n).as_bytes(),
@@ -396,7 +360,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                             ]
                             .join(&b' '),
                         )
-                        iter.conn.read_response(&mut response)
+                        conn.read_response(&mut response)
                     );
                     match protocol_parser::uid_fetch_response(response.as_bytes())
                         .to_full_result()
@@ -451,14 +415,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 } else if n < *prev_exists {
                     *prev_exists = n;
                 }
-                exit_on_error!(
-                    sender,
-                    folder_hash,
-                    work_context,
-                    thread_id,
-                    iter.conn.send_command(b"IDLE")
-                    iter.conn.set_nonblocking(false)
-                );
             }
             Ok(None) | Err(_) => {}
         }
