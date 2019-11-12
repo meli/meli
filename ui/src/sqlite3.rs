@@ -107,7 +107,7 @@ pub fn open_db() -> Result<Connection> {
                   );
         CREATE TABLE IF NOT EXISTS accounts (
                     id               INTEGER PRIMARY KEY,
-                    name             TEXT NOT NULL
+                    name             TEXT NOT NULL UNIQUE
                   );
         CREATE TABLE IF NOT EXISTS folder_and_envelope (
                     folder_id        INTEGER NOT NULL,
@@ -175,15 +175,32 @@ pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>, 
             return Err(err);
         }
     };
-            let account_id: i32 = {
-                let mut stmt = conn.prepare("SELECT id FROM accounts WHERE name = ?").unwrap();
-                let x = stmt.query_map(params![acc_name], |row| row.get(0)).unwrap().next().unwrap().unwrap();
-                x
-            };
+
+    if let Err(err) = conn.execute("INSERT OR IGNORE INTO accounts (name) VALUES (?1)", params![acc_name, ]) {
+        debug!(
+            "Failed to insert envelope {}: {}",
+            envelope.message_id_display(),
+            err.to_string()
+        );
+        log(
+            format!(
+                "Failed to insert envelope {}: {}",
+                envelope.message_id_display(),
+                err.to_string()
+            ),
+            ERROR,
+        );
+        return Err(MeliError::new(err.to_string()));
+    }
+    let account_id: i32 = {
+        let mut stmt = conn.prepare("SELECT id FROM accounts WHERE name = ?").unwrap();
+        let x = stmt.query_map(params![acc_name], |row| row.get(0)).unwrap().next().unwrap().unwrap();
+        x
+    };
     if let Err(err) = conn.execute(
             "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-              params![acc_name, envelope.hash().to_be_bytes().to_vec(), envelope.date_as_str(), envelope.field_from_to_string(), envelope.field_to_to_string(), envelope.field_cc_to_string(), envelope.field_bcc_to_string(), envelope.subject().into_owned().trim_end_matches('\u{0}'), envelope.message_id_display().to_string(), envelope.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), envelope.field_references_to_string(), i64::from(envelope.flags().bits()), if envelope.has_attachments() { 1 } else { 0 }, body, envelope.date().to_be_bytes().to_vec()],
+              params![account_id, envelope.hash().to_be_bytes().to_vec(), envelope.date_as_str(), envelope.field_from_to_string(), envelope.field_to_to_string(), envelope.field_cc_to_string(), envelope.field_bcc_to_string(), envelope.subject().into_owned().trim_end_matches('\u{0}'), envelope.message_id_display().to_string(), envelope.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), envelope.field_references_to_string(), i64::from(envelope.flags().bits()), if envelope.has_attachments() { 1 } else { 0 }, body, envelope.date().to_be_bytes().to_vec()],
         )
             .map_err(|e| MeliError::new(e.to_string())) {
                 debug!(
