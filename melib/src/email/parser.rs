@@ -467,7 +467,7 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
             match phrase(&input[0..end + display_name.length + 3]) {
                 IResult::Error(e) => IResult::Error(e),
                 IResult::Incomplete(i) => IResult::Incomplete(i),
-                IResult::Done(rest, raw) => {
+                IResult::Done(_, raw) => {
                     let display_name_end = raw.find(b"<").unwrap();
                     display_name.length = { raw[0..display_name_end].trim().len() };
                     let address_spec = if display_name_end == 0 {

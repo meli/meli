@@ -522,12 +522,14 @@ impl PlainListing {
                 return;
             }
         }
-        let envelopes = context.accounts[self.cursor_pos.0]
-            .collection
+        self.local_collection = context.accounts[self.cursor_pos.0][folder_hash]
+            .unwrap()
             .envelopes
-            .read()
-            .unwrap();
-        self.local_collection = envelopes.keys().cloned().collect();
+            .iter()
+            .cloned()
+            .collect();
+        self.redraw_list(context);
+
         if self.length > 0 {
             let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
             let temp = (self.new_cursor_pos.0, self.new_cursor_pos.1, env_hash);
@@ -537,8 +539,6 @@ impl PlainListing {
                 self.view = MailView::new(temp, None, None);
             }
         }
-
-        self.redraw_list(context);
     }
 
     fn redraw_list(&mut self, context: &Context) {
@@ -765,9 +765,7 @@ impl PlainListing {
         }
     }
 
-    fn get_env_under_cursor(&self, cursor: usize, context: &Context) -> EnvelopeHash {
-        let account = &context.accounts[self.cursor_pos.0];
-        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+    fn get_env_under_cursor(&self, cursor: usize, _context: &Context) -> EnvelopeHash {
         if self.filter_term.is_empty() {
             self.local_collection[cursor]
         } else {
@@ -993,7 +991,9 @@ impl Component for PlainListing {
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
                 let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                if !account.collection.contains_key(new_hash) {
+                if !account.collection.contains_key(new_hash)
+                    || !account[folder_hash].unwrap().envelopes.contains(new_hash)
+                {
                     return false;
                 }
 

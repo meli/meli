@@ -375,18 +375,24 @@ impl From<ImapConnection> for ImapBlockingConnection {
     fn from(mut conn: ImapConnection) -> Self {
         conn.set_nonblocking(false)
             .expect("set_nonblocking call failed");
-        conn.stream.as_mut().map(|s| {
-            s.stream
-                .get_mut()
-                .set_write_timeout(Some(std::time::Duration::new(5 * 60, 0)))
-                .expect("set_write_timeout call failed")
-        });
-        conn.stream.as_mut().map(|s| {
-            s.stream
-                .get_mut()
-                .set_read_timeout(Some(std::time::Duration::new(5 * 60, 0)))
-                .expect("set_read_timeout call failed")
-        });
+        conn.stream
+            .as_mut()
+            .map(|s| {
+                s.stream
+                    .get_mut()
+                    .set_write_timeout(Some(std::time::Duration::new(5 * 60, 0)))
+                    .expect("set_write_timeout call failed")
+            })
+            .expect("set_write_timeout call failed");
+        conn.stream
+            .as_mut()
+            .map(|s| {
+                s.stream
+                    .get_mut()
+                    .set_read_timeout(Some(std::time::Duration::new(5 * 60, 0)))
+                    .expect("set_read_timeout call failed")
+            })
+            .expect("set_read_timeout call failed");
         ImapBlockingConnection {
             buf: [0; 1024],
             conn,

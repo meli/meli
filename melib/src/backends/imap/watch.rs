@@ -86,7 +86,6 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         main_conn.send_command(b"NOOP").unwrap();
         main_conn.read_response(&mut response).unwrap();
     }
-    Ok(())
 }
 
 pub fn idle(kit: ImapWatchKit) -> Result<()> {
@@ -208,7 +207,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         if now.duration_since(watch) >= _5_mins {
             /* Time to poll all inboxes */
             let mut conn = main_conn.lock().unwrap();
-            for (hash, folder) in folders.lock().unwrap().iter() {
+            for folder in folders.lock().unwrap().values() {
                 work_context
                     .set_status
                     .send((
@@ -216,7 +215,13 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         format!("examining `{}` for updates...", folder.path()),
                     ))
                     .unwrap();
-                examine_updates(folder, &sender, &mut conn, &uid_store, &work_context);
+                exit_on_error!(
+                    sender,
+                    folder_hash,
+                    work_context,
+                    thread_id,
+                    examine_updates(folder, &sender, &mut conn, &uid_store, &work_context)
+                );
             }
             work_context
                 .set_status

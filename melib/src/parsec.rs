@@ -19,8 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::structs::StackVec;
-
 pub type Result<'a, Output> = std::result::Result<(&'a str, Output), &'a str>;
 
 pub trait Parser<'a, Output> {
@@ -53,16 +51,6 @@ pub trait Parser<'a, Output> {
         F: Fn(Output) -> NextParser + 'a,
     {
         BoxedParser::new(and_then(self, f))
-    }
-
-    fn seq<P, NewOutput>(self, p: P) -> BoxedParser<'a, NewOutput>
-    where
-        Self: Sized + 'a,
-        Output: 'a,
-        NewOutput: 'a,
-        P: Parser<'a, NewOutput> + 'a,
-    {
-        BoxedParser::new(seq(self, p))
     }
 }
 
@@ -319,16 +307,5 @@ where
     move |input| match opt_parser.parse(input) {
         Ok((next_input, result)) => Ok((next_input, Some(result))),
         Err(_) => Ok((input, None)),
-    }
-}
-
-pub fn seq<'a, P1, P2, R1, R2>(parser1: P1, parser2: P2) -> impl Parser<'a, R2>
-where
-    P1: Parser<'a, R1>,
-    P2: Parser<'a, R2>,
-{
-    move |input| match parser1.parse(input) {
-        Ok((next_input, result)) => parser2.parse(next_input),
-        Err(e) => Err(e),
     }
 }
