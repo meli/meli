@@ -93,10 +93,10 @@ theme = "light"
 available options are listed below.
 .Sy default values are shown in parentheses.
 .Sh ACCOUNTS
-.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
+.Bl -tag -width "format String [maildir mbox imap notmuch]" -offset -indent
 .It Cm root_folder Ar String
-the backend-specific path of the root_folder, usually INBOX
-.It Cm format Ar String Op maildir mbox imap
+the backend-specific path of the root_folder, usually INBOX.
+.It Cm format Ar String Op maildir mbox imap notmuch
 the format of the mail backend.
 .It Cm subscribed_folders Ar [String,]
 an array of folder paths to display in the UI. Paths are relative to the root folder (eg "INBOX/Sent", not "Sent")
@@ -129,6 +129,26 @@ choose which cache backend to use. Available options are 'none' and 'sqlite3'
 \&.
 .El
 .Pp
+.Sh notmuch only
+.Cm root_folder
+points to the directory which contains the 
+.Pa .notmuch/
+subdirectory. notmuch folders are virtual, since they are defined by user-given notmuch queries. Thus you have to explicitly state the folders you want in the
+.Cm folders
+field and set the 
+.Ar query
+property to each of them. Example:
+.Pp
+.Bd -literal
+[accounts.notmuch]
+format = "notmuch"
+\&...
+  [accounts.notmuch.folders]
+  "INBOX" = {  query="tag:inbox", subscribe = true }
+  "Drafts" = {  query="tag:draft", subscribe = true }
+  "Sent" = {  query="from:username@server.tld from:username2@server.tld", subscribe = true }
+.Ed
+.Sh IMAP only
 IMAP specific options are:
 .Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
 .It Cm server_hostname Ar String

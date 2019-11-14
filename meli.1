@@ -139,8 +139,21 @@ To open a draft for editing later, select your draft in the mail listing and pre
 .Cm e Ns
 \&.
 .Sh SEARCH
+Each e-mail storage backend has its default search method.
+.Em IMAP
+uses the SEARCH command,
+.Em notmuch
+uses libnotmuch and
+.Em Maildir/mbox
+have to perform a very slow and I/O bound linear search. Thus it is advised to use a cache on
+.Em Maildir/mbox
+accounts.  
 .Nm Ns
-, if built with sqlite3, includes the ability to perform full text search on the following fields: From, To, Cc, Bcc, In-Reply-To, References, Subject and Date. The message body (in plain text human readable form) and the flags can also be queried. To create the sqlite3 index issue command
+, if built with sqlite3, includes the ability to perform full text search on the following fields: From, To, Cc, Bcc, In-Reply-To, References, Subject and Date. The message body (in plain text human readable form) and the flags can also be queried. To enable sqlite3 indexing for an account set
+.Em cache_type
+to
+.Em sqlite3 
+in the configuration file and to create the sqlite3 index issue command
 .Ic index Ar ACCOUNT_NAME Ns \&.
 
 To search in the message body type your keywords without any special formatting.

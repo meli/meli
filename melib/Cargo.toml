@@ -4,6 +4,7 @@ version = "0.3.2"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 workspace = ".."
 edition = "2018"
+build = "build.rs"
 
 [dependencies]
 bitflags = "1.0"
@@ -34,4 +35,5 @@ unicode_algorithms = ["text_processing"]
 imap_backend = ["native-tls"]
 maildir_backend = ["notify", "notify-rust", "memmap"]
 mbox_backend = ["notify", "notify-rust", "memmap"]
+notmuch_backend = []
 vcard = []

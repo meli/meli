@@ -493,57 +493,7 @@ impl MailBackend for MaildirType {
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
         for f in self.folders.values() {
             if f.name == folder || f.path.to_str().unwrap() == folder {
-                let mut path = f.fs_path.clone();
-                path.push("cur");
-                {
-                    let mut rand_buf = [0u8; 16];
-                    let mut f = fs::File::open("/dev/urandom")
-                        .expect("Could not open /dev/urandom for reading");
-                    f.read_exact(&mut rand_buf)
-                        .expect("Could not read from /dev/urandom/");
-                    let mut hostn_buf = String::with_capacity(256);
-                    let mut f = fs::File::open("/etc/hostname")
-                        .expect("Could not open /etc/hostname for reading");
-                    f.read_to_string(&mut hostn_buf)
-                        .expect("Could not read from /etc/hostname");
-                    let timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                        .unwrap()
-                        .as_millis();
-                    let mut filename = format!(
-                        "{}.{:x}_{}.{}:2,",
-                        timestamp,
-                        u128::from_be_bytes(rand_buf),
-                        std::process::id(),
-                        hostn_buf.trim()
-                    );
-                    if let Some(flags) = flags {
-                        if !(flags & Flag::DRAFT).is_empty() {
-                            filename.push('D');
-                        }
-                        if !(flags & Flag::FLAGGED).is_empty() {
-                            filename.push('F');
-                        }
-                        if !(flags & Flag::PASSED).is_empty() {
-                            filename.push('P');
-                        }
-                        if !(flags & Flag::REPLIED).is_empty() {
-                            filename.push('R');
-                        }
-                        if !(flags & Flag::SEEN).is_empty() {
-                            filename.push('S');
-                        }
-                        if !(flags & Flag::TRASHED).is_empty() {
-                            filename.push('T');
-                        }
-                    }
-                    path.push(filename);
-                }
-                debug!("saving at {}", path.display());
-                let file = fs::File::create(path).unwrap();
-                let mut writer = io::BufWriter::new(file);
-                writer.write_all(bytes).unwrap();
-                return Ok(());
+                return MaildirType::save_to_folder(f.fs_path.clone(), bytes, flags);
             }
         }
 
@@ -862,6 +812,59 @@ impl MaildirType {
             Box::new(closure)
         };
         w.build(handle)
+    }
+
+    pub fn save_to_folder(mut path: PathBuf, bytes: &[u8], flags: Option<Flag>) -> Result<()> {
+        path.push("cur");
+        {
+            let mut rand_buf = [0u8; 16];
+            let mut f =
+                fs::File::open("/dev/urandom").expect("Could not open /dev/urandom for reading");
+            f.read_exact(&mut rand_buf)
+                .expect("Could not read from /dev/urandom/");
+            let mut hostn_buf = String::with_capacity(256);
+            let mut f =
+                fs::File::open("/etc/hostname").expect("Could not open /etc/hostname for reading");
+            f.read_to_string(&mut hostn_buf)
+                .expect("Could not read from /etc/hostname");
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis();
+            let mut filename = format!(
+                "{}.{:x}_{}.{}:2,",
+                timestamp,
+                u128::from_be_bytes(rand_buf),
+                std::process::id(),
+                hostn_buf.trim()
+            );
+            if let Some(flags) = flags {
+                if !(flags & Flag::DRAFT).is_empty() {
+                    filename.push('D');
+                }
+                if !(flags & Flag::FLAGGED).is_empty() {
+                    filename.push('F');
+                }
+                if !(flags & Flag::PASSED).is_empty() {
+                    filename.push('P');
+                }
+                if !(flags & Flag::REPLIED).is_empty() {
+                    filename.push('R');
+                }
+                if !(flags & Flag::SEEN).is_empty() {
+                    filename.push('S');
+                }
+                if !(flags & Flag::TRASHED).is_empty() {
+                    filename.push('T');
+                }
+            }
+            path.push(filename);
+        }
+        debug!("saving at {}", path.display());
+        let file = fs::File::create(path).unwrap();
+        let mut writer = io::BufWriter::new(file);
+        writer.write_all(bytes).unwrap();
+        return Ok(());
     }
 }
 

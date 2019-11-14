@@ -1,7 +1,7 @@
 .POSIX:
 .SUFFIXES:
 meli:
-	cargo build --release
+	cargo build --features="$(MELI_FEATURES)" --release
 
 PREFIX=/usr/local
 

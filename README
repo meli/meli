@@ -54,6 +54,17 @@ BUILDING IN DEBIAN
 Building with Debian's packaged cargo might require the installation of these
 two packages: librust-openssl-sys-dev and librust-libdbus-sys-dev
 
+BUILDING WITH NOTMUCH
+=====================
+
+To use the optional notmuch backend feature, you must have libnotmuch installed in your system. In Debian-like systems, install the "libnotmuch" package.
+
+To build with notmuch support, prepend the environment variable "MELI_FEATURES='melib/notmuch_backend'" to your make invocation:
+
+# MELI_FEATURES="melib/notmuch_backend" make
+
+or if building directly with cargo, use the flag '--features="melib/notmuch_backend"'.
+
 DEVELOPMENT
 ===========
 

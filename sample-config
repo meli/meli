@@ -39,6 +39,19 @@
 #display_name = "Name Name"
 #subscribed_folders = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 
+# Setting up an account for an already existing notmuch database
+#[accounts.notmuch]
+#root_folder = "/path/to/folder" # where .notmuch/ directory is located
+#format = "notmuch"
+#index_style = "conversations"
+#identity="username@server.tld"
+#display_name = "Name Name"
+#  # notmuch folders are virtual, they are defined by their alias and the notmuch query that corresponds to their content.
+#  [accounts.notmuch.folders]
+#  "INBOX" = {  query="tag:inbox", subscribe = true }
+#  "Drafts" = {  query="tag:draft", subscribe = true }
+#  "Sent" = {  query="from:username@server.tld from:username2@server.tld", subscribe = true }
+#
 #[pager]
 #filter = "/usr/bin/pygmentize"
 #pager_context = 0 # default, optional

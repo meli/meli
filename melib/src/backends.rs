@@ -24,6 +24,10 @@ pub mod imap;
 pub mod maildir;
 #[cfg(feature = "mbox_backend")]
 pub mod mbox;
+#[cfg(feature = "notmuch_backend")]
+pub mod notmuch;
+#[cfg(feature = "notmuch_backend")]
+pub use self::notmuch::NotmuchDb;
 
 #[cfg(feature = "imap_backend")]
 pub use self::imap::ImapType;
@@ -83,6 +87,13 @@ impl Backends {
             b.register(
                 "imap".to_string(),
                 Box::new(|| Box::new(|f, i| Box::new(ImapType::new(f, i)))),
+            );
+        }
+        #[cfg(feature = "notmuch_backend")]
+        {
+            b.register(
+                "notmuch".to_string(),
+                Box::new(|| Box::new(|f, i| Box::new(NotmuchDb::new(f, i)))),
             );
         }
         b
