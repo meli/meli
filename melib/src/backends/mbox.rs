@@ -120,7 +120,7 @@ impl BackendFolder for MboxFolder {
         })
     }
 
-    fn children(&self) -> &Vec<FolderHash> {
+    fn children(&self) -> &[FolderHash] {
         &self.children
     }
 

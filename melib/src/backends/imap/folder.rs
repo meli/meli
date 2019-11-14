@@ -50,7 +50,7 @@ impl BackendFolder for ImapFolder {
         self.name = s.to_string();
     }
 
-    fn children(&self) -> &Vec<FolderHash> {
+    fn children(&self) -> &[FolderHash] {
         &self.children
     }
 

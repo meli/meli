@@ -308,7 +308,7 @@ pub trait BackendFolder: Debug {
     fn path(&self) -> &str;
     fn change_name(&mut self, new_name: &str);
     fn clone(&self) -> Folder;
-    fn children(&self) -> &Vec<FolderHash>;
+    fn children(&self) -> &[FolderHash];
     fn parent(&self) -> Option<FolderHash>;
 
     fn permissions(&self) -> FolderPermissions;
@@ -338,7 +338,7 @@ impl BackendFolder for DummyFolder {
         folder_default()
     }
 
-    fn children(&self) -> &Vec<FolderHash> {
+    fn children(&self) -> &[FolderHash] {
         &self.v
     }
 
