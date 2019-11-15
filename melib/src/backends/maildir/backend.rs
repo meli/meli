@@ -509,15 +509,18 @@ impl MailBackend for MaildirType {
 }
 
 impl MaildirType {
-    pub fn new(settings: &AccountSettings, is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
+    pub fn new(
+        settings: &AccountSettings,
+        is_subscribed: Box<dyn Fn(&str) -> bool>,
+    ) -> Result<Box<dyn MailBackend>> {
         let mut folders: FnvHashMap<FolderHash, MaildirFolder> = Default::default();
         fn recurse_folders<P: AsRef<Path>>(
             folders: &mut FnvHashMap<FolderHash, MaildirFolder>,
             settings: &AccountSettings,
             p: P,
-        ) -> Vec<FolderHash> {
+        ) -> Result<Vec<FolderHash>> {
             if !p.as_ref().exists() || !p.as_ref().is_dir() {
-                eprintln!(
+                return Err(MeliError::new(format!(
                     "Configuration error: Path \"{}\" {}",
                     p.as_ref().display(),
                     if !p.as_ref().exists() {
@@ -525,8 +528,7 @@ impl MaildirType {
                     } else {
                         "is not a directory."
                     }
-                );
-                std::process::exit(1);
+                )));
             }
             let mut children = Vec::new();
             for mut f in fs::read_dir(p).unwrap() {
@@ -544,7 +546,7 @@ impl MaildirType {
                                 Vec::new(),
                                 &settings,
                             ) {
-                                f.children = recurse_folders(folders, settings, &path);
+                                f.children = recurse_folders(folders, settings, &path)?;
                                 f.children
                                     .iter()
                                     .map(|c| folders.get_mut(c).map(|f| f.parent = Some(f.hash)))
@@ -556,23 +558,21 @@ impl MaildirType {
                     }
                 }
             }
-            children
+            Ok(children)
         };
         let root_path = PathBuf::from(settings.root_folder()).expand();
         if !root_path.exists() {
-            eprintln!(
+            return Err(MeliError::new(format!(
                 "Configuration error ({}): root_path `{}` is not a valid directory.",
                 settings.name(),
                 settings.root_folder.as_str()
-            );
-            std::process::exit(1);
+            )));
         } else if !root_path.is_dir() {
-            eprintln!(
+            return Err(MeliError::new(format!(
                 "Configuration error ({}): root_path `{}` is not a directory.",
                 settings.name(),
                 settings.root_folder.as_str()
-            );
-            std::process::exit(1);
+            )));
         }
 
         if let Ok(f) = MaildirFolder::new(
@@ -586,14 +586,14 @@ impl MaildirType {
         }
 
         if folders.is_empty() {
-            let children = recurse_folders(&mut folders, settings, &root_path);
+            let children = recurse_folders(&mut folders, settings, &root_path)?;
             children
                 .iter()
                 .map(|c| folders.get_mut(c).map(|f| f.parent = None))
                 .count();
         } else {
             let root_hash = *folders.keys().nth(0).unwrap();
-            let children = recurse_folders(&mut folders, settings, &root_path);
+            let children = recurse_folders(&mut folders, settings, &root_path)?;
             children
                 .iter()
                 .map(|c| folders.get_mut(c).map(|f| f.parent = Some(root_hash)))
@@ -606,29 +606,24 @@ impl MaildirType {
             f.children.retain(|c| keys.contains(c));
         }
 
-        let hash_indexes = Arc::new(Mutex::new(FnvHashMap::with_capacity_and_hasher(
-            folders.len(),
-            Default::default(),
-        )));
-        {
-            let mut hash_indexes = hash_indexes.lock().unwrap();
-            for &fh in folders.keys() {
-                hash_indexes.insert(
-                    fh,
-                    HashIndex {
-                        index: FnvHashMap::with_capacity_and_hasher(0, Default::default()),
-                        hash: fh,
-                    },
-                );
-            }
+        let mut hash_indexes =
+            FnvHashMap::with_capacity_and_hasher(folders.len(), Default::default());
+        for &fh in folders.keys() {
+            hash_indexes.insert(
+                fh,
+                HashIndex {
+                    index: FnvHashMap::with_capacity_and_hasher(0, Default::default()),
+                    hash: fh,
+                },
+            );
         }
-        MaildirType {
+        Ok(Box::new(MaildirType {
             name: settings.name().to_string(),
             folders,
-            hash_indexes,
+            hash_indexes: Arc::new(Mutex::new(hash_indexes)),
             folder_index: Default::default(),
             path: root_path,
-        }
+        }))
     }
     fn owned_folder_idx(&self, folder: &Folder) -> FolderHash {
         *self

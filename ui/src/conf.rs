@@ -312,10 +312,12 @@ impl FileSettings {
                         file.write_all(include_bytes!("../../sample-config"))
                             .expect("Could not write to config file.");
                         println!("Written config to {}", config_path.display());
-                        std::process::exit(1);
+                        return Err(MeliError::new(
+                            "Edit the sample configuration and relaunch meli.",
+                        ));
                     }
                     "n" | "N" | "no" | "No" | "NO" => {
-                        std::process::exit(1);
+                        return Err(MeliError::new("No configuration file found."));
                     }
                     _ => {
                         println!(
@@ -332,8 +334,10 @@ impl FileSettings {
         file.read_to_string(&mut contents)?;
         let s = toml::from_str(&contents);
         if let Err(e) = s {
-            eprintln!("Config file contains errors: {}", e.to_string());
-            std::process::exit(1);
+            return Err(MeliError::new(format!(
+                "Config file contains errors: {}",
+                e.to_string()
+            )));
         }
 
         Ok(s.unwrap())
@@ -341,11 +345,8 @@ impl FileSettings {
 }
 
 impl Settings {
-    pub fn new() -> Settings {
-        let fs = FileSettings::new().unwrap_or_else(|e| {
-            eprintln!("Configuration error: {}", e);
-            std::process::exit(1);
-        });
+    pub fn new() -> Result<Settings> {
+        let fs = FileSettings::new()?;
         let mut s: HashMap<String, AccountConf> = HashMap::new();
 
         for (id, x) in fs.accounts {
@@ -355,7 +356,7 @@ impl Settings {
             s.insert(id, ac);
         }
 
-        Settings {
+        Ok(Settings {
             accounts: s,
             pager: fs.pager,
             notifications: fs.notifications,
@@ -363,7 +364,7 @@ impl Settings {
             composing: fs.composing,
             pgp: fs.pgp,
             terminal: fs.terminal,
-        }
+        })
     }
 }
 

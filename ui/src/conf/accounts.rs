@@ -227,7 +227,7 @@ impl Account {
         map: &Backends,
         work_context: WorkContext,
         notify_fn: NotifyFn,
-    ) -> Self {
+    ) -> Result<Self> {
         let s = settings.clone();
         let backend = map.get(settings.account().format())(
             settings.account(),
@@ -235,7 +235,7 @@ impl Account {
                 s.folder_confs.contains_key(path)
                     && s.folder_confs[path].folder_conf().subscribe.is_true()
             }),
-        );
+        )?;
         let notify_fn = Arc::new(notify_fn);
 
         let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
@@ -258,7 +258,7 @@ impl Account {
             settings.conf.cache_type = crate::conf::CacheType::None;
         }
 
-        Account {
+        Ok(Account {
             index,
             name,
             is_online: false,
@@ -278,7 +278,7 @@ impl Account {
             notify_fn,
 
             event_queue: VecDeque::with_capacity(8),
-        }
+        })
     }
 
     fn init(&mut self) {

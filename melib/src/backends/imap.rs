@@ -112,7 +112,8 @@ impl MailBackend for ImapType {
             ($tx:expr,$($result:expr)+) => {
                 $(if let Err(e) = $result {
                     $tx.send(AsyncStatus::Payload(Err(e.into()))).unwrap();
-                    std::process::exit(1);
+                    $tx.send(AsyncStatus::Finished).unwrap();
+                    return;
                 })+
             };
         };
@@ -411,30 +412,29 @@ impl MailBackend for ImapType {
 
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
-        $s.extra.get($var).unwrap_or_else(|| {
-            eprintln!(
+        $s.extra.get($var).ok_or_else(|| {
+            MeliError::new(format!(
                 "Configuration error ({}): IMAP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
-            );
-            std::process::exit(1);
+            ))
         })
     };
     ($s:ident[$var:literal], $default:expr) => {
         $s.extra
             .get($var)
             .map(|v| {
-                <_>::from_str(v).unwrap_or_else(|_| {
-                    eprintln!(
-                        "Configuration error ({}): Invalid value for field `{}`: {}",
+                <_>::from_str(v).map_err(|e| {
+                    MeliError::new(format!(
+                        "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
                         $s.name.as_str(),
                         $var,
                         v,
-                    );
-                    std::process::exit(1);
+                        e
+                    ))
                 })
             })
-            .unwrap_or_else(|| $default)
+            .unwrap_or_else(|| Ok($default))
     };
 }
 
@@ -442,21 +442,20 @@ impl ImapType {
     pub fn new(
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
-    ) -> Self {
-        debug!(s);
-        let server_hostname = get_conf_val!(s["server_hostname"]);
-        let server_username = get_conf_val!(s["server_username"]);
-        let server_password = get_conf_val!(s["server_password"]);
-        let server_port = get_conf_val!(s["server_port"], 143);
+    ) -> Result<Box<dyn MailBackend>> {
+        let server_hostname = get_conf_val!(s["server_hostname"])?;
+        let server_username = get_conf_val!(s["server_username"])?;
+        let server_password = get_conf_val!(s["server_password"])?;
+        let server_port = get_conf_val!(s["server_port"], 143)?;
         let use_starttls = get_conf_val!(s["use_starttls"], {
             if server_port == 993 {
                 false
             } else {
                 true
             }
-        });
+        })?;
         let danger_accept_invalid_certs: bool =
-            get_conf_val!(s["danger_accept_invalid_certs"], false);
+            get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         let server_conf = ImapServerConf {
             server_hostname: server_hostname.to_string(),
             server_username: server_username.to_string(),
@@ -467,7 +466,7 @@ impl ImapType {
         };
         let connection = ImapConnection::new_connection(&server_conf);
 
-        ImapType {
+        Ok(Box::new(ImapType {
             account_name: s.name().to_string(),
             online: Arc::new(Mutex::new(false)),
             server_conf,
@@ -481,7 +480,7 @@ impl ImapType {
                 uid_index: Default::default(),
                 byte_cache: Default::default(),
             }),
-        }
+        }))
     }
 
     pub fn shell(&mut self) {

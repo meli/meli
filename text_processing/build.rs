@@ -2,13 +2,13 @@ const LINE_BREAK_TABLE_URL: &str = "http://www.unicode.org/Public/UCD/latest/ucd
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 include!("src/types.rs");
 
 fn main() -> Result<(), std::io::Error> {
-    let mod_path = PathBuf::from("src/tables.rs");
+    let mod_path = Path::new("src/tables.rs");
     if mod_path.exists() {
         eprintln!(
             "{} already exists, delete it if you want to replace it.",

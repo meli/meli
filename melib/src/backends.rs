@@ -48,8 +48,12 @@ use std::ops::Deref;
 use fnv::FnvHashMap;
 use std;
 
-pub type BackendCreator =
-    Box<dyn Fn(&AccountSettings, Box<dyn Fn(&str) -> bool + Send + Sync>) -> Box<dyn MailBackend>>;
+pub type BackendCreator = Box<
+    dyn Fn(
+        &AccountSettings,
+        Box<dyn Fn(&str) -> bool + Send + Sync>,
+    ) -> Result<Box<dyn MailBackend>>,
+>;
 
 /// A hashmap containing all available mail backends.
 /// An abstraction over any available backends.
@@ -72,28 +76,28 @@ impl Backends {
         {
             b.register(
                 "maildir".to_string(),
-                Box::new(|| Box::new(|f, i| Box::new(MaildirType::new(f, i)))),
+                Box::new(|| Box::new(|f, i| MaildirType::new(f, i))),
             );
         }
         #[cfg(feature = "mbox_backend")]
         {
             b.register(
                 "mbox".to_string(),
-                Box::new(|| Box::new(|f, i| Box::new(MboxType::new(f, i)))),
+                Box::new(|| Box::new(|f, i| MboxType::new(f, i))),
             );
         }
         #[cfg(feature = "imap_backend")]
         {
             b.register(
                 "imap".to_string(),
-                Box::new(|| Box::new(|f, i| Box::new(ImapType::new(f, i)))),
+                Box::new(|| Box::new(|f, i| ImapType::new(f, i))),
             );
         }
         #[cfg(feature = "notmuch_backend")]
         {
             b.register(
                 "notmuch".to_string(),
-                Box::new(|| Box::new(|f, i| Box::new(NotmuchDb::new(f, i)))),
+                Box::new(|| Box::new(|f, i| NotmuchDb::new(f, i))),
             );
         }
         b

@@ -70,8 +70,7 @@ fn notify(
 
 macro_rules! error_and_exit {
     ($($err:expr),*) => {{
-            eprintln!($($err),*);
-            std::process::exit(1);
+            return Err(MeliError::new(format!($($err),*)));
     }}
 }
 
@@ -83,7 +82,17 @@ struct CommandLineArguments {
     version: bool,
 }
 
-fn main() -> std::result::Result<(), std::io::Error> {
+fn main() {
+    ::std::process::exit(match run_app() {
+        Ok(()) => 0,
+        Err(err) => {
+            eprintln!("{}", err);
+            1
+        }
+    });
+}
+
+fn run_app() -> Result<()> {
     enum CommandLineFlags {
         CreateConfig,
         Config,
@@ -144,12 +153,12 @@ fn main() -> std::result::Result<(), std::io::Error> {
         println!("\t--version, -v\t\tprint version and exit");
         println!("\t--create-config[ PATH]\tCreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config");
         println!("\t--config PATH, -c PATH\tUse specified configuration file");
-        std::process::exit(0);
+        return Ok(());
     }
 
     if args.version {
         println!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0"));
-        std::process::exit(0);
+        return Ok(());
     }
 
     match prev {
@@ -162,25 +171,28 @@ fn main() -> std::result::Result<(), std::io::Error> {
     if let Some(config_path) = args.create_config.as_mut() {
         let config_path: PathBuf = if config_path.is_empty() {
             let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
-            xdg_dirs.place_config_file("config").unwrap_or_else(|e| {
-                error_and_exit!("Cannot create configuration directory:\n{}", e)
-            })
+            xdg_dirs.place_config_file("config").map_err(|e| {
+                MeliError::new(format!(
+                    "Cannot create configuration directory in {}:\n{}",
+                    xdg_dirs.get_config_home().display(),
+                    e
+                ))
+            })?
         } else {
             Path::new(config_path).to_path_buf()
         };
         if config_path.exists() {
-            println!("File `{}` already exists.\nMaybe you meant to specify another path with --create-config=PATH", config_path.display());
-            std::process::exit(1);
+            return Err(MeliError::new(format!("File `{}` already exists.\nMaybe you meant to specify another path with --create-config=PATH", config_path.display())));
         }
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(config_path.as_path())
-            .unwrap_or_else(|e| error_and_exit!("Could not create config file:\n{}", e));
+            .map_err(|e| MeliError::new(format!("Could not create config file:\n{}", e)))?;
         file.write_all(include_bytes!("../sample-config"))
-            .unwrap_or_else(|e| error_and_exit!("Could not write to config file:\n{}", e));
+            .map_err(|e| MeliError::new(format!("Could not write to config file:\n{}", e)))?;
         println!("Written example configuration to {}", config_path.display());
-        std::process::exit(0);
+        return Ok(());
     }
 
     if let Some(config_location) = args.config.as_ref() {
@@ -188,7 +200,7 @@ fn main() -> std::result::Result<(), std::io::Error> {
     }
 
     /* Create the application State. */
-    let mut state = State::new();
+    let mut state = State::new()?;
 
     let receiver = state.receiver();
     let sender = state.sender();

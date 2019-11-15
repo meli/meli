@@ -562,14 +562,17 @@ impl MailBackend for MboxType {
 }
 
 impl MboxType {
-    pub fn new(s: &AccountSettings, _is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
+    pub fn new(
+        s: &AccountSettings,
+        _is_subscribed: Box<dyn Fn(&str) -> bool>,
+    ) -> Result<Box<dyn MailBackend>> {
         let path = Path::new(s.root_folder.as_str()).expand();
         if !path.exists() {
-            panic!(
+            return Err(MeliError::new(format!(
                 "\"root_folder\" {} for account {} is not a valid path.",
                 s.root_folder.as_str(),
                 s.name()
-            );
+            )));
         }
         let ret = MboxType {
             path,
@@ -640,6 +643,6 @@ impl MboxType {
             }
         }
         */
-        ret
+        Ok(Box::new(ret))
     }
 }

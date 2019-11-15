@@ -104,7 +104,10 @@ unsafe impl Send for NotmuchFolder {}
 unsafe impl Sync for NotmuchFolder {}
 
 impl NotmuchDb {
-    pub fn new(s: &AccountSettings, _is_subscribed: Box<dyn Fn(&str) -> bool>) -> Self {
+    pub fn new(
+        s: &AccountSettings,
+        _is_subscribed: Box<dyn Fn(&str) -> bool>,
+    ) -> Result<Box<dyn MailBackend>> {
         let mut database: *mut notmuch_database_t = std::ptr::null_mut();
         let path = Path::new(s.root_folder.as_str()).expand().to_path_buf();
         if !path.exists() {
@@ -125,7 +128,7 @@ impl NotmuchDb {
             )
         };
         if status != 0 {
-            panic!("notmuch_database_open returned {}.", status);
+            return Err(MeliError::new(format!("Could not open notmuch database at path {}. notmuch_database_open returned {}.", s.root_folder.as_str(), status);
         }
         assert!(!database.is_null());
         let mut folders = FnvHashMap::default();
@@ -150,14 +153,13 @@ impl NotmuchDb {
                     },
                 );
             } else {
-                eprintln!(
+                return Err(MeliError::new(format!(
                     "notmuch folder configuration entry \"{}\" should have a \"query\" value set.",
                     k
-                );
-                std::process::exit(1);
+                )));
             }
         }
-        NotmuchDb {
+        Ok(Box::new(NotmuchDb {
             database: DbWrapper {
                 inner: Arc::new(RwLock::new(database)),
                 database_ph: std::marker::PhantomData,
@@ -166,7 +168,7 @@ impl NotmuchDb {
             index: Arc::new(RwLock::new(Default::default())),
             folders: Arc::new(RwLock::new(folders)),
             save_messages_to: None,
-        }
+        }))
     }
 }
 

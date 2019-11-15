@@ -199,14 +199,8 @@ impl Drop for State {
     }
 }
 
-impl Default for State {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl State {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         /* Create a channel to communicate with other threads. The main process is the sole receiver.
          * */
         let (sender, receiver) = bounded(32 * ::std::mem::size_of::<ThreadEvent>());
@@ -217,13 +211,11 @@ impl State {
          * */
         let input_thread = unbounded();
         let backends = Backends::new();
-        let settings = Settings::new();
+        let settings = Settings::new()?;
 
-        let termsize = termion::terminal_size().ok();
-        let termcols = termsize.map(|(w, _)| w);
-        let termrows = termsize.map(|(_, h)| h);
-        let cols = termcols.unwrap_or(0) as usize;
-        let rows = termrows.unwrap_or(0) as usize;
+        let termsize = termion::terminal_size()?;
+        let cols = termsize.0 as usize;
+        let rows = termsize.1 as usize;
 
         let work_controller = WorkController::new(sender.clone());
         let mut accounts: Vec<Account> = settings
@@ -245,7 +237,7 @@ impl State {
                     })),
                 )
             })
-            .collect();
+            .collect::<Result<Vec<Account>>>()?;
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
 
         let mut s = State {
@@ -284,10 +276,15 @@ impl State {
         s.switch_to_alternate_screen();
         debug!("inserting mailbox hashes:");
         for i in 0..s.context.accounts.len() {
-            s.context.is_online(i);
+            if s.context.is_online(i) && s.context.accounts[i].is_empty() {
+                return Err(MeliError::new(format!(
+                    "Account {} has no folders configured.",
+                    s.context.accounts[i].name()
+                )));
+            }
         }
         s.context.restore_input();
-        s
+        Ok(s)
     }
 
     /*
