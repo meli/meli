@@ -53,7 +53,7 @@ impl ListingTrait for ThreadListing {
         (
             self.new_cursor_pos.0,
             self.new_cursor_pos.1,
-            Some(self.locations[self.new_cursor_pos.2]),
+            self.locations.get(self.new_cursor_pos.2).map(|&k| k),
         )
     }
     fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
