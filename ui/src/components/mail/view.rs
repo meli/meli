@@ -1292,7 +1292,10 @@ impl Component for MailView {
         let mut our_map = FnvHashMap::with_capacity_and_hasher(4, Default::default());
         our_map.insert("add_addresses_to_contacts", Key::Char('c'));
         our_map.insert("view_raw_source", Key::Alt('r'));
-        if self.mode.is_attachment() || self.mode == ViewMode::Subview || self.mode == ViewMode::Raw
+        if self.mode.is_attachment()
+            || self.mode == ViewMode::Subview
+            || self.mode == ViewMode::Raw
+            || self.mode == ViewMode::Url
         {
             our_map.insert("return_to_normal_view", Key::Char('r'));
         }

@@ -738,7 +738,7 @@ impl Account {
                 m.merge(&envelopes);
                 if let Some(updated_folders) =
                     self.collection
-                        .merge(envelopes, folder_hash, m, self.sent_folder)
+                        .merge(envelopes, folder_hash, self.sent_folder)
                 {
                     for f in updated_folders {
                         self.notify_fn.notify(f);

@@ -70,7 +70,7 @@ named!(
 named!(
     my_flags<Flag>,
     do_parse!(
-        flags: separated_nonempty_list!(tag!(" "), preceded!(tag!("\\"), is_not!(")")))
+        flags: separated_list!(tag!(" "), preceded!(tag!("\\"), is_not!(")")))
             >> ({
                 let mut ret = Flag::default();
                 for f in flags {
@@ -118,6 +118,20 @@ named!(
             >> body: length_bytes!(delimited!(tag!("{"), map_res!(digit, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) }), tag!("}\r\n")))
             >> tag!(")\r\n")
             >> ((uid_flags.0, uid_flags.1, body))
+        )
+    )
+);
+
+named!(
+    pub uid_fetch_flags_response<Vec<(usize, Flag)>>,
+    many0!(
+        do_parse!(
+            tag!("* ")
+            >> take_while!(call!(is_digit))
+            >> tag!(" FETCH (")
+            >> uid_flags: permutation!(preceded!(ws!(tag!("UID ")), map_res!(digit, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) })), preceded!(ws!(tag!("FLAGS ")), delimited!(tag!("("), byte_flags, tag!(")"))))
+            >> tag!(")\r\n")
+            >> ((uid_flags.0, uid_flags.1))
         )
     )
 );

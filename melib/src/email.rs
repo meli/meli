@@ -556,10 +556,14 @@ impl Envelope {
     pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) {
         self.timestamp = new_val.timestamp() as UnixTimestamp;
     }
-    pub fn set_flag(&mut self, f: Flag, mut operation: Box<dyn BackendOp>) -> Result<()> {
-        self.flags.toggle(f);
-        operation.set_flag(self, f)?;
-        Ok(())
+    pub fn set_flag(
+        &mut self,
+        f: Flag,
+        value: bool,
+        mut operation: Box<dyn BackendOp>,
+    ) -> Result<()> {
+        self.flags.set(f, value);
+        operation.set_flag(self, f, value)
     }
     pub fn set_flags(&mut self, f: Flag) {
         self.flags = f;
@@ -569,14 +573,14 @@ impl Envelope {
     }
     pub fn set_seen(&mut self, operation: Box<dyn BackendOp>) -> Result<()> {
         if !self.flags.contains(Flag::SEEN) {
-            self.set_flag(Flag::SEEN, operation)
+            self.set_flag(Flag::SEEN, true, operation)
         } else {
             Ok(())
         }
     }
     pub fn set_unseen(&mut self, operation: Box<dyn BackendOp>) -> Result<()> {
         if self.flags.contains(Flag::SEEN) {
-            self.set_flag(Flag::SEEN, operation)
+            self.set_flag(Flag::SEEN, false, operation)
         } else {
             Ok(())
         }
@@ -595,6 +599,7 @@ impl Ord for Envelope {
         self.datetime().cmp(&other.datetime())
     }
 }
+
 impl PartialOrd for Envelope {
     fn partial_cmp(&self, other: &Envelope) -> Option<Ordering> {
         Some(self.cmp(other))

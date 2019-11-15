@@ -159,21 +159,12 @@ impl Collection {
         &mut self,
         mut new_envelopes: FnvHashMap<EnvelopeHash, Envelope>,
         folder_hash: FolderHash,
-        mailbox: &mut Mailbox,
         sent_folder: Option<FolderHash>,
     ) -> Option<StackVec<FolderHash>> {
         self.sent_folder = sent_folder;
-        new_envelopes.retain(|&h, e| {
-            if self.message_ids.contains_key(e.message_id().raw()) {
-                /* skip duplicates until a better way to handle them is found. */
-                //FIXME
-                mailbox.remove(h);
-                false
-            } else {
-                self.message_ids.insert(e.message_id().raw().to_vec(), h);
-                true
-            }
-        });
+        for (h, e) in new_envelopes.iter() {
+            self.message_ids.insert(e.message_id().raw().to_vec(), *h);
+        }
 
         let &mut Collection {
             ref mut threads,

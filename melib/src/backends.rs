@@ -250,7 +250,7 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn fetch_headers(&mut self) -> Result<&[u8]>;
     fn fetch_body(&mut self) -> Result<&[u8]>;
     fn fetch_flags(&self) -> Flag;
-    fn set_flag(&mut self, envelope: &mut Envelope, flag: Flag) -> Result<()>;
+    fn set_flag(&mut self, envelope: &mut Envelope, flag: Flag, value: bool) -> Result<()>;
 }
 
 /// Wrapper for BackendOps that are to be set read-only.
@@ -284,7 +284,7 @@ impl BackendOp for ReadOnlyOp {
     fn fetch_flags(&self) -> Flag {
         self.op.fetch_flags()
     }
-    fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag) -> Result<()> {
+    fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag, _value: bool) -> Result<()> {
         Err(MeliError::new("read-only set."))
     }
 }

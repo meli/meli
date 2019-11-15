@@ -250,7 +250,7 @@ impl BackendOp for MboxOp {
         flags
     }
 
-    fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag) -> Result<()> {
+    fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag, _value: bool) -> Result<()> {
         Ok(())
     }
 }

@@ -230,6 +230,9 @@ impl BackendOp for ImapOp {
         } else {
             let mut response = String::with_capacity(8 * 1024);
             let mut conn = self.connection.lock().unwrap();
+            conn.send_command(format!("EXAMINE \"{}\"", &self.folder_path,).as_bytes())
+                .unwrap();
+            conn.read_response(&mut response).unwrap();
             conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())
                 .unwrap();
             conn.read_response(&mut response).unwrap();
@@ -238,7 +241,7 @@ impl BackendOp for ImapOp {
                 response.len(),
                 response.lines().collect::<Vec<&str>>().len()
             );
-            match protocol_parser::uid_fetch_response(response.as_bytes())
+            match protocol_parser::uid_fetch_flags_response(response.as_bytes())
                 .to_full_result()
                 .map_err(MeliError::from)
             {
@@ -248,12 +251,10 @@ impl BackendOp for ImapOp {
                         /* TODO: Trigger cache invalidation here. */
                         panic!(format!("message with UID {} was not found", self.uid));
                     }
-                    let (uid, flags, _) = v[0];
+                    let (uid, flags) = v[0];
                     assert_eq!(uid, self.uid);
-                    if flags.is_some() {
-                        cache.flags = flags;
-                        self.flags.set(flags);
-                    }
+                    cache.flags = Some(flags);
+                    self.flags.set(Some(flags));
                 }
                 Err(e) => Err(e).unwrap(),
             }
@@ -261,7 +262,10 @@ impl BackendOp for ImapOp {
         self.flags.get().unwrap()
     }
 
-    fn set_flag(&mut self, _envelope: &mut Envelope, flag: Flag) -> Result<()> {
+    fn set_flag(&mut self, _envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
+        let mut flags = self.fetch_flags();
+        flags.set(f, value);
+
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock().unwrap();
         conn.send_command(format!("SELECT \"{}\"", &self.folder_path,).as_bytes())?;
@@ -271,33 +275,29 @@ impl BackendOp for ImapOp {
             format!(
                 "UID STORE {} FLAGS.SILENT ({})",
                 self.uid,
-                flags_to_imap_list!(flag)
+                flags_to_imap_list!(flags)
             )
             .as_bytes(),
         )?;
         conn.read_response(&mut response)?;
         debug!(&response);
-        match protocol_parser::uid_fetch_response(response.as_bytes())
+        match protocol_parser::uid_fetch_flags_response(response.as_bytes())
             .to_full_result()
             .map_err(MeliError::from)
         {
             Ok(v) => {
                 if v.len() == 1 {
                     debug!("responses len is {}", v.len());
-                    let (uid, flags, _) = v[0];
+                    let (uid, flags) = v[0];
                     assert_eq!(uid, self.uid);
-                    if flags.is_some() {
-                        self.flags.set(flags);
-                    }
+                    self.flags.set(Some(flags));
                 }
             }
             Err(e) => Err(e).unwrap(),
         }
-        conn.send_command(format!("EXAMINE \"{}\"", &self.folder_path,).as_bytes())?;
-        conn.read_response(&mut response)?;
         let mut bytes_cache = self.uid_store.byte_cache.lock()?;
         let cache = bytes_cache.entry(self.uid).or_default();
-        cache.flags = Some(flag);
+        cache.flags = Some(flags);
         Ok(())
     }
 }
