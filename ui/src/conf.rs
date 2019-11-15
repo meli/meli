@@ -42,7 +42,7 @@ use self::notifications::NotificationsSettings;
 use self::terminal::TerminalSettings;
 use crate::pager::PagerSettings;
 use melib::backends::SpecialUseMailbox;
-use melib::conf::AccountSettings;
+use melib::conf::{toggleflag_de, AccountSettings, FolderConf, ToggleFlag};
 use melib::error::*;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -60,49 +60,6 @@ macro_rules! split_command {
     }};
 }
 
-#[derive(Copy, Debug, Clone, PartialEq)]
-pub enum ToggleFlag {
-    Unset,
-    InternalVal(bool),
-    False,
-    True,
-}
-
-impl From<bool> for ToggleFlag {
-    fn from(val: bool) -> Self {
-        if val {
-            ToggleFlag::True
-        } else {
-            ToggleFlag::False
-        }
-    }
-}
-
-impl Default for ToggleFlag {
-    fn default() -> Self {
-        ToggleFlag::Unset
-    }
-}
-
-impl ToggleFlag {
-    pub fn is_unset(&self) -> bool {
-        ToggleFlag::Unset == *self
-    }
-    pub fn is_internal(&self) -> bool {
-        if let ToggleFlag::InternalVal(_) = *self {
-            true
-        } else {
-            false
-        }
-    }
-    pub fn is_false(&self) -> bool {
-        ToggleFlag::False == *self || ToggleFlag::InternalVal(false) == *self
-    }
-    pub fn is_true(&self) -> bool {
-        ToggleFlag::True == *self || ToggleFlag::InternalVal(true) == *self
-    }
-}
-
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MailUIConf {
     pub pager: Option<PagerSettings>,
@@ -114,37 +71,21 @@ pub struct MailUIConf {
 }
 
 #[serde(default)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FolderConf {
-    pub rename: Option<String>,
-    #[serde(default = "true_val")]
-    pub autoload: bool,
-    #[serde(deserialize_with = "toggleflag_de")]
-    pub subscribe: ToggleFlag,
-    #[serde(deserialize_with = "toggleflag_de")]
-    pub ignore: ToggleFlag,
-    #[serde(default = "none")]
-    pub usage: Option<SpecialUseMailbox>,
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct FileFolderConf {
+    #[serde(flatten)]
+    pub folder_conf: FolderConf,
     #[serde(flatten)]
     pub conf_override: MailUIConf,
 }
 
-impl Default for FolderConf {
-    fn default() -> Self {
-        FolderConf {
-            rename: None,
-            autoload: true,
-            subscribe: ToggleFlag::Unset,
-            ignore: ToggleFlag::Unset,
-            usage: None,
-            conf_override: MailUIConf::default(),
-        }
+impl FileFolderConf {
+    pub fn conf_override(&self) -> &MailUIConf {
+        &self.conf_override
     }
-}
 
-impl FolderConf {
-    pub fn rename(&self) -> Option<&str> {
-        self.rename.as_ref().map(String::as_str)
+    pub fn folder_conf(&self) -> &FolderConf {
+        &self.folder_conf
     }
 }
 
@@ -165,7 +106,8 @@ pub struct FileAccount {
     #[serde(default = "false_val")]
     read_only: bool,
     subscribed_folders: Vec<String>,
-    folders: Option<HashMap<String, FolderConf>>,
+    #[serde(default)]
+    folders: HashMap<String, FileFolderConf>,
     #[serde(default)]
     cache_type: CacheType,
 }
@@ -176,6 +118,11 @@ impl From<FileAccount> for AccountConf {
         let root_folder = x.root_folder.clone();
         let identity = x.identity.clone();
         let display_name = x.display_name.clone();
+        let folders = x
+            .folders
+            .iter()
+            .map(|(k, v)| (k.clone(), v.folder_conf.clone()))
+            .collect();
 
         let mut acc = AccountSettings {
             name: String::new(),
@@ -185,6 +132,7 @@ impl From<FileAccount> for AccountConf {
             read_only: x.read_only,
             display_name,
             subscribed_folders: x.subscribed_folders.clone(),
+            folders,
             extra: x.extra.clone(),
         };
 
@@ -200,52 +148,58 @@ impl From<FileAccount> for AccountConf {
         if !acc.subscribed_folders.contains(&root_tmp) {
             acc.subscribed_folders.push(root_tmp);
         }
-        let mut folder_confs = x.folders.clone().unwrap_or_else(Default::default);
+        let mut folder_confs = x.folders.clone();
         for s in &x.subscribed_folders {
             if !folder_confs.contains_key(s) {
                 folder_confs.insert(
                     s.to_string(),
-                    FolderConf {
-                        subscribe: ToggleFlag::True,
-                        ..FolderConf::default()
+                    FileFolderConf {
+                        folder_conf: FolderConf {
+                            subscribe: ToggleFlag::True,
+                            ..FolderConf::default()
+                        },
+                        ..FileFolderConf::default()
                     },
                 );
             } else {
-                if !folder_confs[s].subscribe.is_unset() {
-                    eprintln!("Configuration error: folder `{}` cannot both have `subscribe` flag set and be in the `subscribed_folders` array", s);
-                    std::process::exit(1);
+                if !folder_confs[s].folder_conf().subscribe.is_unset() {
+                    continue;
                 }
-                folder_confs.get_mut(s).unwrap().subscribe = ToggleFlag::True;
+                folder_confs.get_mut(s).unwrap().folder_conf.subscribe = ToggleFlag::True;
             }
 
-            if folder_confs[s].usage.is_none() {
+            if folder_confs[s].folder_conf().usage.is_none() {
                 let name = s
                     .split(if s.contains('/') { '/' } else { '.' })
                     .last()
                     .unwrap_or("");
-                folder_confs.get_mut(s).unwrap().usage = if name.eq_ignore_ascii_case("inbox") {
-                    Some(SpecialUseMailbox::Inbox)
-                } else if name.eq_ignore_ascii_case("archive") {
-                    Some(SpecialUseMailbox::Archive)
-                } else if name.eq_ignore_ascii_case("drafts") {
-                    Some(SpecialUseMailbox::Drafts)
-                } else if name.eq_ignore_ascii_case("junk") {
-                    Some(SpecialUseMailbox::Junk)
-                } else if name.eq_ignore_ascii_case("spam") {
-                    Some(SpecialUseMailbox::Junk)
-                } else if name.eq_ignore_ascii_case("sent") {
-                    Some(SpecialUseMailbox::Sent)
-                } else if name.eq_ignore_ascii_case("trash") {
-                    Some(SpecialUseMailbox::Trash)
-                } else {
-                    Some(SpecialUseMailbox::Normal)
-                };
+                folder_confs.get_mut(s).unwrap().folder_conf.usage =
+                    if name.eq_ignore_ascii_case("inbox") {
+                        Some(SpecialUseMailbox::Inbox)
+                    } else if name.eq_ignore_ascii_case("archive") {
+                        Some(SpecialUseMailbox::Archive)
+                    } else if name.eq_ignore_ascii_case("drafts") {
+                        Some(SpecialUseMailbox::Drafts)
+                    } else if name.eq_ignore_ascii_case("junk") {
+                        Some(SpecialUseMailbox::Junk)
+                    } else if name.eq_ignore_ascii_case("spam") {
+                        Some(SpecialUseMailbox::Junk)
+                    } else if name.eq_ignore_ascii_case("sent") {
+                        Some(SpecialUseMailbox::Sent)
+                    } else if name.eq_ignore_ascii_case("trash") {
+                        Some(SpecialUseMailbox::Trash)
+                    } else {
+                        Some(SpecialUseMailbox::Normal)
+                    };
             }
 
-            if folder_confs[s].ignore.is_unset() {
+            if folder_confs[s].folder_conf().ignore.is_unset() {
                 use SpecialUseMailbox::*;
-                if [Junk, Sent, Trash].contains(&folder_confs[s].usage.as_ref().unwrap()) {
-                    folder_confs.get_mut(s).unwrap().ignore = ToggleFlag::InternalVal(true);
+                if [Junk, Sent, Trash]
+                    .contains(&folder_confs[s].folder_conf().usage.as_ref().unwrap())
+                {
+                    folder_confs.get_mut(s).unwrap().folder_conf.ignore =
+                        ToggleFlag::InternalVal(true);
                 }
             }
         }
@@ -259,8 +213,8 @@ impl From<FileAccount> for AccountConf {
 }
 
 impl FileAccount {
-    pub fn folders(&self) -> Option<&HashMap<String, FolderConf>> {
-        self.folders.as_ref()
+    pub fn folders(&self) -> &HashMap<String, FileFolderConf> {
+        &self.folders
     }
 
     pub fn folder(&self) -> &str {
@@ -296,7 +250,7 @@ struct FileSettings {
 pub struct AccountConf {
     pub(crate) account: AccountSettings,
     pub(crate) conf: FileAccount,
-    pub(crate) folder_confs: HashMap<String, FolderConf>,
+    pub(crate) folder_confs: HashMap<String, FileFolderConf>,
 }
 
 impl AccountConf {
@@ -424,31 +378,6 @@ pub enum IndexStyle {
 impl Default for IndexStyle {
     fn default() -> Self {
         IndexStyle::Compact
-    }
-}
-
-fn toggleflag_de<'de, D>(deserializer: D) -> std::result::Result<ToggleFlag, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = <bool>::deserialize(deserializer);
-    Ok(match s {
-        Err(_) => ToggleFlag::Unset,
-        Ok(true) => ToggleFlag::True,
-        Ok(false) => ToggleFlag::False,
-    })
-}
-
-impl Serialize for ToggleFlag {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            ToggleFlag::Unset | ToggleFlag::InternalVal(_) => serializer.serialize_none(),
-            ToggleFlag::False => serializer.serialize_bool(false),
-            ToggleFlag::True => serializer.serialize_bool(true),
-        }
     }
 }
 

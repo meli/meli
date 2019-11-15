@@ -23,7 +23,7 @@
  * Account management from user configuration.
  */
 
-use super::{AccountConf, FolderConf};
+use super::{AccountConf, FileFolderConf};
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
@@ -144,7 +144,7 @@ pub struct Account {
     name: String,
     pub is_online: bool,
     pub(crate) folders: FnvHashMap<FolderHash, MailboxEntry>,
-    pub(crate) folder_confs: FnvHashMap<FolderHash, FolderConf>,
+    pub(crate) folder_confs: FnvHashMap<FolderHash, FileFolderConf>,
     pub(crate) folders_order: Vec<FolderHash>,
     pub(crate) folder_names: FnvHashMap<FolderHash, String>,
     tree: Vec<FolderNode>,
@@ -232,7 +232,8 @@ impl Account {
         let backend = map.get(settings.account().format())(
             settings.account(),
             Box::new(move |path: &str| {
-                s.folder_confs.contains_key(path) && s.folder_confs[path].subscribe.is_true()
+                s.folder_confs.contains_key(path)
+                    && s.folder_confs[path].folder_conf().subscribe.is_true()
             }),
         );
         let notify_fn = Arc::new(notify_fn);
@@ -293,13 +294,16 @@ impl Account {
         let mut sent_folder = None;
         for f in ref_folders.values_mut() {
             if !self.settings.folder_confs.contains_key(f.path())
-                || self.settings.folder_confs[f.path()].subscribe.is_false()
+                || self.settings.folder_confs[f.path()]
+                    .folder_conf()
+                    .subscribe
+                    .is_false()
             {
                 /* Skip unsubscribed folder */
                 continue;
             }
 
-            match self.settings.folder_confs[f.path()].usage {
+            match self.settings.folder_confs[f.path()].folder_conf().usage {
                 Some(SpecialUseMailbox::Sent) => {
                     sent_folder = Some(f.hash());
                 }
@@ -314,7 +318,10 @@ impl Account {
         let mut collection: Collection = Collection::new(Default::default());
         for (h, f) in ref_folders.iter() {
             if !self.settings.folder_confs.contains_key(f.path())
-                || self.settings.folder_confs[f.path()].subscribe.is_false()
+                || self.settings.folder_confs[f.path()]
+                    .folder_conf()
+                    .subscribe
+                    .is_false()
             {
                 /* Skip unsubscribed folder */
                 continue;
@@ -392,7 +399,7 @@ impl Account {
         let mut builder = AsyncBuilder::new();
         let our_tx = builder.tx();
         let folder_hash = folder.hash();
-        let priority = match settings.folder_confs[folder.path()].usage {
+        let priority = match settings.folder_confs[folder.path()].folder_conf().usage {
             Some(SpecialUseMailbox::Inbox) => 0,
             Some(SpecialUseMailbox::Sent) => 1,
             Some(SpecialUseMailbox::Drafts) | Some(SpecialUseMailbox::Trash) => 2,
@@ -563,7 +570,7 @@ impl Account {
                     let ref_folders: FnvHashMap<FolderHash, Folder> =
                         self.backend.read().unwrap().folders();
                     let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
-                    if folder_conf.ignore.is_true() {
+                    if folder_conf.folder_conf().ignore.is_true() {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
 
@@ -673,13 +680,12 @@ impl Account {
     }
     pub fn list_folders(&self) -> Vec<Folder> {
         let mut folders = self.backend.read().unwrap().folders();
-        if let Some(folder_confs) = self.settings.conf().folders() {
-            //debug!("folder renames: {:?}", folder_renames);
-            for f in folders.values_mut() {
-                if let Some(r) = folder_confs.get(f.path()) {
-                    if let Some(rename) = r.rename() {
-                        f.change_name(rename);
-                    }
+        let folder_confs = self.settings.conf().folders();
+        //debug!("folder renames: {:?}", folder_renames);
+        for f in folders.values_mut() {
+            if let Some(r) = folder_confs.get(f.path()) {
+                if let Some(rename) = r.folder_conf().rename() {
+                    f.change_name(rename);
                 }
             }
         }
@@ -829,7 +835,7 @@ impl Account {
         self.backend.write().unwrap().folder_operation(path, op)
     }
 
-    pub fn folder_confs(&self, folder_hash: FolderHash) -> &FolderConf {
+    pub fn folder_confs(&self, folder_hash: FolderHash) -> &FileFolderConf {
         &self.folder_confs[&folder_hash]
     }
 
@@ -838,7 +844,7 @@ impl Account {
             .settings
             .folder_confs
             .iter()
-            .find(|(_, f)| f.usage == Some(SpecialUseMailbox::Sent));
+            .find(|(_, f)| f.folder_conf().usage == Some(SpecialUseMailbox::Sent));
         if let Some(sent_folder) = sent_folder.as_ref() {
             sent_folder.0
         } else {
@@ -851,7 +857,7 @@ impl Account {
             .settings
             .folder_confs
             .iter()
-            .find(|(_, f)| f.usage == Some(special_use));
+            .find(|(_, f)| f.folder_conf().usage == Some(special_use));
         ret.as_ref().map(|r| r.0.as_str())
     }
 
