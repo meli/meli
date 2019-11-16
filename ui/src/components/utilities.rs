@@ -22,6 +22,7 @@
 /*! Various useful components that can be used in a generic fashion.
  */
 use super::*;
+use text_processing::Reflow;
 
 mod widgets;
 
@@ -282,6 +283,7 @@ pub enum PageMovement {
 pub struct Pager {
     text: String,
     cursor: (usize, usize),
+    reflow: Reflow,
     height: usize,
     width: usize,
     dirty: bool,
@@ -299,14 +301,18 @@ impl fmt::Display for Pager {
 
 impl Pager {
     const DESCRIPTION: &'static str = "pager";
-    pub fn update_from_str(&mut self, text: &str, width: Option<usize>) {
-        let lines: Vec<String> = if let Some(width) = width {
-            text.split_lines(width)
-        } else {
-            text.trim().split('\n').map(str::to_string).collect()
-        };
+    pub fn set_reflow(&mut self, new_val: Reflow) {
+        self.reflow = new_val;
+    }
 
-        let height = lines.len() + 1;
+    pub fn reflow(&self) -> Reflow {
+        self.reflow
+    }
+
+    pub fn update_from_str(&mut self, text: &str, width: Option<usize>) {
+        let lines: Vec<String> = text.split_lines_reflow(self.reflow, width);
+        debug!(&lines);
+        let height = lines.len() + 2;
         let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
         let ascii_drawing = self.content.ascii_drawing;
         let mut content = CellBuffer::new(width, height, Cell::with_char(' '));

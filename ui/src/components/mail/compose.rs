@@ -84,13 +84,15 @@ pub struct Composer {
 
 impl Default for Composer {
     fn default() -> Self {
+        let mut pager = Pager::default();
+        pager.set_reflow(text_processing::Reflow::FormatFlowed);
         Composer {
             reply_context: None,
             account_cursor: 0,
 
             cursor: Cursor::Headers,
 
-            pager: Pager::default(),
+            pager,
             draft: Draft::default(),
             form: FormWidget::default(),
 
