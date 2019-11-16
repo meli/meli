@@ -395,7 +395,7 @@ impl ListingTrait for CompactListing {
                     if !threads.thread_nodes.contains_key(&env_hash_thread_hash) {
                         continue;
                     }
-                    let thread_group = melib::find_thread_group(
+                    let thread_group = melib::find_root_hash(
                         &threads.thread_nodes,
                         threads.thread_nodes[&env_hash_thread_hash].thread_group(),
                     );
@@ -1175,7 +1175,7 @@ impl Component for CompactListing {
                 if !threads.thread_nodes.contains_key(&new_env_thread_hash) {
                     return false;
                 }
-                let thread_group = melib::find_thread_group(
+                let thread_group = melib::find_root_hash(
                     &threads.thread_nodes,
                     threads.thread_nodes[&new_env_thread_hash].thread_group(),
                 );
@@ -1183,7 +1183,7 @@ impl Component for CompactListing {
                     .order
                     .iter()
                     .find(|(n, _)| {
-                        melib::find_thread_group(
+                        melib::find_root_hash(
                             &threads.thread_nodes,
                             threads.thread_nodes[&n].thread_group(),
                         ) == thread_group

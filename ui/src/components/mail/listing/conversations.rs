@@ -372,10 +372,8 @@ impl ListingTrait for ConversationsListing {
                     if !threads.thread_nodes.contains_key(&env_hash_thread_hash) {
                         continue;
                     }
-                    let thread_group = melib::find_thread_group(
-                        &threads.thread_nodes,
-                        threads.thread_nodes[&env_hash_thread_hash].thread_group(),
-                    );
+                    let thread_group =
+                        melib::find_root_hash(&threads.thread_nodes, env_hash_thread_hash);
                     if self.filtered_order.contains_key(&thread_group) {
                         continue;
                     }
@@ -1066,7 +1064,7 @@ impl Component for ConversationsListing {
                     if !threads.thread_nodes.contains_key(&new_env_thread_hash) {
                         return false;
                     }
-                    let thread_group = melib::find_thread_group(
+                    let thread_group = melib::find_root_hash(
                         &threads.thread_nodes,
                         threads.thread_nodes[&new_env_thread_hash].thread_group(),
                     );
@@ -1074,7 +1072,7 @@ impl Component for ConversationsListing {
                         .order
                         .iter()
                         .find(|(n, _)| {
-                            melib::find_thread_group(
+                            melib::find_root_hash(
                                 &threads.thread_nodes,
                                 threads.thread_nodes[&n].thread_group(),
                             ) == thread_group

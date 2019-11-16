@@ -612,6 +612,17 @@ impl<'a> Iterator for RootIterator<'a> {
     }
 }
 
+pub fn find_root_hash(buf: &FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
+    if buf[&h].parent.is_none() {
+        return h;
+    }
+    let p = buf[&h].parent.unwrap();
+    if buf[&p].message.is_none() {
+        return h;
+    }
+    find_root_hash(buf, p)
+}
+
 pub fn find_thread_group(buf: &FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
     if buf[&h].thread_group == h {
         return h;
@@ -654,7 +665,7 @@ fn union(buf: &mut FnvHashMap<ThreadHash, ThreadNode>, x: ThreadHash, y: ThreadH
 
 impl Threads {
     pub fn is_snoozed(&self, h: ThreadHash) -> bool {
-        let root = find_thread_group(&self.thread_nodes, h);
+        let root = find_root_hash(&self.thread_nodes, h);
         self.thread_nodes[&root].snoozed()
     }
     pub fn find(&mut self, i: ThreadHash) -> ThreadHash {
