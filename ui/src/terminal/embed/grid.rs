@@ -256,12 +256,15 @@ impl EmbedGrid {
                     match codepoints {
                         CodepointBuf::None if c & 0b1110_0000 == 0b1100_0000 => {
                             *codepoints = CodepointBuf::TwoCodepoints(vec![c]);
+                            return;
                         }
                         CodepointBuf::None if c & 0b1111_0000 == 0b1110_0000 => {
                             *codepoints = CodepointBuf::ThreeCodepoints(vec![c]);
+                            return;
                         }
                         CodepointBuf::None if c & 0b1111_1000 == 0b1111_0000 => {
                             *codepoints = CodepointBuf::FourCodepoints(vec![c]);
+                            return;
                         }
                         CodepointBuf::TwoCodepoints(buf) => {
                             grid[cursor_val!()].set_ch(
