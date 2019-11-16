@@ -186,6 +186,16 @@ impl<T: Default + Copy + std::fmt::Debug> IntoIterator for StackVec<T> {
         StackVecIterOwned(self)
     }
 }
+
+impl<'a, T: Default + Copy + std::fmt::Debug> IntoIterator for &'a StackVec<T> {
+    type Item = &'a T;
+    type IntoIter = StackVecIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 impl<T: Default + Copy + std::fmt::Debug> Iterator for StackVecIterOwned<T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
