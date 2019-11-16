@@ -2,6 +2,7 @@ extern crate unicode_segmentation;
 use self::unicode_segmentation::UnicodeSegmentation;
 use crate::tables::LINE_BREAK_RULES;
 use crate::types::LineBreakClass;
+use crate::types::Reflow;
 use core::cmp::Ordering;
 use core::iter::Peekable;
 use core::str::FromStr;
@@ -873,5 +874,219 @@ mod alg {
         }
         lines.reverse();
         lines
+    }
+}
+
+pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> Vec<String> {
+    match reflow {
+        Reflow::FormatFlowed => {
+            /* rfc3676 - The Text/Plain Format and DelSp Parameters
+             * https://tools.ietf.org/html/rfc3676 */
+
+            let mut ret = Vec::new();
+            /*
+             * - Split lines with indices using str::match_indices()
+             * - Iterate and reflow flow regions, and pass fixed regions through
+             */
+            let lines_indices: Vec<usize> = text.match_indices("\n").map(|(i, _)| i).collect();
+            let mut prev_index = 0;
+            let mut in_paragraph = false;
+            let mut paragraph_start = 0;
+
+            let mut prev_quote_depth = 0;
+            for i in &lines_indices {
+                let line = &text[prev_index..*i];
+                let mut trimmed = line.trim_start().lines().next().unwrap_or("");
+                let mut quote_depth = 0;
+                let p_str: usize = trimmed
+                    .as_bytes()
+                    .iter()
+                    .position(|&b| {
+                        if b != b'>' {
+                            /* position() is short-circuiting */
+                            true
+                        } else {
+                            quote_depth += 1;
+                            false
+                        }
+                    })
+                    .unwrap_or(0);
+                trimmed = &trimmed[p_str..];
+                if trimmed.starts_with(" ") {
+                    /* Remove space stuffing before checking for ending space character.
+                     * [rfc3676#section-4.4] */
+                    trimmed = &trimmed[1..];
+                }
+
+                if trimmed.ends_with(' ') {
+                    if !in_paragraph {
+                        in_paragraph = true;
+                        paragraph_start = prev_index;
+                    } else if prev_quote_depth == quote_depth {
+                        /* This becomes part of the paragraph we're in */
+                    } else {
+                        /*Malformed line, different quote depths can't be in the same paragraph. */
+                        let paragraph = &text[paragraph_start..prev_index];
+                        reflow_helper(&mut ret, paragraph, prev_quote_depth, in_paragraph, width);
+
+                        paragraph_start = prev_index;
+                    }
+                } else {
+                    if prev_quote_depth == quote_depth || !in_paragraph {
+                        let paragraph = &text[paragraph_start..*i];
+                        reflow_helper(&mut ret, paragraph, quote_depth, in_paragraph, width);
+                    } else {
+                        /*Malformed line, different quote depths can't be in the same paragraph. */
+                        let paragraph = &text[paragraph_start..prev_index];
+                        reflow_helper(&mut ret, paragraph, prev_quote_depth, in_paragraph, width);
+                        let paragraph = &text[prev_index..*i];
+                        reflow_helper(&mut ret, paragraph, quote_depth, false, width);
+                    }
+                    paragraph_start = *i;
+                    in_paragraph = false;
+                }
+                prev_quote_depth = quote_depth;
+                prev_index = *i;
+            }
+            let paragraph = &text[paragraph_start..text.len()];
+            reflow_helper(&mut ret, paragraph, prev_quote_depth, in_paragraph, width);
+            ret
+        }
+        Reflow::All => {
+            if let Some(width) = width {
+                linear(text, width)
+            } else {
+                text.trim().split('\n').map(str::to_string).collect()
+            }
+        }
+        Reflow::No => text.trim().split('\n').map(str::to_string).collect(),
+    }
+}
+
+fn reflow_helper(
+    ret: &mut Vec<String>,
+    paragraph: &str,
+    quote_depth: usize,
+    in_paragraph: bool,
+    width: Option<usize>,
+) {
+    if quote_depth > 0 {
+        let quotes: String = ">".repeat(quote_depth);
+        let paragraph = paragraph
+            .trim_start_matches(&quotes)
+            .replace(&format!("\n{}", &quotes), "")
+            .replace("\n", "")
+            .replace("\r", "");
+        if in_paragraph {
+            if let Some(width) = width {
+                ret.extend(
+                    linear(&paragraph, width.saturating_sub(quote_depth))
+                        .into_iter()
+                        .map(|l| format!("{}{}", &quotes, l)),
+                );
+            } else {
+                ret.push(format!("{}{}", &quotes, &paragraph));
+            }
+        } else {
+            ret.push(format!("{}{}", &quotes, &paragraph));
+        }
+    } else {
+        let paragraph = paragraph.replace("\n", "").replace("\r", "");
+
+        if in_paragraph {
+            if let Some(width) = width {
+                let ex = linear(&paragraph, width);
+                ret.extend(ex.into_iter());
+            } else {
+                ret.push(paragraph);
+            }
+        } else {
+            ret.push(paragraph);
+        }
+    }
+}
+
+#[test]
+fn test_reflow() {
+    let text = r#"`Take some more tea,' the March Hare said to Alice, very 
+earnestly.
+
+`I've had nothing yet,' Alice replied in an offended tone, `so 
+I can't take more.'
+
+`You mean you can't take LESS,' said the Hatter: `it's very 
+easy to take MORE than nothing.'"#;
+    for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(30)) {
+        println!("{}", l);
+    }
+    println!("");
+    for l in split_lines_reflow(text, Reflow::No, Some(30)) {
+        println!("{}", l);
+    }
+    println!("");
+    let text = r#">>>Take some more tea.
+>>I've had nothing yet, so I can't take more.
+>You mean you can't take LESS, it's very easy to take 
+>MORE than nothing."#;
+    for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(20)) {
+        println!("{}", l);
+    }
+    println!("");
+    for l in split_lines_reflow(text, Reflow::No, Some(20)) {
+        println!("{}", l);
+    }
+    println!("");
+    let text = r#"CHAPTER I. Down the Rabbit-Hole
+
+Alice was beginning to get very tired of sitting by her sister on the 
+bank, and of having nothing to do: once or twice she had peeped into the 
+book her sister was reading, but it had no pictures or conversations in 
+it, ‘and what is the use of a book,’ thought Alice ‘without pictures or 
+conversations?’
+
+So she was considering in her own mind (as well as she could, for the 
+hot day made her feel very sleepy and stupid), whether the pleasure 
+of making a daisy-chain would be worth the trouble of getting up and 
+picking the daisies, when suddenly a White Rabbit with pink eyes ran 
+close by her.
+
+>>There was nothing so VERY remarkable in that; nor did Alice think it so 
+>>VERY much out of the way to hear the Rabbit say to itself, ‘Oh dear! 
+>> Oh dear! I shall be late!’ (when she thought it over afterwards, it 
+>>occurred to her that she ought to have wondered at this, but at the time 
+>>it all seemed quite natural); but when the Rabbit actually TOOK A WATCH 
+OUT OF ITS WAISTCOAT-POCKET, and looked at it, and then hurried on, 
+>>Alice started to her feet, for it flashed across her mind that she had 
+>>never before seen a rabbit with either a waistcoat-pocket, or a watch 
+>>to take out of it, and burning with curiosity, she ran across the field
+after it, and fortunately was just in time to see it pop down a large 
+rabbit-hole under the hedge.
+
+In another moment down went Alice after it, never once considering how 
+in the world she was to get out again.
+
+The rabbit-hole went straight on like a tunnel for some way, and then 
+dipped suddenly down, so suddenly that Alice had not a moment to think 
+about stopping herself before she found herself falling down a very deep 
+well.
+
+Either the well was very deep, or she fell very slowly, for she had 
+plenty of time as she went down to look about her and to wonder what was 
+going to happen next. First, she tried to look down and make out what 
+she was coming to, but it was too dark to see anything; then she 
+looked at the sides of the well, and noticed that they were filled with 
+cupboards and book-shelves; here and there she saw maps and pictures 
+hung upon pegs. She took down a jar from one of the shelves as 
+she passed; it was labelled ‘ORANGE MARMALADE’, but to her great 
+disappointment it was empty: she did not like to drop the jar for fear 
+of killing somebody, so managed to put it into one of the cupboards as 
+she fell past it.
+
+‘Well!’ thought Alice to herself, ‘after such a fall as this, I shall 
+think nothing of tumbling down stairs! How brave they’ll all think me at 
+home! Why, I wouldn’t say anything about it, even if I fell off the top 
+of the house!’ (Which was very likely true.)"#;
+    for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(72)) {
+        println!("{}", l);
     }
 }
