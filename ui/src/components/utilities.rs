@@ -828,6 +828,8 @@ impl Component for StatusBar {
                 if self.auto_complete.set_suggestions(suggestions) {
                     let len = self.auto_complete.suggestions().len() - 1;
                     self.auto_complete.set_cursor(len);
+
+                    self.container.set_dirty();
                 }
                 let hist_height = std::cmp::min(15, self.auto_complete.suggestions().len());
                 let hist_area = if height < self.auto_complete.suggestions().len() {
@@ -978,7 +980,8 @@ impl Component for StatusBar {
             UIEvent::ChangeMode(m) => {
                 let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
                 self.status.replace_range(..offset, &format!("{} ", m));
-                self.dirty = true;
+                self.set_dirty();
+                self.container.set_dirty();
                 self.mode = *m;
                 match m {
                     UIMode::Normal => {
