@@ -554,10 +554,14 @@ impl Component for MailView {
                         y = _y;
                     }
                     if archive.is_some() || post.is_some() || unsubscribe.is_some() {
-                        grid[(x - 2, y)].set_ch(' ');
-                        grid[(x - 1, y)].set_fg(header_fg);
-                        grid[(x - 1, y)].set_bg(Color::Default);
-                        grid[(x - 1, y)].set_ch(']');
+                        if x >= 2 {
+                            grid[(x - 2, y)].set_ch(' ');
+                        }
+                        if x > 0 {
+                            grid[(x - 1, y)].set_fg(header_fg);
+                            grid[(x - 1, y)].set_bg(Color::Default);
+                            grid[(x - 1, y)].set_ch(']');
+                        }
                     }
                     for x in x..=get_x(bottom_right) {
                         grid[(x, y)].set_ch(' ');
