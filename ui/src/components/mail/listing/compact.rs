@@ -830,8 +830,8 @@ impl CompactListing {
     ) {
         let account = &mut context.accounts[self.cursor_pos.0];
         let mut envs_to_set: StackVec<EnvelopeHash> = StackVec::new();
+        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         {
-            let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
             let mut stack = StackVec::new();
             stack.push(thread_hash);
             while let Some(thread_iter) = stack.pop() {
@@ -858,8 +858,7 @@ impl CompactListing {
             }
         }
         for env_hash in envs_to_set {
-            let hash = account.collection.get_env(env_hash).hash();
-            let op = account.operation(hash);
+            let op = account.operation(env_hash);
             let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
             match a {
                 ListingAction::SetSeen => {
@@ -884,6 +883,72 @@ impl CompactListing {
                 _ => unreachable!(),
             }
             self.row_updates.push(thread_hash);
+            let has_attachments = envelope.has_attachments();
+            drop(envelope);
+            let threads = &account.collection.threads[&folder_hash];
+            let fg_color = if threads[&thread_hash].has_unseen() {
+                Color::Byte(0)
+            } else {
+                Color::Default
+            };
+            let idx = self.order[&thread_hash];
+            let bg_color = if context.settings.terminal.theme == "light" {
+                if threads[&thread_hash].has_unseen() {
+                    Color::Byte(251)
+                } else if idx % 2 == 0 {
+                    Color::Byte(252)
+                } else {
+                    Color::Default
+                }
+            } else {
+                if threads[&thread_hash].has_unseen() {
+                    Color::Byte(253)
+                } else if idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                }
+            };
+            let min_width = (
+                self.data_columns.columns[0].size().0,
+                self.data_columns.columns[1].size().0,
+                self.data_columns.columns[2].size().0,
+                self.data_columns.columns[3].size().0,
+                self.data_columns.columns[4].size().0,
+            );
+            for x in 0..min_width.0 {
+                self.data_columns.columns[0][(x, idx)].set_fg(fg_color);
+                self.data_columns.columns[0][(x, idx)].set_bg(bg_color);
+            }
+            for x in 0..min_width.1 {
+                self.data_columns.columns[1][(x, idx)].set_fg(fg_color);
+                self.data_columns.columns[1][(x, idx)].set_bg(bg_color);
+            }
+            for x in 0..min_width.2 {
+                self.data_columns.columns[2][(x, idx)].set_fg(fg_color);
+                self.data_columns.columns[2][(x, idx)].set_bg(bg_color);
+            }
+            for x in 0..min_width.3 {
+                self.data_columns.columns[3][(x, idx)].set_fg(fg_color);
+                self.data_columns.columns[3][(x, idx)].set_bg(bg_color);
+            }
+            for x in 0..min_width.4 {
+                self.data_columns.columns[4][(x, idx)].set_fg(fg_color);
+                self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
+            }
+            match (threads.is_snoozed(thread_hash), has_attachments) {
+                (true, true) => {
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
+                    self.data_columns.columns[3][(2, idx)].set_fg(Color::Red);
+                }
+                (true, false) => {
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
+                }
+                (false, true) => {
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
+                }
+                (false, false) => {}
+            }
         }
     }
 }
