@@ -99,7 +99,11 @@ impl ListingTrait for CompactListing {
         let threads = &account.collection.threads[&folder_hash];
         let thread_node = &threads.thread_nodes[&i];
 
-        let fg_color = self.data_columns.columns[0][(0, idx)].fg();
+        let fg_color = if thread_node.has_unseen() {
+            Color::Byte(0)
+        } else {
+            Color::Default
+        };
         let bg_color = if context.settings.terminal.theme == "light" {
             if self.cursor_pos.2 == idx {
                 Color::Byte(244)
@@ -107,8 +111,10 @@ impl ListingTrait for CompactListing {
                 Color::Byte(210)
             } else if thread_node.has_unseen() {
                 Color::Byte(251)
+            } else if idx % 2 == 0 {
+                Color::Byte(252)
             } else {
-                self.data_columns.columns[0][(0, idx)].bg()
+                Color::Default
             }
         } else {
             if self.cursor_pos.2 == idx {
@@ -116,9 +122,11 @@ impl ListingTrait for CompactListing {
             } else if self.selection[&i] {
                 Color::Byte(210)
             } else if thread_node.has_unseen() {
-                Color::Byte(251)
+                Color::Byte(253)
+            } else if idx % 2 == 0 {
+                Color::Byte(236)
             } else {
-                self.data_columns.columns[0][(0, idx)].bg()
+                Color::Default
             }
         };
 
@@ -295,8 +303,14 @@ impl ListingTrait for CompactListing {
         }
         for r in 0..cmp::min(self.length - top_idx, rows) {
             let (fg_color, bg_color) = {
+                let thread_hash = self.get_thread_under_cursor(r + top_idx, context);
+
                 let c = &self.data_columns.columns[0][(0, r + top_idx)];
-                (c.fg(), c.bg())
+                if self.selection[&thread_hash] {
+                    (c.fg(), Color::Byte(210))
+                } else {
+                    (c.fg(), c.bg())
+                }
             };
             change_colors(
                 grid,
