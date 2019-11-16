@@ -175,11 +175,14 @@ impl Draft {
             let reply_body_bytes = decode_rec(&body, None);
             let reply_body = String::from_utf8_lossy(&reply_body_bytes);
             let lines: Vec<&str> = reply_body.lines().collect();
-            let mut ret = String::with_capacity(reply_body.len() + lines.len());
+            let mut ret = format!(
+                "On {} {} wrote:\n",
+                envelope.date_as_str(),
+                ret.headers()["To"]
+            );
             for l in lines {
                 ret.push('>');
-                ret.push(' ');
-                ret.push_str(l.trim());
+                ret.push_str(l);
                 ret.push('\n');
             }
             ret.pop();
