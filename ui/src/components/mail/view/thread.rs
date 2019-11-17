@@ -950,41 +950,6 @@ impl Component for ThreadView {
 
         let shortcuts = &self.get_shortcuts(context)[ThreadView::DESCRIPTION];
         match *event {
-            UIEvent::Input(Key::Char('R')) => {
-                context.replies.push_back(UIEvent::Action(Tab(Reply(
-                    self.coordinates,
-                    self.entries[self.expanded_pos].index.1,
-                ))));
-                return true;
-            }
-            UIEvent::Input(Key::Char('e')) => {
-                {
-                    let account = &context.accounts[self.coordinates.0];
-                    let mailbox = &account[self.coordinates.1].unwrap();
-                    let threads = &account.collection.threads[&mailbox.folder.hash()];
-                    let thread_node =
-                        &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
-                    let i = if let Some(i) = thread_node.message() {
-                        i
-                    } else {
-                        threads.thread_nodes()[&thread_node.children()[0]]
-                            .message()
-                            .unwrap()
-                    };
-                    let envelope: EnvelopeRef = account.collection.get_env(i);
-                    let op = account.operation(envelope.hash());
-                    debug!(
-                        "sending action edit for {}, {}",
-                        envelope.message_id(),
-                        op.description()
-                    );
-                    context.replies.push_back(UIEvent::Action(Tab(Edit(
-                        self.coordinates.0,
-                        envelope.hash(),
-                    ))));
-                }
-                return true;
-            }
             UIEvent::Input(Key::Up) => {
                 if self.cursor_pos > 0 {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
@@ -1111,7 +1076,6 @@ impl Component for ThreadView {
         map.insert(
             ThreadView::DESCRIPTION.to_string(),
             [
-                ("reply", Key::Char('R')),
                 ("reverse thread order", Key::Ctrl('r')),
                 ("toggle_mailview", Key::Char('p')),
                 ("toggle_subthread visibility", Key::Char('h')),

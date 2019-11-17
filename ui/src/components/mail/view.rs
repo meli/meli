@@ -707,11 +707,35 @@ impl Component for MailView {
 
         let shortcuts = &self.get_shortcuts(context)[MailView::DESCRIPTION];
         match *event {
+            UIEvent::Input(ref k) if *k == shortcuts["reply"] => {
+                let account = &context.accounts[self.coordinates.0];
+                let folder_hash = account[self.coordinates.1].unwrap().folder.hash();
+                let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
+                let thread_hash = envelope.thread();
+                let threads = &account.collection.threads[&folder_hash];
+                let root_thread_hash = melib::find_root_hash(&threads.thread_nodes, thread_hash);
+                let root_idx = threads
+                    .root_iter()
+                    .position(|t| t == root_thread_hash)
+                    .unwrap();
+                context.replies.push_back(UIEvent::Action(Tab(Reply(
+                    (self.coordinates.0, self.coordinates.1, root_idx),
+                    thread_hash,
+                ))));
+                return true;
+            }
+            UIEvent::Input(ref k) if *k == shortcuts["edit"] => {
+                context.replies.push_back(UIEvent::Action(Tab(Edit(
+                    self.coordinates.0,
+                    self.coordinates.2,
+                ))));
+                return true;
+            }
             UIEvent::Input(ref key)
                 if !self.mode.is_contact_selector()
                     && *key == shortcuts["add_addresses_to_contacts"] =>
             {
-                let account = &mut context.accounts[self.coordinates.0];
+                let account = &context.accounts[self.coordinates.0];
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
 
                 let mut entries = Vec::new();
@@ -1296,6 +1320,8 @@ impl Component for MailView {
         let mut our_map = FnvHashMap::with_capacity_and_hasher(4, Default::default());
         our_map.insert("add_addresses_to_contacts", Key::Char('c'));
         our_map.insert("view_raw_source", Key::Alt('r'));
+        our_map.insert("reply", Key::Char('R'));
+        our_map.insert("edit", Key::Char('e'));
         if self.mode.is_attachment()
             || self.mode == ViewMode::Subview
             || self.mode == ViewMode::Raw
