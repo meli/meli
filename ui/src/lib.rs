@@ -25,7 +25,7 @@
 
 #[macro_use]
 extern crate melib;
-extern crate mime_apps;
+pub extern crate mime_apps;
 extern crate notify_rust;
 extern crate text_processing;
 #[macro_use]
