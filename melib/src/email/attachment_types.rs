@@ -140,6 +140,7 @@ impl From<&[u8]> for MultipartType {
 pub enum ContentType {
     Text {
         kind: Text,
+        parameters: Vec<(Vec<u8>, Vec<u8>)>,
         charset: Charset,
     },
     Multipart {
@@ -162,6 +163,7 @@ impl Default for ContentType {
     fn default() -> Self {
         ContentType::Text {
             kind: Text::Plain,
+            parameters: Vec::new(),
             charset: Charset::UTF8,
         }
     }

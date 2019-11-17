@@ -329,18 +329,14 @@ fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentB
             ContentType::Text {
                 kind: crate::email::attachment_types::Text::Plain,
                 charset: Charset::UTF8,
-            } => {
+                parameters: ref v,
+            } if v.is_empty() => {
                 ret.push('\n');
                 ret.push_str(&String::from_utf8_lossy(sub.raw()));
                 ret.push('\n');
             }
-            Text {
-                ref kind,
-                charset: _,
-            } => {
-                ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", kind).chars());
-                ret.push('\n');
-                ret.push_str(&String::from_utf8_lossy(sub.raw()));
+            Text { .. } => {
+                ret.extend(sub.build().into_raw().chars());
                 ret.push('\n');
             }
             Multipart {

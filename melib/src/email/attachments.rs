@@ -131,10 +131,7 @@ impl AttachmentBuilder {
                         parts,
                     };
                 } else if ct.eq_ignore_ascii_case(b"text") {
-                    self.content_type = ContentType::Text {
-                        kind: Text::Plain,
-                        charset: Charset::UTF8,
-                    };
+                    self.content_type = ContentType::default();
                     for (n, v) in params {
                         if n.eq_ignore_ascii_case(b"charset") {
                             if let ContentType::Text {
@@ -143,7 +140,13 @@ impl AttachmentBuilder {
                             {
                                 *c = Charset::from(v);
                             }
-                            break;
+                        }
+                        if let ContentType::Text {
+                            parameters: ref mut p,
+                            ..
+                        } = self.content_type
+                        {
+                            p.push((n.to_vec(), v.to_vec()));
                         }
                     }
                     if cst.eq_ignore_ascii_case(b"html") {
@@ -587,11 +590,28 @@ impl Attachment {
                 .chars(),
             );
             match &a.content_type {
-                ContentType::Text { kind: _, charset } => {
+                ContentType::Text {
+                    kind: _,
+                    parameters,
+                    charset,
+                } => {
                     ret.extend(
-                        format!("Content-Type: {}; charset={}\n\n", a.content_type, charset)
-                            .chars(),
+                        format!("Content-Type: {}; charset={}", a.content_type, charset).chars(),
                     );
+                    for (n, v) in parameters {
+                        ret.push_str("; ");
+                        ret.extend(String::from_utf8_lossy(n).chars());
+                        ret.push_str("=");
+                        if v.contains(&b' ') {
+                            ret.push_str("\"");
+                        }
+                        ret.extend(String::from_utf8_lossy(v).chars());
+                        if v.contains(&b' ') {
+                            ret.push_str("\"");
+                        }
+                    }
+
+                    ret.push_str("\n\n");
                     ret.extend(String::from_utf8_lossy(a.body()).chars());
                 }
                 ContentType::Multipart {
