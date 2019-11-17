@@ -18,7 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use super::default_vals::{false_val, none};
+use super::default_vals::{false_val, none, true_val};
 
 /// Settings for writing and sending new e-mail
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -32,6 +32,10 @@ pub struct ComposingSettings {
     /// Embed editor (for terminal interfaces) instead of forking and waiting.
     #[serde(default = "false_val")]
     pub embed: bool,
+    /// Set "format=flowed" in plain text attachments.
+    /// Default: true
+    #[serde(default = "true_val")]
+    pub format_flowed: bool,
 }
 
 impl Default for ComposingSettings {
@@ -40,6 +44,7 @@ impl Default for ComposingSettings {
             mailer_cmd: String::new(),
             editor_cmd: None,
             embed: false,
+            format_flowed: true,
         }
     }
 }

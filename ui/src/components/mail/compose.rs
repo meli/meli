@@ -1202,6 +1202,7 @@ pub fn send_draft(
     use std::process::{Command, Stdio};
     let mut failure = true;
     let settings = &context.settings;
+    let format_flowed = settings.composing.format_flowed;
     let parts = split_command!(settings.composing.mailer_cmd);
     let (cmd, args) = (parts[0], &parts[1..]);
     let mut msmtp = Command::new(cmd)
@@ -1213,8 +1214,18 @@ pub fn send_draft(
     {
         let stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
         if sign_mail.is_true() {
+            let mut content_type = ContentType::default();
+            if format_flowed {
+                if let ContentType::Text {
+                    ref mut parameters, ..
+                } = content_type
+                {
+                    parameters.push((b"format".to_vec(), b"flowed".to_vec()));
+                }
+            }
+
             let mut body: AttachmentBuilder = Attachment::new(
-                Default::default(),
+                content_type,
                 Default::default(),
                 std::mem::replace(&mut draft.body, String::new()).into_bytes(),
             )
