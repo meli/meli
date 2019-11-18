@@ -1,9 +1,15 @@
 .POSIX:
 .SUFFIXES:
 meli:
-	cargo build --features="$(MELI_FEATURES)" --release
+	cargo build $(FEATURES)--release
 
 PREFIX=/usr/local
+
+ifdef MELI_FEATURES
+  FEATURES ?= --features="$(MELI_FEATURES)" 
+else
+  FEATURES ?=
+endif
 
 .PHONY: clean
 clean: rm -ri ./target/
