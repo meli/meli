@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use super::*;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
@@ -27,7 +27,7 @@ pub struct ImapWatchKit {
     pub is_online: Arc<Mutex<bool>>,
     pub main_conn: Arc<Mutex<ImapConnection>>,
     pub uid_store: Arc<UIDStore>,
-    pub folders: Arc<Mutex<FnvHashMap<FolderHash, ImapFolder>>>,
+    pub folders: Arc<RwLock<FnvHashMap<FolderHash, ImapFolder>>>,
     pub sender: RefreshEventConsumer,
     pub work_context: WorkContext,
 }
@@ -71,7 +71,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
             .send((thread_id, "sleeping...".to_string()))
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(5 * 60 * 1000));
-        let folders = folders.lock().unwrap();
+        let folders = folders.read().unwrap();
         for folder in folders.values() {
             work_context
                 .set_status
@@ -109,7 +109,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     }
     let thread_id: std::thread::ThreadId = std::thread::current().id();
     let folder: ImapFolder = folders
-        .lock()
+        .read()
         .unwrap()
         .values()
         .find(|f| f.parent.is_none() && f.path().eq_ignore_ascii_case("INBOX"))
@@ -207,7 +207,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         if now.duration_since(watch) >= _5_mins {
             /* Time to poll all inboxes */
             let mut conn = main_conn.lock().unwrap();
-            for folder in folders.lock().unwrap().values() {
+            for folder in folders.read().unwrap().values() {
                 work_context
                     .set_status
                     .send((

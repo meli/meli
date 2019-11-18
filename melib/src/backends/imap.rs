@@ -44,7 +44,7 @@ use fnv::{FnvHashMap, FnvHashSet};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 pub type UID = usize;
 
 pub static SUPPORTED_CAPABILITIES: &'static [&'static str] = &["IDLE"];
@@ -100,7 +100,7 @@ pub struct ImapType {
     server_conf: ImapServerConf,
     uid_store: Arc<UIDStore>,
 
-    folders: Arc<Mutex<FnvHashMap<FolderHash, ImapFolder>>>,
+    folders: Arc<RwLock<FnvHashMap<FolderHash, ImapFolder>>>,
 }
 
 impl MailBackend for ImapType {
@@ -125,7 +125,7 @@ impl MailBackend for ImapType {
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
             let (permissions, folder_exists) = {
-                let f = &self.folders.lock().unwrap()[&folder_hash];
+                let f = &self.folders.read().unwrap()[&folder_hash];
                 (f.permissions.clone(), f.exists.clone())
             };
             let connection = self.connection.clone();
@@ -270,13 +270,16 @@ impl MailBackend for ImapType {
     }
 
     fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
-        let mut folders = self.folders.lock().unwrap();
-        if !folders.is_empty() {
-            return folders
-                .iter()
-                .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
-                .collect();
+        {
+            let folders = self.folders.read().unwrap();
+            if !folders.is_empty() {
+                return folders
+                    .iter()
+                    .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
+                    .collect();
+            }
         }
+        let mut folders = self.folders.write().unwrap();
         *folders = ImapType::imap_folders(&self.connection);
         folders.retain(|_, f| (self.is_subscribed)(f.path()));
         let keys = folders.keys().cloned().collect::<FnvHashSet<FolderHash>>();
@@ -294,7 +297,7 @@ impl MailBackend for ImapType {
         let (uid, folder_hash) = self.uid_store.hash_index.lock().unwrap()[&hash];
         Box::new(ImapOp::new(
             uid,
-            self.folders.lock().unwrap()[&folder_hash]
+            self.folders.read().unwrap()[&folder_hash]
                 .path()
                 .to_string(),
             self.connection.clone(),
@@ -304,7 +307,7 @@ impl MailBackend for ImapType {
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
         let path = {
-            let folders = self.folders.lock().unwrap();
+            let folders = self.folders.read().unwrap();
 
             let f_result = folders.values().find(|v| v.name == folder);
             if f_result
@@ -349,7 +352,7 @@ impl MailBackend for ImapType {
         match (
             &op,
             self.folders
-                .lock()
+                .read()
                 .unwrap()
                 .values()
                 .any(|f| f.path == path),
@@ -472,7 +475,7 @@ impl ImapType {
             server_conf,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
 
-            folders: Arc::new(Mutex::new(Default::default())),
+            folders: Arc::new(RwLock::new(Default::default())),
             connection: Arc::new(Mutex::new(connection)),
             uid_store: Arc::new(UIDStore {
                 uidvalidity: Default::default(),
@@ -575,7 +578,7 @@ impl ImapType {
         query: String,
         folder_hash: FolderHash,
     ) -> Result<crate::structs::StackVec<EnvelopeHash>> {
-        let folders_lck = self.folders.lock()?;
+        let folders_lck = self.folders.read()?;
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock()?;
         conn.send_command(format!("EXAMINE {}", folders_lck[&folder_hash].path()).as_bytes())?;
