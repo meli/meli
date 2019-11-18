@@ -588,6 +588,11 @@ impl Envelope {
     pub fn is_seen(&self) -> bool {
         self.flags.contains(Flag::SEEN)
     }
+
+    pub fn set_has_attachments(&mut self, new_val: bool) {
+        self.has_attachments = new_val;
+    }
+
     pub fn has_attachments(&self) -> bool {
         self.has_attachments
     }

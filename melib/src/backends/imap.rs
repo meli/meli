@@ -179,7 +179,7 @@ impl MailBackend for ImapType {
                 while exists > 1 {
                     let mut envelopes = vec![];
                     exit_on_error!(&tx,
-                                   conn.send_command(format!("UID FETCH {}:{} (UID FLAGS ENVELOPE)", std::cmp::max(exists.saturating_sub(20000), 1), exists).as_bytes())
+                                   conn.send_command(format!("UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)", std::cmp::max(exists.saturating_sub(20000), 1), exists).as_bytes())
                                    conn.read_response(&mut response)
                     );
                     debug!(

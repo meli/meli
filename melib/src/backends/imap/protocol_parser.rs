@@ -1,4 +1,5 @@
 use super::*;
+use crate::email::parser::BytesExt;
 use nom::{digit, is_digit, rest, IResult};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -597,8 +598,20 @@ named!(
             >> uid_flags: permutation!(preceded!(ws!(tag!("UID ")), map_res!(digit, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) })), opt!(preceded!(ws!(tag!("FLAGS ")), delimited!(tag!("("), byte_flags, tag!(")")))))
             >> tag!(" ENVELOPE ")
             >> env: ws!(envelope)
+            >> tag!("BODYSTRUCTURE ")
+            >> bodystructure: take_until!(")\r\n")
             >> tag!(")\r\n")
-            >> ((uid_flags.0, uid_flags.1, env))
+            >> ({
+                let mut env = env;
+                debug!(unsafe { std::str::from_utf8_unchecked(bodystructure) });
+                let has_attachments = bodystructure_has_attachments(bodystructure);
+                env.set_has_attachments(has_attachments);
+                (uid_flags.0, uid_flags.1, env)
+            })
         )
     )
 );
+
+pub fn bodystructure_has_attachments(input: &[u8]) -> bool {
+    input.rfind(b" \"mixed\" ").is_some() || input.rfind(b" \"MIXED\" ").is_some()
+}

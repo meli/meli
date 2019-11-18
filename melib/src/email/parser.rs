@@ -53,6 +53,7 @@ pub trait BytesExt {
     fn ltrim(&self) -> &Self;
     fn trim(&self) -> &Self;
     fn find(&self, needle: &[u8]) -> Option<usize>;
+    fn rfind(&self, needle: &[u8]) -> Option<usize>;
     fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8>;
 }
 
@@ -79,6 +80,12 @@ impl BytesExt for [u8] {
         self.windows(needle.len())
             .position(|window| window == needle)
     }
+
+    fn rfind(&self, needle: &[u8]) -> Option<usize> {
+        self.windows(needle.len())
+            .rposition(|window| window == needle)
+    }
+
     fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8> {
         let mut ret = self.to_vec();
         if let Some(idx) = self.find(from) {
