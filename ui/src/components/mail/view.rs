@@ -693,7 +693,7 @@ impl Component for MailView {
 
         let shortcuts = &self.get_shortcuts(context)[MailView::DESCRIPTION];
         match *event {
-            UIEvent::Input(ref k) if *k == shortcuts["reply"] => {
+            UIEvent::Input(ref k) if k == shortcuts["reply"] => {
                 let account = &context.accounts[self.coordinates.0];
                 let folder_hash = account[self.coordinates.1].unwrap().folder.hash();
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
@@ -710,7 +710,7 @@ impl Component for MailView {
                 ))));
                 return true;
             }
-            UIEvent::Input(ref k) if *k == shortcuts["edit"] => {
+            UIEvent::Input(ref k) if k == shortcuts["edit"] => {
                 context.replies.push_back(UIEvent::Action(Tab(Edit(
                     self.coordinates.0,
                     self.coordinates.2,
@@ -719,7 +719,7 @@ impl Component for MailView {
             }
             UIEvent::Input(ref key)
                 if !self.mode.is_contact_selector()
-                    && *key == shortcuts["add_addresses_to_contacts"] =>
+                    && key == shortcuts["add_addresses_to_contacts"] =>
             {
                 let account = &context.accounts[self.coordinates.0];
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
@@ -766,7 +766,7 @@ impl Component for MailView {
             }
             UIEvent::Input(ref key)
                 if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
-                    && *key == shortcuts["view_raw_source"] =>
+                    && key == shortcuts["view_raw_source"] =>
             {
                 self.mode = ViewMode::Raw;
                 self.set_dirty();
@@ -777,7 +777,7 @@ impl Component for MailView {
                     || self.mode == ViewMode::Subview
                     || self.mode == ViewMode::Url
                     || self.mode == ViewMode::Raw)
-                    && *key == shortcuts["return_to_normal_view"] =>
+                    && key == shortcuts["return_to_normal_view"] =>
             {
                 self.mode = ViewMode::Normal;
                 self.set_dirty();
@@ -786,7 +786,7 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
                     && !self.cmd_buf.is_empty()
-                    && *key == shortcuts["open_mailcap"] =>
+                    && key == shortcuts["open_mailcap"] =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -843,7 +843,7 @@ impl Component for MailView {
                 }
             }
             UIEvent::Input(ref key)
-                if *key == shortcuts["open_attachment"]
+                if key == shortcuts["open_attachment"]
                     && !self.cmd_buf.is_empty()
                     && (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview) =>
             {
@@ -975,7 +975,7 @@ impl Component for MailView {
                     }
                 };
             }
-            UIEvent::Input(ref key) if *key == shortcuts["toggle_expand_headers"] => {
+            UIEvent::Input(ref key) if key == shortcuts["toggle_expand_headers"] => {
                 self.expand_headers = !self.expand_headers;
                 self.dirty = true;
                 return true;
@@ -983,7 +983,7 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if !self.cmd_buf.is_empty()
                     && self.mode == ViewMode::Url
-                    && *key == shortcuts["go_to_url"] =>
+                    && key == shortcuts["go_to_url"] =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -1041,7 +1041,7 @@ impl Component for MailView {
             }
             UIEvent::Input(ref key)
                 if (self.mode == ViewMode::Normal || self.mode == ViewMode::Url)
-                    && *key == shortcuts["toggle_url_mode"] =>
+                    && key == shortcuts["toggle_url_mode"] =>
             {
                 match self.mode {
                     ViewMode::Normal => self.mode = ViewMode::Url,
@@ -1338,7 +1338,7 @@ impl Component for MailView {
             our_map.insert("toggle_url_mode", Key::Char('u'));
         }
         our_map.insert("toggle_expand_headers", Key::Char('h'));
-        map.insert(MailView::DESCRIPTION.to_string(), our_map);
+        map.insert(MailView::DESCRIPTION, our_map);
 
         map
     }

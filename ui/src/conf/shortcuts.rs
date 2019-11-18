@@ -5,7 +5,11 @@ use fnv::FnvHashMap;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Shortcuts {
     #[serde(flatten)]
+    pub general: GeneralShortcuts,
+    #[serde(flatten)]
     pub listing: ListingShortcuts,
+    #[serde(flatten)]
+    pub composing: ComposingShortcuts,
     #[serde(flatten)]
     pub compact_listing: CompactListingShortcuts,
     #[serde(flatten)]
@@ -38,9 +42,9 @@ macro_rules! shortcut_key_values {
                 }
             }
             /// Returns a hashmap of all shortcuts and their values
-            pub fn key_values(&self) -> FnvHashMap<&'static str, &Key> {
+            pub fn key_values(&self) -> FnvHashMap<&'static str, Key> {
                 [
-                $((stringify!($fname),&(self.$fname)),)*
+                $((stringify!($fname),(self.$fname).clone()),)*
                 ].iter().cloned().collect()
             }
         }
@@ -98,5 +102,19 @@ shortcut_key_values! { "pager",
         scroll_down: Key |> "Scroll down pager." |> Key::Char('j'),
         page_up: Key |> "Go to previous pager page" |>  Key::PageUp,
         page_down: Key |> "Go to next pager page" |>  Key::PageDown
+    }
+}
+
+shortcut_key_values! { "general",
+    pub struct GeneralShortcuts {
+            next_tab: Key |> "Next tab." |> Key::Char('T'),
+            go_to_tab: Key |> "Go to the nth tab" |> Key::Alt('n')
+    }
+}
+
+shortcut_key_values! { "composing",
+    pub struct ComposingShortcuts {
+            send_mail: Key |> "Deliver draft to mailer" |> Key::Char('s'),
+            edit_mail: Key |> "Edit mail." |> Key::Char('e')
     }
 }

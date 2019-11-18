@@ -1034,10 +1034,8 @@ impl Component for Composer {
             Default::default()
         };
 
-        let mut our_map: ShortcutMap = Default::default();
-        our_map.insert("Deliver draft to mailer.", Key::Char('s'));
-        our_map.insert("Edit in $EDITOR", Key::Char('e'));
-        map.insert(Composer::DESCRIPTION.to_string(), our_map);
+        let our_map: ShortcutMap = context.settings.shortcuts.composing.key_values();
+        map.insert(Composer::DESCRIPTION, our_map);
 
         map
     }

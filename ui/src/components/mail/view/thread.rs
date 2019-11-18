@@ -1074,7 +1074,7 @@ impl Component for ThreadView {
         let config_map = context.settings.shortcuts.compact_listing.key_values();
 
         map.insert(
-            ThreadView::DESCRIPTION.to_string(),
+            ThreadView::DESCRIPTION,
             [
                 ("reverse thread order", Key::Ctrl('r')),
                 ("toggle_mailview", Key::Char('p')),

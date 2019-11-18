@@ -311,7 +311,6 @@ impl Pager {
 
     pub fn update_from_str(&mut self, text: &str, width: Option<usize>) {
         let lines: Vec<String> = text.split_lines_reflow(self.reflow, width);
-        debug!(&lines);
         let height = lines.len() + 2;
         let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
         let ascii_drawing = self.content.ascii_drawing;
@@ -616,23 +615,11 @@ impl Component for Pager {
         self.dirty = true;
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let config_map: FnvHashMap<&'static str, &Key> =
+        let config_map: FnvHashMap<&'static str, Key> =
             context.settings.shortcuts.pager.key_values();
-        [(
-            Pager::DESCRIPTION.to_string(),
-            [
-                ("scroll_up", (*config_map["scroll_up"]).clone()),
-                ("scroll_down", (*config_map["scroll_down"]).clone()),
-                ("page_up", (*config_map["page_up"]).clone()),
-                ("page_down", (*config_map["page_down"]).clone()),
-            ]
-            .iter()
-            .cloned()
-            .collect::<ShortcutMap>(),
-        )]
-        .iter()
-        .cloned()
-        .collect()
+        let mut ret: ShortcutMaps = Default::default();
+        ret.insert(Pager::DESCRIPTION, config_map);
+        ret
     }
 
     fn id(&self) -> ComponentId {
@@ -1382,7 +1369,9 @@ impl Component for Tabbed {
                     get_x(bottom_right!(area)).saturating_sub(3),
                 ),
             );
-            let children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+            let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+            let our_map = self.get_shortcuts(context);
+            children_maps.extend(our_map.into_iter());
             if children_maps.is_empty() {
                 return;
             }
@@ -1508,6 +1497,8 @@ impl Component for Tabbed {
         self.dirty = false;
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        let our_shortcuts = self.get_shortcuts(context);
+        let shortcuts: &ShortcutMap = &our_shortcuts["general"];
         match *event {
             UIEvent::Input(Key::Alt(no)) if no >= '1' && no <= '9' => {
                 let no = no as usize - '1' as usize;
@@ -1524,7 +1515,7 @@ impl Component for Tabbed {
                 }
                 return true;
             }
-            UIEvent::Input(Key::Char('T')) => {
+            UIEvent::Input(ref key) if *key == shortcuts["next_tab"] => {
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
                 context
                     .replies
@@ -1662,6 +1653,12 @@ impl Component for Tabbed {
     }
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
+    }
+
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map = ShortcutMaps::default();
+        map.insert("general", context.settings.shortcuts.general.key_values());
+        map
     }
 
     fn can_quit_cleanly(&mut self, context: &Context) -> bool {

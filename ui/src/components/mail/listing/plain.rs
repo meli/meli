@@ -894,7 +894,7 @@ impl Component for PlainListing {
         let shortcuts = &self.get_shortcuts(context)[PlainListing::DESCRIPTION];
         if self.length > 0 {
             match *event {
-                UIEvent::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
+                UIEvent::Input(ref k) if !self.unfocused && k == shortcuts["open_thread"] => {
                     let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
                     let temp = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
                     self.view = MailView::new(temp, None, None);
@@ -902,7 +902,7 @@ impl Component for PlainListing {
                     self.dirty = true;
                     return true;
                 }
-                UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
+                UIEvent::Input(ref k) if self.unfocused && k == shortcuts["exit_thread"] => {
                     self.unfocused = false;
                     self.dirty = true;
                     /* If self.row_updates is not empty and we exit a thread, the row_update events
@@ -911,7 +911,7 @@ impl Component for PlainListing {
                     self.force_draw = true;
                     return true;
                 }
-                UIEvent::Input(ref key) if !self.unfocused && *key == shortcuts["select_entry"] => {
+                UIEvent::Input(ref key) if !self.unfocused && key == shortcuts["select_entry"] => {
                     let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
                     self.selection.entry(env_hash).and_modify(|e| *e = !*e);
                 }
@@ -1074,13 +1074,7 @@ impl Component for PlainListing {
         };
 
         let config_map = context.settings.shortcuts.compact_listing.key_values();
-        map.insert(
-            PlainListing::DESCRIPTION.to_string(),
-            config_map
-                .into_iter()
-                .map(|(k, v)| (k, v.clone()))
-                .collect(),
-        );
+        map.insert(PlainListing::DESCRIPTION, config_map);
 
         map
     }

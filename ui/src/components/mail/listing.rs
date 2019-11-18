@@ -508,7 +508,7 @@ impl Component for Listing {
                 self.component.set_movement(PageMovement::Down(amount));
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["prev_page"] => {
+            UIEvent::Input(ref key) if key == shortcuts["prev_page"] => {
                 let mult = if self.cmd_buf.is_empty() {
                     1
                 } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
@@ -527,7 +527,7 @@ impl Component for Listing {
                 self.component.set_movement(PageMovement::PageUp(mult));
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
+            UIEvent::Input(ref key) if key == shortcuts["next_page"] => {
                 let mult = if self.cmd_buf.is_empty() {
                     1
                 } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
@@ -564,7 +564,7 @@ impl Component for Listing {
                     .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0, None))));
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["search"] => {
+            UIEvent::Input(ref key) if key == shortcuts["search"] => {
                 context
                     .replies
                     .push_back(UIEvent::ExInput(Key::Paste("filter ".to_string())));
@@ -573,7 +573,7 @@ impl Component for Listing {
                     .push_back(UIEvent::ChangeMode(UIMode::Execute));
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["set_seen"] => {
+            UIEvent::Input(ref key) if key == shortcuts["set_seen"] => {
                 let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
                 if match self.component {
                     Plain(ref mut l) => l.process_event(&mut event, context),
@@ -647,13 +647,7 @@ impl Component for Listing {
             Conversations(ref l) => l.get_shortcuts(context),
         };
         let config_map = context.settings.shortcuts.listing.key_values();
-        map.insert(
-            Listing::DESCRIPTION.to_string(),
-            config_map
-                .into_iter()
-                .map(|(k, v)| (k, v.clone()))
-                .collect(),
-        );
+        map.insert(Listing::DESCRIPTION, config_map);
 
         map
     }

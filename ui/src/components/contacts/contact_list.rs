@@ -552,7 +552,7 @@ impl Component for ContactList {
         let shortcuts = &self.get_shortcuts(context)[Self::DESCRIPTION];
         match *event {
             UIEvent::Input(ref key)
-                if *key == shortcuts["create_contact"] && self.view.is_none() =>
+                if key == shortcuts["create_contact"] && self.view.is_none() =>
             {
                 let mut manager = ContactManager::default();
                 manager.set_parent_id(self.id);
@@ -565,7 +565,7 @@ impl Component for ContactList {
             }
 
             UIEvent::Input(ref key)
-                if *key == shortcuts["edit_contact"] && self.length > 0 && self.view.is_none() =>
+                if key == shortcuts["edit_contact"] && self.length > 0 && self.view.is_none() =>
             {
                 let account = &mut context.accounts[self.account_pos];
                 let book = &mut account.address_book;
@@ -580,7 +580,7 @@ impl Component for ContactList {
 
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["next_account"] && self.view.is_none() => {
+            UIEvent::Input(ref key) if key == shortcuts["next_account"] && self.view.is_none() => {
                 let amount = if self.cmd_buf.is_empty() {
                     1
                 } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
@@ -612,7 +612,7 @@ impl Component for ContactList {
 
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["prev_account"] && self.view.is_none() => {
+            UIEvent::Input(ref key) if key == shortcuts["prev_account"] && self.view.is_none() => {
                 let amount = if self.cmd_buf.is_empty() {
                     1
                 } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
@@ -747,13 +747,7 @@ impl Component for ContactList {
             .unwrap_or_default();
 
         let config_map = context.settings.shortcuts.contact_list.key_values();
-        map.insert(
-            self.to_string(),
-            config_map
-                .into_iter()
-                .map(|(k, v)| (k, v.clone()))
-                .collect(),
-        );
+        map.insert(Self::DESCRIPTION, config_map);
 
         map
     }

@@ -1066,7 +1066,7 @@ impl Component for CompactListing {
         let shortcuts = &self.get_shortcuts(context)[CompactListing::DESCRIPTION];
         if self.length > 0 {
             match *event {
-                UIEvent::Input(ref k) if !self.unfocused && *k == shortcuts["open_thread"] => {
+                UIEvent::Input(ref k) if !self.unfocused && k == shortcuts["open_thread"] => {
                     if self.filtered_selection.is_empty() {
                         self.view = ThreadView::new(self.cursor_pos, None, context);
                     } else {
@@ -1087,7 +1087,7 @@ impl Component for CompactListing {
                     self.dirty = true;
                     return true;
                 }
-                UIEvent::Input(ref k) if self.unfocused && *k == shortcuts["exit_thread"] => {
+                UIEvent::Input(ref k) if self.unfocused && k == shortcuts["exit_thread"] => {
                     self.unfocused = false;
                     self.dirty = true;
                     /* If self.row_updates is not empty and we exit a thread, the row_update events
@@ -1096,7 +1096,7 @@ impl Component for CompactListing {
                     self.force_draw = true;
                     return true;
                 }
-                UIEvent::Input(ref key) if !self.unfocused && *key == shortcuts["select_entry"] => {
+                UIEvent::Input(ref key) if !self.unfocused && key == shortcuts["select_entry"] => {
                     let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
                     self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
                 }
@@ -1306,13 +1306,7 @@ impl Component for CompactListing {
         };
 
         let config_map = context.settings.shortcuts.compact_listing.key_values();
-        map.insert(
-            CompactListing::DESCRIPTION.to_string(),
-            config_map
-                .into_iter()
-                .map(|(k, v)| (k, v.clone()))
-                .collect(),
-        );
+        map.insert(CompactListing::DESCRIPTION, config_map);
 
         map
     }

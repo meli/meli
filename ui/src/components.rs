@@ -78,7 +78,7 @@ const _DOUBLE_UP_AND_RIGHT: char = '╚';
 type ComponentId = Uuid;
 
 pub type ShortcutMap = FnvHashMap<&'static str, Key>;
-pub type ShortcutMaps = FnvHashMap<String, ShortcutMap>;
+pub type ShortcutMaps = FnvHashMap<&'static str, ShortcutMap>;
 
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
