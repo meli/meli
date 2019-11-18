@@ -62,7 +62,7 @@ impl std::ops::DerefMut for EmbedStatus {
 
 #[derive(Debug)]
 pub struct Composer {
-    reply_context: Option<((usize, usize), Box<ThreadView>)>, // (folder_index, thread_node_index)
+    reply_context: Option<(usize, usize)>, // (folder_index, thread_node_index)
     account_cursor: usize,
 
     cursor: Cursor,
@@ -114,20 +114,11 @@ enum ViewMode {
     Edit,
     Embed,
     SelectRecipients(Selector<Address>),
-    ThreadView,
 }
 
 impl ViewMode {
     fn is_edit(&self) -> bool {
         if let ViewMode::Edit = self {
-            true
-        } else {
-            false
-        }
-    }
-
-    fn is_threadview(&self) -> bool {
-        if let ViewMode::ThreadView = self {
             true
         } else {
             false
@@ -248,10 +239,7 @@ impl Composer {
         );
 
         ret.account_cursor = coordinates.0;
-        ret.reply_context = Some((
-            (coordinates.1, coordinates.2),
-            Box::new(ThreadView::new(coordinates, Some(msg), context)),
-        ));
+        ret.reply_context = Some((coordinates.1, coordinates.2));
         ret
     }
 
@@ -394,11 +382,7 @@ impl Component for Composer {
             return;
         }
 
-        let width = if width!(area) > 80 && self.reply_context.is_some() {
-            width!(area) / 2
-        } else {
-            width!(area)
-        };
+        let width = width!(area);
 
         if !self.initialized {
             if self.sign_mail.is_unset() {
@@ -419,21 +403,7 @@ impl Component for Composer {
 
         let mid = if width > 80 {
             let width = width - 80;
-            let mid = if self.reply_context.is_some() {
-                get_x(upper_left) + width!(area) / 2
-            } else {
-                width / 2
-            };
-
-            if self.reply_context.is_some() {
-                for i in get_y(upper_left) - 1..=get_y(bottom_right) {
-                    //set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
-                    grid[(mid, i)].set_fg(Color::Default);
-                    grid[(mid, i)].set_bg(Color::Default);
-                }
-                //grid[set_x(bottom_right, mid)].set_ch(VERT_BOUNDARY); // Enforce full vert bar at the bottom
-                grid[set_x(bottom_right, mid)].set_fg(Color::Byte(240));
-            }
+            let mid = width / 2;
 
             if self.dirty {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
@@ -450,51 +420,23 @@ impl Component for Composer {
             0
         };
 
-        if width > 80 && self.reply_context.is_some() {
-            let area = (pos_dec(upper_left, (0, 1)), set_x(bottom_right, mid - 1));
-            let view = &mut self.reply_context.as_mut().unwrap().1;
-            view.set_dirty();
-            view.draw(grid, area, context);
-        }
-
-        let header_area = if self.reply_context.is_some() {
+        let header_area = (
+            set_x(upper_left, mid + 1),
             (
-                set_x(upper_left, mid + 1),
-                set_y(bottom_right, get_y(upper_left) + header_height),
-            )
-        } else {
-            (
-                set_x(upper_left, mid + 1),
-                (
-                    get_x(bottom_right).saturating_sub(mid),
-                    get_y(upper_left) + header_height,
-                ),
-            )
-        };
+                get_x(bottom_right).saturating_sub(mid),
+                get_y(upper_left) + header_height,
+            ),
+        );
         let attachments_no = self.draft.attachments().len();
-        let attachment_area = if self.reply_context.is_some() {
-            (
-                (mid + 1, get_y(bottom_right) - 2 - attachments_no),
-                bottom_right,
-            )
-        } else {
-            (
-                (mid + 1, get_y(bottom_right) - 2 - attachments_no),
-                pos_dec(bottom_right, (mid, 0)),
-            )
-        };
+        let attachment_area = (
+            (mid + 1, get_y(bottom_right) - 2 - attachments_no),
+            pos_dec(bottom_right, (mid, 0)),
+        );
 
-        let body_area = if self.reply_context.is_some() {
-            (
-                (mid + 1, get_y(upper_left) + header_height + 1),
-                set_y(bottom_right, get_y(bottom_right) - 3 - attachments_no),
-            )
-        } else {
-            (
-                pos_inc(upper_left, (mid + 1, header_height + 1)),
-                pos_dec(bottom_right, (mid, 3 + attachments_no)),
-            )
-        };
+        let body_area = (
+            pos_inc(upper_left, (mid + 1, header_height + 1)),
+            pos_dec(bottom_right, (mid, 3 + attachments_no)),
+        );
 
         let (x, y) = write_string_to_grid(
             if self.reply_context.is_some() {
@@ -522,7 +464,7 @@ impl Component for Composer {
             Color::Byte(189),
             Color::Byte(167),
         );
-        if mid != 0 && self.reply_context.is_none() {
+        if mid != 0 {
             clear_area(
                 grid,
                 (
@@ -538,17 +480,6 @@ impl Component for Composer {
                         get_y(upper_left) - 1,
                     ),
                     bottom_right,
-                ),
-            );
-        } else if mid != 0 {
-            clear_area(
-                grid,
-                (
-                    (
-                        get_x(bottom_right).saturating_sub(mid),
-                        get_y(upper_left) - 1,
-                    ),
-                    (get_x(bottom_right).saturating_sub(mid), get_y(bottom_right)),
                 ),
             );
         }
@@ -616,7 +547,7 @@ impl Component for Composer {
         }
 
         match self.mode {
-            ViewMode::ThreadView | ViewMode::Edit | ViewMode::Embed => {}
+            ViewMode::Edit | ViewMode::Embed => {}
             ViewMode::SelectRecipients(ref mut s) => {
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
@@ -633,13 +564,8 @@ impl Component for Composer {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match (&mut self.mode, &mut self.reply_context, &event) {
             // don't pass Reply command to thread view in reply_context
-            (_, _, UIEvent::Input(Key::Char('R'))) => {}
-            (ViewMode::ThreadView, Some((_, ref mut view)), _) => {
-                if view.process_event(event, context) {
-                    self.dirty = true;
-                    return true;
-                }
-                /* Cannot mutably borrow in pattern guard, pah! */
+            (_, Some(_), UIEvent::Input(Key::Char('R'))) => {}
+            (ViewMode::Edit, _, _) => {
                 if self.pager.process_event(event, context) {
                     return true;
                 }
@@ -662,12 +588,6 @@ impl Component for Composer {
                         );
                         self.update_form();
                     }
-                    return true;
-                }
-            }
-            (ViewMode::ThreadView, _, _) => {
-                /* Cannot mutably borrow in pattern guard, pah! */
-                if self.pager.process_event(event, context) {
                     return true;
                 }
             }
@@ -813,18 +733,6 @@ impl Component for Composer {
             UIEvent::Input(Key::Down) => {
                 self.cursor = Cursor::Body;
                 self.dirty = true;
-            }
-            /* Switch to thread view mode if we're on Edit mode */
-            UIEvent::Input(Key::Char('v')) if self.mode.is_edit() => {
-                self.mode = ViewMode::ThreadView;
-                self.set_dirty();
-                return true;
-            }
-            /* Switch to Edit mode if we're on ThreadView mode */
-            UIEvent::Input(Key::Char('o')) if self.mode.is_threadview() => {
-                self.mode = ViewMode::Edit;
-                self.set_dirty();
-                return true;
             }
             UIEvent::Input(Key::Char('s')) => {
                 self.update_draft();
@@ -1093,16 +1001,7 @@ impl Component for Composer {
     fn is_dirty(&self) -> bool {
         match self.mode {
             ViewMode::Embed => true,
-            _ => {
-                self.dirty
-                    || self.pager.is_dirty()
-                    || self
-                        .reply_context
-                        .as_ref()
-                        .map(|(_, p)| p.is_dirty())
-                        .unwrap_or(false)
-                    || self.form.is_dirty()
-            }
+            _ => self.dirty || self.pager.is_dirty() || self.form.is_dirty(),
         }
     }
 
@@ -1110,9 +1009,6 @@ impl Component for Composer {
         self.dirty = true;
         self.pager.set_dirty();
         self.form.set_dirty();
-        if let Some((_, ref mut view)) = self.reply_context {
-            view.set_dirty();
-        }
     }
 
     fn kill(&mut self, uuid: Uuid, context: &mut Context) {
@@ -1137,23 +1033,13 @@ impl Component for Composer {
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = if self.mode.is_threadview() {
+        let mut map = if self.mode.is_edit() {
             self.pager.get_shortcuts(context)
         } else {
             Default::default()
         };
 
-        if let Some((_, ref view)) = self.reply_context {
-            map.extend(view.get_shortcuts(context));
-        }
-
         let mut our_map: ShortcutMap = Default::default();
-        if self.mode.is_threadview() {
-            our_map.insert("Switch to right panel (draft editing).", Key::Char('o'));
-        }
-        if self.mode.is_edit() && self.reply_context.is_some() {
-            our_map.insert("Switch to left panel (thread view)", Key::Char('v'));
-        }
         our_map.insert("Deliver draft to mailer.", Key::Char('s'));
         our_map.insert("Edit in $EDITOR", Key::Char('e'));
         map.insert(Composer::DESCRIPTION.to_string(), our_map);
