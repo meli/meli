@@ -243,7 +243,7 @@ impl Component for EnvelopeView {
                     Color::Default,
                     Attr::Default,
                     area,
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
@@ -257,7 +257,7 @@ impl Component for EnvelopeView {
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
@@ -271,7 +271,7 @@ impl Component for EnvelopeView {
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
@@ -285,7 +285,7 @@ impl Component for EnvelopeView {
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
@@ -299,7 +299,7 @@ impl Component for EnvelopeView {
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');

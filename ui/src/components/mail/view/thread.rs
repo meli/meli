@@ -264,7 +264,7 @@ impl ThreadView {
                         (e.index.0 * 4 + 1, 2 * y),
                         (e.index.0 * 4 + e.heading.grapheme_width() + 1, height - 1),
                     ),
-                    true,
+                    None,
                 );
                 {
                     let envelope: EnvelopeRef = context.accounts[self.coordinates.0]
@@ -342,7 +342,7 @@ impl ThreadView {
                         (e.index.0 * 4 + 1, 2 * y),
                         (e.index.0 * 4 + e.heading.grapheme_width() + 1, height - 1),
                     ),
-                    false,
+                    None,
                 );
                 {
                     let envelope: EnvelopeRef = context.accounts[self.coordinates.0]
@@ -650,7 +650,7 @@ impl ThreadView {
                 Color::Default,
                 Attr::Default,
                 area,
-                true,
+                Some(get_x(upper_left)),
             );
             for x in x..=get_x(bottom_right) {
                 grid[(x, y)].set_ch(' ');
@@ -736,7 +736,7 @@ impl ThreadView {
                 Color::Default,
                 Attr::Default,
                 area,
-                true,
+                Some(get_x(upper_left)),
             );
             for x in x..=get_x(bottom_right) {
                 grid[(x, y)].set_ch(' ');

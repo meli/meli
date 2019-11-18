@@ -277,7 +277,7 @@ impl ThreadListing {
                     Color::Default,
                     Attr::Default,
                     ((0, 0), (MAX_COLS - 1, 0)),
-                    false,
+                    None,
                 );
                 return;
             }
@@ -287,20 +287,22 @@ impl ThreadListing {
 
         let threads = &account.collection.threads[&mailbox.folder.hash()];
         self.length = threads.len();
-        self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
         self.locations.clear();
         if self.length == 0 {
+            let message = format!("Folder `{}` is empty.", mailbox.folder.name());
+            self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
             write_string_to_grid(
-                &format!("Folder `{}` is empty.", mailbox.folder.name()),
+                &message,
                 &mut self.content,
                 Color::Default,
                 Color::Default,
                 Attr::Default,
-                ((0, 0), (MAX_COLS - 1, 0)),
-                true,
+                ((0, 0), (message.len() - 1, 0)),
+                None,
             );
             return;
         }
+        self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
 
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let mut thread_idx = 0; // needed for alternate thread colors
@@ -347,7 +349,7 @@ impl ThreadListing {
                     bg_color,
                     Attr::Default,
                     ((0, idx), (MAX_COLS - 1, idx)),
-                    false,
+                    None,
                 );
 
                 for x in x..MAX_COLS {

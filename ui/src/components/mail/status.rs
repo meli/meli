@@ -54,7 +54,7 @@ impl Component for StatusPanel {
                 Color::Default,
                 Attr::Bold,
                 ((1, 1), (width - 1, height - 1)),
-                true,
+                Some(1),
             );
             let mut y = y + 1;
             let work_controller = context.work_controller().threads.lock().unwrap();
@@ -77,7 +77,7 @@ impl Component for StatusPanel {
                     Color::Default,
                     Attr::Default,
                     ((1, y), (width - 1, height - 1)),
-                    true,
+                    Some(1),
                 );
                 for x in x..(width - 1) {
                     self.content[(x, y)].set_ch(' ');
@@ -92,7 +92,7 @@ impl Component for StatusPanel {
                 Color::Default,
                 Attr::Bold,
                 ((1, y + 1), (width - 1, height - 1)),
-                true,
+                Some(1),
             );
             y += 2;
 
@@ -117,7 +117,7 @@ impl Component for StatusPanel {
                     Color::Default,
                     Attr::Default,
                     ((1, y), (width - 1, height - 1)),
-                    true,
+                    Some(1),
                 );
                 for x in x..(width - 1) {
                     self.content[(x, y)].set_ch(' ');
@@ -247,7 +247,7 @@ impl StatusPanel {
             Color::Default,
             Attr::Default,
             ((2, 10), (120 - 1, 10)),
-            true,
+            Some(2),
         );
 
         for (i, a) in context.accounts.iter().enumerate() {
@@ -262,7 +262,7 @@ impl StatusPanel {
                 Color::Default,
                 Attr::Bold,
                 ((3, 12 + i * 10), (120 - 2, 12 + i * 10)),
-                true,
+                Some(3),
             );
             write_string_to_grid(
                 " ▒██▒ ",
@@ -271,7 +271,7 @@ impl StatusPanel {
                 Color::Default,
                 Attr::Default,
                 ((x, y), (120 - 2, 12 + i * 10)),
-                true,
+                None,
             );
             write_string_to_grid(
                 &a.runtime_settings.account().identity,
@@ -280,7 +280,7 @@ impl StatusPanel {
                 Color::Default,
                 Attr::Default,
                 ((4, y + 2), (120 - 2, y + 2)),
-                true,
+                None,
             );
             if i == self.account_cursor {
                 for h in 1..8 {
@@ -308,7 +308,7 @@ impl StatusPanel {
                 Color::Default,
                 Attr::Default,
                 ((5, y + 3), (120 - 2, y + 3)),
-                true,
+                None,
             );
             column_width = std::cmp::max(
                 column_width,
@@ -319,7 +319,7 @@ impl StatusPanel {
                     Color::Default,
                     Attr::Default,
                     ((5, y + 4), (120 - 2, y + 4)),
-                    true,
+                    None,
                 )
                 .0,
             );
@@ -332,7 +332,7 @@ impl StatusPanel {
                     Color::Default,
                     Attr::Default,
                     ((5, y + 5), (120 - 2, y + 5)),
-                    true,
+                    None,
                 )
                 .0,
             );
@@ -354,7 +354,7 @@ impl StatusPanel {
                 Color::Default,
                 Attr::Default,
                 ((5 + column_width, y + 2), (120 - 2, y + 2)),
-                true,
+                None,
             );
         }
     }
@@ -380,7 +380,7 @@ impl Component for AccountStatus {
                     Color::Default,
                     Attr::Default,
                     ((1, 1), (width - 1, height - 1)),
-                    true,
+                    None,
                 );
                 let mut capabilities = imap_backend.capabilities();
                 let max_name_width = std::cmp::max(
@@ -394,7 +394,7 @@ impl Component for AccountStatus {
                     Color::Default,
                     Attr::Default,
                     ((max_name_width + 6, 1), (width - 1, height - 1)),
-                    true,
+                    None,
                 );
                 capabilities.sort();
                 for (i, cap) in capabilities.into_iter().enumerate() {
@@ -406,7 +406,7 @@ impl Component for AccountStatus {
                         Color::Default,
                         Attr::Default,
                         ((1, 2 + i), (width - 1, height - 1)),
-                        true,
+                        None,
                     );
 
                     let (width, height) = self.content.size();
@@ -418,7 +418,7 @@ impl Component for AccountStatus {
                             Color::Default,
                             Attr::Default,
                             ((max_name_width + 6, 2 + i), (width - 1, height - 1)),
-                            true,
+                            None,
                         );
                     } else {
                         write_string_to_grid(
@@ -428,7 +428,7 @@ impl Component for AccountStatus {
                             Color::Default,
                             Attr::Default,
                             ((max_name_width + 6, 2 + i), (width - 1, height - 1)),
-                            true,
+                            None,
                         );
                     }
                 }

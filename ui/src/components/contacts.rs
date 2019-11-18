@@ -83,7 +83,7 @@ impl ContactManager {
             Color::Default,
             Attr::Default,
             ((0, 0), (width - 1, 0)),
-            false,
+            None,
         );
         let (x, y) = write_string_to_grid(
             &self.card.last_edited(),
@@ -92,7 +92,7 @@ impl ContactManager {
             Color::Default,
             Attr::Default,
             ((x, 0), (width - 1, 0)),
-            false,
+            None,
         );
 
         if self.card.external_resource() {
@@ -106,7 +106,7 @@ impl ContactManager {
                 Color::Default,
                 Attr::Default,
                 ((x, y), (width - 1, y)),
-                false,
+                None,
             );
         }
 

@@ -120,7 +120,7 @@ impl Component for Field {
             Color::Default,
             Attr::Default,
             area,
-            true,
+            None,
         );
     }
     fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
@@ -351,7 +351,7 @@ impl Component for FormWidget {
                         pos_inc(upper_left, (1, i)),
                         set_y(bottom_right, i + get_y(upper_left)),
                     ),
-                    false,
+                    None,
                 );
                 /* draw field */
                 v.draw(
@@ -595,7 +595,7 @@ where
                         pos_inc(upper_left, (len, 0)),
                         pos_inc(upper_left, (cur_len + len, 0)),
                     ),
-                    false,
+                    None,
                 );
                 len += cur_len + 3;
             }
@@ -778,7 +778,7 @@ impl AutoComplete {
                 Color::Byte(7),
                 Attr::Default,
                 ((0, i), (width - 1, i)),
-                false,
+                None,
             );
             write_string_to_grid(
                 &e.description,
@@ -787,7 +787,7 @@ impl AutoComplete {
                 Color::Byte(7),
                 Attr::Default,
                 ((x + 2, i), (width - 1, i)),
-                false,
+                None,
             );
             write_string_to_grid(
                 "▒",
@@ -796,7 +796,7 @@ impl AutoComplete {
                 Color::Byte(7),
                 Attr::Default,
                 ((width - 1, i), (width - 1, i)),
-                false,
+                None,
             );
         }
         self.content = content;

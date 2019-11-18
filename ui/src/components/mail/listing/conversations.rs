@@ -417,7 +417,7 @@ impl ListingTrait for ConversationsListing {
                     Color::Default,
                     Attr::Default,
                     ((0, 0), (message.len() - 1, 0)),
-                    false,
+                    None,
                 );
             }
         }
@@ -538,7 +538,7 @@ impl ConversationsListing {
                     Color::Default,
                     Attr::Default,
                     ((0, 0), (message.len() - 1, 0)),
-                    false,
+                    None,
                 );
                 return;
             }
@@ -703,7 +703,7 @@ impl ConversationsListing {
                 bg_color,
                 Attr::Default,
                 ((0, 3 * idx), (width - 1, 3 * idx)),
-                false,
+                None,
             );
             for x in x..(x + 3) {
                 self.content[(x, 3 * idx)].set_bg(bg_color);
@@ -716,7 +716,7 @@ impl ConversationsListing {
                 bg_color,
                 Attr::Bold,
                 ((x, 3 * idx), (width - 1, 3 * idx)),
-                false,
+                None,
             );
             for x in x..width {
                 self.content[(x, 3 * idx)].set_bg(bg_color);
@@ -729,7 +729,7 @@ impl ConversationsListing {
                 bg_color,
                 Attr::Default,
                 ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
-                false,
+                None,
             );
             for x in x..(x + 4) {
                 self.content[(x, 3 * idx + 1)].set_ch('▁');
@@ -743,7 +743,7 @@ impl ConversationsListing {
                 bg_color,
                 Attr::Default,
                 ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
-                false,
+                None,
             );
 
             for x in x..width {
@@ -768,7 +768,7 @@ impl ConversationsListing {
                 Color::Default,
                 Attr::Default,
                 ((0, 0), (message.len() - 1, 0)),
-                false,
+                None,
             );
         }
     }
@@ -916,7 +916,7 @@ impl Component for ConversationsListing {
                     Color::Default,
                     Attr::Default,
                     area,
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 clear_area(grid, ((x, y), set_y(bottom_right, y)));
                 context

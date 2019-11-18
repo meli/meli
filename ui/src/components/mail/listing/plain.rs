@@ -417,7 +417,7 @@ impl ListingTrait for PlainListing {
                     Color::Default,
                     Attr::Default,
                     ((0, 0), (message.len() - 1, 0)),
-                    false,
+                    None,
                 );
             }
         }
@@ -517,7 +517,7 @@ impl PlainListing {
                     Color::Default,
                     Attr::Default,
                     ((0, 0), (MAX_COLS - 1, 0)),
-                    false,
+                    None,
                 );
                 return;
             }
@@ -683,7 +683,7 @@ impl PlainListing {
                 bg_color,
                 Attr::Default,
                 ((0, idx), (min_width.0, idx)),
-                false,
+                None,
             );
             for x in x..min_width.0 {
                 self.data_columns.columns[0][(x, idx)].set_bg(bg_color);
@@ -695,7 +695,7 @@ impl PlainListing {
                 bg_color,
                 Attr::Default,
                 ((0, idx), (min_width.1, idx)),
-                false,
+                None,
             );
             for x in x..min_width.1 {
                 self.data_columns.columns[1][(x, idx)].set_bg(bg_color);
@@ -707,7 +707,7 @@ impl PlainListing {
                 bg_color,
                 Attr::Default,
                 ((0, idx), (min_width.2, idx)),
-                false,
+                None,
             );
             for x in x..min_width.2 {
                 self.data_columns.columns[2][(x, idx)].set_bg(bg_color);
@@ -719,7 +719,7 @@ impl PlainListing {
                 bg_color,
                 Attr::Default,
                 ((0, idx), (min_width.3, idx)),
-                false,
+                None,
             );
             for x in x..min_width.3 {
                 self.data_columns.columns[3][(x, idx)].set_bg(bg_color);
@@ -731,7 +731,7 @@ impl PlainListing {
                 bg_color,
                 Attr::Default,
                 ((0, idx), (min_width.4, idx)),
-                false,
+                None,
             );
             for x in x..min_width.4 {
                 self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
@@ -760,7 +760,7 @@ impl PlainListing {
                 Color::Default,
                 Attr::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
-                false,
+                None,
             );
         }
     }
@@ -827,6 +827,7 @@ impl Component for PlainListing {
             }
             let mut area = area;
             if !self.filter_term.is_empty() {
+                let (upper_left, bottom_right) = area;
                 let (x, y) = write_string_to_grid(
                     &format!(
                         "{} results for `{}` (Press ESC to exit)",
@@ -838,9 +839,8 @@ impl Component for PlainListing {
                     Color::Default,
                     Attr::Default,
                     area,
-                    true,
+                    Some(get_x(upper_left)),
                 );
-                let (upper_left, bottom_right) = area;
                 clear_area(grid, ((x, y), set_y(bottom_right, y)));
                 context
                     .dirty_areas

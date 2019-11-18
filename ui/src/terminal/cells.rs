@@ -770,8 +770,10 @@ macro_rules! inspect_bounds {
             } else {
                 $x = get_x(upper_left);
                 $y += 1;
-                if !$line_break {
+                if $line_break.is_none() {
                     break;
+                } else {
+                    $x = $line_break.unwrap();
                 }
             }
         }
@@ -793,7 +795,8 @@ pub fn write_string_to_grid(
     bg_color: Color,
     attrs: Attr,
     area: Area,
-    line_break: bool,
+    // The left-most x coordinate.
+    line_break: Option<usize>,
 ) -> Pos {
     let bounds = grid.size();
     let upper_left = upper_left!(area);

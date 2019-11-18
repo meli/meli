@@ -234,7 +234,7 @@ impl Component for Listing {
                     Color::Default,
                     Attr::Default,
                     area,
-                    false,
+                    None,
                 );
                 context.dirty_areas.push_back(area);
                 return;
@@ -258,7 +258,7 @@ impl Component for Listing {
                     Color::Default,
                     Attr::Default,
                     (set_x(upper_left, mid + 1), bottom_right),
-                    false,
+                    None,
                 );
                 context.dirty_areas.push_back(area);
                 return;
@@ -892,7 +892,7 @@ impl Listing {
             Color::Default,
             Attr::Bold,
             area,
-            false,
+            None,
         );
 
         if lines.is_empty() {
@@ -903,7 +903,7 @@ impl Listing {
                 Color::Default,
                 Attr::Default,
                 (pos_inc(upper_left, (0, 1)), bottom_right),
-                false,
+                None,
             );
             return 0;
         }
@@ -950,7 +950,7 @@ impl Listing {
                 bg_color,
                 Attr::Default,
                 (set_y(upper_left, y), bottom_right),
-                false,
+                None,
             );
             let (x, _) = write_string_to_grid(
                 &" ".repeat(depth + 1),
@@ -959,7 +959,7 @@ impl Listing {
                 bg_color,
                 Attr::Default,
                 ((x, y), bottom_right),
-                false,
+                None,
             );
             let (x, _) = write_string_to_grid(
                 entries[&folder_idx].name(),
@@ -968,7 +968,7 @@ impl Listing {
                 bg_color,
                 Attr::Default,
                 ((x, y), bottom_right),
-                false,
+                None,
             );
 
             /* Unread message count */
@@ -1000,7 +1000,7 @@ impl Listing {
                     ),
                     bottom_right,
                 ),
-                false,
+                None,
             );
             change_colors(grid, ((x, y), set_y(bottom_right, y)), fg_color, bg_color);
             idx += 1;

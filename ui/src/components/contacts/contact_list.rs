@@ -135,7 +135,7 @@ impl ContactList {
             Color::White,
             Attr::Bold,
             ((0, 0), (MAX_COLS - 1, self.length)),
-            false,
+            None,
         );
         write_string_to_grid(
             "E-MAIL",
@@ -144,7 +144,7 @@ impl ContactList {
             Color::White,
             Attr::Bold,
             ((0, 0), (MAX_COLS - 1, self.length)),
-            false,
+            None,
         );
 
         write_string_to_grid(
@@ -154,7 +154,7 @@ impl ContactList {
             Color::White,
             Attr::Bold,
             ((0, 0), (MAX_COLS - 1, self.length)),
-            false,
+            None,
         );
 
         let account = &mut context.accounts[self.account_pos];
@@ -169,7 +169,7 @@ impl ContactList {
                 Color::Default,
                 Attr::Default,
                 ((0, idx + 1), (min_width.0, idx + 1)),
-                false,
+                None,
             );
 
             write_string_to_grid(
@@ -179,7 +179,7 @@ impl ContactList {
                 Color::Default,
                 Attr::Default,
                 ((0, idx + 1), (min_width.1, idx + 1)),
-                false,
+                None,
             );
 
             write_string_to_grid(
@@ -189,7 +189,7 @@ impl ContactList {
                 Color::Default,
                 Attr::Default,
                 ((0, idx + 1), (min_width.2, idx + 1)),
-                false,
+                None,
             );
         }
 
@@ -208,7 +208,7 @@ impl ContactList {
                 Color::Default,
                 Attr::Default,
                 ((0, 0), (MAX_COLS - 1, 0)),
-                false,
+                None,
             );
             return;
         }
@@ -273,7 +273,7 @@ impl ContactList {
 
         if a.name.grapheme_len() + s.len() > width + 1 {
             /* Print account name */
-            write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::Bold, area, false);
+            write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::Bold, area, None);
             write_string_to_grid(
                 &s,
                 grid,
@@ -287,7 +287,7 @@ impl ContactList {
                     ),
                     bottom_right!(area),
                 ),
-                false,
+                None,
             );
             write_string_to_grid(
                 "…",
@@ -302,12 +302,12 @@ impl ContactList {
                     ),
                     bottom_right!(area),
                 ),
-                false,
+                None,
             );
         } else {
             /* Print account name */
 
-            write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::Bold, area, false);
+            write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::Bold, area, None);
             write_string_to_grid(
                 &s,
                 grid,
@@ -321,7 +321,7 @@ impl ContactList {
                     ),
                     bottom_right!(area),
                 ),
-                false,
+                None,
             );
         }
     }

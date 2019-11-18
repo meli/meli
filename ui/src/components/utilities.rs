@@ -435,7 +435,7 @@ impl Pager {
                 Color::Default,
                 Attr::Default,
                 ((0, i), (width.saturating_sub(1), i)),
-                true,
+                None,
             );
         }
     }
@@ -678,7 +678,7 @@ impl StatusBar {
             Color::Byte(26),
             Attr::Default,
             area,
-            false,
+            None,
         );
         let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
         for x in get_x(upper_left!(area))..get_x(upper_left!(area)) + offset {
@@ -697,7 +697,7 @@ impl StatusBar {
                         (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
                         bottom_right!(area),
                     ),
-                    false,
+                    None,
                 );
             } else {
                 self.cur_notification = None;
@@ -715,7 +715,7 @@ impl StatusBar {
                         (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
                         bottom_right!(area),
                     ),
-                    false,
+                    None,
                 );
                 self.cur_notification = Some((std::time::Instant::now(), n));
             }
@@ -742,7 +742,7 @@ impl StatusBar {
             Color::Byte(88),
             Attr::Default,
             area,
-            false,
+            None,
         );
         grid[(x, y)].set_attrs(Attr::Underline);
         change_colors(grid, area, Color::Byte(219), Color::Byte(88));
@@ -927,7 +927,7 @@ impl Component for StatusBar {
                             ),
                             bottom_right!(hist_area),
                         ),
-                        true,
+                        Some(get_x(upper_left!(hist_area))),
                     );
                     write_string_to_grid(
                         &s.description,
@@ -936,7 +936,7 @@ impl Component for StatusBar {
                         Color::Byte(174),
                         Attr::Default,
                         ((x + 2, y), bottom_right!(hist_area)),
-                        false,
+                        None,
                     );
                     if y_offset + offset == self.auto_complete.cursor() {
                         change_colors(
@@ -962,13 +962,13 @@ impl Component for StatusBar {
                             Attr::Default,
                             (
                                 (
-                                    get_y(upper_left)
+                                    get_x(upper_left)
                                         + self.ex_buffer.as_str().split_graphemes().len(),
                                     get_y(bottom_right) - height + 1,
                                 ),
                                 set_y(bottom_right, get_y(bottom_right) - height + 1),
                             ),
-                            true,
+                            None,
                         );
                     }
                 }
@@ -1262,7 +1262,7 @@ impl Tabbed {
                 bg,
                 Attr::Default,
                 (set_x(upper_left, x), bottom_right!(area)),
-                false,
+                None,
             );
             x = x_ + 1;
             if idx == self.pinned.saturating_sub(1) {
@@ -1429,7 +1429,7 @@ impl Component for Tabbed {
                     Color::Default,
                     Attr::Default,
                     ((2, 0), (max_width.saturating_sub(2), max_length - 1)),
-                    false,
+                    None,
                 );
             }
             let mut idx = 0;
@@ -1441,7 +1441,7 @@ impl Component for Tabbed {
                     Color::Default,
                     Attr::Default,
                     ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
-                    false,
+                    None,
                 );
                 idx += 2;
                 let mut shortcuts = shortcuts.iter().collect::<Vec<_>>();
@@ -1455,7 +1455,7 @@ impl Component for Tabbed {
                         Color::Default,
                         Attr::Default,
                         ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
-                        false,
+                        None,
                     );
                     write_string_to_grid(
                         &format!("{}", v),
@@ -1464,7 +1464,7 @@ impl Component for Tabbed {
                         Color::Default,
                         Attr::Default,
                         ((x + 2, y), (max_width.saturating_sub(2), max_length - 1)),
-                        false,
+                        None,
                     );
                     idx += 1;
                 }
@@ -1720,7 +1720,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                         Color::Default,
                         Attr::Default,
                         ((3, c + 2), (width - 2, c + 2)),
-                        false,
+                        None,
                     );
                 } else {
                     write_string_to_grid(
@@ -1730,7 +1730,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                         Color::Default,
                         Attr::Default,
                         ((3, c + 2), (width - 2, c + 2)),
-                        false,
+                        None,
                     );
                 }
                 self.dirty = true;
@@ -1967,7 +1967,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             Color::Default,
             Attr::Default,
             ((0, 0), (width - 1, 0)),
-            false,
+            None,
         );
         let (x, _) = write_string_to_grid(
             title,
@@ -1976,7 +1976,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             Color::Default,
             Attr::Default,
             ((2, 0), (width - 1, 0)),
-            false,
+            None,
         );
         for i in 1..(width - title.len() - 1) {
             write_string_to_grid(
@@ -1986,7 +1986,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                 Color::Default,
                 Attr::Default,
                 ((x + i, 0), (width - 1, 0)),
-                false,
+                None,
             );
         }
         write_string_to_grid(
@@ -1996,7 +1996,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             Color::Default,
             Attr::Default,
             ((width - 1, 0), (width - 1, 0)),
-            false,
+            None,
         );
         write_string_to_grid(
             if ascii_drawing { "+" } else { "┗" },
@@ -2005,7 +2005,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             Color::Default,
             Attr::Default,
             ((0, height - 1), (width - 1, height - 1)),
-            false,
+            None,
         );
         write_string_to_grid(
             &if ascii_drawing {
@@ -2018,7 +2018,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             Color::Default,
             Attr::Default,
             ((1, height - 1), (width - 2, height - 1)),
-            false,
+            None,
         );
         write_string_to_grid(
             if ascii_drawing { "+" } else { "┛" },
@@ -2027,7 +2027,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             Color::Default,
             Attr::Default,
             ((width - 1, height - 1), (width - 1, height - 1)),
-            false,
+            None,
         );
         for i in 1..height - 1 {
             write_string_to_grid(
@@ -2037,7 +2037,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                 Color::Default,
                 Attr::Default,
                 ((0, i), (width - 1, i)),
-                false,
+                None,
             );
             write_string_to_grid(
                 if ascii_drawing { "|" } else { "┃" },
@@ -2046,7 +2046,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                 Color::Default,
                 Attr::Default,
                 ((width - 1, i), (width - 1, i)),
-                false,
+                None,
             );
         }
         if single_only {
@@ -2062,7 +2062,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                     },
                     Attr::Default,
                     ((2, i + 2), (width - 1, i + 2)),
-                    false,
+                    None,
                 );
             }
         } else {
@@ -2074,7 +2074,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                     Color::Default,
                     Attr::Default,
                     ((2, i + 2), (width - 1, i + 2)),
-                    false,
+                    None,
                 );
                 if i == 0 {
                     content[(2, i + 2)].set_bg(Color::Byte(8));
@@ -2092,7 +2092,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                     ((width - "OK    Cancel".len()) / 2, height - 3),
                     (width - 1, height - 3),
                 ),
-                false,
+                None,
             );
         }
         let mut identifiers: Vec<(T, bool)> =

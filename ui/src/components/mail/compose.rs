@@ -317,7 +317,7 @@ impl Composer {
                 Color::Default,
                 Attr::Default,
                 (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
-                false,
+                None,
             );
         } else {
             write_string_to_grid(
@@ -327,7 +327,7 @@ impl Composer {
                 Color::Default,
                 Attr::Default,
                 (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
-                false,
+                None,
             );
         }
         if attachments_no == 0 {
@@ -338,7 +338,7 @@ impl Composer {
                 Color::Default,
                 Attr::Default,
                 (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
-                false,
+                None,
             );
         } else {
             write_string_to_grid(
@@ -348,7 +348,7 @@ impl Composer {
                 Color::Default,
                 Attr::Default,
                 (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
-                false,
+                None,
             );
             for (i, a) in self.draft.attachments().iter().enumerate() {
                 if let Some(name) = a.content_type().name() {
@@ -365,7 +365,7 @@ impl Composer {
                         Color::Default,
                         Attr::Default,
                         (pos_inc(upper_left!(area), (0, 3 + i)), bottom_right!(area)),
-                        false,
+                        None,
                     );
                 } else {
                     write_string_to_grid(
@@ -375,7 +375,7 @@ impl Composer {
                         Color::Default,
                         Attr::Default,
                         (pos_inc(upper_left!(area), (0, 3 + i)), bottom_right!(area)),
-                        false,
+                        None,
                     );
                 }
             }
@@ -510,7 +510,7 @@ impl Component for Composer {
                 pos_dec(upper_left!(header_area), (0, 1)),
                 bottom_right!(header_area),
             ),
-            false,
+            None,
         );
         clear_area(grid, ((x, y), (set_y(bottom_right, y))));
         change_colors(
@@ -580,7 +580,7 @@ impl Component for Composer {
                         Color::Default,
                         Attr::Default,
                         body_area,
-                        false,
+                        None,
                     );
                     context.dirty_areas.push_back(body_area);
                     self.dirty = false;

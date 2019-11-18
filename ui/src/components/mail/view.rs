@@ -352,7 +352,7 @@ impl Component for MailView {
                     Color::Default,
                     Attr::Default,
                     area,
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
@@ -366,7 +366,7 @@ impl Component for MailView {
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
@@ -380,7 +380,7 @@ impl Component for MailView {
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
@@ -394,7 +394,7 @@ impl Component for MailView {
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
@@ -408,7 +408,7 @@ impl Component for MailView {
                     Color::Default,
                     Attr::Default,
                     (set_y(upper_left, y + 1), bottom_right),
-                    true,
+                    Some(get_x(upper_left)),
                 );
                 for x in x..=get_x(bottom_right) {
                     grid[(x, y)].set_ch(' ');
@@ -423,7 +423,7 @@ impl Component for MailView {
                         Color::Default,
                         Attr::Default,
                         (set_y(upper_left, y + 1), bottom_right),
-                        true,
+                        Some(get_x(upper_left)),
                     );
                     for x in x..=get_x(bottom_right) {
                         grid[(x, _y)].set_ch(' ');
@@ -445,7 +445,7 @@ impl Component for MailView {
                         Color::Default,
                         Attr::Default,
                         (set_y(upper_left, _y + 1), bottom_right),
-                        true,
+                        Some(get_x(upper_left)),
                     );
                     for x in x..=get_x(bottom_right) {
                         grid[(x, _y)].set_ch(' ');
@@ -471,7 +471,7 @@ impl Component for MailView {
                             Color::Default,
                             Attr::Default,
                             (set_y(upper_left, y), bottom_right),
-                            false,
+                            None,
                         );
                         let (_x, _y) = write_string_to_grid(
                             id,
@@ -480,7 +480,7 @@ impl Component for MailView {
                             Color::Default,
                             Attr::Default,
                             ((_x, y), bottom_right),
-                            false,
+                            None,
                         );
                         x = _x;
                         if _y != y {
@@ -496,13 +496,9 @@ impl Component for MailView {
                             Color::Default,
                             Attr::Default,
                             ((x, y), bottom_right),
-                            true,
+                            Some(get_x(upper_left)),
                         );
                         x = _x;
-                        if _y != y {
-                            x = get_x(upper_left);
-                        }
-
                         y = _y;
                     }
                     if archive.is_some() {
@@ -513,12 +509,9 @@ impl Component for MailView {
                             Color::Default,
                             Attr::Default,
                             ((x, y), bottom_right),
-                            true,
+                            Some(get_x(upper_left)),
                         );
                         x = _x;
-                        if _y != y {
-                            x = get_x(upper_left);
-                        }
                         y = _y;
                     }
                     if post.is_some() {
@@ -529,12 +522,9 @@ impl Component for MailView {
                             Color::Default,
                             Attr::Default,
                             ((x, y), bottom_right),
-                            true,
+                            Some(get_x(upper_left)),
                         );
                         x = _x;
-                        if _y != y {
-                            x = get_x(upper_left);
-                        }
                         y = _y;
                     }
                     if unsubscribe.is_some() {
@@ -545,12 +535,9 @@ impl Component for MailView {
                             Color::Default,
                             Attr::Default,
                             ((x, y), bottom_right),
-                            true,
+                            Some(get_x(upper_left)),
                         );
                         x = _x;
-                        if _y != y {
-                            x = get_x(upper_left);
-                        }
                         y = _y;
                     }
                     if archive.is_some() || post.is_some() || unsubscribe.is_some() {
