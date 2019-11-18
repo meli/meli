@@ -474,7 +474,16 @@ impl Component for Pager {
                         self.cursor.1 += height * multiplier;
                     }
                 }
-                PageMovement::Right(_) | PageMovement::Left(_) => {}
+                PageMovement::Right(multiplier) => {
+                    let offset = width!(area) / 3;
+                    if self.cursor.0 + offset * multiplier < self.content.size().0 {
+                        self.cursor.0 += offset * multiplier;
+                    }
+                }
+                PageMovement::Left(multiplier) => {
+                    let offset = width!(area) / 3;
+                    self.cursor.0 = self.cursor.0.saturating_sub(offset * multiplier);
+                }
                 PageMovement::Home => {
                     self.cursor.1 = 0;
                 }
@@ -525,13 +534,23 @@ impl Component for Pager {
                 self.dirty = true;
                 return true;
             }
+            UIEvent::Input(Key::Home) => {
+                self.movement = Some(PageMovement::Home);
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::End) => {
+                self.movement = Some(PageMovement::End);
+                self.dirty = true;
+                return true;
+            }
             UIEvent::Input(Key::Left) => {
-                self.cursor.0 = self.cursor.0.saturating_sub(1);
+                self.movement = Some(PageMovement::Left(1));
                 self.dirty = true;
                 return true;
             }
             UIEvent::Input(Key::Right) => {
-                self.cursor.0 = self.cursor.0 + 1;
+                self.movement = Some(PageMovement::Right(1));
                 self.dirty = true;
                 return true;
             }
