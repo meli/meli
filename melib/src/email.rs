@@ -26,6 +26,7 @@ use fnv::FnvHashMap;
 mod compose;
 pub use self::compose::*;
 
+pub mod list_management;
 mod mailto;
 pub use mailto::*;
 mod attachment_types;

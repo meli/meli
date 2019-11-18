@@ -646,10 +646,7 @@ impl EmbedGrid {
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
                     .unwrap();
-                debug!("cursor backward {} times, cursor was: {:?}", offset, cursor);
-                if offset + cursor.0 < terminal_size.0 {
-                    cursor.0 += offset;
-                }
+                cursor.0 = cursor.0.saturating_sub(offset);
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -668,6 +665,21 @@ impl EmbedGrid {
                 if scroll_region.top + cursor.1 >= terminal_size.1 {
                     cursor.1 = terminal_size.1.saturating_sub(1);
                 }
+                cursor.0 = 0;
+                debug!("cursor became: {:?}", cursor);
+                *state = State::Normal;
+            }
+            (b'F', State::Csi1(buf)) => {
+                // ESC[{buf}F   CSI Cursor Previous Line {buf} Times
+                let offset = unsafe { std::str::from_utf8_unchecked(buf) }
+                    .parse::<usize>()
+                    .unwrap();
+                debug!(
+                    "cursor next line {} times, cursor was: {:?}",
+                    offset, cursor
+                );
+                cursor.1 = cursor.1.saturating_sub(offset);
+                cursor.0 = 0;
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -755,7 +767,7 @@ impl EmbedGrid {
                     b"37" => *fg_color = Color::White,
 
                     b"39" => *fg_color = Color::Default,
-                    b"40" => *fg_color = Color::Black,
+                    b"40" => *bg_color = Color::Black,
                     b"41" => *bg_color = Color::Red,
                     b"42" => *bg_color = Color::Green,
                     b"43" => *bg_color = Color::Yellow,

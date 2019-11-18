@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use melib::list_management;
 
 use crate::terminal::embed::EmbedGrid;
 use melib::Draft;

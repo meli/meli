@@ -18,9 +18,9 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use melib::parser;
-use melib::Envelope;
-use melib::StackVec;
+use super::parser;
+use super::Envelope;
+use crate::StackVec;
 use std::convert::From;
 
 #[derive(Debug, Copy)]

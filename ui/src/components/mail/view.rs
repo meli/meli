@@ -20,12 +20,10 @@
  */
 
 use super::*;
-use linkify::{Link, LinkFinder};
+use melib::list_management;
 
 use std::convert::TryFrom;
 use std::process::{Command, Stdio};
-
-pub mod list_management;
 
 mod html;
 pub use self::html::*;
@@ -35,6 +33,7 @@ pub use self::thread::*;
 mod envelope;
 pub use self::envelope::*;
 
+use linkify::{Link, LinkFinder};
 use mime_apps::query_default_app;
 
 #[derive(PartialEq, Debug, Clone)]
