@@ -459,7 +459,7 @@ impl Component for MailView {
                     ref archive,
                     ref post,
                     ref unsubscribe,
-                }) = list_management::detect(&envelope)
+                }) = list_management::ListActions::detect(&envelope)
                 {
                     let mut x = get_x(upper_left);
                     y += 1;
@@ -1170,16 +1170,30 @@ impl Component for MailView {
                     return true;
                 }
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-                if let Some(actions) = list_management::detect(&envelope) {
+                if let Some(actions) = list_management::ListActions::detect(&envelope) {
                     match e {
                         MailingListAction::ListPost if actions.post.is_some() => {
                             /* open composer */
-                            let mut draft = Draft::default();
-                            draft.set_header("To", actions.post.unwrap().to_string());
-                            context.replies.push_back(UIEvent::Action(Tab(NewDraft(
-                                self.coordinates.0,
-                                Some(draft),
-                            ))));
+                            let mut failure = true;
+                            if let list_management::ListAction::Email(list_post_addr) =
+                                actions.post.unwrap()[0]
+                            {
+                                if let Ok(mailto) = Mailto::try_from(list_post_addr) {
+                                    let draft: Draft = mailto.into();
+                                    context.replies.push_back(UIEvent::Action(Tab(NewDraft(
+                                        self.coordinates.0,
+                                        Some(draft),
+                                    ))));
+                                    failure = false;
+                                }
+                            }
+                            if failure {
+                                context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(String::from(
+                                        "Couldn't parse List-Post header value",
+                                    )),
+                                ));
+                            }
                             return true;
                         }
                         MailingListAction::ListUnsubscribe if actions.unsubscribe.is_some() => {
@@ -1188,7 +1202,7 @@ impl Component for MailView {
                             for option in unsubscribe {
                                 /* TODO: Ask for confirmation before proceding with an action */
                                 match option {
-                                    list_management::UnsubscribeOption::Email(email) => {
+                                    list_management::ListAction::Email(email) => {
                                         if let Ok(mailto) = Mailto::try_from(email) {
                                             let mut draft: Draft = mailto.into();
                                             draft.headers_mut().insert(
@@ -1219,7 +1233,7 @@ impl Component for MailView {
                                             }
                                         }
                                     }
-                                    list_management::UnsubscribeOption::Url(url) => {
+                                    list_management::ListAction::Url(url) => {
                                         if let Err(e) = Command::new("xdg-open")
                                             .arg(String::from_utf8_lossy(url).into_owned())
                                             .stdin(Stdio::piped())

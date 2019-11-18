@@ -24,70 +24,30 @@ use melib::StackVec;
 use std::convert::From;
 
 #[derive(Debug, Copy)]
-pub enum UnsubscribeOption<'a> {
+pub enum ListAction<'a> {
     Url(&'a [u8]),
     Email(&'a [u8]),
 }
 
-impl<'a> From<&'a [u8]> for UnsubscribeOption<'a> {
+impl<'a> From<&'a [u8]> for ListAction<'a> {
     fn from(value: &'a [u8]) -> Self {
         if value.starts_with(b"mailto:") {
             /* if branch looks if value looks like a mailto url but doesn't validate it.
              * parser::mailto() will handle this if user tries to unsubscribe.
              */
-            UnsubscribeOption::Email(value)
+            ListAction::Email(value)
         } else {
             /* Otherwise treat it as url. There's no foolproof way to check if this is valid, so
              * postpone it until we try an HTTP request.
              */
-            UnsubscribeOption::Url(value)
+            ListAction::Url(value)
         }
     }
 }
 
-/* Required for StackVec's place holder elements, never actually used */
-impl<'a> Default for UnsubscribeOption<'a> {
-    fn default() -> Self {
-        UnsubscribeOption::Email(b"")
-    }
-}
-
-impl<'a> Clone for UnsubscribeOption<'a> {
-    fn clone(&self) -> Self {
-        match self {
-            UnsubscribeOption::Url(a) => UnsubscribeOption::Url(<&[u8]>::clone(a)),
-            UnsubscribeOption::Email(a) => UnsubscribeOption::Email(<&[u8]>::clone(a)),
-        }
-    }
-}
-
-#[derive(Default, Debug)]
-pub struct ListActions<'a> {
-    pub id: Option<&'a str>,
-    pub archive: Option<&'a str>,
-    pub post: Option<&'a str>,
-    pub unsubscribe: Option<StackVec<UnsubscribeOption<'a>>>,
-}
-
-pub fn detect<'a>(envelope: &'a Envelope) -> Option<ListActions<'a>> {
-    let mut ret = ListActions::default();
-
-    if let Some(id) = envelope.other_headers().get("List-ID") {
-        ret.id = Some(id);
-    } else if let Some(id) = envelope.other_headers().get("List-Id") {
-        ret.id = Some(id);
-    }
-
-    if let Some(archive) = envelope.other_headers().get("List-Archive") {
-        ret.archive = Some(archive);
-    }
-
-    if let Some(post) = envelope.other_headers().get("List-Post") {
-        ret.post = Some(post);
-    }
-
-    if let Some(unsubscribe) = envelope.other_headers().get("List-Unsubscribe") {
-        ret.unsubscribe = parser::angle_bracket_delimeted_list(unsubscribe.as_bytes())
+impl<'a> ListAction<'a> {
+    pub fn parse_options_list(input: &'a [u8]) -> Option<StackVec<ListAction<'a>>> {
+        parser::angle_bracket_delimeted_list(input)
             .map(|mut vec| {
                 /* Prefer email options first, since this _is_ a mail client after all and it's
                  * more automated */
@@ -100,17 +60,95 @@ pub fn detect<'a>(envelope: &'a Envelope) -> Option<ListActions<'a>> {
                 });
 
                 vec.into_iter()
-                    .map(|elem| UnsubscribeOption::from(elem))
-                    .collect::<StackVec<UnsubscribeOption<'a>>>()
+                    .map(|elem| ListAction::from(elem))
+                    .collect::<StackVec<ListAction<'a>>>()
             })
             .to_full_result()
-            .ok();
+            .ok()
     }
+}
 
-    if ret.id.is_none() && ret.archive.is_none() && ret.post.is_none() && ret.unsubscribe.is_none()
-    {
+/* Required for StackVec's place holder elements, never actually used */
+impl<'a> Default for ListAction<'a> {
+    fn default() -> Self {
+        ListAction::Email(b"")
+    }
+}
+
+impl<'a> Clone for ListAction<'a> {
+    fn clone(&self) -> Self {
+        match self {
+            ListAction::Url(a) => ListAction::Url(<&[u8]>::clone(a)),
+            ListAction::Email(a) => ListAction::Email(<&[u8]>::clone(a)),
+        }
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct ListActions<'a> {
+    pub id: Option<&'a str>,
+    pub archive: Option<&'a str>,
+    pub post: Option<StackVec<ListAction<'a>>>,
+    pub unsubscribe: Option<StackVec<ListAction<'a>>>,
+}
+
+pub fn list_id_header<'a>(envelope: &'a Envelope) -> Option<&'a str> {
+    envelope
+        .other_headers()
+        .get("List-ID")
+        .or(envelope.other_headers().get("List-Id"))
+        .map(String::as_str)
+}
+
+pub fn list_id<'a>(header: Option<&'a str>) -> Option<&'a str> {
+    /* rfc2919 https://tools.ietf.org/html/rfc2919 */
+    /* list-id-header = "List-ID:" [phrase] "<" list-id ">" CRLF */
+    header.and_then(|v| {
+        if let Some(l) = v.rfind("<") {
+            if let Some(r) = v.rfind(">") {
+                if l < r {
+                    return Some(&v[l + 1..r]);
+                }
+            }
+        }
         None
-    } else {
-        Some(ret)
+    })
+}
+
+impl<'a> ListActions<'a> {
+    pub fn detect(envelope: &'a Envelope) -> Option<ListActions<'a>> {
+        let mut ret = ListActions::default();
+
+        ret.id = list_id_header(envelope);
+
+        if let Some(archive) = envelope.other_headers().get("List-Archive") {
+            if archive.starts_with("<") {
+                if let Some(pos) = archive.find(">") {
+                    ret.archive = Some(&archive[1..pos]);
+                } else {
+                    ret.archive = Some(archive);
+                }
+            } else {
+                ret.archive = Some(archive);
+            }
+        }
+
+        if let Some(post) = envelope.other_headers().get("List-Post") {
+            ret.post = ListAction::parse_options_list(post.as_bytes());
+        }
+
+        if let Some(unsubscribe) = envelope.other_headers().get("List-Unsubscribe") {
+            ret.unsubscribe = ListAction::parse_options_list(unsubscribe.as_bytes());
+        }
+
+        if ret.id.is_none()
+            && ret.archive.is_none()
+            && ret.post.is_none()
+            && ret.unsubscribe.is_none()
+        {
+            None
+        } else {
+            Some(ret)
+        }
     }
 }

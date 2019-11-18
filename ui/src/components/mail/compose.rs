@@ -183,33 +183,27 @@ impl Composer {
         let parent_message = account.collection.get_env(p.message().unwrap());
         /* If message is from a mailing list and we detect a List-Post header, ask user if they
          * want to reply to the mailing list or the submitter of the message */
-        if let Some(actions) = list_management::detect(&parent_message) {
+        if let Some(actions) = list_management::ListActions::detect(&parent_message) {
             if let Some(post) = actions.post {
-                /* Try to parse header value in this order
-                 * - <mailto:*****@*****>
-                 * - mailto:******@*****
-                 * - <***@****>
-                 */
-                if let Ok(list_address) = melib::email::parser::message_id(post.as_bytes())
-                    .to_full_result()
-                    .and_then(|b| melib::email::parser::mailto(b).to_full_result())
-                    .or(melib::email::parser::mailto(post.as_bytes()).to_full_result())
-                    .map(|m| m.address)
-                    .or(melib::email::parser::address(post.as_bytes()).to_full_result())
-                {
-                    let list_address_string = list_address.to_string();
-                    ret.mode = ViewMode::SelectRecipients(Selector::new(
-                        "select recipients",
-                        vec![
-                            (
-                                parent_message.from()[0].clone(),
-                                parent_message.field_from_to_string(),
-                            ),
-                            (list_address, list_address_string),
-                        ],
-                        false,
-                        context,
-                    ));
+                if let list_management::ListAction::Email(list_post_addr) = post[0] {
+                    if let Ok(list_address) = melib::email::parser::mailto(list_post_addr)
+                        .to_full_result()
+                        .map(|m| m.address)
+                    {
+                        let list_address_string = list_address.to_string();
+                        ret.mode = ViewMode::SelectRecipients(Selector::new(
+                            "select recipients",
+                            vec![
+                                (
+                                    parent_message.from()[0].clone(),
+                                    parent_message.field_from_to_string(),
+                                ),
+                                (list_address, list_address_string),
+                            ],
+                            false,
+                            context,
+                        ));
+                    }
                 }
             }
         }

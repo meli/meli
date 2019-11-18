@@ -921,7 +921,7 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     IResult::Done(&input[ptr..], acc)
 }
 
-named!(pub angle_bracket_delimeted_list<Vec<&[u8]>>, separated_nonempty_list!(complete!(is_a!(",")), ws!(complete!(message_id))));
+named!(pub angle_bracket_delimeted_list<Vec<&[u8]>>, separated_nonempty_list!(complete!(is_a!(",")), ws!(complete!(complete!(delimited!(tag!("<"), take_until1!(">"), tag!(">")))))));
 
 pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
     if !input.starts_with(b"mailto:") {
