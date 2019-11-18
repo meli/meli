@@ -122,7 +122,7 @@ impl ListingTrait for CompactListing {
             } else if self.selection[&i] {
                 Color::Byte(210)
             } else if thread_node.has_unseen() {
-                Color::Byte(253)
+                Color::Byte(251)
             } else if idx % 2 == 0 {
                 Color::Byte(236)
             } else {
@@ -703,7 +703,7 @@ impl CompactListing {
                 }
             } else {
                 if thread_node.has_unseen() {
-                    Color::Byte(253)
+                    Color::Byte(251)
                 } else if idx % 2 == 0 {
                     Color::Byte(236)
                 } else {
@@ -987,6 +987,44 @@ impl Component for CompactListing {
                 let (upper_left, bottom_right) = area;
                 while let Some(row) = self.row_updates.pop() {
                     let row: usize = self.order[&row];
+                    let i = self.get_thread_under_cursor(row, context);
+
+                    let account = &context.accounts[self.cursor_pos.0];
+                    let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+                    let threads = &account.collection.threads[&folder_hash];
+                    let thread_node = &threads.thread_nodes[&i];
+
+                    let fg_color = if thread_node.has_unseen() {
+                        Color::Byte(0)
+                    } else {
+                        Color::Default
+                    };
+                    let bg_color = if thread_node.has_unseen() {
+                        Color::Byte(251)
+                    } else if self.selection[&i] {
+                        Color::Byte(210)
+                    } else if row % 2 == 0 {
+                        if context.settings.terminal.theme == "light" {
+                            Color::Byte(252)
+                        } else {
+                            Color::Byte(236)
+                        }
+                    } else {
+                        Color::Default
+                    };
+                    for i in 0..self.data_columns.columns.len() {
+                        let column_width = self.data_columns.columns[i].size().0;
+                        if column_width == 0 {
+                            continue;
+                        }
+                        change_colors(
+                            &mut self.data_columns.columns[i],
+                            ((0, row), (column_width - 1, row)),
+                            fg_color,
+                            bg_color,
+                        );
+                    }
+
                     let rows = get_y(bottom_right) - get_y(upper_left) + 1;
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
