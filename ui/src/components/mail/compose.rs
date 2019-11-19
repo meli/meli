@@ -126,14 +126,6 @@ impl ViewMode {
             false
         }
     }
-
-    fn is_embed(&self) -> bool {
-        if let ViewMode::Embed = self {
-            true
-        } else {
-            false
-        }
-    }
 }
 
 impl fmt::Display for Composer {
@@ -543,23 +535,24 @@ impl Component for Composer {
         /* Regardless of view mode, do the following */
         self.form.draw(grid, header_area, context);
         if let Some(ref mut embed_pty) = self.embed {
-            let body_area = (upper_left!(header_area), bottom_right!(body_area));
-            clear_area(grid, body_area);
+            let embed_area = (upper_left!(header_area), bottom_right!(body_area));
             match embed_pty {
                 EmbedStatus::Running(_, _) => {
                     let mut guard = embed_pty.lock().unwrap();
+                    clear_area(grid, embed_area);
                     copy_area(
                         grid,
                         &guard.grid,
-                        body_area,
+                        embed_area,
                         ((0, 0), pos_dec(guard.terminal_size, (1, 1))),
                     );
-                    guard.set_terminal_size((width!(body_area), height!(body_area)));
+                    guard.set_terminal_size((width!(embed_area), height!(embed_area)));
                     context.dirty_areas.push_back(area);
                     self.dirty = false;
                     return;
                 }
                 EmbedStatus::Stopped(_, _) => {
+                    clear_area(grid, body_area);
                     write_string_to_grid(
                         "process has stopped, press 'e' to re-activate",
                         grid,
@@ -569,9 +562,7 @@ impl Component for Composer {
                         body_area,
                         None,
                     );
-                    context.dirty_areas.push_back(body_area);
-                    self.dirty = false;
-                    return;
+                    context.dirty_areas.push_back(area);
                 }
             }
         } else {
@@ -706,7 +697,10 @@ impl Component for Composer {
             }
             _ => {}
         }
-        if self.cursor == Cursor::Headers && self.form.process_event(event, context) {
+        if self.cursor == Cursor::Headers
+            && self.mode.is_edit()
+            && self.form.process_event(event, context)
+        {
             if let UIEvent::InsertInput(_) = event {
                 self.has_changes = true;
             }
@@ -762,6 +756,12 @@ impl Component for Composer {
             }
             UIEvent::EmbedInput((Key::Ctrl('z'), _)) => {
                 self.embed.as_ref().unwrap().lock().unwrap().stop();
+                match self.embed.take() {
+                    Some(EmbedStatus::Running(e, f)) | Some(EmbedStatus::Stopped(e, f)) => {
+                        self.embed = Some(EmbedStatus::Stopped(e, f));
+                    }
+                    _ => {}
+                }
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Normal));
@@ -824,6 +824,10 @@ impl Component for Composer {
                                     }
                                     _ => {}
                                 }
+                                self.mode = ViewMode::Edit;
+                                context
+                                    .replies
+                                    .push_back(UIEvent::ChangeMode(UIMode::Normal));
                                 self.dirty = true;
                                 return true;
                             }
@@ -852,15 +856,22 @@ impl Component for Composer {
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Char('e')) if self.mode.is_embed() => {
+            UIEvent::Input(Key::Char('e')) if self.embed.is_some() => {
                 self.embed.as_ref().unwrap().lock().unwrap().wake_up();
+                match self.embed.take() {
+                    Some(EmbedStatus::Running(e, f)) | Some(EmbedStatus::Stopped(e, f)) => {
+                        self.embed = Some(EmbedStatus::Running(e, f));
+                    }
+                    _ => {}
+                }
+                self.mode = ViewMode::Embed;
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Embed));
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Char('e')) => {
+            UIEvent::Input(Key::Char('e')) if self.mode.is_edit() => {
                 /* Edit draft in $EDITOR */
                 let settings = &context.settings;
                 let editor = if let Some(editor_cmd) = settings.composing.editor_cmd.as_ref() {
@@ -901,6 +912,9 @@ impl Component for Composer {
                     context
                         .replies
                         .push_back(UIEvent::ChangeMode(UIMode::Embed));
+                    context.replies.push_back(UIEvent::Fork(ForkType::Embed(
+                        self.embed.as_ref().unwrap().lock().unwrap().child_pid,
+                    )));
                     self.mode = ViewMode::Embed;
                     return true;
                 }

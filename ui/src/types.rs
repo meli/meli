@@ -28,6 +28,7 @@ use super::terminal::*;
 
 use melib::backends::FolderHash;
 use melib::{EnvelopeHash, RefreshEvent};
+use nix::unistd::Pid;
 use std;
 use std::fmt;
 use std::thread;
@@ -69,7 +70,7 @@ pub enum ForkType {
     /// Already finished fork, we only want to restore input/output
     Finished,
     /// Embed pty
-    Embed,
+    Embed(Pid),
     Generic(std::process::Child),
     NewDraft(File, std::process::Child),
 }

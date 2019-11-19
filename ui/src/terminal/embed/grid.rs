@@ -633,7 +633,7 @@ impl EmbedGrid {
                         .write_all((terminal_size.0).to_string().as_bytes())
                         .unwrap();
                     stdin.write_all(&[b't']).unwrap();
-                    stdin.flush();
+                    stdin.flush().unwrap();
                 } else {
                     debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
                 }
@@ -653,7 +653,7 @@ impl EmbedGrid {
                     .write_all((cursor.0 + 1).to_string().as_bytes())
                     .unwrap();
                 stdin.write_all(&[b'R']).unwrap();
-                stdin.flush();
+                stdin.flush().unwrap();
                 *state = State::Normal;
             }
             (b'A', State::Csi1(buf)) => {

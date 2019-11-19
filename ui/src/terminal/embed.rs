@@ -6,7 +6,7 @@ use melib::ERROR;
 use nix::fcntl::{open, OFlag};
 use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use nix::pty::{grantpt, posix_openpt, ptsname, unlockpt, Winsize};
-use nix::sys::{stat, wait::waitpid};
+use nix::sys::stat;
 use nix::unistd::{dup2, fork, ForkResult};
 use nix::{ioctl_none_bad, ioctl_write_ptr_bad};
 use std::ffi::CString;
@@ -66,45 +66,49 @@ pub fn create_pty(
             /* Open slave end for pseudoterminal */
             let slave_fd = open(Path::new(&slave_name), OFlag::O_RDWR, stat::Mode::empty())?;
 
-            let child_pid = match fork() {
-                Ok(ForkResult::Child) => {
-                    // assign stdin, stdout, stderr to the tty
-                    dup2(slave_fd, STDIN_FILENO).unwrap();
-                    dup2(slave_fd, STDOUT_FILENO).unwrap();
-                    dup2(slave_fd, STDERR_FILENO).unwrap();
-                    /* Become session leader */
-                    nix::unistd::setsid().unwrap();
-                    match unsafe { set_controlling_terminal(slave_fd) } {
-                        Ok(c) if c < 0 => {
-                            log(format!("Could not execute `{}`: ioctl(fd, TIOCSCTTY, NULL) returned {}", command, c,), ERROR);
-                            std::process::exit(c);
-                        }
-                        Ok(_) => {}
-                        Err(err) => {
-                            log(format!("Could not execute `{}`: ioctl(fd, TIOCSCTTY, NULL) returned {}", command, err,), ERROR);
-                            std::process::exit(-1);
-                        }
-                    }
-                    let parts = split_command!(command);
-                    let (cmd, _) = (parts[0], &parts[1..]);
-                    if let Err(e) = nix::unistd::execv(
-                        &CString::new(cmd).unwrap(),
-                        &parts
-                            .iter()
-                            .map(|&a| CString::new(a).unwrap())
-                            .collect::<Vec<CString>>(),
-                    ) {
-                        log(format!("Could not execute `{}`: {}", command, e,), ERROR);
-                        std::process::exit(-1);
-                    }
-                    /* This path shouldn't be executed. */
+            // assign stdin, stdout, stderr to the tty
+            dup2(slave_fd, STDIN_FILENO).unwrap();
+            dup2(slave_fd, STDOUT_FILENO).unwrap();
+            dup2(slave_fd, STDERR_FILENO).unwrap();
+            /* Become session leader */
+            nix::unistd::setsid().unwrap();
+            match unsafe { set_controlling_terminal(slave_fd) } {
+                Ok(c) if c < 0 => {
+                    log(
+                        format!(
+                            "Could not execute `{}`: ioctl(fd, TIOCSCTTY, NULL) returned {}",
+                            command, c,
+                        ),
+                        ERROR,
+                    );
+                    std::process::exit(c);
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    log(
+                        format!(
+                            "Could not execute `{}`: ioctl(fd, TIOCSCTTY, NULL) returned {}",
+                            command, err,
+                        ),
+                        ERROR,
+                    );
                     std::process::exit(-1);
                 }
-                Ok(ForkResult::Parent { child }) => child,
-                Err(e) => panic!(e),
-            };
-            waitpid(child_pid, None).unwrap();
-            std::process::exit(0);
+            }
+            let parts = split_command!(command);
+            let (cmd, _) = (parts[0], &parts[1..]);
+            if let Err(e) = nix::unistd::execv(
+                &CString::new(cmd).unwrap(),
+                &parts
+                    .iter()
+                    .map(|&a| CString::new(a).unwrap())
+                    .collect::<Vec<CString>>(),
+            ) {
+                log(format!("Could not execute `{}`: {}", command, e,), ERROR);
+                std::process::exit(-1);
+            }
+            /* This path shouldn't be executed. */
+            std::process::exit(-1);
         }
         Ok(ForkResult::Parent { child }) => child,
         Err(e) => panic!(e),
