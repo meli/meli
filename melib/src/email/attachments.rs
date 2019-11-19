@@ -92,6 +92,16 @@ impl AttachmentBuilder {
         self
     }
 
+    /// Set body to the entire raw contents, use this if raw contains only data and no headers
+    /// If raw contains data and headers pass it through AttachmentBuilder::new().
+    pub fn set_body_to_raw(&mut self) -> &mut Self {
+        self.body = StrBuilder {
+            offset: 0,
+            length: self.raw.len(),
+        };
+        self
+    }
+
     pub fn set_content_type(&mut self, val: ContentType) -> &mut Self {
         self.content_type = val;
         self

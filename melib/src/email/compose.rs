@@ -272,9 +272,6 @@ impl Draft {
             );
             ret.push('\n');
             ret.push_str(&self.body);
-        } else if self.attachments.len() == 1 && self.body.is_empty() {
-            let attachment: Attachment = self.attachments.remove(0).into();
-            ret.extend(attachment.into_raw().chars());
         } else {
             let mut parts = Vec::with_capacity(self.attachments.len() + 1);
             let attachments = std::mem::replace(&mut self.attachments, Vec::new());
@@ -453,9 +450,10 @@ where
     let mut file = std::fs::File::open(&path)?;
     let mut contents = Vec::new();
     file.read_to_end(&mut contents)?;
-    let mut attachment = AttachmentBuilder::new(b"");
+    let mut attachment = AttachmentBuilder::default();
     attachment
         .set_raw(contents)
+        .set_body_to_raw()
         .set_content_type(ContentType::Other {
             name: path.file_name().map(|s| s.to_string_lossy().into()),
             tag: b"application/octet-stream".to_vec(),

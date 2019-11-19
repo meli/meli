@@ -115,6 +115,7 @@ enum ViewMode {
     Edit,
     Embed,
     SelectRecipients(Selector<Address>),
+    Send(Selector<bool>),
 }
 
 impl ViewMode {
@@ -364,6 +365,66 @@ impl Composer {
             }
         }
     }
+
+    fn save_draft(&mut self, context: &mut Context, folder_type: SpecialUseMailbox) {
+        let mut failure = true;
+        let draft = std::mem::replace(&mut self.draft, Draft::default());
+
+        let draft = draft.finalise().unwrap();
+        for folder in &[
+            &context.accounts[self.account_cursor].special_use_folder(folder_type),
+            &context.accounts[self.account_cursor].special_use_folder(SpecialUseMailbox::Inbox),
+            &context.accounts[self.account_cursor].special_use_folder(SpecialUseMailbox::Normal),
+        ] {
+            if folder.is_none() {
+                continue;
+            }
+            let folder = folder.unwrap();
+            if let Err(e) = context.accounts[self.account_cursor].save(
+                draft.as_bytes(),
+                folder,
+                Some(Flag::SEEN | Flag::DRAFT),
+            ) {
+                debug!("{:?} could not save draft msg", e);
+                log(
+                    format!(
+                        "Could not save draft in '{}' folder: {}.",
+                        folder,
+                        e.to_string()
+                    ),
+                    ERROR,
+                );
+                context.replies.push_back(UIEvent::Notification(
+                    Some(format!("Could not save draft in '{}' folder.", folder)),
+                    e.into(),
+                    Some(NotificationType::ERROR),
+                ));
+            } else {
+                failure = false;
+                break;
+            }
+        }
+
+        if failure {
+            let file = create_temp_file(draft.as_bytes(), None, None, false);
+            debug!("message saved in {}", file.path.display());
+            log(
+                format!(
+                    "Message was stored in {} so that you can restore it manually.",
+                    file.path.display()
+                ),
+                INFO,
+            );
+            context.replies.push_back(UIEvent::Notification(
+                Some("Could not save in any folder".into()),
+                format!(
+                    "Message was stored in {} so that you can restore it manually.",
+                    file.path.display()
+                ),
+                Some(NotificationType::INFO),
+            ));
+        }
+    }
 }
 
 impl Component for Composer {
@@ -543,6 +604,9 @@ impl Component for Composer {
 
         match self.mode {
             ViewMode::Edit | ViewMode::Embed => {}
+            ViewMode::Send(ref mut s) => {
+                s.draw(grid, center_area(area, s.content.size()), context);
+            }
             ViewMode::SelectRecipients(ref mut s) => {
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
@@ -562,6 +626,34 @@ impl Component for Composer {
             (_, Some(_), UIEvent::Input(Key::Char('R'))) => {}
             (ViewMode::Edit, _, _) => {
                 if self.pager.process_event(event, context) {
+                    return true;
+                }
+            }
+            (ViewMode::Send(ref mut selector), _, _) => {
+                if selector.process_event(event, context) {
+                    if selector.is_done() {
+                        let s = match std::mem::replace(&mut self.mode, ViewMode::Edit) {
+                            ViewMode::Send(s) => s,
+                            _ => unreachable!(),
+                        };
+                        let result: bool = s.collect()[0];
+                        if result {
+                            self.update_draft();
+                            if send_draft(
+                                self.sign_mail,
+                                context,
+                                self.account_cursor,
+                                self.draft.clone(),
+                            ) {
+                                self.save_draft(context, SpecialUseMailbox::Sent);
+                                context
+                                    .replies
+                                    .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                            } else {
+                                self.save_draft(context, SpecialUseMailbox::Drafts);
+                            }
+                        }
+                    }
                     return true;
                 }
             }
@@ -601,70 +693,7 @@ impl Component for Composer {
                             }
                             'n' => {}
                             'y' => {
-                                let mut failure = true;
-                                let draft = std::mem::replace(&mut self.draft, Draft::default());
-
-                                let draft = draft.finalise().unwrap();
-                                for folder in &[
-                                    &context.accounts[self.account_cursor]
-                                        .special_use_folder(SpecialUseMailbox::Drafts),
-                                    &context.accounts[self.account_cursor]
-                                        .special_use_folder(SpecialUseMailbox::Inbox),
-                                    &context.accounts[self.account_cursor]
-                                        .special_use_folder(SpecialUseMailbox::Normal),
-                                ] {
-                                    if folder.is_none() {
-                                        continue;
-                                    }
-                                    let folder = folder.unwrap();
-                                    if let Err(e) = context.accounts[self.account_cursor].save(
-                                        draft.as_bytes(),
-                                        folder,
-                                        Some(Flag::SEEN | Flag::DRAFT),
-                                    ) {
-                                        debug!("{:?} could not save draft msg", e);
-                                        log(
-                                            format!(
-                                                "Could not save draft in '{}' folder: {}.",
-                                                folder,
-                                                e.to_string()
-                                            ),
-                                            ERROR,
-                                        );
-                                        context.replies.push_back(UIEvent::Notification(
-                                            Some(format!(
-                                                "Could not save draft in '{}' folder.",
-                                                folder
-                                            )),
-                                            e.into(),
-                                            Some(NotificationType::ERROR),
-                                        ));
-                                    } else {
-                                        failure = false;
-                                        break;
-                                    }
-                                }
-
-                                if failure {
-                                    let file =
-                                        create_temp_file(draft.as_bytes(), None, None, false);
-                                    debug!("message saved in {}", file.path.display());
-                                    log(
-                                        format!(
-                                    "Message was stored in {} so that you can restore it manually.",
-                                    file.path.display()
-                                ),
-                                        INFO,
-                                    );
-                                    context.replies.push_back(UIEvent::Notification(
-                                        Some("Could not save in any folder".into()),
-                                        format!(
-                                    "Message was stored in {} so that you can restore it manually.",
-                                    file.path.display()
-                                ),
-                                        Some(NotificationType::INFO),
-                                    ));
-                                }
+                                self.save_draft(context, SpecialUseMailbox::Drafts);
                                 context.replies.push_back(UIEvent::Action(Tab(Kill(u))));
                                 return true;
                             }
@@ -720,18 +749,15 @@ impl Component for Composer {
                 self.cursor = Cursor::Body;
                 self.dirty = true;
             }
-            UIEvent::Input(Key::Char('s')) => {
+            UIEvent::Input(Key::Char('s')) if self.mode.is_edit() => {
                 self.update_draft();
-                if send_draft(
-                    self.sign_mail,
+                self.mode = ViewMode::Send(Selector::new(
+                    "send mail?",
+                    vec![(true, "yes".to_string()), (false, "no".to_string())],
+                    /* only one choice */
+                    true,
                     context,
-                    self.account_cursor,
-                    self.draft.clone(),
-                ) {
-                    context
-                        .replies
-                        .push_back(UIEvent::Action(Tab(Kill(self.id))));
-                }
+                ));
                 return true;
             }
             UIEvent::EmbedInput((Key::Ctrl('z'), _)) => {
@@ -1071,10 +1097,17 @@ pub fn send_draft(
 ) -> bool {
     use std::io::Write;
     use std::process::{Command, Stdio};
-    let mut failure = true;
     let settings = &context.settings;
     let format_flowed = settings.composing.format_flowed;
     let parts = split_command!(settings.composing.mailer_cmd);
+    if parts.is_empty() {
+        context.replies.push_back(UIEvent::Notification(
+            None,
+            String::from("mailer_cmd configuration value is empty"),
+            Some(NotificationType::ERROR),
+        ));
+        return false;
+    }
     let (cmd, args) = (parts[0], &parts[1..]);
     let mut msmtp = Command::new(cmd)
         .args(args)
@@ -1147,53 +1180,6 @@ pub fn send_draft(
         stdin
             .write_all(draft.as_bytes())
             .expect("Failed to write to stdin");
-        for folder in &[
-            &context.accounts[account_cursor].special_use_folder(SpecialUseMailbox::Sent),
-            &context.accounts[account_cursor].special_use_folder(SpecialUseMailbox::Inbox),
-            &context.accounts[account_cursor].special_use_folder(SpecialUseMailbox::Normal),
-        ] {
-            if folder.is_none() {
-                continue;
-            }
-            let folder = folder.unwrap();
-            if let Err(e) =
-                context.accounts[account_cursor].save(draft.as_bytes(), folder, Some(Flag::SEEN))
-            {
-                debug!("{:?} could not save sent msg", e);
-                log(
-                    format!("Could not save in '{}' folder: {}.", folder, e.to_string()),
-                    ERROR,
-                );
-                context.replies.push_back(UIEvent::Notification(
-                    Some(format!("Could not save in '{}' folder.", folder)),
-                    e.into(),
-                    Some(NotificationType::ERROR),
-                ));
-            } else {
-                failure = false;
-                break;
-            }
-        }
-
-        if failure {
-            let file = create_temp_file(draft.as_bytes(), None, None, false);
-            debug!("message saved in {}", file.path.display());
-            log(
-                format!(
-                    "Message was stored in {} so that you can restore it manually.",
-                    file.path.display()
-                ),
-                INFO,
-            );
-            context.replies.push_back(UIEvent::Notification(
-                Some("Could not save in any folder".into()),
-                format!(
-                    "Message was stored in {} so that you can restore it manually.",
-                    file.path.display()
-                ),
-                Some(NotificationType::INFO),
-            ));
-        }
     }
     let output = msmtp.wait().expect("Failed to wait on mailer");
     if output.success() {
@@ -1203,23 +1189,23 @@ pub fn send_draft(
             None,
         ));
     } else {
-        if let Some(exit_code) = output.code() {
-            log(
-                format!(
-                    "Could not send e-mail using `{}`: Process exited with {}",
-                    cmd, exit_code
-                ),
-                ERROR,
-            );
+        let error_message = if let Some(exit_code) = output.code() {
+            format!(
+                "Could not send e-mail using `{}`: Process exited with {}",
+                cmd, exit_code
+            )
         } else {
-            log(
-                format!(
-                    "Could not send e-mail using `{}`: Process was killed by signal",
-                    cmd
-                ),
-                ERROR,
-            );
-        }
+            format!(
+                "Could not send e-mail using `{}`: Process was killed by signal",
+                cmd
+            )
+        };
+        context.replies.push_back(UIEvent::Notification(
+            Some("Message not sent.".into()),
+            error_message.clone(),
+            Some(NotificationType::ERROR),
+        ));
+        log(error_message, ERROR);
     }
-    !failure
+    true
 }

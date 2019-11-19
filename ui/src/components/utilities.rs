@@ -1763,6 +1763,13 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.done = true;
                 return true;
             }
+            (UIEvent::Input(Key::Esc), _) => {
+                for e in self.entries.iter_mut() {
+                    e.1 = false;
+                }
+                self.done = true;
+                return true;
+            }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Cancel) if !self.single_only => {
                 for e in self.entries.iter_mut() {
                     e.1 = false;
