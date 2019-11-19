@@ -687,8 +687,15 @@ impl StatusBar {
             None,
         );
         let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
-        for x in get_x(upper_left!(area))..get_x(upper_left!(area)) + offset {
-            grid[(x, y)].set_attrs(Attr::Bold);
+        if y < get_y(bottom_right!(area)) + 1 {
+            for x in get_x(upper_left!(area))
+                ..std::cmp::min(
+                    get_x(upper_left!(area)) + offset,
+                    get_x(bottom_right!(area)),
+                )
+            {
+                grid[(x, y)].set_attrs(Attr::Bold);
+            }
         }
         if self.cur_notification.is_some() {
             let (t, n) = self.cur_notification.as_ref().unwrap();
