@@ -478,6 +478,10 @@ impl Cell {
     pub fn empty(&self) -> bool {
         self.empty
     }
+
+    pub fn set_empty(&mut self, new_val: bool) {
+        self.empty = new_val;
+    }
 }
 
 impl Default for Cell {

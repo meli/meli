@@ -268,6 +268,14 @@ fn run_app() -> Result<()> {
                             state.render();
                             state.redraw();
                         },
+                        ThreadEvent::InputRaw(raw_input @ (Key::Ctrl('l'), _)) => {
+                            /* Manual screen redraw */
+                            state.update_size();
+                            state.render();
+                            state.redraw();
+                            state.rcv_event(UIEvent::EmbedInput(raw_input));
+                            state.redraw();
+                        },
                         ThreadEvent::Input(k) => {
                             match state.mode {
                                 UIMode::Normal => {

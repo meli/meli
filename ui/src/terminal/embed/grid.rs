@@ -3,6 +3,7 @@ use crate::terminal::cells::*;
 use melib::error::{MeliError, Result};
 use nix::sys::wait::WaitStatus;
 use nix::sys::wait::{waitpid, WaitPidFlag};
+use text_processing::wcwidth;
 /**
  * `EmbedGrid` manages the terminal grid state of the embed process.
  *
@@ -41,6 +42,11 @@ pub struct EmbedGrid {
     prev_bg_color: Option<Color>,
 
     show_cursor: bool,
+    origin_mode: bool,
+    auto_wrap_mode: bool,
+    /// If next grapheme should be placed in the next line
+    /// This should be reset whenever the cursor value changes
+    wrap_next: bool,
     /// Store state in case a multi-byte character is encountered
     codepoints: CodepointBuf,
 }
@@ -68,6 +74,9 @@ impl EmbedGrid {
             prev_fg_color: None,
             prev_bg_color: None,
             show_cursor: true,
+            auto_wrap_mode: true,
+            wrap_next: false,
+            origin_mode: false,
             codepoints: CodepointBuf::None,
         }
     }
@@ -77,13 +86,14 @@ impl EmbedGrid {
             return;
         }
         debug!("resizing to {:?}", new_val);
-        if self.scroll_region.top == 0 && self.scroll_region.bottom == self.terminal_size.1 {
-            self.scroll_region.bottom = new_val.1;
-        }
+        self.scroll_region.top = 0;
+        self.scroll_region.bottom = new_val.1.saturating_sub(1);
+
         self.terminal_size = new_val;
         self.grid.resize(new_val.0, new_val.1, Cell::default());
         self.grid.clear(Cell::default());
         self.cursor = (0, 0);
+        self.wrap_next = false;
         let winsize = Winsize {
             ws_row: <u16>::try_from(new_val.1).unwrap(),
             ws_col: <u16>::try_from(new_val.0).unwrap(),
@@ -124,6 +134,9 @@ impl EmbedGrid {
             ref mut prev_bg_color,
             ref mut codepoints,
             ref mut show_cursor,
+            ref mut auto_wrap_mode,
+            ref mut wrap_next,
+            ref mut origin_mode,
             child_pid: _,
         } = self;
 
@@ -131,6 +144,8 @@ impl EmbedGrid {
             () => {
                 if cursor.0 + 1 < terminal_size.0 {
                     cursor.0 += 1;
+                } else if *auto_wrap_mode {
+                    *wrap_next = true;
                 }
             };
         }
@@ -171,6 +186,17 @@ impl EmbedGrid {
             }
             (b'(', State::ExpectingControlChar) => {
                 *state = State::G0;
+            }
+            (b'D', State::ExpectingControlChar) => {
+                // ESCD Linefeed
+                debug!("{}", EscCode::from((&(*state), byte)));
+                if cursor.1 == scroll_region.bottom {
+                    scroll_up(grid, scroll_region, scroll_region.top, 1);
+                } else {
+                    cursor.1 += 1;
+                }
+                *wrap_next = false;
+                *state = State::Normal;
             }
             (b'J', State::ExpectingControlChar) => {
                 // ESCJ Erase from the cursor to the end of the screen
@@ -214,26 +240,25 @@ impl EmbedGrid {
             (c, State::Osc2(_, ref mut buf)) if (c >= b'0' && c <= b'9') || c == b'?' => {
                 buf.push(c);
             }
-            (_, State::Osc1(_)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
-                *state = State::Normal;
-            }
-            (_, State::Osc2(_, _)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
-                *state = State::Normal;
-            }
             /* Normal */
             (b'\r', State::Normal) => {
                 debug!("carriage return x-> 0, cursor was: {:?}", cursor);
                 cursor.0 = 0;
+                *wrap_next = false;
                 debug!("cursor became: {:?}", cursor);
             }
             (b'\n', State::Normal) => {
                 //debug!("setting cell {:?} char '{}'", cursor, c as char);
                 debug!("newline y-> y+1, cursor was: {:?}", cursor);
+
                 if cursor.1 + 1 < terminal_size.1 {
-                    cursor.1 += 1;
+                    if cursor.1 == scroll_region.bottom {
+                        scroll_up(grid, scroll_region, cursor.1, 1);
+                    } else {
+                        cursor.1 += 1;
+                    }
                 }
+                *wrap_next = false;
                 debug!("cursor became: {:?}", cursor);
             }
             (b'', State::Normal) => {
@@ -249,9 +274,9 @@ impl EmbedGrid {
             }
             (c, State::Normal) => {
                 /* Character to be printed. */
-                if *codepoints == CodepointBuf::None && c & 0x80 == 0 {
+                let c = if *codepoints == CodepointBuf::None && c & 0x80 == 0 {
                     /* This is a one byte char */
-                    grid[cursor_val!()].set_ch(c as char);
+                    c as char
                 } else {
                     match codepoints {
                         CodepointBuf::None if c & 0b1110_0000 == 0b1100_0000 => {
@@ -267,37 +292,29 @@ impl EmbedGrid {
                             return;
                         }
                         CodepointBuf::TwoCodepoints(buf) => {
-                            grid[cursor_val!()].set_ch(
-                                unsafe { std::str::from_utf8_unchecked(&[buf[0], c]) }
-                                    .chars()
-                                    .next()
-                                    .unwrap(),
-                            );
-                            *codepoints = CodepointBuf::None;
+                            debug!("two byte char = ");
+                            unsafe { std::str::from_utf8_unchecked(&[buf[0], c]) }
+                                .chars()
+                                .next()
+                                .unwrap()
                         }
                         CodepointBuf::ThreeCodepoints(buf) if buf.len() == 2 => {
-                            grid[cursor_val!()].set_ch(
-                                unsafe { std::str::from_utf8_unchecked(&[buf[0], buf[1], c]) }
-                                    .chars()
-                                    .next()
-                                    .unwrap(),
-                            );
-                            *codepoints = CodepointBuf::None;
+                            debug!("three byte char = ",);
+                            unsafe { std::str::from_utf8_unchecked(&[buf[0], buf[1], c]) }
+                                .chars()
+                                .next()
+                                .unwrap()
                         }
                         CodepointBuf::ThreeCodepoints(buf) => {
                             buf.push(c);
                             return;
                         }
                         CodepointBuf::FourCodepoints(buf) if buf.len() == 3 => {
-                            grid[cursor_val!()].set_ch(
-                                unsafe {
-                                    std::str::from_utf8_unchecked(&[buf[0], buf[1], buf[2], c])
-                                }
+                            debug!("four byte char = ",);
+                            unsafe { std::str::from_utf8_unchecked(&[buf[0], buf[1], buf[2], c]) }
                                 .chars()
                                 .next()
-                                .unwrap(),
-                            );
-                            *codepoints = CodepointBuf::None;
+                                .unwrap()
                         }
                         CodepointBuf::FourCodepoints(buf) => {
                             buf.push(c);
@@ -309,12 +326,45 @@ impl EmbedGrid {
                                 codepoints, c
                             );
                             *codepoints = CodepointBuf::None;
+                            return;
+                        }
+                    }
+                };
+                debug!("c = {:?}\tcursor={:?}", c, cursor);
+                *codepoints = CodepointBuf::None;
+                if *auto_wrap_mode && *wrap_next {
+                    *wrap_next = false;
+                    if cursor.1 == scroll_region.bottom {
+                        scroll_up(grid, scroll_region, scroll_region.top, 1);
+                    } else {
+                        cursor.1 += 1;
+                    }
+                    cursor.0 = 0;
+                }
+
+                if c == '↪' {
+                    debug!("↪ cursor is {:?}", cursor_val!());
+                }
+                grid[cursor_val!()].set_ch(c);
+                grid[cursor_val!()].set_fg(*fg_color);
+                grid[cursor_val!()].set_bg(*bg_color);
+                match wcwidth(u32::from(c)) {
+                    Some(0) | None => {
+                        /* Skip drawing zero width characters */
+                        grid[cursor_val!()].set_empty(true);
+                    }
+                    Some(1) => {}
+                    Some(n) => {
+                        /* Grapheme takes more than one column, so the next cell will be
+                         * drawn over. Set it as empty to skip drawing it. */
+                        for _ in 1..n {
+                            increase_cursor_x!();
+                            grid[cursor_val!()].set_empty(true);
+                            grid[cursor_val!()].set_fg(*fg_color);
+                            grid[cursor_val!()].set_bg(*bg_color);
                         }
                     }
                 }
-
-                grid[cursor_val!()].set_fg(*fg_color);
-                grid[cursor_val!()].set_bg(*bg_color);
                 increase_cursor_x!();
             }
             (b'u', State::Csi) => {
@@ -332,24 +382,11 @@ impl EmbedGrid {
                 grid[cursor_val!()].set_bg(Color::Default);
                 *state = State::Normal;
             }
-            (b'H', State::Csi) => {
-                /* move cursor to (1,1) */
-                debug!("{}", EscCode::from((&(*state), byte)),);
-                debug!("move cursor to (1,1) cursor before: {:?}", *cursor);
-                *cursor = (0, 0);
-                debug!("cursor after: {:?}", *cursor);
-                *state = State::Normal;
-            }
-            (b'P', State::Csi) => {
-                /* delete one character */
-                debug!("{}", EscCode::from((&(*state), byte)),);
-                grid[cursor_val!()].set_ch(' ');
-                *state = State::Normal;
-            }
             (b'C', State::Csi) => {
                 // ESC[C    CSI Cursor Forward one Time
                 debug!("cursor forward one time, cursor was: {:?}", cursor);
                 cursor.0 = std::cmp::min(cursor.0 + 1, terminal_size.0.saturating_sub(1));
+                *wrap_next = false;
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -359,6 +396,12 @@ impl EmbedGrid {
             }
             (b'h', State::CsiQ(ref buf)) => {
                 match buf.as_slice() {
+                    b"6" => {
+                        *origin_mode = true;
+                    }
+                    b"7" => {
+                        *auto_wrap_mode = true;
+                    }
                     b"25" => {
                         *show_cursor = true;
                         *prev_fg_color = Some(grid[cursor_val!()].fg());
@@ -374,6 +417,12 @@ impl EmbedGrid {
             }
             (b'l', State::CsiQ(ref mut buf)) => {
                 match buf.as_slice() {
+                    b"6" => {
+                        *origin_mode = false;
+                    }
+                    b"7" => {
+                        *auto_wrap_mode = false;
+                    }
                     b"25" => {
                         *show_cursor = false;
                         if let Some(fg_color) = prev_fg_color.take() {
@@ -390,10 +439,6 @@ impl EmbedGrid {
                     _ => {}
                 }
                 debug!("{}", EscCode::from((&(*state), byte)));
-                *state = State::Normal;
-            }
-            (_, State::CsiQ(_)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             /* END OF CSI ? stuff */
@@ -429,16 +474,38 @@ impl EmbedGrid {
                 /* Erase to right (Default) */
                 debug!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
-                    grid[(x, cursor.1 + scroll_region.top)] = Cell::default();
+                    grid[(x, cursor.1)] = Cell::default();
                 }
                 *state = State::Normal;
             }
-            (b'M', State::Csi) => {
-                /* Delete line */
+            (b'L', State::Csi) | (b'L', State::Csi1(_)) => {
+                /* Insert n blank lines (default 1) */
+                let n = if let State::Csi1(ref buf1) = state {
+                    unsafe { std::str::from_utf8_unchecked(buf1) }
+                        .parse::<usize>()
+                        .unwrap()
+                } else {
+                    1
+                };
+
+                scroll_down(grid, scroll_region, cursor.1, n);
+
                 debug!("{}", EscCode::from((&(*state), byte)));
-                for x in 0..terminal_size.0 {
-                    grid[(x, cursor.1 + scroll_region.top)] = Cell::default();
-                }
+                *state = State::Normal;
+            }
+            (b'M', State::Csi) | (b'M', State::Csi1(_)) => {
+                /* Delete n lines (default 1) */
+                let n = if let State::Csi1(ref buf1) = state {
+                    unsafe { std::str::from_utf8_unchecked(buf1) }
+                        .parse::<usize>()
+                        .unwrap()
+                } else {
+                    1
+                };
+
+                scroll_up(grid, scroll_region, cursor.1, n);
+
+                debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             (b'A', State::Csi) => {
@@ -449,18 +516,8 @@ impl EmbedGrid {
                 } else {
                     debug!("cursor.1 == 0");
                 }
+                *wrap_next = false;
                 debug!("cursor became: {:?}", cursor);
-                *state = State::Normal;
-            }
-            (b'r', State::Csi) => {
-                // Set scrolling region to default (size of window)
-                scroll_region.top = 0;
-                scroll_region.bottom = terminal_size.1.saturating_sub(1);
-                *cursor = (0, 0);
-                *state = State::Normal;
-            }
-            (_, State::Csi) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             (b'K', State::Csi1(buf)) if buf == b"0" => {
@@ -468,15 +525,15 @@ impl EmbedGrid {
                 /* Erase to right (Default) */
                 debug!("{}", EscCode::from((&(*state), byte)));
                 for x in cursor.0..terminal_size.0 {
-                    grid[(x, cursor.1 + scroll_region.top)] = Cell::default();
+                    grid[(x, cursor.1)] = Cell::default();
                 }
                 *state = State::Normal;
             }
             (b'K', State::Csi1(buf)) if buf == b"1" => {
                 /* Erase in Line (ED), VT100.*/
                 /* Erase to left (Default) */
-                for x in cursor.0..=0 {
-                    grid[(x, cursor.1 + scroll_region.top)] = Cell::default();
+                for x in 0..=cursor.0 {
+                    grid[(x, cursor.1)] = Cell::default();
                 }
                 debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
@@ -538,12 +595,6 @@ impl EmbedGrid {
                 debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
-            (b'J', State::Csi1(ref buf)) if buf == b"3" => {
-                /* Erase in Display (ED), VT100.*/
-                /* Erase saved lines (What?) */
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
-                *state = State::Normal;
-            }
             (b'X', State::Csi1(ref buf)) => {
                 /* Erase Ps Character(s) (default = 1) (ECH)..*/
                 let ps = unsafe { std::str::from_utf8_unchecked(buf) }
@@ -569,7 +620,7 @@ impl EmbedGrid {
             }
             (b't', State::Csi1(buf)) => {
                 /* Window manipulation */
-                if buf == b"18" {
+                if buf == b"18" || buf == b"19" {
                     // Ps = 18 → Report the size of the text area in characters as CSI 8 ; height ; width t
                     debug!("report size of the text area");
                     debug!("got {}", EscCode::from((&(*state), byte)));
@@ -582,6 +633,7 @@ impl EmbedGrid {
                         .write_all((terminal_size.0).to_string().as_bytes())
                         .unwrap();
                     stdin.write_all(&[b't']).unwrap();
+                    stdin.flush();
                 } else {
                     debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
                 }
@@ -601,6 +653,7 @@ impl EmbedGrid {
                     .write_all((cursor.0 + 1).to_string().as_bytes())
                     .unwrap();
                 stdin.write_all(&[b'R']).unwrap();
+                stdin.flush();
                 *state = State::Normal;
             }
             (b'A', State::Csi1(buf)) => {
@@ -609,16 +662,7 @@ impl EmbedGrid {
                     .parse::<usize>()
                     .unwrap();
                 debug!("cursor up {} times, cursor was: {:?}", offset, cursor);
-                if cursor.1 == scroll_region.top {
-                    for y in scroll_region.top..scroll_region.bottom {
-                        for x in 0..terminal_size.1 {
-                            grid[(x, y)] = grid[(x, y + 1)];
-                        }
-                    }
-                    for x in 0..terminal_size.1 {
-                        grid[(x, scroll_region.bottom)] = Cell::default();
-                    }
-                } else if cursor.1 >= offset {
+                if cursor.1 >= offset {
                     cursor.1 -= offset;
                 } else {
                     debug!("offset > cursor.1");
@@ -632,12 +676,23 @@ impl EmbedGrid {
                     .parse::<usize>()
                     .unwrap();
                 debug!("cursor down {} times, cursor was: {:?}", offset, cursor);
-                if offset + cursor.1 < terminal_size.1 {
+                if cursor.1 == scroll_region.bottom {
+                    /* scroll down */
+                    for y in scroll_region.top..scroll_region.bottom {
+                        for x in 0..terminal_size.1 {
+                            grid[(x, y)] = grid[(x, y + 1)];
+                        }
+                    }
+                    for x in 0..terminal_size.1 {
+                        grid[(x, scroll_region.bottom)] = Cell::default();
+                    }
+                } else if offset + cursor.1 < terminal_size.1 {
                     cursor.1 += offset;
                 }
                 if scroll_region.top + cursor.1 >= terminal_size.1 {
                     cursor.1 = terminal_size.1.saturating_sub(1);
                 }
+                *wrap_next = false;
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -646,8 +701,13 @@ impl EmbedGrid {
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
                     .unwrap();
-                cursor.0 = cursor.0.saturating_sub(offset);
-                debug!("cursor became: {:?}", cursor);
+                if cursor.0 >= offset {
+                    cursor.0 -= offset;
+                }
+                debug!(
+                    "ESC[ {} D cursor backwards cursor became: {:?}",
+                    offset, cursor
+                );
                 *state = State::Normal;
             }
             (b'E', State::Csi1(buf)) => {
@@ -666,6 +726,7 @@ impl EmbedGrid {
                     cursor.1 = terminal_size.1.saturating_sub(1);
                 }
                 cursor.0 = 0;
+                *wrap_next = false;
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -675,19 +736,24 @@ impl EmbedGrid {
                     .parse::<usize>()
                     .unwrap();
                 debug!(
-                    "cursor next line {} times, cursor was: {:?}",
+                    "cursor previous line {} times, cursor was: {:?}",
                     offset, cursor
                 );
                 cursor.1 = cursor.1.saturating_sub(offset);
                 cursor.0 = 0;
+                *wrap_next = false;
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b'G', State::Csi1(buf)) => {
+            (b'G', State::Csi1(_)) | (b'G', State::Csi) => {
                 // ESC[{buf}G   Cursor Character Absolute  [column={buf}] (default = [row,1])
-                let new_col = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let new_col = if let State::Csi1(buf) = state {
+                    unsafe { std::str::from_utf8_unchecked(buf) }
+                        .parse::<usize>()
+                        .unwrap()
+                } else {
+                    1
+                };
                 debug!("cursor absolute {}, cursor was: {:?}", new_col, cursor);
                 if new_col < terminal_size.0 {
                     cursor.0 = new_col.saturating_sub(1);
@@ -697,47 +763,53 @@ impl EmbedGrid {
                         new_col, terminal_size.0, terminal_size
                     );
                 }
+                *wrap_next = false;
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (b'C', State::Csi1(buf)) => {
-                // ESC[{buf}C   CSI Cursor Preceding Line {buf} Times
+                // ESC[{buf}C   CSI Cursor Forward {buf} Times
                 let offset = unsafe { std::str::from_utf8_unchecked(buf) }
                     .parse::<usize>()
                     .unwrap();
-                debug!(
-                    "cursor preceding {} times, cursor was: {:?}",
-                    offset, cursor
-                );
-                if cursor.1 >= offset {
-                    cursor.1 -= offset;
-                }
-                if scroll_region.top + cursor.1 >= terminal_size.1 {
-                    cursor.1 = terminal_size.1.saturating_sub(1);
+                debug!("cursor forward {} times, cursor was: {:?}", offset, cursor);
+                if cursor.0 + offset < terminal_size.0 {
+                    cursor.0 += offset;
                 }
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b'P', State::Csi1(buf)) => {
+            (b'P', State::Csi1(_)) | (b'P', State::Csi) => {
                 // ESC[{buf}P   CSI Delete {buf} characters, default = 1
-                let offset = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let offset = if let State::Csi1(buf) = state {
+                    unsafe { std::str::from_utf8_unchecked(buf) }
+                        .parse::<usize>()
+                        .unwrap()
+                } else {
+                    1
+                };
+
+                for i in 0..(terminal_size.0 - cursor.0 - offset) {
+                    grid[(cursor.0 + i, cursor.1)] = grid[(cursor.0 + i + offset, cursor.1)];
+                }
+                for x in (terminal_size.0 - offset)..terminal_size.0 {
+                    grid[(x, cursor.1)].set_ch(' ');
+                }
                 debug!(
                     "Delete {} Character(s) with cursor at {:?}  ",
                     offset, cursor
                 );
-                for x in (cursor.0 - std::cmp::min(offset, cursor.0))..cursor.0 {
-                    grid[(x, cursor.1 + scroll_region.top)].set_ch(' ');
-                }
-                debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
-            (b'd', State::Csi1(buf)) => {
+            (b'd', State::Csi1(_)) | (b'd', State::Csi) => {
                 /* CSI Pm d Line Position Absolute [row] (default = [1,column]) (VPA). */
-                let row = unsafe { std::str::from_utf8_unchecked(buf) }
-                    .parse::<usize>()
-                    .unwrap();
+                let row = if let State::Csi1(buf) = state {
+                    unsafe { std::str::from_utf8_unchecked(buf) }
+                        .parse::<usize>()
+                        .unwrap()
+                } else {
+                    1
+                };
                 debug!(
                     "Line position absolute row {} with cursor at {:?}",
                     row, cursor
@@ -746,6 +818,7 @@ impl EmbedGrid {
                 if scroll_region.top + cursor.1 >= terminal_size.1 {
                     cursor.1 = terminal_size.1.saturating_sub(1);
                 }
+                *wrap_next = false;
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
@@ -757,6 +830,23 @@ impl EmbedGrid {
             (b'm', State::Csi1(ref buf1)) => {
                 // Character Attributes.
                 match buf1.as_slice() {
+                    b"0" => {
+                        *fg_color = Color::Default;
+                        *bg_color = Color::Default;
+                    }
+                    b"1" => { /* bold */ }
+                    b"7" => {
+                        /* Inverse */
+                        let temp = *fg_color;
+                        *fg_color = *bg_color;
+                        *bg_color = temp;
+                    }
+                    b"27" => {
+                        /* Inverse off */
+                        let temp = *fg_color;
+                        *fg_color = *bg_color;
+                        *bg_color = temp;
+                    }
                     b"30" => *fg_color = Color::Black,
                     b"31" => *fg_color = Color::Red,
                     b"32" => *fg_color = Color::Green,
@@ -777,7 +867,90 @@ impl EmbedGrid {
                     b"47" => *bg_color = Color::White,
 
                     b"49" => *bg_color = Color::Default,
+
+                    b"90" => *fg_color = Color::Black,
+                    b"91" => *fg_color = Color::Red,
+                    b"92" => *fg_color = Color::Green,
+                    b"93" => *fg_color = Color::Yellow,
+                    b"94" => *fg_color = Color::Blue,
+                    b"95" => *fg_color = Color::Magenta,
+                    b"96" => *fg_color = Color::Cyan,
+                    b"97" => *fg_color = Color::White,
+
+                    b"100" => *bg_color = Color::Black,
+                    b"101" => *bg_color = Color::Red,
+                    b"102" => *bg_color = Color::Green,
+                    b"103" => *bg_color = Color::Yellow,
+                    b"104" => *bg_color = Color::Blue,
+                    b"105" => *bg_color = Color::Magenta,
+                    b"106" => *bg_color = Color::Cyan,
+                    b"107" => *bg_color = Color::White,
                     _ => {}
+                }
+                grid[cursor_val!()].set_fg(*fg_color);
+                grid[cursor_val!()].set_bg(*bg_color);
+                *state = State::Normal;
+            }
+            (b'm', State::Csi2(ref buf1, ref buf2)) => {
+                for b in &[buf1, buf2] {
+                    match b.as_slice() {
+                        b"0" => {
+                            *fg_color = Color::Default;
+                            *bg_color = Color::Default;
+                        }
+                        b"1" => { /* bold */ }
+                        b"7" => {
+                            /* Inverse */
+                            let temp = *fg_color;
+                            *fg_color = *bg_color;
+                            *bg_color = temp;
+                        }
+                        b"27" => {
+                            /* Inverse off */
+                            let temp = *fg_color;
+                            *fg_color = *bg_color;
+                            *bg_color = temp;
+                        }
+                        b"30" => *fg_color = Color::Black,
+                        b"31" => *fg_color = Color::Red,
+                        b"32" => *fg_color = Color::Green,
+                        b"33" => *fg_color = Color::Yellow,
+                        b"34" => *fg_color = Color::Blue,
+                        b"35" => *fg_color = Color::Magenta,
+                        b"36" => *fg_color = Color::Cyan,
+                        b"37" => *fg_color = Color::White,
+
+                        b"39" => *fg_color = Color::Default,
+                        b"40" => *bg_color = Color::Black,
+                        b"41" => *bg_color = Color::Red,
+                        b"42" => *bg_color = Color::Green,
+                        b"43" => *bg_color = Color::Yellow,
+                        b"44" => *bg_color = Color::Blue,
+                        b"45" => *bg_color = Color::Magenta,
+                        b"46" => *bg_color = Color::Cyan,
+                        b"47" => *bg_color = Color::White,
+
+                        b"49" => *bg_color = Color::Default,
+
+                        b"90" => *fg_color = Color::Black,
+                        b"91" => *fg_color = Color::Red,
+                        b"92" => *fg_color = Color::Green,
+                        b"93" => *fg_color = Color::Yellow,
+                        b"94" => *fg_color = Color::Blue,
+                        b"95" => *fg_color = Color::Magenta,
+                        b"96" => *fg_color = Color::Cyan,
+                        b"97" => *fg_color = Color::White,
+
+                        b"100" => *bg_color = Color::Black,
+                        b"101" => *bg_color = Color::Red,
+                        b"102" => *bg_color = Color::Green,
+                        b"103" => *bg_color = Color::Yellow,
+                        b"104" => *bg_color = Color::Blue,
+                        b"105" => *bg_color = Color::Magenta,
+                        b"106" => *bg_color = Color::Cyan,
+                        b"107" => *bg_color = Color::White,
+                        _ => {}
+                    }
                 }
                 grid[cursor_val!()].set_fg(*fg_color);
                 grid[cursor_val!()].set_bg(*bg_color);
@@ -785,10 +958,6 @@ impl EmbedGrid {
             }
             (c, State::Csi1(ref mut buf)) if (c >= b'0' && c <= b'9') || c == b' ' => {
                 buf.push(c);
-            }
-            (_, State::Csi1(_)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
-                *state = State::Normal;
             }
             (b';', State::Csi2(ref mut buf1_p, ref mut buf2_p)) => {
                 let buf1 = std::mem::replace(buf1_p, Vec::new());
@@ -801,56 +970,67 @@ impl EmbedGrid {
                 // Window manipulation, skip it
                 *state = State::Normal;
             }
-            (b'H', State::Csi2(ref y, ref x)) => {
+            (b'H', State::Csi2(_, _)) | (b'H', State::Csi) => {
                 //Cursor Position [row;column] (default = [1,1]) (CUP).
-                let orig_x = unsafe { std::str::from_utf8_unchecked(x) }
-                    .parse::<usize>()
-                    .unwrap_or(1);
-                let orig_y = unsafe { std::str::from_utf8_unchecked(y) }
-                    .parse::<usize>()
-                    .unwrap_or(1);
-                debug!("sending {}", EscCode::from((&(*state), byte)),);
+                let (orig_x, mut orig_y) = if let State::Csi2(ref y, ref x) = state {
+                    (
+                        unsafe { std::str::from_utf8_unchecked(x) }
+                            .parse::<usize>()
+                            .unwrap_or(1),
+                        unsafe { std::str::from_utf8_unchecked(y) }
+                            .parse::<usize>()
+                            .unwrap_or(1),
+                    )
+                } else {
+                    (1, 1)
+                };
+
+                let (min_y, max_y) = if *origin_mode {
+                    debug!(*origin_mode);
+                    orig_y += scroll_region.top;
+                    (scroll_region.top, scroll_region.bottom)
+                } else {
+                    (0, terminal_size.1.saturating_sub(1))
+                };
+
+                cursor.0 = std::cmp::min(orig_x - 1, terminal_size.0.saturating_sub(1));
+                cursor.1 = std::cmp::max(min_y, std::cmp::min(max_y, orig_y - 1));
+                *wrap_next = false;
+
+                debug!("{}", EscCode::from((&(*state), byte)),);
                 debug!(
                     "cursor set to ({},{}), cursor was: {:?}",
                     orig_x, orig_y, cursor
                 );
-                if orig_x - 1 <= terminal_size.0 && orig_y - 1 <= terminal_size.1 {
-                    cursor.0 = orig_x - 1;
-                    cursor.1 = orig_y - 1;
-                } else {
-                    debug!(
-                        "[error] terminal_size = {:?}, cursor = {:?} but given [{},{}]",
-                        terminal_size, cursor, orig_x, orig_y
-                    );
-                }
-                if scroll_region.top + cursor.1 >= terminal_size.1 {
-                    cursor.1 = terminal_size.1.saturating_sub(1);
-                }
+
                 debug!("cursor became: {:?}", cursor);
                 *state = State::Normal;
             }
             (c, State::Csi2(_, ref mut buf)) if c >= b'0' && c <= b'9' => {
                 buf.push(c);
             }
-            (b'r', State::Csi2(ref top, ref bottom)) => {
+            (b'r', State::Csi2(_, _)) | (b'r', State::Csi) => {
                 /* CSI Ps ; Ps r Set Scrolling Region [top;bottom] (default = full size of window) (DECSTBM). */
-                let top = unsafe { std::str::from_utf8_unchecked(top) }
-                    .parse::<usize>()
-                    .unwrap_or(1);
-                let bottom = unsafe { std::str::from_utf8_unchecked(bottom) }
-                    .parse::<usize>()
-                    .unwrap_or(1);
+                let (top, bottom) = if let State::Csi2(ref top, ref bottom) = state {
+                    (
+                        unsafe { std::str::from_utf8_unchecked(top) }
+                            .parse::<usize>()
+                            .unwrap_or(1),
+                        unsafe { std::str::from_utf8_unchecked(bottom) }
+                            .parse::<usize>()
+                            .unwrap_or(1),
+                    )
+                } else {
+                    (1, terminal_size.1)
+                };
 
                 if bottom > top {
                     scroll_region.top = top - 1;
                     scroll_region.bottom = bottom - 1;
                     *cursor = (0, 0);
+                    *wrap_next = false;
                 }
                 debug!("set scrolling region to {:?}", scroll_region);
-                *state = State::Normal;
-            }
-            (_, State::Csi2(_, _)) => {
-                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
             (b't', State::Csi3(_, _, _)) => {
@@ -890,7 +1070,31 @@ impl EmbedGrid {
                 debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
+            (_, State::Csi) => {
+                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                *state = State::Normal;
+            }
+            (_, State::Csi1(_)) => {
+                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                *state = State::Normal;
+            }
+            (_, State::Csi2(_, _)) => {
+                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                *state = State::Normal;
+            }
             (_, State::Csi3(_, _, _)) => {
+                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                *state = State::Normal;
+            }
+            (_, State::Osc1(_)) => {
+                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                *state = State::Normal;
+            }
+            (_, State::Osc2(_, _)) => {
+                debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
+                *state = State::Normal;
+            }
+            (_, State::CsiQ(_)) => {
                 debug!("ignoring unknown code {}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
@@ -899,6 +1103,109 @@ impl EmbedGrid {
                 debug!("ignoring {}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
+        }
+    }
+}
+
+#[inline(always)]
+/// Performs the normal scroll up motion:
+///
+/// First clear offset number of lines:
+///
+/// For offset = 1, top = 1:
+///
+///  | 111111111111 |            |              |
+///  | 222222222222 |            | 222222222222 |
+///  | 333333333333 |            | 333333333333 |
+///  | 444444444444 |    -->     | 444444444444 |
+///  | 555555555555 |            | 555555555555 |
+///  | 666666666666 |            | 666666666666 |
+///
+///  In each step, swap the current line with the next by offset:
+///
+///  |              |            | 222222222222 |
+///  | 222222222222 |            |              |
+///  | 333333333333 |            | 333333333333 |
+///  | 444444444444 |    -->     | 444444444444 |
+///  | 555555555555 |            | 555555555555 |
+///  | 666666666666 |            | 666666666666 |
+///
+///  Result:
+///    Before                      After
+///  | 111111111111 |            | 222222222222 |
+///  | 222222222222 |            | 333333333333 |
+///  | 333333333333 |            | 444444444444 |
+///  | 444444444444 |            | 555555555555 |
+///  | 555555555555 |            | 666666666666 |
+///  | 666666666666 |            |              |
+///
+fn scroll_up(grid: &mut CellBuffer, scroll_region: &ScrollRegion, top: usize, offset: usize) {
+    //debug!(
+    //    "scroll_up scroll_region {:?}, top: {} offset {}",
+    //    scroll_region, top, offset
+    //);
+    for y in top..=(top + offset - 1) {
+        for x in 0..grid.size().0 {
+            grid[(x, y)] = Cell::default();
+        }
+    }
+    for y in top..=(scroll_region.bottom - offset) {
+        for x in 0..grid.size().0 {
+            let temp = grid[(x, y)];
+            grid[(x, y)] = grid[(x, y + offset)];
+            grid[(x, y + offset)] = temp;
+        }
+    }
+}
+
+#[inline(always)]
+/// Performs the normal scroll down motion:
+///
+/// First clear offset number of lines:
+///
+/// For offset = 1, top = 1:
+///
+///  | 111111111111 |            | 111111111111 |
+///  | 222222222222 |            | 222222222222 |
+///  | 333333333333 |            | 333333333333 |
+///  | 444444444444 |    -->     | 444444444444 |
+///  | 555555555555 |            | 555555555555 |
+///  | 666666666666 |            |              |
+///
+///  In each step, swap the current line with the prev by offset:
+///
+///  | 111111111111 |            | 111111111111 |
+///  | 222222222222 |            | 222222222222 |
+///  | 333333333333 |            | 333333333333 |
+///  | 444444444444 |    -->     | 444444444444 |
+///  | 555555555555 |            |              |
+///  |              |            | 555555555555 |
+///
+///  Result:
+///    Before                      After
+///  | 111111111111 |            |              |
+///  | 222222222222 |            | 111111111111 |
+///  | 333333333333 |            | 222222222222 |
+///  | 444444444444 |            | 333333333333 |
+///  | 555555555555 |            | 444444444444 |
+///  | 666666666666 |            | 555555555555 |
+///
+fn scroll_down(grid: &mut CellBuffer, scroll_region: &ScrollRegion, top: usize, offset: usize) {
+    //debug!(
+    //    "scroll_down scroll_region {:?}, top: {} offset {}",
+    //    scroll_region, top, offset
+    //);
+    for y in (scroll_region.bottom - offset + 1)..=scroll_region.bottom {
+        for x in 0..grid.size().0 {
+            grid[(x, y)] = Cell::default();
+        }
+    }
+
+    for y in ((top + offset)..=scroll_region.bottom).rev() {
+        for x in 0..grid.size().0 {
+            let temp = grid[(x, y)];
+            grid[(x, y)] = grid[(x, y - offset)];
+            grid[(x, y - offset)] = temp;
         }
     }
 }

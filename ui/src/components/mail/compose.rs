@@ -687,15 +687,6 @@ impl Component for Composer {
         match *event {
             UIEvent::Resize => {
                 self.set_dirty();
-                if let Some(ref mut embed_pty) = self.embed {
-                    match embed_pty {
-                        EmbedStatus::Running(_, _) => {
-                            let mut guard = embed_pty.lock().unwrap();
-                            guard.grid.clear(Cell::default());
-                        }
-                        _ => {}
-                    }
-                }
             }
             /*
             /* Switch e-mail From: field to the `left` configured account. */
@@ -873,7 +864,8 @@ impl Component for Composer {
                 if settings.composing.embed {
                     self.embed = Some(EmbedStatus::Running(
                         crate::terminal::embed::create_pty(
-                            self.embed_area,
+                            width!(self.embed_area),
+                            height!(self.embed_area),
                             [editor, f.path().display().to_string()].join(" "),
                         )
                         .unwrap(),

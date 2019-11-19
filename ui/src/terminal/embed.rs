@@ -1,15 +1,14 @@
 use crate::split_command;
-use crate::terminal::position::Area;
 use crate::terminal::position::*;
 use melib::log;
 use melib::ERROR;
 
 use nix::fcntl::{open, OFlag};
-use nix::ioctl_write_ptr_bad;
 use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use nix::pty::{grantpt, posix_openpt, ptsname, unlockpt, Winsize};
 use nix::sys::{stat, wait::waitpid};
 use nix::unistd::{dup2, fork, ForkResult};
+use nix::{ioctl_none_bad, ioctl_write_ptr_bad};
 use std::ffi::CString;
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
 
@@ -17,7 +16,9 @@ mod grid;
 
 pub use grid::EmbedGrid;
 
-// ioctl command to set window size of pty:
+// ioctl request code to "Make the given terminal the controlling terminal of the calling process"
+use libc::TIOCSCTTY;
+// ioctl request code to set window size of pty:
 use libc::TIOCSWINSZ;
 use std::path::Path;
 
@@ -29,7 +30,13 @@ use std::sync::{Arc, Mutex};
 // Macro generated function that calls ioctl to set window size of slave pty end
 ioctl_write_ptr_bad!(set_window_size, TIOCSWINSZ, Winsize);
 
-pub fn create_pty(area: Area, command: String) -> nix::Result<Arc<Mutex<EmbedGrid>>> {
+ioctl_none_bad!(set_controlling_terminal, TIOCSCTTY);
+
+pub fn create_pty(
+    width: usize,
+    height: usize,
+    command: String,
+) -> nix::Result<Arc<Mutex<EmbedGrid>>> {
     // Open a new PTY master
     let master_fd = posix_openpt(OFlag::O_RDWR)?;
 
@@ -44,8 +51,8 @@ pub fn create_pty(area: Area, command: String) -> nix::Result<Arc<Mutex<EmbedGri
     //let _slave_fd = open(Path::new(&slave_name), OFlag::O_RDWR, Mode::empty())?;
     {
         let winsize = Winsize {
-            ws_row: <u16>::try_from(height!(area)).unwrap(),
-            ws_col: <u16>::try_from(width!(area)).unwrap(),
+            ws_row: <u16>::try_from(height).unwrap(),
+            ws_col: <u16>::try_from(width).unwrap(),
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
@@ -65,6 +72,19 @@ pub fn create_pty(area: Area, command: String) -> nix::Result<Arc<Mutex<EmbedGri
                     dup2(slave_fd, STDIN_FILENO).unwrap();
                     dup2(slave_fd, STDOUT_FILENO).unwrap();
                     dup2(slave_fd, STDERR_FILENO).unwrap();
+                    /* Become session leader */
+                    nix::unistd::setsid().unwrap();
+                    match unsafe { set_controlling_terminal(slave_fd) } {
+                        Ok(c) if c < 0 => {
+                            log(format!("Could not execute `{}`: ioctl(fd, TIOCSCTTY, NULL) returned {}", command, c,), ERROR);
+                            std::process::exit(c);
+                        }
+                        Ok(_) => {}
+                        Err(err) => {
+                            log(format!("Could not execute `{}`: ioctl(fd, TIOCSCTTY, NULL) returned {}", command, err,), ERROR);
+                            std::process::exit(-1);
+                        }
+                    }
                     let parts = split_command!(command);
                     let (cmd, _) = (parts[0], &parts[1..]);
                     if let Err(e) = nix::unistd::execv(
@@ -78,7 +98,7 @@ pub fn create_pty(area: Area, command: String) -> nix::Result<Arc<Mutex<EmbedGri
                         std::process::exit(-1);
                     }
                     /* This path shouldn't be executed. */
-                    std::process::exit(0);
+                    std::process::exit(-1);
                 }
                 Ok(ForkResult::Parent { child }) => child,
                 Err(e) => panic!(e),
@@ -92,7 +112,7 @@ pub fn create_pty(area: Area, command: String) -> nix::Result<Arc<Mutex<EmbedGri
 
     let stdin = unsafe { std::fs::File::from_raw_fd(master_fd.clone().into_raw_fd()) };
     let mut embed_grid = EmbedGrid::new(stdin, child_pid);
-    embed_grid.set_terminal_size((width!(area), height!(area)));
+    embed_grid.set_terminal_size((width, height));
     let grid = Arc::new(Mutex::new(embed_grid));
     let grid_ = grid.clone();
 
@@ -110,7 +130,8 @@ fn forward_pty_translate_escape_codes(pty_fd: std::fs::File, grid: Arc<Mutex<Emb
     let mut bytes_iter = pty_fd.bytes();
     debug!("waiting for bytes");
     while let Some(Ok(byte)) = bytes_iter.next() {
-        debug!("got byte {}", byte as char);
+        debug!("got a byte? {:?}", byte as char);
+        /* Drink deep, and descend. */
         grid.lock().unwrap().process_byte(byte);
     }
 }
@@ -167,6 +188,9 @@ impl std::fmt::Display for EscCode<'_> {
                 unsafestr!(buf2),
                 *c as char
             ),
+            EscCode(ExpectingControlChar, b'D') => write!(
+                f, "ESC D Linefeed"
+            ),
             EscCode(Csi, b'm') => write!(
                 f,
                 "ESC[m\t\tCSI Character Attributes | Set Attr and Color to Normal (default)"
@@ -175,12 +199,26 @@ impl std::fmt::Display for EscCode<'_> {
                 f,
                 "ESC[K\t\tCSI Erase from the cursor to the end of the line"
             ),
+            EscCode(Csi, b'L') => write!(
+                f,
+                "ESC[L\t\tCSI Insert one blank line"
+            ),
+            EscCode(Csi, b'M') => write!(
+                f,
+                "ESC[M\t\tCSI delete line"
+            ),
             EscCode(Csi, b'J') => write!(
                 f,
                 "ESC[J\t\tCSI Erase from the cursor to the end of the screen"
             ),
             EscCode(Csi, b'H') => write!(f, "ESC[H\t\tCSI Move the cursor to home position."),
             EscCode(Csi, c) => write!(f, "ESC[{}\t\tCSI [UNKNOWN]", *c as char),
+            EscCode(Csi1(ref buf), b'L') => write!(
+                f,
+                "ESC[{}L\t\tCSI Insert {} blank lines",
+                unsafestr!(buf),
+                unsafestr!(buf)
+            ),
             EscCode(Csi1(ref buf), b'm') => write!(
                 f,
                 "ESC[{}m\t\tCSI Character Attributes | Set fg, bg color",
@@ -230,7 +268,11 @@ impl std::fmt::Display for EscCode<'_> {
                 "ESC[{buf}G\t\tCursor Character Absolute  [column={buf}] (default = [row,1])",
                 buf = unsafestr!(buf)
             ),
-
+            EscCode(Csi1(ref buf), b'M') => write!(
+                f,
+                "ESC[{buf}M\t\tDelete P s Lines(s) (default = 1) (DCH).  ",
+                buf = unsafestr!(buf)
+            ),
             EscCode(Csi1(ref buf), b'P') => write!(
                 f,
                 "ESC[{buf}P\t\tDelete P s Character(s) (default = 1) (DCH).  ",
