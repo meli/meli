@@ -287,6 +287,8 @@ pub struct Pager {
     height: usize,
     width: usize,
     dirty: bool,
+
+    initialised: bool,
     content: CellBuffer,
     movement: Option<PageMovement>,
     id: ComponentId,
@@ -436,6 +438,10 @@ impl Pager {
                 ((0, i), (width.saturating_sub(1), i)),
                 None,
             );
+            if l.starts_with("⤷") {
+                content[(0, i)].set_fg(Color::Byte(240));
+                content[(0, i)].set_attrs(Attr::Bold);
+            }
         }
     }
     pub fn cursor_pos(&self) -> usize {
@@ -450,6 +456,21 @@ impl Component for Pager {
         }
         if !self.is_dirty() {
             return;
+        }
+
+        if !self.initialised {
+            let width = width!(area);
+            let lines: Vec<String> = self
+                .text
+                .split_lines_reflow(Reflow::All, Some(width.saturating_sub(2)));
+            let height = lines.len() + 2;
+            let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+            content.set_ascii_drawing(self.content.ascii_drawing);
+            Pager::print_string(&mut content, lines);
+            self.content = content;
+            self.height = height;
+            self.width = width;
+            self.initialised = true;
         }
 
         self.dirty = false;
@@ -602,6 +623,7 @@ impl Component for Pager {
                 return true;
             }
             UIEvent::Resize => {
+                self.initialised = false;
                 self.dirty = true;
             }
             _ => {}
