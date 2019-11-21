@@ -670,6 +670,9 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                 self.iter.next();
                 return self.next();
             }
+            _ if next_char.is_none() => {
+                return None;
+            }
             _ => {
                 *pos += grapheme.len();
                 return Some((*pos - grapheme.len(), BreakAllowed));
