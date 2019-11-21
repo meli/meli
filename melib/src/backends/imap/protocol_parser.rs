@@ -603,7 +603,6 @@ named!(
             >> tag!(")\r\n")
             >> ({
                 let mut env = env;
-                debug!(unsafe { std::str::from_utf8_unchecked(bodystructure) });
                 let has_attachments = bodystructure_has_attachments(bodystructure);
                 env.set_has_attachments(has_attachments);
                 (uid_flags.0, uid_flags.1, env)
