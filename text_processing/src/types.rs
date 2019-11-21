@@ -110,6 +110,6 @@ pub enum Reflow {
 
 impl Default for Reflow {
     fn default() -> Self {
-        Reflow::No
+        Reflow::FormatFlowed
     }
 }

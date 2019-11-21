@@ -1,5 +1,6 @@
 extern crate unicode_segmentation;
 use self::unicode_segmentation::UnicodeSegmentation;
+use crate::grapheme_clusters::TextProcessing;
 use crate::tables::LINE_BREAK_RULES;
 use crate::types::LineBreakClass;
 use crate::types::Reflow;
@@ -8,11 +9,17 @@ use core::iter::Peekable;
 use core::str::FromStr;
 use LineBreakClass::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum LineBreakCandidate {
     MandatoryBreak,
     BreakAllowed,
-    // NoBreak, Not used.
+    NoBreak, // Not used.
+}
+
+impl Default for LineBreakCandidate {
+    fn default() -> Self {
+        LineBreakCandidate::NoBreak
+    }
 }
 
 use LineBreakCandidate::*;
@@ -954,7 +961,49 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
         }
         Reflow::All => {
             if let Some(width) = width {
-                linear(text, width)
+                let mut ret = Vec::new();
+                let width = width.saturating_sub(2);
+
+                for line in text.lines() {
+                    if line.grapheme_len() <= width {
+                        ret.push(line.to_string());
+                        continue;
+                    }
+
+                    let breaks = LineBreakCandidateIter::new(line)
+                        .collect::<Vec<(usize, LineBreakCandidate)>>();
+                    &breaks.iter().enumerate().collect::<Vec<_>>();
+                    if breaks.len() < 2 {
+                        split(&mut ret, line, width);
+                        continue;
+                    }
+
+                    let mut prev = 0;
+                    let mut prev_line_offset = 0;
+                    while prev < breaks.len() {
+                        let new_off = match breaks[prev..].binary_search_by(|(offset, _)| {
+                            line[prev_line_offset..*offset].grapheme_len().cmp(&width)
+                        }) {
+                            Ok(v) => v,
+                            Err(v) => v,
+                        } + prev;
+                        let end_offset = if new_off >= breaks.len() {
+                            line.len()
+                        } else {
+                            breaks[new_off].0
+                        };
+                        if !line[prev_line_offset..end_offset].is_empty() {
+                            if prev_line_offset == 0 {
+                                ret.push(format!("{}", &line[prev_line_offset..end_offset]));
+                            } else {
+                                ret.push(format!("⤷{}", &line[prev_line_offset..end_offset]));
+                            }
+                        }
+                        prev_line_offset = end_offset;
+                        prev = new_off;
+                    }
+                }
+                ret
             } else {
                 text.trim().split('\n').map(str::to_string).collect()
             }
@@ -963,6 +1012,21 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
     }
 }
 
+fn split(ret: &mut Vec<String>, mut line: &str, width: usize) {
+    while !line.is_empty() {
+        let mut chop_index = std::cmp::min(line.len().saturating_sub(1), width);
+        while chop_index > 0 && !line.is_char_boundary(chop_index) {
+            chop_index = chop_index - 1;
+        }
+        if chop_index == 0 {
+            ret.push(format!("⤷{}", line));
+            return;
+        } else {
+            ret.push(format!("⤷{}", &line[..chop_index]));
+        }
+        line = &line[chop_index..];
+    }
+}
 fn reflow_helper(
     ret: &mut Vec<String>,
     paragraph: &str,
