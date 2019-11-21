@@ -193,16 +193,14 @@ the following commands are valid in the mail listing context:
 .Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
 .It Ic set Ar plain | threaded | compact | conversations
 set the way mailboxes are displayed
-.Bl -tag -width "conversations" -compact
-.It Cm plain
+.It Cm set Ar plain
 shows one row per mail, regardless of threading
-.It Cm threaded
+.It Cm set Ar threaded
 shows threads as a tree structure, with one row per thread entry
-.It Cm conversations
+.It Cm set Ar conversations
 shows one entry per thread
-.It Cm compact
+.It Cm set Ar compact
 shows one row per thread
-.El
 .It Ic sort Ar subject | date \  Ar asc | desc
 sort mail listing
 .It Ic subsort Ar subject | date \  Ar asc | desc
