@@ -172,6 +172,11 @@ impl CellBuffer {
             self.rows = newrows;
             return;
         }
+
+        if newlen >= 200_000 {
+            return;
+        }
+
         let mut newbuf: Vec<Cell> = Vec::with_capacity(newlen);
         for y in 0..newrows {
             for x in 0..newcols {

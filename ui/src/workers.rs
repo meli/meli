@@ -8,6 +8,7 @@ use melib::async_workers::{Work, WorkContext};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
+use text_processing::Truncate;
 
 const MAX_WORKER: usize = 4;
 
@@ -235,7 +236,8 @@ impl WorkController {
                         }
                     }
                     recv(set_name_rx) -> new_name => {
-                        if let Ok((thread_id, new_name)) = new_name {
+                        if let Ok((thread_id, mut new_name)) = new_name {
+                            new_name.truncate_at_boundary(256);
                             let mut threads = threads_lock.lock().unwrap();
                             let mut static_threads = _static_threads_lock.lock().unwrap();
                             if threads.contains_key(&thread_id) {
@@ -249,7 +251,8 @@ impl WorkController {
                         }
                     }
                     recv(set_status_rx) -> new_status => {
-                        if let Ok((thread_id, new_status)) = new_status {
+                        if let Ok((thread_id, mut new_status)) = new_status {
+                            new_status.truncate_at_boundary(256);
                             let mut threads = threads_lock.lock().unwrap();
                             let mut static_threads = _static_threads_lock.lock().unwrap();
                             if threads.contains_key(&thread_id) {
