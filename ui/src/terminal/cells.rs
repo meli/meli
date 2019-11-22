@@ -641,7 +641,6 @@ pub enum Attr {
     BoldReverseUnderline = 0b111,
 }
 
-// TODO: word break.
 pub fn copy_area_with_break(
     grid_dest: &mut CellBuffer,
     grid_src: &CellBuffer,

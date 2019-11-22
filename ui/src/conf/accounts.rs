@@ -166,30 +166,37 @@ pub struct Account {
 
 impl Drop for Account {
     fn drop(&mut self) {
-        //TODO: Avoid panics
-        let data_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
-        if let Ok(data) = data_dir.place_data_file("addressbook") {
-            /* place result in cache directory */
-            let f = match fs::File::create(data) {
-                Ok(f) => f,
-                Err(e) => {
-                    panic!("{}", e);
-                }
+        if let Ok(data_dir) = xdg::BaseDirectories::with_profile("meli", &self.name) {
+            if let Ok(data) = data_dir.place_data_file("addressbook") {
+                /* place result in cache directory */
+                let f = match fs::File::create(data) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return;
+                    }
+                };
+                let writer = io::BufWriter::new(f);
+                if let Err(err) = serde_json::to_writer(writer, &self.address_book) {
+                    eprintln!("{}", err);
+                    return;
+                };
             };
-            let writer = io::BufWriter::new(f);
-            serde_json::to_writer(writer, &self.address_book).unwrap();
-        };
-        if let Ok(data) = data_dir.place_data_file("mailbox") {
-            /* place result in cache directory */
-            let f = match fs::File::create(data) {
-                Ok(f) => f,
-                Err(e) => {
-                    panic!("{}", e);
-                }
+            if let Ok(data) = data_dir.place_data_file("mailbox") {
+                /* place result in cache directory */
+                let f = match fs::File::create(data) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        return;
+                    }
+                };
+                let writer = io::BufWriter::new(f);
+                if let Err(err) = bincode::serialize_into(writer, &self.folders) {
+                    eprintln!("{}", err);
+                };
             };
-            let writer = io::BufWriter::new(f);
-            bincode::serialize_into(writer, &self.folders).unwrap();
-        };
+        }
     }
 }
 

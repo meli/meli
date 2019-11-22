@@ -477,7 +477,6 @@ fn examine_updates(
                         *v = ok.uidvalidity;
                     }
                 } else {
-                    // FIXME: Handle this case in ui/src/conf/accounts.rs
                     sender.send(RefreshEvent {
                         hash: folder_hash,
                         kind: RefreshEventKind::Rescan,

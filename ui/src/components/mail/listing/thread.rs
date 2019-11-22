@@ -250,7 +250,6 @@ impl ThreadListing {
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
         {
-            //TODO: store cursor_pos in each folder
             self.cursor_pos.2 = 0;
             self.new_cursor_pos.2 = 0;
         }
@@ -451,15 +450,14 @@ impl ThreadListing {
             s.push('>');
         }
 
+        s.push_str(if envelope.has_attachments() {
+            "📎"
+        } else {
+            ""
+        });
         if show_subject {
             s.push_str(&format!("{:.85}", envelope.subject()));
         }
-        /* TODO Very slow since we have to build all attachments
-        let attach_count = envelope.body(op).count_attachments();
-        if attach_count > 1 {
-            s.push_str(&format!(" {}âˆž ", attach_count - 1));
-        }
-         */
         s
     }
     fn format_date(envelope: &Envelope) -> String {
