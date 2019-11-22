@@ -4,17 +4,19 @@ use fnv::FnvHashMap;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Shortcuts {
-    #[serde(flatten)]
+    #[serde(default)]
     pub general: GeneralShortcuts,
-    #[serde(flatten)]
+    #[serde(default)]
     pub listing: ListingShortcuts,
-    #[serde(flatten)]
+    #[serde(default)]
     pub composing: ComposingShortcuts,
-    #[serde(flatten)]
+    #[serde(default)]
     pub compact_listing: CompactListingShortcuts,
-    #[serde(flatten)]
+    #[serde(default)]
     pub contact_list: ContactListShortcuts,
-    #[serde(flatten)]
+    #[serde(default)]
+    pub envelope_view: EnvelopeViewShortcuts,
+    #[serde(default)]
     pub pager: PagerShortcuts,
 }
 
@@ -59,7 +61,7 @@ macro_rules! shortcut_key_values {
     }
 }
 
-shortcut_key_values! { "compact_listing",
+shortcut_key_values! { "compact-listing",
     /// Shortcut listing for a mail listing in compact mode.
     pub struct CompactListingShortcuts {
             open_thread: Key |> "Open thread." |> Key::Char('\n'),
@@ -116,5 +118,17 @@ shortcut_key_values! { "composing",
     pub struct ComposingShortcuts {
             send_mail: Key |> "Deliver draft to mailer" |> Key::Char('s'),
             edit_mail: Key |> "Edit mail." |> Key::Char('e')
+    }
+}
+
+shortcut_key_values! { "envelope-view",
+    pub struct EnvelopeViewShortcuts {
+            reverse_thread_order: Key |> "reverse thread order" |> Key::Ctrl('r'),
+            toggle_mailview: Key |> "toggle mail view visibility" |> Key::Char('p'),
+            toggle_threadview: Key |> "toggle thread view visibility" |> Key::Char('t'),
+            collapse_subtree: Key |> "collapse thread branches" |> Key::Char('h'),
+            exit_thread: Key |> "exit thread" |> Key::Char('i'),
+            prev_page: Key |> "Go to previous page." |> Key::PageUp,
+            next_page: Key |> "Go to next page." |> Key::PageDown
     }
 }

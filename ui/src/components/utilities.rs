@@ -1461,10 +1461,12 @@ impl Component for Tabbed {
                 self.dirty = false;
                 return;
             }
-            self.help_curr_views = children_maps;
             let mut max_length = 5;
             let mut max_width = "Use Up, Down, Left, Right to scroll.".len() + 3;
-            for (desc, shortcuts) in self.help_curr_views.iter() {
+
+            let mut shortcuts = children_maps.iter().collect::<Vec<_>>();
+            shortcuts.sort_by_key(|(k, _)| *k);
+            for (desc, shortcuts) in shortcuts.iter() {
                 max_length += shortcuts.len() + 3;
                 max_width = std::cmp::max(
                     max_width,
@@ -1500,7 +1502,7 @@ impl Component for Tabbed {
                 );
             }
             let mut idx = 0;
-            for (desc, shortcuts) in self.help_curr_views.iter() {
+            for (desc, shortcuts) in shortcuts.iter() {
                 write_string_to_grid(
                     desc,
                     &mut self.help_content,
@@ -1537,6 +1539,7 @@ impl Component for Tabbed {
                 }
                 idx += 1;
             }
+            self.help_curr_views = children_maps;
             copy_area(
                 grid,
                 &self.help_content,

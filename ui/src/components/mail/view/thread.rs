@@ -1009,19 +1009,19 @@ impl Component for ThreadView {
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Char('p')) => {
+            UIEvent::Input(ref key) if *key == shortcuts["toggle_mailview"] => {
                 self.show_mailview = !self.show_mailview;
                 self.initiated = false;
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Char('t')) => {
+            UIEvent::Input(ref key) if *key == shortcuts["toggle_threadview"] => {
                 self.show_thread = !self.show_thread;
                 self.initiated = false;
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Ctrl('r')) => {
+            UIEvent::Input(ref key) if *key == shortcuts["reverse_thread_order"] => {
                 self.reversed = !self.reversed;
                 let expanded_hash = self.entries[self.expanded_pos].index.1;
                 self.initiate(Some(expanded_hash), context);
@@ -1029,7 +1029,7 @@ impl Component for ThreadView {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(Key::Char('h')) => {
+            UIEvent::Input(ref key) if *key == shortcuts["collapse_subtree"] => {
                 let current_pos = self.current_pos();
                 self.entries[current_pos].hidden = !self.entries[current_pos].hidden;
                 self.entries[current_pos].dirty = true;
@@ -1095,43 +1095,9 @@ impl Component for ThreadView {
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self.mailview.get_shortcuts(context);
         //FIXME
-        let config_map = context.settings.shortcuts.compact_listing.key_values();
+        let config_map = context.settings.shortcuts.envelope_view.key_values();
 
-        map.insert(
-            ThreadView::DESCRIPTION,
-            [
-                ("reverse thread order", Key::Ctrl('r')),
-                ("toggle_mailview", Key::Char('p')),
-                ("toggle_subthread visibility", Key::Char('h')),
-                (
-                    "prev_page",
-                    if let Some(key) = config_map.get("prev_page") {
-                        (*key).clone()
-                    } else {
-                        Key::PageUp
-                    },
-                ),
-                (
-                    "next_page",
-                    if let Some(key) = config_map.get("next_page") {
-                        (*key).clone()
-                    } else {
-                        Key::PageDown
-                    },
-                ),
-                (
-                    "exit_thread",
-                    if let Some(key) = config_map.get("exit_thread") {
-                        (*key).clone()
-                    } else {
-                        Key::Char('i')
-                    },
-                ),
-            ]
-            .iter()
-            .cloned()
-            .collect(),
-        );
+        map.insert(ThreadView::DESCRIPTION, config_map);
 
         map
     }

@@ -64,28 +64,33 @@
 #play_sound = true # default, optional
 #sound_file = PATH # optional
 
-#[shortcuts]
+##shortcuts
 # Compact mail listing defaults:
-#open_thread = '\n'
+#[shortcuts.compact_listing]
 #exit_thread = 'i'
+#
+#[shortcuts.contact-list]
 #create_contact = 'c'
 #edit_contact = 'e'
 
 # Mail listing defaults
-#prev_page = PageUp,
-#next_page = PageDown,
-#prev_folder = 'K',
-#next_folder = 'J',
-#prev_account = 'l',
-#next_account = 'h',
-#new_mail = 'm',
+#[shortcuts.listing]
+#prev_page = "PageUp"
+#next_page = "PageDown"
+#prev_folder = 'K'
+#next_folder = 'J'
+#prev_account = 'l'
+#next_account = 'h'
+#new_mail = 'm'
+#set_seen = 'n'
 
 # Pager defaults
 
-#scroll_up = 'k',
-#scroll_down = 'j',
-#page_up = PageUp,
-#page_down = PageDown,
+#[shortcuts.pager]
+#scroll_up = 'k'
+#scroll_down = 'j'
+#page_up = "PageUp"
+#page_down = "PageDown"
 
 #[composing]
 # required for sending e-mail
