@@ -77,6 +77,7 @@ macro_rules! error_and_exit {
 #[derive(Debug)]
 struct CommandLineArguments {
     create_config: Option<String>,
+    test_config: Option<String>,
     config: Option<String>,
     help: bool,
     version: bool,
@@ -95,12 +96,14 @@ fn main() {
 fn run_app() -> Result<()> {
     enum CommandLineFlags {
         CreateConfig,
+        TestConfig,
         Config,
     }
     use CommandLineFlags::*;
     let mut prev: Option<CommandLineFlags> = None;
     let mut args = CommandLineArguments {
         create_config: None,
+        test_config: None,
         config: None,
         help: false,
         version: false,
@@ -108,9 +111,16 @@ fn run_app() -> Result<()> {
 
     for i in std::env::args().skip(1) {
         match i.as_str() {
+            "--test-config" => match prev {
+                None => prev = Some(TestConfig),
+                Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
+                Some(Config) => error_and_exit!("invalid value for flag `--config`"),
+                Some(TestConfig) => error_and_exit!("invalid value for flag `--test-config`"),
+            },
             "--create-config" => match prev {
                 None => prev = Some(CreateConfig),
                 Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
+                Some(TestConfig) => error_and_exit!("invalid value for flag `--test-config`"),
                 Some(Config) => error_and_exit!("invalid value for flag `--config`"),
             },
             "--config" | "-c" => match prev {
@@ -119,8 +129,9 @@ fn run_app() -> Result<()> {
                     args.config = Some(String::new());
                     prev = Some(Config);
                 }
-                Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
+                Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
                 Some(Config) => error_and_exit!("invalid value for flag `--config`"),
+                Some(TestConfig) => error_and_exit!("invalid value for flag `--test-config`"),
             },
             "--help" | "-h" => {
                 args.help = true;
@@ -138,6 +149,11 @@ fn run_app() -> Result<()> {
                     args.config = Some(i);
                     prev = None;
                 }
+                Some(TestConfig) if args.test_config.is_none() => {
+                    args.test_config = Some(i);
+                    prev = None;
+                }
+                Some(TestConfig) => error_and_exit!("Duplicate value for flag `--test-config`"),
                 Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
                 Some(Config) => error_and_exit!("Duplicate value for flag `--config`"),
             },
@@ -152,6 +168,9 @@ fn run_app() -> Result<()> {
         println!("\t--help, -h\t\tshow this message and exit");
         println!("\t--version, -v\t\tprint version and exit");
         println!("\t--create-config[ PATH]\tCreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config");
+        println!(
+            "\t--test-config PATH\tTest a configuration file for syntax issues or missing options."
+        );
         println!("\t--config PATH, -c PATH\tUse specified configuration file");
         return Ok(());
     }
@@ -165,8 +184,14 @@ fn run_app() -> Result<()> {
         None => {}
         Some(CreateConfig) if args.create_config.is_none() => args.create_config = Some("".into()),
         Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
-        Some(Config) => error_and_exit!("error: flag without value: --config"),
+        Some(Config) => error_and_exit!("error: flag without value: `--config`"),
+        Some(TestConfig) => error_and_exit!("error: flag without value: `--test-config`"),
     };
+
+    if let Some(config_path) = args.test_config.as_ref() {
+        ui::conf::FileSettings::validate(config_path)?;
+        return Ok(());
+    }
 
     if let Some(config_path) = args.create_config.as_mut() {
         let config_path: PathBuf = if config_path.is_empty() {

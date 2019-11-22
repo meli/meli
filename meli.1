@@ -28,6 +28,7 @@
 .Op Fl -help | h
 .Op Fl -version | v
 .Op Fl -create-config Op Ar path
+.Op Fl -test-config Op Ar path
 .Op Fl -config Ar path
 .Sh DESCRIPTION
 Experimental terminal mail client
@@ -41,6 +42,8 @@ Create configuration file in
 .Pa path
 if given, or at
 .Pa $XDG_CONFIG_HOME/meli/config
+.It Fl -test-config Op Ar path
+Test a configuration file for syntax issues or missing options.
 .It Fl -config Ar path
 Start meli with given configuration file.
 .El

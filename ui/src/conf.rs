@@ -231,7 +231,7 @@ impl FileAccount {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct FileSettings {
+pub struct FileSettings {
     accounts: HashMap<String, FileAccount>,
     #[serde(default)]
     pager: PagerSettings,
@@ -341,6 +341,21 @@ impl FileSettings {
         }
 
         Ok(s.unwrap())
+    }
+
+    pub fn validate(path: &str) -> Result<()> {
+        let mut file = File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let s: std::result::Result<FileSettings, toml::de::Error> = toml::from_str(&contents);
+        if let Err(e) = s {
+            return Err(MeliError::new(format!(
+                "Config file contains errors: {}",
+                e.to_string()
+            )));
+        }
+
+        Ok(())
     }
 }
 
