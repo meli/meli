@@ -58,4 +58,18 @@ pub struct PagerSettings {
     /// Default: true
     #[serde(default = "true_val")]
     pub format_flowed: bool,
+
+    /// Split long lines that would overflow on the x axis.
+    /// Default: true
+    #[serde(default = "true_val")]
+    pub split_long_lines: bool,
+
+    /// Minimum text width in columns.
+    /// Default: 80
+    #[serde(default = "eighty_val")]
+    pub minimum_width: usize,
+}
+
+fn eighty_val() -> usize {
+    80
 }

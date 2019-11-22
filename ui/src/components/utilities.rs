@@ -286,6 +286,7 @@ pub struct Pager {
     reflow: Reflow,
     height: usize,
     width: usize,
+    minimum_width: usize,
     dirty: bool,
 
     initialised: bool,
@@ -311,7 +312,11 @@ impl Pager {
         self.reflow
     }
 
-    pub fn update_from_str(&mut self, text: &str, width: Option<usize>) {
+    pub fn update_from_str(&mut self, text: &str, mut width: Option<usize>) {
+        if width.is_some() && width.unwrap() < self.minimum_width {
+            width = Some(self.minimum_width);
+        }
+
         let lines: Vec<String> = text.split_lines_reflow(self.reflow, width);
         let height = lines.len() + 2;
         let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
@@ -330,13 +335,33 @@ impl Pager {
         mut text: String,
         context: Option<&Context>,
         cursor_pos: Option<usize>,
-        width: Option<usize>,
+        mut width: Option<usize>,
     ) -> Self {
         let pager_filter: Option<&String> = if let Some(context) = context {
             context.settings.pager.filter.as_ref()
         } else {
             None
         };
+
+        let pager_minimum_width: usize = if let Some(context) = context {
+            context.settings.pager.minimum_width
+        } else {
+            0
+        };
+
+        let reflow: Reflow = if let Some(context) = context {
+            if context.settings.pager.split_long_lines {
+                Reflow::All
+            } else {
+                Reflow::No
+            }
+        } else {
+            Reflow::All
+        };
+
+        if width.is_some() && width.unwrap() < pager_minimum_width {
+            width = Some(pager_minimum_width);
+        }
 
         if let Some(bin) = pager_filter {
             use std::io::Write;
@@ -364,7 +389,7 @@ impl Pager {
 
         let content = {
             let lines: Vec<String> = if let Some(width) = width {
-                text.split_lines(width)
+                text.split_lines_reflow(reflow, Some(width.saturating_sub(2)))
             } else {
                 text.trim().split('\n').map(str::to_string).collect()
             };
@@ -381,6 +406,7 @@ impl Pager {
         };
         Pager {
             text,
+            reflow,
             cursor: (0, cursor_pos.unwrap_or(0)),
             height: content.size().1,
             width: content.size().0,
@@ -459,10 +485,14 @@ impl Component for Pager {
         }
 
         if !self.initialised {
-            let width = width!(area);
+            let mut width = width!(area);
+            if width < self.minimum_width {
+                width = self.minimum_width;
+            }
+
             let lines: Vec<String> = self
                 .text
-                .split_lines_reflow(Reflow::All, Some(width.saturating_sub(2)));
+                .split_lines_reflow(self.reflow, Some(width.saturating_sub(2)));
             let height = lines.len() + 2;
             let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
             content.set_ascii_drawing(self.content.ascii_drawing);
