@@ -19,7 +19,7 @@
 .\"
 .Dd September 16, 2019
 .Dt MELI.CONF 5
-.Os Linux
+.Os
 .Sh NAME
 .Nm meli.conf
 .Nd configuration file for the Meli Mail User Agent
@@ -93,52 +93,50 @@ theme = "light"
 available options are listed below.
 .Sy default values are shown in parentheses.
 .Sh ACCOUNTS
-.Bl -tag -width "format String [maildir mbox imap notmuch]" -offset -indent
-.It Cm root_folder Ar String
+.Bl -tag -width 36n
+.It Ic root_folder Ar String
 the backend-specific path of the root_folder, usually INBOX.
-.It Cm format Ar String Op maildir mbox imap notmuch
+.It Ic format Ar String Op maildir mbox imap notmuch
 the format of the mail backend.
-.It Cm subscribed_folders Ar [String,]
+.It Ic subscribed_folders Ar [String,]
 an array of folder paths to display in the UI. Paths are relative to the root folder (eg "INBOX/Sent", not "Sent")
-.It Cm identity Ar String
+.It Ic identity Ar String
 your e-mail address that is inserted in the From: headers of outgoing mail
-.It Cm index_style Ar String
+.It Ic index_style Ar String
 set the way mailboxes are displayed
-.Bl -tag -width "conversations" -compact
-.It Cm plain
-shows one row per mail, regardless of threading
-.It Cm threaded
-shows threads as a tree structure, with one row per thread entry
-.It Cm conversations
-shows one entry per thread
-.It Cm compact
-shows one row per thread
 .El
-.It Cm display_name Ar String
+.TS
+allbox tab(:);
+lb l.
+conversations:shows one entry per thread
+compact:shows one row per thread
+threaded:shows threads as a tree structure
+plain:shows one row per mail, regardless of threading
+.TE
+.Bl -tag -width 36n
+.It Ic display_name Ar String
 (optional) a name which can be combined with your address:
 "Name <email@address.tld>"
-.It Cm read_only Ar boolean
+.It Ic read_only Ar boolean
 attempt to not make any changes to this account.
 .Pq Em false
-.It Cm cache_type Ar String
+.It Ic cache_type Ar String
 choose which cache backend to use. Available options are 'none' and 'sqlite3'
 .Pq Em "sqlite3"
-.It Cm folders Ar folder_config
+.It Ic folders Ar folder_config
 (optional) configuration for each folder. Its format is described below in
 .Sx FOLDERS Ns
 \&.
 .El
-.Pp
 .Sh notmuch only
-.Cm root_folder
-points to the directory which contains the 
+.Ic root_folder
+points to the directory which contains the
 .Pa .notmuch/
 subdirectory. notmuch folders are virtual, since they are defined by user-given notmuch queries. Thus you have to explicitly state the folders you want in the
-.Cm folders
-field and set the 
+.Ic folders
+field and set the
 .Ar query
 property to each of them. Example:
-.Pp
 .Bd -literal
 [accounts.notmuch]
 format = "notmuch"
@@ -150,40 +148,40 @@ format = "notmuch"
 .Ed
 .Sh IMAP only
 IMAP specific options are:
-.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
-.It Cm server_hostname Ar String
+.Bl -tag -width 36n
+.It Ic server_hostname Ar String
 example:
 .Qq mail.example.tld
-.It Cm server_username Ar String
-.It Cm server_password Ar String
-.It Cm server_port Ar number
+.It Ic server_username Ar String
+.It Ic server_password Ar String
+.It Ic server_port Ar number
 (optional)
 .\" default value
 .Pq Em 143
-.It Cm use_starttls Ar boolean
+.It Ic use_starttls Ar boolean
 (optional) if port is 993 and use_starttls is unspecified, it becomes false by default.
 .\" default value
 .Pq Em true
-.It Cm danger_accept_invalid_certs Ar boolean
+.It Ic danger_accept_invalid_certs Ar boolean
 (optional) do not validate TLS certificates.
 .\" default value
 .Pq Em false
 .El
 .Sh FOLDERS
-.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
-.It Cm rename Ar String
+.Bl -tag -width 36n
+.It Ic rename Ar String
 (optional) show a different name for this folder in the UI
-.It Cm autoload Ar boolean
+.It Ic autoload Ar boolean
 (optional) load this folder on startup (not functional yet)
-.It Cm subscribe Ar boolean
+.It Ic subscribe Ar boolean
 (optional) watch this folder for updates
 .\" default value
 .Pq Em true
-.It Cm ignore Ar boolean
+.It Ic ignore Ar boolean
 (optional) silently insert updates for this folder, if any
 .\" default value
 .Pq Em false
-.It Cm usage Ar boolean
+.It Ic usage Ar boolean
 (optional) special usage of this folder. valid values are:
 .Bl -bullet -compact
 .It
@@ -204,7 +202,7 @@ example:
 .Ar Trash
 .El
 otherwise usage is inferred from the folder title.
-.It Cm conf_override Ar boolean
+.It Ic conf_override Ar boolean
 (optional) override global settings for this folder. available sections to override are
 .Em pager, notifications, shortcuts, composing
 and the account options
@@ -218,17 +216,17 @@ and the account options
 .Ed
 .El
 .Sh COMPOSING
-.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
-.It Cm mailer_cmd Ar String
+.Bl -tag -width 36n
+.It Ic mailer_cmd Ar String
 command to pipe new mail to, exit code must be 0 for success.
-.It Cm editor_cmd Ar String
+.It Ic editor_cmd Ar String
 command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
-.It Cm embed Ar boolean
+.It Ic embed Ar boolean
 (optional) embed editor within meli
 .\" default value
 .Pq Em false
-.It Cm format_flowed Ar boolean
-(optional) set format=flowed [RFC367] in text/plain attachments.
+.It Ic format_flowed Ar boolean
+(optional) set format=flowed [RFC3676] in text/plain attachments.
 .\" default value
 .Pq Em true
 .El
@@ -249,110 +247,122 @@ Shortcuts can take the following values:
 and
 .Qq Em char Ns
 , where char is a single character string.
-.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
-.It Cm prev_page
+.Bl -tag -width 36n
+.It Ic prev_page
 Go to previous page.
-.It Cm next_page
+.It Ic next_page
 Go to next page.
-.It Cm prev_folder
+.It Ic prev_folder
 Go to previous folder.
-.It Cm next_folder
+.It Ic next_folder
 Go to next folder.
-.It Cm prev_account
+.It Ic prev_account
 Go to previous account.
-.It Cm next_account
+.It Ic next_account
 Go to next account.
-.It Cm new_mail
+.It Ic new_mail
 Start new mail draft in new tab
-.It Cm open_thread
+.It Ic open_thread
 Open thread.
-.It Cm exit_thread
+.It Ic exit_thread
 Exit thread view
-.It Cm scroll_up
+.It Ic scroll_up
 Scroll up pager.
-.It Cm scroll_down
+.It Ic scroll_down
 Scroll down pager.
-.It Cm page_up
+.It Ic page_up
 Go to previous pager page
-.It Cm page_down
+.It Ic page_down
 Go to next pager pag
-.It Cm create_contact
+.It Ic create_contact
 Create new contact.
-.It Cm edit_contact
+.It Ic edit_contact
 Edit contact under cursor
 .El
 .Sh NOTIFICATIONS
-.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
-.It Cm enable Ar boolean
+.Bl -tag -width 36n
+.It Ic enable Ar boolean
 enable freedesktop-spec notifications. this is usually what you want
 .\" default value
 .Pq Em true
-.It Cm script Ar String
+.It Ic script Ar String
 (optional) script to pass notifications to, with title as 1st arg and body as 2nd
 .\" default value
 .Pq Em none
-.It Cm xbiff_file_path Ar String
+.It Ic xbiff_file_path Ar String
 (optional) file that gets its size updated when new mail arrives
 .Pq Em none
 .\" default value
-.It Cm play_sound Ar boolean
+.It Ic play_sound Ar boolean
 (optional) play theme sound in notifications if possible
 .Pq Em false
 .\" default value
-.It Cm sound_file Ar String
+.It Ic sound_file Ar String
 (optional) play sound file in notifications if possible
 .\" default value
 .Pq Em none
 .El
 .Sh PAGER
-.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
-.It Cm pager_context Ar num
+.Bl -tag -width 36n
+.It Ic pager_context Ar num
 (optional) number of context lines when going to next page.
 .\" default value
 .Pq Em 0
-.It Cm headers_sticky Ar boolean
+.It Ic headers_sticky Ar boolean
 (optional) always show headers when scrolling.
 .\" default value
 .Pq Em false
-.It Cm html_filter Ar String
+.It Ic html_filter Ar String
 (optional) pipe html attachments through this filter before display
 .\" default value
 .Pq Em none
-.It Cm filter Ar String
+.It Ic filter Ar String
 (optional) a command to pipe mail output through for viewing in pager.
 .\" default value
 .Pq Em none
+.It Ic format_flowed Ar bool
+(optional) respect format=flowed
+.\" default value
+.Pq Em true
+.It Ic split_long_lines Ar bool
+(optional) Split long lines that would overflow on the x axis.
+.\" default value
+.Pq Em true
+.It Ic minimum_width Ar num
+(optional) Minimum text width in columns.
+.\" default value
+.Pq Em 80
 .El
 .Sh PGP
-.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
-.It Cm auto_verify_signatures Ar boolean
+.Bl -tag -width 36n
+.It Ic auto_verify_signatures Ar boolean
 auto verify signed e-mail according to RFC3156
 .\" default value
 .Pq Em true
-.It Cm auto_sign Ar boolean
+.It Ic auto_sign Ar boolean
 (optional) always sign sent messages
 .\" default value
 .Pq Em false
-.It Cm key Ar String
+.It Ic key Ar String
 (optional) key to be used when signing/encrypting (not functional yet)
 .\" default value
 .Pq Em none
-.It Cm gpg_binary Ar String
+.It Ic gpg_binary Ar String
 (optional) gpg binary name or file location to use
 .\" default value
 .Pq Em "gpg2"
 .El
 .Sh TERMINAL
-.Bl -tag -width "danger_accept_invalid_certs boolean" -offset -indent
-.It Cm theme Ar String
+.Bl -tag -width 36n
+.It Ic theme Ar String
 (optional) select between these themes: light / dark
 .\" default value
 .Pq Em dark
-.It Cm ascii_drawing Ar boolean
+.It Ic ascii_drawing Ar boolean
 (optional) if true, box drawing will be done with ascii characters.
 .\" default value
 .Pq Em false
-.It Cm window_title Ar String
+.It Ic window_title Ar String
 (optional) set window title in xterm compatible terminals (empty string means no window title is set)
 .\" default value
 .Pq Em "meli"

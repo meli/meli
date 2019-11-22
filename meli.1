@@ -19,10 +19,10 @@
 .\"
 .Dd July 29, 2019
 .Dt MELI 1
-.Os Linux
+.Os
 .Sh NAME
 .Nm meli
-.Nd Meli Mail User Agent. meli is the Greek word for honey.
+.Nd Meli Mail User Agent. meli is the Greek word for honey
 .Sh SYNOPSIS
 .Nm
 .Op Fl -help | h
@@ -45,7 +45,7 @@ if given, or at
 Start meli with given configuration file.
 .El
 .Sh STARTING WITH meli
-When launched for the first time, 
+When launched for the first time,
 .Nm
 will search for its configuration directory,
 .Pa $XDG_CONFIG_HOME/meli/ Ns
@@ -55,17 +55,17 @@ includes comments with the basic settings required for setting up accounts allow
 .Xr meli.conf 5
 for the available configuration options.
 .Pp
-At any time, you can press
+At any time, you may press
 .Cm \&?
 to show a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
 .Pp
-The main visual navigation tool is the left-side sidebar. The menu's visibility can be toggled (default shortcut
+The main visual navigation tool is the left-side sidebar. The menu's visibility may be toggled (default shortcut
 .Cm ` Ns
 ).
 .Pp
 The view into each folder has 4 modes: plain, threaded, conversations and compact. Plain views each mail indvidually, threaded shows their thread relationship visually, and conversations includes one entry per thread of emails (compact is one row per thread).
 .Pp
-If you're using a light color palette in your terminal, you can set
+If you're using a light color palette in your terminal, you may set
 .Em theme = "light"
 in the
 .Em terminal
@@ -97,7 +97,7 @@ will attempt to open text inside its pager and other content via
 .Cm m
 instead to use the mailcap entry for the MIME type of the attachment, if any. See
 .Sx FILES
-for the location of the mailcap files and 
+for the location of the mailcap files and
 .Xr mailcap 5
 for their syntax.
 .Sh COMPOSING
@@ -105,32 +105,30 @@ To send mail, press
 .Cm m
 while viewing the appropriate account to open a new composing tab. To reply to a mail, press
 .Cm R Ns
-\&. You can edit some of the header fields from within the view, by selecting with the arrow keys and pressing
+\&. You may edit some of the header fields from within the view, by selecting with the arrow keys and pressing
 .Cm enter
 to enter
 .Ar INSERT
-mode. At any time you can press
+mode. At any time you may press
 .Cm e
 to launch your editor (see
-.Xr meli.conf 5
-.Em COMPOSING
-for how to select which editor to launch). Attachments can be handled with the
+.Xr meli.conf 5 COMPOSING
+for how to select which editor to launch). Attachments may be handled with the
 .Em add-attachment Ns
 ,
 .Em remove-attachment
 commands (see below). Finally, pressing
-.Ar s
+.Cm s
 will send your message by piping it into a binary of your choosing (see
-.Xr meli.conf 5
-.Em COMPOSING Ns
+.Xr meli.conf 5 COMPOSING Ns
 , setting
 .Em mailer_cmd Ns
 ). To save your draft without sending it, issue command
 .Cm close
 and select 'save as draft'.
 .Pp
-If there is no Draft or Sent folder, 
-.Nm 
+With no Draft or Sent folder,
+.Nm
 tries first saving mail in your INBOX and then at any other folder. On complete failure to save your draft or sent message it will be saved in your
 .Em tmp
 directory instead and you will be notified of its location.
@@ -145,16 +143,16 @@ uses the SEARCH command,
 .Em notmuch
 uses libnotmuch and
 .Em Maildir/mbox
-have to perform a very slow and I/O bound linear search. Thus it is advised to use a cache on
+have to do a slow linear search. Thus it is advised to use a cache on
 .Em Maildir/mbox
-accounts.  
+accounts.
 .Nm Ns
 , if built with sqlite3, includes the ability to perform full text search on the following fields: From, To, Cc, Bcc, In-Reply-To, References, Subject and Date. The message body (in plain text human readable form) and the flags can also be queried. To enable sqlite3 indexing for an account set
 .Em cache_type
 to
-.Em sqlite3 
+.Em sqlite3
 in the configuration file and to create the sqlite3 index issue command
-.Ic index Ar ACCOUNT_NAME Ns \&.
+.Cm index Ar ACCOUNT_NAME Ns \&.
 
 To search in the message body type your keywords without any special formatting.
 To search in specific fields, prepend your search keyword with "field:" like so:
@@ -172,94 +170,96 @@ Boolean operators are
 and
 .Em not
 .Po
-alias: 
-.Em !
+alias:
+.Em \&!
 .Pc
 String keywords with spaces must be quoted. Quotes should always be escaped.
-
+.sp
 .Sy Important Notice about IMAP
-
-To prevent downloading all your messages from your IMAP server, don't set 
+.sp
+To prevent downloading all your messages from your IMAP server, don't set
 .Em cache_type
 to
 .Em sqlite3 Ns
-\&. 
+\&.
 .Nm
 will relay your queries to the IMAP server. Expect a delay between query and response. Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable delay.
 .Sh EXECUTE mode
-Commands are issued in EXECUTE mode, by default started with the space character and exited with Escape key.
+Commands are issued in EXECUTE mode, by default started with Space and exited with Escape key.
 .Pp
 the following commands are valid in the mail listing context:
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
-.It Ic set Ar plain | threaded | compact | conversations
+.Bl -tag -width 36n
+.It Cm set Ar plain | threaded | compact | conversations
 set the way mailboxes are displayed
-.It Cm set Ar plain
-shows one row per mail, regardless of threading
-.It Cm set Ar threaded
-shows threads as a tree structure, with one row per thread entry
-.It Cm set Ar conversations
-shows one entry per thread
-.It Cm set Ar compact
-shows one row per thread
-.It Ic sort Ar subject | date \  Ar asc | desc
+.El
+.TS
+allbox tab(:);
+lb l.
+conversations:shows one entry per thread
+compact:shows one row per thread
+threaded:shows threads as a tree structure
+plain:shows one row per mail, regardless of threading
+.TE
+.Bl -tag -width 36n
+.It Cm sort Ar subject | date \  Ar asc | desc
 sort mail listing
-.It Ic subsort Ar subject | date \  Ar asc | desc
+.It Cm subsort Ar subject | date \  Ar asc | desc
 sorts only the first level of replies.
-.It Ic go Ar n
+.It Cm go Ar n
 where
 .Ar n
 is a mailbox prefixed with the
 .Ar n
 number in the side menu for the current account
-.It Ic toggle_thread_snooze
+.It Cm toggle_thread_snooze
 don't issue notifications for thread under cursor in thread listing
-.It Ic filter Ar STRING
+.It Cm filter Ar STRING
 filter mailbox with
 .Ar STRING
 key. Escape exits filter results
-.It Ic set read, set unread
-.It Ic create-folder Ar ACCOUNT Ar FOLDER_PATH
+.It Cm set read, set unread
+.It Cm create-folder Ar ACCOUNT Ar FOLDER_PATH
 create folder with given path. be careful with backends and separator sensitivity (eg IMAP)
-.It Ic subscribe-folder Ar ACCOUNT Ar FOLDER_PATH
+.It Cm subscribe-folder Ar ACCOUNT Ar FOLDER_PATH
 subscribe to folder with given path
-.It Ic unsubscribe-folder Ar ACCOUNT Ar FOLDER_PATH
+.It Cm unsubscribe-folder Ar ACCOUNT Ar FOLDER_PATH
 unsubscribe to folder with given path
-.It Ic rename-folder Ar ACCOUNT Ar FOLDER_PATH_SRC Ar FOLDER_PATH_DEST
+.It Cm rename-folder Ar ACCOUNT Ar FOLDER_PATH_SRC Ar FOLDER_PATH_DEST
 rename folder
-.It Ic delete-folder Ar ACCOUNT Ar FOLDER_PATH
+.It Cm delete-folder Ar ACCOUNT Ar FOLDER_PATH
 delete folder
 .El
 .Pp
 envelope view commands:
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
+.Bl -tag -width 36n
 .It Cm pipe Ar EXECUTABLE Ar ARGS
 pipe pager contents to binary
 .It Cm list-post
-post in list of currently viewed envelope
+post in list of viewed envelope
 .It Cm list-unsubscribe
-unsubscribe automatically from list of currently viewed envelope
+unsubscribe automatically from list of viewed envelope
 .It Cm list-archive
 open list archive with
 .Cm xdg-open
 .El
 .Pp
 composing mail commands:
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
-.It Ic add-attachment Ar PATH
+.Bl -tag -width 36n
+.It Cm add-attachment Ar PATH
 in composer, add
 .Ar PATH
 as an attachment
-.It Ic remove-attachment Ar INDEX
+.It Cm remove-attachment Ar INDEX
 remove attachment with given index
-.It Ic toggle sign
+.It Cm toggle sign
 toggle between signing and not signing this message. If the gpg invocation fails then the mail won't be sent.
 .El
 .Pp
 generic commands:
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
+.Bl -tag -width 36n
 .It Cm open-in-tab
 opens envelope view in new tab
-.It Ic close
+.It Cm close
 closes closeable tabs
 .It Cm setenv Ar KEY=VALUE
 set environment variable
@@ -272,69 +272,67 @@ print environment variable
 .El
 .Sh SHORTCUTS
 Non-complete list of shortcuts and their default values.
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
-.It Cm open_thread
+.Bl -tag -width 36n
+.It Ic open_thread
 \&'\\n'
-.It Cm exit_thread
+.It Ic exit_thread
 \&'i'
-.It Cm create_contact
+.It Ic create_contact
 \&'c'
-.It Cm edit_contact
+.It Ic edit_contact
 \&'e'
-.It Cm prev_page
+.It Ic prev_page
 PageUp,
-.It Cm next_page
+.It Ic next_page
 PageDown
-.It Cm prev_folder
+.It Ic prev_folder
 \&'K'
-.It Cm next_folder
+.It Ic next_folder
 \&'J'
-.It Cm prev_account
+.It Ic prev_account
 \&'l'
-.It Cm next_account
+.It Ic next_account
 \&'h'
-.It Cm new_mail
+.It Ic new_mail
 \&'m'
-.It Cm scroll_up
+.It Ic scroll_up
 \&'k'
-.It Cm scroll_down
+.It Ic scroll_down
 \&'j'
-.It Cm page_up
+.It Ic page_up
 PageUp
-.It Cm page_down
+.It Ic page_down
 PageDown
-.It Cm toggle-menu-visibility
+.It Ic toggle-menu-visibility
 \&'`'
-.It Cm select
+.It Ic select
 \&'v'
-.El
-.Bl -tag -width "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST"
-.It Cm `
+.It Ic `
 toggles hiding of sidebar in mail listings
-.It Cm \&?
+.It Ic \&?
 opens up a shortcut window that shows available actions in the current component you are using (eg mail listing, contact list, mail composing)
-.It Cm m
+.It Ic m
 starts a new mail composer
-.It Cm R
-replies to the currently viewed mail.
-.It Cm u
+.It Ic R
+replies to the viewed mail.
+.It Ic u
 displays numbers next to urls in the body text of an email and
-.Ar n Ns Cm g
+.Ar n Ns Ic g
 opens the
 .Ar n Ns
 th
 url with xdg-open
-.It Ar n Ns Cm a
+.It Ar n Ns Ic a
 opens the
 .Ar n Ns
 th
 attachment.
-.It Ar n Ns Cm m
+.It Ar n Ns Ic m
 opens the
 .Ar n Ns
 th
 attachment according to its mailcap entry.
-.It Cm v
+.It Ic v
 (un)selects mail entries in mail listings
 .El
 .Sh EXIT STATUS
@@ -390,7 +388,7 @@ Temporary files generated by
 Mailcap entries are searched for in the following files, in this order:
 .Pp
 .Bl -enum -compact -offset indent
-.It 
+.It
 .Pa $XDG_CONFIG_HOME/meli/mailcap
 .It
 .Pa $XDG_CONFIG_HOME/.mailcap
