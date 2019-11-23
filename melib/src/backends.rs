@@ -201,7 +201,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId>;
-    fn folders(&self) -> FnvHashMap<FolderHash, Folder>;
+    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>>;
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp>;
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()>;

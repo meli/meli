@@ -536,13 +536,14 @@ impl MailBackend for MboxType {
             })?;
         Ok(handle.thread().id())
     }
-    fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
-        self.folders
+    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
+        Ok(self
+            .folders
             .lock()
             .unwrap()
             .iter()
             .map(|(h, f)| (*h, f.clone() as Folder))
-            .collect()
+            .collect())
     }
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
         let (offset, length) = {

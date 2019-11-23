@@ -269,17 +269,17 @@ impl MailBackend for ImapType {
         Ok(handle.thread().id())
     }
 
-    fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
+    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
         {
             let folders = self.folders.read().unwrap();
             if !folders.is_empty() {
-                return folders
+                return Ok(folders
                     .iter()
                     .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
-                    .collect();
+                    .collect());
             }
         }
-        let mut folders = self.folders.write().unwrap();
+        let mut folders = self.folders.write()?;
         *folders = ImapType::imap_folders(&self.connection);
         folders.retain(|_, f| (self.is_subscribed)(f.path()));
         let keys = folders.keys().cloned().collect::<FnvHashSet<FolderHash>>();
@@ -287,10 +287,10 @@ impl MailBackend for ImapType {
             f.children.retain(|c| keys.contains(c));
         }
         *self.online.lock().unwrap() = true;
-        folders
+        Ok(folders
             .iter()
             .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
-            .collect()
+            .collect())
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {

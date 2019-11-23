@@ -147,13 +147,7 @@ impl Context {
         let was_online = accounts[account_pos].is_online;
         if accounts[account_pos].is_online() {
             if !was_online {
-                for folder in accounts[account_pos]
-                    .backend
-                    .read()
-                    .unwrap()
-                    .folders()
-                    .values()
-                {
+                for folder in accounts[account_pos].list_folders() {
                     debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
                     mailbox_hashes.insert(folder.hash(), account_pos);
                 }

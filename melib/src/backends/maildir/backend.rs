@@ -186,12 +186,15 @@ impl MailBackend for MaildirType {
     fn is_online(&self) -> bool {
         true
     }
-    fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
-        self.folders
+
+    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
+        Ok(self
+            .folders
             .iter()
             .map(|(h, f)| (*h, f.clone() as Folder))
-            .collect()
+            .collect())
     }
+
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         self.multicore(4, folder)
     }

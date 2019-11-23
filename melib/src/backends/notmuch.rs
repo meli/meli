@@ -268,13 +268,13 @@ impl MailBackend for NotmuchDb {
             .spawn(move || {})?;
         Ok(handle.thread().id())
     }
-    fn folders(&self) -> FnvHashMap<FolderHash, Folder> {
-        self.folders
+    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
+        Ok(self.folders
             .read()
             .unwrap()
             .iter()
             .map(|(k, f)| (*k, BackendFolder::clone(f)))
-            .collect()
+            .collect())
     }
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
         Box::new(NotmuchOp {

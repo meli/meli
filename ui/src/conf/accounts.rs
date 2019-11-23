@@ -289,8 +289,8 @@ impl Account {
     }
 
     fn init(&mut self) {
-        let mut ref_folders: FnvHashMap<FolderHash, Folder> =
-            self.backend.read().unwrap().folders();
+        let ref_folders: FnvHashMap<FolderHash, Folder> =
+            self.backend.read().unwrap().folders().unwrap();
         let mut folders: FnvHashMap<FolderHash, MailboxEntry> =
             FnvHashMap::with_capacity_and_hasher(ref_folders.len(), Default::default());
         let mut folders_order: Vec<FolderHash> = Vec::with_capacity(ref_folders.len());
@@ -575,7 +575,7 @@ impl Account {
                     }
 
                     let ref_folders: FnvHashMap<FolderHash, Folder> =
-                        self.backend.read().unwrap().folders();
+                        self.backend.read().unwrap().folders().unwrap();
                     let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
                     if folder_conf.folder_conf().ignore.is_true() {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
@@ -626,7 +626,7 @@ impl Account {
                 }
                 RefreshEventKind::Rescan => {
                     let ref_folders: FnvHashMap<FolderHash, Folder> =
-                        self.backend.read().unwrap().folders();
+                        self.backend.read().unwrap().folders().unwrap();
                     let handle = Account::new_worker(
                         &self.settings,
                         ref_folders[&folder_hash].clone(),
@@ -686,8 +686,12 @@ impl Account {
         self.folders.is_empty()
     }
     pub fn list_folders(&self) -> Vec<Folder> {
-        let mut folders = self.backend.read().unwrap().folders();
         let folder_confs = self.settings.conf().folders();
+        let mut folders = if let Ok(folders) = self.backend.read().unwrap().folders() {
+            folders
+        } else {
+            return Vec::new();
+        };
         //debug!("folder renames: {:?}", folder_renames);
         for f in folders.values_mut() {
             if let Some(r) = folder_confs.get(f.path()) {
