@@ -151,6 +151,10 @@ impl From<FileAccount> for AccountConf {
         let mut folder_confs = x.folders.clone();
         for s in &x.subscribed_folders {
             if !folder_confs.contains_key(s) {
+                use text_processing::GlobMatch;
+                if s.is_glob() {
+                    continue;
+                }
                 folder_confs.insert(
                     s.to_string(),
                     FileFolderConf {
@@ -173,24 +177,7 @@ impl From<FileAccount> for AccountConf {
                     .split(if s.contains('/') { '/' } else { '.' })
                     .last()
                     .unwrap_or("");
-                folder_confs.get_mut(s).unwrap().folder_conf.usage =
-                    if name.eq_ignore_ascii_case("inbox") {
-                        Some(SpecialUseMailbox::Inbox)
-                    } else if name.eq_ignore_ascii_case("archive") {
-                        Some(SpecialUseMailbox::Archive)
-                    } else if name.eq_ignore_ascii_case("drafts") {
-                        Some(SpecialUseMailbox::Drafts)
-                    } else if name.eq_ignore_ascii_case("junk") {
-                        Some(SpecialUseMailbox::Junk)
-                    } else if name.eq_ignore_ascii_case("spam") {
-                        Some(SpecialUseMailbox::Junk)
-                    } else if name.eq_ignore_ascii_case("sent") {
-                        Some(SpecialUseMailbox::Sent)
-                    } else if name.eq_ignore_ascii_case("trash") {
-                        Some(SpecialUseMailbox::Trash)
-                    } else {
-                        Some(SpecialUseMailbox::Normal)
-                    };
+                folder_confs.get_mut(s).unwrap().folder_conf.usage = usage(name);
             }
 
             if folder_confs[s].folder_conf().ignore.is_unset() {
@@ -550,5 +537,25 @@ impl Serialize for CacheType {
             CacheType::Sqlite3 => serializer.serialize_str("sqlite3"),
             CacheType::None => serializer.serialize_str("none"),
         }
+    }
+}
+
+pub fn usage(name: &str) -> Option<SpecialUseMailbox> {
+    if name.eq_ignore_ascii_case("inbox") {
+        Some(SpecialUseMailbox::Inbox)
+    } else if name.eq_ignore_ascii_case("archive") {
+        Some(SpecialUseMailbox::Archive)
+    } else if name.eq_ignore_ascii_case("drafts") {
+        Some(SpecialUseMailbox::Drafts)
+    } else if name.eq_ignore_ascii_case("junk") {
+        Some(SpecialUseMailbox::Junk)
+    } else if name.eq_ignore_ascii_case("spam") {
+        Some(SpecialUseMailbox::Junk)
+    } else if name.eq_ignore_ascii_case("sent") {
+        Some(SpecialUseMailbox::Sent)
+    } else if name.eq_ignore_ascii_case("trash") {
+        Some(SpecialUseMailbox::Trash)
+    } else {
+        Some(SpecialUseMailbox::Normal)
     }
 }

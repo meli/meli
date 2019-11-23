@@ -35,6 +35,7 @@ use melib::mailbox::*;
 use melib::thread::{SortField, SortOrder, ThreadHash, ThreadNode, Threads};
 use melib::AddressBook;
 use melib::StackVec;
+use text_processing::GlobMatch;
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use crate::{workers::WorkController, StatusEvent, ThreadEvent};
@@ -239,8 +240,12 @@ impl Account {
         let backend = map.get(settings.account().format())(
             settings.account(),
             Box::new(move |path: &str| {
-                s.folder_confs.contains_key(path)
-                    && s.folder_confs[path].folder_conf().subscribe.is_true()
+                (s.folder_confs.contains_key(path)
+                    && s.folder_confs[path].folder_conf().subscribe.is_true())
+                    || s.account
+                        .subscribed_folders
+                        .iter()
+                        .any(|m| path.matches_glob(m))
             }),
         )?;
         let notify_fn = Arc::new(notify_fn);
@@ -299,24 +304,37 @@ impl Account {
         let mut folder_confs = FnvHashMap::default();
 
         let mut sent_folder = None;
-        for f in ref_folders.values_mut() {
-            if !self.settings.folder_confs.contains_key(f.path())
-                || self.settings.folder_confs[f.path()]
+        for f in ref_folders.values() {
+            if !((self.settings.folder_confs.contains_key(f.path())
+                && self.settings.folder_confs[f.path()]
                     .folder_conf()
                     .subscribe
-                    .is_false()
+                    .is_true())
+                || self
+                    .settings
+                    .account
+                    .subscribed_folders
+                    .iter()
+                    .any(|m| f.path().matches_glob(m)))
             {
                 /* Skip unsubscribed folder */
                 continue;
             }
 
-            match self.settings.folder_confs[f.path()].folder_conf().usage {
-                Some(SpecialUseMailbox::Sent) => {
-                    sent_folder = Some(f.hash());
+            if self.settings.folder_confs.contains_key(f.path()) {
+                match self.settings.folder_confs[f.path()].folder_conf().usage {
+                    Some(SpecialUseMailbox::Sent) => {
+                        sent_folder = Some(f.hash());
+                    }
+                    _ => {}
                 }
-                _ => {}
+                folder_confs.insert(f.hash(), self.settings.folder_confs[f.path()].clone());
+            } else {
+                let mut new = FileFolderConf::default();
+                new.folder_conf.subscribe = super::ToggleFlag::InternalVal(true);
+                new.folder_conf.usage = super::usage(f.name());
+                folder_confs.insert(f.hash(), new);
             }
-            folder_confs.insert(f.hash(), self.settings.folder_confs[f.path()].clone());
             folder_names.insert(f.hash(), f.path().to_string());
         }
 
@@ -324,12 +342,7 @@ impl Account {
         let mut tree: Vec<FolderNode> = Vec::new();
         let mut collection: Collection = Collection::new(Default::default());
         for (h, f) in ref_folders.iter() {
-            if !self.settings.folder_confs.contains_key(f.path())
-                || self.settings.folder_confs[f.path()]
-                    .folder_conf()
-                    .subscribe
-                    .is_false()
-            {
+            if !folder_confs.contains_key(&h) {
                 /* Skip unsubscribed folder */
                 continue;
             }
@@ -362,7 +375,7 @@ impl Account {
             workers.insert(
                 *h,
                 Account::new_worker(
-                    &self.settings,
+                    &folder_confs,
                     f.clone(),
                     &mut self.backend,
                     &self.work_context,
@@ -372,12 +385,32 @@ impl Account {
             collection.threads.insert(*h, Threads::default());
         }
 
-        tree.sort_unstable_by_key(|f| ref_folders[&f.hash].path());
+        tree.sort_unstable_by(|a, b| {
+            if ref_folders[&b.hash].path().eq_ignore_ascii_case("INBOX") {
+                std::cmp::Ordering::Greater
+            } else if ref_folders[&a.hash].path().eq_ignore_ascii_case("INBOX") {
+                std::cmp::Ordering::Less
+            } else {
+                ref_folders[&a.hash]
+                    .path()
+                    .cmp(&ref_folders[&b.hash].path())
+            }
+        });
 
         let mut stack: StackVec<Option<&FolderNode>> = StackVec::new();
         for n in tree.iter_mut() {
             folders_order.push(n.hash);
-            n.kids.sort_unstable_by_key(|f| ref_folders[&f.hash].path());
+            n.kids.sort_unstable_by(|a, b| {
+                if ref_folders[&b.hash].path().eq_ignore_ascii_case("INBOX") {
+                    std::cmp::Ordering::Greater
+                } else if ref_folders[&a.hash].path().eq_ignore_ascii_case("INBOX") {
+                    std::cmp::Ordering::Less
+                } else {
+                    ref_folders[&a.hash]
+                        .path()
+                        .cmp(&ref_folders[&b.hash].path())
+                }
+            });
             stack.extend(n.kids.iter().rev().map(Some));
             while let Some(Some(next)) = stack.pop() {
                 folders_order.push(next.hash);
@@ -396,7 +429,7 @@ impl Account {
     }
 
     fn new_worker(
-        settings: &AccountConf,
+        folder_confs: &FnvHashMap<FolderHash, FileFolderConf>,
         folder: Folder,
         backend: &Arc<RwLock<Box<dyn MailBackend>>>,
         work_context: &WorkContext,
@@ -406,7 +439,7 @@ impl Account {
         let mut builder = AsyncBuilder::new();
         let our_tx = builder.tx();
         let folder_hash = folder.hash();
-        let priority = match settings.folder_confs[folder.path()].folder_conf().usage {
+        let priority = match folder_confs[&folder.hash()].folder_conf().usage {
             Some(SpecialUseMailbox::Inbox) => 0,
             Some(SpecialUseMailbox::Sent) => 1,
             Some(SpecialUseMailbox::Drafts) | Some(SpecialUseMailbox::Trash) => 2,
@@ -576,7 +609,7 @@ impl Account {
 
                     let ref_folders: FnvHashMap<FolderHash, Folder> =
                         self.backend.read().unwrap().folders().unwrap();
-                    let folder_conf = &self.settings.folder_confs[&self.folder_names[&folder_hash]];
+                    let folder_conf = &self.folder_confs[&folder_hash];
                     if folder_conf.folder_conf().ignore.is_true() {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
@@ -628,7 +661,7 @@ impl Account {
                     let ref_folders: FnvHashMap<FolderHash, Folder> =
                         self.backend.read().unwrap().folders().unwrap();
                     let handle = Account::new_worker(
-                        &self.settings,
+                        &self.folder_confs,
                         ref_folders[&folder_hash].clone(),
                         &mut self.backend,
                         &self.work_context,
@@ -694,15 +727,15 @@ impl Account {
         self.folders.is_empty()
     }
     pub fn list_folders(&self) -> Vec<Folder> {
-        let folder_confs = self.settings.conf().folders();
         let mut folders = if let Ok(folders) = self.backend.read().unwrap().folders() {
             folders
         } else {
             return Vec::new();
         };
+        let folder_confs = &self.folder_confs;
         //debug!("folder renames: {:?}", folder_renames);
         for f in folders.values_mut() {
-            if let Some(r) = folder_confs.get(f.path()) {
+            if let Some(r) = folder_confs.get(&f.hash()) {
                 if let Some(rename) = r.folder_conf().rename() {
                     f.change_name(rename);
                 }
@@ -725,8 +758,19 @@ impl Account {
         let mut folders: Vec<Folder> = folders
             .drain()
             .map(|(_, f)| f)
-            .filter(|f| self.folders.contains_key(&f.hash()))
+            .filter(|f| {
+                self.folders.contains_key(&f.hash())
+                    || self
+                        .settings
+                        .account
+                        .subscribed_folders
+                        .iter()
+                        .any(|m| f.path().matches_glob(m))
+            })
             .collect();
+        if order.is_empty() {
+            return Vec::new();
+        }
         folders.sort_unstable_by(|a, b| order[&a.hash()].partial_cmp(&order[&b.hash()]).unwrap());
         folders
     }
@@ -860,12 +904,11 @@ impl Account {
 
     pub fn sent_folder(&self) -> &str {
         let sent_folder = self
-            .settings
             .folder_confs
             .iter()
             .find(|(_, f)| f.folder_conf().usage == Some(SpecialUseMailbox::Sent));
         if let Some(sent_folder) = sent_folder.as_ref() {
-            sent_folder.0
+            &self.folder_names[&sent_folder.0]
         } else {
             ""
         }
@@ -873,11 +916,14 @@ impl Account {
 
     pub fn special_use_folder(&self, special_use: SpecialUseMailbox) -> Option<&str> {
         let ret = self
-            .settings
             .folder_confs
             .iter()
             .find(|(_, f)| f.folder_conf().usage == Some(special_use));
-        ret.as_ref().map(|r| r.0.as_str())
+        if let Some(ret) = ret.as_ref() {
+            Some(&self.folder_names[&ret.0])
+        } else {
+            None
+        }
     }
 
     /* Call only in Context::is_online, since only Context can launch the watcher threads if an
