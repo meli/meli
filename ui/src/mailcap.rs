@@ -1,3 +1,23 @@
+/*
+ * meli
+ *
+ * Copyright 2019 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
 use crate::split_command;
 use crate::state::Context;
 use crate::types::{create_temp_file, ForkType, UIEvent};
@@ -8,44 +28,12 @@ use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use text_processing::GlobMatch;
 
 pub struct MailcapEntry {
     command: String,
     /* Pass to pager */
     copiousoutput: bool,
-}
-
-trait GlobMatch {
-    fn matches_glob(&self, s: &str) -> bool;
-}
-
-impl GlobMatch for str {
-    fn matches_glob(&self, s: &str) -> bool {
-        let parts = self.split("*");
-
-        let mut ptr = 0;
-        let mut part_no = 0;
-
-        for p in parts {
-            if ptr >= s.len() {
-                return false;
-            }
-            if part_no > 0 {
-                while !&s[ptr..].starts_with(p) {
-                    ptr += 1;
-                    if ptr >= s.len() {
-                        return false;
-                    }
-                }
-            }
-            if !&s[ptr..].starts_with(p) {
-                return false;
-            }
-            ptr += p.len();
-            part_no += 1;
-        }
-        true
-    }
 }
 
 impl MailcapEntry {
