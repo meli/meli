@@ -1423,9 +1423,9 @@ impl Component for Tabbed {
             create_box(grid, area);
             let area = (
                 pos_inc(upper_left!(area), (3, 2)),
-                set_x(
-                    bottom_right!(area),
+                (
                     get_x(bottom_right!(area)).saturating_sub(3),
+                    get_y(bottom_right!(area)).saturating_sub(1),
                 ),
             );
             let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);

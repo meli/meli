@@ -183,6 +183,7 @@ pub struct State {
     pub mode: UIMode,
     components: Vec<Box<dyn Component>>,
     pub context: Context,
+    timer: thread::JoinHandle<()>,
     threads: FnvHashMap<thread::ThreadId, (Sender<bool>, thread::JoinHandle<()>)>,
 }
 
@@ -241,6 +242,22 @@ impl State {
             .collect::<Result<Vec<Account>>>()?;
         accounts.sort_by(|a, b| a.name().cmp(&b.name()));
 
+        let timer = {
+            let sender = sender.clone();
+            thread::Builder::new().spawn(move || {
+                let sender = sender;
+                loop {
+                    thread::park();
+                    debug!("unparked");
+
+                    sender.send(ThreadEvent::Pulse).unwrap();
+                    thread::sleep(std::time::Duration::from_millis(100));
+                }
+            })
+        }?;
+
+        timer.thread().unpark();
+
         let mut s = State {
             cols,
             rows,
@@ -249,6 +266,7 @@ impl State {
             child: None,
             mode: UIMode::Normal,
             components: Vec::with_capacity(1),
+            timer,
 
             context: Context {
                 accounts,
@@ -715,5 +733,18 @@ impl State {
     }
     fn stdout(&mut self) -> &mut StateStdout {
         self.stdout.as_mut().unwrap()
+    }
+
+    pub fn check_accounts(&mut self) {
+        let mut ctr = 0;
+        for i in 0..self.context.accounts.len() {
+            if self.context.is_online(i) {
+                ctr += 1;
+            }
+        }
+        if ctr != self.context.accounts.len() {
+            debug!("unparking");
+            self.timer.thread().unpark();
+        }
     }
 }

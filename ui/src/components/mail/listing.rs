@@ -222,7 +222,6 @@ impl Component for Listing {
                 .dirty_areas
                 .push_back(((mid, get_y(upper_left)), (mid, get_y(bottom_right))));
         }
-        self.dirty = false;
 
         if right_component_width == total_cols {
             if !context.is_online(self.cursor_pos.0) {
@@ -278,6 +277,7 @@ impl Component for Listing {
                 }
             }
         }
+        self.dirty = false;
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if match self.component {
@@ -468,7 +468,7 @@ impl Component for Listing {
                 self.dirty = true;
             }
             UIEvent::Resize => {
-                self.dirty = true;
+                self.set_dirty();
             }
             UIEvent::Input(Key::Up) => {
                 let amount = if self.cmd_buf.is_empty() {

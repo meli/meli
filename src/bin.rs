@@ -376,6 +376,7 @@ fn run_app() -> Result<()> {
                             state.render();
                         },
                         ThreadEvent::Pulse => {
+                            state.check_accounts();
                             state.redraw();
                         },
                         ThreadEvent::ThreadJoin(id) => {
