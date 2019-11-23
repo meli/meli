@@ -410,7 +410,10 @@ impl Component for AccountStatus {
                     );
 
                     let (width, height) = self.content.size();
-                    if melib::backends::imap::SUPPORTED_CAPABILITIES.contains(&cap.as_str()) {
+                    if melib::backends::imap::SUPPORTED_CAPABILITIES
+                        .iter()
+                        .any(|c| cap.eq_ignore_ascii_case(c))
+                    {
                         write_string_to_grid(
                             "supported",
                             &mut self.content,

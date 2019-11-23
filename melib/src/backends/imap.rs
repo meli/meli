@@ -47,7 +47,8 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 pub type UID = usize;
 
-pub static SUPPORTED_CAPABILITIES: &'static [&'static str] = &["IDLE"];
+pub static SUPPORTED_CAPABILITIES: &'static [&'static str] =
+    &["IDLE", "LOGIN", "LOGINDISABLED", "ENABLE", "IMAP4REV1"];
 
 #[derive(Debug, Default)]
 pub struct EnvelopeCache {
