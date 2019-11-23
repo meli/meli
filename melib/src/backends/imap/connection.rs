@@ -240,11 +240,45 @@ impl ImapStream {
             .as_bytes(),
         )?;
         let mut res = String::with_capacity(8 * 1024);
-        ret.read_lines(&mut res, &String::new())?;
-        let capabilities = protocol_parser::capabilities(res.as_bytes()).to_full_result()?;
-        let capabilities = FnvHashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
+        let tag_start = format!("M{} ", (ret.cmd_id - 1));
+        loop {
+            ret.read_lines(&mut res, &String::new())?;
+            if res.starts_with("* OK") {
+                if let Some(pos) = res.as_bytes().find(b"\r\n") {
+                    let pos = pos + "\r\n".len();
+                    res.replace_range(..pos, "");
+                }
+            }
 
-        Ok((capabilities, ret))
+            if res.starts_with(tag_start.as_str()) {
+                if !res[tag_start.len()..].trim().starts_with("OK ") {
+                    return Err(MeliError::new(format!(
+                        "Could not connect. Server replied with '{}'",
+                        res[tag_start.len()..].trim()
+                    )));
+                }
+                break;
+            }
+        }
+
+        let capabilities: std::result::Result<Vec<&[u8]>, _> =
+            protocol_parser::capabilities(res.as_bytes()).to_full_result();
+
+        if capabilities.is_err() {
+            /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so check
+             * for lazy servers */
+            drop(capabilities);
+            ret.send_command(b"CAPABILITY")?;
+            ret.read_response(&mut res).unwrap();
+            let capabilities = protocol_parser::capabilities(res.as_bytes()).to_full_result()?;
+            let capabilities = FnvHashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
+            Ok((capabilities, ret))
+        } else {
+            let capabilities = capabilities?;
+            let capabilities = FnvHashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
+
+            Ok((capabilities, ret))
+        }
     }
 }
 
@@ -369,6 +403,7 @@ pub struct ImapBlockingConnection {
     result: Vec<u8>,
     prev_res_length: usize,
     pub conn: ImapConnection,
+    err: Option<String>,
 }
 
 impl From<ImapConnection> for ImapBlockingConnection {
@@ -398,6 +433,7 @@ impl From<ImapConnection> for ImapBlockingConnection {
             conn,
             prev_res_length: 0,
             result: Vec::with_capacity(8 * 1024),
+            err: None,
         }
     }
 }
@@ -405,6 +441,10 @@ impl From<ImapConnection> for ImapBlockingConnection {
 impl ImapBlockingConnection {
     pub fn into_conn(self) -> ImapConnection {
         self.conn
+    }
+
+    pub fn err(&self) -> Option<&str> {
+        self.err.as_ref().map(String::as_str)
     }
 }
 
@@ -418,6 +458,7 @@ impl Iterator for ImapBlockingConnection {
             ref mut result,
             ref mut conn,
             ref mut buf,
+            ref mut err,
         } = self;
         loop {
             if conn.stream.is_err() {
@@ -436,7 +477,8 @@ impl Iterator for ImapBlockingConnection {
                 }
                 Err(e) => {
                     debug!(&conn.stream);
-                    debug!(e);
+                    debug!(&e);
+                    *err = Some(e.to_string());
                     return None;
                 }
             }

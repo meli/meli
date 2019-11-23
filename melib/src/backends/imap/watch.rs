@@ -108,13 +108,28 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     let thread_id: std::thread::ThreadId = std::thread::current().id();
-    let folder: ImapFolder = folders
+    let folder: ImapFolder = match folders
         .read()
         .unwrap()
         .values()
         .find(|f| f.parent.is_none() && f.path().eq_ignore_ascii_case("INBOX"))
         .map(std::clone::Clone::clone)
-        .unwrap();
+    {
+        Some(folder) => folder,
+        None => {
+            let err = MeliError::new("INBOX mailbox not found in local folder index. meli may have not parsed the IMAP folders correctly");
+            debug!("failure: {}", err.to_string());
+            work_context
+                .set_status
+                .send((thread_id, err.to_string()))
+                .unwrap();
+            sender.send(RefreshEvent {
+                hash: 0,
+                kind: RefreshEventKind::Failure(err.clone()),
+            });
+            return Err(err);
+        }
+    };
     let folder_hash = folder.hash();
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
@@ -428,16 +443,21 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
             .send((thread_id, "IDLEing".to_string()))
             .unwrap();
     }
-    debug!("IDLE exited");
+    debug!("IDLE connection dropped");
+    let err: &str = iter.err().unwrap_or("Unknown reason.");
     work_context
         .set_status
-        .send((thread_id, "IDLE exited".to_string()))
+        .send((thread_id, "IDLE connection dropped".to_string()))
         .unwrap();
+    work_context.finished.send(thread_id).unwrap();
     sender.send(RefreshEvent {
         hash: folder_hash,
-        kind: RefreshEventKind::Failure(MeliError::new("IDLE exited".to_string())),
+        kind: RefreshEventKind::Failure(MeliError::new(format!(
+            "IDLE connection dropped: {}",
+            &err
+        ))),
     });
-    Err(MeliError::new("IDLE exited".to_string()))
+    Err(MeliError::new(format!("IDLE connection dropped: {}", err)))
 }
 
 fn examine_updates(

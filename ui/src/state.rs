@@ -317,10 +317,16 @@ impl State {
                 self.rcv_event(notification);
             }
         } else {
-            debug!(
-                "BUG: mailbox with hash {} not found in mailbox_hashes.",
-                hash
-            );
+            if let melib::backends::RefreshEventKind::Failure(e) = event.kind() {
+                self.context
+                    .sender
+                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                        Some("watcher thread exited with error".to_string()),
+                        e.to_string(),
+                        Some(crate::types::NotificationType::ERROR),
+                    )))
+                    .expect("Could not send event on main channel");
+            }
         }
     }
 

@@ -638,6 +638,14 @@ impl Account {
                 }
                 RefreshEventKind::Failure(e) => {
                     debug!("RefreshEvent Failure: {}", e.to_string());
+                    context
+                        .1
+                        .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                            Some(format!("{} watcher exited with error", &self.name)),
+                            e.to_string(),
+                            Some(crate::types::NotificationType::ERROR),
+                        )))
+                        .expect("Could not send event on main channel");
                     self.watch(context);
                 }
             }
