@@ -72,7 +72,7 @@ impl ViewMode {
 #[derive(Debug, Default)]
 pub struct MailView {
     coordinates: (usize, usize, EnvelopeHash),
-    pager: Option<Pager>,
+    pager: Pager,
     subview: Option<Box<dyn Component>>,
     dirty: bool,
     mode: ViewMode,
@@ -110,7 +110,7 @@ impl MailView {
     ) -> Self {
         MailView {
             coordinates,
-            pager,
+            pager: pager.unwrap_or_default(),
             subview,
             dirty: true,
             mode: ViewMode::Normal,
@@ -591,14 +591,12 @@ impl Component for MailView {
             };
             match self.mode {
                 ViewMode::Attachment(aidx) if body.attachments()[aidx].is_html() => {
-                    self.pager = None;
                     let attachment = &body.attachments()[aidx];
                     self.subview = Some(Box::new(HtmlView::new(&attachment, context)));
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Normal if body.is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(&body, context)));
-                    self.pager = None;
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Subview | ViewMode::ContactSelector(_) => {}
@@ -611,8 +609,7 @@ impl Component for MailView {
                             .map(|v| String::from_utf8_lossy(v).into_owned())
                             .unwrap_or_else(|e| e.to_string())
                     };
-                    self.pager = Some(Pager::from_string(text, Some(context), None, None));
-                    self.subview = None;
+                    self.pager = Pager::from_string(text, Some(context), None, None);
                 }
                 _ => {
                     let text = {
@@ -623,11 +620,11 @@ impl Component for MailView {
                         */
                     };
                     let cursor_pos = if self.mode.is_attachment() {
-                        Some(0)
+                        0
                     } else {
-                        self.pager.as_mut().map(|p| p.cursor_pos())
+                        self.pager.cursor_pos()
                     };
-                    self.pager = Some(Pager::from_string(text, Some(context), cursor_pos, None));
+                    self.pager = Pager::from_string(text, Some(context), Some(cursor_pos), None);
                     self.subview = None;
                 }
             };
@@ -639,9 +636,8 @@ impl Component for MailView {
                 }
             }
             _ => {
-                if let Some(p) = self.pager.as_mut() {
-                    p.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
-                }
+                self.pager
+                    .draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
             }
         }
         if let ViewMode::ContactSelector(ref mut s) = self.mode {
@@ -676,17 +672,13 @@ impl Component for MailView {
                     }
                     return true;
                 }
-                if let Some(p) = self.pager.as_mut() {
-                    if p.process_event(event, context) {
-                        return true;
-                    }
+                if self.pager.process_event(event, context) {
+                    return true;
                 }
             }
             _ => {
-                if let Some(p) = self.pager.as_mut() {
-                    if p.process_event(event, context) {
-                        return true;
-                    }
+                if self.pager.process_event(event, context) {
+                    return true;
                 }
             }
         }
@@ -1284,7 +1276,7 @@ impl Component for MailView {
     }
     fn is_dirty(&self) -> bool {
         self.dirty
-            || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
+            || self.pager.is_dirty()
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || if let ViewMode::ContactSelector(ref s) = self.mode {
                 s.is_dirty()
@@ -1296,9 +1288,7 @@ impl Component for MailView {
         self.dirty = true;
         match self.mode {
             ViewMode::Normal => {
-                if let Some(p) = self.pager.as_mut() {
-                    p.set_dirty();
-                }
+                self.pager.set_dirty();
             }
             ViewMode::Subview => {
                 if let Some(s) = self.subview.as_mut() {
@@ -1311,10 +1301,8 @@ impl Component for MailView {
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = if let Some(ref sbv) = self.subview {
             sbv.get_shortcuts(context)
-        } else if let Some(ref pgr) = self.pager {
-            pgr.get_shortcuts(context)
         } else {
-            Default::default()
+            self.pager.get_shortcuts(context)
         };
 
         let mut our_map = FnvHashMap::with_capacity_and_hasher(4, Default::default());
