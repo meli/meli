@@ -303,7 +303,7 @@ impl fmt::Display for Pager {
 }
 
 impl Pager {
-    const DESCRIPTION: &'static str = "pager";
+    pub const DESCRIPTION: &'static str = "pager";
     pub fn set_reflow(&mut self, new_val: Reflow) {
         self.reflow = new_val;
     }
@@ -470,8 +470,13 @@ impl Pager {
             }
         }
     }
+
     pub fn cursor_pos(&self) -> usize {
         self.cursor.1
+    }
+
+    pub fn size(&self) -> (usize, usize) {
+        (self.width, self.height)
     }
 }
 

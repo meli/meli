@@ -77,6 +77,9 @@ pub struct MailView {
     dirty: bool,
     mode: ViewMode,
     expand_headers: bool,
+    headers_no: usize,
+    headers_cursor: usize,
+    force_draw_headers: bool,
 
     cmd_buf: String,
     id: ComponentId,
@@ -115,6 +118,10 @@ impl MailView {
             dirty: true,
             mode: ViewMode::Normal,
             expand_headers: false,
+
+            headers_no: 5,
+            headers_cursor: 0,
+            force_draw_headers: false,
 
             cmd_buf: String::with_capacity(4),
             id: ComponentId::new_v4(),
@@ -300,7 +307,7 @@ impl MailView {
 
 impl Component for MailView {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        if !self.is_dirty() {
+        if !self.is_dirty() && !self.force_draw_headers {
             return;
         }
         let upper_left = upper_left!(area);
@@ -344,114 +351,60 @@ impl Component for MailView {
                 context.dirty_areas.push_back(area);
                 get_y(upper_left) - 1
             } else {
-                let (x, y) = write_string_to_grid(
-                    &format!("Date: {}", envelope.date_as_str()),
-                    grid,
-                    header_fg,
-                    Color::Default,
-                    Attr::Default,
-                    area,
-                    Some(get_x(upper_left)),
-                );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
+                let height_p = self.pager.size().1;
+
+                let height = height!(area) - self.headers_no - 1;
+
+                self.headers_no = 0;
+                let mut skip_header_ctr = self.headers_cursor;
+                let sticky = context.settings.pager.headers_sticky || height_p < height;
+                let (_, mut y) = upper_left;
+                macro_rules! print_header {
+                    ($($string:expr)+) => {
+                        $({
+                            if sticky || skip_header_ctr == 0 {
+                                let (_x, _y) = write_string_to_grid(
+                                    &$string,
+                                    grid,
+                                    header_fg,
+                                    Color::Default,
+                                    Attr::Default,
+                                    (set_y(upper_left, y), bottom_right),
+                                    Some(get_x(upper_left)),
+                                );
+                            for x in _x..=get_x(bottom_right) {
+                                grid[(x, _y)].set_ch(' ');
+                                grid[(x, _y)].set_bg(Color::Default);
+                                grid[(x, _y)].set_fg(Color::Default);
+                            }
+                            y = _y + 1;
+                        } else {
+                            skip_header_ctr -= 1;
+                        }
+                        self.headers_no += 1;
+                        })+
+                    };
                 }
-                let (x, y) = write_string_to_grid(
-                    &format!("From: {}", envelope.field_from_to_string()),
-                    grid,
-                    header_fg,
-                    Color::Default,
-                    Attr::Default,
-                    (set_y(upper_left, y + 1), bottom_right),
-                    Some(get_x(upper_left)),
+                print_header!(
+                    format!("Date: {}", envelope.date_as_str())
+                    format!("From: {}", envelope.field_from_to_string())
+                    format!("To: {}", envelope.field_to_to_string())
+                    format!("Subject: {}", envelope.subject())
+                    format!("Message-ID: <{}>", envelope.message_id_raw())
                 );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
-                let (x, y) = write_string_to_grid(
-                    &format!("To: {}", envelope.field_to_to_string()),
-                    grid,
-                    header_fg,
-                    Color::Default,
-                    Attr::Default,
-                    (set_y(upper_left, y + 1), bottom_right),
-                    Some(get_x(upper_left)),
-                );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
-                let (x, y) = write_string_to_grid(
-                    &format!("Subject: {}", envelope.subject()),
-                    grid,
-                    header_fg,
-                    Color::Default,
-                    Attr::Default,
-                    (set_y(upper_left, y + 1), bottom_right),
-                    Some(get_x(upper_left)),
-                );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
-                let (x, mut y) = write_string_to_grid(
-                    &format!("Message-ID: <{}>", envelope.message_id_raw()),
-                    grid,
-                    header_fg,
-                    Color::Default,
-                    Attr::Default,
-                    (set_y(upper_left, y + 1), bottom_right),
-                    Some(get_x(upper_left)),
-                );
-                for x in x..=get_x(bottom_right) {
-                    grid[(x, y)].set_ch(' ');
-                    grid[(x, y)].set_bg(Color::Default);
-                    grid[(x, y)].set_fg(Color::Default);
-                }
                 if self.expand_headers && envelope.in_reply_to().is_some() {
-                    let (x, _y) = write_string_to_grid(
-                        &format!("In-Reply-To: {}", envelope.in_reply_to_display().unwrap()),
-                        grid,
-                        header_fg,
-                        Color::Default,
-                        Attr::Default,
-                        (set_y(upper_left, y + 1), bottom_right),
-                        Some(get_x(upper_left)),
-                    );
-                    for x in x..=get_x(bottom_right) {
-                        grid[(x, _y)].set_ch(' ');
-                        grid[(x, _y)].set_bg(Color::Default);
-                        grid[(x, _y)].set_fg(Color::Default);
-                    }
-                    let (x, _y) = write_string_to_grid(
-                        &format!(
+                    print_header!(
+                        format!("In-Reply-To: {}", envelope.in_reply_to_display().unwrap())
+                        format!(
                             "References: {}",
                             envelope
-                                .references()
-                                .iter()
-                                .map(std::string::ToString::to_string)
-                                .collect::<Vec<String>>()
-                                .join(", ")
-                        ),
-                        grid,
-                        header_fg,
-                        Color::Default,
-                        Attr::Default,
-                        (set_y(upper_left, _y + 1), bottom_right),
-                        Some(get_x(upper_left)),
+                            .references()
+                            .iter()
+                            .map(std::string::ToString::to_string)
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                        )
                     );
-                    for x in x..=get_x(bottom_right) {
-                        grid[(x, _y)].set_ch(' ');
-                        grid[(x, _y)].set_bg(Color::Default);
-                        grid[(x, _y)].set_fg(Color::Default);
-                    }
-                    y = _y;
                 }
                 if let Some(list_management::ListActions {
                     ref id,
@@ -461,106 +414,129 @@ impl Component for MailView {
                 }) = list_management::ListActions::detect(&envelope)
                 {
                     let mut x = get_x(upper_left);
-                    y += 1;
                     if let Some(id) = id {
-                        let (_x, _) = write_string_to_grid(
-                            "List-ID: ",
-                            grid,
-                            header_fg,
-                            Color::Default,
-                            Attr::Default,
-                            (set_y(upper_left, y), bottom_right),
-                            None,
-                        );
-                        let (_x, _y) = write_string_to_grid(
-                            id,
-                            grid,
-                            Color::Default,
-                            Color::Default,
-                            Attr::Default,
-                            ((_x, y), bottom_right),
-                            None,
-                        );
-                        x = _x;
-                        if _y != y {
-                            x = get_x(upper_left);
+                        if sticky || skip_header_ctr == 0 {
+                            let (_x, _) = write_string_to_grid(
+                                "List-ID: ",
+                                grid,
+                                header_fg,
+                                Color::Default,
+                                Attr::Default,
+                                (set_y(upper_left, y), bottom_right),
+                                None,
+                            );
+                            let (_x, _y) = write_string_to_grid(
+                                id,
+                                grid,
+                                Color::Default,
+                                Color::Default,
+                                Attr::Default,
+                                ((_x, y), bottom_right),
+                                None,
+                            );
+                            x = _x;
+                            if _y != y {
+                                x = get_x(upper_left);
+                            }
+                            y = _y;
                         }
-                        y = _y;
+                        self.headers_no += 1;
                     }
-                    if archive.is_some() || post.is_some() || unsubscribe.is_some() {
-                        let (_x, _y) = write_string_to_grid(
-                            " Available actions: [ ",
-                            grid,
-                            header_fg,
-                            Color::Default,
-                            Attr::Default,
-                            ((x, y), bottom_right),
-                            Some(get_x(upper_left)),
-                        );
-                        x = _x;
-                        y = _y;
-                    }
-                    if archive.is_some() {
-                        let (_x, _y) = write_string_to_grid(
-                            "list-archive, ",
-                            grid,
-                            Color::Default,
-                            Color::Default,
-                            Attr::Default,
-                            ((x, y), bottom_right),
-                            Some(get_x(upper_left)),
-                        );
-                        x = _x;
-                        y = _y;
-                    }
-                    if post.is_some() {
-                        let (_x, _y) = write_string_to_grid(
-                            "list-post, ",
-                            grid,
-                            Color::Default,
-                            Color::Default,
-                            Attr::Default,
-                            ((x, y), bottom_right),
-                            Some(get_x(upper_left)),
-                        );
-                        x = _x;
-                        y = _y;
-                    }
-                    if unsubscribe.is_some() {
-                        let (_x, _y) = write_string_to_grid(
-                            "list-unsubscribe, ",
-                            grid,
-                            Color::Default,
-                            Color::Default,
-                            Attr::Default,
-                            ((x, y), bottom_right),
-                            Some(get_x(upper_left)),
-                        );
-                        x = _x;
-                        y = _y;
-                    }
-                    if archive.is_some() || post.is_some() || unsubscribe.is_some() {
-                        if x >= 2 {
-                            grid[(x - 2, y)].set_ch(' ');
+                    if sticky || skip_header_ctr == 0 {
+                        if archive.is_some() || post.is_some() || unsubscribe.is_some() {
+                            let (_x, _y) = write_string_to_grid(
+                                " Available actions: [ ",
+                                grid,
+                                header_fg,
+                                Color::Default,
+                                Attr::Default,
+                                ((x, y), bottom_right),
+                                Some(get_x(upper_left)),
+                            );
+                            x = _x;
+                            y = _y;
                         }
-                        if x > 0 {
-                            grid[(x - 1, y)].set_fg(header_fg);
-                            grid[(x - 1, y)].set_bg(Color::Default);
-                            grid[(x - 1, y)].set_ch(']');
+                        if archive.is_some() {
+                            let (_x, _y) = write_string_to_grid(
+                                "list-archive, ",
+                                grid,
+                                Color::Default,
+                                Color::Default,
+                                Attr::Default,
+                                ((x, y), bottom_right),
+                                Some(get_x(upper_left)),
+                            );
+                            x = _x;
+                            y = _y;
                         }
-                    }
-                    for x in x..=get_x(bottom_right) {
-                        grid[(x, y)].set_ch(' ');
-                        grid[(x, y)].set_bg(Color::Default);
-                        grid[(x, y)].set_fg(Color::Default);
+                        if post.is_some() {
+                            let (_x, _y) = write_string_to_grid(
+                                "list-post, ",
+                                grid,
+                                Color::Default,
+                                Color::Default,
+                                Attr::Default,
+                                ((x, y), bottom_right),
+                                Some(get_x(upper_left)),
+                            );
+                            x = _x;
+                            y = _y;
+                        }
+                        if unsubscribe.is_some() {
+                            let (_x, _y) = write_string_to_grid(
+                                "list-unsubscribe, ",
+                                grid,
+                                Color::Default,
+                                Color::Default,
+                                Attr::Default,
+                                ((x, y), bottom_right),
+                                Some(get_x(upper_left)),
+                            );
+                            x = _x;
+                            y = _y;
+                        }
+                        if archive.is_some() || post.is_some() || unsubscribe.is_some() {
+                            if x >= 2 {
+                                grid[(x - 2, y)].set_ch(' ');
+                            }
+                            if x > 0 {
+                                grid[(x - 1, y)].set_fg(header_fg);
+                                grid[(x - 1, y)].set_bg(Color::Default);
+                                grid[(x - 1, y)].set_ch(']');
+                            }
+                        }
+                        for x in x..=get_x(bottom_right) {
+                            grid[(x, y)].set_ch(' ');
+                            grid[(x, y)].set_bg(Color::Default);
+                            grid[(x, y)].set_fg(Color::Default);
+                        }
+                        y += 1;
                     }
                 }
 
-                clear_area(grid, (set_y(upper_left, y + 1), set_y(bottom_right, y + 1)));
+                self.force_draw_headers = false;
+                clear_area(grid, (set_y(upper_left, y), set_y(bottom_right, y + 1)));
                 context
                     .dirty_areas
-                    .push_back((upper_left, set_y(bottom_right, y + 1)));
-                y + 1
+                    .push_back((upper_left, set_y(bottom_right, y + 3)));
+                if !context.settings.pager.headers_sticky {
+                    let height_p = self.pager.size().1;
+
+                    let height = height!(area) - y - 1;
+                    if self.pager.cursor_pos() >= self.headers_no {
+                        get_y(upper_left)
+                    } else if height_p > height && self.headers_cursor < self.headers_no + 1 {
+                        y + 1
+                    } else if self.headers_cursor == 0 {
+                        y + 1
+                    } else if height_p < height {
+                        y + 1
+                    } else {
+                        get_y(upper_left)
+                    }
+                } else {
+                    y + 1
+                }
             }
         };
 
@@ -632,12 +608,12 @@ impl Component for MailView {
         match self.mode {
             ViewMode::Subview if self.subview.is_some() => {
                 if let Some(s) = self.subview.as_mut() {
-                    s.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+                    s.draw(grid, (set_y(upper_left, y), bottom_right), context);
                 }
             }
             _ => {
                 self.pager
-                    .draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+                    .draw(grid, (set_y(upper_left, y), bottom_right), context);
             }
         }
         if let ViewMode::ContactSelector(ref mut s) = self.mode {
@@ -647,6 +623,7 @@ impl Component for MailView {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        let shortcuts = self.get_shortcuts(context);
         match self.mode {
             ViewMode::Subview => {
                 if let Some(s) = self.subview.as_mut() {
@@ -676,11 +653,39 @@ impl Component for MailView {
                     return true;
                 }
             }
-            _ => {
-                if self.pager.process_event(event, context) {
+            _ => match event {
+                UIEvent::Input(ref k)
+                    if k == shortcuts[Pager::DESCRIPTION]["scroll_up"]
+                        && !context.settings.pager.headers_sticky
+                        && self.headers_cursor <= self.headers_no =>
+                {
+                    self.force_draw_headers = true;
+                    if self.pager.cursor_pos() == 0 {
+                        self.headers_cursor = self.headers_cursor.saturating_sub(1);
+                    } else {
+                        if self.pager.process_event(event, context) {
+                            return true;
+                        }
+                    }
+                    self.pager.set_dirty();
                     return true;
                 }
-            }
+                UIEvent::Input(ref k)
+                    if k == shortcuts[Pager::DESCRIPTION]["scroll_down"]
+                        && !context.settings.pager.headers_sticky
+                        && self.headers_cursor < self.headers_no =>
+                {
+                    self.force_draw_headers = true;
+                    self.headers_cursor += 1;
+                    self.pager.set_dirty();
+                    return true;
+                }
+                _ => {
+                    if self.pager.process_event(event, context) {
+                        return true;
+                    }
+                }
+            },
         }
 
         let shortcuts = &self.get_shortcuts(context)[MailView::DESCRIPTION];
