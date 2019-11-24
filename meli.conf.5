@@ -51,7 +51,7 @@ root_folder = "/path/to/root/folder"
 format = "Maildir"
 index_style = "Compact"
 identity="email@address.tld"
-subscribed_folders = ["folder", "folder/Sent"]
+subscribed_folders = ["folder", "folder/Sent"] # or [ "*", ] for all folders
 display_name = "Name"
 
 # Set folder-specific settings
@@ -99,7 +99,10 @@ the backend-specific path of the root_folder, usually INBOX.
 .It Ic format Ar String Op maildir mbox imap notmuch
 the format of the mail backend.
 .It Ic subscribed_folders Ar [String,]
-an array of folder paths to display in the UI. Paths are relative to the root folder (eg "INBOX/Sent", not "Sent")
+an array of folder paths to display in the UI. Paths are relative to the root folder (eg "INBOX/Sent", not "Sent").
+The glob wildcard
+.Em \&*
+can be used to match every folder name and path.
 .It Ic identity Ar String
 your e-mail address that is inserted in the From: headers of outgoing mail
 .It Ic index_style Ar String

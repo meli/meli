@@ -37,6 +37,9 @@
 #index_style = "Conversations"
 #identity = "username@server.tld"
 #display_name = "Name Name"
+## match every folder:
+#subscribed_folders = ["*" ]
+## match specific folders:
 #subscribed_folders = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 
 # Setting up an account for an already existing notmuch database
