@@ -14,14 +14,6 @@ use text_processing::wcwidth;
  * The main process copies the grid whenever the actual terminal is redrawn.
  **/
 
-/// In a scroll region up and down cursor movements shift the region vertically. The new lines are
-/// empty.
-#[derive(Debug)]
-struct ScrollRegion {
-    top: usize,
-    bottom: usize,
-}
-
 #[derive(Debug)]
 pub struct EmbedGrid {
     cursor: (usize, usize),
@@ -63,7 +55,12 @@ impl EmbedGrid {
     pub fn new(stdin: std::fs::File, child_pid: nix::unistd::Pid) -> Self {
         EmbedGrid {
             cursor: (0, 0),
-            scroll_region: ScrollRegion { top: 0, bottom: 0 },
+            scroll_region: ScrollRegion {
+                top: 0,
+                bottom: 0,
+                left: 0,
+                ..Default::default()
+            },
             terminal_size: (0, 0),
             grid: CellBuffer::default(),
             state: State::Normal,
@@ -191,7 +188,7 @@ impl EmbedGrid {
                 // ESCD Linefeed
                 debug!("{}", EscCode::from((&(*state), byte)));
                 if cursor.1 == scroll_region.bottom {
-                    scroll_up(grid, scroll_region, scroll_region.top, 1);
+                    grid.scroll_up(scroll_region, scroll_region.top, 1);
                 } else {
                     cursor.1 += 1;
                 }
@@ -253,7 +250,7 @@ impl EmbedGrid {
 
                 if cursor.1 + 1 < terminal_size.1 {
                     if cursor.1 == scroll_region.bottom {
-                        scroll_up(grid, scroll_region, cursor.1, 1);
+                        grid.scroll_up(scroll_region, cursor.1, 1);
                     } else {
                         cursor.1 += 1;
                     }
@@ -335,7 +332,7 @@ impl EmbedGrid {
                 if *auto_wrap_mode && *wrap_next {
                     *wrap_next = false;
                     if cursor.1 == scroll_region.bottom {
-                        scroll_up(grid, scroll_region, scroll_region.top, 1);
+                        grid.scroll_up(scroll_region, scroll_region.top, 1);
                     } else {
                         cursor.1 += 1;
                     }
@@ -488,7 +485,7 @@ impl EmbedGrid {
                     1
                 };
 
-                scroll_down(grid, scroll_region, cursor.1, n);
+                grid.scroll_down(scroll_region, cursor.1, n);
 
                 debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
@@ -503,7 +500,7 @@ impl EmbedGrid {
                     1
                 };
 
-                scroll_up(grid, scroll_region, cursor.1, n);
+                grid.scroll_up(scroll_region, cursor.1, n);
 
                 debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
@@ -1103,109 +1100,6 @@ impl EmbedGrid {
                 debug!("ignoring {}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }
-        }
-    }
-}
-
-#[inline(always)]
-/// Performs the normal scroll up motion:
-///
-/// First clear offset number of lines:
-///
-/// For offset = 1, top = 1:
-///
-///  | 111111111111 |            |              |
-///  | 222222222222 |            | 222222222222 |
-///  | 333333333333 |            | 333333333333 |
-///  | 444444444444 |    -->     | 444444444444 |
-///  | 555555555555 |            | 555555555555 |
-///  | 666666666666 |            | 666666666666 |
-///
-///  In each step, swap the current line with the next by offset:
-///
-///  |              |            | 222222222222 |
-///  | 222222222222 |            |              |
-///  | 333333333333 |            | 333333333333 |
-///  | 444444444444 |    -->     | 444444444444 |
-///  | 555555555555 |            | 555555555555 |
-///  | 666666666666 |            | 666666666666 |
-///
-///  Result:
-///    Before                      After
-///  | 111111111111 |            | 222222222222 |
-///  | 222222222222 |            | 333333333333 |
-///  | 333333333333 |            | 444444444444 |
-///  | 444444444444 |            | 555555555555 |
-///  | 555555555555 |            | 666666666666 |
-///  | 666666666666 |            |              |
-///
-fn scroll_up(grid: &mut CellBuffer, scroll_region: &ScrollRegion, top: usize, offset: usize) {
-    //debug!(
-    //    "scroll_up scroll_region {:?}, top: {} offset {}",
-    //    scroll_region, top, offset
-    //);
-    for y in top..=(top + offset - 1) {
-        for x in 0..grid.size().0 {
-            grid[(x, y)] = Cell::default();
-        }
-    }
-    for y in top..=(scroll_region.bottom - offset) {
-        for x in 0..grid.size().0 {
-            let temp = grid[(x, y)];
-            grid[(x, y)] = grid[(x, y + offset)];
-            grid[(x, y + offset)] = temp;
-        }
-    }
-}
-
-#[inline(always)]
-/// Performs the normal scroll down motion:
-///
-/// First clear offset number of lines:
-///
-/// For offset = 1, top = 1:
-///
-///  | 111111111111 |            | 111111111111 |
-///  | 222222222222 |            | 222222222222 |
-///  | 333333333333 |            | 333333333333 |
-///  | 444444444444 |    -->     | 444444444444 |
-///  | 555555555555 |            | 555555555555 |
-///  | 666666666666 |            |              |
-///
-///  In each step, swap the current line with the prev by offset:
-///
-///  | 111111111111 |            | 111111111111 |
-///  | 222222222222 |            | 222222222222 |
-///  | 333333333333 |            | 333333333333 |
-///  | 444444444444 |    -->     | 444444444444 |
-///  | 555555555555 |            |              |
-///  |              |            | 555555555555 |
-///
-///  Result:
-///    Before                      After
-///  | 111111111111 |            |              |
-///  | 222222222222 |            | 111111111111 |
-///  | 333333333333 |            | 222222222222 |
-///  | 444444444444 |            | 333333333333 |
-///  | 555555555555 |            | 444444444444 |
-///  | 666666666666 |            | 555555555555 |
-///
-fn scroll_down(grid: &mut CellBuffer, scroll_region: &ScrollRegion, top: usize, offset: usize) {
-    //debug!(
-    //    "scroll_down scroll_region {:?}, top: {} offset {}",
-    //    scroll_region, top, offset
-    //);
-    for y in (scroll_region.bottom - offset + 1)..=scroll_region.bottom {
-        for x in 0..grid.size().0 {
-            grid[(x, y)] = Cell::default();
-        }
-    }
-
-    for y in ((top + offset)..=scroll_region.bottom).rev() {
-        for x in 0..grid.size().0 {
-            let temp = grid[(x, y)];
-            grid[(x, y)] = grid[(x, y - offset)];
-            grid[(x, y - offset)] = temp;
         }
     }
 }

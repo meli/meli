@@ -160,21 +160,3 @@ macro_rules! is_valid_area {
         !(get_y(upper_left) > get_y(bottom_right) || get_x(upper_left) > get_x(bottom_right))
     }};
 }
-
-/// A `(cols, rows)` size.
-pub type Size = (usize, usize);
-
-pub trait HasSize {
-    fn size(&self) -> Size;
-    fn cols(&self) -> usize {
-        self.size().0
-    }
-    fn rows(&self) -> usize {
-        self.size().1
-    }
-}
-
-pub trait HasPosition {
-    fn origin(&self) -> Pos;
-    fn set_origin(&mut self, new_origin: Pos);
-}

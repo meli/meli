@@ -33,66 +33,17 @@ use std::fmt;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use termion::color::{AnsiValue, Rgb as TermionRgb};
 
-/// Types and implementations taken from rustty for convenience.
-
-pub trait CellAccessor: HasSize {
-    fn cellvec(&self) -> &Vec<Cell>;
-    fn cellvec_mut(&mut self) -> &mut Vec<Cell>;
-
-    /// Clears `self`, using the given `Cell` as a blank.
-    fn clear(&mut self, blank: Cell) {
-        for cell in self.cellvec_mut().iter_mut() {
-            *cell = blank;
-        }
-    }
-
-    fn pos_to_index(&self, x: usize, y: usize) -> Option<usize> {
-        let (cols, rows) = self.size();
-        if x < cols && y < rows {
-            Some((cols * y) + x)
-        } else {
-            None
-        }
-    }
-
-    /// Returns a reference to the `Cell` at the given coordinates, or `None` if the index is out of
-    /// bounds.
-    ///
-    /// # Examples
-    ///
-    /// ```norun
-    /// use rustty::{Terminal, CellAccessor};
-    ///
-    /// let mut term = Terminal::new().unwrap();
-    ///
-    /// let a_cell = term.get(5, 5);
-    /// ```
-    fn get(&self, x: usize, y: usize) -> Option<&Cell> {
-        match self.pos_to_index(x, y) {
-            Some(i) => self.cellvec().get(i),
-            None => None,
-        }
-    }
-
-    /// Returns a mutable reference to the `Cell` at the given coordinates, or `None` if the index
-    /// is out of bounds.
-    ///
-    /// # Examples
-    ///
-    /// ```norun
-    /// use rustty::{Terminal, CellAccessor};
-    ///
-    /// let mut term = Terminal::new().unwrap();
-    ///
-    /// let a_mut_cell = term.get_mut(5, 5);
-    /// ```
-    fn get_mut(&mut self, x: usize, y: usize) -> Option<&mut Cell> {
-        match self.pos_to_index(x, y) {
-            Some(i) => self.cellvec_mut().get_mut(i),
-            None => None,
-        }
-    }
+/// In a scroll region up and down cursor movements shift the region vertically. The new lines are
+/// empty.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ScrollRegion {
+    pub top: usize,
+    pub bottom: usize,
+    pub left: usize,
+    pub right: usize,
 }
+
+/// Types and implementations taken from rustty for convenience.
 
 /// An array of `Cell`s that represents a terminal display.
 ///
@@ -216,21 +167,188 @@ impl CellBuffer {
         self.cols = 0;
         self.rows = 0;
     }
-}
 
-impl HasSize for CellBuffer {
-    fn size(&self) -> Size {
+    /// Clears `self`, using the given `Cell` as a blank.
+    pub fn clear(&mut self, blank: Cell) {
+        for cell in self.cellvec_mut().iter_mut() {
+            *cell = blank;
+        }
+    }
+
+    pub fn pos_to_index(&self, x: usize, y: usize) -> Option<usize> {
+        let (cols, rows) = self.size();
+        if x < cols && y < rows {
+            Some((cols * y) + x)
+        } else {
+            None
+        }
+    }
+
+    /// Returns a reference to the `Cell` at the given coordinates, or `None` if the index is out of
+    /// bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```norun
+    /// use rustty::{Terminal, CellAccessor};
+    ///
+    /// let mut term = Terminal::new().unwrap();
+    ///
+    /// let a_cell = term.get(5, 5);
+    /// ```
+    pub fn get(&self, x: usize, y: usize) -> Option<&Cell> {
+        match self.pos_to_index(x, y) {
+            Some(i) => self.cellvec().get(i),
+            None => None,
+        }
+    }
+
+    /// Returns a mutable reference to the `Cell` at the given coordinates, or `None` if the index
+    /// is out of bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```norun
+    /// use rustty::{Terminal, CellAccessor};
+    ///
+    /// let mut term = Terminal::new().unwrap();
+    ///
+    /// let a_mut_cell = term.get_mut(5, 5);
+    /// ```
+    pub fn get_mut(&mut self, x: usize, y: usize) -> Option<&mut Cell> {
+        match self.pos_to_index(x, y) {
+            Some(i) => self.cellvec_mut().get_mut(i),
+            None => None,
+        }
+    }
+
+    pub fn size(&self) -> (usize, usize) {
         (self.cols, self.rows)
     }
-}
 
-impl CellAccessor for CellBuffer {
-    fn cellvec(&self) -> &Vec<Cell> {
+    pub fn cellvec(&self) -> &Vec<Cell> {
         &self.buf
     }
 
-    fn cellvec_mut(&mut self) -> &mut Vec<Cell> {
+    pub fn cellvec_mut(&mut self) -> &mut Vec<Cell> {
         &mut self.buf
+    }
+
+    pub fn cols(&self) -> usize {
+        self.size().0
+    }
+
+    pub fn rows(&self) -> usize {
+        self.size().1
+    }
+
+    #[inline(always)]
+    /// Performs the normal scroll up motion:
+    ///
+    /// First clear offset number of lines:
+    ///
+    /// For offset = 1, top = 1:
+    ///
+    ///  | 111111111111 |            |              |
+    ///  | 222222222222 |            | 222222222222 |
+    ///  | 333333333333 |            | 333333333333 |
+    ///  | 444444444444 |    -->     | 444444444444 |
+    ///  | 555555555555 |            | 555555555555 |
+    ///  | 666666666666 |            | 666666666666 |
+    ///
+    ///  In each step, swap the current line with the next by offset:
+    ///
+    ///  |              |            | 222222222222 |
+    ///  | 222222222222 |            |              |
+    ///  | 333333333333 |            | 333333333333 |
+    ///  | 444444444444 |    -->     | 444444444444 |
+    ///  | 555555555555 |            | 555555555555 |
+    ///  | 666666666666 |            | 666666666666 |
+    ///
+    ///  Result:
+    ///    Before                      After
+    ///  | 111111111111 |            | 222222222222 |
+    ///  | 222222222222 |            | 333333333333 |
+    ///  | 333333333333 |            | 444444444444 |
+    ///  | 444444444444 |            | 555555555555 |
+    ///  | 555555555555 |            | 666666666666 |
+    ///  | 666666666666 |            |              |
+    ///
+    pub fn scroll_up(&mut self, scroll_region: &ScrollRegion, top: usize, offset: usize) {
+        //debug!(
+        //    "scroll_up scroll_region {:?}, top: {} offset {}",
+        //    scroll_region, top, offset
+        //);
+        let l = scroll_region.left;
+        let r = if scroll_region.right == 0 {
+            self.size().0
+        } else {
+            scroll_region.right
+        };
+        for y in top..=(top + offset - 1) {
+            for x in l..r {
+                self[(x, y)] = Cell::default();
+            }
+        }
+        for y in top..=(scroll_region.bottom - offset) {
+            for x in l..r {
+                let temp = self[(x, y)];
+                self[(x, y)] = self[(x, y + offset)];
+                self[(x, y + offset)] = temp;
+            }
+        }
+    }
+
+    #[inline(always)]
+    /// Performs the normal scroll down motion:
+    ///
+    /// First clear offset number of lines:
+    ///
+    /// For offset = 1, top = 1:
+    ///
+    ///  | 111111111111 |            | 111111111111 |
+    ///  | 222222222222 |            | 222222222222 |
+    ///  | 333333333333 |            | 333333333333 |
+    ///  | 444444444444 |    -->     | 444444444444 |
+    ///  | 555555555555 |            | 555555555555 |
+    ///  | 666666666666 |            |              |
+    ///
+    ///  In each step, swap the current line with the prev by offset:
+    ///
+    ///  | 111111111111 |            | 111111111111 |
+    ///  | 222222222222 |            | 222222222222 |
+    ///  | 333333333333 |            | 333333333333 |
+    ///  | 444444444444 |    -->     | 444444444444 |
+    ///  | 555555555555 |            |              |
+    ///  |              |            | 555555555555 |
+    ///
+    ///  Result:
+    ///    Before                      After
+    ///  | 111111111111 |            |              |
+    ///  | 222222222222 |            | 111111111111 |
+    ///  | 333333333333 |            | 222222222222 |
+    ///  | 444444444444 |            | 333333333333 |
+    ///  | 555555555555 |            | 444444444444 |
+    ///  | 666666666666 |            | 555555555555 |
+    ///
+    pub fn scroll_down(&mut self, scroll_region: &ScrollRegion, top: usize, offset: usize) {
+        //debug!(
+        //    "scroll_down scroll_region {:?}, top: {} offset {}",
+        //    scroll_region, top, offset
+        //);
+        for y in (scroll_region.bottom - offset + 1)..=scroll_region.bottom {
+            for x in 0..self.size().0 {
+                self[(x, y)] = Cell::default();
+            }
+        }
+
+        for y in ((top + offset)..=scroll_region.bottom).rev() {
+            for x in 0..self.size().0 {
+                let temp = self[(x, y)];
+                self[(x, y)] = self[(x, y - offset)];
+                self[(x, y - offset)] = temp;
+            }
+        }
     }
 }
 
