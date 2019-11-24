@@ -45,6 +45,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::{self, Read, Write};
 use std::ops::{Deref, DerefMut};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 use std::result;
 use std::sync::{Arc, Mutex};
@@ -768,6 +769,12 @@ impl MaildirType {
                                                             panic!("{}", e);
                                                         }
                                                     };
+                                                    let metadata = f.metadata().unwrap();
+                                                    let mut permissions = metadata.permissions();
+
+                                                    permissions.set_mode(0o600); // Read/write for owner only.
+                                                    f.set_permissions(permissions).unwrap();
+
                                                     let writer = io::BufWriter::new(f);
                                                     bincode::serialize_into(writer, &e).unwrap();
                                                 }
@@ -860,6 +867,12 @@ impl MaildirType {
         }
         debug!("saving at {}", path.display());
         let file = fs::File::create(path).unwrap();
+        let metadata = file.metadata()?;
+        let mut permissions = metadata.permissions();
+
+        permissions.set_mode(0o600); // Read/write for owner only.
+        file.set_permissions(permissions)?;
+
         let mut writer = io::BufWriter::new(file);
         writer.write_all(bytes).unwrap();
         return Ok(());
@@ -899,6 +912,11 @@ fn add_path_to_index(
                     panic!("{}", e);
                 }
             };
+            let metadata = f.metadata().unwrap();
+            let mut permissions = metadata.permissions();
+
+            permissions.set_mode(0o600); // Read/write for owner only.
+            f.set_permissions(permissions).unwrap();
             let writer = io::BufWriter::new(f);
             bincode::serialize_into(writer, &e).unwrap();
         }

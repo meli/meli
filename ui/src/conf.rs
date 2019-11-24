@@ -51,7 +51,8 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufRead, Read, Write};
-use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 
 #[macro_export]
 macro_rules! split_command {
@@ -291,14 +292,7 @@ impl FileSettings {
 
                 match buffer.trim() {
                     "Y" | "y" | "yes" | "YES" | "Yes" => {
-                        let mut file = OpenOptions::new()
-                            .write(true)
-                            .create_new(true)
-                            .open(config_path.as_path())
-                            .expect("Could not create config file.");
-                        file.write_all(include_bytes!("../../sample-config"))
-                            .expect("Could not write to config file.");
-                        println!("Written config to {}", config_path.display());
+                        create_config_file(&config_path)?;
                         return Err(MeliError::new(
                             "Edit the sample configuration and relaunch meli.",
                         ));
@@ -558,4 +552,21 @@ pub fn usage(name: &str) -> Option<SpecialUseMailbox> {
     } else {
         Some(SpecialUseMailbox::Normal)
     }
+}
+
+pub fn create_config_file(p: &Path) -> Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(p)
+        .expect("Could not create config file.");
+    file.write_all(include_bytes!("../../sample-config"))
+        .expect("Could not write to config file.");
+    println!("Written example configuration to {}", p.display());
+    let metadata = file.metadata()?;
+    let mut permissions = metadata.permissions();
+
+    permissions.set_mode(0o600); // Read/write for owner only.
+    file.set_permissions(permissions)?;
+    Ok(())
 }

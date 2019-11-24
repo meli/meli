@@ -72,13 +72,25 @@ pub fn open_db() -> Result<Connection> {
     let db_path = data_dir
         .place_data_file("index.db")
         .map_err(|e| MeliError::new(e.to_string()))?;
+    let mut set_mode = false;
     if !db_path.exists() {
         log(
             format!("Creating index database in {}", db_path.display()),
             melib::INFO,
         );
+        set_mode = true;
     }
-    let conn = Connection::open(db_path).map_err(|e| MeliError::new(e.to_string()))?;
+    let conn = Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))?;
+    if set_mode {
+        use std::os::unix::fs::PermissionsExt;
+        let file = std::fs::File::open(&db_path)?;
+        let metadata = file.metadata()?;
+        let mut permissions = metadata.permissions();
+
+        permissions.set_mode(0o600); // Read/write for owner only.
+        file.set_permissions(permissions)?;
+    }
+
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,

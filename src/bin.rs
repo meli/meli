@@ -28,7 +28,6 @@
 //!
 
 use std::alloc::System;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[global_allocator]
@@ -209,14 +208,7 @@ fn run_app() -> Result<()> {
         if config_path.exists() {
             return Err(MeliError::new(format!("File `{}` already exists.\nMaybe you meant to specify another path with --create-config=PATH", config_path.display())));
         }
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(config_path.as_path())
-            .map_err(|e| MeliError::new(format!("Could not create config file:\n{}", e)))?;
-        file.write_all(include_bytes!("../sample-config"))
-            .map_err(|e| MeliError::new(format!("Could not write to config file:\n{}", e)))?;
-        println!("Written example configuration to {}", config_path.display());
+        ui::conf::create_config_file(&config_path)?;
         return Ok(());
     }
 

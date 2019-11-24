@@ -23,6 +23,7 @@ use std;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use uuid::Uuid;
@@ -92,6 +93,11 @@ pub fn create_temp_file(
     };
 
     let mut f = std::fs::File::create(path).unwrap();
+    let metadata = f.metadata().unwrap();
+    let mut permissions = metadata.permissions();
+
+    permissions.set_mode(0o600); // Read/write for owner only.
+    f.set_permissions(permissions).unwrap();
 
     f.write_all(bytes).unwrap();
     f.flush().unwrap();

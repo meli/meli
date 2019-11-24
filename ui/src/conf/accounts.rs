@@ -44,6 +44,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::io;
 use std::ops::{Index, IndexMut};
+use std::os::unix::fs::PermissionsExt;
 use std::result;
 use std::sync::{Arc, RwLock};
 
@@ -177,6 +178,11 @@ impl Drop for Account {
                         return;
                     }
                 };
+                let metadata = f.metadata().unwrap();
+                let mut permissions = metadata.permissions();
+
+                permissions.set_mode(0o600); // Read/write for owner only.
+                f.set_permissions(permissions).unwrap();
                 let writer = io::BufWriter::new(f);
                 if let Err(err) = serde_json::to_writer(writer, &self.address_book) {
                     eprintln!("{}", err);
@@ -192,6 +198,11 @@ impl Drop for Account {
                         return;
                     }
                 };
+                let metadata = f.metadata().unwrap();
+                let mut permissions = metadata.permissions();
+
+                permissions.set_mode(0o600); // Read/write for owner only.
+                f.set_permissions(permissions).unwrap();
                 let writer = io::BufWriter::new(f);
                 if let Err(err) = bincode::serialize_into(writer, &self.folders) {
                     eprintln!("{}", err);
@@ -254,6 +265,11 @@ impl Account {
         let address_book = if let Ok(data) = data_dir.place_data_file("addressbook") {
             if data.exists() {
                 let reader = io::BufReader::new(fs::File::open(data).unwrap());
+                let metadata = reader.get_ref().metadata().unwrap();
+                let mut permissions = metadata.permissions();
+
+                permissions.set_mode(0o600); // Read/write for owner only.
+                reader.get_ref().set_permissions(permissions).unwrap();
                 let result: result::Result<AddressBook, _> = serde_json::from_reader(reader);
                 if let Ok(data_t) = result {
                     data_t

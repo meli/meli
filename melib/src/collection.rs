@@ -1,8 +1,6 @@
 use super::*;
 use crate::backends::FolderHash;
 use std::collections::BTreeMap;
-use std::fs;
-use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -52,19 +50,21 @@ pub struct Collection {
 
 impl Drop for Collection {
     fn drop(&mut self) {
-        let cache_dir: xdg::BaseDirectories =
-            xdg::BaseDirectories::with_profile("meli", "threads".to_string()).unwrap();
-        if let Ok(cached) = cache_dir.place_cache_file("threads") {
-            /* place result in cache directory */
-            let f = match fs::File::create(cached) {
-                Ok(f) => f,
-                Err(e) => {
-                    panic!("{}", e);
-                }
-            };
-            let writer = io::BufWriter::new(f);
-            bincode::serialize_into(writer, &self.threads).unwrap();
-        }
+        /*
+            let cache_dir: xdg::BaseDirectories =
+                xdg::BaseDirectories::with_profile("meli", "threads".to_string()).unwrap();
+            if let Ok(cached) = cache_dir.place_cache_file("threads") {
+                /* place result in cache directory */
+                let f = match fs::File::create(cached) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        panic!("{}", e);
+                    }
+                };
+                let writer = io::BufWriter::new(f);
+                bincode::serialize_into(writer, &self.threads).unwrap();
+            }
+        */
     }
 }
 

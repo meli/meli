@@ -1096,6 +1096,12 @@ impl Component for MailView {
                                 }
                                 Ok(f) => f,
                             };
+                            use std::os::unix::fs::PermissionsExt;
+                            let metadata = f.metadata().unwrap();
+                            let mut permissions = metadata.permissions();
+
+                            permissions.set_mode(0o600); // Read/write for owner only.
+                            f.set_permissions(permissions).unwrap();
 
                             f.write_all(&decode(u, None)).unwrap();
                             f.flush().unwrap();
