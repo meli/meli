@@ -89,6 +89,10 @@ impl UText {
      *                       self.cursor_pos
      */
     pub fn insert_char(&mut self, k: char) {
+        if k.is_control() {
+            return;
+        }
+
         self.content.insert(self.cursor_pos, k);
         self.cursor_pos += k.len_utf8();
         self.grapheme_cursor_pos += 1;
@@ -131,5 +135,20 @@ impl UText {
         self.cursor_dec();
 
         self.content.drain(offset..offset + graph_len).count();
+    }
+
+    pub fn cut_left(&mut self) {
+        if self.content.is_empty() {
+            return;
+        }
+        let offset = {
+            let (left, _) = self.content.split_at(self.cursor_pos);
+            left.last_grapheme()
+                .map(|(offset, graph)| offset + graph.len())
+                .unwrap_or(0)
+        };
+        self.cursor_pos = 0;
+        self.grapheme_cursor_pos = 0;
+        self.content.drain(..offset).count();
     }
 }

@@ -128,7 +128,7 @@ impl Component for Field {
             if let UIEvent::InsertInput(Key::Char('\t')) = event {
                 if let Some(suggestion) = auto_complete.get_suggestion() {
                     *s = UText::new(suggestion);
-                    let len = s.as_str().len().saturating_sub(1);
+                    let len = s.as_str().len();
                     s.set_cursor(len);
                     return true;
                 }
@@ -197,6 +197,43 @@ impl Component for Field {
             UIEvent::InsertInput(Key::Ctrl('a')) => {
                 if let Text(ref mut s, _) = self {
                     s.set_cursor(0);
+                }
+            }
+            UIEvent::InsertInput(Key::Ctrl('b')) => {
+                /* Backward one character */
+                if let Text(ref mut s, _) = self {
+                    s.cursor_dec();
+                }
+            }
+            UIEvent::InsertInput(Key::Ctrl('f')) => {
+                /* Forward one character */
+                if let Text(ref mut s, _) = self {
+                    s.cursor_inc();
+                }
+            }
+            UIEvent::InsertInput(Key::Ctrl('w')) => {
+                // FIXME: Use Unicode word-breaking algorithm.
+                /* Cut previous word */
+                if let Text(ref mut s, _) = self {
+                    while s.as_str()[..s.cursor_pos()]
+                        .last_grapheme()
+                        .map(|(_, graph)| !graph.is_empty() && graph.trim().is_empty())
+                        .unwrap_or(false)
+                    {
+                        s.backspace();
+                    }
+                    while s.as_str()[..s.cursor_pos()]
+                        .last_grapheme()
+                        .map(|(_, graph)| !graph.is_empty() && !graph.trim().is_empty())
+                        .unwrap_or(false)
+                    {
+                        s.backspace();
+                    }
+                }
+            }
+            UIEvent::InsertInput(Key::Ctrl('u')) => {
+                if let Text(ref mut s, _) = self {
+                    s.cut_left()
                 }
             }
             UIEvent::InsertInput(Key::Ctrl('e')) => {
