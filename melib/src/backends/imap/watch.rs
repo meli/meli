@@ -37,6 +37,7 @@ macro_rules! exit_on_error {
         $(if let Err(e) = $result {
             debug!("failure: {}", e.to_string());
             $work_context.set_status.send(($thread_id, e.to_string())).unwrap();
+            $work_context.finished.send($thread_id).unwrap();
             $sender.send(RefreshEvent {
                 hash: $folder_hash,
                 kind: RefreshEventKind::Failure(e.clone()),
