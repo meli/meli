@@ -225,7 +225,7 @@ mod tests {
         let mut stack = StackVec::from_iter(0..4 * STACK_VEC_CAPACITY);
         let mut ctr = 0;
         assert!(stack.iter().all(|&x| {
-            let ret = (x == ctr);
+            let ret = x == ctr;
             ctr += 1;
             ret
         }));
@@ -234,7 +234,7 @@ mod tests {
         }
         ctr = 0;
         assert!(stack.iter().all(|&x| {
-            let ret = (x == ctr);
+            let ret = x == ctr;
             ctr += 1;
             ret
         }));

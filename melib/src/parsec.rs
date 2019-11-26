@@ -309,3 +309,37 @@ where
         Err(_) => Ok((input, None)),
     }
 }
+
+pub fn peek<'a, P, A>(parser: P) -> impl Parser<'a, A>
+where
+    P: Parser<'a, A>,
+{
+    move |input| match parser.parse(input) {
+        Ok((_, result)) => Ok((input, result)),
+        e @ Err(_) => e,
+    }
+}
+
+pub fn take_until<'a, A, P>(end: P) -> impl Parser<'a, &'a str>
+where
+    P: Parser<'a, A>,
+{
+    move |input: &'a str| {
+        let mut offset = 0;
+        while !input[offset..].is_empty() {
+            if let Ok((rest, _)) = end.parse(&input[offset..]) {
+                return Ok((
+                    rest,
+                    &input[..(offset + input[offset..].len() - rest.len())],
+                ));
+            }
+            while offset != input.len() {
+                offset += 1;
+                if input.is_char_boundary(offset) {
+                    break;
+                }
+            }
+        }
+        Ok((&input[offset..], input))
+    }
+}

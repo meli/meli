@@ -23,10 +23,16 @@
 use super::*;
 use crate::chrono::TimeZone;
 use crate::error::{MeliError, Result};
+use crate::parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser};
 use fnv::FnvHashMap;
+use std::convert::TryInto;
 
 /* Supported vcard versions */
 pub trait VCardVersion: core::fmt::Debug {}
+
+#[derive(Debug)]
+pub struct VCardVersionUnknown;
+impl VCardVersion for VCardVersionUnknown {}
 
 /// https://tools.ietf.org/html/rfc6350
 #[derive(Debug)]
@@ -40,7 +46,7 @@ impl VCardVersion for VCardVersion3 {}
 
 pub struct CardDeserializer;
 
-static HEADER: &'static str = "BEGIN:VCARD\r\nVERSION:4.0\r\n";
+static HEADER: &'static str = "BEGIN:VCARD\r\n"; //VERSION:4.0\r\n";
 static FOOTER: &'static str = "END:VCARD\r\n";
 
 #[derive(Debug)]
@@ -106,13 +112,18 @@ impl CardDeserializer {
                         el.params.push(l[value_start..i].to_string());
                         value_start = i + 1;
                     }
+                    (b';', Stage::Name) => {
+                        name = l[value_start..i].to_string();
+                        value_start = i + 1;
+                        stage = Stage::Param;
+                    }
                     (b':', Stage::Group) | (b':', Stage::Name) => {
                         name = l[value_start..i].to_string();
                         has_colon = true;
                         value_start = i + 1;
                         stage = Stage::Value;
                     }
-                    (b':', Stage::Param) if l.as_bytes()[i] != b'\\' => {
+                    (b':', Stage::Param) if l.as_bytes()[i.saturating_sub(1)] != b'\\' => {
                         el.params.push(l[value_start..i].to_string());
                         has_colon = true;
                         value_start = i + 1;
@@ -121,7 +132,6 @@ impl CardDeserializer {
                     _ => {}
                 }
             }
-            el.value = l[value_start..].to_string();
             if !has_colon {
                 return Err(MeliError::new(format!(
                     "Error while parsing vcard: error at line {}, no colon. {:?}",
@@ -134,13 +144,14 @@ impl CardDeserializer {
                     l, el
                 )));
             }
+            el.value = l[value_start..].replace("\\:", ":");
             ret.insert(name, el);
         }
         Ok(VCard(ret, std::marker::PhantomData::<*const VCardVersion4>))
     }
 }
 
-impl<V: VCardVersion> std::convert::TryInto<Card> for VCard<V> {
+impl<V: VCardVersion> TryInto<Card> for VCard<V> {
     type Error = crate::error::MeliError;
 
     fn try_into(mut self) -> crate::error::Result<Card> {
@@ -203,10 +214,87 @@ impl<V: VCardVersion> std::convert::TryInto<Card> for VCard<V> {
             card.set_key(val.value);
         }
         for (k, v) in self.0.into_iter() {
+            if k.eq_ignore_ascii_case("VERSION") || k.eq_ignore_ascii_case("N") {
+                continue;
+            }
             card.set_extra_property(&k, v.value);
         }
 
         Ok(card)
+    }
+}
+
+fn parse_card<'a>() -> impl Parser<'a, Vec<&'a str>> {
+    move |input| {
+        one_or_more(prefix(
+            peek(match_literal_anycase(HEADER)),
+            take_until(match_literal_anycase(FOOTER)),
+        ))
+        .parse(input)
+    }
+}
+
+#[test]
+fn test_load_cards() {
+    /*
+    let mut contents = String::with_capacity(256);
+    let p = &std::path::Path::new("/tmp/contacts.vcf");
+    use std::io::Read;
+    contents.clear();
+    std::fs::File::open(&p)
+        .unwrap()
+        .read_to_string(&mut contents)
+        .unwrap();
+    for s in parse_card().parse(contents.as_str()).unwrap().1 {
+        println!("");
+        println!("{}", s);
+        println!("{:?}", CardDeserializer::from_str(s));
+        println!("");
+    }
+    */
+}
+
+pub fn load_cards(p: &std::path::Path) -> Result<Vec<Card>> {
+    let vcf_dir = std::fs::read_dir(p);
+    let mut ret: Vec<Result<_>> = Vec::new();
+    let mut is_any_valid = false;
+    if vcf_dir.is_ok() {
+        let mut contents = String::with_capacity(256);
+        for f in vcf_dir? {
+            if f.is_err() {
+                continue;
+            }
+            let f = f?.path();
+            if f.is_file() {
+                use std::io::Read;
+                contents.clear();
+                std::fs::File::open(&f)?.read_to_string(&mut contents)?;
+                if let Ok((_, c)) = parse_card().parse(contents.as_str()) {
+                    for s in c {
+                        ret.push(
+                            CardDeserializer::from_str(s)
+                                .and_then(TryInto::try_into)
+                                .and_then(|mut card| {
+                                    Card::set_external_resource(&mut card, true);
+                                    is_any_valid = true;
+                                    Ok(card)
+                                }),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    for c in &ret {
+        if c.is_err() {
+            debug!(&c);
+        }
+    }
+    if !is_any_valid {
+        ret.into_iter().collect::<Result<Vec<Card>>>()
+    } else {
+        ret.retain(Result::is_ok);
+        ret.into_iter().collect::<Result<Vec<Card>>>()
     }
 }
 
