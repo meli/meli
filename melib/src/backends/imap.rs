@@ -284,9 +284,12 @@ impl MailBackend for ImapType {
         *folders = ImapType::imap_folders(&self.connection);
         folders.retain(|_, f| (self.is_subscribed)(f.path()));
         let keys = folders.keys().cloned().collect::<FnvHashSet<FolderHash>>();
+        let mut uid_lock = self.uid_store.uidvalidity.lock().unwrap();
         for f in folders.values_mut() {
+            uid_lock.entry(f.hash()).or_default();
             f.children.retain(|c| keys.contains(c));
         }
+        drop(uid_lock);
         *self.online.lock().unwrap() = true;
         Ok(folders
             .iter()
