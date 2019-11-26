@@ -267,7 +267,8 @@ impl<'de> Deserialize<'de> for Key {
             type Value = Key;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("`secs` or `nanos`")
+                formatter
+                    .write_str("a valid key value. Please consult the manual for valid key inputs.")
             }
 
             fn visit_str<E>(self, value: &str) -> Result<Key, E>
@@ -275,20 +276,61 @@ impl<'de> Deserialize<'de> for Key {
                 E: de::Error,
             {
                 match value {
-                    "Backspace" => Ok(Key::Backspace),
-                    "Left" => Ok(Key::Left),
-                    "Right" => Ok(Key::Right),
-                    "Up" => Ok(Key::Up),
-                    "Down" => Ok(Key::Down),
-                    "Home" => Ok(Key::Home),
-                    "End" => Ok(Key::End),
-                    "PageUp" => Ok(Key::PageUp),
-                    "PageDown" => Ok(Key::PageDown),
-                    "Delete" => Ok(Key::Delete),
-                    "Insert" => Ok(Key::Insert),
-                    "Esc" => Ok(Key::Esc),
+                    "Backspace" | "backspace" => Ok(Key::Backspace),
+                    "Left" | "left" => Ok(Key::Left),
+                    "Right" | "right" => Ok(Key::Right),
+                    "Up" | "up" => Ok(Key::Up),
+                    "Down" | "down" => Ok(Key::Down),
+                    "Home" | "home" => Ok(Key::Home),
+                    "End" | "end" => Ok(Key::End),
+                    "PageUp" | "pageup" => Ok(Key::PageUp),
+                    "PageDown" | "pagedown" => Ok(Key::PageDown),
+                    "Delete" | "delete" => Ok(Key::Delete),
+                    "Insert" | "insert" => Ok(Key::Insert),
+                    "Enter" | "enter" => Ok(Key::Char('\n')),
+                    "Tab" | "tab" => Ok(Key::Char('\t')),
+                    "Esc" | "esc" => Ok(Key::Esc),
                     ref s if s.len() == 1 => Ok(Key::Char(s.chars().nth(0).unwrap())),
-                    _ => Err(de::Error::unknown_field(value, FIELDS)),
+                    ref s if s.starts_with("F") && (s.len() == 2 || s.len() == 3) => {
+                        use std::str::FromStr;
+
+                        if let Ok(n) = u8::from_str(&s[1..]) {
+                            if n >= 1 && n <= 12 {
+                                return Ok(Key::F(n));
+                            }
+                        }
+                        Err(de::Error::custom(format!(
+                                    "`{}` should be a number 1 <= n <= 12 instead.",
+                                    &s[1..]
+                        )))
+                    }
+                    ref s if s.starts_with("M-") && s.len() == 3 => {
+                        let c = s.as_bytes()[2] as char;
+
+                        if c.is_lowercase() || c.is_numeric() {
+                            return Ok(Key::Alt(c));
+                        }
+
+                        Err(de::Error::custom(format!(
+                                    "`{}` should be a lowercase and alphanumeric character instead.",
+                                    &s[2..]
+                        )))
+                    }
+                    ref s if s.starts_with("C-") && s.len() == 3 => {
+                        let c = s.as_bytes()[2] as char;
+
+                        if c.is_lowercase() || c.is_numeric() {
+                            return Ok(Key::Ctrl(c));
+                        }
+                        Err(de::Error::custom(format!(
+                                    "`{}` should be a lowercase and alphanumeric character instead.",
+                                    &s[2..]
+                        )))
+                    }
+                    _ => Err(de::Error::custom(format!(
+                                "Cannot derive shortcut from `{}`. Please consult the manual for valid key inputs.",
+                                value
+                    ))),
                 }
             }
         }
@@ -315,14 +357,65 @@ impl Serialize for Key {
             Key::Delete => serializer.serialize_str("Delete"),
             Key::Insert => serializer.serialize_str("Insert"),
             Key::Esc => serializer.serialize_str("Esc"),
+            Key::Char('\n') => serializer.serialize_str("Enter"),
+            Key::Char('\t') => serializer.serialize_str("Tab"),
             Key::Char(c) => serializer.serialize_char(*c),
             Key::F(n) => serializer.serialize_str(&format!("F{}", n)),
             Key::Alt(c) => serializer.serialize_str(&format!("M-{}", c)),
             Key::Ctrl(c) => serializer.serialize_str(&format!("C-{}", c)),
-            v => Err(serde::ser::Error::custom(format!(
-                "`{}` is not a valid key",
-                v
-            ))),
+            Key::Null => serializer.serialize_str("Null"),
+            Key::Paste(s) => serializer.serialize_str(s),
         }
     }
+}
+
+#[test]
+fn test_key_serde() {
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct V {
+        k: Key,
+    }
+
+    macro_rules! test_key {
+        ($s:literal, ok $v:expr) => {
+            assert_eq!(
+                toml::from_str::<V>(std::concat!("k = \"", $s, "\"")),
+                Ok(V { k: $v })
+            );
+        };
+        ($s:literal, err $v:literal) => {
+            assert_eq!(
+                toml::from_str::<V>(std::concat!("k = \"", $s, "\""))
+                    .unwrap_err()
+                    .to_string(),
+                $v.to_string()
+            );
+        };
+    }
+    test_key!("Backspace", ok Key::Backspace);
+    test_key!("Left", ok  Key::Left );
+    test_key!("Right", ok  Key::Right);
+    test_key!("Up", ok  Key::Up );
+    test_key!("Down", ok  Key::Down );
+    test_key!("Home", ok  Key::Home );
+    test_key!("End", ok  Key::End );
+    test_key!("PageUp", ok  Key::PageUp );
+    test_key!("PageDown", ok  Key::PageDown );
+    test_key!("Delete", ok  Key::Delete );
+    test_key!("Insert", ok  Key::Insert );
+    test_key!("Enter", ok  Key::Char('\n') );
+    test_key!("Tab", ok  Key::Char('\t') );
+    test_key!("k", ok  Key::Char('k') );
+    test_key!("1", ok  Key::Char('1') );
+    test_key!("Esc", ok  Key::Esc );
+    test_key!("C-a", ok  Key::Ctrl('a') );
+    test_key!("C-1", ok  Key::Ctrl('1') );
+    test_key!("M-a", ok  Key::Alt('a') );
+    test_key!("F1", ok  Key::F(1) );
+    test_key!("F12", ok  Key::F(12) );
+    test_key!("C-V", err "`V` should be a lowercase and alphanumeric character instead. for key `k` at line 1 column 5");
+    test_key!("M-V", err "`V` should be a lowercase and alphanumeric character instead. for key `k` at line 1 column 5");
+    test_key!("F13", err "`13` should be a number 1 <= n <= 12 instead. for key `k` at line 1 column 5");
+    test_key!("Fc", err "`c` should be a number 1 <= n <= 12 instead. for key `k` at line 1 column 5");
+    test_key!("adsfsf", err "Cannot derive shortcut from `adsfsf`. Please consult the manual for valid key inputs. for key `k` at line 1 column 5");
 }
