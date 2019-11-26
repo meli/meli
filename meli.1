@@ -62,8 +62,10 @@ At any time, you may press
 .Cm \&?
 to show a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
 .Pp
-The main visual navigation tool is the left-side sidebar. The menu's visibility may be toggled (default shortcut
-.Cm ` Ns
+The main visual navigation tool is the left-side sidebar. The menu's visibility may be toggled with 
+.Cm ` 
+(shortcuts.listing: 
+.Ic toggle_menu_visibility Ns
 ).
 .Pp
 The view into each folder has 4 modes: plain, threaded, conversations and compact. Plain views each mail indvidually, threaded shows their thread relationship visually, and conversations includes one entry per thread of emails (compact is one row per thread).
@@ -115,7 +117,9 @@ to enter
 mode. At any time you may press
 .Cm e
 to launch your editor (see
-.Xr meli.conf 5 COMPOSING
+.Xr meli.conf 5 COMPOSING Ns
+, setting
+.Ic editor_cmd
 for how to select which editor to launch). Attachments may be handled with the
 .Em add-attachment Ns
 ,
@@ -125,7 +129,7 @@ commands (see below). Finally, pressing
 will send your message by piping it into a binary of your choosing (see
 .Xr meli.conf 5 COMPOSING Ns
 , setting
-.Em mailer_cmd Ns
+.Ic mailer_cmd Ns
 ). To save your draft without sending it, issue command
 .Cm close
 and select 'save as draft'.
@@ -139,6 +143,20 @@ directory instead and you will be notified of its location.
 To open a draft for editing later, select your draft in the mail listing and press
 .Cm e Ns
 \&.
+
+Your editor can be used in
+.Nm Ns
+\&'s embed terminal emulator by setting
+.Ic embed
+to
+.Em true
+in your composing settings. When launched, your editor captures all input until it exits or stops. To stop your editor and return to
+.Nm
+issue Ctrl-z and to resume editing press the
+.Ic edit_mail
+command again (default
+.Em e Ns
+).
 .Sh SEARCH
 Each e-mail storage backend has its default search method.
 .Em IMAP

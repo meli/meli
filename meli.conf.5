@@ -81,10 +81,12 @@ mailer_cmd = 'msmtp --read-recipients --read-envelope-from'
 editor_cmd = 'vim +/^$'
 
 [shortcuts]
-scroll_up = 'k'
-scroll_down = 'j'
-page_up = PageUp
-page_down = PageDown
+[shortcuts.composing]
+edit_mail = 'e'
+
+[shortcuts.listing]
+new_mail = 'm'
+set_seen = 'n'
 
 [terminal]
 theme = "light"
@@ -248,42 +250,234 @@ Shortcuts can take the following values:
 .Qq Em PageDown
 .Qq Em Delete
 .Qq Em Insert
+.Qq Em Enter
+.Qq Em Tab
 .Qq Em Esc
+.Qq Em F1..F12
+.Qq Em M-char
+.Qq Em C-char
 and
 .Qq Em char Ns
 , where char is a single character string.
+
+The headings before each list indicate the map key of the shortcut list. For example for the first list titled
+.Em general
+the configuration is typed as follows:
+.Bd -literal
+[shortcuts.general]
+next_tab = 'T'
+.Ed
+
+and for
+.Em compact-listing Ns
+:
+.Bd -literal
+[shortcuts.compact-listing]
+open_thread = "Enter"
+exit_thread = 'i'
+.Bd
+
+.Sy Em general
+.Bl -tag -width 36n
+.It Ic next_tab
+Go to next tab.
+.\" default value
+.Pq Em T
+.It Ic go_to_tab
+Go to the 
+.Em n Ns
+th tab
+.Pq Em cannot be redefined
+.El
+
+.Sy Em listing
 .Bl -tag -width 36n
 .It Ic prev_page
 Go to previous page.
+.\" default value
+.Pq Em PageUp
 .It Ic next_page
 Go to next page.
+.\" default value
+.Pq Em PageDown
 .It Ic prev_folder
 Go to previous folder.
+.\" default value
+.Pq Em K
 .It Ic next_folder
 Go to next folder.
+.\" default value
+.Pq Em J
 .It Ic prev_account
 Go to previous account.
+.\" default value
+.Pq Em l
 .It Ic next_account
 Go to next account.
+.\" default value
+.Pq Em h
 .It Ic new_mail
 Start new mail draft in new tab
-.It Ic open_thread
-Open thread.
+.\" default value
+.Pq Em m
+.It Ic search
+Search within list of e-mails.
+.\" default value
+.Pq Em /
+.It Ic toggle_menu_visibility
+Toggle visibility of side menu in mail list.
+.\" default value
+.Pq Em `
+.El
+
+.Sy Em compact-listing
+.Bl -tag -width 36n
 .It Ic exit_thread
 Exit thread view
+.\" default value
+.Pq Em i
+.It Ic open_thread
+Open thread.
+.\" default value
+.Pq Em Enter
+.It Ic select_entry
+Select thread entry.
+.\" default value
+.Pq Em v
+.El
+
+.Sy Em pager
+.Bl -tag -width 36n
 .It Ic scroll_up
 Scroll up pager.
+.\" default value
+.Pq Em k
 .It Ic scroll_down
 Scroll down pager.
+.\" default value
+.Pq Em j
 .It Ic page_up
 Go to previous pager page
+.\" default value
+.Pq Em PageUp
 .It Ic page_down
 Go to next pager pag
+.\" default value
+.Pq Em PageDown
+.El
+
+.Sy Em contact-list
+.Bl -tag -width 36n
 .It Ic create_contact
 Create new contact.
+.\" default value
+.Pq Em c
 .It Ic edit_contact
 Edit contact under cursor
+.\" default value
+.Pq Em e
+.It Ic mail_contact
+Mail contact under cursor
+.\" default value
+.Pq Em m
+.It Ic toggle_menu_visibility
+Toggle visibility of side menu in mail list.
+.\" default value
+.Pq Em `
 .El
+
+
+.Sy Em composing
+.Bl -tag -width 36n
+.It Ic send_mail
+Deliver draft to mailer
+.\" default value
+.Pq Em s
+.It Ic edit_mail
+Edit mail.
+.\" default value
+.Pq Em e
+.El
+
+.Sy Em envelope-view
+
+To "select" an attachment, type its index (you will see the typed result in the command buffer on your bottom right of the status line) and then issue the corresponding command.
+.Bl -tag -width 36n
+.It Ic add_addresses_to_contacts Ns
+Select addresses from envelope to add to contacts.
+.\" default value
+.Pq Em c
+.It Ic view_raw_source
+View raw envelope source in a pager.
+.\" default value
+.Pq Em M-r
+.It Ic reply
+Reply to envelope.
+.\" default value
+.Pq Em R
+.It Ic edit
+Open envelope in composer.
+.\" default value
+.Pq Em e
+.It Ic return_to_normal_view
+Return to envelope if viewing raw source or attachment.
+.\" default value
+.Pq Em r
+.It Ic open_attachment
+Opens selected attachment with 
+.Cm xdg-open
+.\" default value
+.Pq Em a
+.It Ic open_mailcap
+Opens selected attachment according to its mailcap entry. See 
+.Xr meli.1 FILES
+for the mailcap file locations.
+.\" default value
+.Pq Em m
+.It Ic go_to_url
+Go to url of given index
+.\" default value
+.Pq Em g
+.It Ic toggle_url_mode
+Toggles url open mode. When active, it prepends an index next to each url that you can select by typing and open by issuing 
+.Ic go_to_url
+.\" default value
+.Pq Em u
+.It Ic toggle_expand_headers
+Expand extra headers (References and others)
+.\" default value
+.Pq Em h
+.El
+
+.Sy Em thread-view
+.Bl -tag -width 36n
+.It Ic reverse_thread_order
+Reverse thread order.
+.\" default value
+.Pq Em r
+.It Ic toggle_mailview
+Toggle mail view visibility.
+.\" default value
+.Pq Em p
+.It Ic toggle_threadview
+Toggle thread view visibility.
+.\" default value
+.Pq Em t
+.It Ic collapse_subtree
+Collapse thread branches.
+.\" default value
+.Pq Em h
+.It Ic prev_page
+Go to previous page.
+.\" default value
+.Pq Em PageUp
+.It Ic next_page
+Go to next page.
+.\" default value
+.Pq Em PageDown
+.El
+
+.Bl -tag -width 36n
 .Sh NOTIFICATIONS
 .Bl -tag -width 36n
 .It Ic enable Ar boolean

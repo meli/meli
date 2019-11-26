@@ -105,7 +105,7 @@ impl fmt::Display for MailView {
 }
 
 impl MailView {
-    const DESCRIPTION: &'static str = "mail";
+    const DESCRIPTION: &'static str = "view mail";
     pub fn new(
         coordinates: (usize, usize, EnvelopeHash),
         pager: Option<Pager>,
@@ -1316,27 +1316,21 @@ impl Component for MailView {
             self.pager.get_shortcuts(context)
         };
 
-        let mut our_map = FnvHashMap::with_capacity_and_hasher(4, Default::default());
-        our_map.insert("add_addresses_to_contacts", Key::Char('c'));
-        our_map.insert("view_raw_source", Key::Alt('r'));
-        our_map.insert("reply", Key::Char('R'));
-        our_map.insert("edit", Key::Char('e'));
-        if self.mode.is_attachment()
+        let mut our_map = context.settings.shortcuts.envelope_view.key_values();
+
+        if !(self.mode.is_attachment()
             || self.mode == ViewMode::Subview
             || self.mode == ViewMode::Raw
-            || self.mode == ViewMode::Url
+            || self.mode == ViewMode::Url)
         {
-            our_map.insert("return_to_normal_view", Key::Char('r'));
+            our_map.remove("return_to_normal_view");
         }
-        our_map.insert("open_attachment", Key::Char('a'));
-        our_map.insert("open_mailcap", Key::Char('m'));
-        if self.mode == ViewMode::Url {
-            our_map.insert("go_to_url", Key::Char('g'));
+        if self.mode != ViewMode::Url {
+            our_map.remove("go_to_url");
         }
-        if self.mode == ViewMode::Normal || self.mode == ViewMode::Url {
-            our_map.insert("toggle_url_mode", Key::Char('u'));
+        if !(self.mode == ViewMode::Normal || self.mode == ViewMode::Url) {
+            our_map.remove("toggle_url_mode");
         }
-        our_map.insert("toggle_expand_headers", Key::Char('h'));
         map.insert(MailView::DESCRIPTION, our_map);
 
         map

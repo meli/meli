@@ -68,8 +68,11 @@
 #sound_file = PATH # optional
 
 ##shortcuts
-# Compact mail listing defaults:
-#[shortcuts.compact_listing]
+#[shortcuts.composing]
+#edit_mail = 'e'
+#
+# Thread view defaults:
+#[shortcuts.compact-listing]
 #exit_thread = 'i'
 #
 #[shortcuts.contact-list]

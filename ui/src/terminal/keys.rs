@@ -255,7 +255,6 @@ pub fn get_events_raw(
         }
     }
 }
-const FIELDS: &[&str] = &[];
 
 impl<'de> Deserialize<'de> for Key {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

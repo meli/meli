@@ -1094,8 +1094,7 @@ impl Component for ThreadView {
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self.mailview.get_shortcuts(context);
-        //FIXME
-        let config_map = context.settings.shortcuts.envelope_view.key_values();
+        let config_map = context.settings.shortcuts.thread_view.key_values();
 
         map.insert(ThreadView::DESCRIPTION, config_map);
 
