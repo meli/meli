@@ -61,7 +61,7 @@ pub struct AddressBook {
     display_name: String,
     created: DateTime<Local>,
     last_edited: DateTime<Local>,
-    cards: FnvHashMap<CardId, Card>,
+    pub cards: FnvHashMap<CardId, Card>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -95,6 +95,24 @@ impl AddressBook {
             cards: FnvHashMap::default(),
         }
     }
+
+    pub fn with_account(s: &crate::conf::AccountSettings) -> AddressBook {
+        let mut ret = AddressBook::new(s.name.clone());
+
+        #[cfg(feature = "vcard")]
+        {
+            if let Some(vcard_path) = s.vcard_folder() {
+                if let Ok(cards) = vcard::load_cards(&std::path::Path::new(vcard_path)) {
+                    for c in cards {
+                        ret.add_card(c);
+                    }
+                }
+            }
+        }
+
+        ret
+    }
+
     pub fn add_card(&mut self, card: Card) {
         self.cards.insert(card.id, card);
     }
@@ -108,7 +126,7 @@ impl AddressBook {
         self.cards
             .values()
             .filter(|c| c.email.contains(term))
-            .map(|c| c.email.clone())
+            .map(|c| format!("{} <{}>", &c.name, &c.email))
             .collect()
     }
 }

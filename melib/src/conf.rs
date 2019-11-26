@@ -63,6 +63,11 @@ impl AccountSettings {
     pub fn subscribed_folders(&self) -> &Vec<String> {
         &self.subscribed_folders
     }
+
+    #[cfg(feature = "vcard")]
+    pub fn vcard_folder(&self) -> Option<&str> {
+        self.extra.get("vcard_folder").map(String::as_str)
+    }
 }
 
 #[serde(default)]

@@ -262,26 +262,22 @@ impl Account {
         let notify_fn = Arc::new(notify_fn);
 
         let data_dir = xdg::BaseDirectories::with_profile("meli", &name).unwrap();
-        let address_book = if let Ok(data) = data_dir.place_data_file("addressbook") {
+        let mut address_book = AddressBook::with_account(&settings.account());
+
+        if let Ok(data) = data_dir.place_data_file("addressbook") {
             if data.exists() {
                 let reader = io::BufReader::new(fs::File::open(data).unwrap());
-                let metadata = reader.get_ref().metadata().unwrap();
-                let mut permissions = metadata.permissions();
-
-                permissions.set_mode(0o600); // Read/write for owner only.
-                reader.get_ref().set_permissions(permissions).unwrap();
                 let result: result::Result<AddressBook, _> = serde_json::from_reader(reader);
                 if let Ok(data_t) = result {
-                    data_t
-                } else {
-                    AddressBook::new(name.clone())
+                    for (id, c) in data_t.cards {
+                        if !address_book.card_exists(id) && !c.external_resource() {
+                            address_book.add_card(c);
+                        }
+                    }
                 }
-            } else {
-                AddressBook::new(name.clone())
             }
-        } else {
-            AddressBook::new(name.clone())
         };
+
         if settings.account().format() == "imap" {
             settings.conf.cache_type = crate::conf::CacheType::None;
         }

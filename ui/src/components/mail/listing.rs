@@ -45,12 +45,6 @@ struct AccountMenuEntry {
     // Index in the config account vector.
     index: usize,
 }
-#[derive(Debug, Default, Clone)]
-pub(in crate::listing) struct CachedSearchStrings {
-    subject: String,
-    from: String,
-    body: String,
-}
 
 pub trait ListingTrait {
     fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>);
