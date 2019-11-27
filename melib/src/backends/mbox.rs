@@ -520,18 +520,46 @@ impl MailBackend for MboxType {
                             /* Remove */
                             DebouncedEvent::NoticeRemove(pathbuf)
                             | DebouncedEvent::Remove(pathbuf) => {
-                                panic!(format!("mbox folder {} was removed.", pathbuf.display()))
+                                if folders
+                                    .lock()
+                                    .unwrap()
+                                    .values()
+                                    .any(|f| &f.path == &pathbuf)
+                                {
+                                    let folder_hash = get_path_hash!(&pathbuf);
+                                    sender.send(RefreshEvent {
+                                        hash: folder_hash,
+                                        kind: RefreshEventKind::Failure(MeliError::new(format!(
+                                            "mbox folder {} was removed.",
+                                            pathbuf.display()
+                                        ))),
+                                    });
+                                    return;
+                                }
                             }
-                            /* Envelope hasn't changed */
-                            DebouncedEvent::Rename(src, dest) => panic!(format!(
-                                "mbox folder {} was renamed to {}.",
-                                src.display(),
-                                dest.display()
-                            )),
-                            /* Trigger rescan of folder */
+                            DebouncedEvent::Rename(src, dest) => {
+                                if folders.lock().unwrap().values().any(|f| &f.path == &src) {
+                                    let folder_hash = get_path_hash!(&src);
+                                    sender.send(RefreshEvent {
+                                        hash: folder_hash,
+                                        kind: RefreshEventKind::Failure(MeliError::new(format!(
+                                            "mbox folder {} was renamed to {}.",
+                                            src.display(),
+                                            dest.display()
+                                        ))),
+                                    });
+                                    return;
+                                }
+                            }
+                            /* Trigger rescan of folders */
                             DebouncedEvent::Rescan => {
-                                /* Actually should rescan all folders */
-                                unreachable!("Unimplemented: rescan of all folders in MboxType")
+                                for h in folders.lock().unwrap().keys() {
+                                    sender.send(RefreshEvent {
+                                        hash: *h,
+                                        kind: RefreshEventKind::Rescan,
+                                    });
+                                }
+                                return;
                             }
                             _ => {}
                         },

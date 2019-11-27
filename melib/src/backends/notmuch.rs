@@ -216,13 +216,17 @@ impl MailBackend for NotmuchDb {
                 let query: *mut notmuch_query_t =
                     unsafe { notmuch_query_create(*database_lck, query_str.as_ptr()) };
                 if query.is_null() {
-                    panic!("Out of memory.");
+                    tx.send(AsyncStatus::Payload(Err(MeliError::new("Could not create query. Out of memory?")))).unwrap();
+                    tx.send(AsyncStatus::Finished).unwrap();
+                    return;
                 }
                 let mut messages: *mut notmuch_messages_t = std::ptr::null_mut();
                 let status =
                     unsafe { notmuch_query_search_messages(query, &mut messages as *mut _) };
                 if status != 0 {
-                    panic!(status);
+                    tx.send(AsyncStatus::Payload(Err(MeliError::new("Search for {} returned {}", folder.query_str.as_str(), status)))).unwrap();
+                    tx.send(AsyncStatus::Finished).unwrap();
+                    return;
                 }
                 assert!(!messages.is_null());
                 let iter = MessageIterator { messages };

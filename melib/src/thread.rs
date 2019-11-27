@@ -962,6 +962,9 @@ impl Threads {
             .get(envelopes_lck[&env_hash].message_id().raw())
             .cloned()
         {
+            if self.thread_nodes[&id].message.is_some() {
+                return false;
+            }
             self.thread_nodes.entry(id).and_modify(|n| {
                 n.message = Some(env_hash);
                 n.date = envelopes_lck[&env_hash].date();

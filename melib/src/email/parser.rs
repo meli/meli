@@ -901,7 +901,7 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
             );
             break;
         }
-        if ascii_s == ascii_e {
+        if ascii_s >= ascii_e {
             /* We have the start of an encoded word but not the end, so parse it as ascii */
             ascii_e = input[ascii_s..]
                 .find(b" ")
