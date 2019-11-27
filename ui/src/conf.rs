@@ -49,8 +49,8 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 use std::collections::HashMap;
 use std::env;
-use std::fs::{File, OpenOptions};
-use std::io::{self, BufRead, Read, Write};
+use std::fs::OpenOptions;
+use std::io::{self, BufRead, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -310,25 +310,15 @@ impl FileSettings {
             }
         }
 
-        let mut file = File::open(config_path.to_str().unwrap())?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let s = toml::from_str(&contents);
-        if let Err(e) = s {
-            return Err(MeliError::new(format!(
-                "Config file contains errors: {}",
-                e.to_string()
-            )));
-        }
-
-        Ok(s.unwrap())
+        FileSettings::validate(config_path.to_str().unwrap())?;
+        let s = pp::pp(config_path.to_str().unwrap()).unwrap();
+        let s: FileSettings = toml::from_str(&s).unwrap();
+        Ok(s)
     }
 
     pub fn validate(path: &str) -> Result<()> {
-        let mut file = File::open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let s: FileSettings = toml::from_str(&contents).map_err(|e| {
+        let s = pp::pp(path)?;
+        let s: FileSettings = toml::from_str(&s).map_err(|e| {
             MeliError::new(format!("Config file contains errors: {}", e.to_string()))
         })?;
         let backends = melib::backends::Backends::new();
@@ -597,4 +587,105 @@ pub fn create_config_file(p: &Path) -> Result<()> {
     permissions.set_mode(0o600); // Read/write for owner only.
     file.set_permissions(permissions)?;
     Ok(())
+}
+
+mod pp {
+    use melib::{
+        error::{MeliError, Result},
+        parsec::*,
+    };
+    use std::borrow::Cow;
+    use std::io::Read;
+
+    fn include_directive<'a>() -> impl Parser<'a, Option<&'a str>> {
+        move |input: &'a str| {
+            enum State {
+                Start,
+                Directive,
+                Path,
+            }
+            use State::*;
+            let mut state = State::Start;
+
+            let mut i = 0;
+            while i < input.len() {
+                match (&state, input.as_bytes()[i]) {
+                    (Start, b'#') => {
+                        state = Directive;
+                    }
+                    (Start, b) if (b as char).is_whitespace() => { /* consume */ }
+                    (Start, _) => {
+                        return Ok(("", None));
+                    }
+                    (Directive, b) if (b as char).is_whitespace() => { /* consume */ }
+                    (Directive, _) if input.as_bytes()[i..].starts_with(b"include") => {
+                        i += "include".len();
+                        state = Path;
+                        continue;
+                    }
+                    (Directive, _) => {
+                        return Ok(("", None));
+                    }
+                    (Path, b) if (b as char).is_whitespace() => { /* consume */ }
+                    (Path, b'"') | (Path, b'\'') => {
+                        let mut end = i + 1;
+                        while end < input.len() && input.as_bytes()[end] != input.as_bytes()[i] {
+                            end += 1;
+                        }
+                        if end == input.len() {
+                            return Err(input);
+                        }
+                        let ret = &input[i + 1..end];
+                        end += 1;
+                        while end < input.len() {
+                            if !(input.as_bytes()[end] as char).is_whitespace() {
+                                /* Nothing else allowed in line */
+                                return Err(input);
+                            }
+                            end += 1;
+                        }
+                        return Ok(("", Some(ret)));
+                    }
+                    (Path, _) => return Err(input),
+                }
+                i += 1;
+            }
+            return Ok(("", None));
+        }
+    }
+
+    fn pp_helper(path: &str, level: u8) -> Result<Cow<'_, str>> {
+        if level > 7 {
+            return Err(MeliError::new(format!("Maximum recursion limit reached while unfolding include directives in {}. Have you included a config file within itself?", path)));
+        }
+        let mut contents = String::new();
+        let mut file = std::fs::File::open(path)?;
+        file.read_to_string(&mut contents)?;
+
+        let mut includes = Vec::new();
+        for (i, l) in contents.lines().enumerate() {
+            if let (_, Some(path)) = include_directive().parse(l).map_err(|l| {
+                MeliError::new(format!(
+                    "Malformed include directive in line {} of file {}: {}",
+                    i, path, l
+                ))
+            })? {
+                includes.push(path);
+            }
+        }
+
+        if includes.is_empty() {
+            Ok(Cow::from(contents))
+        } else {
+            let mut ret = String::with_capacity(contents.len());
+            for path in includes {
+                ret.extend(pp_helper(path, level + 1)?.chars());
+            }
+            ret.extend(contents.chars());
+            Ok(Cow::from(ret))
+        }
+    }
+    pub fn pp(path: &str) -> Result<Cow<'_, str>> {
+        pp_helper(path, 0)
+    }
 }
