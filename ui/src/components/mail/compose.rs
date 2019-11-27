@@ -358,7 +358,7 @@ impl Composer {
         }
     }
 
-    fn save_draft(&mut self, context: &mut Context, folder_type: SpecialUseMailbox) {
+    fn save_draft(&mut self, context: &mut Context, folder_type: SpecialUseMailbox, flags: Flag) {
         let mut failure = true;
         let draft = std::mem::replace(&mut self.draft, Draft::default());
 
@@ -372,11 +372,9 @@ impl Composer {
                 continue;
             }
             let folder = folder.unwrap();
-            if let Err(e) = context.accounts[self.account_cursor].save(
-                draft.as_bytes(),
-                folder,
-                Some(Flag::SEEN | Flag::DRAFT),
-            ) {
+            if let Err(e) =
+                context.accounts[self.account_cursor].save(draft.as_bytes(), folder, Some(flags))
+            {
                 debug!("{:?} could not save draft msg", e);
                 log(
                     format!(
@@ -636,12 +634,16 @@ impl Component for Composer {
                                 self.account_cursor,
                                 self.draft.clone(),
                             ) {
-                                self.save_draft(context, SpecialUseMailbox::Sent);
+                                self.save_draft(context, SpecialUseMailbox::Sent, Flag::SEEN);
                                 context
                                     .replies
                                     .push_back(UIEvent::Action(Tab(Kill(self.id))));
                             } else {
-                                self.save_draft(context, SpecialUseMailbox::Drafts);
+                                self.save_draft(
+                                    context,
+                                    SpecialUseMailbox::Drafts,
+                                    Flag::SEEN | Flag::DRAFT,
+                                );
                             }
                         }
                     }
@@ -684,7 +686,11 @@ impl Component for Composer {
                             }
                             'n' => {}
                             'y' => {
-                                self.save_draft(context, SpecialUseMailbox::Drafts);
+                                self.save_draft(
+                                    context,
+                                    SpecialUseMailbox::Drafts,
+                                    Flag::SEEN | Flag::DRAFT,
+                                );
                                 context.replies.push_back(UIEvent::Action(Tab(Kill(u))));
                                 return true;
                             }
