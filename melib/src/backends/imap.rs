@@ -84,6 +84,34 @@ impl std::ops::Deref for IsSubscribedFn {
 }
 type Capabilities = FnvHashSet<Vec<u8>>;
 
+macro_rules! get_conf_val {
+    ($s:ident[$var:literal]) => {
+        $s.extra.get($var).ok_or_else(|| {
+            MeliError::new(format!(
+                "Configuration error ({}): IMAP connection requires the field `{}` set",
+                $s.name.as_str(),
+                $var
+            ))
+        })
+    };
+    ($s:ident[$var:literal], $default:expr) => {
+        $s.extra
+            .get($var)
+            .map(|v| {
+                <_>::from_str(v).map_err(|e| {
+                    MeliError::new(format!(
+                        "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                        $s.name.as_str(),
+                        $var,
+                        v,
+                        e
+                    ))
+                })
+            })
+            .unwrap_or_else(|| Ok($default))
+    };
+}
+
 #[derive(Debug)]
 pub struct UIDStore {
     uidvalidity: Arc<Mutex<FnvHashMap<FolderHash, UID>>>,
@@ -313,7 +341,9 @@ impl MailBackend for ImapType {
         let path = {
             let folders = self.folders.read().unwrap();
 
-            let f_result = folders.values().find(|v| v.name == folder);
+            let f_result = folders
+                .values()
+                .find(|v| v.path == folder || v.name == folder);
             if f_result
                 .map(|f| !f.permissions.lock().unwrap().create_messages)
                 .unwrap_or(false)
@@ -415,34 +445,6 @@ impl MailBackend for ImapType {
     fn as_any(&self) -> &dyn::std::any::Any {
         self
     }
-}
-
-macro_rules! get_conf_val {
-    ($s:ident[$var:literal]) => {
-        $s.extra.get($var).ok_or_else(|| {
-            MeliError::new(format!(
-                "Configuration error ({}): IMAP connection requires the field `{}` set",
-                $s.name.as_str(),
-                $var
-            ))
-        })
-    };
-    ($s:ident[$var:literal], $default:expr) => {
-        $s.extra
-            .get($var)
-            .map(|v| {
-                <_>::from_str(v).map_err(|e| {
-                    MeliError::new(format!(
-                        "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
-                        $s.name.as_str(),
-                        $var,
-                        v,
-                        e
-                    ))
-                })
-            })
-            .unwrap_or_else(|| Ok($default))
-    };
 }
 
 impl ImapType {
@@ -608,5 +610,15 @@ impl ImapType {
             }
         }
         Err(MeliError::new(response))
+    }
+
+    pub fn validate_config(s: &AccountSettings) -> Result<()> {
+        get_conf_val!(s["server_hostname"])?;
+        get_conf_val!(s["server_username"])?;
+        get_conf_val!(s["server_password"])?;
+        get_conf_val!(s["server_port"], 143)?;
+        get_conf_val!(s["use_starttls"], false)?;
+        get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+        Ok(())
     }
 }

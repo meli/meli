@@ -328,12 +328,40 @@ impl FileSettings {
         let mut file = File::open(path)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-        let s: std::result::Result<FileSettings, toml::de::Error> = toml::from_str(&contents);
-        if let Err(e) = s {
-            return Err(MeliError::new(format!(
-                "Config file contains errors: {}",
-                e.to_string()
-            )));
+        let s: FileSettings = toml::from_str(&contents).map_err(|e| {
+            MeliError::new(format!("Config file contains errors: {}", e.to_string()))
+        })?;
+        let backends = melib::backends::Backends::new();
+        for (name, acc) in s.accounts {
+            let FileAccount {
+                root_folder,
+                format,
+                identity,
+                read_only,
+                display_name,
+                subscribed_folders,
+                folders,
+                extra,
+                index_style: _,
+                cache_type: _,
+            } = acc;
+
+            let lowercase_format = format.to_lowercase();
+            let s = AccountSettings {
+                name,
+                root_folder,
+                format: format.clone(),
+                identity,
+                read_only,
+                display_name,
+                subscribed_folders,
+                folders: folders
+                    .into_iter()
+                    .map(|(k, v)| (k, v.folder_conf))
+                    .collect(),
+                extra,
+            };
+            backends.validate_config(&lowercase_format, &s)?;
         }
 
         Ok(())

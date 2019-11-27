@@ -58,7 +58,12 @@ pub type BackendCreator = Box<
 /// A hashmap containing all available mail backends.
 /// An abstraction over any available backends.
 pub struct Backends {
-    map: FnvHashMap<std::string::String, Box<dyn Fn() -> BackendCreator>>,
+    map: FnvHashMap<std::string::String, Backend>,
+}
+
+pub struct Backend {
+    pub create_fn: Box<dyn Fn() -> BackendCreator>,
+    pub validate_conf_fn: Box<dyn Fn(&AccountSettings) -> Result<()>>,
 }
 
 impl Default for Backends {
@@ -76,28 +81,40 @@ impl Backends {
         {
             b.register(
                 "maildir".to_string(),
-                Box::new(|| Box::new(|f, i| MaildirType::new(f, i))),
+                Backend {
+                    create_fn: Box::new(|| Box::new(|f, i| MaildirType::new(f, i))),
+                    validate_conf_fn: Box::new(MaildirType::validate_config),
+                },
             );
         }
         #[cfg(feature = "mbox_backend")]
         {
             b.register(
                 "mbox".to_string(),
-                Box::new(|| Box::new(|f, i| MboxType::new(f, i))),
+                Backend {
+                    create_fn: Box::new(|| Box::new(|f, i| MboxType::new(f, i))),
+                    validate_conf_fn: Box::new(MboxType::validate_config),
+                },
             );
         }
         #[cfg(feature = "imap_backend")]
         {
             b.register(
                 "imap".to_string(),
-                Box::new(|| Box::new(|f, i| ImapType::new(f, i))),
+                Backend {
+                    create_fn: Box::new(|| Box::new(|f, i| ImapType::new(f, i))),
+                    validate_conf_fn: Box::new(ImapType::validate_config),
+                },
             );
         }
         #[cfg(feature = "notmuch_backend")]
         {
             b.register(
                 "notmuch".to_string(),
-                Box::new(|| Box::new(|f, i| NotmuchDb::new(f, i))),
+                Backend {
+                    create_fn: Box::new(|| Box::new(|f, i| NotmuchDb::new(f, i))),
+                    validate_conf_fn: Box::new(NotmuchDb::validate_config),
+                },
             );
         }
         b
@@ -107,14 +124,22 @@ impl Backends {
         if !self.map.contains_key(key) {
             panic!("{} is not a valid mail backend", key);
         }
-        self.map[key]()
+        (self.map[key].create_fn)()
     }
 
-    pub fn register(&mut self, key: String, backend: Box<dyn Fn() -> BackendCreator>) {
+    pub fn register(&mut self, key: String, backend: Backend) {
         if self.map.contains_key(&key) {
             panic!("{} is an already registered backend", key);
         }
         self.map.insert(key, backend);
+    }
+
+    pub fn validate_config(&self, key: &str, s: &AccountSettings) -> Result<()> {
+        (self
+            .map
+            .get(key)
+            .ok_or_else(|| MeliError::new(format!("{} is not a valid mail backend", key)))?
+            .validate_conf_fn)(s)
     }
 }
 

@@ -877,6 +877,25 @@ impl MaildirType {
         writer.write_all(bytes).unwrap();
         return Ok(());
     }
+
+    pub fn validate_config(s: &AccountSettings) -> Result<()> {
+        let root_path = PathBuf::from(s.root_folder()).expand();
+        if !root_path.exists() {
+            return Err(MeliError::new(format!(
+                "Configuration error ({}): root_path `{}` is not a valid directory.",
+                s.name(),
+                s.root_folder.as_str()
+            )));
+        } else if !root_path.is_dir() {
+            return Err(MeliError::new(format!(
+                "Configuration error ({}): root_path `{}` is not a directory.",
+                s.name(),
+                s.root_folder.as_str()
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 fn add_path_to_index(

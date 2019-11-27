@@ -432,9 +432,14 @@ impl MailBackend for MboxType {
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
         let (tx, rx) = channel();
-        let mut watcher = watcher(tx, std::time::Duration::from_secs(10)).unwrap();
+        let mut watcher = watcher(tx, std::time::Duration::from_secs(10))
+            .map_err(|e| e.to_string())
+            .map_err(MeliError::new)?;
         for f in self.folders.lock().unwrap().values() {
-            watcher.watch(&f.path, RecursiveMode::Recursive).unwrap();
+            watcher
+                .watch(&f.path, RecursiveMode::Recursive)
+                .map_err(|e| e.to_string())
+                .map_err(MeliError::new)?;
             debug!("watching {:?}", f.path.as_path());
         }
         let index = self.index.clone();
@@ -645,5 +650,17 @@ impl MboxType {
         }
         */
         Ok(Box::new(ret))
+    }
+
+    pub fn validate_config(s: &AccountSettings) -> Result<()> {
+        let path = Path::new(s.root_folder.as_str()).expand();
+        if !path.exists() {
+            return Err(MeliError::new(format!(
+                "\"root_folder\" {} for account {} is not a valid path.",
+                s.root_folder.as_str(),
+                s.name()
+            )));
+        }
+        Ok(())
     }
 }

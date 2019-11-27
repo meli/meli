@@ -111,11 +111,11 @@ impl NotmuchDb {
         let mut database: *mut notmuch_database_t = std::ptr::null_mut();
         let path = Path::new(s.root_folder.as_str()).expand().to_path_buf();
         if !path.exists() {
-            panic!(
+                return Err(MeliError::new(format!(
                 "\"root_folder\" {} for account {} is not a valid path.",
                 s.root_folder.as_str(),
                 s.name()
-            );
+            )));
         }
 
         let path_c = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
@@ -169,6 +169,26 @@ impl NotmuchDb {
             folders: Arc::new(RwLock::new(folders)),
             save_messages_to: None,
         }))
+    }
+
+    pub fn validate_config( s: &AccountSettings) -> Result<()> {
+        let path = Path::new(s.root_folder.as_str()).expand().to_path_buf();
+        if !path.exists() {
+            return Err(MeliError::new(format!(
+                "\"root_folder\" {} for account {} is not a valid path.",
+                s.root_folder.as_str(),
+                s.name()
+            )));
+        }
+        for (k, f) in s.folders.iter() {
+            if f.extra.get("query").is_none() {
+                return Err(MeliError::new(format!(
+                    "notmuch folder configuration entry \"{}\" should have a \"query\" value set.",
+                    k
+                )));
+            }
+        }
+        Ok(())
     }
 }
 

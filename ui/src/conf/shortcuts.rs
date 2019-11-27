@@ -10,13 +10,13 @@ pub struct Shortcuts {
     pub listing: ListingShortcuts,
     #[serde(default)]
     pub composing: ComposingShortcuts,
-    #[serde(default)]
+    #[serde(default, alias = "compact-listing")]
     pub compact_listing: CompactListingShortcuts,
-    #[serde(default)]
+    #[serde(default, alias = "contact-list")]
     pub contact_list: ContactListShortcuts,
-    #[serde(default)]
+    #[serde(default, alias = "envelope-view")]
     pub envelope_view: EnvelopeViewShortcuts,
-    #[serde(default)]
+    #[serde(default, alias = "thread-view")]
     pub thread_view: ThreadViewShortcuts,
     #[serde(default)]
     pub pager: PagerShortcuts,
