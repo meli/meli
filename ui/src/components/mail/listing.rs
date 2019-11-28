@@ -283,10 +283,11 @@ impl Component for Listing {
             return true;
         }
 
-        let shortcuts = &self.get_shortcuts(context)[Listing::DESCRIPTION];
+        let shortcuts = self.get_shortcuts(context);
         match *event {
             UIEvent::Input(ref k)
-                if k == shortcuts["next_folder"] || k == shortcuts["prev_folder"] =>
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_folder"])
+                    || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_folder"]) =>
             {
                 let amount = if self.cmd_buf.is_empty() {
                     1
@@ -305,7 +306,9 @@ impl Component for Listing {
                 };
                 let folder_length = context.accounts[self.cursor_pos.0].len();
                 match k {
-                    k if k == shortcuts["next_folder"] && folder_length > 0 => {
+                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_folder"])
+                        && folder_length > 0 =>
+                    {
                         if self.cursor_pos.1 + amount < folder_length {
                             self.cursor_pos.1 += amount;
                             self.component.set_coordinates((
@@ -318,7 +321,7 @@ impl Component for Listing {
                             return true;
                         }
                     }
-                    k if k == shortcuts["prev_folder"] => {
+                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_folder"]) => {
                         if self.cursor_pos.1 >= amount {
                             self.cursor_pos.1 -= amount;
                             self.component.set_coordinates((
@@ -357,7 +360,8 @@ impl Component for Listing {
                 return true;
             }
             UIEvent::Input(ref k)
-                if k == shortcuts["next_account"] || k == shortcuts["prev_account"] =>
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"])
+                    || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) =>
             {
                 let amount = if self.cmd_buf.is_empty() {
                     1
@@ -375,7 +379,7 @@ impl Component for Listing {
                     return true;
                 };
                 match k {
-                    k if k == shortcuts["next_account"] => {
+                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"]) => {
                         if self.cursor_pos.0 + amount < self.accounts.len() {
                             self.cursor_pos = (self.cursor_pos.0 + amount, 0);
                             self.component.set_coordinates((self.cursor_pos.0, 0, None));
@@ -384,7 +388,7 @@ impl Component for Listing {
                             return true;
                         }
                     }
-                    k if k == shortcuts["prev_account"] => {
+                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) => {
                         if self.cursor_pos.0 >= amount {
                             self.cursor_pos = (self.cursor_pos.0 - amount, 0);
                             self.component.set_coordinates((self.cursor_pos.0, 0, None));
@@ -502,7 +506,9 @@ impl Component for Listing {
                 self.component.set_movement(PageMovement::Down(amount));
                 return true;
             }
-            UIEvent::Input(ref key) if key == shortcuts["prev_page"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
+            {
                 let mult = if self.cmd_buf.is_empty() {
                     1
                 } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
@@ -521,7 +527,9 @@ impl Component for Listing {
                 self.component.set_movement(PageMovement::PageUp(mult));
                 return true;
             }
-            UIEvent::Input(ref key) if key == shortcuts["next_page"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["next_page"]) =>
+            {
                 let mult = if self.cmd_buf.is_empty() {
                     1
                 } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
@@ -548,17 +556,23 @@ impl Component for Listing {
                 self.component.set_movement(PageMovement::End);
                 return true;
             }
-            UIEvent::Input(ref k) if k == shortcuts["toggle_menu_visibility"] => {
+            UIEvent::Input(ref k)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["toggle_menu_visibility"]) =>
+            {
                 self.menu_visibility = !self.menu_visibility;
                 self.set_dirty();
             }
-            UIEvent::Input(ref k) if k == shortcuts["new_mail"] => {
+            UIEvent::Input(ref k)
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["new_mail"]) =>
+            {
                 context
                     .replies
                     .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0, None))));
                 return true;
             }
-            UIEvent::Input(ref key) if key == shortcuts["search"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["search"]) =>
+            {
                 context
                     .replies
                     .push_back(UIEvent::ExInput(Key::Paste("filter ".to_string())));
@@ -567,7 +581,9 @@ impl Component for Listing {
                     .push_back(UIEvent::ChangeMode(UIMode::Execute));
                 return true;
             }
-            UIEvent::Input(ref key) if key == shortcuts["set_seen"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["set_seen"]) =>
+            {
                 let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
                 if match self.component {
                     Plain(ref mut l) => l.process_event(&mut event, context),

@@ -654,8 +654,8 @@ impl Component for MailView {
                 }
             }
             _ => match event {
-                UIEvent::Input(ref k)
-                    if k == shortcuts[Pager::DESCRIPTION]["scroll_up"]
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Pager::DESCRIPTION]["scroll_up"])
                         && !context.settings.pager.headers_sticky
                         && self.headers_cursor <= self.headers_no =>
                 {
@@ -670,8 +670,8 @@ impl Component for MailView {
                     self.pager.set_dirty();
                     return true;
                 }
-                UIEvent::Input(ref k)
-                    if k == shortcuts[Pager::DESCRIPTION]["scroll_down"]
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Pager::DESCRIPTION]["scroll_down"])
                         && !context.settings.pager.headers_sticky
                         && self.headers_cursor < self.headers_no =>
                 {
@@ -688,9 +688,11 @@ impl Component for MailView {
             },
         }
 
-        let shortcuts = &self.get_shortcuts(context)[MailView::DESCRIPTION];
+        let shortcuts = &self.get_shortcuts(context);
         match *event {
-            UIEvent::Input(ref k) if k == shortcuts["reply"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[MailView::DESCRIPTION]["reply"]) =>
+            {
                 let account = &context.accounts[self.coordinates.0];
                 let folder_hash = account[self.coordinates.1].unwrap().folder.hash();
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
@@ -707,7 +709,9 @@ impl Component for MailView {
                 ))));
                 return true;
             }
-            UIEvent::Input(ref k) if k == shortcuts["edit"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[MailView::DESCRIPTION]["edit"]) =>
+            {
                 context.replies.push_back(UIEvent::Action(Tab(Edit(
                     self.coordinates.0,
                     self.coordinates.2,
@@ -716,7 +720,9 @@ impl Component for MailView {
             }
             UIEvent::Input(ref key)
                 if !self.mode.is_contact_selector()
-                    && key == shortcuts["add_addresses_to_contacts"] =>
+                    && shortcut!(
+                        key == shortcuts[MailView::DESCRIPTION]["add_addresses_to_contacts"]
+                    ) =>
             {
                 let account = &context.accounts[self.coordinates.0];
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
@@ -763,7 +769,7 @@ impl Component for MailView {
             }
             UIEvent::Input(ref key)
                 if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
-                    && key == shortcuts["view_raw_source"] =>
+                    && shortcut!(key == shortcuts[MailView::DESCRIPTION]["view_raw_source"]) =>
             {
                 self.mode = ViewMode::Raw;
                 self.set_dirty();
@@ -774,7 +780,9 @@ impl Component for MailView {
                     || self.mode == ViewMode::Subview
                     || self.mode == ViewMode::Url
                     || self.mode == ViewMode::Raw)
-                    && key == shortcuts["return_to_normal_view"] =>
+                    && shortcut!(
+                        key == shortcuts[MailView::DESCRIPTION]["return_to_normal_view"]
+                    ) =>
             {
                 self.mode = ViewMode::Normal;
                 self.set_dirty();
@@ -783,7 +791,7 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
                     && !self.cmd_buf.is_empty()
-                    && key == shortcuts["open_mailcap"] =>
+                    && shortcut!(key == shortcuts[MailView::DESCRIPTION]["open_mailcap"]) =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -840,7 +848,7 @@ impl Component for MailView {
                 }
             }
             UIEvent::Input(ref key)
-                if key == shortcuts["open_attachment"]
+                if shortcut!(key == shortcuts[MailView::DESCRIPTION]["open_attachment"])
                     && !self.cmd_buf.is_empty()
                     && (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview) =>
             {
@@ -972,7 +980,9 @@ impl Component for MailView {
                     }
                 };
             }
-            UIEvent::Input(ref key) if key == shortcuts["toggle_expand_headers"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[MailView::DESCRIPTION]["toggle_expand_headers"]) =>
+            {
                 self.expand_headers = !self.expand_headers;
                 self.dirty = true;
                 return true;
@@ -980,7 +990,7 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if !self.cmd_buf.is_empty()
                     && self.mode == ViewMode::Url
-                    && key == shortcuts["go_to_url"] =>
+                    && shortcut!(key == shortcuts[MailView::DESCRIPTION]["go_to_url"]) =>
             {
                 let lidx = self.cmd_buf.parse::<usize>().unwrap();
                 self.cmd_buf.clear();
@@ -1038,7 +1048,7 @@ impl Component for MailView {
             }
             UIEvent::Input(ref key)
                 if (self.mode == ViewMode::Normal || self.mode == ViewMode::Url)
-                    && key == shortcuts["toggle_url_mode"] =>
+                    && shortcut!(key == shortcuts[MailView::DESCRIPTION]["toggle_url_mode"]) =>
             {
                 match self.mode {
                     ViewMode::Normal => self.mode = ViewMode::Url,

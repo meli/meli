@@ -2,6 +2,16 @@ use crate::terminal::Key;
 //use std::any::TypeId;
 use fnv::FnvHashMap;
 
+#[macro_export]
+macro_rules! shortcut {
+    ($key:ident == $shortcuts:ident[$section:expr][$val:literal]) => {
+        $shortcuts[$section]
+            .get($val)
+            .map(|v| v == $key)
+            .unwrap_or(false)
+    };
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Shortcuts {
     #[serde(default)]

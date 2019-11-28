@@ -891,10 +891,13 @@ impl Component for PlainListing {
             return true;
         }
 
-        let shortcuts = &self.get_shortcuts(context)[PlainListing::DESCRIPTION];
+        let shortcuts = self.get_shortcuts(context);
         if self.length > 0 {
             match *event {
-                UIEvent::Input(ref k) if !self.unfocused && k == shortcuts["open_thread"] => {
+                UIEvent::Input(ref k)
+                    if !self.unfocused
+                        && shortcut!(k == shortcuts[PlainListing::DESCRIPTION]["open_thread"]) =>
+                {
                     let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
                     let temp = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
                     self.view = MailView::new(temp, None, None);
@@ -902,7 +905,10 @@ impl Component for PlainListing {
                     self.dirty = true;
                     return true;
                 }
-                UIEvent::Input(ref k) if self.unfocused && k == shortcuts["exit_thread"] => {
+                UIEvent::Input(ref k)
+                    if self.unfocused
+                        && shortcut!(k == shortcuts[PlainListing::DESCRIPTION]["exit_thread"]) =>
+                {
                     self.unfocused = false;
                     self.dirty = true;
                     /* If self.row_updates is not empty and we exit a thread, the row_update events
@@ -911,7 +917,12 @@ impl Component for PlainListing {
                     self.force_draw = true;
                     return true;
                 }
-                UIEvent::Input(ref key) if !self.unfocused && key == shortcuts["select_entry"] => {
+                UIEvent::Input(ref key)
+                    if !self.unfocused
+                        && shortcut!(
+                            key == shortcuts[PlainListing::DESCRIPTION]["select_entry"]
+                        ) =>
+                {
                     let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
                     self.selection.entry(env_hash).and_modify(|e| *e = !*e);
                 }

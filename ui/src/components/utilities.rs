@@ -577,14 +577,18 @@ impl Component for Pager {
         context.dirty_areas.push_back(area);
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        let shortcuts = &self.get_shortcuts(context)[Self::DESCRIPTION];
+        let shortcuts = self.get_shortcuts(context);
         match event {
-            UIEvent::Input(ref key) if *key == shortcuts["scroll_up"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
+            {
                 self.cursor.1 = self.cursor.1.saturating_sub(1);
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["scroll_down"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_down"]) =>
+            {
                 self.cursor.1 = self.cursor.1 + 1;
                 self.dirty = true;
                 return true;
@@ -609,12 +613,16 @@ impl Component for Pager {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["page_up"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Self::DESCRIPTION]["page_up"]) =>
+            {
                 self.movement = Some(PageMovement::PageUp(1));
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["page_down"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Self::DESCRIPTION]["page_down"]) =>
+            {
                 self.movement = Some(PageMovement::PageDown(1));
                 self.dirty = true;
                 return true;
@@ -1564,8 +1572,7 @@ impl Component for Tabbed {
         self.dirty = false;
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        let our_shortcuts = self.get_shortcuts(context);
-        let shortcuts: &ShortcutMap = &our_shortcuts["general"];
+        let shortcuts = self.get_shortcuts(context);
         match *event {
             UIEvent::Input(Key::Alt(no)) if no >= '1' && no <= '9' => {
                 let no = no as usize - '1' as usize;
@@ -1582,7 +1589,7 @@ impl Component for Tabbed {
                 }
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["next_tab"] => {
+            UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["next_tab"]) => {
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
                 context
                     .replies

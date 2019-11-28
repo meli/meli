@@ -63,6 +63,7 @@ pub use crate::state::*;
 pub mod components;
 pub use crate::components::*;
 
+#[macro_use]
 pub mod conf;
 pub use crate::conf::*;
 

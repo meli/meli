@@ -966,7 +966,7 @@ impl Component for ThreadView {
             return true;
         }
 
-        let shortcuts = &self.get_shortcuts(context)[ThreadView::DESCRIPTION];
+        let shortcuts = self.get_shortcuts(context);
         match *event {
             UIEvent::Input(Key::Up) => {
                 if self.cursor_pos > 0 {
@@ -983,11 +983,15 @@ impl Component for ThreadView {
                 }
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["prev_page"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["prev_page"]) =>
+            {
                 self.movement = Some(PageMovement::PageUp(1));
                 self.dirty = true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["next_page"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["next_page"]) =>
+            {
                 self.movement = Some(PageMovement::PageDown(1));
                 self.dirty = true;
             }
@@ -1009,19 +1013,25 @@ impl Component for ThreadView {
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["toggle_mailview"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["toggle_mailview"]) =>
+            {
                 self.show_mailview = !self.show_mailview;
                 self.initiated = false;
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["toggle_threadview"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["toggle_threadview"]) =>
+            {
                 self.show_thread = !self.show_thread;
                 self.initiated = false;
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["reverse_thread_order"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["reverse_thread_order"]) =>
+            {
                 self.reversed = !self.reversed;
                 let expanded_hash = self.entries[self.expanded_pos].index.1;
                 self.initiate(Some(expanded_hash), context);
@@ -1029,7 +1039,9 @@ impl Component for ThreadView {
                 self.dirty = true;
                 return true;
             }
-            UIEvent::Input(ref key) if *key == shortcuts["collapse_subtree"] => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["collapse_subtree"]) =>
+            {
                 let current_pos = self.current_pos();
                 self.entries[current_pos].hidden = !self.entries[current_pos].hidden;
                 self.entries[current_pos].dirty = true;

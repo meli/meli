@@ -28,6 +28,7 @@ pub mod composing;
 pub mod notifications;
 pub mod pager;
 pub mod pgp;
+#[macro_use]
 pub mod shortcuts;
 pub mod terminal;
 

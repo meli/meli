@@ -154,6 +154,9 @@ impl Component for HtmlView {
         }
         false
     }
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+        self.pager.get_shortcuts(context)
+    }
     fn is_dirty(&self) -> bool {
         self.pager.is_dirty()
     }

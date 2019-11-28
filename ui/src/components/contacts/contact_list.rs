@@ -583,10 +583,12 @@ impl Component for ContactList {
                 return true;
             }
         }
-        let shortcuts = &self.get_shortcuts(context)[Self::DESCRIPTION];
+        let shortcuts = self.get_shortcuts(context);
         if self.view.is_none() {
             match *event {
-                UIEvent::Input(ref key) if key == shortcuts["create_contact"] => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["create_contact"]) =>
+                {
                     let mut manager = ContactManager::default();
                     manager.set_parent_id(self.id);
                     manager.account_pos = self.account_pos;
@@ -597,7 +599,10 @@ impl Component for ContactList {
                     return true;
                 }
 
-                UIEvent::Input(ref key) if key == shortcuts["edit_contact"] && self.length > 0 => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_contact"])
+                        && self.length > 0 =>
+                {
                     let account = &mut context.accounts[self.account_pos];
                     let book = &mut account.address_book;
                     let card = book[&self.id_positions[self.cursor_pos]].clone();
@@ -611,7 +616,10 @@ impl Component for ContactList {
 
                     return true;
                 }
-                UIEvent::Input(ref key) if key == shortcuts["mail_contact"] && self.length > 0 => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["mail_contact"])
+                        && self.length > 0 =>
+                {
                     let account = &context.accounts[self.account_pos];
                     let book = &account.address_book;
                     let card = &book[&self.id_positions[self.cursor_pos]];
@@ -625,7 +633,9 @@ impl Component for ContactList {
 
                     return true;
                 }
-                UIEvent::Input(ref key) if key == shortcuts["next_account"] => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["next_account"]) =>
+                {
                     let amount = if self.cmd_buf.is_empty() {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
@@ -660,7 +670,9 @@ impl Component for ContactList {
 
                     return true;
                 }
-                UIEvent::Input(ref key) if key == shortcuts["prev_account"] => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["prev_account"]) =>
+                {
                     let amount = if self.cmd_buf.is_empty() {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
@@ -694,7 +706,9 @@ impl Component for ContactList {
                     }
                     return true;
                 }
-                UIEvent::Input(ref k) if k == shortcuts["toggle_menu_visibility"] => {
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Self::DESCRIPTION]["toggle_menu_visibility"]) =>
+                {
                     self.menu_visibility = !self.menu_visibility;
                     self.set_dirty();
                 }
