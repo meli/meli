@@ -14,8 +14,8 @@ fn main() -> Result<()> {
                 filename.display()
             ));
             let env = Envelope::from_bytes(&buffer.as_bytes(), None).expect("Couldn't parse email");
-            debug!("Env is {:#?}", env);
-            debug!(env.body_bytes(buffer.as_bytes()));
+            eprintln!("Env is {:#?}", env);
+            eprintln!("{:?}", env.body_bytes(buffer.as_bytes()));
         } else {
             println!("it's not a file");
         }

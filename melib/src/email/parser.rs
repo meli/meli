@@ -488,8 +488,13 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
                             length: end,
                         }
                     };
+                    let rest_start = if input.len() > end + display_name.length + 2 {
+                        end + display_name.length + 3
+                    } else {
+                        end + display_name.length + 2
+                    };
                     IResult::Done(
-                        &input[end + display_name.length + 3..],
+                        &input[rest_start..],
                         Address::Mailbox(MailboxAddress {
                             raw,
                             display_name,

@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn test_attachments() {
-        return;
+        /*
         let mut default = Draft::default();
         default.set_body("αδφαφσαφασ".to_string());
 
@@ -434,6 +434,7 @@ mod tests {
             .set_content_transfer_encoding(ContentTransferEncoding::Base64);
         default.attachments_mut().push(attachment);
         println!("{}", default.finalise().unwrap());
+        */
     }
 }
 
