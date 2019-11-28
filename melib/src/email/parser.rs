@@ -55,6 +55,7 @@ pub trait BytesExt {
     fn find(&self, needle: &[u8]) -> Option<usize>;
     fn rfind(&self, needle: &[u8]) -> Option<usize>;
     fn replace(&self, from: &[u8], to: &[u8]) -> Vec<u8>;
+    fn is_quoted(&self) -> bool;
 }
 
 impl BytesExt for [u8] {
@@ -92,6 +93,10 @@ impl BytesExt for [u8] {
             ret.splice(idx..(idx + from.len()), to.iter().cloned());
         }
         ret
+    }
+
+    fn is_quoted(&self) -> bool {
+        self.starts_with(b"\"") && self.ends_with(b"\"") && self.len() > 1
     }
 }
 
@@ -488,11 +493,18 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
                             length: end,
                         }
                     };
+
+                    if display_name.display(&raw).as_bytes().is_quoted() {
+                        display_name.offset += 1;
+                        display_name.length -= 2;
+                    }
+
                     let rest_start = if input.len() > end + display_name.length + 2 {
                         end + display_name.length + 3
                     } else {
                         end + display_name.length + 2
                     };
+
                     IResult::Done(
                         &input[rest_start..],
                         Address::Mailbox(MailboxAddress {

@@ -29,6 +29,27 @@ pub struct GroupAddress {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+/**
+ * Container for an address.
+ *
+ * >           raw: Vec<u8>
+ * > ┌──────────┴────────────┐
+ * > Name <address@domain.tld>
+ * > └─┬┘  └──────────┬─────┘
+ * > display_name     │
+ * >                  │
+ * >            address_spec
+ *
+ *
+ * >           raw: Vec<u8>
+ * > ┌──────────┴────────────────────┐
+ * > "Name Name2" <address@domain.tld>
+ * >  └─────┬──┘   └──────────┬─────┘
+ * > display_name             │
+ * >                          │
+ * >                    address_spec
+ *
+ */
 pub struct MailboxAddress {
     pub raw: Vec<u8>,
     pub display_name: StrBuilder,
