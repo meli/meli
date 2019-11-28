@@ -349,7 +349,7 @@ impl Component for MailView {
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area);
                 context.dirty_areas.push_back(area);
-                get_y(upper_left) - 1
+                get_y(upper_left)
             } else {
                 let height_p = self.pager.size().1;
 
