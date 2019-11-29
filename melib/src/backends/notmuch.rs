@@ -111,7 +111,7 @@ impl NotmuchDb {
         let mut database: *mut notmuch_database_t = std::ptr::null_mut();
         let path = Path::new(s.root_folder.as_str()).expand().to_path_buf();
         if !path.exists() {
-                return Err(MeliError::new(format!(
+            return Err(MeliError::new(format!(
                 "\"root_folder\" {} for account {} is not a valid path.",
                 s.root_folder.as_str(),
                 s.name()
@@ -128,7 +128,11 @@ impl NotmuchDb {
             )
         };
         if status != 0 {
-            return Err(MeliError::new(format!("Could not open notmuch database at path {}. notmuch_database_open returned {}.", s.root_folder.as_str(), status);
+            return Err(MeliError::new(format!(
+                "Could not open notmuch database at path {}. notmuch_database_open returned {}.",
+                s.root_folder.as_str(),
+                status
+            )));
         }
         assert!(!database.is_null());
         let mut folders = FnvHashMap::default();
@@ -171,7 +175,7 @@ impl NotmuchDb {
         }))
     }
 
-    pub fn validate_config( s: &AccountSettings) -> Result<()> {
+    pub fn validate_config(s: &AccountSettings) -> Result<()> {
         let path = Path::new(s.root_folder.as_str()).expand().to_path_buf();
         if !path.exists() {
             return Err(MeliError::new(format!(
@@ -216,7 +220,10 @@ impl MailBackend for NotmuchDb {
                 let query: *mut notmuch_query_t =
                     unsafe { notmuch_query_create(*database_lck, query_str.as_ptr()) };
                 if query.is_null() {
-                    tx.send(AsyncStatus::Payload(Err(MeliError::new("Could not create query. Out of memory?")))).unwrap();
+                    tx.send(AsyncStatus::Payload(Err(MeliError::new(
+                        "Could not create query. Out of memory?",
+                    ))))
+                    .unwrap();
                     tx.send(AsyncStatus::Finished).unwrap();
                     return;
                 }
@@ -224,7 +231,12 @@ impl MailBackend for NotmuchDb {
                 let status =
                     unsafe { notmuch_query_search_messages(query, &mut messages as *mut _) };
                 if status != 0 {
-                    tx.send(AsyncStatus::Payload(Err(MeliError::new("Search for {} returned {}", folder.query_str.as_str(), status)))).unwrap();
+                    tx.send(AsyncStatus::Payload(Err(MeliError::new(format!(
+                        "Search for {} returned {}",
+                        folder.query_str.as_str(),
+                        status,
+                    )))))
+                    .unwrap();
                     tx.send(AsyncStatus::Finished).unwrap();
                     return;
                 }
@@ -293,7 +305,8 @@ impl MailBackend for NotmuchDb {
         Ok(handle.thread().id())
     }
     fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
-        Ok(self.folders
+        Ok(self
+            .folders
             .read()
             .unwrap()
             .iter()
