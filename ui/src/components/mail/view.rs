@@ -515,7 +515,7 @@ impl Component for MailView {
                 }
 
                 self.force_draw_headers = false;
-                clear_area(grid, (set_y(upper_left, y), set_y(bottom_right, y + 1)));
+                clear_area(grid, (set_y(upper_left, y), set_y(bottom_right, y)));
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 3)));

@@ -41,7 +41,7 @@ Newline means LF (0x0A) or CRLF (0x0D 0x0A).
 .Pp
 Refer to TOML documentation for valid TOML syntax.
 
-Thought not valid TOML syntax,
+Thought not part of TOML syntax,
 .Nm
 can have nested configuration files by using the following include directive, which though starting with
 .Em \&#
@@ -49,6 +49,9 @@ is not a comment:
 .Bd -literal
 #include "/path/to/file"
 .Ed
+
+The accepted regular expression is
+.Li ^\es*include\es*\&\\&\e"(\e\e.|[^\e"])+\e"\es*$
 .Sh SECTIONS
 The top level sections of the config are accounts, shortcuts, notifications, pager, composing, pgp, terminal.
 .Pp

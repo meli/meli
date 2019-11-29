@@ -134,13 +134,13 @@ impl fmt::Display for Composer {
         if self.reply_context.is_some() {
             write!(f, "reply: {:8}", self.draft.headers()["Subject"])
         } else {
-            write!(f, "compose")
+            write!(f, "composing")
         }
     }
 }
 
 impl Composer {
-    const DESCRIPTION: &'static str = "compose";
+    const DESCRIPTION: &'static str = "composing";
     pub fn new(account_cursor: usize) -> Self {
         Composer {
             account_cursor,
@@ -610,9 +610,8 @@ impl Component for Composer {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        let shortcuts = self.get_shortcuts(context);
         match (&mut self.mode, &mut self.reply_context, &event) {
-            // don't pass Reply command to thread view in reply_context
-            (_, Some(_), UIEvent::Input(Key::Char('R'))) => {}
             (ViewMode::Edit, _, _) => {
                 if self.pager.process_event(event, context) {
                     return true;
@@ -749,7 +748,10 @@ impl Component for Composer {
                 self.cursor = Cursor::Body;
                 self.dirty = true;
             }
-            UIEvent::Input(Key::Char('s')) if self.mode.is_edit() => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Self::DESCRIPTION]["send_mail"])
+                    && self.mode.is_edit() =>
+            {
                 self.update_draft();
                 self.mode = ViewMode::Send(Selector::new(
                     "send mail?",
@@ -862,7 +864,10 @@ impl Component for Composer {
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Char('e')) if self.embed.is_some() => {
+            UIEvent::Input(ref key)
+                if self.embed.is_some()
+                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+            {
                 self.embed.as_ref().unwrap().lock().unwrap().wake_up();
                 match self.embed.take() {
                     Some(EmbedStatus::Running(e, f)) | Some(EmbedStatus::Stopped(e, f)) => {
@@ -877,7 +882,10 @@ impl Component for Composer {
                 self.set_dirty();
                 return true;
             }
-            UIEvent::Input(Key::Char('e')) if self.mode.is_edit() => {
+            UIEvent::Input(ref key)
+                if self.mode.is_edit()
+                    && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
+            {
                 /* Edit draft in $EDITOR */
                 let settings = &context.settings;
                 let editor = if let Some(editor_cmd) = settings.composing.editor_cmd.as_ref() {

@@ -595,8 +595,8 @@ mod pp {
         error::{MeliError, Result},
         parsec::*,
     };
-    use std::borrow::Cow;
     use std::io::Read;
+    use std::path::{Path, PathBuf};
 
     fn include_directive<'a>() -> impl Parser<'a, Option<&'a str>> {
         move |input: &'a str| {
@@ -655,9 +655,9 @@ mod pp {
         }
     }
 
-    fn pp_helper(path: &str, level: u8) -> Result<Cow<'_, str>> {
+    fn pp_helper(path: &Path, level: u8) -> Result<String> {
         if level > 7 {
-            return Err(MeliError::new(format!("Maximum recursion limit reached while unfolding include directives in {}. Have you included a config file within itself?", path)));
+            return Err(MeliError::new(format!("Maximum recursion limit reached while unfolding include directives in {}. Have you included a config file within itself?", path.display())));
         }
         let mut contents = String::new();
         let mut file = std::fs::File::open(path)?;
@@ -668,7 +668,9 @@ mod pp {
             if let (_, Some(path)) = include_directive().parse(l).map_err(|l| {
                 MeliError::new(format!(
                     "Malformed include directive in line {} of file {}: {}",
-                    i, path, l
+                    i,
+                    path.display(),
+                    l
                 ))
             })? {
                 includes.push(path);
@@ -676,17 +678,39 @@ mod pp {
         }
 
         if includes.is_empty() {
-            Ok(Cow::from(contents))
+            Ok(contents)
         } else {
             let mut ret = String::with_capacity(contents.len());
-            for path in includes {
-                ret.extend(pp_helper(path, level + 1)?.chars());
+            for sub_path in includes {
+                let p = &Path::new(sub_path);
+                debug!(p);
+                let p_buf = if p.is_relative() {
+                    /* We checked that path is ok above so we can do unwrap here */
+                    debug!(path);
+                    let prefix = path.parent().unwrap();
+                    debug!(prefix);
+                    prefix.join(p)
+                } else {
+                    p.to_path_buf()
+                };
+
+                ret.extend(pp_helper(&p_buf, level + 1)?.chars());
             }
             ret.extend(contents.chars());
-            Ok(Cow::from(ret))
+            Ok(ret)
         }
     }
-    pub fn pp(path: &str) -> Result<Cow<'_, str>> {
-        pp_helper(path, 0)
+
+    pub fn pp(path: &str) -> Result<String> {
+        let p = &Path::new(path);
+        let p_buf: PathBuf = if p.is_relative() {
+            p.canonicalize()?
+        } else {
+            p.to_path_buf()
+        };
+
+        let ret = pp_helper(&p_buf, 0);
+        drop(p_buf);
+        ret
     }
 }
