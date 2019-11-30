@@ -30,7 +30,8 @@ rusqlite = {version = "0.20.0", optional =true }
 
 [features]
 default = ["sqlite3"]
-
+notmuch = []
 sqlite3 = ["rusqlite"]
+
 # Print tracing logs as meli runs
 debug-tracing = []

@@ -25,6 +25,7 @@ members = ["melib", "ui", "debug_printer", "testing", "text_processing"]
 
 [features]
 default = []
+notmuch = ["melib/notmuch_backend", "ui/notmuch"]
 
 # Print tracing logs as meli runs in stderr
 # enable for debug tracing logs: build with --features=debug-tracing
