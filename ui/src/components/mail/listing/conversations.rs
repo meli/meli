@@ -24,8 +24,7 @@ use crate::components::utilities::PageMovement;
 use std::iter::FromIterator;
 use std::ops::{Deref, DerefMut};
 
-const MAX_COLS: usize = 500;
-
+#[derive(Debug)]
 pub(super) struct EntryStrings {
     pub(super) date: DateString,
     pub(super) subject: SubjectString,
@@ -53,6 +52,7 @@ macro_rules! address_list {
 macro_rules! column_str {
     (
         struct $name:ident(String)) => {
+        #[derive(Debug)]
         pub(super) struct $name(pub String);
 
         impl Deref for $name {
@@ -470,11 +470,34 @@ impl ConversationsListing {
         }
     }
     pub(super) fn make_entry_string(
+        &self,
         e: &Envelope,
+        context: &Context,
         from: &Vec<Address>,
         thread_node: &ThreadNode,
         is_snoozed: bool,
     ) -> EntryStrings {
+        let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+            .unwrap()
+            .folder
+            .hash();
+        let folder = &context.accounts[self.cursor_pos.0].folder_confs[&folder_hash];
+        let mut tags = String::new();
+        let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
+        if let Some(t) = backend_lck.tags() {
+            let tags_lck = t.read().unwrap();
+            for t in e.labels().iter() {
+                if folder.folder_conf.ignore_tags.contains(t) {
+                    continue;
+                }
+                tags.push(' ');
+                tags.push_str(tags_lck.get(t).as_ref().unwrap());
+                tags.push(' ');
+            }
+            if !tags.is_empty() {
+                tags.pop();
+            }
+        }
         if thread_node.len() > 0 {
             EntryStrings {
                 date: DateString(ConversationsListing::format_date(thread_node)),
@@ -485,7 +508,7 @@ impl ConversationsListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),
-                tags: TagString(String::new()),
+                tags: TagString(tags),
             }
         } else {
             EntryStrings {
@@ -497,7 +520,7 @@ impl ConversationsListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),
-                tags: TagString(String::new()),
+                tags: TagString(tags),
             }
         }
     }
@@ -634,15 +657,24 @@ impl ConversationsListing {
             let root_envelope: &EnvelopeRef =
                 &context.accounts[self.cursor_pos.0].collection.get_env(i);
 
-            let strings = ConversationsListing::make_entry_string(
+            let strings = self.make_entry_string(
                 root_envelope,
+                context,
                 &from_address_list,
                 thread_node,
                 threads.is_snoozed(root_idx),
             );
             max_entry_columns = std::cmp::max(
                 max_entry_columns,
-                strings.flag.len() + 3 + strings.subject.len(),
+                strings.flag.len()
+                    + 3
+                    + strings.subject.grapheme_width()
+                    + 1
+                    + strings.tags.grapheme_width(),
+            );
+            max_entry_columns = std::cmp::max(
+                max_entry_columns,
+                strings.date.len() + 1 + strings.from.grapheme_width(),
             );
             rows.push(strings);
             if refresh_mailbox {
@@ -659,7 +691,7 @@ impl ConversationsListing {
         } = self;
         selection.retain(|e, _| order.contains_key(e));
 
-        let width = std::cmp::min(MAX_COLS, max_entry_columns);
+        let width = max_entry_columns;
         self.content =
             CellBuffer::new_with_context(width, 4 * rows.len(), Cell::with_char(' '), context);
 
@@ -722,6 +754,34 @@ impl ConversationsListing {
                 ((x, 3 * idx), (width - 1, 3 * idx)),
                 None,
             );
+            let x = {
+                let mut x = x + 1;
+                use std::convert::TryInto;
+                for (m, t) in strings.tags.split_whitespace().enumerate() {
+                    let m = 2 * m.try_into().unwrap_or(0);
+                    let (_x, _) = write_string_to_grid(
+                        t,
+                        &mut self.content,
+                        Color::White,
+                        Color::Byte(103 + m),
+                        Attr::Bold,
+                        ((x + 1, 3 * idx), (width - 1, 3 * idx)),
+                        None,
+                    );
+                    self.content[(x, 3 * idx)].set_bg(Color::Byte(103 + m));
+                    if _x < width {
+                        self.content[(_x, 3 * idx)].set_bg(Color::Byte(103 + m));
+                        self.content[(_x, 3 * idx)].set_keep_bg(true);
+                    }
+                    for x in (x + 1).._x {
+                        self.content[(x, 3 * idx)].set_keep_fg(true);
+                        self.content[(x, 3 * idx)].set_keep_bg(true);
+                    }
+                    self.content[(x, 3 * idx)].set_keep_bg(true);
+                    x = _x + 1;
+                }
+                x
+            };
             for x in x..width {
                 self.content[(x, 3 * idx)].set_bg(bg_color);
             }

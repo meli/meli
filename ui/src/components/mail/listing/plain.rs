@@ -771,13 +771,15 @@ impl PlainListing {
                         None,
                     );
                     self.data_columns.columns[4][(x, idx)].set_bg(Color::Byte(103 + m));
-                    self.data_columns.columns[4][(_x, idx)].set_bg(Color::Byte(103 + m));
+                    if _x < min_width.4 {
+                        self.data_columns.columns[4][(_x, idx)].set_bg(Color::Byte(103 + m));
+                        self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
+                    }
                     for x in (x + 1).._x {
                         self.data_columns.columns[4][(x, idx)].set_keep_fg(true);
                         self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
                     }
                     self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
-                    self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
                     x = _x + 1;
                 }
                 x

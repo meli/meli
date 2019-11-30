@@ -493,10 +493,33 @@ impl CompactListing {
         }
     }
     fn make_entry_string(
+        &self,
         e: EnvelopeRef,
+        context: &Context,
         thread_node: &ThreadNode,
         is_snoozed: bool,
     ) -> EntryStrings {
+        let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+            .unwrap()
+            .folder
+            .hash();
+        let folder = &context.accounts[self.cursor_pos.0].folder_confs[&folder_hash];
+        let mut tags = String::new();
+        let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
+        if let Some(t) = backend_lck.tags() {
+            let tags_lck = t.read().unwrap();
+            for t in e.labels().iter() {
+                if folder.folder_conf.ignore_tags.contains(t) {
+                    continue;
+                }
+                tags.push(' ');
+                tags.push_str(tags_lck.get(t).as_ref().unwrap());
+                tags.push(' ');
+            }
+            if !tags.is_empty() {
+                tags.pop();
+            }
+        }
         if thread_node.len() > 0 {
             EntryStrings {
                 date: DateString(ConversationsListing::format_date(thread_node)),
@@ -507,7 +530,7 @@ impl CompactListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
-                tags: TagString(String::new()),
+                tags: TagString(tags),
             }
         } else {
             EntryStrings {
@@ -519,7 +542,7 @@ impl CompactListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
-                tags: TagString(String::new()),
+                tags: TagString(tags),
             }
         }
     }
@@ -626,15 +649,19 @@ impl CompactListing {
             let root_envelope: EnvelopeRef =
                 context.accounts[self.cursor_pos.0].collection.get_env(i);
 
-            let entry_strings = CompactListing::make_entry_string(
+            let entry_strings = self.make_entry_string(
                 root_envelope,
+                context,
                 thread_node,
                 threads.is_snoozed(root_idx),
             );
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
             min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
             min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
-            min_width.4 = cmp::max(min_width.4, entry_strings.subject.grapheme_width()); /* subject */
+            min_width.4 = cmp::max(
+                min_width.4,
+                entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
+            ); /* subject */
             rows.push(entry_strings);
             if refresh_mailbox {
                 self.all_threads.insert(root_idx);
@@ -769,6 +796,34 @@ impl CompactListing {
                 ((0, idx), (min_width.4, idx)),
                 None,
             );
+            let x = {
+                let mut x = x + 1;
+                use std::convert::TryInto;
+                for (m, t) in strings.tags.split_whitespace().enumerate() {
+                    let m = 2 * m.try_into().unwrap_or(0);
+                    let (_x, _) = write_string_to_grid(
+                        t,
+                        &mut self.data_columns.columns[4],
+                        Color::White,
+                        Color::Byte(103 + m),
+                        Attr::Bold,
+                        ((x + 1, idx), (min_width.4, idx)),
+                        None,
+                    );
+                    self.data_columns.columns[4][(x, idx)].set_bg(Color::Byte(103 + m));
+                    if _x < min_width.4 {
+                        self.data_columns.columns[4][(_x, idx)].set_bg(Color::Byte(103 + m));
+                        self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
+                    }
+                    for x in (x + 1).._x {
+                        self.data_columns.columns[4][(x, idx)].set_keep_fg(true);
+                        self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                    }
+                    self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                    x = _x + 1;
+                }
+                x
+            };
             for x in x..min_width.4 {
                 self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
             }
