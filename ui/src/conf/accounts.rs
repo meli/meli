@@ -959,6 +959,22 @@ impl Account {
             return crate::cache::imap_search(search_term, sort, folder_hash, &self.backend);
         }
 
+        #[cfg(feature = "notmuch")]
+        {
+            if self.settings.account().format() == "notmuch" {
+                let backend_lck = self.backend.read().unwrap();
+                let b = (*backend_lck).as_any();
+                return if let Some(notmuch_backend) = b.downcast_ref::<melib::backends::NotmuchDb>()
+                {
+                    notmuch_backend.search(search_term)
+                } else {
+                    Err(MeliError::new(
+                        "Internal error: Could not downcast backend to NotmuchDb",
+                    ))
+                };
+            }
+        }
+
         #[cfg(feature = "sqlite3")]
         {
             crate::sqlite3::search(search_term, sort)
