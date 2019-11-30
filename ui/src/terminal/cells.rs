@@ -433,6 +433,8 @@ pub struct Cell {
     fg: Color,
     bg: Color,
     attrs: Attr,
+    keep_fg: bool,
+    keep_bg: bool,
 }
 
 impl Cell {
@@ -456,6 +458,8 @@ impl Cell {
             bg,
             attrs,
             empty: false,
+            keep_fg: false,
+            keep_bg: false,
         }
     }
 
@@ -522,6 +526,8 @@ impl Cell {
     /// ```
     pub fn set_ch(&mut self, newch: char) -> &mut Cell {
         self.ch = newch;
+        self.keep_fg = false;
+        self.keep_bg = false;
         self
     }
 
@@ -553,7 +559,9 @@ impl Cell {
     /// assert_eq!(cell.fg(), Color::White);
     /// ```
     pub fn set_fg(&mut self, newfg: Color) -> &mut Cell {
-        self.fg = newfg;
+        if !self.keep_fg {
+            self.fg = newfg;
+        }
         self
     }
 
@@ -585,7 +593,9 @@ impl Cell {
     /// assert_eq!(cell.bg(), Color::Black);
     /// ```
     pub fn set_bg(&mut self, newbg: Color) -> &mut Cell {
-        self.bg = newbg;
+        if !self.keep_bg {
+            self.bg = newbg;
+        }
         self
     }
 
@@ -604,6 +614,14 @@ impl Cell {
 
     pub fn set_empty(&mut self, new_val: bool) {
         self.empty = new_val;
+    }
+
+    pub fn set_keep_fg(&mut self, new_val: bool) {
+        self.keep_fg = new_val;
+    }
+
+    pub fn set_keep_bg(&mut self, new_val: bool) {
+        self.keep_bg = new_val;
     }
 }
 
@@ -1002,11 +1020,7 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area) {
     let bottom_right = bottom_right!(area);
     for y in get_y(upper_left)..=get_y(bottom_right) {
         for x in get_x(upper_left)..=get_x(bottom_right) {
-            grid[(x, y)].set_ch(' ');
-            grid[(x, y)].set_bg(Color::Default);
-            grid[(x, y)].set_fg(Color::Default);
-            grid[(x, y)].set_attrs(Attr::Default);
-            grid[(x, y)].empty = false;
+            grid[(x, y)] = Cell::default();
         }
     }
 }
