@@ -7,8 +7,10 @@ use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
+use crate::structs::StackVec;
 use fnv::FnvHashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeMap;
 use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 use std::io::Read;
@@ -32,6 +34,7 @@ pub struct NotmuchDb {
     database: DbWrapper,
     folders: Arc<RwLock<FnvHashMap<FolderHash, NotmuchFolder>>>,
     index: Arc<RwLock<FnvHashMap<EnvelopeHash, &'static CStr>>>,
+    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     path: PathBuf,
     save_messages_to: Option<PathBuf>,
 }
@@ -170,6 +173,8 @@ impl NotmuchDb {
             },
             path,
             index: Arc::new(RwLock::new(Default::default())),
+            tag_index: Arc::new(RwLock::new(Default::default())),
+
             folders: Arc::new(RwLock::new(folders)),
             save_messages_to: None,
         }))
@@ -194,6 +199,39 @@ impl NotmuchDb {
         }
         Ok(())
     }
+
+    pub fn search(&self, query_s: &str) -> Result<crate::structs::StackVec<EnvelopeHash>> {
+        let database_lck = self.database.inner.read().unwrap();
+        let query_str = std::ffi::CString::new(query_s).unwrap();
+        let query: *mut notmuch_query_t =
+            unsafe { notmuch_query_create(*database_lck, query_str.as_ptr()) };
+        if query.is_null() {
+            return Err(MeliError::new("Could not create query. Out of memory?"));
+        }
+        let mut messages: *mut notmuch_messages_t = std::ptr::null_mut();
+        let status = unsafe { notmuch_query_search_messages(query, &mut messages as *mut _) };
+        if status != 0 {
+            return Err(MeliError::new(format!(
+                "Search for {} returned {}",
+                query_s, status,
+            )));
+        }
+        assert!(!messages.is_null());
+        let iter = MessageIterator { messages };
+        let mut ret = StackVec::new();
+        for message in iter {
+            let fs_path = unsafe { notmuch_message_get_filename(message) };
+            let c_str = unsafe { CStr::from_ptr(fs_path) };
+            let env_hash = {
+                let mut hasher = DefaultHasher::default();
+                c_str.hash(&mut hasher);
+                hasher.finish()
+            };
+            ret.push(env_hash);
+        }
+
+        Ok(ret)
+    }
 }
 
 impl MailBackend for NotmuchDb {
@@ -205,6 +243,7 @@ impl MailBackend for NotmuchDb {
         let folder_hash = folder.hash();
         let database = self.database.clone();
         let index = self.index.clone();
+        let tag_index = self.tag_index.clone();
         let folders = self.folders.clone();
         let handle = {
             let tx = w.tx();
@@ -275,7 +314,21 @@ impl MailBackend for NotmuchDb {
                         index: index.clone(),
                         bytes: Some(response),
                     });
-                    if let Some(env) = Envelope::from_token(op, env_hash) {
+                    if let Some(mut env) = Envelope::from_token(op, env_hash) {
+                        let mut tag_lock = tag_index.write().unwrap();
+                        for tag in (TagIterator {
+                            tags: unsafe { notmuch_message_get_tags(message) },
+                        }) {
+                            let tag = tag.to_string_lossy().into_owned();
+
+                            let mut hasher = DefaultHasher::new();
+                            hasher.write(tag.as_bytes());
+                            let num = hasher.finish();
+                            if !tag_lock.contains_key(&num) {
+                                tag_lock.insert(num, tag);
+                            }
+                            env.labels_mut().push(num);
+                        }
                         ret.push(env);
                     } else {
                         debug!("could not parse path {:?}", c_str);
@@ -346,6 +399,10 @@ impl MailBackend for NotmuchDb {
 
     fn as_any(&self) -> &dyn::std::any::Any {
         self
+    }
+
+    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
+        Some(self.tag_index.clone())
     }
 }
 

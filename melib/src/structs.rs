@@ -23,7 +23,7 @@ use std::iter::{Extend, FromIterator};
 use std::ops::Index;
 
 const STACK_VEC_CAPACITY: usize = 32;
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StackVec<T: Default + Copy + std::fmt::Debug> {
     len: usize,
     array: [T; STACK_VEC_CAPACITY],

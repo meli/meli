@@ -135,6 +135,7 @@ pub struct Envelope {
 
     flags: Flag,
     has_attachments: bool,
+    labels: crate::structs::StackVec<u64>,
 }
 
 impl fmt::Debug for Envelope {
@@ -172,6 +173,7 @@ impl Envelope {
             hash,
             has_attachments: false,
             flags: Flag::default(),
+            labels: crate::structs::StackVec::new(),
         }
     }
 
@@ -596,6 +598,14 @@ impl Envelope {
 
     pub fn has_attachments(&self) -> bool {
         self.has_attachments
+    }
+
+    pub fn labels(&self) -> &crate::structs::StackVec<u64> {
+        &self.labels
+    }
+
+    pub fn labels_mut(&mut self) -> &mut crate::structs::StackVec<u64> {
+        &mut self.labels
     }
 }
 
