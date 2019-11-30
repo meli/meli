@@ -31,6 +31,7 @@ pub(super) struct EntryStrings {
     pub(super) subject: SubjectString,
     pub(super) flag: FlagString,
     pub(super) from: FromString,
+    pub(super) tags: TagString,
 }
 
 macro_rules! address_list {
@@ -72,6 +73,7 @@ column_str!(struct DateString(String));
 column_str!(struct FromString(String));
 column_str!(struct SubjectString(String));
 column_str!(struct FlagString(String));
+column_str!(struct TagString(String));
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `ThreadView`.
@@ -483,6 +485,7 @@ impl ConversationsListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),
+                tags: TagString(String::new()),
             }
         } else {
             EntryStrings {
@@ -494,6 +497,7 @@ impl ConversationsListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),
+                tags: TagString(String::new()),
             }
         }
     }

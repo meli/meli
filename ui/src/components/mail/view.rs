@@ -372,11 +372,7 @@ impl Component for MailView {
                                     (set_y(upper_left, y), bottom_right),
                                     Some(get_x(upper_left)),
                                 );
-                            for x in _x..=get_x(bottom_right) {
-                                grid[(x, _y)].set_ch(' ');
-                                grid[(x, _y)].set_bg(Color::Default);
-                                grid[(x, _y)].set_fg(Color::Default);
-                            }
+                            clear_area(grid, ((_x, _y), (get_x(bottom_right), _y)));
                             y = _y + 1;
                         } else {
                             skip_header_ctr -= 1;
@@ -416,6 +412,7 @@ impl Component for MailView {
                     let mut x = get_x(upper_left);
                     if let Some(id) = id {
                         if sticky || skip_header_ctr == 0 {
+                            clear_area(grid, (set_y(upper_left, y), set_y(bottom_right, y)));
                             let (_x, _) = write_string_to_grid(
                                 "List-ID: ",
                                 grid,

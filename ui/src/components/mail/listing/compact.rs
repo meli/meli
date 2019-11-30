@@ -507,6 +507,7 @@ impl CompactListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
+                tags: TagString(String::new()),
             }
         } else {
             EntryStrings {
@@ -518,6 +519,7 @@ impl CompactListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
+                tags: TagString(String::new()),
             }
         }
     }

@@ -468,12 +468,13 @@ impl PlainListing {
             id: ComponentId::new_v4(),
         }
     }
-    fn make_entry_string(e: EnvelopeRef) -> EntryStrings {
+    fn make_entry_string(e: EnvelopeRef, tags: String) -> EntryStrings {
         EntryStrings {
             date: DateString(PlainListing::format_date(&e)),
             subject: SubjectString(format!("{}", e.subject())),
             flag: FlagString(format!("{}", if e.has_attachments() { "📎" } else { "" },)),
             from: FromString(address_list!((e.from()) as comma_sep_list)),
+            tags: TagString(tags),
         }
     }
 
@@ -544,6 +545,8 @@ impl PlainListing {
     fn redraw_list(&mut self, context: &Context) {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = &account[self.cursor_pos.1].unwrap();
+        let folder_hash = &account[self.cursor_pos.1].unwrap().folder.hash();
+        let folder = &account.folder_confs[&folder_hash];
 
         self.order.clear();
         self.selection.clear();
@@ -599,12 +602,32 @@ impl PlainListing {
                 panic!();
             }
             let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0].collection.get_env(i);
+            let mut tags = String::new();
+            let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
+            if let Some(t) = backend_lck.tags() {
+                let tags_lck = t.read().unwrap();
+                for t in envelope.labels().iter() {
+                    if folder.folder_conf.ignore_tags.contains(t) {
+                        continue;
+                    }
+                    tags.push(' ');
+                    tags.push_str(tags_lck.get(t).as_ref().unwrap());
+                    tags.push(' ');
+                }
+                if !tags.is_empty() {
+                    tags.pop();
+                }
+            }
+            drop(backend_lck);
 
-            let entry_strings = PlainListing::make_entry_string(envelope);
+            let entry_strings = PlainListing::make_entry_string(envelope, tags);
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
             min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
             min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
-            min_width.4 = cmp::max(min_width.4, entry_strings.subject.grapheme_width()); /* subject */
+            min_width.4 = cmp::max(
+                min_width.4,
+                entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
+            ); /* tags + subject */
             rows.push(entry_strings);
             if refresh_mailbox {
                 self.all_envelopes.insert(i);
@@ -733,6 +756,32 @@ impl PlainListing {
                 ((0, idx), (min_width.4, idx)),
                 None,
             );
+            let x = {
+                let mut x = x + 1;
+                use std::convert::TryInto;
+                for (m, t) in strings.tags.split_whitespace().enumerate() {
+                    let m = 2 * m.try_into().unwrap_or(0);
+                    let (_x, _) = write_string_to_grid(
+                        t,
+                        &mut self.data_columns.columns[4],
+                        Color::White,
+                        Color::Byte(103 + m),
+                        Attr::Bold,
+                        ((x + 1, idx), (min_width.4, idx)),
+                        None,
+                    );
+                    self.data_columns.columns[4][(x, idx)].set_bg(Color::Byte(103 + m));
+                    self.data_columns.columns[4][(_x, idx)].set_bg(Color::Byte(103 + m));
+                    for x in (x + 1).._x {
+                        self.data_columns.columns[4][(x, idx)].set_keep_fg(true);
+                        self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                    }
+                    self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                    self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
+                    x = _x + 1;
+                }
+                x
+            };
             for x in x..min_width.4 {
                 self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
             }
