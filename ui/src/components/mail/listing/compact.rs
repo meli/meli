@@ -1135,6 +1135,7 @@ impl Component for CompactListing {
                     Action::Listing(a @ ListingAction::SetSeen)
                     | Action::Listing(a @ ListingAction::SetUnseen)
                     | Action::Listing(a @ ListingAction::Delete)
+                    | Action::Listing(a @ ListingAction::Tag(_))
                         if !self.unfocused =>
                     {
                         let is_selection_empty =

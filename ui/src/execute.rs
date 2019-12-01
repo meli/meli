@@ -33,6 +33,7 @@ pub use crate::actions::ComposeAction::{self, *};
 pub use crate::actions::ListingAction::{self, *};
 pub use crate::actions::MailingListAction::{self, *};
 pub use crate::actions::TabAction::{self, *};
+pub use crate::actions::TagAction::{self, *};
 pub use crate::actions::ViewAction::{self, *};
 use std::str::FromStr;
 
@@ -333,7 +334,28 @@ define_commands!([
                               )
                       );
                   )
-                }
+                },
+                { tags: ["tag", "tag add", "tag remove"],
+                   desc: "tag [add/remove], edits message's tags.",
+                   parser:
+                     ( named!(
+                             tag<Action>,
+                                 preceded!(
+                                     ws!(tag!("tag")),
+                                     alt_complete!(
+                                         do_parse!(
+                                         ws!(tag!("add"))
+                                         >> tag: ws!(map_res!(call!(not_line_ending), std::str::from_utf8))
+                                         >> (Listing(Tag(Add(tag.to_string())))))
+                                         | do_parse!(
+                                         ws!(tag!("remove"))
+                                         >> tag: ws!(map_res!(call!(not_line_ending), std::str::from_utf8))
+                                         >> (Listing(Tag(Remove(tag.to_string())))))
+
+                                     )
+                                 )
+                     ); )
+                 }
 ]);
 
 named!(
@@ -382,7 +404,7 @@ named!(
 
 named!(
     listing_action<Action>,
-    alt_complete!(toggle | envelope_action | filter | toggle_thread_snooze | open_in_new_tab)
+    alt_complete!(toggle | envelope_action | filter | toggle_thread_snooze | open_in_new_tab | tag)
 );
 
 named!(

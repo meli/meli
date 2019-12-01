@@ -33,6 +33,12 @@ extern crate uuid;
 use uuid::Uuid;
 
 #[derive(Debug)]
+pub enum TagAction {
+    Add(String),
+    Remove(String),
+}
+
+#[derive(Debug)]
 pub enum ListingAction {
     SetPlain,
     SetThreaded,
@@ -43,6 +49,7 @@ pub enum ListingAction {
     SetUnseen,
     Delete,
     OpenInNewTab,
+    Tag(TagAction),
 }
 
 #[derive(Debug)]
