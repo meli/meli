@@ -41,7 +41,7 @@ use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
 use fnv::{FnvHashMap, FnvHashSet};
-use std::collections::hash_map::DefaultHasher;
+use std::collections::{hash_map::DefaultHasher, BTreeMap};
 use std::hash::Hasher;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
@@ -128,6 +128,8 @@ pub struct ImapType {
     connection: Arc<Mutex<ImapConnection>>,
     server_conf: ImapServerConf,
     uid_store: Arc<UIDStore>,
+    can_create_flags: Arc<Mutex<bool>>,
+    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 
     folders: Arc<RwLock<FnvHashMap<FolderHash, ImapFolder>>>,
 }
@@ -151,6 +153,7 @@ impl MailBackend for ImapType {
         let handle = {
             let tx = w.tx();
             let uid_store = self.uid_store.clone();
+            let can_create_flags = self.can_create_flags.clone();
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
             let (permissions, folder_exists) = {
@@ -176,6 +179,7 @@ impl MailBackend for ImapType {
                 let examine_response = protocol_parser::select_response(&response);
                 exit_on_error!(&tx, examine_response);
                 let examine_response = examine_response.unwrap();
+                *can_create_flags.lock().unwrap() = examine_response.can_create_flags;
                 debug!(
                     "folder: {} examine_response: {:?}",
                     folder_path, examine_response
@@ -445,6 +449,14 @@ impl MailBackend for ImapType {
     fn as_any(&self) -> &dyn::std::any::Any {
         self
     }
+
+    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
+        if *self.can_create_flags.lock().unwrap() {
+            Some(self.tag_index.clone())
+        } else {
+            None
+        }
+    }
 }
 
 impl ImapType {
@@ -481,6 +493,8 @@ impl ImapType {
             server_conf,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
 
+            can_create_flags: Arc::new(Mutex::new(false)),
+            tag_index: Arc::new(RwLock::new(Default::default())),
             folders: Arc::new(RwLock::new(Default::default())),
             connection: Arc::new(Mutex::new(connection)),
             uid_store: Arc::new(UIDStore {

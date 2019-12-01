@@ -144,6 +144,13 @@ impl From<native_tls::Error> for MeliError {
     }
 }
 
+impl From<std::num::ParseIntError> for MeliError {
+    #[inline]
+    fn from(kind: std::num::ParseIntError) -> MeliError {
+        MeliError::new(format!("{}", kind))
+    }
+}
+
 impl From<&str> for MeliError {
     #[inline]
     fn from(kind: &str) -> MeliError {

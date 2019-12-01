@@ -302,6 +302,8 @@ pub struct SelectResponse {
     pub uidvalidity: usize,
     pub uidnext: usize,
     pub permanentflags: Flag,
+    /// if SELECT returns \* we can set arbritary flags permanently.
+    pub can_create_flags: bool,
     pub read_only: bool,
 }
 
@@ -332,27 +334,23 @@ pub fn select_response(input: &str) -> Result<SelectResponse> {
         let mut ret = SelectResponse::default();
         for l in input.split("\r\n") {
             if l.starts_with("* ") && l.ends_with(" EXISTS") {
-                ret.exists = usize::from_str(&l["* ".len()..l.len() - " EXISTS".len()]).unwrap();
+                ret.exists = usize::from_str(&l["* ".len()..l.len() - " EXISTS".len()])?;
             } else if l.starts_with("* ") && l.ends_with(" RECENT") {
-                ret.recent = usize::from_str(&l["* ".len()..l.len() - " RECENT".len()]).unwrap();
+                ret.recent = usize::from_str(&l["* ".len()..l.len() - " RECENT".len()])?;
             } else if l.starts_with("* FLAGS (") {
-                ret.flags = flags(&l["* FLAGS (".len()..l.len() - ")".len()])
-                    .to_full_result()
-                    .unwrap();
+                ret.flags = flags(&l["* FLAGS (".len()..l.len() - ")".len()]).to_full_result()?;
             } else if l.starts_with("* OK [UNSEEN ") {
-                ret.unseen =
-                    usize::from_str(&l["* OK [UNSEEN ".len()..l.find(']').unwrap()]).unwrap();
+                ret.unseen = usize::from_str(&l["* OK [UNSEEN ".len()..l.find(']').unwrap()])?;
             } else if l.starts_with("* OK [UIDVALIDITY ") {
                 ret.uidvalidity =
-                    usize::from_str(&l["* OK [UIDVALIDITY ".len()..l.find(']').unwrap()]).unwrap();
+                    usize::from_str(&l["* OK [UIDVALIDITY ".len()..l.find(']').unwrap()])?;
             } else if l.starts_with("* OK [UIDNEXT ") {
-                ret.uidnext =
-                    usize::from_str(&l["* OK [UIDNEXT ".len()..l.find(']').unwrap()]).unwrap();
+                ret.uidnext = usize::from_str(&l["* OK [UIDNEXT ".len()..l.find(']').unwrap()])?;
             } else if l.starts_with("* OK [PERMANENTFLAGS (") {
                 ret.permanentflags =
                     flags(&l["* OK [PERMANENTFLAGS (".len()..l.find(')').unwrap()])
-                        .to_full_result()
-                        .unwrap();
+                        .to_full_result()?;
+                ret.can_create_flags = l.contains("\\*");
             } else if l.contains("OK [READ-WRITE]") {
                 ret.read_only = false;
             } else if l.contains("OK [READ-ONLY]") {
