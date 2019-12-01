@@ -368,9 +368,87 @@ impl Component for AccountStatus {
         self.dirty = false;
         let (width, height) = self.content.size();
         let a = &context.accounts[self.account_pos];
-        if a.settings.account().format() == "imap" {
-            let backend_lck = a.backend.read().unwrap();
+        let backend_lck = a.backend.read().unwrap();
+        let (_x, _y) = write_string_to_grid(
+            "(Press Esc to return)",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            Attr::Default,
+            ((1, 0), (width - 1, height - 1)),
+            None,
+        );
+        let mut line = 2;
 
+        let (_x, _y) = write_string_to_grid(
+            "Tag support: ",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            Attr::Bold,
+            ((1, line), (width - 1, height - 1)),
+            None,
+        );
+        write_string_to_grid(
+            if backend_lck.tags().is_some() {
+                "yes"
+            } else {
+                "no"
+            },
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            Attr::Default,
+            ((_x, _y), (width - 1, height - 1)),
+            None,
+        );
+        line += 1;
+        let (_x, _y) = write_string_to_grid(
+            "Cache backend: ",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            Attr::Bold,
+            ((1, line), (width - 1, height - 1)),
+            None,
+        );
+        write_string_to_grid(
+            &if a.settings.account().format() == "imap"
+                && *a.settings.conf.cache_type() == CacheType::None
+            {
+                "server-side search".to_string()
+            } else if a.settings.account().format() == "notmuch"
+                && *a.settings.conf.cache_type() == CacheType::None
+            {
+                "notmuch database".to_string()
+            } else {
+                #[cfg(feature = "sqlite3")]
+                {
+                    if *a.settings.conf.cache_type() == CacheType::Sqlite3 {
+                        if let Ok(path) = crate::sqlite3::db_path() {
+                            format!("sqlite3 database {}", path.display())
+                        } else {
+                            "sqlite3 database".to_string()
+                        }
+                    } else {
+                        "none (search will be slow)".to_string()
+                    }
+                }
+                #[cfg(not(feature = "sqlite3"))]
+                {
+                    "none (search will be slow)".to_string()
+                }
+            },
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            Attr::Default,
+            ((_x, _y), (width - 1, height - 1)),
+            None,
+        );
+
+        line += 1;
+        if a.settings.account().format() == "imap" {
             let b = (*backend_lck).as_any();
             if let Some(imap_backend) = b.downcast_ref::<melib::backends::ImapType>() {
                 write_string_to_grid(
@@ -378,8 +456,8 @@ impl Component for AccountStatus {
                     &mut self.content,
                     Color::Default,
                     Color::Default,
-                    Attr::Default,
-                    ((1, 1), (width - 1, height - 1)),
+                    Attr::Bold,
+                    ((1, line), (width - 1, height - 1)),
                     None,
                 );
                 let mut capabilities = imap_backend.capabilities();
@@ -393,10 +471,11 @@ impl Component for AccountStatus {
                     Color::Default,
                     Color::Default,
                     Attr::Default,
-                    ((max_name_width + 6, 1), (width - 1, height - 1)),
+                    ((max_name_width + 6, line), (width - 1, height - 1)),
                     None,
                 );
                 capabilities.sort();
+                line += 1;
                 for (i, cap) in capabilities.into_iter().enumerate() {
                     let (width, height) = self.content.size();
                     write_string_to_grid(
@@ -405,7 +484,7 @@ impl Component for AccountStatus {
                         Color::Default,
                         Color::Default,
                         Attr::Default,
-                        ((1, 2 + i), (width - 1, height - 1)),
+                        ((1, line + i), (width - 1, height - 1)),
                         None,
                     );
 
@@ -420,7 +499,7 @@ impl Component for AccountStatus {
                             Color::Green,
                             Color::Default,
                             Attr::Default,
-                            ((max_name_width + 6, 2 + i), (width - 1, height - 1)),
+                            ((max_name_width + 6, line + i), (width - 1, height - 1)),
                             None,
                         );
                     } else {
@@ -430,7 +509,7 @@ impl Component for AccountStatus {
                             Color::Red,
                             Color::Default,
                             Attr::Default,
-                            ((max_name_width + 6, 2 + i), (width - 1, height - 1)),
+                            ((max_name_width + 6, line + i), (width - 1, height - 1)),
                             None,
                         );
                     }

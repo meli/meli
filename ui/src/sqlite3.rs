@@ -31,6 +31,7 @@ use melib::{
 };
 use rusqlite::{params, Connection};
 use std::borrow::Cow;
+use std::path::PathBuf;
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 
@@ -41,6 +42,14 @@ pub fn escape_double_quote(w: &str) -> Cow<str> {
     } else {
         Cow::from(w)
     }
+}
+
+pub fn db_path() -> Result<PathBuf> {
+    let data_dir =
+        xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
+    Ok(data_dir
+        .place_data_file("index.db")
+        .map_err(|e| MeliError::new(e.to_string()))?)
 }
 
 //#[inline(always)]
@@ -67,11 +76,7 @@ pub fn escape_double_quote(w: &str) -> Cow<str> {
 //}
 //
 pub fn open_db() -> Result<Connection> {
-    let data_dir =
-        xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
-    let db_path = data_dir
-        .place_data_file("index.db")
-        .map_err(|e| MeliError::new(e.to_string()))?;
+    let db_path = db_path()?;
     let mut set_mode = false;
     if !db_path.exists() {
         log(
