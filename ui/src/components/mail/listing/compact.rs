@@ -79,68 +79,23 @@ impl MailListingTrait for CompactListing {
         &mut self.row_updates
     }
 
-    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
-        let account = &context.accounts[self.cursor_pos.0];
-        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        let threads = &account.collection.threads[&folder_hash];
-        if let Some(env_hash) = threads[&thread_hash].message() {
-            if !account.contains_key(env_hash) {
-                /* The envelope has been renamed or removed, so wait for the appropriate event to
-                 * arrive */
-                return;
-            }
-            let envelope: EnvelopeRef = account.collection.get_env(env_hash);
-            let has_attachments = envelope.has_attachments();
-            drop(envelope);
-            let fg_color = if threads[&thread_hash].has_unseen() {
-                Color::Byte(0)
-            } else {
-                Color::Default
-            };
-            let idx = self.order[&thread_hash];
-            let bg_color = if context.settings.terminal.theme == "light" {
-                if threads[&thread_hash].has_unseen() {
-                    Color::Byte(251)
-                } else if idx % 2 == 0 {
-                    Color::Byte(252)
-                } else {
-                    Color::Default
-                }
-            } else {
-                if threads[&thread_hash].has_unseen() {
-                    Color::Byte(253)
-                } else if idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                }
-            };
-            for i in 0..self.data_columns.columns.len() {
-                let column_width = self.data_columns.columns[i].size().0;
-                if column_width == 0 {
-                    continue;
-                }
-                change_colors(
-                    &mut self.data_columns.columns[i],
-                    ((0, idx), (column_width - 1, idx)),
-                    fg_color,
-                    bg_color,
-                );
-            }
-            match (threads.is_snoozed(thread_hash), has_attachments) {
-                (true, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
-                    self.data_columns.columns[3][(2, idx)].set_fg(Color::Red);
-                }
-                (true, false) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
-                }
-                (false, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
-                }
-                (false, false) => {}
-            }
-        }
+    fn get_focused_items(&self, context: &Context) -> StackVec<ThreadHash> {
+        let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
+        let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
+        let cursor_iter;
+        let sel_iter = if is_selection_empty {
+            cursor_iter = None;
+            Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
+        } else {
+            cursor_iter = Some(i.iter());
+            None
+        };
+        let iter = sel_iter
+            .into_iter()
+            .flatten()
+            .chain(cursor_iter.into_iter().flatten())
+            .cloned();
+        StackVec::from_iter(iter.into_iter())
     }
 }
 
@@ -564,7 +519,7 @@ impl CompactListing {
     }
     fn make_entry_string(
         &self,
-        e: EnvelopeRef,
+        e: &Envelope,
         context: &Context,
         thread_node: &ThreadNode,
         is_snoozed: bool,
@@ -592,10 +547,16 @@ impl CompactListing {
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) = context.settings.tags.colors.get(t) {
+                if let Some(&c) = folder
+                    .conf_override
+                    .tags
+                    .as_ref()
+                    .map(|s| s.colors.get(t))
+                    .unwrap_or(None)
+                {
                     colors.push(c);
                 } else {
-                    colors.push(8);
+                    colors.push(Color::Byte(8));
                 }
             }
             if !tags.is_empty() {
@@ -732,7 +693,7 @@ impl CompactListing {
                 context.accounts[self.cursor_pos.0].collection.get_env(i);
 
             let entry_strings = self.make_entry_string(
-                root_envelope,
+                &root_envelope,
                 context,
                 thread_node,
                 threads.is_snoozed(root_idx),
@@ -885,14 +846,14 @@ impl CompactListing {
                         t,
                         &mut self.data_columns.columns[4],
                         Color::White,
-                        Color::Byte(color),
+                        color,
                         Attr::Bold,
                         ((x + 1, idx), (min_width.4, idx)),
                         None,
                     );
-                    self.data_columns.columns[4][(x, idx)].set_bg(Color::Byte(color));
+                    self.data_columns.columns[4][(x, idx)].set_bg(color);
                     if _x < min_width.4 {
-                        self.data_columns.columns[4][(_x, idx)].set_bg(Color::Byte(color));
+                        self.data_columns.columns[4][(_x, idx)].set_bg(color);
                         self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
                     }
                     for x in (x + 1).._x {
@@ -905,6 +866,7 @@ impl CompactListing {
                 x
             };
             for x in x..min_width.4 {
+                self.data_columns.columns[4][(x, idx)].set_ch(' ');
                 self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
             }
             match (
@@ -956,6 +918,163 @@ impl CompactListing {
             threads.root_set(cursor)
         } else {
             self.filtered_selection[cursor]
+        }
+    }
+
+    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
+        let account = &context.accounts[self.cursor_pos.0];
+        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+        let threads = &account.collection.threads[&folder_hash];
+        if let Some(env_hash) = threads[&thread_hash].message() {
+            if !account.contains_key(env_hash) {
+                /* The envelope has been renamed or removed, so wait for the appropriate event to
+                 * arrive */
+                return;
+            }
+            let envelope: EnvelopeRef = account.collection.get_env(env_hash);
+            let has_attachments = envelope.has_attachments();
+            let fg_color = if threads[&thread_hash].has_unseen() {
+                Color::Byte(0)
+            } else {
+                Color::Default
+            };
+            let idx = self.order[&thread_hash];
+            let bg_color = if context.settings.terminal.theme == "light" {
+                if threads[&thread_hash].has_unseen() {
+                    Color::Byte(251)
+                } else if idx % 2 == 0 {
+                    Color::Byte(252)
+                } else {
+                    Color::Default
+                }
+            } else {
+                if threads[&thread_hash].has_unseen() {
+                    Color::Byte(253)
+                } else if idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                }
+            };
+            let strings = self.make_entry_string(
+                &envelope,
+                context,
+                &threads[&thread_hash],
+                threads.is_snoozed(thread_hash),
+            );
+            drop(envelope);
+            let columns = &mut self.data_columns.columns;
+            let min_width = (
+                columns[0].size().0,
+                columns[1].size().0,
+                columns[2].size().0,
+                columns[3].size().0,
+                columns[4].size().0,
+            );
+            let (x, _) = write_string_to_grid(
+                &idx.to_string(),
+                &mut columns[0],
+                fg_color,
+                bg_color,
+                Attr::Default,
+                ((0, idx), (min_width.0, idx)),
+                None,
+            );
+            for c in columns[0].row_iter((x, min_width.0.saturating_sub(1)), idx) {
+                columns[0][c].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.date,
+                &mut columns[1],
+                fg_color,
+                bg_color,
+                Attr::Default,
+                ((0, idx), (min_width.1.saturating_sub(1), idx)),
+                None,
+            );
+            for c in columns[1].row_iter((x, min_width.1.saturating_sub(1)), idx) {
+                columns[1][c].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.from,
+                &mut columns[2],
+                fg_color,
+                bg_color,
+                Attr::Default,
+                ((0, idx), (min_width.2, idx)),
+                None,
+            );
+            for c in columns[2].row_iter((x, min_width.2.saturating_sub(1)), idx) {
+                columns[2][c].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.flag,
+                &mut columns[3],
+                fg_color,
+                bg_color,
+                Attr::Default,
+                ((0, idx), (min_width.3, idx)),
+                None,
+            );
+            for c in columns[3].row_iter((x, min_width.3.saturating_sub(1)), idx) {
+                columns[3][c].set_bg(bg_color);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.subject,
+                &mut columns[4],
+                fg_color,
+                bg_color,
+                Attr::Default,
+                ((0, idx), (min_width.4, idx)),
+                None,
+            );
+            let x = {
+                let mut x = x + 1;
+                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                    let (_x, _) = write_string_to_grid(
+                        t,
+                        &mut columns[4],
+                        Color::White,
+                        color,
+                        Attr::Bold,
+                        ((x + 1, idx), (min_width.4, idx)),
+                        None,
+                    );
+                    for c in columns[4].row_iter((x, x), idx) {
+                        columns[4][c].set_bg(color);
+                    }
+                    for c in columns[4].row_iter((_x, _x), idx) {
+                        columns[4][c].set_bg(color);
+                        columns[4][c].set_keep_bg(true);
+                    }
+                    for c in columns[4].row_iter((x + 1, _x), idx) {
+                        columns[4][c].set_keep_fg(true);
+                        columns[4][c].set_keep_bg(true);
+                    }
+                    for c in columns[4].row_iter((x, x), idx) {
+                        columns[4][c].set_keep_bg(true);
+                    }
+                    x = _x + 1;
+                }
+                x
+            };
+            for c in columns[4].row_iter((x, min_width.4.saturating_sub(1)), idx) {
+                columns[4][c].set_ch(' ');
+                columns[4][c].set_bg(bg_color);
+            }
+            match (threads.is_snoozed(thread_hash), has_attachments) {
+                (true, true) => {
+                    columns[3][(0, idx)].set_fg(Color::Byte(103));
+                    columns[3][(2, idx)].set_fg(Color::Red);
+                }
+                (true, false) => {
+                    columns[3][(0, idx)].set_fg(Color::Red);
+                }
+                (false, true) => {
+                    columns[3][(0, idx)].set_fg(Color::Byte(103));
+                }
+                (false, false) => {}
+            }
         }
     }
 }
@@ -1130,38 +1249,6 @@ impl Component for CompactListing {
                         root_node.set_snoozed(!is_snoozed);
                         self.row_updates.push(thread_hash);
                         self.refresh_mailbox(context);
-                        return true;
-                    }
-                    Action::Listing(a @ ListingAction::SetSeen)
-                    | Action::Listing(a @ ListingAction::SetUnseen)
-                    | Action::Listing(a @ ListingAction::Delete)
-                    | Action::Listing(a @ ListingAction::Tag(_))
-                        if !self.unfocused =>
-                    {
-                        let is_selection_empty =
-                            self.selection.values().cloned().any(std::convert::identity);
-                        let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
-                        let cursor_iter;
-                        let sel_iter = if is_selection_empty {
-                            cursor_iter = None;
-                            Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
-                        } else {
-                            cursor_iter = Some(i.iter());
-                            None
-                        };
-                        let iter = sel_iter
-                            .into_iter()
-                            .flatten()
-                            .chain(cursor_iter.into_iter().flatten())
-                            .cloned();
-                        let stack = StackVec::from_iter(iter.into_iter());
-                        for i in stack {
-                            self.perform_action(context, i, a);
-                        }
-                        self.dirty = true;
-                        for v in self.selection.values_mut() {
-                            *v = false;
-                        }
                         return true;
                     }
 

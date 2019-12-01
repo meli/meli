@@ -73,7 +73,7 @@ column_str!(struct DateString(String));
 column_str!(struct FromString(String));
 column_str!(struct SubjectString(String));
 column_str!(struct FlagString(String));
-column_str!(struct TagString(String, StackVec<u8>));
+column_str!(struct TagString(String, StackVec<Color>));
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `ThreadView`.
@@ -111,43 +111,26 @@ impl MailListingTrait for ConversationsListing {
         &mut self.row_updates
     }
 
-    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
-        let account = &context.accounts[self.cursor_pos.0];
-        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        let threads = &account.collection.threads[&folder_hash];
-        let thread_node = &threads.thread_nodes[&thread_hash];
-        let row: usize = self.order[&thread_hash];
-        let width = self.content.size().0;
-
-        let fg_color = if thread_node.has_unseen() {
-            Color::Byte(0)
+    fn get_focused_items(&self, context: &Context) -> StackVec<ThreadHash> {
+        let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
+        let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
+        let cursor_iter;
+        let sel_iter = if is_selection_empty {
+            cursor_iter = None;
+            Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
         } else {
-            Color::Default
+            cursor_iter = Some(i.iter());
+            None
         };
-        let bg_color = if thread_node.has_unseen() {
-            Color::Byte(251)
-        } else {
-            Color::Default
-        };
-        change_colors(
-            &mut self.content,
-            ((0, 3 * row), (width - 1, 3 * row + 1)),
-            fg_color,
-            bg_color,
-        );
-        let padding_fg = if context.settings.terminal.theme == "light" {
-            Color::Byte(254)
-        } else {
-            Color::Byte(235)
-        };
-        change_colors(
-            &mut self.content,
-            ((0, 3 * row + 2), (width - 1, 3 * row + 2)),
-            padding_fg,
-            bg_color,
-        );
+        let iter = sel_iter
+            .into_iter()
+            .flatten()
+            .chain(cursor_iter.into_iter().flatten())
+            .cloned();
+        StackVec::from_iter(iter.into_iter())
     }
 }
+
 impl ListingTrait for ConversationsListing {
     fn coordinates(&self) -> (usize, usize) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
@@ -559,10 +542,16 @@ impl ConversationsListing {
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) = context.settings.tags.colors.get(t) {
+                if let Some(&c) = folder
+                    .conf_override
+                    .tags
+                    .as_ref()
+                    .map(|s| s.colors.get(t))
+                    .unwrap_or(None)
+                {
                     colors.push(c);
                 } else {
-                    colors.push(8);
+                    colors.push(Color::Byte(8));
                 }
             }
             if !tags.is_empty() {
@@ -830,14 +819,14 @@ impl ConversationsListing {
                     t,
                     &mut self.content,
                     Color::White,
-                    Color::Byte(color),
+                    color,
                     Attr::Bold,
                     ((x + 1, 3 * idx), (width - 1, 3 * idx)),
                     None,
                 );
-                self.content[(x, 3 * idx)].set_bg(Color::Byte(color));
+                self.content[(x, 3 * idx)].set_bg(color);
                 if _x < width {
-                    self.content[(_x, 3 * idx)].set_bg(Color::Byte(color));
+                    self.content[(_x, 3 * idx)].set_bg(color);
                     self.content[(_x, 3 * idx)].set_keep_bg(true);
                 }
                 for x in (x + 1).._x {
@@ -848,6 +837,7 @@ impl ConversationsListing {
                 x = _x + 1;
             }
             for x in x..width {
+                self.content[(x, 3 * idx)].set_ch(' ');
                 self.content[(x, 3 * idx)].set_bg(bg_color);
             }
             /* Next line, draw date */
@@ -938,6 +928,164 @@ impl ConversationsListing {
             threads.root_set(cursor)
         } else {
             self.filtered_selection[cursor]
+        }
+    }
+
+    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
+        let account = &context.accounts[self.cursor_pos.0];
+        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+        let threads = &account.collection.threads[&folder_hash];
+        let thread_node = &threads.thread_nodes[&thread_hash];
+        let idx: usize = self.order[&thread_hash];
+        let width = self.content.size().0;
+
+        let fg_color = if thread_node.has_unseen() {
+            Color::Byte(0)
+        } else {
+            Color::Default
+        };
+        let bg_color = if thread_node.has_unseen() {
+            Color::Byte(251)
+        } else {
+            Color::Default
+        };
+        let padding_fg = if context.settings.terminal.theme == "light" {
+            Color::Byte(254)
+        } else {
+            Color::Byte(235)
+        };
+        let mut from_address_list = Vec::new();
+        let mut from_address_set: std::collections::HashSet<Vec<u8>> =
+            std::collections::HashSet::new();
+        let mut stack = StackVec::new();
+        stack.push(thread_hash);
+        while let Some(h) = stack.pop() {
+            let env_hash = if let Some(h) = threads.thread_nodes()[&h].message() {
+                h
+            } else {
+                break;
+            };
+
+            let envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
+                .collection
+                .get_env(env_hash);
+            for addr in envelope.from().iter() {
+                if from_address_set.contains(addr.raw()) {
+                    continue;
+                }
+                from_address_set.insert(addr.raw().to_vec());
+                from_address_list.push(addr.clone());
+            }
+            for c in threads.thread_nodes()[&h].children() {
+                stack.push(*c);
+            }
+        }
+        let env_hash = threads[&thread_hash].message().unwrap();
+        let envelope: EnvelopeRef = account.collection.get_env(env_hash);
+        let strings = self.make_entry_string(
+            &envelope,
+            context,
+            &from_address_list,
+            &threads[&thread_hash],
+            threads.is_snoozed(thread_hash),
+        );
+        drop(envelope);
+        /* draw flags */
+        let (x, _) = write_string_to_grid(
+            &strings.flag,
+            &mut self.content,
+            fg_color,
+            bg_color,
+            Attr::Default,
+            ((0, 3 * idx), (width - 1, 3 * idx)),
+            None,
+        );
+        for c in self.content.row_iter((x, x + 3), 3 * idx) {
+            self.content[c].set_bg(bg_color);
+        }
+        /* draw subject */
+        let (x, _) = write_string_to_grid(
+            &strings.subject,
+            &mut self.content,
+            fg_color,
+            bg_color,
+            Attr::Bold,
+            ((x, 3 * idx), (width - 1, 3 * idx)),
+            None,
+        );
+        let x = {
+            let mut x = x + 1;
+            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                let (_x, _) = write_string_to_grid(
+                    t,
+                    &mut self.content,
+                    Color::White,
+                    color,
+                    Attr::Bold,
+                    ((x + 1, 3 * idx), (width - 1, 3 * idx)),
+                    None,
+                );
+                for c in self.content.row_iter((x, x), 3 * idx) {
+                    self.content[c].set_bg(color);
+                }
+                for c in self.content.row_iter((_x, _x), 3 * idx) {
+                    self.content[c].set_bg(color);
+                    self.content[c].set_keep_bg(true);
+                }
+                for c in self.content.row_iter((x + 1, _x), 3 * idx) {
+                    self.content[c].set_keep_fg(true);
+                    self.content[c].set_keep_bg(true);
+                }
+                for c in self.content.row_iter((x, x), 3 * idx) {
+                    self.content[c].set_keep_bg(true);
+                }
+                x = _x + 1;
+            }
+            x
+        };
+        for c in self.content.row_iter((x, width.saturating_sub(1)), 3 * idx) {
+            self.content[c].set_ch(' ');
+            self.content[c].set_bg(bg_color);
+        }
+        /* Next line, draw date */
+        let (x, _) = write_string_to_grid(
+            &strings.date,
+            &mut self.content,
+            fg_color,
+            bg_color,
+            Attr::Default,
+            ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
+            None,
+        );
+        for c in self.content.row_iter((x, x + 4), 3 * idx + 1) {
+            self.content[c].set_ch('▁');
+            self.content[c].set_bg(bg_color);
+        }
+        /* draw from */
+        let (x, _) = write_string_to_grid(
+            &strings.from,
+            &mut self.content,
+            fg_color,
+            bg_color,
+            Attr::Default,
+            ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
+            None,
+        );
+
+        for c in self
+            .content
+            .row_iter((x, width.saturating_sub(1)), 3 * idx + 1)
+        {
+            self.content[c].set_ch('▁');
+            self.content[c].set_bg(bg_color);
+        }
+        for c in self
+            .content
+            .row_iter((0, width.saturating_sub(1)), 3 * idx + 2)
+        {
+            self.content[c].set_ch('▓');
+            self.content[c].set_fg(padding_fg);
+            self.content[c].set_bg(bg_color);
         }
     }
 }
@@ -1189,37 +1337,6 @@ impl Component for ConversationsListing {
                         root_node.set_snoozed(!is_snoozed);
                         self.row_updates.push(thread_hash);
                         self.refresh_mailbox(context);
-                        return true;
-                    }
-                    Action::Listing(a @ ListingAction::SetSeen)
-                    | Action::Listing(a @ ListingAction::SetUnseen)
-                    | Action::Listing(a @ ListingAction::Delete)
-                        if !self.unfocused =>
-                    {
-                        let is_selection_empty =
-                            self.selection.values().cloned().any(std::convert::identity);
-                        let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
-                        let cursor_iter;
-                        let sel_iter = if is_selection_empty {
-                            cursor_iter = None;
-                            Some(self.selection.iter().filter(|(_, v)| **v).map(|(k, _)| k))
-                        } else {
-                            cursor_iter = Some(i.iter());
-                            None
-                        };
-                        let iter = sel_iter
-                            .into_iter()
-                            .flatten()
-                            .chain(cursor_iter.into_iter().flatten())
-                            .cloned();
-                        let stack = StackVec::from_iter(iter.into_iter());
-                        for i in stack {
-                            self.perform_action(context, i, a);
-                        }
-                        self.dirty = true;
-                        for v in self.selection.values_mut() {
-                            *v = false;
-                        }
                         return true;
                     }
                     _ => {}

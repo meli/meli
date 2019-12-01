@@ -62,6 +62,7 @@ pub struct PlainListing {
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: FnvHashMap<EnvelopeHash, usize>,
     selection: FnvHashMap<EnvelopeHash, bool>,
+    thread_hashes: FnvHashMap<EnvelopeHash, ThreadHash>,
     local_collection: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
     dirty: bool,
@@ -81,7 +82,20 @@ impl MailListingTrait for PlainListing {
         &mut self._row_updates
     }
 
-    fn update_line(&mut self, _context: &Context, _thread_hash: ThreadHash) {}
+    fn get_focused_items(&self, context: &Context) -> StackVec<ThreadHash> {
+        let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
+        if is_selection_empty {
+            self.selection
+                .iter()
+                .filter(|(_, v)| **v)
+                .map(|(k, _)| self.thread_hashes[k])
+                .collect()
+        } else {
+            let mut ret = StackVec::new();
+            ret.push(self.get_thread_under_cursor(self.cursor_pos.2, context));
+            ret
+        }
+    }
 }
 
 impl ListingTrait for PlainListing {
@@ -470,6 +484,7 @@ impl PlainListing {
             subsort: (SortField::Date, SortOrder::Desc),
             all_envelopes: fnv::FnvHashSet::default(),
             local_collection: Vec::new(),
+            thread_hashes: FnvHashMap::default(),
             order: FnvHashMap::default(),
             filter_term: String::new(),
             filtered_selection: Vec::new(),
@@ -520,7 +535,7 @@ impl PlainListing {
                 {
                     colors.push(c);
                 } else {
-                    colors.push(8);
+                    colors.push(Color::Byte(8));
                 }
             }
             if !tags.is_empty() {
@@ -587,6 +602,18 @@ impl PlainListing {
             .iter()
             .cloned()
             .collect();
+        let env_lck = context.accounts[self.cursor_pos.0]
+            .collection
+            .envelopes
+            .read()
+            .unwrap();
+        self.thread_hashes = context.accounts[self.cursor_pos.0][folder_hash]
+            .unwrap()
+            .envelopes
+            .iter()
+            .map(|h| (*h, env_lck[h].thread()))
+            .collect();
+        drop(env_lck);
         self.redraw_list(context);
 
         if self.length > 0 {
@@ -803,16 +830,16 @@ impl PlainListing {
                         t,
                         &mut columns[4],
                         Color::White,
-                        Color::Byte(color),
+                        color,
                         Attr::Bold,
                         ((x + 1, idx), (min_width.4, idx)),
                         None,
                     );
                     for c in columns[4].row_iter((x, x), idx) {
-                        columns[4][c].set_bg(Color::Byte(color));
+                        columns[4][c].set_bg(color);
                     }
                     for c in columns[4].row_iter((_x, _x), idx) {
-                        columns[4][c].set_bg(Color::Byte(color));
+                        columns[4][c].set_bg(color);
                         columns[4][c].set_keep_bg(true);
                     }
                     for c in columns[4].row_iter((x + 1, _x), idx) {
@@ -864,6 +891,12 @@ impl PlainListing {
         } else {
             self.filtered_selection[cursor]
         }
+    }
+
+    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
+        let account = &context.accounts[self.cursor_pos.0];
+        let env_hash = self.get_env_under_cursor(cursor, context);
+        account.collection.get_env(env_hash).thread()
     }
 
     fn format_date(envelope: &Envelope) -> String {

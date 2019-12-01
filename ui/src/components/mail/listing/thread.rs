@@ -54,7 +54,9 @@ impl MailListingTrait for ThreadListing {
         &mut self.row_updates
     }
 
-    fn update_line(&mut self, _context: &Context, _thread_hash: ThreadHash) {}
+    fn get_focused_items(&self, _context: &Context) -> StackVec<ThreadHash> {
+        StackVec::new()
+    }
 }
 
 impl ListingTrait for ThreadListing {

@@ -92,7 +92,6 @@ pub trait MailListingTrait: ListingTrait {
                             StatusEvent::DisplayMessage(e.to_string()),
                         ));
                     }
-                    self.row_updates().push(thread_hash);
                 }
                 ListingAction::SetUnseen => {
                     if let Err(e) = envelope.set_unseen(op) {
@@ -153,8 +152,7 @@ pub trait MailListingTrait: ListingTrait {
     }
 
     fn row_updates(&mut self) -> &mut StackVec<ThreadHash>;
-
-    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash);
+    fn get_focused_items(&self, _context: &Context) -> StackVec<ThreadHash>;
 }
 
 pub trait ListingTrait: Component {
@@ -506,6 +504,17 @@ impl Component for Listing {
                 }
                 Action::Listing(ListingAction::SetConversations) => {
                     self.component.set_style(IndexStyle::Conversations);
+                    return true;
+                }
+                Action::Listing(a @ ListingAction::SetSeen)
+                | Action::Listing(a @ ListingAction::SetUnseen)
+                | Action::Listing(a @ ListingAction::Delete)
+                | Action::Listing(a @ ListingAction::Tag(_)) => {
+                    let focused = self.component.get_focused_items(context);
+                    for i in focused {
+                        self.component.perform_action(context, i, a);
+                    }
+                    self.component.set_dirty();
                     return true;
                 }
                 _ => {}
