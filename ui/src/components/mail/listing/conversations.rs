@@ -51,9 +51,9 @@ macro_rules! address_list {
 
 macro_rules! column_str {
     (
-        struct $name:ident(String)) => {
+        struct $name:ident($($t:ty),+)) => {
         #[derive(Debug)]
-        pub(super) struct $name(pub String);
+        pub(super) struct $name($(pub $t),+);
 
         impl Deref for $name {
             type Target = String;
@@ -73,7 +73,7 @@ column_str!(struct DateString(String));
 column_str!(struct FromString(String));
 column_str!(struct SubjectString(String));
 column_str!(struct FlagString(String));
-column_str!(struct TagString(String));
+column_str!(struct TagString(String, StackVec<u8>));
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `ThreadView`.
@@ -520,7 +520,7 @@ impl ConversationsListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),
-                tags: TagString(tags),
+                tags: TagString(tags, colors),
             }
         } else {
             EntryStrings {
@@ -532,7 +532,7 @@ impl ConversationsListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),
-                tags: TagString(tags),
+                tags: TagString(tags, colors),
             }
         }
     }
@@ -768,21 +768,19 @@ impl ConversationsListing {
             );
             let x = {
                 let mut x = x + 1;
-                use std::convert::TryInto;
-                for (m, t) in strings.tags.split_whitespace().enumerate() {
-                    let m = 2 * m.try_into().unwrap_or(0);
+                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                     let (_x, _) = write_string_to_grid(
                         t,
                         &mut self.content,
                         Color::White,
-                        Color::Byte(103 + m),
+                        Color::Byte(color),
                         Attr::Bold,
                         ((x + 1, 3 * idx), (width - 1, 3 * idx)),
                         None,
                     );
-                    self.content[(x, 3 * idx)].set_bg(Color::Byte(103 + m));
+                    self.content[(x, 3 * idx)].set_bg(Color::Byte(color));
                     if _x < width {
-                        self.content[(_x, 3 * idx)].set_bg(Color::Byte(103 + m));
+                        self.content[(_x, 3 * idx)].set_bg(Color::Byte(color));
                         self.content[(_x, 3 * idx)].set_keep_bg(true);
                     }
                     for x in (x + 1).._x {

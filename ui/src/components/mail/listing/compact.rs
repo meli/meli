@@ -542,7 +542,7 @@ impl CompactListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
-                tags: TagString(tags),
+                tags: TagString(tags, colors),
             }
         } else {
             EntryStrings {
@@ -554,7 +554,7 @@ impl CompactListing {
                     if is_snoozed { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
-                tags: TagString(tags),
+                tags: TagString(tags, colors),
             }
         }
     }
@@ -810,21 +810,19 @@ impl CompactListing {
             );
             let x = {
                 let mut x = x + 1;
-                use std::convert::TryInto;
-                for (m, t) in strings.tags.split_whitespace().enumerate() {
-                    let m = 2 * m.try_into().unwrap_or(0);
+                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                     let (_x, _) = write_string_to_grid(
                         t,
                         &mut self.data_columns.columns[4],
                         Color::White,
-                        Color::Byte(103 + m),
+                        Color::Byte(color),
                         Attr::Bold,
                         ((x + 1, idx), (min_width.4, idx)),
                         None,
                     );
-                    self.data_columns.columns[4][(x, idx)].set_bg(Color::Byte(103 + m));
+                    self.data_columns.columns[4][(x, idx)].set_bg(Color::Byte(color));
                     if _x < min_width.4 {
-                        self.data_columns.columns[4][(_x, idx)].set_bg(Color::Byte(103 + m));
+                        self.data_columns.columns[4][(_x, idx)].set_bg(Color::Byte(color));
                         self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
                     }
                     for x in (x + 1).._x {

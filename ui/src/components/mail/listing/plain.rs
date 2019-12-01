@@ -468,13 +468,52 @@ impl PlainListing {
             id: ComponentId::new_v4(),
         }
     }
-    fn make_entry_string(e: EnvelopeRef, tags: String) -> EntryStrings {
+    fn make_entry_string(&self, e: EnvelopeRef, context: &Context) -> EntryStrings {
+        let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
+            .unwrap()
+            .folder
+            .hash();
+        let folder = &context.accounts[self.cursor_pos.0].folder_confs[&folder_hash];
+        let mut tags = String::new();
+        let mut colors = StackVec::new();
+        let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
+        if let Some(t) = backend_lck.tags() {
+            let tags_lck = t.read().unwrap();
+            for t in e.labels().iter() {
+                if folder
+                    .conf_override
+                    .tags
+                    .as_ref()
+                    .map(|s| s.ignore_tags.contains(t))
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+                tags.push(' ');
+                tags.push_str(tags_lck.get(t).as_ref().unwrap());
+                tags.push(' ');
+                if let Some(&c) = folder
+                    .conf_override
+                    .tags
+                    .as_ref()
+                    .map(|s| s.colors.get(t))
+                    .unwrap_or(None)
+                {
+                    colors.push(c);
+                } else {
+                    colors.push(8);
+                }
+            }
+            if !tags.is_empty() {
+                tags.pop();
+            }
+        }
         EntryStrings {
             date: DateString(PlainListing::format_date(&e)),
             subject: SubjectString(format!("{}", e.subject())),
             flag: FlagString(format!("{}", if e.has_attachments() { "📎" } else { "" },)),
             from: FromString(address_list!((e.from()) as comma_sep_list)),
-            tags: TagString(tags),
+            tags: TagString(tags, colors),
         }
     }
 
@@ -545,8 +584,6 @@ impl PlainListing {
     fn redraw_list(&mut self, context: &Context) {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = &account[self.cursor_pos.1].unwrap();
-        let folder_hash = &account[self.cursor_pos.1].unwrap().folder.hash();
-        let folder = &account.folder_confs[&folder_hash];
 
         self.order.clear();
         self.selection.clear();
@@ -602,9 +639,8 @@ impl PlainListing {
                 panic!();
             }
             let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0].collection.get_env(i);
-            let mut tags = String::new();
 
-            let entry_strings = PlainListing::make_entry_string(envelope, tags);
+            let entry_strings = self.make_entry_string(envelope, context);
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
             min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
             min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
