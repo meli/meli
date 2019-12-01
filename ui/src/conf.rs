@@ -79,9 +79,9 @@ pub struct MailUIConf {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct FileFolderConf {
     #[serde(flatten)]
-    pub folder_conf: FolderConf,
-    #[serde(flatten)]
     pub conf_override: MailUIConf,
+    #[serde(flatten)]
+    pub folder_conf: FolderConf,
 }
 
 impl FileFolderConf {
@@ -326,7 +326,11 @@ impl FileSettings {
     pub fn validate(path: &str) -> Result<()> {
         let s = pp::pp(path)?;
         let s: FileSettings = toml::from_str(&s).map_err(|e| {
-            MeliError::new(format!("Config file contains errors: {}", e.to_string()))
+            MeliError::new(format!(
+                "{}:\nConfig file contains errors: {}",
+                path,
+                e.to_string()
+            ))
         })?;
         let backends = melib::backends::Backends::new();
         for (name, acc) in s.accounts {
