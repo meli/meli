@@ -37,6 +37,7 @@ pub struct ThreadListing {
     /// Cache current view.
     content: CellBuffer,
 
+    row_updates: StackVec<ThreadHash>,
     locations: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
     dirty: bool,
@@ -48,6 +49,14 @@ pub struct ThreadListing {
     id: ComponentId,
 }
 
+impl MailListingTrait for ThreadListing {
+    fn row_updates(&mut self) -> &mut StackVec<ThreadHash> {
+        &mut self.row_updates
+    }
+
+    fn update_line(&mut self, _context: &Context, _thread_hash: ThreadHash) {}
+}
+
 impl ListingTrait for ThreadListing {
     fn coordinates(&self) -> (usize, usize) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
@@ -56,6 +65,7 @@ impl ListingTrait for ThreadListing {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.locations.clear();
+        self.row_updates.clear();
         self.initialised = false;
     }
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
@@ -230,6 +240,7 @@ impl ThreadListing {
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
             content,
+            row_updates: StackVec::new(),
             locations: Vec::new(),
             dirty: true,
             unfocused: false,

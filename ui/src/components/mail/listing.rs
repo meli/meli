@@ -136,7 +136,7 @@ pub enum ListingComponent {
 use crate::ListingComponent::*;
 
 impl core::ops::Deref for ListingComponent {
-    type Target = dyn ListingTrait;
+    type Target = dyn MailListingTrait;
 
     fn deref(&self) -> &Self::Target {
         match &self {
@@ -149,7 +149,7 @@ impl core::ops::Deref for ListingComponent {
 }
 
 impl core::ops::DerefMut for ListingComponent {
-    fn deref_mut(&mut self) -> &mut (dyn ListingTrait + 'static) {
+    fn deref_mut(&mut self) -> &mut (dyn MailListingTrait + 'static) {
         match self {
             Compact(l) => l,
             Plain(l) => l,

@@ -70,9 +70,18 @@ pub struct PlainListing {
     unfocused: bool,
     view: MailView,
     row_updates: StackVec<EnvelopeHash>,
+    _row_updates: StackVec<ThreadHash>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
+}
+
+impl MailListingTrait for PlainListing {
+    fn row_updates(&mut self) -> &mut StackVec<ThreadHash> {
+        &mut self._row_updates
+    }
+
+    fn update_line(&mut self, _context: &Context, _thread_hash: ThreadHash) {}
 }
 
 impl ListingTrait for PlainListing {
@@ -467,6 +476,7 @@ impl PlainListing {
             filtered_order: FnvHashMap::default(),
             selection: FnvHashMap::default(),
             row_updates: StackVec::new(),
+            _row_updates: StackVec::new(),
             data_columns: DataColumns::default(),
             dirty: true,
             force_draw: true,
