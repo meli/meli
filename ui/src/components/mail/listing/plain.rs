@@ -123,7 +123,7 @@ impl ListingTrait for PlainListing {
 
         let (upper_left, bottom_right) = area;
         change_colors(grid, area, fg_color, bg_color);
-        let mut x = get_x(upper_left)
+        let x = get_x(upper_left)
             + self.data_columns.widths[0]
             + self.data_columns.widths[1]
             + self.data_columns.widths[2]
@@ -138,9 +138,11 @@ impl ListingTrait for PlainListing {
                 pos_dec(self.data_columns.columns[3].size(), (1, 1)),
             ),
         );
-        for _ in 0..self.data_columns.widths[3] {
-            grid[(x, get_y(upper_left))].set_bg(bg_color);
-            x += 1;
+        for c in grid.row_iter(
+            (x, x + self.data_columns.widths[3].saturating_sub(1)),
+            get_y(upper_left),
+        ) {
+            grid[c].set_bg(bg_color);
         }
         return;
     }
@@ -310,13 +312,18 @@ impl ListingTrait for PlainListing {
                 fg_color,
                 bg_color,
             );
-            for x in flag_x
-                ..std::cmp::min(
-                    get_x(bottom_right),
-                    flag_x + 2 + self.data_columns.widths[3],
-                )
-            {
-                grid[(x, get_y(upper_left) + r)].set_bg(bg_color);
+            for c in grid.row_iter(
+                (
+                    flag_x,
+                    std::cmp::min(
+                        get_x(bottom_right),
+                        flag_x + 2 + self.data_columns.widths[3],
+                    )
+                    .saturating_sub(1),
+                ),
+                get_y(upper_left) + r,
+            ) {
+                grid[c].set_bg(bg_color);
             }
             change_colors(
                 grid,
@@ -683,6 +690,7 @@ impl PlainListing {
                 as Box<dyn Iterator<Item = EnvelopeHash>>
         };
 
+        let columns = &mut self.data_columns.columns;
         for ((idx, i), strings) in iter.enumerate().zip(rows) {
             if !context.accounts[self.cursor_pos.0].contains_key(i) {
                 //debug!("key = {}", i);
@@ -721,55 +729,55 @@ impl PlainListing {
             };
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
-                &mut self.data_columns.columns[0],
+                &mut columns[0],
                 fg_color,
                 bg_color,
                 Attr::Default,
                 ((0, idx), (min_width.0, idx)),
                 None,
             );
-            for x in x..min_width.0 {
-                self.data_columns.columns[0][(x, idx)].set_bg(bg_color);
+            for c in columns[0].row_iter((x, min_width.0.saturating_sub(1)), idx) {
+                columns[0][c].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
                 &strings.date,
-                &mut self.data_columns.columns[1],
+                &mut columns[1],
                 fg_color,
                 bg_color,
                 Attr::Default,
                 ((0, idx), (min_width.1, idx)),
                 None,
             );
-            for x in x..min_width.1 {
-                self.data_columns.columns[1][(x, idx)].set_bg(bg_color);
+            for c in columns[1].row_iter((x, min_width.1.saturating_sub(1)), idx) {
+                columns[1][c].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
                 &strings.from,
-                &mut self.data_columns.columns[2],
+                &mut columns[2],
                 fg_color,
                 bg_color,
                 Attr::Default,
                 ((0, idx), (min_width.2, idx)),
                 None,
             );
-            for x in x..min_width.2 {
-                self.data_columns.columns[2][(x, idx)].set_bg(bg_color);
+            for c in columns[2].row_iter((x, min_width.2.saturating_sub(1)), idx) {
+                columns[2][c].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
                 &strings.flag,
-                &mut self.data_columns.columns[3],
+                &mut columns[3],
                 fg_color,
                 bg_color,
                 Attr::Default,
                 ((0, idx), (min_width.3, idx)),
                 None,
             );
-            for x in x..min_width.3 {
-                self.data_columns.columns[3][(x, idx)].set_bg(bg_color);
+            for c in columns[3].row_iter((x, min_width.3.saturating_sub(1)), idx) {
+                columns[3][c].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
                 &strings.subject,
-                &mut self.data_columns.columns[4],
+                &mut columns[4],
                 fg_color,
                 bg_color,
                 Attr::Default,
@@ -778,41 +786,43 @@ impl PlainListing {
             );
             let x = {
                 let mut x = x + 1;
-                use std::convert::TryInto;
-                for (m, t) in strings.tags.split_whitespace().enumerate() {
-                    let m = 2 * m.try_into().unwrap_or(0);
+                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
                     let (_x, _) = write_string_to_grid(
                         t,
-                        &mut self.data_columns.columns[4],
+                        &mut columns[4],
                         Color::White,
-                        Color::Byte(103 + m),
+                        Color::Byte(color),
                         Attr::Bold,
                         ((x + 1, idx), (min_width.4, idx)),
                         None,
                     );
-                    self.data_columns.columns[4][(x, idx)].set_bg(Color::Byte(103 + m));
-                    if _x < min_width.4 {
-                        self.data_columns.columns[4][(_x, idx)].set_bg(Color::Byte(103 + m));
-                        self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
+                    for c in columns[4].row_iter((x, x), idx) {
+                        columns[4][c].set_bg(Color::Byte(color));
                     }
-                    for x in (x + 1).._x {
-                        self.data_columns.columns[4][(x, idx)].set_keep_fg(true);
-                        self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                    for c in columns[4].row_iter((_x, _x), idx) {
+                        columns[4][c].set_bg(Color::Byte(color));
+                        columns[4][c].set_keep_bg(true);
                     }
-                    self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                    for c in columns[4].row_iter((x + 1, _x), idx) {
+                        columns[4][c].set_keep_fg(true);
+                        columns[4][c].set_keep_bg(true);
+                    }
+                    for c in columns[4].row_iter((x, x), idx) {
+                        columns[4][c].set_keep_bg(true);
+                    }
                     x = _x + 1;
                 }
                 x
             };
-            for x in x..min_width.4 {
-                self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
+            for c in columns[4].row_iter((x, min_width.4.saturating_sub(1)), idx) {
+                columns[4][c].set_bg(bg_color);
             }
             if context.accounts[self.cursor_pos.0]
                 .collection
                 .get_env(i)
                 .has_attachments()
             {
-                self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
+                columns[3][(0, idx)].set_fg(Color::Byte(103));
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {

@@ -350,6 +350,29 @@ impl CellBuffer {
             }
         }
     }
+
+    pub fn bounds_iter(&self, area: Area) -> BoundsIterator {
+        BoundsIterator {
+            rows: std::cmp::min(self.rows.saturating_sub(1), get_y(upper_left!(area)))
+                ..(std::cmp::min(self.rows, get_y(bottom_right!(area))) + 1),
+            cols: (
+                std::cmp::min(self.cols.saturating_sub(1), get_x(upper_left!(area))),
+                std::cmp::min(self.cols.saturating_sub(1), get_x(bottom_right!(area))),
+            ),
+        }
+    }
+
+    pub fn row_iter(&self, bounds: (usize, usize), row: usize) -> RowIterator {
+        if row < self.rows {
+            RowIterator {
+                row,
+                col: std::cmp::min(self.cols.saturating_sub(1), bounds.0)
+                    ..(std::cmp::min(self.cols, bounds.1 + 1)),
+            }
+        } else {
+            RowIterator { row, col: 0..0 }
+        }
+    }
 }
 
 impl Deref for CellBuffer {
@@ -1260,5 +1283,66 @@ pub mod ansi {
             growable: false,
             ascii_drawing: false,
         })
+    }
+}
+
+/// Use `RowIterator` to iterate the cells of a row without the need to do any bounds checking;
+/// the iterator will simply return `None` when it reaches the end of the row.
+/// `RowIterator` can be created via the `CellBuffer::row_iter` method and can be returned by
+/// `BoundsIterator` which iterates each row.
+/// ```norun
+/// for c in grid.row_iter(
+///     (x, x + 10),
+///     0,
+/// ) {
+///     grid[c].set_ch('w');
+/// }
+/// ```
+pub struct RowIterator {
+    row: usize,
+    col: std::ops::Range<usize>,
+}
+
+pub struct BoundsIterator {
+    rows: std::ops::Range<usize>,
+    cols: (usize, usize),
+}
+
+impl Iterator for BoundsIterator {
+    type Item = RowIterator;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next_row) = self.rows.next() {
+            Some(RowIterator {
+                row: next_row,
+                col: self.cols.0..(self.cols.1 + 1),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl Iterator for RowIterator {
+    type Item = (usize, usize);
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next_col) = self.col.next() {
+            Some((next_col, self.row))
+        } else {
+            None
+        }
+    }
+}
+
+impl RowIterator {
+    pub fn forward_col(mut self, new_val: usize) -> Self {
+        if self.col.start > new_val {
+            self
+        } else if self.col.end <= new_val {
+            self.col.start = self.col.end;
+            self
+        } else {
+            self.col.start = new_val;
+            self
+        }
     }
 }
