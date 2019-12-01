@@ -43,8 +43,6 @@ pub struct ScrollRegion {
     pub right: usize,
 }
 
-/// Types and implementations taken from rustty for convenience.
-
 /// An array of `Cell`s that represents a terminal display.
 ///
 /// A `CellBuffer` is a two-dimensional array of `Cell`s, each pair of indices correspond to a
@@ -190,7 +188,6 @@ impl CellBuffer {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Terminal, CellAccessor};
     ///
     /// let mut term = Terminal::new().unwrap();
     ///
@@ -209,7 +206,6 @@ impl CellBuffer {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Terminal, CellAccessor};
     ///
     /// let mut term = Terminal::new().unwrap();
     ///
@@ -249,23 +245,28 @@ impl CellBuffer {
     ///
     /// For offset = 1, top = 1:
     ///
+    ///  ```text
     ///  | 111111111111 |            |              |
     ///  | 222222222222 |            | 222222222222 |
     ///  | 333333333333 |            | 333333333333 |
     ///  | 444444444444 |    -->     | 444444444444 |
     ///  | 555555555555 |            | 555555555555 |
     ///  | 666666666666 |            | 666666666666 |
+    ///  ```
     ///
     ///  In each step, swap the current line with the next by offset:
     ///
+    ///  ```text
     ///  |              |            | 222222222222 |
     ///  | 222222222222 |            |              |
     ///  | 333333333333 |            | 333333333333 |
     ///  | 444444444444 |    -->     | 444444444444 |
     ///  | 555555555555 |            | 555555555555 |
     ///  | 666666666666 |            | 666666666666 |
+    ///  ```
     ///
     ///  Result:
+    ///  ```text
     ///    Before                      After
     ///  | 111111111111 |            | 222222222222 |
     ///  | 222222222222 |            | 333333333333 |
@@ -273,6 +274,7 @@ impl CellBuffer {
     ///  | 444444444444 |            | 555555555555 |
     ///  | 555555555555 |            | 666666666666 |
     ///  | 666666666666 |            |              |
+    ///  ```
     ///
     pub fn scroll_up(&mut self, scroll_region: &ScrollRegion, top: usize, offset: usize) {
         //debug!(
@@ -306,23 +308,28 @@ impl CellBuffer {
     ///
     /// For offset = 1, top = 1:
     ///
+    ///  ```text
     ///  | 111111111111 |            | 111111111111 |
     ///  | 222222222222 |            | 222222222222 |
     ///  | 333333333333 |            | 333333333333 |
     ///  | 444444444444 |    -->     | 444444444444 |
     ///  | 555555555555 |            | 555555555555 |
     ///  | 666666666666 |            |              |
+    ///  ```
     ///
     ///  In each step, swap the current line with the prev by offset:
     ///
+    ///  ```text
     ///  | 111111111111 |            | 111111111111 |
     ///  | 222222222222 |            | 222222222222 |
     ///  | 333333333333 |            | 333333333333 |
     ///  | 444444444444 |    -->     | 444444444444 |
     ///  | 555555555555 |            |              |
     ///  |              |            | 555555555555 |
+    ///  ```
     ///
     ///  Result:
+    ///  ```text
     ///    Before                      After
     ///  | 111111111111 |            |              |
     ///  | 222222222222 |            | 111111111111 |
@@ -330,6 +337,7 @@ impl CellBuffer {
     ///  | 444444444444 |            | 333333333333 |
     ///  | 555555555555 |            | 444444444444 |
     ///  | 666666666666 |            | 555555555555 |
+    ///  ```
     ///
     pub fn scroll_down(&mut self, scroll_region: &ScrollRegion, top: usize, offset: usize) {
         //debug!(
@@ -351,6 +359,7 @@ impl CellBuffer {
         }
     }
 
+    /// See `BoundsIterator` documentation.
     pub fn bounds_iter(&self, area: Area) -> BoundsIterator {
         BoundsIterator {
             rows: std::cmp::min(self.rows.saturating_sub(1), get_y(upper_left!(area)))
@@ -362,6 +371,7 @@ impl CellBuffer {
         }
     }
 
+    /// See `RowIterator` documentation.
     pub fn row_iter(&self, bounds: (usize, usize), row: usize) -> RowIterator {
         if row < self.rows {
             RowIterator {
@@ -466,7 +476,6 @@ impl Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Cell, Color, Attr};
     ///
     /// let cell = Cell::new('x', Color::Default, Color::Green, Attr::Default);
     /// assert_eq!(cell.ch(), 'x');
@@ -491,7 +500,6 @@ impl Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
@@ -508,7 +516,6 @@ impl Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::with_style(Color::Default, Color::Red, Attr::Bold);
     /// assert_eq!(cell.fg(), Color::Default);
@@ -525,7 +532,6 @@ impl Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::Cell;
     ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
@@ -539,7 +545,6 @@ impl Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::Cell;
     ///
     /// let mut cell = Cell::with_char('x');
     /// assert_eq!(cell.ch(), 'x');
@@ -559,7 +564,6 @@ impl Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::with_style(Color::Blue, Color::Default, Attr::Default);
     /// assert_eq!(cell.fg(), Color::Blue);
@@ -573,7 +577,6 @@ impl Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Cell, Color, Attr};
     ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.fg(), Color::Default);
@@ -593,8 +596,6 @@ impl Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Cell, Color, Attr};
-    ///
     /// let mut cell = Cell::with_style(Color::Default, Color::Green, Attr::Default);
     /// assert_eq!(cell.bg(), Color::Green);
     /// ```
@@ -607,8 +608,6 @@ impl Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Cell, Color, Attr};
-    ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.bg(), Color::Default);
     ///
@@ -631,6 +630,8 @@ impl Cell {
         self
     }
 
+    /// Set a `Cell` as empty when a previous cell spans multiple columns and it would
+    /// "overflow" to this cell.
     pub fn empty(&self) -> bool {
         self.empty
     }
@@ -639,10 +640,14 @@ impl Cell {
         self.empty = new_val;
     }
 
+    /// Sets `keep_fg` field. If true, the foreground color will not be altered if attempted so
+    /// until the character content of the cell is changed.
     pub fn set_keep_fg(&mut self, new_val: bool) {
         self.keep_fg = new_val;
     }
 
+    /// Sets `keep_bg` field. If true, the background color will not be altered if attempted so
+    /// until the character content of the cell is changed.
     pub fn set_keep_bg(&mut self, new_val: bool) {
         self.keep_bg = new_val;
     }
@@ -654,7 +659,6 @@ impl Default for Cell {
     /// # Examples
     ///
     /// ```norun
-    /// use rustty::{Cell, Color};
     ///
     /// let mut cell = Cell::default();
     /// assert_eq!(cell.ch(), ' ');
@@ -679,7 +683,6 @@ impl Default for Cell {
 /// # Examples
 ///
 /// ```norun
-/// use rustty::Color;
 ///
 /// // The default color.
 /// let default = Color::Default;
@@ -782,7 +785,6 @@ impl Color {
 /// # Examples
 ///
 /// ```norun
-/// use rustty::Attr;
 ///
 /// // Default attribute.
 /// let def = Attr::Default;
@@ -1067,7 +1069,9 @@ pub fn center_area(area: Area, (width, height): (usize, usize)) -> Area {
 }
 
 pub mod ansi {
+    //! Create a `CellBuffer` from a string slice containing ANSI escape codes.
     use super::{Cell, CellBuffer, Color};
+    /// Create a `CellBuffer` from a string slice containing ANSI escape codes.
     pub fn ansi_to_cellbuffer(s: &str) -> Option<CellBuffer> {
         let mut buf: Vec<Cell> = Vec::with_capacity(2048);
 
@@ -1303,6 +1307,13 @@ pub struct RowIterator {
     col: std::ops::Range<usize>,
 }
 
+/// `BoundsIterator` iterates each row returning a `RowIterator`.
+/// ```norun
+/// /* Visit each `Cell` in `area`. */
+/// for c in grid.bounds_iter(area) {
+///     grid[c].set_ch('w');
+/// }
+/// ```
 pub struct BoundsIterator {
     rows: std::ops::Range<usize>,
     cols: (usize, usize),

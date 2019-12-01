@@ -18,6 +18,23 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
+//! A crate that performs mail client operations such as
+//! - Hold an `Envelope` with methods convenient for mail client use. (see module `email`)
+//! - Abstract through mail storages through the `MailBackend` trait, and handle
+//!   read/writes/updates through it. (see module `melib::backends`)
+//! - Decode attachments (see module `melib::email::attachments`)
+//! - Create new mail (see `email::Draft`)
+//! - Manage an `addressbook` i.e. have contacts (see module `addressbook`)
+//! - Build thread structures out of a list of mail via their `In-Reply-To` and `References` header
+//!   values (see module `thread`)
+//!
+//! Other exports are
+//! - Thread management (see module `async_workers`)
+//! - Basic mail account configuration to use with `backends` (see module `conf`)
+//! - Parser combinators (see module `parsec`)
+//! - A `ShellExpandTrait` to expand paths like a shell.
+//! - A `debug` macro that works like `std::dbg` but for multiple threads. (see `dbg` module)
 #[macro_use]
 pub mod dbg {
     #[allow(clippy::redundant_closure)]

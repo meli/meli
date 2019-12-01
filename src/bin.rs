@@ -33,10 +33,12 @@ use std::path::{Path, PathBuf};
 #[global_allocator]
 static GLOBAL: System = System;
 
-use ui;
+// Re export to put crates in the documentation's start page.
+pub use melib;
+pub use ui;
 
-pub use melib::*;
-pub use ui::*;
+use melib::*;
+use ui::*;
 
 use nix;
 use std::os::raw::c_int;
