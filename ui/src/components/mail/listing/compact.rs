@@ -75,11 +75,11 @@ pub struct CompactListing {
 }
 
 impl ListingTrait for CompactListing {
-    fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
-        (self.new_cursor_pos.0, self.new_cursor_pos.1, None)
+    fn coordinates(&self) -> (usize, usize) {
+        (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
 
-    fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
+    fn set_coordinates(&mut self, coordinates: (usize, usize)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.filtered_selection.clear();
@@ -1336,7 +1336,7 @@ impl Component for CompactListing {
                 self.dirty = true;
             }
             UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
-                self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1, None));
+                self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.refresh_mailbox(context);
                 self.set_dirty();
                 return true;

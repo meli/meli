@@ -49,14 +49,10 @@ pub struct ThreadListing {
 }
 
 impl ListingTrait for ThreadListing {
-    fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
-        (
-            self.new_cursor_pos.0,
-            self.new_cursor_pos.1,
-            self.locations.get(self.new_cursor_pos.2).map(|&k| k),
-        )
+    fn coordinates(&self) -> (usize, usize) {
+        (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
-    fn set_coordinates(&mut self, coordinates: (usize, usize, Option<EnvelopeHash>)) {
+    fn set_coordinates(&mut self, coordinates: (usize, usize)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.locations.clear();

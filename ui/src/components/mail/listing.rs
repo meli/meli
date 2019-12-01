@@ -46,9 +46,9 @@ struct AccountMenuEntry {
     index: usize,
 }
 
-pub trait ListingTrait {
-    fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>);
-    fn set_coordinates(&mut self, _: (usize, usize, Option<EnvelopeHash>));
+pub trait ListingTrait: Component {
+    fn coordinates(&self) -> (usize, usize);
+    fn set_coordinates(&mut self, _: (usize, usize));
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
     fn filter(&mut self, _filter_term: &str, _context: &Context) {}
@@ -64,45 +64,26 @@ pub enum ListingComponent {
 }
 use crate::ListingComponent::*;
 
-impl ListingTrait for ListingComponent {
-    fn coordinates(&self) -> (usize, usize, Option<EnvelopeHash>) {
+impl core::ops::Deref for ListingComponent {
+    type Target = dyn ListingTrait;
+
+    fn deref(&self) -> &Self::Target {
         match &self {
-            Compact(ref l) => l.coordinates(),
-            Plain(ref l) => l.coordinates(),
-            Threaded(ref l) => l.coordinates(),
-            Conversations(ref l) => l.coordinates(),
+            Compact(ref l) => l,
+            Plain(ref l) => l,
+            Threaded(ref l) => l,
+            Conversations(ref l) => l,
         }
     }
-    fn set_coordinates(&mut self, c: (usize, usize, Option<EnvelopeHash>)) {
+}
+
+impl core::ops::DerefMut for ListingComponent {
+    fn deref_mut(&mut self) -> &mut (dyn ListingTrait + 'static) {
         match self {
-            Compact(ref mut l) => l.set_coordinates(c),
-            Plain(ref mut l) => l.set_coordinates(c),
-            Threaded(ref mut l) => l.set_coordinates(c),
-            Conversations(ref mut l) => l.set_coordinates(c),
-        }
-    }
-    fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        match self {
-            Compact(ref mut l) => l.draw_list(grid, area, context),
-            Plain(ref mut l) => l.draw_list(grid, area, context),
-            Threaded(ref mut l) => l.draw_list(grid, area, context),
-            Conversations(ref mut l) => l.draw_list(grid, area, context),
-        }
-    }
-    fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        match self {
-            Compact(ref mut l) => l.highlight_line(grid, area, idx, context),
-            Plain(ref mut l) => l.highlight_line(grid, area, idx, context),
-            Threaded(ref mut l) => l.highlight_line(grid, area, idx, context),
-            Conversations(ref mut l) => l.highlight_line(grid, area, idx, context),
-        }
-    }
-    fn set_movement(&mut self, mvm: PageMovement) {
-        match self {
-            Compact(ref mut l) => l.set_movement(mvm),
-            Plain(ref mut l) => l.set_movement(mvm),
-            Threaded(ref mut l) => l.set_movement(mvm),
-            Conversations(ref mut l) => l.set_movement(mvm),
+            Compact(l) => l,
+            Plain(l) => l,
+            Threaded(l) => l,
+            Conversations(l) => l,
         }
     }
 }
@@ -116,7 +97,7 @@ impl ListingComponent {
                 }
                 let mut new_l = PlainListing::default();
                 let coors = self.coordinates();
-                new_l.set_coordinates((coors.0, coors.1, None));
+                new_l.set_coordinates((coors.0, coors.1));
                 *self = Plain(new_l);
             }
             IndexStyle::Threaded => {
@@ -125,7 +106,7 @@ impl ListingComponent {
                 }
                 let mut new_l = ThreadListing::default();
                 let coors = self.coordinates();
-                new_l.set_coordinates((coors.0, coors.1, None));
+                new_l.set_coordinates((coors.0, coors.1));
                 *self = Threaded(new_l);
             }
             IndexStyle::Compact => {
@@ -134,7 +115,7 @@ impl ListingComponent {
                 }
                 let mut new_l = CompactListing::default();
                 let coors = self.coordinates();
-                new_l.set_coordinates((coors.0, coors.1, None));
+                new_l.set_coordinates((coors.0, coors.1));
                 *self = Compact(new_l);
             }
             IndexStyle::Conversations => {
@@ -143,7 +124,7 @@ impl ListingComponent {
                 }
                 let mut new_l = ConversationsListing::default();
                 let coors = self.coordinates();
-                new_l.set_coordinates((coors.0, coors.1, None));
+                new_l.set_coordinates((coors.0, coors.1));
                 *self = Conversations(new_l);
             }
         }
@@ -232,12 +213,7 @@ impl Component for Listing {
                 context.dirty_areas.push_back(area);
                 return;
             }
-            match self.component {
-                Compact(ref mut l) => l.draw(grid, area, context),
-                Plain(ref mut l) => l.draw(grid, area, context),
-                Threaded(ref mut l) => l.draw(grid, area, context),
-                Conversations(ref mut l) => l.draw(grid, area, context),
-            }
+            self.component.draw(grid, area, context);
         } else if right_component_width == 0 {
             self.draw_menu(grid, area, context);
         } else {
@@ -256,30 +232,13 @@ impl Component for Listing {
                 context.dirty_areas.push_back(area);
                 return;
             }
-            match self.component {
-                Compact(ref mut l) => {
-                    l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
-                }
-                Plain(ref mut l) => {
-                    l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
-                }
-                Threaded(ref mut l) => {
-                    l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
-                }
-                Conversations(ref mut l) => {
-                    l.draw(grid, (set_x(upper_left, mid + 1), bottom_right), context)
-                }
-            }
+            self.component
+                .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
         }
         self.dirty = false;
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        if match self.component {
-            Plain(ref mut l) => l.process_event(event, context),
-            Compact(ref mut l) => l.process_event(event, context),
-            Threaded(ref mut l) => l.process_event(event, context),
-            Conversations(ref mut l) => l.process_event(event, context),
-        } {
+        if self.component.process_event(event, context) {
             return true;
         }
 
@@ -311,11 +270,8 @@ impl Component for Listing {
                     {
                         if self.cursor_pos.1 + amount < folder_length {
                             self.cursor_pos.1 += amount;
-                            self.component.set_coordinates((
-                                self.cursor_pos.0,
-                                self.cursor_pos.1,
-                                None,
-                            ));
+                            self.component
+                                .set_coordinates((self.cursor_pos.0, self.cursor_pos.1));
                             self.set_dirty();
                         } else {
                             return true;
@@ -324,11 +280,8 @@ impl Component for Listing {
                     k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_folder"]) => {
                         if self.cursor_pos.1 >= amount {
                             self.cursor_pos.1 -= amount;
-                            self.component.set_coordinates((
-                                self.cursor_pos.0,
-                                self.cursor_pos.1,
-                                None,
-                            ));
+                            self.component
+                                .set_coordinates((self.cursor_pos.0, self.cursor_pos.1));
                             self.set_dirty();
                         } else {
                             return true;
@@ -382,7 +335,7 @@ impl Component for Listing {
                     k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"]) => {
                         if self.cursor_pos.0 + amount < self.accounts.len() {
                             self.cursor_pos = (self.cursor_pos.0 + amount, 0);
-                            self.component.set_coordinates((self.cursor_pos.0, 0, None));
+                            self.component.set_coordinates((self.cursor_pos.0, 0));
                             self.set_dirty();
                         } else {
                             return true;
@@ -391,7 +344,7 @@ impl Component for Listing {
                     k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) => {
                         if self.cursor_pos.0 >= amount {
                             self.cursor_pos = (self.cursor_pos.0 - amount, 0);
-                            self.component.set_coordinates((self.cursor_pos.0, 0, None));
+                            self.component.set_coordinates((self.cursor_pos.0, 0));
                             self.set_dirty();
                         } else {
                             return true;
@@ -585,12 +538,7 @@ impl Component for Listing {
                 if shortcut!(key == shortcuts[Listing::DESCRIPTION]["set_seen"]) =>
             {
                 let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
-                if match self.component {
-                    Plain(ref mut l) => l.process_event(&mut event, context),
-                    Compact(ref mut l) => l.process_event(&mut event, context),
-                    Threaded(ref mut l) => l.process_event(&mut event, context),
-                    Conversations(ref mut l) => l.process_event(&mut event, context),
-                } {
+                if self.component.process_event(&mut event, context) {
                     return true;
                 }
             }
@@ -631,31 +579,15 @@ impl Component for Listing {
         false
     }
     fn is_dirty(&self) -> bool {
-        self.dirty
-            || match self.component {
-                Compact(ref l) => l.is_dirty(),
-                Plain(ref l) => l.is_dirty(),
-                Threaded(ref l) => l.is_dirty(),
-                Conversations(ref l) => l.is_dirty(),
-            }
+        self.dirty || self.component.is_dirty()
     }
     fn set_dirty(&mut self) {
         self.dirty = true;
-        match self.component {
-            Compact(ref mut l) => l.set_dirty(),
-            Plain(ref mut l) => l.set_dirty(),
-            Threaded(ref mut l) => l.set_dirty(),
-            Conversations(ref mut l) => l.set_dirty(),
-        }
+        self.component.set_dirty();
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let mut map = match self.component {
-            Compact(ref l) => l.get_shortcuts(context),
-            Plain(ref l) => l.get_shortcuts(context),
-            Threaded(ref l) => l.get_shortcuts(context),
-            Conversations(ref l) => l.get_shortcuts(context),
-        };
+        let mut map = self.component.get_shortcuts(context);
         let config_map = context.settings.shortcuts.listing.key_values();
         map.insert(Listing::DESCRIPTION, config_map);
 
@@ -663,20 +595,10 @@ impl Component for Listing {
     }
 
     fn id(&self) -> ComponentId {
-        match self.component {
-            Compact(ref l) => l.id(),
-            Plain(ref l) => l.id(),
-            Threaded(ref l) => l.id(),
-            Conversations(ref l) => l.id(),
-        }
+        self.component.id()
     }
     fn set_id(&mut self, id: ComponentId) {
-        match self.component {
-            Compact(ref mut l) => l.set_id(id),
-            Plain(ref mut l) => l.set_id(id),
-            Threaded(ref mut l) => l.set_id(id),
-            Conversations(ref mut l) => l.set_id(id),
-        }
+        self.component.set_id(id);
     }
 
     fn get_status(&self, context: &Context) -> Option<String> {
