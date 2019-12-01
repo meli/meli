@@ -603,22 +603,6 @@ impl PlainListing {
             }
             let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0].collection.get_env(i);
             let mut tags = String::new();
-            let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
-            if let Some(t) = backend_lck.tags() {
-                let tags_lck = t.read().unwrap();
-                for t in envelope.labels().iter() {
-                    if folder.folder_conf.ignore_tags.contains(t) {
-                        continue;
-                    }
-                    tags.push(' ');
-                    tags.push_str(tags_lck.get(t).as_ref().unwrap());
-                    tags.push(' ');
-                }
-                if !tags.is_empty() {
-                    tags.pop();
-                }
-            }
-            drop(backend_lck);
 
             let entry_strings = PlainListing::make_entry_string(envelope, tags);
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */

@@ -20,8 +20,7 @@
  */
 use crate::backends::SpecialUseMailbox;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
-use std::hash::Hasher;
+use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Default, Clone)]
 pub struct AccountSettings {
@@ -83,8 +82,6 @@ pub struct FolderConf {
     pub ignore: ToggleFlag,
     #[serde(default = "none")]
     pub usage: Option<SpecialUseMailbox>,
-    #[serde(default, deserialize_with = "tag_set_de")]
-    pub ignore_tags: HashSet<u64>,
     #[serde(flatten)]
     pub extra: HashMap<String, String>,
 }
@@ -97,7 +94,6 @@ impl Default for FolderConf {
             subscribe: ToggleFlag::Unset,
             ignore: ToggleFlag::Unset,
             usage: None,
-            ignore_tags: HashSet::default(),
             extra: HashMap::default(),
         }
     }
@@ -183,18 +179,4 @@ impl Serialize for ToggleFlag {
             ToggleFlag::True => serializer.serialize_bool(true),
         }
     }
-}
-
-pub fn tag_set_de<'de, D>(deserializer: D) -> std::result::Result<HashSet<u64>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    Ok(<Vec<String>>::deserialize(deserializer)?
-        .into_iter()
-        .map(|tag| {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(tag.as_bytes());
-            hasher.finish()
-        })
-        .collect())
 }

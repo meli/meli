@@ -483,16 +483,28 @@ impl ConversationsListing {
             .hash();
         let folder = &context.accounts[self.cursor_pos.0].folder_confs[&folder_hash];
         let mut tags = String::new();
+        let mut colors = StackVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
-                if folder.folder_conf.ignore_tags.contains(t) {
+                if folder
+                    .conf_override
+                    .tags
+                    .as_ref()
+                    .map(|s| s.ignore_tags.contains(t))
+                    .unwrap_or(false)
+                {
                     continue;
                 }
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
+                if let Some(&c) = context.settings.tags.colors.get(t) {
+                    colors.push(c);
+                } else {
+                    colors.push(8);
+                }
             }
             if !tags.is_empty() {
                 tags.pop();

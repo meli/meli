@@ -28,6 +28,7 @@ pub mod composing;
 pub mod notifications;
 pub mod pager;
 pub mod pgp;
+pub mod tags;
 #[macro_use]
 pub mod shortcuts;
 pub mod terminal;
@@ -37,6 +38,7 @@ pub use self::accounts::Account;
 pub use self::composing::*;
 pub use self::pgp::*;
 pub use self::shortcuts::*;
+pub use self::tags::*;
 
 use self::default_vals::*;
 use self::notifications::NotificationsSettings;
@@ -70,6 +72,7 @@ pub struct MailUIConf {
     pub composing: Option<ComposingSettings>,
     pub identity: Option<String>,
     pub index_style: Option<IndexStyle>,
+    pub tags: Option<TagsSettings>,
 }
 
 #[serde(default)]
@@ -230,6 +233,8 @@ pub struct FileSettings {
     shortcuts: Shortcuts,
     composing: ComposingSettings,
     #[serde(default)]
+    tags: TagsSettings,
+    #[serde(default)]
     pgp: PGPSettings,
     #[serde(default)]
     terminal: TerminalSettings,
@@ -260,6 +265,7 @@ pub struct Settings {
     pub pager: PagerSettings,
     pub notifications: NotificationsSettings,
     pub shortcuts: Shortcuts,
+    pub tags: TagsSettings,
     pub composing: ComposingSettings,
     pub pgp: PGPSettings,
     pub terminal: TerminalSettings,
@@ -376,6 +382,7 @@ impl Settings {
             pager: fs.pager,
             notifications: fs.notifications,
             shortcuts: fs.shortcuts,
+            tags: fs.tags,
             composing: fs.composing,
             pgp: fs.pgp,
             terminal: fs.terminal,
