@@ -46,6 +46,77 @@ struct AccountMenuEntry {
     index: usize,
 }
 
+pub trait MailListingTrait: ListingTrait {
+    fn perform_action(
+        &mut self,
+        context: &mut Context,
+        thread_hash: ThreadHash,
+        a: &ListingAction,
+    ) {
+        let account = &mut context.accounts[self.coordinates().0];
+        let mut envs_to_set: StackVec<EnvelopeHash> = StackVec::new();
+        let folder_hash = account[self.coordinates().1].unwrap().folder.hash();
+        {
+            let mut stack = StackVec::new();
+            stack.push(thread_hash);
+            while let Some(thread_iter) = stack.pop() {
+                {
+                    let threads = account.collection.threads.get_mut(&folder_hash).unwrap();
+                    threads
+                        .thread_nodes
+                        .entry(thread_iter)
+                        .and_modify(|t| t.set_has_unseen(false));
+                }
+                let threads = &account.collection.threads[&folder_hash];
+                if let Some(env_hash) = threads[&thread_iter].message() {
+                    if !account.contains_key(env_hash) {
+                        /* The envelope has been renamed or removed, so wait for the appropriate event to
+                         * arrive */
+                        continue;
+                    }
+                    envs_to_set.push(env_hash);
+                }
+                for c in 0..threads[&thread_iter].children().len() {
+                    let c = threads[&thread_iter].children()[c];
+                    stack.push(c);
+                }
+            }
+        }
+        for env_hash in envs_to_set {
+            let op = account.operation(env_hash);
+            let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
+            match a {
+                ListingAction::SetSeen => {
+                    if let Err(e) = envelope.set_seen(op) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(e.to_string()),
+                        ));
+                    }
+                    self.row_updates().push(thread_hash);
+                }
+                ListingAction::SetUnseen => {
+                    if let Err(e) = envelope.set_unseen(op) {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(e.to_string()),
+                        ));
+                    }
+                }
+                ListingAction::Delete => {
+                    /* do nothing */
+                    continue;
+                }
+                _ => unreachable!(),
+            }
+            self.row_updates().push(thread_hash);
+            drop(envelope);
+        }
+    }
+
+    fn row_updates(&mut self) -> &mut StackVec<ThreadHash>;
+
+    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash);
+}
+
 pub trait ListingTrait: Component {
     fn coordinates(&self) -> (usize, usize);
     fn set_coordinates(&mut self, _: (usize, usize));

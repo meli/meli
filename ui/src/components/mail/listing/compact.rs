@@ -74,6 +74,76 @@ pub struct CompactListing {
     id: ComponentId,
 }
 
+impl MailListingTrait for CompactListing {
+    fn row_updates(&mut self) -> &mut StackVec<ThreadHash> {
+        &mut self.row_updates
+    }
+
+    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
+        let account = &context.accounts[self.cursor_pos.0];
+        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+        let threads = &account.collection.threads[&folder_hash];
+        if let Some(env_hash) = threads[&thread_hash].message() {
+            if !account.contains_key(env_hash) {
+                /* The envelope has been renamed or removed, so wait for the appropriate event to
+                 * arrive */
+                return;
+            }
+            let envelope: EnvelopeRef = account.collection.get_env(env_hash);
+            let has_attachments = envelope.has_attachments();
+            drop(envelope);
+            let fg_color = if threads[&thread_hash].has_unseen() {
+                Color::Byte(0)
+            } else {
+                Color::Default
+            };
+            let idx = self.order[&thread_hash];
+            let bg_color = if context.settings.terminal.theme == "light" {
+                if threads[&thread_hash].has_unseen() {
+                    Color::Byte(251)
+                } else if idx % 2 == 0 {
+                    Color::Byte(252)
+                } else {
+                    Color::Default
+                }
+            } else {
+                if threads[&thread_hash].has_unseen() {
+                    Color::Byte(253)
+                } else if idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                }
+            };
+            for i in 0..self.data_columns.columns.len() {
+                let column_width = self.data_columns.columns[i].size().0;
+                if column_width == 0 {
+                    continue;
+                }
+                change_colors(
+                    &mut self.data_columns.columns[i],
+                    ((0, idx), (column_width - 1, idx)),
+                    fg_color,
+                    bg_color,
+                );
+            }
+            match (threads.is_snoozed(thread_hash), has_attachments) {
+                (true, true) => {
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
+                    self.data_columns.columns[3][(2, idx)].set_fg(Color::Red);
+                }
+                (true, false) => {
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
+                }
+                (false, true) => {
+                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
+                }
+                (false, false) => {}
+            }
+        }
+    }
+}
+
 impl ListingTrait for CompactListing {
     fn coordinates(&self) -> (usize, usize) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
@@ -888,136 +958,6 @@ impl CompactListing {
             self.filtered_selection[cursor]
         }
     }
-
-    fn perform_action(
-        &mut self,
-        context: &mut Context,
-        thread_hash: ThreadHash,
-        a: &ListingAction,
-    ) {
-        let account = &mut context.accounts[self.cursor_pos.0];
-        let mut envs_to_set: StackVec<EnvelopeHash> = StackVec::new();
-        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        {
-            let mut stack = StackVec::new();
-            stack.push(thread_hash);
-            while let Some(thread_iter) = stack.pop() {
-                {
-                    let threads = account.collection.threads.get_mut(&folder_hash).unwrap();
-                    threads
-                        .thread_nodes
-                        .entry(thread_iter)
-                        .and_modify(|t| t.set_has_unseen(false));
-                }
-                let threads = &account.collection.threads[&folder_hash];
-                if let Some(env_hash) = threads[&thread_iter].message() {
-                    if !account.contains_key(env_hash) {
-                        /* The envelope has been renamed or removed, so wait for the appropriate event to
-                         * arrive */
-                        continue;
-                    }
-                    envs_to_set.push(env_hash);
-                }
-                for c in 0..threads[&thread_iter].children().len() {
-                    let c = threads[&thread_iter].children()[c];
-                    stack.push(c);
-                }
-            }
-        }
-        for env_hash in envs_to_set {
-            let op = account.operation(env_hash);
-            let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
-            match a {
-                ListingAction::SetSeen => {
-                    if let Err(e) = envelope.set_seen(op) {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(e.to_string()),
-                        ));
-                    }
-                    self.row_updates.push(thread_hash);
-                }
-                ListingAction::SetUnseen => {
-                    if let Err(e) = envelope.set_unseen(op) {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(e.to_string()),
-                        ));
-                    }
-                }
-                ListingAction::Delete => {
-                    /* do nothing */
-                    continue;
-                }
-                _ => unreachable!(),
-            }
-            self.row_updates.push(thread_hash);
-            let has_attachments = envelope.has_attachments();
-            drop(envelope);
-            let threads = &account.collection.threads[&folder_hash];
-            let fg_color = if threads[&thread_hash].has_unseen() {
-                Color::Byte(0)
-            } else {
-                Color::Default
-            };
-            let idx = self.order[&thread_hash];
-            let bg_color = if context.settings.terminal.theme == "light" {
-                if threads[&thread_hash].has_unseen() {
-                    Color::Byte(251)
-                } else if idx % 2 == 0 {
-                    Color::Byte(252)
-                } else {
-                    Color::Default
-                }
-            } else {
-                if threads[&thread_hash].has_unseen() {
-                    Color::Byte(253)
-                } else if idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                }
-            };
-            let min_width = (
-                self.data_columns.columns[0].size().0,
-                self.data_columns.columns[1].size().0,
-                self.data_columns.columns[2].size().0,
-                self.data_columns.columns[3].size().0,
-                self.data_columns.columns[4].size().0,
-            );
-            for x in 0..min_width.0 {
-                self.data_columns.columns[0][(x, idx)].set_fg(fg_color);
-                self.data_columns.columns[0][(x, idx)].set_bg(bg_color);
-            }
-            for x in 0..min_width.1 {
-                self.data_columns.columns[1][(x, idx)].set_fg(fg_color);
-                self.data_columns.columns[1][(x, idx)].set_bg(bg_color);
-            }
-            for x in 0..min_width.2 {
-                self.data_columns.columns[2][(x, idx)].set_fg(fg_color);
-                self.data_columns.columns[2][(x, idx)].set_bg(bg_color);
-            }
-            for x in 0..min_width.3 {
-                self.data_columns.columns[3][(x, idx)].set_fg(fg_color);
-                self.data_columns.columns[3][(x, idx)].set_bg(bg_color);
-            }
-            for x in 0..min_width.4 {
-                self.data_columns.columns[4][(x, idx)].set_fg(fg_color);
-                self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
-            }
-            match (threads.is_snoozed(thread_hash), has_attachments) {
-                (true, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
-                    self.data_columns.columns[3][(2, idx)].set_fg(Color::Red);
-                }
-                (true, false) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
-                }
-                (false, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
-                }
-                (false, false) => {}
-            }
-        }
-    }
 }
 
 impl Component for CompactListing {
@@ -1053,44 +993,8 @@ impl Component for CompactListing {
             if !self.row_updates.is_empty() {
                 let (upper_left, bottom_right) = area;
                 while let Some(row) = self.row_updates.pop() {
+                    self.update_line(context, row);
                     let row: usize = self.order[&row];
-                    let i = self.get_thread_under_cursor(row, context);
-
-                    let account = &context.accounts[self.cursor_pos.0];
-                    let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                    let threads = &account.collection.threads[&folder_hash];
-                    let thread_node = &threads.thread_nodes[&i];
-
-                    let fg_color = if thread_node.has_unseen() {
-                        Color::Byte(0)
-                    } else {
-                        Color::Default
-                    };
-                    let bg_color = if thread_node.has_unseen() {
-                        Color::Byte(251)
-                    } else if self.selection[&i] {
-                        Color::Byte(210)
-                    } else if row % 2 == 0 {
-                        if context.settings.terminal.theme == "light" {
-                            Color::Byte(252)
-                        } else {
-                            Color::Byte(236)
-                        }
-                    } else {
-                        Color::Default
-                    };
-                    for i in 0..self.data_columns.columns.len() {
-                        let column_width = self.data_columns.columns[i].size().0;
-                        if column_width == 0 {
-                            continue;
-                        }
-                        change_colors(
-                            &mut self.data_columns.columns[i],
-                            ((0, row), (column_width - 1, row)),
-                            fg_color,
-                            bg_color,
-                        );
-                    }
 
                     let rows = get_y(bottom_right) - get_y(upper_left) + 1;
                     let page_no = (self.new_cursor_pos.2).wrapping_div(rows);

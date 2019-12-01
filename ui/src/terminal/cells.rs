@@ -1005,8 +1005,6 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area) {
     if !is_valid_area!(area) {
         return;
     }
-    let upper_left = upper_left!(area);
-    let bottom_right = bottom_right!(area);
     for row in grid.bounds_iter(area) {
         for c in row {
             grid[c] = Cell::default();

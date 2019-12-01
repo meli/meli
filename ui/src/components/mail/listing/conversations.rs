@@ -106,6 +106,48 @@ pub struct ConversationsListing {
     id: ComponentId,
 }
 
+impl MailListingTrait for ConversationsListing {
+    fn row_updates(&mut self) -> &mut StackVec<ThreadHash> {
+        &mut self.row_updates
+    }
+
+    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
+        let account = &context.accounts[self.cursor_pos.0];
+        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+        let threads = &account.collection.threads[&folder_hash];
+        let thread_node = &threads.thread_nodes[&thread_hash];
+        let row: usize = self.order[&thread_hash];
+        let width = self.content.size().0;
+
+        let fg_color = if thread_node.has_unseen() {
+            Color::Byte(0)
+        } else {
+            Color::Default
+        };
+        let bg_color = if thread_node.has_unseen() {
+            Color::Byte(251)
+        } else {
+            Color::Default
+        };
+        change_colors(
+            &mut self.content,
+            ((0, 3 * row), (width - 1, 3 * row + 1)),
+            fg_color,
+            bg_color,
+        );
+        let padding_fg = if context.settings.terminal.theme == "light" {
+            Color::Byte(254)
+        } else {
+            Color::Byte(235)
+        };
+        change_colors(
+            &mut self.content,
+            ((0, 3 * row + 2), (width - 1, 3 * row + 2)),
+            padding_fg,
+            bg_color,
+        );
+    }
+}
 impl ListingTrait for ConversationsListing {
     fn coordinates(&self) -> (usize, usize) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
@@ -898,70 +940,6 @@ impl ConversationsListing {
             self.filtered_selection[cursor]
         }
     }
-
-    fn perform_action(
-        &mut self,
-        context: &mut Context,
-        thread_hash: ThreadHash,
-        a: &ListingAction,
-    ) {
-        let account = &mut context.accounts[self.cursor_pos.0];
-        let mut envs_to_set: StackVec<EnvelopeHash> = StackVec::new();
-        {
-            let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-            let mut stack = StackVec::new();
-            stack.push(thread_hash);
-            while let Some(thread_iter) = stack.pop() {
-                {
-                    let threads = account.collection.threads.get_mut(&folder_hash).unwrap();
-                    threads
-                        .thread_nodes
-                        .entry(thread_iter)
-                        .and_modify(|t| t.set_has_unseen(false));
-                }
-                let threads = &account.collection.threads[&folder_hash];
-                if let Some(env_hash) = threads[&thread_iter].message() {
-                    if !account.contains_key(env_hash) {
-                        /* The envelope has been renamed or removed, so wait for the appropriate event to
-                         * arrive */
-                        continue;
-                    }
-                    envs_to_set.push(env_hash);
-                }
-                for c in 0..threads[&thread_iter].children().len() {
-                    let c = threads[&thread_iter].children()[c];
-                    stack.push(c);
-                }
-            }
-        }
-        for env_hash in envs_to_set {
-            let hash = account.collection.get_env(env_hash).hash();
-            let op = account.operation(hash);
-            let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
-            match a {
-                ListingAction::SetSeen => {
-                    if let Err(e) = envelope.set_seen(op) {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(e.to_string()),
-                        ));
-                    }
-                }
-                ListingAction::SetUnseen => {
-                    if let Err(e) = envelope.set_unseen(op) {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(e.to_string()),
-                        ));
-                    }
-                }
-                ListingAction::Delete => {
-                    /* do nothing */
-                    continue;
-                }
-                _ => unreachable!(),
-            }
-            self.row_updates.push(thread_hash);
-        }
-    }
 }
 
 impl Component for ConversationsListing {
@@ -1016,43 +994,10 @@ impl Component for ConversationsListing {
                 /* certain rows need to be updated (eg an unseen message was just set seen)
                  * */
                 let (upper_left, bottom_right) = area;
-                let width = self.content.size().0;
                 while let Some(row) = self.row_updates.pop() {
+                    self.update_line(context, row);
                     let row: usize = self.order[&row];
-                    let i = self.get_thread_under_cursor(row, context);
 
-                    let account = &context.accounts[self.cursor_pos.0];
-                    let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                    let threads = &account.collection.threads[&folder_hash];
-                    let thread_node = &threads.thread_nodes[&i];
-
-                    let fg_color = if thread_node.has_unseen() {
-                        Color::Byte(0)
-                    } else {
-                        Color::Default
-                    };
-                    let bg_color = if thread_node.has_unseen() {
-                        Color::Byte(251)
-                    } else {
-                        Color::Default
-                    };
-                    change_colors(
-                        &mut self.content,
-                        ((0, 3 * row), (width - 1, 3 * row + 1)),
-                        fg_color,
-                        bg_color,
-                    );
-                    let padding_fg = if context.settings.terminal.theme == "light" {
-                        Color::Byte(254)
-                    } else {
-                        Color::Byte(235)
-                    };
-                    change_colors(
-                        &mut self.content,
-                        ((0, 3 * row + 2), (width - 1, 3 * row + 2)),
-                        padding_fg,
-                        bg_color,
-                    );
                     let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
                     let page_no = (self.cursor_pos.2).wrapping_div(rows);
 
