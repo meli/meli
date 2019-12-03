@@ -420,6 +420,7 @@ impl MailBackend for MboxType {
                 }
 
                 tx.send(AsyncStatus::Payload(payload)).unwrap();
+                tx.send(AsyncStatus::Finished).unwrap();
             };
             Box::new(closure)
         };
