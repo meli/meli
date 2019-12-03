@@ -1221,7 +1221,7 @@ impl Component for MailView {
                                                     self.coordinates.0,
                                                 ),
                                             );
-                                            if super::compose::send_draft(
+                                            return super::compose::send_draft(
                                                 ToggleFlag::False,
                                                 /* FIXME: refactor to avoid unsafe.
                                                  *
@@ -1232,14 +1232,9 @@ impl Component for MailView {
                                                 unsafe { &mut *(unsafe_context) },
                                                 self.coordinates.0,
                                                 draft,
-                                            ) {
-                                                context.replies.push_back(UIEvent::Notification(
-                                                    Some("Sent unsubscribe email.".into()),
-                                                    "Sent unsubscribe email".to_string(),
-                                                    None,
-                                                ));
-                                                return true;
-                                            }
+                                                SpecialUseMailbox::Sent,
+                                                Flag::SEEN,
+                                            );
                                         }
                                     }
                                     list_management::ListAction::Url(url) => {

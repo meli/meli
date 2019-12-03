@@ -873,6 +873,53 @@ impl Account {
         }
     }
 
+    pub fn save_special(
+        &self,
+        bytes: &[u8],
+        folder_type: SpecialUseMailbox,
+        flags: Flag,
+    ) -> Result<()> {
+        let mut failure = true;
+        for folder in &[
+            self.special_use_folder(folder_type),
+            self.special_use_folder(SpecialUseMailbox::Inbox),
+            self.special_use_folder(SpecialUseMailbox::Normal),
+        ] {
+            if folder.is_none() {
+                continue;
+            }
+            let folder = folder.unwrap();
+            if let Err(e) = self.save(bytes, folder, Some(flags)) {
+                debug!("{:?} could not save msg", e);
+                melib::log(
+                    format!("Could not save in '{}' folder: {}.", folder, e.to_string()),
+                    melib::ERROR,
+                );
+            } else {
+                failure = false;
+                break;
+            }
+        }
+
+        if failure {
+            let file = crate::types::create_temp_file(bytes, None, None, false);
+            debug!("message saved in {}", file.path.display());
+            melib::log(
+                format!(
+                    "Message was stored in {} so that you can restore it manually.",
+                    file.path.display()
+                ),
+                melib::INFO,
+            );
+            return Err(MeliError::new(format!(
+                "Message was stored in {} so that you can restore it manually.",
+                file.path.display()
+            ))
+            .set_summary("Could not save in any folder"));
+        }
+        Ok(())
+    }
+
     pub fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
         if self.settings.account.read_only() {
             return Err(MeliError::new(format!(
