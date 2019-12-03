@@ -38,6 +38,10 @@ pub mod mbox;
 pub mod notmuch;
 #[cfg(feature = "notmuch_backend")]
 pub use self::notmuch::NotmuchDb;
+#[cfg(feature = "jmap_backend")]
+pub mod jmap;
+#[cfg(feature = "jmap_backend")]
+pub use self::jmap::JmapType;
 
 #[cfg(feature = "imap_backend")]
 pub use self::imap::ImapType;
@@ -126,6 +130,16 @@ impl Backends {
                 Backend {
                     create_fn: Box::new(|| Box::new(|f, i| NotmuchDb::new(f, i))),
                     validate_conf_fn: Box::new(NotmuchDb::validate_config),
+                },
+            );
+        }
+        #[cfg(feature = "jmap_backend")]
+        {
+            b.register(
+                "jmap".to_string(),
+                Backend {
+                    create_fn: Box::new(|| Box::new(|f, i| JmapType::new(f, i))),
+                    validate_conf_fn: Box::new(JmapType::validate_config),
                 },
             );
         }

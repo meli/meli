@@ -26,9 +26,11 @@ bincode = "1.2.0"
 uuid = { version = "0.7.4", features = ["serde", "v4"] }
 text_processing = { path = "../text_processing", version = "*", optional= true }
 libc = {version = "0.2.59", features = ["extra_traits",]}
+reqwest = { version ="0.10.0-alpha.2", optional=true, features = ["json", "blocking" ]}
+serde_json = { version = "1.0", optional = true }
 
 [features]
-default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "vcard"]
+default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "jmap_backend", "vcard"]
 
 debug-tracing = []
 unicode_algorithms = ["text_processing"]
@@ -36,4 +38,5 @@ imap_backend = ["native-tls"]
 maildir_backend = ["notify", "notify-rust", "memmap"]
 mbox_backend = ["notify", "notify-rust", "memmap"]
 notmuch_backend = []
+jmap_backend = ["reqwest", "serde_json" ]
 vcard = []
