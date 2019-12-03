@@ -36,11 +36,15 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 
 pub mod protocol;
-
 use protocol::*;
 
-pub mod folder;
+pub mod rfc8620;
+use rfc8620::*;
 
+pub mod objects;
+use objects::*;
+
+pub mod folder;
 use folder::*;
 
 #[derive(Debug, Default)]

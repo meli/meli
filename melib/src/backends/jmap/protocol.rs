@@ -21,8 +21,34 @@
 
 use super::folder::JmapFolder;
 use super::*;
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
 
+pub type Id = String;
+pub type UtcDate = String;
+
+use super::rfc8620::Object;
+
+pub trait Method<OBJ: Object>: Serialize {
+    const NAME: &'static str;
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum MessageProperty {
+    ThreadId,
+    MailboxId,
+    IsUnread,
+    IsFlagged,
+    IsAnswered,
+    IsDraft,
+    HasAttachment,
+    From,
+    To,
+    Subject,
+    Date,
+    Preview,
+}
 macro_rules! get_path_hash {
     ($path:expr) => {{
         use std::collections::hash_map::DefaultHasher;
@@ -34,6 +60,45 @@ macro_rules! get_path_hash {
 }
 
 static USING: &'static [&'static str] = &["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"];
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Request {
+    using: &'static [&'static str],
+    /* Why is this Value instead of Box<dyn Method<_>>? The Method trait cannot be made into a
+     * Trait object because its serialize() will be generic. */
+    method_calls: Vec<Value>,
+}
+
+impl Request {
+    pub fn new() -> Self {
+        Request {
+            using: USING,
+            method_calls: Vec::new(),
+        }
+    }
+
+    pub fn add_call<M: Method<O>, O: Object>(&mut self, call: M) {
+        self.method_calls
+            .push(serde_json::to_value((M::NAME, call, "f")).unwrap());
+    }
+}
+
+#[derive(Serialize, Debug)]
+#[serde(untagged)]
+pub enum MethodCall {
+    #[serde(rename_all = "camelCase")]
+    EmailQuery {
+        filter: Vec<String>, /* "inMailboxes": [ folder.id ] },*/
+        collapse_threads: bool,
+        position: u64,
+        fetch_threads: bool,
+        fetch_messages: bool,
+        fetch_message_properties: Vec<MessageProperty>,
+    },
+    MailboxGet {},
+    Empty {},
+}
 
 pub fn get_mailboxes(conn: &mut JmapConnection) -> Result<FnvHashMap<FolderHash, JmapFolder>> {
     let res = conn
@@ -195,6 +260,74 @@ pub struct JmapRights {
 //     }, "call1"]
 // ]
 pub fn get_message_list(conn: &mut JmapConnection, folder: &JmapFolder) -> Result<Vec<String>> {
+    let email_call: EmailQueryCall = EmailQueryCall {
+        filter: vec![EmailFilterCondition {
+            in_mailboxes: vec![folder.id.clone()],
+            ..Default::default()
+        }],
+        collapse_threads: false,
+        position: 0,
+        fetch_threads: true,
+        fetch_messages: true,
+        fetch_message_properties: vec![
+            MessageProperty::ThreadId,
+            MessageProperty::MailboxId,
+            MessageProperty::IsUnread,
+            MessageProperty::IsFlagged,
+            MessageProperty::IsAnswered,
+            MessageProperty::IsDraft,
+            MessageProperty::HasAttachment,
+            MessageProperty::From,
+            MessageProperty::To,
+            MessageProperty::Subject,
+            MessageProperty::Date,
+            MessageProperty::Preview,
+        ],
+    };
+
+    let mut req = Request::new();
+    req.add_call(email_call);
+    std::dbg!(serde_json::to_string(&req));
+
+    /*
+    {
+        "using": [
+            "urn:ietf:params:jmap:core",
+            "urn:ietf:params:jmap:mail"
+        ],
+        "methodCalls": [[
+                "Email/query",
+                {
+                    "collapseThreads": false,
+                    "fetchMessageProperties": [
+                        "threadId",
+                        "mailboxId",
+                        "isUnread",
+                        "isFlagged",
+                        "isAnswered",
+                        "isDraft",
+                        "hasAttachment",
+                        "from",
+                        "to",
+                        "subject",
+                        "date",
+                        "preview"
+                    ],
+                    "fetchMessages": true,
+                    "fetchThreads": true,
+                    "filter": [
+                        {
+                            "inMailboxes": [
+                                "fde49e47-14e7-11ea-a277-2477037a1804"
+                            ]
+                        }
+                    ],
+                    "position": 0
+                },
+                "f"
+            ]]
+    }
+            */
     let res = conn
         .client
         .post("https://jmap-proxy.local/jmap/fc32dffe-14e7-11ea-a277-2477037a1804/")
