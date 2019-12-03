@@ -29,6 +29,15 @@ pub type UtcDate = String;
 
 use super::rfc8620::Object;
 
+macro_rules! get_request_no {
+    ($lock:expr) => {{
+        let mut lck = $lock.lock().unwrap();
+        let ret = *lck;
+        *lck += 1;
+        ret
+    }};
+}
+
 pub trait Method<OBJ: Object>: Serialize {
     const NAME: &'static str;
 }
@@ -68,19 +77,25 @@ pub struct Request {
     /* Why is this Value instead of Box<dyn Method<_>>? The Method trait cannot be made into a
      * Trait object because its serialize() will be generic. */
     method_calls: Vec<Value>,
+
+    #[serde(skip_serializing)]
+    request_no: Arc<Mutex<usize>>,
 }
 
 impl Request {
-    pub fn new() -> Self {
+    pub fn new(request_no: Arc<Mutex<usize>>) -> Self {
         Request {
             using: USING,
             method_calls: Vec::new(),
+            request_no,
         }
     }
 
-    pub fn add_call<M: Method<O>, O: Object>(&mut self, call: M) {
+    pub fn add_call<M: Method<O>, O: Object>(&mut self, call: M) -> usize {
+        let seq = get_request_no!(self.request_no);
         self.method_calls
-            .push(serde_json::to_value((M::NAME, call, "f")).unwrap());
+            .push(serde_json::to_value((M::NAME, call, &format!("m{}", seq))).unwrap());
+        seq
     }
 }
 
@@ -100,17 +115,19 @@ pub enum MethodCall {
     Empty {},
 }
 
-pub fn get_mailboxes(conn: &mut JmapConnection) -> Result<FnvHashMap<FolderHash, JmapFolder>> {
+pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<FolderHash, JmapFolder>> {
+    let seq = get_request_no!(conn.request_no);
     let res = conn
         .client
+        .lock()
+        .unwrap()
         .post("https://jmap-proxy.local/jmap/fc32dffe-14e7-11ea-a277-2477037a1804/")
         .json(&json!({
             "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
             "methodCalls": [["Mailbox/get", {},
-             format!("#m{}", conn.request_no + 1).as_str()]],
+             format!("#m{}",seq).as_str()]],
         }))
         .send();
-    conn.request_no += 1;
 
     let mut v: JsonResponse =
         serde_json::from_str(&std::dbg!(res.unwrap().text().unwrap())).unwrap();
@@ -259,12 +276,13 @@ pub struct JmapRights {
 //         fetchSearchSnippets: false
 //     }, "call1"]
 // ]
-pub fn get_message_list(conn: &mut JmapConnection, folder: &JmapFolder) -> Result<Vec<String>> {
+pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<String>> {
+    let seq = get_request_no!(conn.request_no);
     let email_call: EmailQueryCall = EmailQueryCall {
-        filter: vec![EmailFilterCondition {
+        filter: EmailFilterCondition {
             in_mailboxes: vec![folder.id.clone()],
             ..Default::default()
-        }],
+        },
         collapse_threads: false,
         position: 0,
         fetch_threads: true,
@@ -285,9 +303,8 @@ pub fn get_message_list(conn: &mut JmapConnection, folder: &JmapFolder) -> Resul
         ],
     };
 
-    let mut req = Request::new();
+    let mut req = Request::new(conn.request_no.clone());
     req.add_call(email_call);
-    std::dbg!(serde_json::to_string(&req));
 
     /*
     {
@@ -328,37 +345,43 @@ pub fn get_message_list(conn: &mut JmapConnection, folder: &JmapFolder) -> Resul
             ]]
     }
             */
+    /*
+        r#"
+        "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
+        "methodCalls": [["Email/query", { "filter": {
+            "inMailboxes": [ folder.id ]
+        },
+       "collapseThreads": false,
+       "position": 0,
+       "fetchThreads": true,
+       "fetchMessages": true,
+       "fetchMessageProperties": [
+           "threadId",
+           "mailboxId",
+           "isUnread",
+           "isFlagged",
+           "isAnswered",
+           "isDraft",
+           "hasAttachment",
+           "from",
+           "to",
+           "subject",
+           "date",
+           "preview"
+       ],
+        }, format!("m{}", seq).as_str()]],
+    });"
+    );*/
+
+    std::dbg!(serde_json::to_string(&req));
     let res = conn
         .client
+        .lock()
+        .unwrap()
         .post("https://jmap-proxy.local/jmap/fc32dffe-14e7-11ea-a277-2477037a1804/")
-        .json(&json!({
-            "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
-            "methodCalls": [["Email/query", { "filter": {
-                "inMailboxes": [ folder.id ]
-            },
-           "collapseThreads": false,
-           "position": 0,
-           "fetchThreads": true,
-           "fetchMessages": true,
-           "fetchMessageProperties": [
-               "threadId",
-               "mailboxId",
-               "isUnread",
-               "isFlagged",
-               "isAnswered",
-               "isDraft",
-               "hasAttachment",
-               "from",
-               "to",
-               "subject",
-               "date",
-               "preview"
-           ],
-            }, format!("#m{}", conn.request_no + 1).as_str()]],
-        }))
+        .json(&req)
         .send();
 
-    conn.request_no += 1;
     let mut v: JsonResponse = serde_json::from_str(&std::dbg!(res.unwrap().text().unwrap()))?;
 
     let result: Response = v.method_responses.remove(0).1;
@@ -369,11 +392,35 @@ pub fn get_message_list(conn: &mut JmapConnection, folder: &JmapFolder) -> Resul
     }
 }
 
-pub fn get_message(conn: &mut JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
+pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
+    let seq = get_request_no!(conn.request_no);
+    let email_call: EmailGetCall =
+        EmailGetCall::new(GetCall::new().ids(Some(ids.iter().cloned().collect::<Vec<String>>())));
+
+    let mut req = Request::new(conn.request_no.clone());
+    req.add_call(email_call);
     let res = conn
         .client
+        .lock()
+        .unwrap()
         .post("https://jmap-proxy.local/jmap/fc32dffe-14e7-11ea-a277-2477037a1804/")
-        .json(&json!({
+        .json(&req)
+        .send();
+
+    let res_text = res?.text()?;
+    let v: JsonResponse = serde_json::from_str(&res_text)?;
+    let mut f = std::fs::File::create(std::dbg!(format!("/tmp/asdfsa{}", seq))).unwrap();
+    use std::io::Write;
+    f.write_all(
+        serde_json::to_string_pretty(&serde_json::from_str::<Value>(&res_text)?)?.as_bytes(),
+    )
+    .unwrap();
+    Ok(vec![])
+}
+
+/*
+ *
+ *json!({
             "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
             "methodCalls": [["Email/get", {
                 "ids": ids,
@@ -383,12 +430,7 @@ pub fn get_message(conn: &mut JmapConnection, ids: &[String]) -> Result<Vec<Enve
                 "bodyProperties": [ "partId", "blobId", "size", "type" ],
                 "fetchHTMLBodyValues": true,
                 "maxBodyValueBytes": 256
-            }, format!("#m{}", conn.request_no + 1).as_str()]],
+            }, format!("m{}", seq).as_str()]],
         }))
-        .send();
-    conn.request_no += 1;
 
-    let v: JsonResponse = serde_json::from_str(&std::dbg!(res.unwrap().text().unwrap()))?;
-    std::dbg!(&v);
-    Ok(vec![])
-}
+*/

@@ -19,14 +19,18 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use super::Id;
 use core::marker::PhantomData;
 use serde::{de::DeserializeOwned, Serialize};
+use serde_json::Value;
+
 mod filters;
 pub use filters::*;
 mod comparator;
 pub use comparator::*;
 
 use super::protocol::Method;
+use std::collections::HashMap;
 pub trait Object {}
 
 // 5.1.  /get
@@ -57,20 +61,76 @@ pub trait Object {}
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct GetCall<OBJ: Object, CALL: Method<OBJ>>
+pub struct JmapSession {
+    capabilities: HashMap<String, CapabilitiesObject>,
+    accounts: HashMap<Id, Account>,
+    primary_accounts: Vec<Id>,
+    username: String,
+    api_url: String,
+    download_url: String,
+
+    upload_url: String,
+    event_source_url: String,
+    state: String,
+    #[serde(flatten)]
+    extra_properties: HashMap<String, Value>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct CapabilitiesObject {
+    max_size_upload: u64,
+    max_concurrent_upload: u64,
+    max_size_request: u64,
+    max_concurrent_requests: u64,
+    max_calls_in_request: u64,
+    max_objects_in_get: u64,
+    max_objects_in_set: u64,
+    collation_algorithms: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Account {
+    name: String,
+    is_personal: bool,
+    is_read_only: bool,
+    account_capabilities: HashMap<String, Value>,
+    #[serde(flatten)]
+    extra_properties: HashMap<String, Value>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCall<OBJ: Object>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
     #[serde(skip_serializing_if = "String::is_empty")]
-    account_id: String,
+    pub account_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    ids: Option<Vec<String>>,
+    pub ids: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    properties: Option<Vec<String>>,
-    _ph: PhantomData<*const CALL>,
-    __ph: PhantomData<*const OBJ>,
+    pub properties: Option<Vec<String>>,
+    _ph: PhantomData<*const OBJ>,
 }
 
+impl<OBJ: Object> GetCall<OBJ>
+where
+    OBJ: std::fmt::Debug + Serialize,
+{
+    pub fn new() -> Self {
+        Self {
+            account_id: String::new(),
+            ids: None,
+            properties: None,
+            _ph: PhantomData,
+        }
+    }
+    _impl!(account_id: String);
+    _impl!(ids: Option<Vec<String>>);
+    _impl!(properties: Option<Vec<String>>);
+}
 //   The response has the following arguments:
 //
 //   o  accountId: "Id"
@@ -128,6 +188,7 @@ pub struct GetResponse<T> {
 enum JmapError {
     RequestTooLarge,
     InvalidArguments,
+    InvalidResultReference,
 }
 
 // 5.5.  /query
@@ -321,11 +382,39 @@ where
     _ph: PhantomData<*const OBJ>,
 }
 
-fn bool_false() -> bool {
+impl<F: FilterTrait<OBJ>, OBJ: Object> QueryCall<F, OBJ>
+where
+    OBJ: std::fmt::Debug + Serialize,
+{
+    pub fn new() -> Self {
+        Self {
+            account_id: String::new(),
+            filter: None,
+            sort: None,
+            position: 0,
+            anchor: None,
+            anchor_offset: 0,
+            limit: None,
+            calculate_total: false,
+            _ph: PhantomData,
+        }
+    }
+
+    _impl!(account_id: String);
+    _impl!(filter: Option<Filter<F, OBJ>>);
+    _impl!(sort: Option<Comparator<OBJ>>);
+    _impl!(position: u64);
+    _impl!(anchor: Option<String>);
+    _impl!(anchor_offset: u64);
+    _impl!(limit: Option<u64>);
+    _impl!(calculate_total: bool);
+}
+
+pub fn bool_false() -> bool {
     false
 }
 
-fn bool_true() -> bool {
+pub fn bool_true() -> bool {
     true
 }
 

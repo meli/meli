@@ -21,6 +21,7 @@
 
 use super::*;
 use crate::backends::jmap::protocol::*;
+use crate::backends::jmap::rfc8620::bool_false;
 use std::collections::HashMap;
 
 // 4.1.1.
@@ -151,7 +152,7 @@ pub struct EmailQueryResponse {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailQueryCall {
-    pub filter: Vec<EmailFilterCondition>, /* "inMailboxes": [ folder.id ] },*/
+    pub filter: EmailFilterCondition, /* "inMailboxes": [ folder.id ] },*/
     pub collapse_threads: bool,
     pub position: u64,
     pub fetch_threads: bool,
@@ -166,16 +167,42 @@ impl Method<EmailObject> for EmailQueryCall {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailGetCall {
-    pub filter: Vec<EmailFilterCondition>, /* "inMailboxes": [ folder.id ] },*/
-    pub collapse_threads: bool,
-    pub position: u64,
-    pub fetch_threads: bool,
-    pub fetch_messages: bool,
-    pub fetch_message_properties: Vec<MessageProperty>,
+    #[serde(flatten)]
+    pub get_call: GetCall<EmailObject>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub body_properties: Vec<String>,
+    #[serde(default = "bool_false")]
+    pub fetch_text_body_values: bool,
+    #[serde(default = "bool_false")]
+    pub fetch_html_body_values: bool,
+    #[serde(default = "bool_false")]
+    pub fetch_all_body_values: bool,
+    #[serde(default)]
+    pub max_body_value_bytes: u64,
 }
 
 impl Method<EmailObject> for EmailGetCall {
     const NAME: &'static str = "Email/get";
+}
+
+impl EmailGetCall {
+    pub fn new(get_call: GetCall<EmailObject>) -> Self {
+        EmailGetCall {
+            get_call,
+            body_properties: Vec::new(),
+            fetch_text_body_values: false,
+            fetch_html_body_values: false,
+            fetch_all_body_values: false,
+            max_body_value_bytes: 0,
+        }
+    }
+
+    _impl!(get_call: GetCall<EmailObject>);
+    _impl!(body_properties: Vec<String>);
+    _impl!(fetch_text_body_values: bool);
+    _impl!(fetch_html_body_values: bool);
+    _impl!(fetch_all_body_values: bool);
+    _impl!(max_body_value_bytes: u64);
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -223,6 +250,29 @@ pub struct EmailFilterCondition {
     pub body: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub header: Vec<String>,
+}
+
+impl EmailFilterCondition {
+    _impl!(in_mailboxes: Vec<Id>);
+    _impl!(in_mailbox_other_than: Vec<Id>);
+    _impl!(before: UtcDate);
+    _impl!(after: UtcDate);
+    _impl!(min_size: Option<u64>);
+    _impl!(max_size: Option<u64>);
+    _impl!(all_in_thread_have_keyword: String);
+    _impl!(some_in_thread_have_keyword: String);
+    _impl!(none_in_thread_have_keyword: String);
+    _impl!(has_keyword: String);
+    _impl!(not_keyword: String);
+    _impl!(has_attachment: Option<bool>);
+    _impl!(text: String);
+    _impl!(from: String);
+    _impl!(to: String);
+    _impl!(cc: String);
+    _impl!(bcc: String);
+    _impl!(subject: String);
+    _impl!(body: String);
+    _impl!(header: Vec<String>);
 }
 
 impl FilterTrait<EmailObject> for EmailFilterCondition {}

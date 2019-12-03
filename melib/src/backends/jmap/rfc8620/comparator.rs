@@ -35,6 +35,23 @@ pub struct Comparator<OBJ: Object> {
     _ph: PhantomData<*const OBJ>,
 }
 
+impl<OBJ: Object> Comparator<OBJ> {
+    pub fn new() -> Self {
+        Self {
+            property: String::new(),
+            is_ascending: true,
+            collation: None,
+            additional_properties: Vec::new(),
+            _ph: PhantomData,
+        }
+    }
+
+    _impl!(property: String);
+    _impl!(is_ascending: bool);
+    _impl!(collation: Option<String>);
+    _impl!(additional_properties: Vec<String>);
+}
+
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum FilterOperator {

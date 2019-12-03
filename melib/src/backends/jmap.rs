@@ -35,6 +35,19 @@ use std::hash::Hasher;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 
+#[macro_export]
+macro_rules! _impl {
+        ($field:ident : $t:ty) => {
+            pub fn $field(mut self, new_val: $t) -> Self {
+                self.$field = new_val;
+                self
+            }
+        }
+    }
+
+pub mod connection;
+use connection::*;
+
 pub mod protocol;
 use protocol::*;
 
@@ -122,7 +135,7 @@ macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).ok_or_else(|| {
             MeliError::new(format!(
-                "Configuration error ({}): IMAP connection requires the field `{}` set",
+                "Configuration error ({}): JMAP connection requires the field `{}` set",
                 $s.name.as_str(),
                 $var
             ))
@@ -152,7 +165,7 @@ pub struct JmapType {
     online: Arc<Mutex<bool>>,
     is_subscribed: Arc<IsSubscribedFn>,
     server_conf: JmapServerConf,
-    connection: Arc<Mutex<JmapConnection>>,
+    connection: Arc<JmapConnection>,
     folders: Arc<RwLock<FnvHashMap<FolderHash, JmapFolder>>>,
 }
 
@@ -168,15 +181,11 @@ impl MailBackend for JmapType {
         let handle = {
             let tx = w.tx();
             let closure = move |_work_context| {
-                let mut conn_lck = connection.lock().unwrap();
                 tx.send(AsyncStatus::Payload(
-                    protocol::get_message_list(
-                        &mut conn_lck,
-                        &folders.read().unwrap()[&folder_hash],
-                    )
-                    .and_then(|ids| {
-                        protocol::get_message(&mut conn_lck, std::dbg!(&ids).as_slice())
-                    }),
+                    protocol::get_message_list(&connection, &folders.read().unwrap()[&folder_hash])
+                        .and_then(|ids| {
+                            protocol::get_message(&connection, std::dbg!(&ids).as_slice())
+                        }),
                 ))
                 .unwrap();
                 tx.send(AsyncStatus::Finished).unwrap();
@@ -196,9 +205,7 @@ impl MailBackend for JmapType {
 
     fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
         if self.folders.read().unwrap().is_empty() {
-            let folders = std::dbg!(protocol::get_mailboxes(
-                &mut self.connection.lock().unwrap()
-            ))?;
+            let folders = std::dbg!(protocol::get_mailboxes(&self.connection))?;
             let ret = Ok(folders
                 .iter()
                 .map(|(&h, f)| (h, BackendFolder::clone(f) as Folder))
@@ -242,10 +249,7 @@ impl JmapType {
         let server_conf = JmapServerConf::new(s)?;
 
         Ok(Box::new(JmapType {
-            connection: Arc::new(Mutex::new(JmapConnection::new(
-                &server_conf,
-                online.clone(),
-            )?)),
+            connection: Arc::new(JmapConnection::new(&server_conf, online.clone())?),
             folders: Arc::new(RwLock::new(FnvHashMap::default())),
             account_name: s.name.clone(),
             online,
@@ -261,39 +265,5 @@ impl JmapType {
         get_conf_val!(s["server_port"], 443)?;
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub struct JmapConnection {
-    request_no: usize,
-    client: Client,
-    online_status: Arc<Mutex<bool>>,
-}
-
-impl JmapConnection {
-    pub fn new(server_conf: &JmapServerConf, online_status: Arc<Mutex<bool>>) -> Result<Self> {
-        use reqwest::header;
-        let mut headers = header::HeaderMap::new();
-        headers.insert(
-            header::AUTHORIZATION,
-            header::HeaderValue::from_static("fc32dffe-14e7-11ea-a277-2477037a1804"),
-        );
-        headers.insert(
-            header::ACCEPT,
-            header::HeaderValue::from_static("application/json"),
-        );
-        headers.insert(
-            header::CONTENT_TYPE,
-            header::HeaderValue::from_static("application/json"),
-        );
-        Ok(JmapConnection {
-            request_no: 0,
-            client: reqwest::blocking::ClientBuilder::new()
-                .danger_accept_invalid_certs(server_conf.danger_accept_invalid_certs)
-                .default_headers(headers)
-                .build()?,
-            online_status,
-        })
     }
 }
