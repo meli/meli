@@ -37,7 +37,8 @@ pub type Result<T> = result::Result<T, MeliError>;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MeliError {
-    details: String,
+    pub summary: Option<String>,
+    pub details: String,
 }
 
 impl MeliError {
@@ -46,8 +47,17 @@ impl MeliError {
         M: Into<String>,
     {
         MeliError {
+            summary: None,
             details: msg.into(),
         }
+    }
+
+    pub fn set_summary<M>(mut self, summary: M) -> MeliError
+    where
+        M: Into<String>,
+    {
+        self.summary = Some(summary.into());
+        self
     }
 }
 
