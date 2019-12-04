@@ -1102,36 +1102,6 @@ mod tests {
         );
     }
 
-    macro_rules! make_address {
-        ($d:literal, $a:literal) => {
-            Address::Mailbox(if $d.is_empty() {
-                MailboxAddress {
-                    raw: format!("<{}>", $a).into_bytes(),
-                    display_name: StrBuilder {
-                        offset: 0,
-                        length: 0,
-                    },
-                    address_spec: StrBuilder {
-                        offset: 1,
-                        length: $a.len(),
-                    },
-                }
-            } else {
-                MailboxAddress {
-                    raw: format!("{} <{}>", $d, $a).into_bytes(),
-                    display_name: StrBuilder {
-                        offset: 0,
-                        length: $d.len(),
-                    },
-                    address_spec: StrBuilder {
-                        offset: $d.len() + 2,
-                        length: $a.len(),
-                    },
-                }
-            })
-        };
-    }
-
     #[test]
     fn test_address_list() {
         let s = b"Obit Oppidum <user@domain>,

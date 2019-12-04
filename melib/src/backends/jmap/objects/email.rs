@@ -22,7 +22,11 @@
 use super::*;
 use crate::backends::jmap::protocol::*;
 use crate::backends::jmap::rfc8620::bool_false;
+use serde::de::{Deserialize, Deserializer};
+use serde_json::Value;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::Hasher;
 
 // 4.1.1.
 // Metadata
@@ -122,17 +126,215 @@ use std::collections::HashMap;
 //      "internal date" in IMAP [RFC3501]./
 
 #[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct EmailObject {
-    pub id: Id,
-    pub blob_id: Id,
-    pub thread_id: Id,
-    pub mailbox_ids: HashMap<Id, bool>,
-    pub keywords: HashMap<String, bool>,
-    pub size: u64,
-    pub received_at: String,
+    #[serde(default)]
+    id: Id,
+    #[serde(default)]
+    mailbox_ids: HashMap<Id, bool>,
+    #[serde(default)]
+    size: u64,
+    #[serde(default)]
+    received_at: String,
+    #[serde(default)]
+    to: Vec<EmailAddress>,
+    #[serde(default)]
+    bcc: Vec<EmailAddress>,
+    #[serde(default)]
+    reply_to: Option<EmailAddress>,
+    #[serde(default)]
+    cc: Vec<EmailAddress>,
+    #[serde(default)]
+    from: Vec<EmailAddress>,
+    #[serde(default)]
+    in_reply_to_email_id: Id,
+    #[serde(default)]
+    keywords: Value,
+    #[serde(default)]
+    attached_emails: Option<Id>,
+    #[serde(default)]
+    attachments: Vec<Value>,
+    #[serde(default)]
+    blob_id: String,
+    #[serde(default)]
+    has_attachment: bool,
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_header")]
+    headers: HashMap<String, String>,
+    #[serde(default)]
+    html_body: Vec<HtmlBody>,
+    #[serde(default)]
+    preview: Option<String>,
+    #[serde(default)]
+    sent_at: String,
+    #[serde(default)]
+    subject: String,
+    #[serde(default)]
+    text_body: Vec<TextBody>,
+    #[serde(default)]
+    thread_id: Id,
 }
 
-impl Object for EmailObject {}
+#[derive(Deserialize, Serialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+struct Header {
+    name: String,
+    value: String,
+}
+
+fn deserialize_header<'de, D>(
+    deserializer: D,
+) -> std::result::Result<HashMap<String, String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = <Vec<Header>>::deserialize(deserializer)?;
+    Ok(v.into_iter().map(|t| (t.name, t.value)).collect())
+}
+
+#[derive(Deserialize, Serialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+struct EmailAddress {
+    email: String,
+    name: Option<String>,
+}
+
+impl Into<crate::email::Address> for EmailAddress {
+    fn into(self) -> crate::email::Address {
+        let Self { email, mut name } = self;
+        crate::make_address!((name.take().unwrap_or_default()), email)
+    }
+}
+
+impl std::fmt::Display for EmailAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.name.is_some() {
+            write!(f, "{} <{}>", self.name.as_ref().unwrap(), &self.email)
+        } else {
+            write!(f, "{}", &self.email)
+        }
+    }
+}
+
+impl std::convert::From<EmailObject> for crate::Envelope {
+    fn from(mut t: EmailObject) -> crate::Envelope {
+        let mut env = crate::Envelope::new(0);
+        env.set_date(std::mem::replace(&mut t.sent_at, String::new()).as_bytes());
+        if let Ok(d) = crate::email::parser::date(env.date_as_str().as_bytes()) {
+            env.set_datetime(d);
+        }
+
+        if let Some(v) = t.headers.get("Message-ID").or(t.headers.get("Message-Id")) {
+            env.set_message_id(v.as_bytes());
+        }
+        if let Some(v) = t.headers.get("In-Reply-To") {
+            env.set_in_reply_to(v.as_bytes());
+            env.push_references(v.as_bytes());
+        }
+        if let Some(v) = t.headers.get("References") {
+            let parse_result = crate::email::parser::references(v.as_bytes());
+            if parse_result.is_done() {
+                for v in parse_result.to_full_result().unwrap() {
+                    env.push_references(v);
+                }
+            }
+            env.set_references(v.as_bytes());
+        }
+        if let Some(v) = t.headers.get("Date") {
+            env.set_date(v.as_bytes());
+            if let Ok(d) = crate::email::parser::date(v.as_bytes()) {
+                env.set_datetime(d);
+            }
+        }
+        env.set_has_attachments(t.has_attachment);
+        env.set_subject(std::mem::replace(&mut t.subject, String::new()).into_bytes());
+
+        env.set_from(
+            std::mem::replace(&mut t.from, Vec::new())
+                .into_iter()
+                .map(|addr| addr.into())
+                .collect::<Vec<crate::email::Address>>(),
+        );
+        env.set_to(
+            std::mem::replace(&mut t.to, Vec::new())
+                .into_iter()
+                .map(|addr| addr.into())
+                .collect::<Vec<crate::email::Address>>(),
+        );
+
+        env.set_cc(
+            std::mem::replace(&mut t.cc, Vec::new())
+                .into_iter()
+                .map(|addr| addr.into())
+                .collect::<Vec<crate::email::Address>>(),
+        );
+
+        env.set_bcc(
+            std::mem::replace(&mut t.bcc, Vec::new())
+                .into_iter()
+                .map(|addr| addr.into())
+                .collect::<Vec<crate::email::Address>>(),
+        );
+
+        if env.references.is_some() {
+            if let Some(pos) = env
+                .references
+                .as_ref()
+                .map(|r| &r.refs)
+                .unwrap()
+                .iter()
+                .position(|r| r == env.message_id())
+            {
+                env.references.as_mut().unwrap().refs.remove(pos);
+            }
+        }
+
+        let mut h = DefaultHasher::new();
+        h.write(t.id.as_bytes());
+        env.set_hash(h.finish());
+        env
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct HtmlBody {
+    blob_id: Id,
+    cid: Option<String>,
+    disposition: String,
+    headers: Value,
+    language: Option<Vec<String>>,
+    location: Option<String>,
+    name: Option<String>,
+    part_id: Option<String>,
+    size: u64,
+    #[serde(alias = "type")]
+    content_type: String,
+    #[serde(default)]
+    sub_parts: Vec<Value>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct TextBody {
+    blob_id: Id,
+    cid: Option<String>,
+    disposition: String,
+    headers: Value,
+    language: Option<Vec<String>>,
+    location: Option<String>,
+    name: Option<String>,
+    part_id: Option<String>,
+    size: u64,
+    #[serde(alias = "type")]
+    content_type: String,
+    #[serde(default)]
+    sub_parts: Vec<Value>,
+}
+
+impl Object for EmailObject {
+    const NAME: &'static str = "Email";
+}
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -166,9 +368,9 @@ impl Method<EmailObject> for EmailQueryCall {
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct EmailGetCall {
+pub struct EmailGet {
     #[serde(flatten)]
-    pub get_call: GetCall<EmailObject>,
+    pub get_call: Get<EmailObject>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub body_properties: Vec<String>,
     #[serde(default = "bool_false")]
@@ -181,13 +383,13 @@ pub struct EmailGetCall {
     pub max_body_value_bytes: u64,
 }
 
-impl Method<EmailObject> for EmailGetCall {
+impl Method<EmailObject> for EmailGet {
     const NAME: &'static str = "Email/get";
 }
 
-impl EmailGetCall {
-    pub fn new(get_call: GetCall<EmailObject>) -> Self {
-        EmailGetCall {
+impl EmailGet {
+    pub fn new(get_call: Get<EmailObject>) -> Self {
+        EmailGet {
             get_call,
             body_properties: Vec::new(),
             fetch_text_body_values: false,
@@ -197,7 +399,7 @@ impl EmailGetCall {
         }
     }
 
-    _impl!(get_call: GetCall<EmailObject>);
+    _impl!(get_call: Get<EmailObject>);
     _impl!(body_properties: Vec<String>);
     _impl!(fetch_text_body_values: bool);
     _impl!(fetch_html_body_values: bool);
@@ -249,7 +451,7 @@ pub struct EmailFilterCondition {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub body: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub header: Vec<String>,
+    pub header: Vec<Value>,
 }
 
 impl EmailFilterCondition {
@@ -272,68 +474,24 @@ impl EmailFilterCondition {
     _impl!(bcc: String);
     _impl!(subject: String);
     _impl!(body: String);
-    _impl!(header: Vec<String>);
+    _impl!(header: Vec<Value>);
 }
 
 impl FilterTrait<EmailObject> for EmailFilterCondition {}
 
-// The following convenience properties are also specified for the Email
-//    object:
-//
-//    o  messageId: "String[]|null" (immutable)
-//
-//       The value is identical to the value of "header:Message-
-//       ID:asMessageIds".  For messages conforming to RFC 5322, this will
-//       be an array with a single entry.
-//
-//    o  inReplyTo: "String[]|null" (immutable)
-//
-//       The value is identical to the value of "header:In-Reply-
-//       To:asMessageIds".
-//
-//    o  references: "String[]|null" (immutable)
-//
-//       The value is identical to the value of
-//       "header:References:asMessageIds".
-//
-//    o  sender: "EmailAddress[]|null" (immutable)
-//
-//       The value is identical to the value of
-//       "header:Sender:asAddresses".
-//
-//    o  from: "EmailAddress[]|null" (immutable)
-//
-//       The value is identical to the value of "header:From:asAddresses".
-//
-//    o  to: "EmailAddress[]|null" (immutable)
-//
-//       The value is identical to the value of "header:To:asAddresses".
-//
-//    o  cc: "EmailAddress[]|null" (immutable)
-//
-//       The value is identical to the value of "header:Cc:asAddresses".
-//
-//    o  bcc: "EmailAddress[]|null" (immutable)
-//
-//       The value is identical to the value of "header:Bcc:asAddresses".
-//
-//    o  replyTo: "EmailAddress[]|null" (immutable)
-//
-//       The value is identical to the value of "header:Reply-
-//       To:asAddresses".
-//
-//    o  subject: "String|null" (immutable)
-//
-//       The value is identical to the value of "header:Subject:asText".
-//
-//
-//
-// Jenkins & Newman             Standards Track                   [Page 34]
-//
-// RFC 8621                        JMAP Mail                    August 2019
-//
-//
-//    o  sentAt: "Date|null" (immutable; default on creation: current
-//       server time)
-//
-//       The value is identical to the value of "header:Date:asDate".
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum MessageProperty {
+    ThreadId,
+    MailboxId,
+    IsUnread,
+    IsFlagged,
+    IsAnswered,
+    IsDraft,
+    HasAttachment,
+    From,
+    To,
+    Subject,
+    Date,
+    Preview,
+}

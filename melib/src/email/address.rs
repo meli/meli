@@ -257,3 +257,34 @@ impl fmt::Debug for References {
         write!(f, "{:#?}", self.refs)
     }
 }
+
+#[macro_export]
+macro_rules! make_address {
+    ($d:expr, $a:expr) => {
+        Address::Mailbox(if $d.is_empty() {
+            MailboxAddress {
+                raw: format!("{}", $a).into_bytes(),
+                display_name: StrBuilder {
+                    offset: 0,
+                    length: 0,
+                },
+                address_spec: StrBuilder {
+                    offset: 0,
+                    length: $a.len(),
+                },
+            }
+        } else {
+            MailboxAddress {
+                raw: format!("{} <{}>", $d, $a).into_bytes(),
+                display_name: StrBuilder {
+                    offset: 0,
+                    length: $d.len(),
+                },
+                address_spec: StrBuilder {
+                    offset: $d.len() + 2,
+                    length: $a.len(),
+                },
+            }
+        })
+    };
+}

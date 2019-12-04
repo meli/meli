@@ -23,3 +23,6 @@ use super::*;
 
 mod email;
 pub use email::*;
+
+mod mailbox;
+pub use mailbox::*;

@@ -27,6 +27,7 @@ pub struct JmapConnection {
     pub client: Arc<Mutex<Client>>,
     pub online_status: Arc<Mutex<bool>>,
     pub server_conf: JmapServerConf,
+    pub account_id: Arc<Mutex<String>>,
 }
 
 impl JmapConnection {
@@ -59,6 +60,7 @@ impl JmapConnection {
             client: Arc::new(Mutex::new(client)),
             online_status,
             server_conf,
+            account_id: Arc::new(Mutex::new(String::new())),
         })
     }
 }

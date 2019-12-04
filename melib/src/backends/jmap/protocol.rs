@@ -23,6 +23,7 @@ use super::folder::JmapFolder;
 use super::*;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
+use std::convert::TryFrom;
 
 pub type Id = String;
 pub type UtcDate = String;
@@ -38,26 +39,14 @@ macro_rules! get_request_no {
     }};
 }
 
+pub trait Response<OBJ: Object> {
+    const NAME: &'static str;
+}
+
 pub trait Method<OBJ: Object>: Serialize {
     const NAME: &'static str;
 }
 
-#[derive(Deserialize, Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub enum MessageProperty {
-    ThreadId,
-    MailboxId,
-    IsUnread,
-    IsFlagged,
-    IsAnswered,
-    IsDraft,
-    HasAttachment,
-    From,
-    To,
-    Subject,
-    Date,
-    Preview,
-}
 macro_rules! get_path_hash {
     ($path:expr) => {{
         use std::collections::hash_map::DefaultHasher;
@@ -78,7 +67,7 @@ pub struct Request {
      * Trait object because its serialize() will be generic. */
     method_calls: Vec<Value>,
 
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     request_no: Arc<Mutex<usize>>,
 }
 
@@ -129,153 +118,62 @@ pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<FolderHash, Jma
         }))
         .send();
 
-    let mut v: JsonResponse =
-        serde_json::from_str(&std::dbg!(res.unwrap().text().unwrap())).unwrap();
+    let res_text = res?.text()?;
+    let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     *conn.online_status.lock().unwrap() = true;
-    std::dbg!(&v);
-    assert_eq!("Mailbox/get", v.method_responses[0].0);
-    Ok(
-        if let Response::MailboxGet { list, .. } = v.method_responses.remove(0).1 {
-            list.into_iter().map(|r| {
-                if let MailboxResponse {
+    let m = GetResponse::<MailboxObject>::try_from(v.method_responses.remove(0))?;
+    let GetResponse::<MailboxObject> {
+        list, account_id, ..
+    } = m;
+    *conn.account_id.lock().unwrap() = account_id;
+    Ok(list
+        .into_iter()
+        .map(|r| {
+            let MailboxObject {
+                id,
+                is_subscribed,
+                my_rights,
+                name,
+                parent_id,
+                role,
+                sort_order,
+                total_emails,
+                total_threads,
+                unread_emails,
+                unread_threads,
+            } = r;
+            let hash = get_path_hash!(&name);
+            (
+                hash,
+                JmapFolder {
+                    name: name.clone(),
+                    hash,
+                    path: name,
+                    v: Vec::new(),
                     id,
                     is_subscribed,
                     my_rights,
-                    name,
                     parent_id,
                     role,
+                    usage: Default::default(),
                     sort_order,
                     total_emails,
                     total_threads,
                     unread_emails,
                     unread_threads,
-                } = r
-                {
-                    let hash = get_path_hash!(&name);
-                    (
-                        hash,
-                        JmapFolder {
-                            name: name.clone(),
-                            hash,
-                            path: name,
-                            v: Vec::new(),
-                            id,
-                            is_subscribed,
-                            my_rights,
-                            parent_id,
-                            role,
-                            usage: Default::default(),
-                            sort_order,
-                            total_emails,
-                            total_threads,
-                            unread_emails,
-                            unread_threads,
-                        },
-                    )
-                } else {
-                    panic!()
-                }
-            })
-        } else {
-            panic!()
-        }
-        .collect(),
-    )
+                },
+            )
+        })
+        .collect())
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct JsonResponse {
-    method_responses: Vec<MethodResponse>,
+pub struct JsonResponse<'a> {
+    #[serde(borrow)]
+    method_responses: Vec<MethodResponse<'a>>,
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct MethodResponse(String, Response, String);
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-#[serde(untagged)]
-pub enum Response {
-    #[serde(rename_all = "camelCase")]
-    MailboxGet {
-        account_id: String,
-        list: Vec<MailboxResponse>,
-        not_found: Vec<String>,
-        state: String,
-    },
-    #[serde(rename_all = "camelCase")]
-    EmailQuery {
-        account_id: String,
-        can_calculate_changes: bool,
-        collapse_threads: bool,
-        filter: Value,
-        ids: Vec<String>,
-        position: u64,
-        query_state: String,
-        sort: Option<String>,
-        total: usize,
-    },
-    Empty {},
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct MailboxResponse {
-    id: String,
-    is_subscribed: bool,
-    my_rights: JmapRights,
-    name: String,
-    parent_id: Option<String>,
-    role: Option<String>,
-    sort_order: u64,
-    total_emails: u64,
-    total_threads: u64,
-    unread_emails: u64,
-    unread_threads: u64,
-}
-#[derive(Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct JmapRights {
-    may_add_items: bool,
-    may_create_child: bool,
-    may_delete: bool,
-    may_read_items: bool,
-    may_remove_items: bool,
-    may_rename: bool,
-    may_set_keywords: bool,
-    may_set_seen: bool,
-    may_submit: bool,
-}
-
-// [
-//     [ "getMessageList", {
-//         filter: {
-//             inMailboxes: [ "mailbox1" ]
-//         },
-//         sort: [ "date desc", "id desc" ]
-//         collapseThreads: true,
-//         position: 0,
-//         limit: 10,
-//         fetchThreads: true,
-//         fetchMessages: true,
-//         fetchMessageProperties: [
-//             "threadId",
-//             "mailboxId",
-//             "isUnread",
-//             "isFlagged",
-//             "isAnswered",
-//             "isDraft",
-//             "hasAttachment",
-//             "from",
-//             "to",
-//             "subject",
-//             "date",
-//             "preview"
-//         ],
-//         fetchSearchSnippets: false
-//     }, "call1"]
-// ]
 pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<String>> {
     let seq = get_request_no!(conn.request_no);
     let email_call: EmailQueryCall = EmailQueryCall {
@@ -373,7 +271,6 @@ pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Ve
     });"
     );*/
 
-    std::dbg!(serde_json::to_string(&req));
     let res = conn
         .client
         .lock()
@@ -382,20 +279,21 @@ pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Ve
         .json(&req)
         .send();
 
-    let mut v: JsonResponse = serde_json::from_str(&std::dbg!(res.unwrap().text().unwrap()))?;
-
-    let result: Response = v.method_responses.remove(0).1;
-    if let Response::EmailQuery { ids, .. } = result {
-        Ok(ids)
-    } else {
-        Err(MeliError::new(format!("response was {:#?}", &result)))
-    }
+    let res_text = res?.text()?;
+    let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+    *conn.online_status.lock().unwrap() = true;
+    let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
+    let QueryResponse::<EmailObject> { ids, .. } = m;
+    Ok(ids)
 }
 
 pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
     let seq = get_request_no!(conn.request_no);
-    let email_call: EmailGetCall =
-        EmailGetCall::new(GetCall::new().ids(Some(ids.iter().cloned().collect::<Vec<String>>())));
+    let email_call: EmailGet = EmailGet::new(
+        Get::new()
+            .ids(Some(ids.iter().cloned().collect::<Vec<String>>()))
+            .account_id(conn.account_id.lock().unwrap().clone()),
+    );
 
     let mut req = Request::new(conn.request_no.clone());
     req.add_call(email_call);
@@ -408,14 +306,13 @@ pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope
         .send();
 
     let res_text = res?.text()?;
-    let v: JsonResponse = serde_json::from_str(&res_text)?;
-    let mut f = std::fs::File::create(std::dbg!(format!("/tmp/asdfsa{}", seq))).unwrap();
-    use std::io::Write;
-    f.write_all(
-        serde_json::to_string_pretty(&serde_json::from_str::<Value>(&res_text)?)?.as_bytes(),
-    )
-    .unwrap();
-    Ok(vec![])
+    let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+    let e = GetResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
+    let GetResponse::<EmailObject> { list, .. } = e;
+    Ok(list
+        .into_iter()
+        .map(std::convert::Into::into)
+        .collect::<Vec<Envelope>>())
 }
 
 /*

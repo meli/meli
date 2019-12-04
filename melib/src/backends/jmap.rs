@@ -45,6 +45,15 @@ macro_rules! _impl {
         }
     }
 
+#[macro_export]
+macro_rules! _impl_get_mut {
+        ($method:ident, $field:ident : $t:ty) => {
+            pub fn $method(&mut self) -> &mut $t {
+                &mut self.$field
+            }
+        }
+    }
+
 pub mod connection;
 use connection::*;
 

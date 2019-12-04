@@ -22,16 +22,18 @@
 use super::Id;
 use core::marker::PhantomData;
 use serde::{de::DeserializeOwned, Serialize};
-use serde_json::Value;
+use serde_json::{value::RawValue, Value};
 
 mod filters;
 pub use filters::*;
 mod comparator;
 pub use comparator::*;
 
-use super::protocol::Method;
+use super::protocol::{Method, Response};
 use std::collections::HashMap;
-pub trait Object {}
+pub trait Object {
+    const NAME: &'static str;
+}
 
 // 5.1.  /get
 //
@@ -102,7 +104,7 @@ pub struct Account {
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct GetCall<OBJ: Object>
+pub struct Get<OBJ: Object>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
@@ -112,10 +114,11 @@ where
     pub ids: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<String>>,
+    #[serde(skip)]
     _ph: PhantomData<*const OBJ>,
 }
 
-impl<OBJ: Object> GetCall<OBJ>
+impl<OBJ: Object> Get<OBJ>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
@@ -173,14 +176,41 @@ where
 //   the maximum number the server is willing to process in a single
 //   method call.
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct GetResponse<T> {
+pub struct MethodResponse<'a> {
+    #[serde(borrow)]
+    pub method_responses: Vec<&'a RawValue>,
+    #[serde(default)]
+    pub created_ids: HashMap<Id, Id>,
+    #[serde(default)]
+    pub session_state: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct GetResponse<OBJ: Object> {
     #[serde(skip_serializing_if = "String::is_empty")]
-    account_id: String,
-    state: String,
-    list: Vec<T>,
-    not_found: Vec<String>,
+    pub account_id: String,
+    pub state: String,
+    pub list: Vec<OBJ>,
+    pub not_found: Vec<String>,
+}
+
+impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for GetResponse<OBJ> {
+    type Error = crate::error::MeliError;
+    fn try_from(t: &RawValue) -> Result<GetResponse<OBJ>, crate::error::MeliError> {
+        let res: (String, GetResponse<OBJ>, String) = serde_json::from_str(t.get())?;
+        assert_eq!(&res.0, &format!("{}/get", OBJ::NAME));
+        Ok(res.1)
+    }
+}
+
+impl<OBJ: Object> GetResponse<OBJ> {
+    _impl_get_mut!(account_id_mut, account_id: String);
+    _impl_get_mut!(state_mut, state: String);
+    _impl_get_mut!(list_mut, list: Vec<OBJ>);
+    _impl_get_mut!(not_found_mut, not_found: Vec<String>);
 }
 
 #[derive(Deserialize, Debug)]
@@ -379,6 +409,7 @@ where
     limit: Option<u64>,
     #[serde(default = "bool_false")]
     calculate_total: bool,
+    #[serde(skip)]
     _ph: PhantomData<*const OBJ>,
 }
 
@@ -495,3 +526,33 @@ pub fn bool_true() -> bool {
 //    server cannot process it.  If the filter was the result of a user's
 //    search input, the client SHOULD suggest that the user simplify their
 //    search.
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryResponse<OBJ: Object> {
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub account_id: String,
+    pub query_state: String,
+    pub can_calculate_changes: bool,
+    pub position: u64,
+    pub ids: Vec<Id>,
+    #[serde(default)]
+    pub total: u64,
+    #[serde(default)]
+    pub limit: u64,
+    #[serde(skip)]
+    _ph: PhantomData<*const OBJ>,
+}
+
+impl<OBJ: Object + DeserializeOwned> std::convert::TryFrom<&RawValue> for QueryResponse<OBJ> {
+    type Error = crate::error::MeliError;
+    fn try_from(t: &RawValue) -> Result<QueryResponse<OBJ>, crate::error::MeliError> {
+        let res: (String, QueryResponse<OBJ>, String) = serde_json::from_str(t.get())?;
+        assert_eq!(&res.0, &format!("{}/query", OBJ::NAME));
+        Ok(res.1)
+    }
+}
+
+impl<OBJ: Object> QueryResponse<OBJ> {
+    _impl_get_mut!(ids_mut, ids: Vec<Id>);
+}
