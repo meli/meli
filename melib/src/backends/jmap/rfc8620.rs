@@ -21,13 +21,16 @@
 
 use super::Id;
 use core::marker::PhantomData;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde_json::{value::RawValue, Value};
 
 mod filters;
 pub use filters::*;
 mod comparator;
 pub use comparator::*;
+mod argument;
+pub use argument::*;
 
 use super::protocol::{Method, Response};
 use std::collections::HashMap;
@@ -102,7 +105,7 @@ pub struct Account {
     extra_properties: HashMap<String, Value>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Get<OBJ: Object>
 where
@@ -111,7 +114,8 @@ where
     #[serde(skip_serializing_if = "String::is_empty")]
     pub account_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ids: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub ids: Option<JmapArgument<Vec<String>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<String>>,
     #[serde(skip)]
@@ -131,9 +135,65 @@ where
         }
     }
     _impl!(account_id: String);
-    _impl!(ids: Option<Vec<String>>);
+    _impl!(ids: Option<JmapArgument<Vec<String>>>);
     _impl!(properties: Option<Vec<String>>);
 }
+
+impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut fields_no = 0;
+        if !self.account_id.is_empty() {
+            fields_no += 1;
+        }
+        if !self.ids.is_none() {
+            fields_no += 1;
+        }
+        if !self.properties.is_none() {
+            fields_no += 1;
+        }
+
+        let mut state = serializer.serialize_struct("Get", fields_no)?;
+        if !self.account_id.is_empty() {
+            state.serialize_field("accountId", &self.account_id)?;
+        }
+        match self.ids.as_ref() {
+            None => {}
+            Some(JmapArgument::Value(ref v)) => state.serialize_field("ids", v)?,
+            Some(JmapArgument::ResultReference {
+                ref result_of,
+                ref name,
+                ref path,
+            }) => {
+                #[derive(Serialize)]
+                #[serde(rename_all = "camelCase")]
+                struct A<'a> {
+                    result_of: &'a str,
+                    name: &'a str,
+                    path: &'a str,
+                }
+
+                state.serialize_field(
+                    "#ids",
+                    &A {
+                        result_of,
+                        name,
+                        path,
+                    },
+                )?;
+            }
+        }
+
+        if !self.properties.is_none() {
+            state.serialize_field("properties", self.properties.as_ref().unwrap());
+        }
+
+        state.end()
+    }
+}
+
 //   The response has the following arguments:
 //
 //   o  accountId: "Id"
@@ -192,6 +252,7 @@ pub struct MethodResponse<'a> {
 pub struct GetResponse<OBJ: Object> {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub account_id: String,
+    #[serde(default)]
     pub state: String,
     pub list: Vec<OBJ>,
     pub not_found: Vec<String>,

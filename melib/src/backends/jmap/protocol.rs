@@ -80,7 +80,7 @@ impl Request {
         }
     }
 
-    pub fn add_call<M: Method<O>, O: Object>(&mut self, call: M) -> usize {
+    pub fn add_call<M: Method<O>, O: Object>(&mut self, call: &M) -> usize {
         let seq = get_request_no!(self.request_no);
         self.method_calls
             .push(serde_json::to_value((M::NAME, call, &format!("m{}", seq))).unwrap());
@@ -177,10 +177,7 @@ pub struct JsonResponse<'a> {
 pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<String>> {
     let seq = get_request_no!(conn.request_no);
     let email_call: EmailQueryCall = EmailQueryCall {
-        filter: EmailFilterCondition {
-            in_mailboxes: vec![folder.id.clone()],
-            ..Default::default()
-        },
+        filter: EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
         collapse_threads: false,
         position: 0,
         fetch_threads: true,
@@ -202,7 +199,7 @@ pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Ve
     };
 
     let mut req = Request::new(conn.request_no.clone());
-    req.add_call(email_call);
+    req.add_call(&email_call);
 
     /*
     {
@@ -291,12 +288,14 @@ pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope
     let seq = get_request_no!(conn.request_no);
     let email_call: EmailGet = EmailGet::new(
         Get::new()
-            .ids(Some(ids.iter().cloned().collect::<Vec<String>>()))
+            .ids(Some(JmapArgument::value(
+                ids.iter().cloned().collect::<Vec<String>>(),
+            )))
             .account_id(conn.account_id.lock().unwrap().clone()),
     );
 
     let mut req = Request::new(conn.request_no.clone());
-    req.add_call(email_call);
+    req.add_call(&email_call);
     let res = conn
         .client
         .lock()
@@ -331,3 +330,60 @@ pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope
         }))
 
 */
+
+pub fn get(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<Envelope>> {
+    let email_query_call: EmailQueryCall = EmailQueryCall {
+        filter: EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
+        collapse_threads: false,
+        position: 0,
+        fetch_threads: true,
+        fetch_messages: true,
+        fetch_message_properties: vec![
+            MessageProperty::ThreadId,
+            MessageProperty::MailboxId,
+            MessageProperty::IsUnread,
+            MessageProperty::IsFlagged,
+            MessageProperty::IsAnswered,
+            MessageProperty::IsDraft,
+            MessageProperty::HasAttachment,
+            MessageProperty::From,
+            MessageProperty::To,
+            MessageProperty::Subject,
+            MessageProperty::Date,
+            MessageProperty::Preview,
+        ],
+    };
+
+    let mut req = Request::new(conn.request_no.clone());
+    let prev_seq = req.add_call(&email_query_call);
+
+    let email_call: EmailGet = EmailGet::new(
+        Get::new()
+            .ids(Some(JmapArgument::reference(
+                prev_seq,
+                &email_query_call,
+                "/ids",
+            )))
+            .account_id(conn.account_id.lock().unwrap().clone()),
+    );
+
+    req.add_call(&email_call);
+
+    let res = conn
+        .client
+        .lock()
+        .unwrap()
+        .post("https://jmap-proxy.local/jmap/fc32dffe-14e7-11ea-a277-2477037a1804/")
+        .json(&req)
+        .send();
+
+    let res_text = res?.text()?;
+
+    let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
+    let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
+    let GetResponse::<EmailObject> { list, .. } = e;
+    Ok(list
+        .into_iter()
+        .map(std::convert::Into::into)
+        .collect::<Vec<Envelope>>())
+}

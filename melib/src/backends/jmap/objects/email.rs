@@ -399,7 +399,6 @@ impl EmailGet {
         }
     }
 
-    _impl!(get_call: Get<EmailObject>);
     _impl!(body_properties: Vec<String>);
     _impl!(fetch_text_body_values: bool);
     _impl!(fetch_html_body_values: bool);
@@ -410,8 +409,8 @@ impl EmailGet {
 #[derive(Serialize, Deserialize, Default, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailFilterCondition {
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub in_mailboxes: Vec<Id>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub in_mailbox: Option<Id>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub in_mailbox_other_than: Vec<Id>,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -455,7 +454,11 @@ pub struct EmailFilterCondition {
 }
 
 impl EmailFilterCondition {
-    _impl!(in_mailboxes: Vec<Id>);
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    _impl!(in_mailbox: Option<Id>);
     _impl!(in_mailbox_other_than: Vec<Id>);
     _impl!(before: UtcDate);
     _impl!(after: UtcDate);

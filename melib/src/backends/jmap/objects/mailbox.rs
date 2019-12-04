@@ -60,7 +60,12 @@ pub struct MailboxGet {
     #[serde(flatten)]
     pub get_call: Get<MailboxObject>,
 }
+impl MailboxGet {
+    pub fn new(get_call: Get<MailboxObject>) -> Self {
+        MailboxGet { get_call }
+    }
+}
 
 impl Method<MailboxObject> for MailboxGet {
-    const NAME: &'static str = "Mailbox/query";
+    const NAME: &'static str = "Mailbox/get";
 }

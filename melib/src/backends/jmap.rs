@@ -190,12 +190,10 @@ impl MailBackend for JmapType {
         let handle = {
             let tx = w.tx();
             let closure = move |_work_context| {
-                tx.send(AsyncStatus::Payload(
-                    protocol::get_message_list(&connection, &folders.read().unwrap()[&folder_hash])
-                        .and_then(|ids| {
-                            protocol::get_message(&connection, std::dbg!(&ids).as_slice())
-                        }),
-                ))
+                tx.send(AsyncStatus::Payload(protocol::get(
+                    &connection,
+                    &folders.read().unwrap()[&folder_hash],
+                )))
                 .unwrap();
                 tx.send(AsyncStatus::Finished).unwrap();
             };
