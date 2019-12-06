@@ -428,18 +428,6 @@ impl BackendOp for NotmuchOp {
         Ok(self.bytes.as_ref().unwrap().as_bytes())
     }
 
-    fn fetch_headers(&mut self) -> Result<&[u8]> {
-        let raw = self.as_bytes()?;
-        let result = crate::email::parser::headers_raw(raw).to_full_result()?;
-        Ok(result)
-    }
-
-    fn fetch_body(&mut self) -> Result<&[u8]> {
-        let raw = self.as_bytes()?;
-        let result = crate::email::parser::body_raw(raw).to_full_result()?;
-        Ok(result)
-    }
-
     fn fetch_flags(&self) -> Flag {
         let mut flag = Flag::default();
         let path = self.index.read().unwrap()[&self.hash].to_str().unwrap();

@@ -24,7 +24,6 @@ mod backend;
 pub use self::backend::*;
 
 use crate::backends::*;
-use crate::email::parser;
 use crate::email::{Envelope, Flag};
 use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
@@ -95,16 +94,6 @@ impl<'a> BackendOp for MaildirOp {
         }
         /* Unwrap is safe since we use ? above. */
         Ok(unsafe { self.slice.as_ref().unwrap().as_slice() })
-    }
-    fn fetch_headers(&mut self) -> Result<&[u8]> {
-        let raw = self.as_bytes()?;
-        let result = parser::headers_raw(raw).to_full_result()?;
-        Ok(result)
-    }
-    fn fetch_body(&mut self) -> Result<&[u8]> {
-        let raw = self.as_bytes()?;
-        let result = parser::body_raw(raw).to_full_result()?;
-        Ok(result)
     }
     fn fetch_flags(&self) -> Flag {
         let mut flag = Flag::default();

@@ -338,10 +338,6 @@ impl Envelope {
         Ok(())
     }
 
-    pub fn populate_headers_from_token(&mut self, mut operation: Box<dyn BackendOp>) -> Result<()> {
-        let headers = operation.fetch_headers()?;
-        self.populate_headers(headers)
-    }
     pub fn date(&self) -> UnixTimestamp {
         self.timestamp
     }

@@ -170,18 +170,6 @@ impl BackendOp for MboxOp {
         })
     }
 
-    fn fetch_headers(&mut self) -> Result<&[u8]> {
-        let raw = self.as_bytes()?;
-        let result = parser::headers_raw(raw).to_full_result()?;
-        Ok(result)
-    }
-
-    fn fetch_body(&mut self) -> Result<&[u8]> {
-        let raw = self.as_bytes()?;
-        let result = parser::body_raw(raw).to_full_result()?;
-        Ok(result)
-    }
-
     fn fetch_flags(&self) -> Flag {
         let mut flags = Flag::empty();
         let file = match std::fs::OpenOptions::new()
