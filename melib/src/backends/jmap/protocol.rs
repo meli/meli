@@ -314,24 +314,11 @@ pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope
         .collect::<Vec<Envelope>>())
 }
 
-/*
- *
- *json!({
-            "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
-            "methodCalls": [["Email/get", {
-                "ids": ids,
-                "properties": [ "threadId", "mailboxIds", "from", "subject",
-                "receivedAt",
-                "htmlBody", "bodyValues" ],
-                "bodyProperties": [ "partId", "blobId", "size", "type" ],
-                "fetchHTMLBodyValues": true,
-                "maxBodyValueBytes": 256
-            }, format!("m{}", seq).as_str()]],
-        }))
-
-*/
-
-pub fn get(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<Envelope>> {
+pub fn get(
+    conn: &JmapConnection,
+    store: &Arc<RwLock<Store>>,
+    folder: &JmapFolder,
+) -> Result<Vec<Envelope>> {
     let email_query_call: EmailQueryCall = EmailQueryCall {
         filter: EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
         collapse_threads: false,
@@ -349,7 +336,6 @@ pub fn get(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<Envelope>> 
             MessageProperty::From,
             MessageProperty::To,
             MessageProperty::Subject,
-            MessageProperty::Date,
             MessageProperty::Preview,
         ],
     };
@@ -382,8 +368,18 @@ pub fn get(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<Envelope>> 
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
     let GetResponse::<EmailObject> { list, .. } = e;
-    Ok(list
+    let ids = list
+        .iter()
+        .map(|obj| (obj.id.clone(), obj.blob_id.clone()))
+        .collect::<Vec<(Id, Id)>>();
+    let ret = list
         .into_iter()
         .map(std::convert::Into::into)
-        .collect::<Vec<Envelope>>())
+        .collect::<Vec<Envelope>>();
+    let mut store_lck = store.write().unwrap();
+    for (env, (id, blob_id)) in ret.iter().zip(ids.into_iter()) {
+        store_lck.id_store.insert(env.hash(), id);
+        store_lck.blob_id_store.insert(env.hash(), blob_id);
+    }
+    Ok(ret)
 }

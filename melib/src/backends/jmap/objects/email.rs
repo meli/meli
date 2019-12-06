@@ -129,7 +129,7 @@ use std::hash::Hasher;
 #[serde(rename_all = "camelCase")]
 pub struct EmailObject {
     #[serde(default)]
-    id: Id,
+    pub id: Id,
     #[serde(default)]
     mailbox_ids: HashMap<Id, bool>,
     #[serde(default)]
@@ -155,7 +155,7 @@ pub struct EmailObject {
     #[serde(default)]
     attachments: Vec<Value>,
     #[serde(default)]
-    blob_id: String,
+    pub blob_id: String,
     #[serde(default)]
     has_attachment: bool,
     #[serde(default)]

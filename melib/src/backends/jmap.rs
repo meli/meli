@@ -54,6 +54,9 @@ macro_rules! _impl_get_mut {
         }
     }
 
+pub mod operations;
+use operations::*;
+
 pub mod connection;
 use connection::*;
 
@@ -168,6 +171,13 @@ macro_rules! get_conf_val {
     };
 }
 
+#[derive(Debug, Default)]
+pub struct Store {
+    byte_cache: FnvHashMap<EnvelopeHash, EnvelopeCache>,
+    id_store: FnvHashMap<EnvelopeHash, Id>,
+    blob_id_store: FnvHashMap<EnvelopeHash, Id>,
+}
+
 #[derive(Debug)]
 pub struct JmapType {
     account_name: String,
@@ -175,6 +185,7 @@ pub struct JmapType {
     is_subscribed: Arc<IsSubscribedFn>,
     server_conf: JmapServerConf,
     connection: Arc<JmapConnection>,
+    store: Arc<RwLock<Store>>,
     folders: Arc<RwLock<FnvHashMap<FolderHash, JmapFolder>>>,
 }
 
@@ -185,6 +196,7 @@ impl MailBackend for JmapType {
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let folders = self.folders.clone();
+        let store = self.store.clone();
         let connection = self.connection.clone();
         let folder_hash = folder.hash();
         let handle = {
@@ -192,6 +204,7 @@ impl MailBackend for JmapType {
             let closure = move |_work_context| {
                 tx.send(AsyncStatus::Payload(protocol::get(
                     &connection,
+                    &store,
                     &folders.read().unwrap()[&folder_hash],
                 )))
                 .unwrap();
@@ -231,7 +244,11 @@ impl MailBackend for JmapType {
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
-        unimplemented!()
+        Box::new(JmapOp::new(
+            hash,
+            self.connection.clone(),
+            self.store.clone(),
+        ))
     }
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
@@ -257,6 +274,7 @@ impl JmapType {
 
         Ok(Box::new(JmapType {
             connection: Arc::new(JmapConnection::new(&server_conf, online.clone())?),
+            store: Arc::new(RwLock::new(Store::default())),
             folders: Arc::new(RwLock::new(FnvHashMap::default())),
             account_name: s.name.clone(),
             online,
