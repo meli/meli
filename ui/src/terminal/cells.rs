@@ -363,10 +363,10 @@ impl CellBuffer {
     pub fn bounds_iter(&self, area: Area) -> BoundsIterator {
         BoundsIterator {
             rows: std::cmp::min(self.rows.saturating_sub(1), get_y(upper_left!(area)))
-                ..(std::cmp::min(self.rows, get_y(bottom_right!(area))) + 1),
+                ..(std::cmp::min(self.rows, get_y(bottom_right!(area)) + 1)),
             cols: (
                 std::cmp::min(self.cols.saturating_sub(1), get_x(upper_left!(area))),
-                std::cmp::min(self.cols.saturating_sub(1), get_x(bottom_right!(area))),
+                std::cmp::min(self.cols, get_x(bottom_right!(area)) + 1),
             ),
         }
     }
@@ -1043,9 +1043,9 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area) {
     }
     let upper_left = upper_left!(area);
     let bottom_right = bottom_right!(area);
-    for y in get_y(upper_left)..=get_y(bottom_right) {
-        for x in get_x(upper_left)..=get_x(bottom_right) {
-            grid[(x, y)] = Cell::default();
+    for row in grid.bounds_iter(area) {
+        for c in row {
+            grid[c] = Cell::default();
         }
     }
 }
@@ -1325,7 +1325,7 @@ impl Iterator for BoundsIterator {
         if let Some(next_row) = self.rows.next() {
             Some(RowIterator {
                 row: next_row,
-                col: self.cols.0..(self.cols.1 + 1),
+                col: self.cols.0..self.cols.1,
             })
         } else {
             None

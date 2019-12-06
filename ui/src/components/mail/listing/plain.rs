@@ -252,17 +252,19 @@ impl ListingTrait for PlainListing {
             let remainder = width
                 .saturating_sub(self.data_columns.widths[0])
                 .saturating_sub(self.data_columns.widths[1])
-                - 4;
+                .saturating_sub(4);
             self.data_columns.widths[2] = remainder / 6;
-            self.data_columns.widths[4] = (2 * remainder) / 3 - self.data_columns.widths[3];
+            self.data_columns.widths[4] =
+                ((2 * remainder) / 3).saturating_sub(self.data_columns.widths[3]);
         } else {
             let remainder = width
                 .saturating_sub(self.data_columns.widths[0])
                 .saturating_sub(self.data_columns.widths[1])
                 .saturating_sub(8);
             if min_col_width + self.data_columns.widths[4] > remainder {
-                self.data_columns.widths[4] =
-                    remainder - min_col_width - self.data_columns.widths[3];
+                self.data_columns.widths[4] = remainder
+                    .saturating_sub(min_col_width)
+                    .saturating_sub(self.data_columns.widths[3]);
                 self.data_columns.widths[2] = min_col_width;
             }
         }
