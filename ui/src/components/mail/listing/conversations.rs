@@ -208,6 +208,7 @@ impl ListingTrait for ConversationsListing {
             return;
         }
         let rows = (get_y(bottom_right) - get_y(upper_left) + 1) / 3;
+        let pad = (get_y(bottom_right) - get_y(upper_left) + 1) % 3;
 
         if let Some(mvm) = self.movement.take() {
             match mvm {
@@ -306,7 +307,7 @@ impl ListingTrait for ConversationsListing {
         );
 
         /* calculate how many entries are visible in this page */
-        let rows = if top_idx + rows > self.length {
+        let (pad, rows) = if top_idx + rows > self.length {
             clear_area(
                 grid,
                 (
@@ -314,9 +315,9 @@ impl ListingTrait for ConversationsListing {
                     bottom_right,
                 ),
             );
-            self.length - top_idx
+            (0, self.length - top_idx)
         } else {
-            rows
+            (pad, rows)
         };
 
         /* fill any remaining columns, if our view is wider than self.content */
@@ -341,7 +342,23 @@ impl ListingTrait for ConversationsListing {
                     grid[(x, y_offset + 3 * y + 2)].set_bg(bg_color);
                 }
             }
+            if pad > 0 {
+                let y = 3 * rows;
+                let bg_color = grid[(get_x(upper_left) + width - 1, y_offset + y)].bg();
+                for x in (get_x(upper_left) + width)..=get_x(bottom_right) {
+                    grid[(x, y_offset + y)].set_bg(bg_color);
+                    grid[(x, y_offset + y + 1)].set_ch('▁');
+                    grid[(x, y_offset + y + 1)].set_bg(bg_color);
+                    if pad == 2 {
+                        grid[(x, y_offset + y + 2)].set_fg(Color::Default);
+                        grid[(x, y_offset + y + 2)].set_ch('▓');
+                        grid[(x, y_offset + y + 2)].set_fg(padding_fg);
+                        grid[(x, y_offset + y + 2)].set_bg(bg_color);
+                    }
+                }
+            }
         }
+
         context.dirty_areas.push_back(area);
     }
 
@@ -757,7 +774,7 @@ impl ConversationsListing {
                 self.content[(x, 3 * idx)].set_bg(bg_color);
             }
             /* draw subject */
-            let (x, _) = write_string_to_grid(
+            let (mut x, _) = write_string_to_grid(
                 &strings.subject,
                 &mut self.content,
                 fg_color,
@@ -766,32 +783,28 @@ impl ConversationsListing {
                 ((x, 3 * idx), (width - 1, 3 * idx)),
                 None,
             );
-            let x = {
-                let mut x = x + 1;
-                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                    let (_x, _) = write_string_to_grid(
-                        t,
-                        &mut self.content,
-                        Color::White,
-                        Color::Byte(color),
-                        Attr::Bold,
-                        ((x + 1, 3 * idx), (width - 1, 3 * idx)),
-                        None,
-                    );
-                    self.content[(x, 3 * idx)].set_bg(Color::Byte(color));
-                    if _x < width {
-                        self.content[(_x, 3 * idx)].set_bg(Color::Byte(color));
-                        self.content[(_x, 3 * idx)].set_keep_bg(true);
-                    }
-                    for x in (x + 1).._x {
-                        self.content[(x, 3 * idx)].set_keep_fg(true);
-                        self.content[(x, 3 * idx)].set_keep_bg(true);
-                    }
-                    self.content[(x, 3 * idx)].set_keep_bg(true);
-                    x = _x + 1;
+            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                let (_x, _) = write_string_to_grid(
+                    t,
+                    &mut self.content,
+                    Color::White,
+                    Color::Byte(color),
+                    Attr::Bold,
+                    ((x + 1, 3 * idx), (width - 1, 3 * idx)),
+                    None,
+                );
+                self.content[(x, 3 * idx)].set_bg(Color::Byte(color));
+                if _x < width {
+                    self.content[(_x, 3 * idx)].set_bg(Color::Byte(color));
+                    self.content[(_x, 3 * idx)].set_keep_bg(true);
                 }
-                x
-            };
+                for x in (x + 1).._x {
+                    self.content[(x, 3 * idx)].set_keep_fg(true);
+                    self.content[(x, 3 * idx)].set_keep_bg(true);
+                }
+                self.content[(x, 3 * idx)].set_keep_bg(true);
+                x = _x + 1;
+            }
             for x in x..width {
                 self.content[(x, 3 * idx)].set_bg(bg_color);
             }
