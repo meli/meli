@@ -138,24 +138,6 @@ impl CellBuffer {
         self.rows = newrows;
     }
 
-    pub fn split_newlines(self) -> Self {
-        let lines: Vec<&[Cell]> = self.split(|cell| cell.ch() == '\n').collect();
-        let height = lines.len();
-        let width = lines.iter().map(|l| l.len()).max().unwrap_or(0) + 1;
-        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
-        {
-            let mut x;
-            let c_slice: &mut [Cell] = &mut content;
-            for (y, l) in lines.iter().enumerate() {
-                let y_r = y * width;
-                x = l.len() + y_r;
-                c_slice[y_r..x].copy_from_slice(l);
-                c_slice[x].set_ch('\n');
-            }
-        }
-        content
-    }
-
     pub fn is_empty(&self) -> bool {
         self.buf.is_empty()
     }
@@ -419,24 +401,6 @@ impl Default for CellBuffer {
     /// Constructs a new `CellBuffer` with a size of `(0, 0)`, using the default `Cell` as a blank.
     fn default() -> CellBuffer {
         CellBuffer::new(0, 0, Cell::default())
-    }
-}
-
-impl<'a> From<&'a str> for CellBuffer {
-    fn from(s: &'a str) -> Self {
-        let lines: Vec<&str> = s.lines().map(|l| l.trim_end()).collect();
-        let len = s.len() + lines.len();
-        let mut buf = CellBuffer::new(len, 1, Cell::default());
-        let mut x = 0;
-        for l in &lines {
-            for (idx, c) in l.chars().enumerate() {
-                buf[(x + idx, 0)].set_ch(c);
-            }
-            x += l.chars().count();
-            buf[(x, 0)].set_ch('\n');
-            x += 1;
-        }
-        buf
     }
 }
 

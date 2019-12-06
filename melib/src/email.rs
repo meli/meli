@@ -467,7 +467,15 @@ impl Envelope {
         };
         self.in_reply_to = Some(MessageID::new(new_val, slice));
     }
-    pub fn set_subject(&mut self, new_val: Vec<u8>) {
+    pub fn set_subject(&mut self, mut new_val: Vec<u8>) {
+        while new_val
+            .last()
+            .map(|&u| char::is_control(u as char))
+            .unwrap_or(false)
+        {
+            new_val.pop();
+        }
+
         self.subject = Some(new_val);
     }
     pub fn set_message_id(&mut self, new_val: &[u8]) {

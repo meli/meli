@@ -265,38 +265,6 @@ impl MailView {
             }
         }
     }
-    pub fn plain_text_to_buf(s: &str, highlight_urls: bool) -> CellBuffer {
-        let mut buf = CellBuffer::from(s);
-
-        if highlight_urls {
-            let lines: Vec<&str> = s.split('\n').map(|l| l.trim_end()).collect();
-            let mut shift = 0;
-            let mut lidx_total = 0;
-            let finder = LinkFinder::new();
-            for r in &lines {
-                for l in finder.links(&r) {
-                    let offset = if lidx_total < 10 {
-                        3
-                    } else if lidx_total < 100 {
-                        4
-                    } else if lidx_total < 1000 {
-                        5
-                    } else {
-                        panic!("BUG: Message body with more than 100 urls");
-                    };
-                    for i in 1..=offset {
-                        buf[(l.start() + shift - i, 0)].set_fg(Color::Byte(226));
-                        //buf[(l.start() + shift - 2, 0)].set_fg(Color::Byte(226));
-                        //buf[(l.start() + shift - 3, 0)].set_fg(Color::Byte(226));
-                    }
-                    lidx_total += 1;
-                }
-                // Each Cell represents one char so next line will be:
-                shift += r.chars().count() + 1;
-            }
-        }
-        buf
-    }
 
     pub fn update(&mut self, new_coordinates: (usize, usize, EnvelopeHash)) {
         self.coordinates = new_coordinates;
