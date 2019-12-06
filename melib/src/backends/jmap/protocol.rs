@@ -182,91 +182,11 @@ pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Ve
         position: 0,
         fetch_threads: true,
         fetch_messages: true,
-        fetch_message_properties: vec![
-            MessageProperty::ThreadId,
-            MessageProperty::MailboxId,
-            MessageProperty::IsUnread,
-            MessageProperty::IsFlagged,
-            MessageProperty::IsAnswered,
-            MessageProperty::IsDraft,
-            MessageProperty::HasAttachment,
-            MessageProperty::From,
-            MessageProperty::To,
-            MessageProperty::Subject,
-            MessageProperty::Date,
-            MessageProperty::Preview,
-        ],
+        fetch_message_properties: vec![],
     };
 
     let mut req = Request::new(conn.request_no.clone());
     req.add_call(&email_call);
-
-    /*
-    {
-        "using": [
-            "urn:ietf:params:jmap:core",
-            "urn:ietf:params:jmap:mail"
-        ],
-        "methodCalls": [[
-                "Email/query",
-                {
-                    "collapseThreads": false,
-                    "fetchMessageProperties": [
-                        "threadId",
-                        "mailboxId",
-                        "isUnread",
-                        "isFlagged",
-                        "isAnswered",
-                        "isDraft",
-                        "hasAttachment",
-                        "from",
-                        "to",
-                        "subject",
-                        "date",
-                        "preview"
-                    ],
-                    "fetchMessages": true,
-                    "fetchThreads": true,
-                    "filter": [
-                        {
-                            "inMailboxes": [
-                                "fde49e47-14e7-11ea-a277-2477037a1804"
-                            ]
-                        }
-                    ],
-                    "position": 0
-                },
-                "f"
-            ]]
-    }
-            */
-    /*
-        r#"
-        "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
-        "methodCalls": [["Email/query", { "filter": {
-            "inMailboxes": [ folder.id ]
-        },
-       "collapseThreads": false,
-       "position": 0,
-       "fetchThreads": true,
-       "fetchMessages": true,
-       "fetchMessageProperties": [
-           "threadId",
-           "mailboxId",
-           "isUnread",
-           "isFlagged",
-           "isAnswered",
-           "isDraft",
-           "hasAttachment",
-           "from",
-           "to",
-           "subject",
-           "date",
-           "preview"
-       ],
-        }, format!("m{}", seq).as_str()]],
-    });"
-    );*/
 
     let res = conn
         .client
@@ -327,7 +247,7 @@ pub fn get(
         fetch_messages: true,
         fetch_message_properties: vec![
             MessageProperty::ThreadId,
-            MessageProperty::MailboxId,
+            MessageProperty::MailboxIds,
             MessageProperty::IsUnread,
             MessageProperty::IsFlagged,
             MessageProperty::IsAnswered,
@@ -348,7 +268,7 @@ pub fn get(
             .ids(Some(JmapArgument::reference(
                 prev_seq,
                 &email_query_call,
-                "/ids",
+                EmailQueryCall::RESULT_FIELD_IDS,
             )))
             .account_id(conn.account_id.lock().unwrap().clone()),
     );
@@ -367,7 +287,22 @@ pub fn get(
 
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
     let e = GetResponse::<EmailObject>::try_from(v.method_responses.pop().unwrap())?;
-    let GetResponse::<EmailObject> { list, .. } = e;
+    let GetResponse::<EmailObject> { list, state, .. } = e;
+    {
+        let mut states_lck = conn.method_call_states.lock().unwrap();
+
+        if let Some(prev_state) = states_lck.get_mut(&EmailGet::NAME) {
+            debug!("{:?}: prev_state was {}", EmailGet::NAME, prev_state);
+
+            if *prev_state != state { /* Query Changes. */ }
+
+            *prev_state = state;
+            debug!("{:?}: curr state is {}", EmailGet::NAME, prev_state);
+        } else {
+            debug!("{:?}: inserting state {}", EmailGet::NAME, &state);
+            states_lck.insert(EmailGet::NAME, state);
+        }
+    }
     let ids = list
         .iter()
         .map(|obj| (obj.id.clone(), obj.blob_id.clone()))

@@ -28,6 +28,7 @@ pub struct JmapConnection {
     pub online_status: Arc<Mutex<bool>>,
     pub server_conf: JmapServerConf,
     pub account_id: Arc<Mutex<String>>,
+    pub method_call_states: Arc<Mutex<FnvHashMap<&'static str, String>>>,
 }
 
 impl JmapConnection {
@@ -61,6 +62,7 @@ impl JmapConnection {
             online_status,
             server_conf,
             account_id: Arc::new(Mutex::new(String::new())),
+            method_call_states: Arc::new(Mutex::new(Default::default())),
         })
     }
 }

@@ -22,6 +22,7 @@
 use super::*;
 use crate::backends::jmap::protocol::*;
 use crate::backends::jmap::rfc8620::bool_false;
+use core::marker::PhantomData;
 use serde::de::{Deserialize, Deserializer};
 use serde_json::Value;
 use std::collections::hash_map::DefaultHasher;
@@ -131,6 +132,8 @@ pub struct EmailObject {
     #[serde(default)]
     pub id: Id,
     #[serde(default)]
+    pub blob_id: String,
+    #[serde(default)]
     mailbox_ids: HashMap<Id, bool>,
     #[serde(default)]
     size: u64,
@@ -154,8 +157,6 @@ pub struct EmailObject {
     attached_emails: Option<Id>,
     #[serde(default)]
     attachments: Vec<Value>,
-    #[serde(default)]
-    pub blob_id: String,
     #[serde(default)]
     has_attachment: bool,
     #[serde(default)]
@@ -366,6 +367,14 @@ impl Method<EmailObject> for EmailQueryCall {
     const NAME: &'static str = "Email/query";
 }
 
+impl EmailQueryCall {
+    pub const RESULT_FIELD_IDS: ResultField<EmailQueryCall, EmailObject> =
+        ResultField::<EmailQueryCall, EmailObject> {
+            field: "/ids",
+            _ph: PhantomData,
+        };
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct EmailGet {
@@ -486,7 +495,10 @@ impl FilterTrait<EmailObject> for EmailFilterCondition {}
 #[serde(rename_all = "camelCase")]
 pub enum MessageProperty {
     ThreadId,
-    MailboxId,
+    MailboxIds,
+    Keywords,
+    Size,
+    ReceivedAt,
     IsUnread,
     IsFlagged,
     IsAnswered,
@@ -494,7 +506,15 @@ pub enum MessageProperty {
     HasAttachment,
     From,
     To,
+    Cc,
+    Bcc,
+    ReplyTo,
     Subject,
-    Date,
+    SentAt,
     Preview,
+    Id,
+    BlobId,
+    MessageId,
+    InReplyTo,
+    Sender,
 }

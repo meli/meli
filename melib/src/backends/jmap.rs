@@ -37,19 +37,23 @@ use std::sync::{Arc, Mutex, RwLock};
 
 #[macro_export]
 macro_rules! _impl {
-        ($field:ident : $t:ty) => {
+        ($(#[$outer:meta])*$field:ident : $t:ty) => {
+            $(#[$outer])*
             pub fn $field(mut self, new_val: $t) -> Self {
                 self.$field = new_val;
                 self
             }
-        }
-    }
-
-#[macro_export]
-macro_rules! _impl_get_mut {
-        ($method:ident, $field:ident : $t:ty) => {
+        };
+        (get_mut $(#[$outer:meta])*$method:ident, $field:ident : $t:ty) => {
+            $(#[$outer])*
             pub fn $method(&mut self) -> &mut $t {
                 &mut self.$field
+            }
+        };
+        (get $(#[$outer:meta])*$method:ident, $field:ident : $t:ty) => {
+            $(#[$outer])*
+            pub fn $method(&self) -> &$t {
+                &self.$field
             }
         }
     }
