@@ -1153,6 +1153,24 @@ pub fn send_draft(
                 return false;
             }
             draft.attachments.push(output.unwrap());
+        } else {
+            let mut content_type = ContentType::default();
+            if format_flowed {
+                if let ContentType::Text {
+                    ref mut parameters, ..
+                } = content_type
+                {
+                    parameters.push((b"format".to_vec(), b"flowed".to_vec()));
+                }
+
+                let body: AttachmentBuilder = Attachment::new(
+                    content_type,
+                    Default::default(),
+                    std::mem::replace(&mut draft.body, String::new()).into_bytes(),
+                )
+                .into();
+                draft.attachments.insert(0, body);
+            }
         }
         bytes = draft.finalise().unwrap();
         stdin

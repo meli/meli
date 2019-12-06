@@ -272,6 +272,9 @@ impl Draft {
             );
             ret.push('\n');
             ret.push_str(&self.body);
+        } else if self.body.is_empty() && self.attachments.len() == 1 {
+            let attachment = std::mem::replace(&mut self.attachments, Vec::new()).remove(0);
+            print_attachment(&mut ret, &Default::default(), attachment);
         } else {
             let mut parts = Vec::with_capacity(self.attachments.len() + 1);
             let attachments = std::mem::replace(&mut self.attachments, Vec::new());
@@ -306,7 +309,6 @@ fn ignore_header(header: &[u8]) -> bool {
 }
 
 fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentBuilder>) {
-    use ContentType::*;
     let boundary = ContentType::make_boundary(&parts);
     ret.extend(
         format!(
@@ -322,71 +324,75 @@ fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentB
         ret.push_str("--");
         ret.extend(boundary.chars());
         ret.push('\n');
-        match sub.content_type {
-            ContentType::Text {
-                kind: crate::email::attachment_types::Text::Plain,
-                charset: Charset::UTF8,
-                parameters: ref v,
-            } if v.is_empty() => {
-                ret.push('\n');
-                ret.push_str(&String::from_utf8_lossy(sub.raw()));
-                ret.push('\n');
-            }
-            Text { .. } => {
-                ret.extend(sub.build().into_raw().chars());
-                ret.push('\n');
-            }
-            Multipart {
-                boundary: _boundary,
-                kind,
-                parts: subparts,
-            } => {
-                build_multipart(
-                    ret,
-                    kind,
-                    subparts
-                        .into_iter()
-                        .map(|s| s.into())
-                        .collect::<Vec<AttachmentBuilder>>(),
-                );
-                ret.push('\n');
-            }
-            MessageRfc822 | PGPSignature => {
-                ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", kind).chars());
-                ret.push('\n');
-                ret.push_str(&String::from_utf8_lossy(sub.raw()));
-                ret.push('\n');
-            }
-            _ => {
-                let content_transfer_encoding: ContentTransferEncoding =
-                    ContentTransferEncoding::Base64;
-                if let Some(name) = sub.content_type().name() {
-                    ret.extend(
-                        format!(
-                            "Content-Type: {}; name=\"{}\"; charset=\"utf-8\"\n",
-                            sub.content_type(),
-                            name
-                        )
-                        .chars(),
-                    );
-                } else {
-                    ret.extend(
-                        format!("Content-Type: {}; charset=\"utf-8\"\n", sub.content_type())
-                            .chars(),
-                    );
-                }
-                ret.extend(
-                    format!("Content-Transfer-Encoding: {}\n", content_transfer_encoding).chars(),
-                );
-                ret.push('\n');
-                ret.push_str(&BASE64_MIME.encode(sub.raw()).trim());
-                ret.push('\n');
-            }
-        }
+        print_attachment(ret, &kind, sub);
     }
     ret.push_str("--");
     ret.extend(boundary.chars());
     ret.push_str("--\n");
+}
+
+fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder) {
+    use ContentType::*;
+    match a.content_type {
+        ContentType::Text {
+            kind: crate::email::attachment_types::Text::Plain,
+            charset: Charset::UTF8,
+            parameters: ref v,
+        } if v.is_empty() => {
+            ret.push('\n');
+            ret.push_str(&String::from_utf8_lossy(a.raw()));
+            ret.push('\n');
+        }
+        Text { .. } => {
+            ret.extend(a.build().into_raw().chars());
+            ret.push('\n');
+        }
+        Multipart {
+            boundary: _boundary,
+            kind,
+            parts: subparts,
+        } => {
+            build_multipart(
+                ret,
+                kind,
+                subparts
+                    .into_iter()
+                    .map(|s| s.into())
+                    .collect::<Vec<AttachmentBuilder>>(),
+            );
+            ret.push('\n');
+        }
+        MessageRfc822 | PGPSignature => {
+            ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", kind).chars());
+            ret.push('\n');
+            ret.push_str(&String::from_utf8_lossy(a.raw()));
+            ret.push('\n');
+        }
+        _ => {
+            let content_transfer_encoding: ContentTransferEncoding =
+                ContentTransferEncoding::Base64;
+            if let Some(name) = a.content_type().name() {
+                ret.extend(
+                    format!(
+                        "Content-Type: {}; name=\"{}\"; charset=\"utf-8\"\n",
+                        a.content_type(),
+                        name
+                    )
+                    .chars(),
+                );
+            } else {
+                ret.extend(
+                    format!("Content-Type: {}; charset=\"utf-8\"\n", a.content_type()).chars(),
+                );
+            }
+            ret.extend(
+                format!("Content-Transfer-Encoding: {}\n", content_transfer_encoding).chars(),
+            );
+            ret.push('\n');
+            ret.push_str(&BASE64_MIME.encode(a.raw()).trim());
+            ret.push('\n');
+        }
+    }
 }
 
 #[cfg(test)]
