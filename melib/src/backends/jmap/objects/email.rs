@@ -175,6 +175,10 @@ pub struct EmailObject {
     thread_id: Id,
 }
 
+impl EmailObject {
+    _impl!(get keywords, keywords: HashMap<String, bool>);
+}
+
 #[derive(Deserialize, Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 struct Header {

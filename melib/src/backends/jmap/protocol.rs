@@ -21,9 +21,12 @@
 
 use super::folder::JmapFolder;
 use super::*;
+use crate::structs::StackVec;
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
+use std::hash::{Hash, Hasher};
 
 pub type Id = String;
 pub type UtcDate = String;
@@ -36,6 +39,19 @@ macro_rules! get_request_no {
         let ret = *lck;
         *lck += 1;
         ret
+    }};
+}
+
+macro_rules! tag_hash {
+    ($t:ident) => {{
+        let mut hasher = DefaultHasher::default();
+        $t.hash(&mut hasher);
+        hasher.finish()
+    }};
+    ($t:literal) => {{
+        let mut hasher = DefaultHasher::default();
+        $t.hash(&mut hasher);
+        hasher.finish()
     }};
 }
 
@@ -235,6 +251,7 @@ pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope
 pub fn get(
     conn: &JmapConnection,
     store: &Arc<RwLock<Store>>,
+    tag_index: &Arc<RwLock<BTreeMap<u64, String>>>,
     folder: &JmapFolder,
 ) -> Result<Vec<Envelope>> {
     let email_query_call: EmailQueryCall = EmailQueryCall {
@@ -291,7 +308,7 @@ pub fn get(
         if let Some(prev_state) = states_lck.get_mut(&EmailGet::NAME) {
             debug!("{:?}: prev_state was {}", EmailGet::NAME, prev_state);
 
-            if *prev_state != state { /* Query Changes. */ }
+            if *prev_state != state { /* FIXME Query Changes. */ }
 
             *prev_state = state;
             debug!("{:?}: curr state is {}", EmailGet::NAME, prev_state);
@@ -300,18 +317,62 @@ pub fn get(
             states_lck.insert(EmailGet::NAME, state);
         }
     }
+    let mut tag_lck = tag_index.write().unwrap();
     let ids = list
         .iter()
-        .map(|obj| (obj.id.clone(), obj.blob_id.clone()))
-        .collect::<Vec<(Id, Id)>>();
-    let ret = list
+        .map(|obj| {
+            let tags = obj
+                .keywords()
+                .keys()
+                .map(|tag| {
+                    let tag_hash = {
+                        let mut hasher = DefaultHasher::default();
+                        tag.hash(&mut hasher);
+                        hasher.finish()
+                    };
+                    if !tag_lck.contains_key(&tag_hash) {
+                        tag_lck.insert(tag_hash, tag.to_string());
+                    }
+                    tag_hash
+                })
+                .collect::<StackVec<u64>>();
+            (tags, obj.id.clone(), obj.blob_id.clone())
+        })
+        .collect::<Vec<(StackVec<u64>, Id, Id)>>();
+    drop(tag_lck);
+    let mut ret = list
         .into_iter()
         .map(std::convert::Into::into)
         .collect::<Vec<Envelope>>();
+
     let mut store_lck = store.write().unwrap();
-    for (env, (id, blob_id)) in ret.iter().zip(ids.into_iter()) {
+    debug_assert_eq!(tag_hash!("$draft"), 6613915297903591176);
+    debug_assert_eq!(tag_hash!("$seen"), 1683863812294339685);
+    debug_assert_eq!(tag_hash!("$flagged"), 2714010747478170100);
+    debug_assert_eq!(tag_hash!("$answered"), 8940855303929342213);
+    debug_assert_eq!(tag_hash!("$junk"), 2656839745430720464);
+    debug_assert_eq!(tag_hash!("$notjunk"), 4091323799684325059);
+    for (env, (tags, id, blob_id)) in ret.iter_mut().zip(ids.into_iter()) {
         store_lck.id_store.insert(env.hash(), id);
         store_lck.blob_id_store.insert(env.hash(), blob_id);
+        for t in tags {
+            match t {
+                6613915297903591176 => {
+                    env.set_flags(env.flags() | Flag::DRAFT);
+                }
+                1683863812294339685 => {
+                    env.set_flags(env.flags() | Flag::SEEN);
+                }
+                2714010747478170100 => {
+                    env.set_flags(env.flags() | Flag::FLAGGED);
+                }
+                8940855303929342213 => {
+                    env.set_flags(env.flags() | Flag::REPLIED);
+                }
+                2656839745430720464 | 4091323799684325059 => { /* ignore */ }
+                _ => env.labels_mut().push(t),
+            }
+        }
     }
     Ok(ret)
 }

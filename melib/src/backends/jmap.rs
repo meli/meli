@@ -28,6 +28,7 @@ use crate::email::*;
 use crate::error::{MeliError, Result};
 use fnv::FnvHashMap;
 use reqwest::blocking::Client;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -186,6 +187,7 @@ pub struct JmapType {
     server_conf: JmapServerConf,
     connection: Arc<JmapConnection>,
     store: Arc<RwLock<Store>>,
+    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     folders: Arc<RwLock<FnvHashMap<FolderHash, JmapFolder>>>,
 }
 
@@ -197,6 +199,7 @@ impl MailBackend for JmapType {
         let mut w = AsyncBuilder::new();
         let folders = self.folders.clone();
         let store = self.store.clone();
+        let tag_index = self.tag_index.clone();
         let connection = self.connection.clone();
         let folder_hash = folder.hash();
         let handle = {
@@ -205,6 +208,7 @@ impl MailBackend for JmapType {
                 tx.send(AsyncStatus::Payload(protocol::get(
                     &connection,
                     &store,
+                    &tag_index,
                     &folders.read().unwrap()[&folder_hash],
                 )))
                 .unwrap();
@@ -262,6 +266,10 @@ impl MailBackend for JmapType {
     fn as_any(&self) -> &dyn::std::any::Any {
         self
     }
+
+    fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
+        Some(self.tag_index.clone())
+    }
 }
 
 impl JmapType {
@@ -275,6 +283,7 @@ impl JmapType {
         Ok(Box::new(JmapType {
             connection: Arc::new(JmapConnection::new(&server_conf, online.clone())?),
             store: Arc::new(RwLock::new(Store::default())),
+            tag_index: Arc::new(RwLock::new(Default::default())),
             folders: Arc::new(RwLock::new(FnvHashMap::default())),
             account_name: s.name.clone(),
             online,
