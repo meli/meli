@@ -370,6 +370,28 @@ impl Default for SpecialUsageMailbox {
     }
 }
 
+impl SpecialUsageMailbox {
+    pub fn detect_usage(name: &str) -> Option<SpecialUsageMailbox> {
+        if name.eq_ignore_ascii_case("inbox") {
+            Some(SpecialUsageMailbox::Inbox)
+        } else if name.eq_ignore_ascii_case("archive") {
+            Some(SpecialUsageMailbox::Archive)
+        } else if name.eq_ignore_ascii_case("drafts") {
+            Some(SpecialUsageMailbox::Drafts)
+        } else if name.eq_ignore_ascii_case("junk") {
+            Some(SpecialUsageMailbox::Junk)
+        } else if name.eq_ignore_ascii_case("spam") {
+            Some(SpecialUsageMailbox::Junk)
+        } else if name.eq_ignore_ascii_case("sent") {
+            Some(SpecialUsageMailbox::Sent)
+        } else if name.eq_ignore_ascii_case("trash") {
+            Some(SpecialUsageMailbox::Trash)
+        } else {
+            Some(SpecialUsageMailbox::Normal)
+        }
+    }
+}
+
 pub trait BackendFolder: Debug {
     fn hash(&self) -> FolderHash;
     fn name(&self) -> &str;
