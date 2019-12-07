@@ -32,7 +32,7 @@ pub use comparator::*;
 mod argument;
 pub use argument::*;
 
-use super::protocol::{Method, Response};
+use super::protocol::Method;
 use std::collections::HashMap;
 pub trait Object {
     const NAME: &'static str;
@@ -196,7 +196,7 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
         }
 
         if !self.properties.is_none() {
-            state.serialize_field("properties", self.properties.as_ref().unwrap());
+            state.serialize_field("properties", self.properties.as_ref().unwrap())?;
         }
 
         state.end()

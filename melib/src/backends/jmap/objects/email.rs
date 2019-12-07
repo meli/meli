@@ -20,7 +20,6 @@
  */
 
 use super::*;
-use crate::backends::jmap::protocol::*;
 use crate::backends::jmap::rfc8620::bool_false;
 use core::marker::PhantomData;
 use serde::de::{Deserialize, Deserializer};
@@ -152,7 +151,7 @@ pub struct EmailObject {
     #[serde(default)]
     in_reply_to_email_id: Id,
     #[serde(default)]
-    keywords: Value,
+    keywords: HashMap<String, bool>,
     #[serde(default)]
     attached_emails: Option<Id>,
     #[serde(default)]

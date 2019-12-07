@@ -22,8 +22,7 @@
 use super::*;
 
 use crate::backends::BackendOp;
-use crate::email::*;
-use crate::error::{MeliError, Result};
+use crate::error::Result;
 use std::cell::Cell;
 use std::sync::{Arc, RwLock};
 
@@ -92,7 +91,7 @@ impl BackendOp for JmapOp {
         Flag::default()
     }
 
-    fn set_flag(&mut self, _envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
+    fn set_flag(&mut self, _envelope: &mut Envelope, _f: Flag, _value: bool) -> Result<()> {
         Ok(())
     }
 

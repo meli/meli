@@ -22,16 +22,12 @@
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
 use crate::backends::FolderHash;
-use crate::backends::RefreshEvent;
-use crate::backends::RefreshEventKind::{self, *};
 use crate::backends::{BackendFolder, Folder, FolderOperation, MailBackend, RefreshEventConsumer};
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
-use fnv::{FnvHashMap, FnvHashSet};
+use fnv::FnvHashMap;
 use reqwest::blocking::Client;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -221,8 +217,8 @@ impl MailBackend for JmapType {
 
     fn watch(
         &self,
-        sender: RefreshEventConsumer,
-        work_context: WorkContext,
+        _sender: RefreshEventConsumer,
+        _work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
         Err(MeliError::from("sadfsa"))
     }
@@ -255,11 +251,11 @@ impl MailBackend for JmapType {
         ))
     }
 
-    fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
+    fn save(&self, _bytes: &[u8], _folder: &str, _flags: Option<Flag>) -> Result<()> {
         Ok(())
     }
 
-    fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
+    fn folder_operation(&mut self, _path: &str, _op: FolderOperation) -> Result<()> {
         Ok(())
     }
 

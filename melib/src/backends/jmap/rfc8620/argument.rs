@@ -22,8 +22,6 @@
 use crate::backends::jmap::protocol::Method;
 use crate::backends::jmap::rfc8620::Object;
 use crate::backends::jmap::rfc8620::ResultField;
-use serde::de::DeserializeOwned;
-use serde::ser::{Serialize, SerializeStruct, Serializer};
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -41,7 +39,7 @@ impl<T> JmapArgument<T> {
         JmapArgument::Value(v)
     }
 
-    pub fn reference<M, OBJ>(result_of: usize, method: &M, path: ResultField<M, OBJ>) -> Self
+    pub fn reference<M, OBJ>(result_of: usize, path: ResultField<M, OBJ>) -> Self
     where
         M: Method<OBJ>,
         OBJ: Object,

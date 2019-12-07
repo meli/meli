@@ -21,7 +21,7 @@
 
 use super::folder::JmapFolder;
 use super::*;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::convert::TryFrom;
 
@@ -175,7 +175,6 @@ pub struct JsonResponse<'a> {
 }
 
 pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<String>> {
-    let seq = get_request_no!(conn.request_no);
     let email_call: EmailQueryCall = EmailQueryCall {
         filter: EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
         collapse_threads: false,
@@ -205,7 +204,6 @@ pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Ve
 }
 
 pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
-    let seq = get_request_no!(conn.request_no);
     let email_call: EmailGet = EmailGet::new(
         Get::new()
             .ids(Some(JmapArgument::value(
@@ -267,7 +265,6 @@ pub fn get(
         Get::new()
             .ids(Some(JmapArgument::reference(
                 prev_seq,
-                &email_query_call,
                 EmailQueryCall::RESULT_FIELD_IDS,
             )))
             .account_id(conn.account_id.lock().unwrap().clone()),
