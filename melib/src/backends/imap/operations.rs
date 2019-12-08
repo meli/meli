@@ -38,6 +38,7 @@ pub struct ImapOp {
     flags: Cell<Option<Flag>>,
     connection: Arc<Mutex<ImapConnection>>,
     uid_store: Arc<UIDStore>,
+    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 }
 
 impl ImapOp {
@@ -46,6 +47,7 @@ impl ImapOp {
         folder_path: String,
         connection: Arc<Mutex<ImapConnection>>,
         uid_store: Arc<UIDStore>,
+        tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     ) -> Self {
         ImapOp {
             uid,
@@ -56,6 +58,7 @@ impl ImapOp {
             folder_path,
             flags: Cell::new(None),
             uid_store,
+            tag_index,
         }
     }
 }
@@ -89,7 +92,7 @@ impl BackendOp for ImapOp {
                     .to_full_result()
                     .map_err(MeliError::from)
                 {
-                    Ok(v) => {
+                    Ok(mut v) => {
                         if v.len() != 1 {
                             debug!("responses len is {}", v.len());
                             /* TODO: Trigger cache invalidation here. */
@@ -98,11 +101,11 @@ impl BackendOp for ImapOp {
                                 self.uid
                             )));
                         }
-                        let (uid, flags, b) = v[0];
+                        let (uid, flags, b) = v.remove(0);
                         assert_eq!(uid, self.uid);
-                        if flags.is_some() {
-                            self.flags.set(flags);
-                            cache.flags = flags;
+                        if let Some((flags, _)) = flags {
+                            self.flags.set(Some(flags));
+                            cache.flags = Some(flags);
                         }
                         cache.bytes = Some(unsafe { std::str::from_utf8_unchecked(b).to_string() });
                     }
@@ -147,7 +150,7 @@ impl BackendOp for ImapOp {
                         /* TODO: Trigger cache invalidation here. */
                         panic!(format!("message with UID {} was not found", self.uid));
                     }
-                    let (uid, flags) = v[0];
+                    let (uid, (flags, _)) = v[0];
                     assert_eq!(uid, self.uid);
                     cache.flags = Some(flags);
                     self.flags.set(Some(flags));
@@ -184,7 +187,7 @@ impl BackendOp for ImapOp {
             Ok(v) => {
                 if v.len() == 1 {
                     debug!("responses len is {}", v.len());
-                    let (uid, flags) = v[0];
+                    let (uid, (flags, _)) = v[0];
                     assert_eq!(uid, self.uid);
                     self.flags.set(Some(flags));
                 }
@@ -194,6 +197,43 @@ impl BackendOp for ImapOp {
         let mut bytes_cache = self.uid_store.byte_cache.lock()?;
         let cache = bytes_cache.entry(self.uid).or_default();
         cache.flags = Some(flags);
+        Ok(())
+    }
+
+    fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()> {
+        let mut response = String::with_capacity(8 * 1024);
+        let mut conn = self.connection.lock().unwrap();
+        conn.send_command(format!("SELECT \"{}\"", &self.folder_path,).as_bytes())?;
+        conn.read_response(&mut response)?;
+        conn.send_command(
+            format!(
+                "UID STORE {} {}FLAGS.SILENT ({})",
+                self.uid,
+                if value { "+" } else { "-" },
+                &tag
+            )
+            .as_bytes(),
+        )?;
+        conn.read_response(&mut response)?;
+        protocol_parser::uid_fetch_flags_response(response.as_bytes())
+            .to_full_result()
+            .map_err(MeliError::from)?;
+        let hash = tag_hash!(tag);
+        if value {
+            self.tag_index.write().unwrap().insert(hash, tag);
+        } else {
+            self.tag_index.write().unwrap().remove(&hash);
+        }
+        if !envelope.labels().iter().any(|&h_| h_ == hash) {
+            if value {
+                envelope.labels_mut().push(hash);
+            }
+        }
+        if !value {
+            if let Some(pos) = envelope.labels().iter().position(|&h_| h_ == hash) {
+                envelope.labels_mut().remove(pos);
+            }
+        }
         Ok(())
     }
 }

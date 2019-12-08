@@ -154,7 +154,10 @@ pub mod query_parser {
     fn flags<'a>() -> impl Parser<'a, Query> {
         move |input| {
             whitespace_wrap(either(
-                match_literal_anycase("flags:"),
+                either(
+                    match_literal_anycase("flags:"),
+                    match_literal_anycase("tags:"),
+                ),
                 match_literal_anycase("is:"),
             ))
             .parse(input)
@@ -322,6 +325,10 @@ pub mod query_parser {
             Ok(("", Flags(vec!["test".to_string(), "testtest".to_string()]))),
             query().parse_complete("flags:test,testtest")
         );
+        assert_eq!(
+            query().parse_complete("flags:test,testtest"),
+            query().parse_complete("tags:test,testtest")
+        );
     }
 }
 
@@ -387,7 +394,7 @@ pub fn query_to_imap(q: &Query) -> String {
                             s.push_str(" UNANSWERED ");
                         }
                         keyword => {
-                            s.push_str(" ");
+                            s.push_str(" KEYWORD ");
                             s.extend(keyword.chars());
                             s.push_str(" ");
                         }

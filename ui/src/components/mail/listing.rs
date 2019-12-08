@@ -105,42 +105,27 @@ pub trait MailListingTrait: ListingTrait {
                     continue;
                 }
                 ListingAction::Tag(Remove(ref tag_str)) => {
-                    use std::collections::hash_map::DefaultHasher;
-                    use std::hash::Hasher;
-                    let h = {
-                        let mut hasher = DefaultHasher::new();
-                        hasher.write(tag_str.as_bytes());
-                        hasher.finish()
-                    };
                     let backend_lck = account.backend.write().unwrap();
-                    if let Some(t) = backend_lck.tags() {
-                        let mut tags_lck = t.write().unwrap();
-                        if !tags_lck.contains_key(&h) {
-                            tags_lck.insert(h, tag_str.to_string());
-                        }
-                        if let Some(pos) = envelope.labels().iter().position(|&el| el == h) {
-                            envelope.labels_mut().remove(pos);
-                        }
-                    } else {
+                    let mut op = backend_lck.operation(envelope.hash());
+                    if let Err(err) = op.set_tag(&mut envelope, tag_str.to_string(), false) {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not set tag.".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
                         return;
                     }
                 }
                 ListingAction::Tag(Add(ref tag_str)) => {
-                    use std::collections::hash_map::DefaultHasher;
-                    use std::hash::Hasher;
-                    let h = {
-                        let mut hasher = DefaultHasher::new();
-                        hasher.write(tag_str.as_bytes());
-                        hasher.finish()
-                    };
                     let backend_lck = account.backend.write().unwrap();
-                    if let Some(t) = backend_lck.tags() {
-                        let mut tags_lck = t.write().unwrap();
-                        if !tags_lck.contains_key(&h) {
-                            tags_lck.insert(h, tag_str.to_string());
-                        }
-                        envelope.labels_mut().push(h);
-                    } else {
+                    let mut op = backend_lck.operation(envelope.hash());
+
+                    if let Err(err) = op.set_tag(&mut envelope, tag_str.to_string(), true) {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not set tag.".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
                         return;
                     }
                 }

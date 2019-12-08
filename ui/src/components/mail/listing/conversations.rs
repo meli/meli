@@ -1131,6 +1131,9 @@ impl Component for ConversationsListing {
                     area,
                     Some(get_x(upper_left)),
                 );
+                for c in grid.row_iter((x, get_x(bottom_right)), y) {
+                    grid[c] = Cell::default();
+                }
                 clear_area(grid, ((x, y), set_y(bottom_right, y)));
                 context
                     .dirty_areas

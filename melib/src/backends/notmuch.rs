@@ -11,7 +11,7 @@ use crate::structs::StackVec;
 use fnv::FnvHashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -313,6 +313,7 @@ impl MailBackend for NotmuchDb {
                         hash: env_hash,
                         index: index.clone(),
                         bytes: Some(response),
+                        tag_index: tag_index.clone(),
                     });
                     if let Some(mut env) = Envelope::from_token(op, env_hash) {
                         let mut tag_lock = tag_index.write().unwrap();
@@ -372,6 +373,7 @@ impl MailBackend for NotmuchDb {
             hash,
             index: self.index.clone(),
             bytes: None,
+            tag_index: self.tag_index.clone(),
         })
     }
 
@@ -410,6 +412,7 @@ impl MailBackend for NotmuchDb {
 struct NotmuchOp {
     hash: EnvelopeHash,
     index: Arc<RwLock<FnvHashMap<EnvelopeHash, &'static CStr>>>,
+    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     database: DbWrapper,
     bytes: Option<String>,
 }
@@ -545,6 +548,58 @@ impl BackendOp for NotmuchOp {
         };
         index_lck.insert(new_hash, c_str);
 
+        Ok(())
+    }
+
+    fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()> {
+        let mut message: *mut notmuch_message_t = std::ptr::null_mut();
+        let index_lck = self.index.read().unwrap();
+        unsafe {
+            notmuch_database_find_message_by_filename(
+                *self.database.inner.read().unwrap(),
+                index_lck[&self.hash].as_ptr(),
+                &mut message as *mut _,
+            )
+        };
+        if message.is_null() {
+            return Err(MeliError::new(format!(
+                "Error, message with path {:?} not found in notmuch database.",
+                index_lck[&self.hash]
+            )));
+        }
+        if value {
+            if unsafe {
+                notmuch_message_add_tag(message, CString::new(tag.as_str()).unwrap().as_ptr())
+            } != _notmuch_status_NOTMUCH_STATUS_SUCCESS
+            {
+                return Err(MeliError::new("Could not set tag."));
+            }
+            debug!("added tag {}", &tag);
+        } else {
+            if unsafe {
+                notmuch_message_remove_tag(message, CString::new(tag.as_str()).unwrap().as_ptr())
+            } != _notmuch_status_NOTMUCH_STATUS_SUCCESS
+            {
+                return Err(MeliError::new("Could not set tag."));
+            }
+            debug!("removed tag {}", &tag);
+        }
+        let hash = tag_hash!(tag);
+        if value {
+            self.tag_index.write().unwrap().insert(hash, tag);
+        } else {
+            self.tag_index.write().unwrap().remove(&hash);
+        }
+        if !envelope.labels().iter().any(|&h_| h_ == hash) {
+            if value {
+                envelope.labels_mut().push(hash);
+            }
+        }
+        if !value {
+            if let Some(pos) = envelope.labels().iter().position(|&h_| h_ == hash) {
+                envelope.labels_mut().remove(pos);
+            }
+        }
         Ok(())
     }
 }

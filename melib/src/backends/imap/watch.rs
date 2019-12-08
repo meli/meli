@@ -30,6 +30,7 @@ pub struct ImapWatchKit {
     pub folders: Arc<RwLock<FnvHashMap<FolderHash, ImapFolder>>>,
     pub sender: RefreshEventConsumer,
     pub work_context: WorkContext,
+    pub tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 }
 
 macro_rules! exit_on_error {
@@ -57,6 +58,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         folders,
         sender,
         work_context,
+        tag_index,
     } = kit;
     loop {
         if *is_online.lock().unwrap() {
@@ -81,7 +83,14 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
                     format!("examining `{}` for updates...", folder.path()),
                 ))
                 .unwrap();
-            examine_updates(folder, &sender, &mut conn, &uid_store, &work_context)?;
+            examine_updates(
+                folder,
+                &sender,
+                &mut conn,
+                &uid_store,
+                &work_context,
+                &tag_index,
+            )?;
         }
         let mut main_conn = main_conn.lock().unwrap();
         main_conn.send_command(b"NOOP").unwrap();
@@ -101,6 +110,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         folders,
         sender,
         work_context,
+        tag_index,
     } = kit;
     loop {
         if *is_online.lock().unwrap() {
@@ -236,7 +246,14 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     folder_hash,
                     work_context,
                     thread_id,
-                    examine_updates(folder, &sender, &mut conn, &uid_store, &work_context)
+                    examine_updates(
+                        folder,
+                        &sender,
+                        &mut conn,
+                        &uid_store,
+                        &work_context,
+                        &tag_index
+                    )
                 );
             }
             work_context
@@ -301,7 +318,9 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             format!("parsing {}/{} envelopes..", ctr, len),
                                         ))
                                         .unwrap();
-                                    if let Ok(env) = Envelope::from_bytes(&b, flags) {
+                                    if let Ok(mut env) =
+                                        Envelope::from_bytes(&b, flags.as_ref().map(|&(f, _)| f))
+                                    {
                                         ctr += 1;
                                         uid_store
                                             .hash_index
@@ -315,6 +334,16 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             env.subject(),
                                             folder.path(),
                                         );
+                                        if let Some((_, keywords)) = flags {
+                                            let mut tag_lck = tag_index.write().unwrap();
+                                            for f in keywords {
+                                                let hash = tag_hash!(f);
+                                                if !tag_lck.contains_key(&hash) {
+                                                    tag_lck.insert(hash, f);
+                                                }
+                                                env.labels_mut().push(hash);
+                                            }
+                                        }
                                         sender.send(RefreshEvent {
                                             hash: folder_hash,
                                             kind: Create(Box::new(env)),
@@ -402,7 +431,9 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                     ctr += 1;
                                     continue;
                                 }
-                                if let Ok(env) = Envelope::from_bytes(&b, flags) {
+                                if let Ok(mut env) =
+                                    Envelope::from_bytes(&b, flags.as_ref().map(|&(f, _)| f))
+                                {
                                     ctr += 1;
                                     uid_store
                                         .hash_index
@@ -410,6 +441,16 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         .unwrap()
                                         .insert(env.hash(), (uid, folder_hash));
                                     uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
+                                    if let Some((_, keywords)) = flags {
+                                        let mut tag_lck = tag_index.write().unwrap();
+                                        for f in keywords {
+                                            let hash = tag_hash!(f);
+                                            if !tag_lck.contains_key(&hash) {
+                                                tag_lck.insert(hash, f);
+                                            }
+                                            env.labels_mut().push(hash);
+                                        }
+                                    }
                                     debug!(
                                         "Create event {} {} {}",
                                         env.hash(),
@@ -467,6 +508,7 @@ fn examine_updates(
     conn: &mut ImapConnection,
     uid_store: &Arc<UIDStore>,
     work_context: &WorkContext,
+    tag_index: &Arc<RwLock<BTreeMap<u64, String>>>,
 ) -> Result<()> {
     let thread_id: std::thread::ThreadId = std::thread::current().id();
     let folder_hash = folder.hash();
@@ -551,7 +593,10 @@ fn examine_updates(
                             {
                                 Ok(v) => {
                                     for (uid, flags, b) in v {
-                                        if let Ok(env) = Envelope::from_bytes(&b, flags) {
+                                        if let Ok(mut env) = Envelope::from_bytes(
+                                            &b,
+                                            flags.as_ref().map(|&(f, _)| f),
+                                        ) {
                                             uid_store
                                                 .hash_index
                                                 .lock()
@@ -568,6 +613,16 @@ fn examine_updates(
                                                 env.subject(),
                                                 folder.path(),
                                             );
+                                            if let Some((_, keywords)) = flags {
+                                                let mut tag_lck = tag_index.write().unwrap();
+                                                for f in keywords {
+                                                    let hash = tag_hash!(f);
+                                                    if !tag_lck.contains_key(&hash) {
+                                                        tag_lck.insert(hash, f);
+                                                    }
+                                                    env.labels_mut().push(hash);
+                                                }
+                                            }
                                             sender.send(RefreshEvent {
                                                 hash: folder_hash,
                                                 kind: Create(Box::new(env)),
@@ -614,13 +669,25 @@ fn examine_updates(
                 {
                     Ok(v) => {
                         for (uid, flags, b) in v {
-                            if let Ok(env) = Envelope::from_bytes(&b, flags) {
+                            if let Ok(mut env) =
+                                Envelope::from_bytes(&b, flags.as_ref().map(|&(f, _)| f))
+                            {
                                 uid_store
                                     .hash_index
                                     .lock()
                                     .unwrap()
                                     .insert(env.hash(), (uid, folder_hash));
                                 uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
+                                if let Some((_, keywords)) = flags {
+                                    let mut tag_lck = tag_index.write().unwrap();
+                                    for f in keywords {
+                                        let hash = tag_hash!(f);
+                                        if !tag_lck.contains_key(&hash) {
+                                            tag_lck.insert(hash, f);
+                                        }
+                                        env.labels_mut().push(hash);
+                                    }
+                                }
                                 debug!(
                                     "Create event {} {} {}",
                                     env.hash(),

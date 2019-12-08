@@ -108,7 +108,7 @@ named!(
  * "* 1 FETCH (FLAGS (\Seen) UID 1 RFC822.HEADER {5224}"
 */
 named!(
-    pub uid_fetch_response<Vec<(usize, Option<Flag>, &[u8])>>,
+    pub uid_fetch_response<Vec<(usize, Option<(Flag, Vec<String>)>, &[u8])>>,
     many0!(
         do_parse!(
             tag!("* ")
@@ -124,7 +124,7 @@ named!(
 );
 
 named!(
-    pub uid_fetch_flags_response<Vec<(usize, Flag)>>,
+    pub uid_fetch_flags_response<Vec<(usize, (Flag, Vec<String>))>>,
     many0!(
         do_parse!(
             tag!("* ")
@@ -297,11 +297,11 @@ named!(
 pub struct SelectResponse {
     pub exists: usize,
     pub recent: usize,
-    pub flags: Flag,
+    pub flags: (Flag, Vec<String>),
     pub unseen: usize,
     pub uidvalidity: usize,
     pub uidnext: usize,
-    pub permanentflags: Flag,
+    pub permanentflags: (Flag, Vec<String>),
     /// if SELECT returns \* we can set arbritary flags permanently.
     pub can_create_flags: bool,
     pub read_only: bool,
@@ -366,8 +366,9 @@ pub fn select_response(input: &str) -> Result<SelectResponse> {
     }
 }
 
-pub fn flags(input: &str) -> IResult<&str, Flag> {
+pub fn flags(input: &str) -> IResult<&str, (Flag, Vec<String>)> {
     let mut ret = Flag::default();
+    let mut keywords = Vec::new();
 
     let mut input = input;
     while !input.starts_with(")") && !input.is_empty() {
@@ -399,16 +400,16 @@ pub fn flags(input: &str) -> IResult<&str, Flag> {
                 ret.set(Flag::DRAFT, true);
             }
             f => {
-                debug!("unknown Flag token value: {}", f);
+                keywords.push(f.to_string());
             }
         }
         input = &input[match_end..];
         input = input.trim_start();
     }
-    IResult::Done(input, ret)
+    IResult::Done(input, (ret, keywords))
 }
 
-pub fn byte_flags(input: &[u8]) -> IResult<&[u8], Flag> {
+pub fn byte_flags(input: &[u8]) -> IResult<&[u8], (Flag, Vec<String>)> {
     let i = unsafe { std::str::from_utf8_unchecked(input) };
     match flags(i) {
         IResult::Done(rest, ret) => IResult::Done(rest.as_bytes(), ret),
@@ -587,7 +588,7 @@ named!(
     alt_complete!(map!(ws!(tag!("NIL")), |_| None) | map!(quoted, |v| Some(v))));
 
 named!(
-    pub uid_fetch_envelopes_response<Vec<(usize, Option<Flag>, Envelope)>>,
+    pub uid_fetch_envelopes_response<Vec<(usize, Option<(Flag, Vec<String>)>, Envelope)>>,
     many0!(
         do_parse!(
             tag!("* ")

@@ -1576,9 +1576,6 @@ pub fn write_string_to_grid(
         if c == '\r' {
             continue;
         }
-        grid[(x, y)].set_attrs(attrs);
-        grid[(x, y)].set_fg(fg_color);
-        grid[(x, y)].set_bg(bg_color);
         if c == '\t' {
             grid[(x, y)].set_ch(' ');
             x += 1;
@@ -1587,6 +1584,9 @@ pub fn write_string_to_grid(
         } else {
             grid[(x, y)].set_ch(c);
         }
+        grid[(x, y)].set_attrs(attrs);
+        grid[(x, y)].set_fg(fg_color);
+        grid[(x, y)].set_bg(bg_color);
 
         match wcwidth(u32::from(c)) {
             Some(0) | None => {
@@ -1598,6 +1598,10 @@ pub fn write_string_to_grid(
                  * drawn over. Set it as empty to skip drawing it. */
                 x += 1;
                 inspect_bounds!(grid, area, x, y, line_break);
+                grid[(x, y)] = Cell::default();
+                grid[(x, y)].set_attrs(attrs);
+                grid[(x, y)].set_fg(fg_color);
+                grid[(x, y)].set_bg(bg_color);
                 grid[(x, y)].empty = true;
             }
             _ => {}

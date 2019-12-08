@@ -153,6 +153,7 @@ impl MailBackend for ImapType {
         let handle = {
             let tx = w.tx();
             let uid_store = self.uid_store.clone();
+            let tag_index = self.tag_index.clone();
             let can_create_flags = self.can_create_flags.clone();
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
@@ -209,6 +210,7 @@ impl MailBackend for ImapType {
                                conn.read_response(&mut response)
                 );
 
+                let mut tag_lck = tag_index.write().unwrap();
                 while exists > 1 {
                     let mut envelopes = vec![];
                     exit_on_error!(&tx,
@@ -231,8 +233,15 @@ impl MailBackend for ImapType {
                                 h.write_usize(uid);
                                 h.write(folder_path.as_bytes());
                                 env.set_hash(h.finish());
-                                if let Some(flags) = flags {
+                                if let Some((flags, keywords)) = flags {
                                     env.set_flags(flags);
+                                    for f in keywords {
+                                        let hash = tag_hash!(f);
+                                        if !tag_lck.contains_key(&hash) {
+                                            tag_lck.insert(hash, f);
+                                        }
+                                        env.labels_mut().push(hash);
+                                    }
                                 }
                                 uid_store
                                     .hash_index
@@ -272,6 +281,7 @@ impl MailBackend for ImapType {
             .capabilities
             .contains(&b"IDLE"[0..]);
         let folders = self.folders.clone();
+        let tag_index = self.tag_index.clone();
         let conn = ImapConnection::new_connection(&self.server_conf);
         let main_conn = self.connection.clone();
         let is_online = self.online.clone();
@@ -292,6 +302,7 @@ impl MailBackend for ImapType {
                     folders,
                     sender,
                     work_context,
+                    tag_index,
                 };
                 if has_idle {
                     idle(kit).ok().take();
@@ -338,6 +349,7 @@ impl MailBackend for ImapType {
                 .to_string(),
             self.connection.clone(),
             self.uid_store.clone(),
+            self.tag_index.clone(),
         ))
     }
 

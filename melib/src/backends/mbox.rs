@@ -241,6 +241,10 @@ impl BackendOp for MboxOp {
     fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag, _value: bool) -> Result<()> {
         Ok(())
     }
+
+    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
+        Err(MeliError::new("mbox doesn't support tags."))
+    }
 }
 
 pub fn mbox_parse(

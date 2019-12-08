@@ -162,6 +162,10 @@ impl<'a> BackendOp for MaildirOp {
         debug!("success in rename");
         Ok(())
     }
+
+    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
+        Err(MeliError::new("Maildir doesn't support tags."))
+    }
 }
 
 #[derive(Debug, Default)]

@@ -18,6 +18,16 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
+#[macro_export]
+macro_rules! tag_hash {
+    ($tag:ident) => {{
+        let mut hasher = DefaultHasher::new();
+        hasher.write($tag.as_bytes());
+        hasher.finish()
+    }};
+}
+
 #[cfg(feature = "imap_backend")]
 pub mod imap;
 #[cfg(feature = "maildir_backend")]
@@ -288,6 +298,7 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     //fn copy(&self
     fn fetch_flags(&self) -> Flag;
     fn set_flag(&mut self, envelope: &mut Envelope, flag: Flag, value: bool) -> Result<()>;
+    fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()>;
 }
 
 /// Wrapper for BackendOps that are to be set read-only.
@@ -316,6 +327,9 @@ impl BackendOp for ReadOnlyOp {
         self.op.fetch_flags()
     }
     fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag, _value: bool) -> Result<()> {
+        Err(MeliError::new("read-only set."))
+    }
+    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
         Err(MeliError::new("read-only set."))
     }
 }
