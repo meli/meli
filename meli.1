@@ -153,6 +153,19 @@ to
 \&.
 .Nm
 will relay your queries to the IMAP server. Expect a delay between query and response. Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable delay.
+.Sh TAGS
+.Nm
+supports tagging in notmuch and IMAP backends. Tags can be searched with the `tags:` or `flags:` prefix in a search query, and can be modified by
+.Cm tag add TAG
+and
+.Cm tag remove TAG
+(see
+.Xr meli.conf 5 TAGS Ns
+, settings
+.Ic colors
+and
+.Ic ignore_tags
+for how to set tag colors and tag visiblity)
 .Sh COMPOSING
 To send mail, press
 .Cm m
