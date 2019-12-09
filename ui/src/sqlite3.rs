@@ -77,6 +77,14 @@ pub fn db_path() -> Result<PathBuf> {
 //
 pub fn open_db() -> Result<Connection> {
     let db_path = db_path()?;
+    if !db_path.exists() {
+        return Err(MeliError::new("Database hasn't been initialised. Run `reindex` command"));
+    }
+    Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))
+}
+
+pub fn open_or_create_db() -> Result<Connection> {
+    let db_path = db_path()?;
     let mut set_mode = false;
     if !db_path.exists() {
         log(
@@ -262,7 +270,7 @@ pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
 }
 
 pub fn index(context: &mut crate::state::Context) -> Result<()> {
-    let conn = open_db()?;
+    let conn = open_or_create_db()?;
     let work_context = context.work_controller().get_context();
     let mutexes = context
         .accounts
