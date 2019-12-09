@@ -12,11 +12,13 @@ else
 endif
 
 .PHONY: clean
-clean: rm -ri ./target/
+clean:
+	rm -ri ./target/
 
 
 .PHONY: uninstall
-uninstall: rm -f $(DESTDIR)$(PREFIX)/bin/meli
+uninstall:
+	rm -f $(DESTDIR)$(PREFIX)/bin/meli
 	rm $(DESTDIR)$(PREFIX)/share/man/man1/meli.1.gz
 	rm $(DESTDIR)$(PREFIX)/share/man/man5/meli.conf.5.gz
 

@@ -218,8 +218,8 @@ name = "debug_printer"
 version = "0.0.1"
 dependencies = [
  "libc 0.2.64 (registry+https://github.com/rust-lang/crates.io-index)",
- "melib 0.3.2",
- "ui 0.3.2",
+ "melib 0.4.1",
+ "ui 0.4.1",
 ]
 
 [[package]]
@@ -527,19 +527,19 @@ dependencies = [
 
 [[package]]
 name = "meli"
-version = "0.3.2"
+version = "0.4.1"
 dependencies = [
  "crossbeam 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "melib 0.3.2",
+ "melib 0.4.1",
  "nix 0.14.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "signal-hook 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "ui 0.3.2",
+ "ui 0.4.1",
  "xdg 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "melib"
-version = "0.3.2"
+version = "0.4.1"
 dependencies = [
  "bincode 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -557,7 +557,7 @@ dependencies = [
  "serde 1.0.99 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.92 (registry+https://github.com/rust-lang/crates.io-index)",
  "termion 1.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "text_processing 0.3.2",
+ "text_processing 0.4.1",
  "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "xdg 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1197,15 +1197,15 @@ dependencies = [
 
 [[package]]
 name = "testing"
-version = "0.3.2"
+version = "0.4.1"
 dependencies = [
- "melib 0.3.2",
- "text_processing 0.3.2",
+ "melib 0.4.1",
+ "text_processing 0.4.1",
 ]
 
 [[package]]
 name = "text_processing"
-version = "0.3.2"
+version = "0.4.1"
 dependencies = [
  "unicode-segmentation 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1230,14 +1230,14 @@ dependencies = [
 
 [[package]]
 name = "ui"
-version = "0.3.2"
+version = "0.4.1"
 dependencies = [
  "bincode 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "fnv 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "linkify 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "melib 0.3.2",
+ "melib 0.4.1",
  "mime_apps 0.2.0 (git+https://git.meli.delivery/meli/mime_apps)",
  "nix 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "nom 3.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1248,7 +1248,7 @@ dependencies = [
  "serde_derive 1.0.92 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.39 (registry+https://github.com/rust-lang/crates.io-index)",
  "termion 1.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "text_processing 0.3.2",
+ "text_processing 0.4.1",
  "toml 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-segmentation 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
