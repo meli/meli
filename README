@@ -19,7 +19,7 @@ After installing meli, see meli(1) and meli.conf(5) for documentation.
 BUILDING
 ========
 
-meli requires rust 1.34 and rust's package manager, Cargo. Information on how
+meli requires rust 1.39 and rust's package manager, Cargo. Information on how
 to get it on your system can be found here:
 
 https://doc.rust-lang.org/cargo/getting-started/installation.html
