@@ -643,7 +643,7 @@ impl Component for Listing {
                 if shortcut!(key == shortcuts[Listing::DESCRIPTION]["set_seen"]) =>
             {
                 let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
-                if self.component.process_event(&mut event, context) {
+                if self.process_event(&mut event, context) {
                     return true;
                 }
             }
