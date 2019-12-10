@@ -28,6 +28,7 @@ pub struct ImapFolder {
     pub(super) name: String,
     pub(super) parent: Option<FolderHash>,
     pub(super) children: Vec<FolderHash>,
+    pub no_select: bool,
 
     pub permissions: Arc<Mutex<FolderPermissions>>,
     pub exists: Arc<Mutex<usize>>,
@@ -61,6 +62,7 @@ impl BackendFolder for ImapFolder {
             name: self.name.clone(),
             parent: self.parent,
             children: self.children.clone(),
+            no_select: self.no_select,
             permissions: self.permissions.clone(),
             exists: self.exists.clone(),
         })

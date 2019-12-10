@@ -157,12 +157,17 @@ impl MailBackend for ImapType {
             let can_create_flags = self.can_create_flags.clone();
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
-            let (permissions, folder_exists) = {
+            let (permissions, folder_exists, no_select) = {
                 let f = &self.folders.read().unwrap()[&folder_hash];
-                (f.permissions.clone(), f.exists.clone())
+                (f.permissions.clone(), f.exists.clone(), f.no_select)
             };
             let connection = self.connection.clone();
             let closure = move |_work_context| {
+                if no_select {
+                    tx.send(AsyncStatus::Payload(Ok(Vec::new()))).unwrap();
+                    tx.send(AsyncStatus::Finished).unwrap();
+                    return;
+                }
                 let connection = connection.clone();
                 let tx = tx.clone();
                 let mut response = String::with_capacity(8 * 1024);

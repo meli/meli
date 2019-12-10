@@ -54,6 +54,12 @@ named!(
             >> ({
                 let separator: u8 = separator[0];
                 let mut f = ImapFolder::default();
+                f.no_select = false;
+                for p in properties.split(|&b| b == b' ') {
+                    if p.eq_ignore_ascii_case(b"\\NoSelect") {
+                        f.no_select = true;
+                    }
+                }
                 f.hash = get_path_hash!(path);
                 f.path = String::from_utf8_lossy(path).into();
                 f.name = if let Some(pos) = path.iter().rposition(|&c| c == separator) {
