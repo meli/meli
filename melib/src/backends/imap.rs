@@ -283,12 +283,6 @@ impl MailBackend for ImapType {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
-        let has_idle: bool = self
-            .connection
-            .lock()
-            .unwrap()
-            .capabilities
-            .contains(&b"IDLE"[0..]);
         let folders = self.folders.clone();
         let tag_index = self.tag_index.clone();
         let conn = ImapConnection::new_connection(&self.server_conf);
@@ -303,6 +297,12 @@ impl MailBackend for ImapType {
                     .set_status
                     .send((thread.id(), "watching".to_string()))
                     .unwrap();
+                let has_idle: bool = main_conn
+                    .lock()
+                    .unwrap()
+                    .capabilities
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"));
                 let kit = ImapWatchKit {
                     conn,
                     is_online,
@@ -333,7 +333,7 @@ impl MailBackend for ImapType {
             }
         }
         let mut folders = self.folders.write()?;
-        *folders = ImapType::imap_folders(&self.connection);
+        *folders = ImapType::imap_folders(&self.connection)?;
         folders.retain(|_, f| (self.is_subscribed)(f.path()));
         let keys = folders.keys().cloned().collect::<FnvHashSet<FolderHash>>();
         let mut uid_lock = self.uid_store.uidvalidity.lock().unwrap();
@@ -565,12 +565,12 @@ impl ImapType {
 
     pub fn imap_folders(
         connection: &Arc<Mutex<ImapConnection>>,
-    ) -> FnvHashMap<FolderHash, ImapFolder> {
+    ) -> Result<FnvHashMap<FolderHash, ImapFolder>> {
         let mut folders: FnvHashMap<FolderHash, ImapFolder> = Default::default();
         let mut res = String::with_capacity(8 * 1024);
         let mut conn = connection.lock().unwrap();
-        conn.send_command(b"LIST \"\" \"*\"").unwrap();
-        conn.read_response(&mut res).unwrap();
+        conn.send_command(b"LIST \"\" \"*\"")?;
+        conn.read_response(&mut res)?;
         debug!("out: {}", &res);
         for l in res.lines().map(|l| l.trim()) {
             if let Ok(mut folder) =
@@ -605,7 +605,7 @@ impl ImapType {
                 debug!("parse error for {:?}", l);
             }
         }
-        debug!(folders)
+        Ok(debug!(folders))
     }
 
     pub fn capabilities(&self) -> Vec<String> {

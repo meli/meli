@@ -172,30 +172,18 @@ impl ImapStream {
 
             let mut buf = vec![0; 1024];
             let mut response = String::with_capacity(1024);
-            let mut cap_flag = false;
             let mut broken = false;
             let now = std::time::Instant::now();
 
             while now.elapsed().as_secs() < 3 {
                 let len = socket.read(&mut buf)?;
                 response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
-                if !cap_flag {
-                    if response.starts_with("* OK [CAPABILITY") {
-                        cap_flag = true;
-                        if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                            response.drain(0..pos + 2);
-                        }
-                    } else if response.starts_with("* OK ") && response.find("\r\n").is_some() {
-                        if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                            response.drain(0..pos + 2);
-                        }
-                    }
-                } else if response.starts_with("* OK [CAPABILITY") {
+                if response.starts_with("* OK ") && response.find("\r\n").is_some() {
                     if let Some(pos) = response.as_bytes().find(b"\r\n") {
                         response.drain(0..pos + 2);
                     }
                 }
-                if cap_flag && response == "M0 OK Begin TLS negotiation now.\r\n" {
+                if response.starts_with("M0 OK") {
                     broken = true;
                     break;
                 }
