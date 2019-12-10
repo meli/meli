@@ -815,8 +815,7 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 
     let mut i = 1;
     while i < input.len() {
-        if input[i] == b'\"' {
-            //&& input[i - 1] != b'\\' {
+        if input[i] == b'\"' && (i == 0 || (input[i - 1] != b'\\')) {
             return match crate::email::parser::phrase(&input[1..i]) {
                 IResult::Done(_, out) => IResult::Done(&input[i + 1..], out),
                 e => e,

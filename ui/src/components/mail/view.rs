@@ -513,6 +513,11 @@ impl Component for MailView {
                 match envelope.body(op) {
                     Ok(body) => body,
                     Err(e) => {
+                        self.dirty = false;
+                        clear_area(grid, (set_y(upper_left, y), bottom_right));
+                        context
+                            .dirty_areas
+                            .push_back((set_y(upper_left, y), bottom_right));
                         context.replies.push_back(UIEvent::Notification(
                             Some("Failed to open e-mail".to_string()),
                             e.to_string(),

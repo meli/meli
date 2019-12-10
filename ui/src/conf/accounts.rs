@@ -827,7 +827,14 @@ impl Account {
     pub fn status(&mut self, folder_hash: FolderHash) -> result::Result<(), usize> {
         match self.workers.get_mut(&folder_hash).unwrap() {
             None => {
-                return Ok(());
+                return if self.folders[&folder_hash].is_available()
+                    || (self.folders[&folder_hash].is_parsing()
+                        && self.collection.threads.contains_key(&folder_hash))
+                {
+                    Ok(())
+                } else {
+                    Err(0)
+                };
             }
             Some(ref mut w) => match w.poll() {
                 Ok(AsyncStatus::NoUpdate) => {
