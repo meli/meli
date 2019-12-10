@@ -88,30 +88,17 @@ impl BackendOp for ImapOp {
                     response.len(),
                     response.lines().collect::<Vec<&str>>().len()
                 );
-                match protocol_parser::uid_fetch_response(response.as_bytes())
-                    .to_full_result()
-                    .map_err(MeliError::from)
-                {
-                    Ok(mut v) => {
-                        if v.len() != 1 {
-                            debug!("responses len is {}", v.len());
-                            /* TODO: Trigger cache invalidation here. */
-                            return Err(MeliError::new(format!(
-                                "message with UID {} was not found",
-                                self.uid
-                            )));
-                        }
-                        let (uid, flags, b) = v.remove(0);
-                        assert_eq!(uid, self.uid);
-                        if let Some((flags, _)) = flags {
-                            self.flags.set(Some(flags));
-                            cache.flags = Some(flags);
-                        }
-                        cache.bytes = Some(unsafe { std::str::from_utf8_unchecked(b).to_string() });
-                    }
-                    Err(e) => return Err(e),
+                let UidFetchResponse {
+                    uid, flags, body, ..
+                } = protocol_parser::uid_fetch_response(&response)?.1;
+                assert_eq!(uid, self.uid);
+                assert!(body.is_some());
+                if let Some((flags, _)) = flags {
+                    self.flags.set(Some(flags));
+                    cache.flags = Some(flags);
                 }
-
+                cache.bytes =
+                    Some(unsafe { std::str::from_utf8_unchecked(body.unwrap()).to_string() });
                 self.bytes = cache.bytes.clone();
             }
         }

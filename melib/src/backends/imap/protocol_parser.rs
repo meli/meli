@@ -5,6 +5,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
+pub type ImapParseResult<'a, T> = Result<(&'a str, T)>;
 pub struct ImapLineIterator<'a> {
     slice: &'a str,
 }
@@ -141,22 +142,219 @@ named!(
     )
 );
 
+#[derive(Debug)]
+pub struct UidFetchResponse<'a> {
+    pub uid: UID,
+    pub flags: Option<(Flag, Vec<String>)>,
+    pub body: Option<&'a [u8]>,
+    pub envelope: Option<Envelope>,
+}
+
+pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> {
+    macro_rules! should_start_with {
+        ($input:expr, $tag:literal) => {
+            if !$input.starts_with($tag) {
+                return Err(MeliError::new(format!(
+                    "Expected `{}` but got `{:.50}`",
+                    $tag, &$input
+                )));
+            }
+        };
+    }
+    should_start_with!(input, "* ");
+
+    let mut i = "* ".len();
+    macro_rules! bounds {
+        () => {
+            if i == input.len() {
+                return Err(MeliError::new(format!(
+                    "Expected more input. Got: `{:.50}`",
+                    input
+                )));
+            }
+        };
+        (break) => {
+            if i == input.len() {
+                break;
+            }
+        };
+    }
+
+    macro_rules! eat_whitespace {
+        () => {
+            while (input.as_bytes()[i] as char).is_whitespace() {
+                i += 1;
+                bounds!();
+            }
+        };
+        (break) => {
+            while (input.as_bytes()[i] as char).is_whitespace() {
+                i += 1;
+                bounds!(break);
+            }
+        };
+    }
+
+    while (input.as_bytes()[i] as char).is_numeric() {
+        i += 1;
+        bounds!();
+    }
+
+    eat_whitespace!();
+    should_start_with!(input[i..], "FETCH (");
+    i += "FETCH (".len();
+
+    let mut ret = UidFetchResponse {
+        uid: 0,
+        flags: None,
+        body: None,
+        envelope: None,
+    };
+    let mut has_attachments = false;
+    while i < input.len() {
+        eat_whitespace!(break);
+
+        if input[i..].starts_with("UID ") {
+            i += "UID ".len();
+            if let IResult::Done(rest, uid) = take_while!(input[i..].as_bytes(), call!(is_digit)) {
+                i += input.len() - i - rest.len();
+                ret.uid = usize::from_str(unsafe { std::str::from_utf8_unchecked(uid) }).unwrap();
+            } else {
+                return debug!(Err(MeliError::new(format!(
+                    "217Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    input
+                ))));
+            }
+        } else if input[i..].starts_with("FLAGS (") {
+            i += "FLAGS (".len();
+            if let IResult::Done(rest, flags) = flags(&input[i..]) {
+                ret.flags = Some(flags);
+                i += (input.len() - i - rest.len()) + 1;
+            } else {
+                return debug!(Err(MeliError::new(format!(
+                    "228Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    input
+                ))));
+            }
+        } else if input[i..].starts_with("RFC822 {") {
+            i += "RFC822 ".len();
+            if let IResult::Done(rest, body) = length_bytes!(
+                input[i..].as_bytes(),
+                delimited!(
+                    tag!("{"),
+                    map_res!(digit, |s| {
+                        usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+                    }),
+                    tag!("}\r\n")
+                )
+            ) {
+                ret.body = Some(body);
+                i += input.len() - i - rest.len();
+            } else {
+                return debug!(Err(MeliError::new(format!(
+                    "248Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    input
+                ))));
+            }
+        } else if input[i..].starts_with("ENVELOPE (") {
+            i += "ENVELOPE ".len();
+            if let IResult::Done(rest, envelope) = envelope(input[i..].as_bytes()) {
+                ret.envelope = Some(envelope);
+                i += input.len() - i - rest.len();
+            } else {
+                return debug!(Err(MeliError::new(format!(
+                    "264Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    &input[i..]
+                ))));
+            }
+        } else if input[i..].starts_with("BODYSTRUCTURE ") {
+            i += "BODYSTRUCTURE ".len();
+            let mut struct_ptr = i;
+            let mut parenth_level = 0;
+            let mut inside_quote = false;
+            while struct_ptr != input.len() {
+                if !inside_quote {
+                    if input.as_bytes()[struct_ptr] == b'(' {
+                        parenth_level += 1;
+                    } else if input.as_bytes()[struct_ptr] == b')' {
+                        if parenth_level == 0 {
+                            return debug!(Err(MeliError::new(format!(
+                            "280Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                            &input[struct_ptr..]
+                        ))));
+                        }
+                        parenth_level -= 1;
+                        if parenth_level == 0 {
+                            struct_ptr += 1;
+                            break;
+                        }
+                    } else if input.as_bytes()[struct_ptr] == b'"' {
+                        inside_quote = true;
+                    }
+                } else if input.as_bytes()[struct_ptr] == b'\"'
+                    && (struct_ptr == 0 || (input.as_bytes()[struct_ptr - 1] != b'\\'))
+                {
+                    inside_quote = false;
+                }
+                struct_ptr += 1;
+            }
+
+            has_attachments = bodystructure_has_attachments(&input.as_bytes()[i..struct_ptr]);
+            i = struct_ptr;
+        } else if input[i..].starts_with(")\r\n") {
+            i += ")\r\n".len();
+            break;
+        } else {
+            debug!(
+                "Got unexpected token while parsing UID FETCH response:\n`{}`\n",
+                input
+            );
+            return debug!(Err(MeliError::new(format!(
+                "Got unexpected token while parsing UID FETCH response: `{:.40}`",
+                &input[i..]
+            ))));
+        }
+    }
+
+    if let Some(env) = ret.envelope.as_mut() {
+        env.set_has_attachments(has_attachments);
+    }
+
+    Ok((&input[i..], ret))
+}
+
+pub fn uid_fetch_responses(mut input: &str) -> ImapParseResult<Vec<UidFetchResponse<'_>>> {
+    let mut ret = Vec::new();
+
+    while let Ok((rest, el)) = uid_fetch_response(input) {
+        input = rest;
+        ret.push(el);
+    }
+
+    if !input.is_empty() && ret.is_empty() {
+        return Err(MeliError::new(format!(
+            "310Unexpected input while parsing UID FETCH responses: `{:.40}`",
+            input
+        )));
+    }
+    Ok((input, ret))
+}
+
 /*
  *
  * "* 1 FETCH (FLAGS (\Seen) UID 1 RFC822.HEADER {5224}"
 */
 named!(
-    pub uid_fetch_response<Vec<(usize, Option<(Flag, Vec<String>)>, &[u8])>>,
+    pub uid_fetch_response_<Vec<(usize, Option<(Flag, Vec<String>)>, &[u8])>>,
     many0!(
         do_parse!(
             tag!("* ")
             >> take_while!(call!(is_digit))
             >> tag!(" FETCH (")
-            >> uid_flags: permutation!(preceded!(ws!(tag!("UID ")), map_res!(digit, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) })), opt!(preceded!(ws!(tag!("FLAGS ")), delimited!(tag!("("), byte_flags, tag!(")")))))
-            >> is_not!("{")
-            >> body: length_bytes!(delimited!(tag!("{"), map_res!(digit, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) }), tag!("}\r\n")))
+            >> result: permutation!(preceded!(ws!(tag!("UID ")), map_res!(digit, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) })), opt!(preceded!(ws!(tag!("FLAGS ")), delimited!(tag!("("), byte_flags, tag!(")")))),
+            ws!(length_bytes!(delimited!(tag!("{"), map_res!(digit, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) }), tag!("}\r\n")))))
             >> tag!(")\r\n")
-            >> ((uid_flags.0, uid_flags.1, body))
+            >> ((result.0, result.1, result.2))
         )
     )
 );

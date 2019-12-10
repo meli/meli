@@ -303,14 +303,14 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                             conn.read_response(&mut response)
                         );
                         debug!(&response);
-                        match protocol_parser::uid_fetch_response(response.as_bytes())
-                            .to_full_result()
-                            .map_err(MeliError::from)
-                        {
-                            Ok(v) => {
+                        match protocol_parser::uid_fetch_responses(&response) {
+                            Ok((_, v)) => {
                                 let len = v.len();
                                 let mut ctr = 0;
-                                for (uid, flags, b) in v {
+                                for UidFetchResponse {
+                                    uid, flags, body, ..
+                                } in v
+                                {
                                     work_context
                                         .set_status
                                         .send((
@@ -318,9 +318,10 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             format!("parsing {}/{} envelopes..", ctr, len),
                                         ))
                                         .unwrap();
-                                    if let Ok(mut env) =
-                                        Envelope::from_bytes(&b, flags.as_ref().map(|&(f, _)| f))
-                                    {
+                                    if let Ok(mut env) = Envelope::from_bytes(
+                                        body.unwrap(),
+                                        flags.as_ref().map(|&(f, _)| f),
+                                    ) {
                                         ctr += 1;
                                         uid_store
                                             .hash_index
@@ -412,14 +413,14 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         )
                         conn.read_response(&mut response)
                     );
-                    match protocol_parser::uid_fetch_response(response.as_bytes())
-                        .to_full_result()
-                        .map_err(MeliError::from)
-                    {
-                        Ok(v) => {
+                    match protocol_parser::uid_fetch_responses(&response) {
+                        Ok((_, v)) => {
                             let len = v.len();
                             let mut ctr = 0;
-                            for (uid, flags, b) in v {
+                            for UidFetchResponse {
+                                uid, flags, body, ..
+                            } in v
+                            {
                                 work_context
                                     .set_status
                                     .send((
@@ -431,9 +432,10 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                     ctr += 1;
                                     continue;
                                 }
-                                if let Ok(mut env) =
-                                    Envelope::from_bytes(&b, flags.as_ref().map(|&(f, _)| f))
-                                {
+                                if let Ok(mut env) = Envelope::from_bytes(
+                                    body.unwrap(),
+                                    flags.as_ref().map(|&(f, _)| f),
+                                ) {
                                     ctr += 1;
                                     uid_store
                                         .hash_index
@@ -587,14 +589,14 @@ fn examine_updates(
                                 conn.read_response(&mut response)
                             );
                             debug!(&response);
-                            match protocol_parser::uid_fetch_response(response.as_bytes())
-                                .to_full_result()
-                                .map_err(MeliError::from)
-                            {
-                                Ok(v) => {
-                                    for (uid, flags, b) in v {
+                            match protocol_parser::uid_fetch_responses(&response) {
+                                Ok((_, v)) => {
+                                    for UidFetchResponse {
+                                        uid, flags, body, ..
+                                    } in v
+                                    {
                                         if let Ok(mut env) = Envelope::from_bytes(
-                                            &b,
+                                            body.unwrap(),
                                             flags.as_ref().map(|&(f, _)| f),
                                         ) {
                                             uid_store
@@ -663,14 +665,14 @@ fn examine_updates(
                         )
                     conn.read_response(&mut response)
                 );
-                match protocol_parser::uid_fetch_response(response.as_bytes())
-                    .to_full_result()
-                    .map_err(MeliError::from)
-                {
-                    Ok(v) => {
-                        for (uid, flags, b) in v {
+                match protocol_parser::uid_fetch_responses(&response) {
+                    Ok((_, v)) => {
+                        for UidFetchResponse {
+                            uid, flags, body, ..
+                        } in v
+                        {
                             if let Ok(mut env) =
-                                Envelope::from_bytes(&b, flags.as_ref().map(|&(f, _)| f))
+                                Envelope::from_bytes(body.unwrap(), flags.as_ref().map(|&(f, _)| f))
                             {
                                 uid_store
                                     .hash_index

@@ -227,13 +227,17 @@ impl MailBackend for ImapType {
                         response.len(),
                         response.lines().collect::<Vec<&str>>().len()
                     );
-                    match protocol_parser::uid_fetch_envelopes_response(response.as_bytes())
-                        .to_full_result()
-                        .map_err(MeliError::from)
-                    {
-                        Ok(v) => {
+                    match protocol_parser::uid_fetch_responses(&response) {
+                        Ok((_, v)) => {
                             debug!("responses len is {}", v.len());
-                            for (uid, flags, mut env) in v {
+                            for UidFetchResponse {
+                                uid,
+                                flags,
+                                envelope,
+                                ..
+                            } in v
+                            {
+                                let mut env = envelope.unwrap();
                                 let mut h = DefaultHasher::new();
                                 h.write_usize(uid);
                                 h.write(folder_path.as_bytes());
