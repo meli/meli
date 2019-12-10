@@ -28,7 +28,7 @@ use crate::backends::BackendOp;
 use crate::backends::FolderHash;
 use crate::backends::{
     BackendFolder, Folder, FolderPermissions, MailBackend, RefreshEvent, RefreshEventConsumer,
-    RefreshEventKind,
+    RefreshEventKind, SpecialUsageMailbox,
 };
 use crate::conf::AccountSettings;
 use crate::email::parser::BytesExt;
@@ -126,6 +126,10 @@ impl BackendFolder for MboxFolder {
 
     fn parent(&self) -> Option<FolderHash> {
         self.parent
+    }
+
+    fn special_usage(&self) -> SpecialUsageMailbox {
+        SpecialUsageMailbox::Normal
     }
 
     fn permissions(&self) -> FolderPermissions {

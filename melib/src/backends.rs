@@ -339,7 +339,7 @@ impl BackendOp for ReadOnlyOp {
 }
 
 #[derive(Debug, Copy, Hash, Eq, Clone, Serialize, Deserialize, PartialEq)]
-pub enum SpecialUseMailbox {
+pub enum SpecialUsageMailbox {
     Normal,
     Inbox,
     Archive,
@@ -348,6 +348,12 @@ pub enum SpecialUseMailbox {
     Junk,
     Sent,
     Trash,
+}
+
+impl Default for SpecialUsageMailbox {
+    fn default() -> Self {
+        SpecialUsageMailbox::Normal
+    }
 }
 
 pub trait BackendFolder: Debug {
@@ -359,7 +365,7 @@ pub trait BackendFolder: Debug {
     fn clone(&self) -> Folder;
     fn children(&self) -> &[FolderHash];
     fn parent(&self) -> Option<FolderHash>;
-
+    fn special_usage(&self) -> SpecialUsageMailbox;
     fn permissions(&self) -> FolderPermissions;
 }
 
@@ -385,6 +391,10 @@ impl BackendFolder for DummyFolder {
 
     fn clone(&self) -> Folder {
         folder_default()
+    }
+
+    fn special_usage(&self) -> SpecialUsageMailbox {
+        SpecialUsageMailbox::Normal
     }
 
     fn children(&self) -> &[FolderHash] {

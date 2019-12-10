@@ -44,7 +44,7 @@ use self::default_vals::*;
 use self::notifications::NotificationsSettings;
 use self::terminal::TerminalSettings;
 use crate::pager::PagerSettings;
-use melib::backends::SpecialUseMailbox;
+use melib::backends::SpecialUsageMailbox;
 use melib::conf::{toggleflag_de, AccountSettings, FolderConf, ToggleFlag};
 use melib::error::*;
 
@@ -186,7 +186,7 @@ impl From<FileAccount> for AccountConf {
             }
 
             if folder_confs[s].folder_conf().ignore.is_unset() {
-                use SpecialUseMailbox::*;
+                use SpecialUsageMailbox::*;
                 if [Junk, Sent, Trash]
                     .contains(&folder_confs[s].folder_conf().usage.as_ref().unwrap())
                 {
@@ -564,23 +564,23 @@ impl Serialize for CacheType {
     }
 }
 
-pub fn usage(name: &str) -> Option<SpecialUseMailbox> {
+pub fn usage(name: &str) -> Option<SpecialUsageMailbox> {
     if name.eq_ignore_ascii_case("inbox") {
-        Some(SpecialUseMailbox::Inbox)
+        Some(SpecialUsageMailbox::Inbox)
     } else if name.eq_ignore_ascii_case("archive") {
-        Some(SpecialUseMailbox::Archive)
+        Some(SpecialUsageMailbox::Archive)
     } else if name.eq_ignore_ascii_case("drafts") {
-        Some(SpecialUseMailbox::Drafts)
+        Some(SpecialUsageMailbox::Drafts)
     } else if name.eq_ignore_ascii_case("junk") {
-        Some(SpecialUseMailbox::Junk)
+        Some(SpecialUsageMailbox::Junk)
     } else if name.eq_ignore_ascii_case("spam") {
-        Some(SpecialUseMailbox::Junk)
+        Some(SpecialUsageMailbox::Junk)
     } else if name.eq_ignore_ascii_case("sent") {
-        Some(SpecialUseMailbox::Sent)
+        Some(SpecialUsageMailbox::Sent)
     } else if name.eq_ignore_ascii_case("trash") {
-        Some(SpecialUseMailbox::Trash)
+        Some(SpecialUsageMailbox::Trash)
     } else {
-        Some(SpecialUseMailbox::Normal)
+        Some(SpecialUsageMailbox::Normal)
     }
 }
 

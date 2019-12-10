@@ -28,7 +28,7 @@ use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
     BackendOp, Backends, Folder, FolderHash, FolderOperation, MailBackend, NotifyFn, ReadOnlyOp,
-    RefreshEvent, RefreshEventConsumer, RefreshEventKind, SpecialUseMailbox,
+    RefreshEvent, RefreshEventConsumer, RefreshEventKind, SpecialUsageMailbox,
 };
 use melib::error::{MeliError, Result};
 use melib::mailbox::*;
@@ -335,7 +335,7 @@ impl Account {
 
             if self.settings.folder_confs.contains_key(f.path()) {
                 match self.settings.folder_confs[f.path()].folder_conf().usage {
-                    Some(SpecialUseMailbox::Sent) => {
+                    Some(SpecialUsageMailbox::Sent) => {
                         sent_folder = Some(f.hash());
                     }
                     _ => {}
@@ -452,9 +452,9 @@ impl Account {
         let our_tx = builder.tx();
         let folder_hash = folder.hash();
         let priority = match folder_confs[&folder.hash()].folder_conf().usage {
-            Some(SpecialUseMailbox::Inbox) => 0,
-            Some(SpecialUseMailbox::Sent) => 1,
-            Some(SpecialUseMailbox::Drafts) | Some(SpecialUseMailbox::Trash) => 2,
+            Some(SpecialUsageMailbox::Inbox) => 0,
+            Some(SpecialUsageMailbox::Sent) => 1,
+            Some(SpecialUsageMailbox::Drafts) | Some(SpecialUsageMailbox::Trash) => 2,
             Some(_) | None => {
                 3 * folder
                     .path()
@@ -876,14 +876,14 @@ impl Account {
     pub fn save_special(
         &self,
         bytes: &[u8],
-        folder_type: SpecialUseMailbox,
+        folder_type: SpecialUsageMailbox,
         flags: Flag,
     ) -> Result<()> {
         let mut failure = true;
         for folder in &[
             self.special_use_folder(folder_type),
-            self.special_use_folder(SpecialUseMailbox::Inbox),
-            self.special_use_folder(SpecialUseMailbox::Normal),
+            self.special_use_folder(SpecialUsageMailbox::Inbox),
+            self.special_use_folder(SpecialUsageMailbox::Normal),
         ] {
             if folder.is_none() {
                 continue;
@@ -965,7 +965,7 @@ impl Account {
         let sent_folder = self
             .folder_confs
             .iter()
-            .find(|(_, f)| f.folder_conf().usage == Some(SpecialUseMailbox::Sent));
+            .find(|(_, f)| f.folder_conf().usage == Some(SpecialUsageMailbox::Sent));
         if let Some(sent_folder) = sent_folder.as_ref() {
             &self.folder_names[&sent_folder.0]
         } else {
@@ -973,7 +973,7 @@ impl Account {
         }
     }
 
-    pub fn special_use_folder(&self, special_use: SpecialUseMailbox) -> Option<&str> {
+    pub fn special_use_folder(&self, special_use: SpecialUsageMailbox) -> Option<&str> {
         let ret = self
             .folder_confs
             .iter()

@@ -574,7 +574,7 @@ impl Component for Composer {
                                 context,
                                 self.account_cursor,
                                 self.draft.clone(),
-                                SpecialUseMailbox::Sent,
+                                SpecialUsageMailbox::Sent,
                                 Flag::SEEN,
                             ) {
                                 context
@@ -584,7 +584,7 @@ impl Component for Composer {
                                 save_draft(
                                     self.draft.clone().finalise().unwrap().as_bytes(),
                                     context,
-                                    SpecialUseMailbox::Drafts,
+                                    SpecialUsageMailbox::Drafts,
                                     Flag::SEEN | Flag::DRAFT,
                                     self.account_cursor,
                                 );
@@ -633,7 +633,7 @@ impl Component for Composer {
                                 save_draft(
                                     self.draft.clone().finalise().unwrap().as_bytes(),
                                     context,
-                                    SpecialUseMailbox::Drafts,
+                                    SpecialUsageMailbox::Drafts,
                                     Flag::SEEN | Flag::DRAFT,
                                     self.account_cursor,
                                 );
@@ -1069,7 +1069,7 @@ pub fn send_draft(
     context: &mut Context,
     account_cursor: usize,
     mut draft: Draft,
-    folder_type: SpecialUseMailbox,
+    folder_type: SpecialUsageMailbox,
     flags: Flag,
 ) -> bool {
     use std::io::Write;
@@ -1216,7 +1216,7 @@ pub fn send_draft(
 pub fn save_draft(
     bytes: &[u8],
     context: &mut Context,
-    folder_type: SpecialUseMailbox,
+    folder_type: SpecialUsageMailbox,
     flags: Flag,
     account_cursor: usize,
 ) {

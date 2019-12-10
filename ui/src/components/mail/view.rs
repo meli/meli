@@ -1200,7 +1200,7 @@ impl Component for MailView {
                                                 unsafe { &mut *(unsafe_context) },
                                                 self.coordinates.0,
                                                 draft,
-                                                SpecialUseMailbox::Sent,
+                                                SpecialUsageMailbox::Sent,
                                                 Flag::SEEN,
                                             );
                                         }

@@ -18,7 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::backends::{BackendFolder, Folder, FolderHash, FolderPermissions};
+use crate::backends::{BackendFolder, Folder, FolderHash, FolderPermissions, SpecialUsageMailbox};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Default, Clone)]
@@ -28,6 +28,7 @@ pub struct ImapFolder {
     pub(super) name: String,
     pub(super) parent: Option<FolderHash>,
     pub(super) children: Vec<FolderHash>,
+    pub usage: SpecialUsageMailbox,
     pub no_select: bool,
 
     pub permissions: Arc<Mutex<FolderPermissions>>,
@@ -62,10 +63,15 @@ impl BackendFolder for ImapFolder {
             name: self.name.clone(),
             parent: self.parent,
             children: self.children.clone(),
+            usage: self.usage,
             no_select: self.no_select,
             permissions: self.permissions.clone(),
             exists: self.exists.clone(),
         })
+    }
+
+    fn special_usage(&self) -> SpecialUsageMailbox {
+        self.usage
     }
 
     fn parent(&self) -> Option<FolderHash> {

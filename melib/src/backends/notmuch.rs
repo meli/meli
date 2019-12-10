@@ -2,6 +2,7 @@ use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::FolderHash;
 use crate::backends::{
     BackendFolder, BackendOp, Folder, FolderPermissions, MailBackend, RefreshEventConsumer,
+    SpecialUsageMailbox,
 };
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
@@ -66,6 +67,7 @@ struct NotmuchFolder {
     parent: Option<FolderHash>,
     name: String,
     path: String,
+    usage: SpecialUsageMailbox,
     query_str: String,
     query: Option<*mut notmuch_query_t>,
     phantom: std::marker::PhantomData<&'static mut notmuch_query_t>,
@@ -96,6 +98,10 @@ impl BackendFolder for NotmuchFolder {
 
     fn parent(&self) -> Option<FolderHash> {
         self.parent
+    }
+
+    fn special_usage(&self) -> SpecialUsageMailbox {
+        self.usage
     }
 
     fn permissions(&self) -> FolderPermissions {
@@ -156,6 +162,7 @@ impl NotmuchDb {
                         parent: None,
                         query: None,
                         query_str: query_str.to_string(),
+                        usage: SpecialUsageMailbox::Normal,
                         phantom: std::marker::PhantomData,
                     },
                 );

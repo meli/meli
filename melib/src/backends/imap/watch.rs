@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use super::*;
+use crate::backends::SpecialUsageMailbox;
 use std::sync::{Arc, Mutex, RwLock};
 
 /// Arguments for IMAP watching functions
@@ -123,7 +124,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         .read()
         .unwrap()
         .values()
-        .find(|f| f.parent.is_none() && f.path().eq_ignore_ascii_case("INBOX"))
+        .find(|f| f.parent.is_none() && (f.usage == SpecialUsageMailbox::Inbox))
         .map(std::clone::Clone::clone)
     {
         Some(folder) => folder,

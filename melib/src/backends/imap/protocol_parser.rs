@@ -89,8 +89,15 @@ named!(
                 let mut f = ImapFolder::default();
                 f.no_select = false;
                 for p in properties.split(|&b| b == b' ') {
+                    use crate::backends::SpecialUsageMailbox;
                     if p.eq_ignore_ascii_case(b"\\NoSelect") {
                         f.no_select = true;
+                    } else if p.eq_ignore_ascii_case(b"\\Sent") {
+                        f.usage = SpecialUsageMailbox::Sent;
+                    } else if p.eq_ignore_ascii_case(b"\\Junk") {
+                        f.usage = SpecialUsageMailbox::Trash;
+                    } else if p.eq_ignore_ascii_case(b"\\Drafts") {
+                        f.usage = SpecialUsageMailbox::Drafts;
                     }
                 }
                 f.hash = get_path_hash!(path);

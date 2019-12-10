@@ -18,7 +18,7 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::backends::SpecialUseMailbox;
+use crate::backends::SpecialUsageMailbox;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 
@@ -81,7 +81,7 @@ pub struct FolderConf {
     #[serde(deserialize_with = "toggleflag_de")]
     pub ignore: ToggleFlag,
     #[serde(default = "none")]
-    pub usage: Option<SpecialUseMailbox>,
+    pub usage: Option<SpecialUsageMailbox>,
     #[serde(flatten)]
     pub extra: HashMap<String, String>,
 }

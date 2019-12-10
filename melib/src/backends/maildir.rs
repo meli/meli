@@ -176,6 +176,7 @@ pub struct MaildirFolder {
     path: PathBuf,
     parent: Option<FolderHash>,
     children: Vec<FolderHash>,
+    usage: SpecialUsageMailbox,
     permissions: FolderPermissions,
 }
 
@@ -237,6 +238,7 @@ impl MaildirFolder {
             fs_path: pathbuf,
             parent,
             children,
+            usage: SpecialUsageMailbox::Normal,
             permissions: FolderPermissions {
                 create_messages: !read_only,
                 remove_messages: !read_only,
@@ -300,9 +302,14 @@ impl BackendFolder for MaildirFolder {
             fs_path: self.fs_path.clone(),
             path: self.path.clone(),
             children: self.children.clone(),
+            usage: self.usage,
             parent: self.parent,
             permissions: self.permissions,
         })
+    }
+
+    fn special_usage(&self) -> SpecialUsageMailbox {
+        self.usage
     }
 
     fn parent(&self) -> Option<FolderHash> {
