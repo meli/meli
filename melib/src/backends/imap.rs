@@ -471,6 +471,10 @@ impl MailBackend for ImapType {
         self
     }
 
+    fn as_any_mut(&mut self) -> &mut dyn::std::any::Any {
+        self
+    }
+
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         if *self.can_create_flags.lock().unwrap() {
             Some(self.tag_index.clone())
@@ -530,8 +534,8 @@ impl ImapType {
     pub fn shell(&mut self) {
         let mut conn = ImapConnection::new_connection(&self.server_conf);
         let mut res = String::with_capacity(8 * 1024);
+        conn.send_command(b"NOOP").unwrap();
         conn.read_response(&mut res).unwrap();
-        debug!("out: {}", &res);
 
         let mut input = String::new();
         loop {
@@ -540,6 +544,9 @@ impl ImapType {
 
             match io::stdin().read_line(&mut input) {
                 Ok(_) => {
+                    if input.trim().eq_ignore_ascii_case("logout") {
+                        break;
+                    }
                     conn.send_command(input.as_bytes()).unwrap();
                     conn.read_lines(&mut res, String::new()).unwrap();
                     if input.trim() == "IDLE" {
@@ -550,9 +557,6 @@ impl ImapType {
                         conn = iter.into_conn();
                     }
                     debug!("out: {}", &res);
-                    if input.trim().eq_ignore_ascii_case("logout") {
-                        break;
-                    }
                 }
                 Err(error) => debug!("error: {}", error),
             }

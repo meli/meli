@@ -33,7 +33,11 @@ fn main() -> Result<()> {
         .collect(),
         ..Default::default()
     };
-    let mut imap = ImapType::new(&set, Box::new(|_| true));
-    imap.shell();
+    let mut imap = ImapType::new(&set, Box::new(|_| true))?;
+
+    (imap.as_any_mut())
+        .downcast_mut::<ImapType>()
+        .unwrap()
+        .shell();
     Ok(())
 }
