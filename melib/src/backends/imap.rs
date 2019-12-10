@@ -179,7 +179,7 @@ impl MailBackend for ImapType {
                 /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
                  * returns READ-ONLY for both cases) */
                 exit_on_error!(&tx,
-                               conn.send_command(format!("SELECT {}", folder_path).as_bytes())
+                               conn.send_command(format!("SELECT \"{}\"", folder_path).as_bytes())
                                conn.read_response(&mut response)
                 );
                 let examine_response = protocol_parser::select_response(&response);
@@ -211,7 +211,7 @@ impl MailBackend for ImapType {
                 }
                 /* reselecting the same mailbox with EXAMINE prevents expunging it */
                 exit_on_error!(&tx,
-                               conn.send_command(format!("EXAMINE {}", folder_path).as_bytes())
+                               conn.send_command(format!("EXAMINE \"{}\"", folder_path).as_bytes())
                                conn.read_response(&mut response)
                 );
 
@@ -618,7 +618,7 @@ impl ImapType {
         let folders_lck = self.folders.read()?;
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock()?;
-        conn.send_command(format!("EXAMINE {}", folders_lck[&folder_hash].path()).as_bytes())?;
+        conn.send_command(format!("EXAMINE \"{}\"", folders_lck[&folder_hash].path()).as_bytes())?;
         conn.read_response(&mut response)?;
         conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query).as_bytes())?;
         conn.read_response(&mut response)?;
