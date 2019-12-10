@@ -5,6 +5,38 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
+pub struct ImapLineIterator<'a> {
+    slice: &'a str,
+}
+
+impl<'a> Iterator for ImapLineIterator<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<&'a str> {
+        if self.slice.is_empty() {
+            None
+        } else if let Some(pos) = self.slice.find("\r\n") {
+            let ret = &self.slice[..pos + 2];
+            self.slice = &self.slice[pos + 2..];
+            Some(ret)
+        } else {
+            let ret = self.slice;
+            self.slice = &self.slice[ret.len()..];
+            Some(ret)
+        }
+    }
+}
+
+pub trait ImapLineSplit {
+    fn split_rn(&self) -> ImapLineIterator;
+}
+
+impl ImapLineSplit for str {
+    fn split_rn(&self) -> ImapLineIterator {
+        ImapLineIterator { slice: self }
+    }
+}
+
 macro_rules! to_str (
     ($v:expr) => (unsafe{ std::str::from_utf8_unchecked($v) })
 );
@@ -181,14 +213,16 @@ macro_rules! flags_to_imap_list {
  * ==============
  *
  *  "M0 OK [CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE SPECIAL-USE] Logged in\r\n"
+*   "* CAPABILITY IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN X-GM-EXT-1 XYZZY SASL-IR AUTH=XOAUTH2 AUTH=PLAIN AUTH=PLAIN-CLIENT TOKEN AUTH=OAUTHBEARER AUTH=XOAUTH\r\n"
+*   "* CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE AUTH=PLAIN\r\n"
  */
 
 named!(
     pub capabilities<Vec<&[u8]>>,
     do_parse!(
-        take_until!("[CAPABILITY ")
-        >> tag!("[CAPABILITY ")
-        >> ret: terminated!(separated_nonempty_list_complete!(tag!(" "), is_not!(" ]")), tag!("]"))
+        take_until!("CAPABILITY ")
+        >> tag!("CAPABILITY ")
+        >> ret: separated_nonempty_list_complete!(tag!(" "), is_not!(" ]\r\n"))
         >> take_until!("\r\n")
         >> tag!("\r\n")
         >> ({ ret })

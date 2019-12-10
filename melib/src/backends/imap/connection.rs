@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use super::protocol_parser::ImapLineSplit;
 use crate::email::parser::BytesExt;
 use crate::error::*;
 use std::io::Read;
@@ -231,7 +232,47 @@ impl ImapStream {
             }
             conn_result?
         };
+        let mut res = String::with_capacity(8 * 1024);
         let mut ret = ImapStream { cmd_id, stream };
+        ret.send_command(b"CAPABILITY")?;
+        ret.read_response(&mut res)?;
+        let capabilities: std::result::Result<Vec<&[u8]>, _> = res
+            .split_rn()
+            .find(|l| l.starts_with("* CAPABILITY"))
+            .ok_or_else(|| MeliError::new(""))
+            .and_then(|res| {
+                protocol_parser::capabilities(res.as_bytes())
+                    .to_full_result()
+                    .map_err(|_| MeliError::new(""))
+            });
+
+        if capabilities.is_err() {
+            return Err(MeliError::new(format!(
+                "Could not connect to {}: expected CAPABILITY response but got:{}",
+                &server_conf.server_hostname, res
+            )));
+        }
+
+        let capabilities = capabilities.unwrap();
+        if !capabilities
+            .iter()
+            .any(|cap| cap.eq_ignore_ascii_case(b"IMAP4rev1"))
+        {
+            return Err(MeliError::new(format!(
+                "Could not connect to {}: server is not IMAP4rev1 compliant",
+                &server_conf.server_hostname
+            )));
+        } else if capabilities
+            .iter()
+            .any(|cap| cap.eq_ignore_ascii_case(b"LOGINDISABLED"))
+        {
+            return Err(MeliError::new(format!(
+                "Could not connect to {}: server does not accept logins [LOGINDISABLED]",
+                &server_conf.server_hostname
+            )));
+        }
+
+        let mut capabilities = None;
         ret.send_command(
             format!(
                 "LOGIN \"{}\" \"{}\"",
@@ -239,32 +280,39 @@ impl ImapStream {
             )
             .as_bytes(),
         )?;
-        let mut res = String::with_capacity(8 * 1024);
         let tag_start = format!("M{} ", (ret.cmd_id - 1));
+
         loop {
             ret.read_lines(&mut res, &String::new())?;
-            if res.starts_with("* OK") {
-                if let Some(pos) = res.as_bytes().find(b"\r\n") {
-                    let pos = pos + "\r\n".len();
-                    res.replace_range(..pos, "");
+            let mut should_break = false;
+            for l in res.split_rn() {
+                if l.starts_with("* CAPABILITY") {
+                    capabilities = protocol_parser::capabilities(l.as_bytes())
+                        .to_full_result()
+                        .map(|capabilities| {
+                            FnvHashSet::from_iter(
+                                capabilities.into_iter().map(|s: &[u8]| s.to_vec()),
+                            )
+                        })
+                        .ok();
+                }
+
+                if l.starts_with(tag_start.as_str()) {
+                    if !l[tag_start.len()..].trim().starts_with("OK ") {
+                        return Err(MeliError::new(format!(
+                            "Could not connect. Server replied with '{}'",
+                            l[tag_start.len()..].trim()
+                        )));
+                    }
+                    should_break = true;
                 }
             }
-
-            if res.starts_with(tag_start.as_str()) {
-                if !res[tag_start.len()..].trim().starts_with("OK ") {
-                    return Err(MeliError::new(format!(
-                        "Could not connect. Server replied with '{}'",
-                        res[tag_start.len()..].trim()
-                    )));
-                }
+            if should_break {
                 break;
             }
         }
 
-        let capabilities: std::result::Result<Vec<&[u8]>, _> =
-            protocol_parser::capabilities(res.as_bytes()).to_full_result();
-
-        if capabilities.is_err() {
+        if capabilities.is_none() {
             /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so check
              * for lazy servers */
             drop(capabilities);
@@ -274,9 +322,7 @@ impl ImapStream {
             let capabilities = FnvHashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
             Ok((capabilities, ret))
         } else {
-            let capabilities = capabilities?;
-            let capabilities = FnvHashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
-
+            let capabilities = capabilities.unwrap();
             Ok((capabilities, ret))
         }
     }
