@@ -32,6 +32,7 @@ pub struct GroupAddress {
 /**
  * Container for an address.
  *
+ * ```text
  * >           raw: Vec<u8>
  * > ┌──────────┴────────────┐
  * > Name <address@domain.tld>
@@ -48,7 +49,7 @@ pub struct GroupAddress {
  * > display_name             │
  * >                          │
  * >                    address_spec
- *
+ *```
  */
 pub struct MailboxAddress {
     pub raw: Vec<u8>,

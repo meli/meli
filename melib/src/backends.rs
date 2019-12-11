@@ -265,15 +265,15 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 /// from (eg local or imap).
 ///
 /// # Creation
-/// ```no_run
+/// ```ignore
 /// /* Create operation from Backend */
 ///
 /// let op = backend.operation(message.hash(), mailbox.folder.hash());
 /// ```
 ///
 /// # Example
-/// ```
-/// use melib::mailbox::backends::{BackendOp};
+/// ```ignore
+/// use melib::backends::{BackendOp};
 /// use melib::Result;
 /// use melib::{Envelope, Flag};
 ///

@@ -398,7 +398,6 @@ fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Read;
     use std::str::FromStr;
 
     #[test]
