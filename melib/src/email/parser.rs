@@ -658,13 +658,18 @@ fn eat_comments(input: &[u8]) -> Vec<u8> {
  * right now we expect input will have no extra spaces in between tokens
  *
  * We should use a custom parser here*/
-pub fn date(input: &[u8]) -> Option<chrono::DateTime<chrono::FixedOffset>> {
-    let parsed_result = phrase(&eat_comments(input))
-        .to_full_result()
-        .unwrap()
-        .replace(b"-", b"+");
-    chrono::DateTime::parse_from_rfc2822(String::from_utf8_lossy(parsed_result.trim()).as_ref())
-        .ok()
+pub fn date(input: &[u8]) -> Result<chrono::DateTime<chrono::FixedOffset>> {
+    let mut parsed_result = phrase(&eat_comments(input)).to_full_result()?;
+    if let Some(pos) = parsed_result.find(b"-0000") {
+        parsed_result[pos] = b'+';
+    }
+
+    Ok(
+        chrono::DateTime::parse_from_rfc2822(
+            String::from_utf8_lossy(parsed_result.trim()).as_ref(),
+        )
+        .map_err(|err| MeliError::new(err.to_string()))?,
+    )
 }
 
 named!(pub message_id<&[u8]>,
@@ -1052,38 +1057,48 @@ mod tests {
         let words = b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
      =?iso-8859-7?B?INb18+nq3l0gzd3hIMHt4erv3+358+c6IMzF0c/TIMHQz9TFy8XTzMHU?=
       =?iso-8859-7?B?2c0gwiDUzC4gysHNLiDFzsXUwdPH0yAyMDE3LTE4OiDTx8zFydnTxw==?=";
-        assert!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
+        assert_eq!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" , std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
         let words = b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=";
-        assert!(
-            "Πρόσθετη εξεταστική"
-                == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
+        assert_eq!(
+            "Πρόσθετη εξεταστική",
+            std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
         );
         let words = b"[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
-        assert!(
-            "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store"
-                == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
+        assert_eq!(
+            "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
+            std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
         );
         let words = b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
 	=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=
 	=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
-        assert!(
-            "Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store"
-                == std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
+        assert_eq!(
+            "Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
+            std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
         );
         let words = b"sdf";
-        assert!("sdf" == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap());
+        assert_eq!(
+            "sdf",
+            std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
+        );
         let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
-        assert!(
-            "Seg fault στην εκτέλεση του example ru n _sniper"
-                == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
+        assert_eq!(
+            "Seg fault στην εκτέλεση του example ru n _sniper",
+            std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
         );
         let words = b"Re: [Advcomparch]
  =?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?=
  =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
 
-        assert!(
-            "Re: [Advcomparch] Seg fault στην εκτέλεση του example ru n _sniper"
-                == std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
+        assert_eq!(
+            "Re: [Advcomparch] Seg fault στην εκτέλεση του example ru n _sniper",
+            std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
+        );
+
+        let words = r#"[internal] =?UTF-8?B?zp3Orc6/z4Igzp/OtM63zrPPjM+CIM6jz4XOs86zz4E=?=
+ =?UTF-8?B?zrHPhs6uz4I=?="#;
+        assert_eq!(
+            "[internal] Νέος Οδηγός Συγγραφής",
+            std::str::from_utf8(&phrase(words.as_bytes()).to_full_result().unwrap()).unwrap()
         );
     }
 

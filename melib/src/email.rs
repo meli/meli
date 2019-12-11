@@ -122,7 +122,7 @@ pub struct Envelope {
     to: Vec<Address>,
     cc: Vec<Address>,
     bcc: Vec<Address>,
-    subject: Option<Vec<u8>>,
+    subject: Option<String>,
     message_id: MessageID,
     in_reply_to: Option<MessageID>,
     references: Option<References>,
@@ -315,7 +315,7 @@ impl Envelope {
         if let Some(ref mut x) = in_reply_to {
             self.push_references(x);
         }
-        if let Some(d) = parser::date(&self.date.as_bytes()) {
+        if let Ok(d) = parser::date(&self.date.as_bytes()) {
             self.set_datetime(d);
         }
         if self.message_id.raw().is_empty() {
@@ -343,7 +343,7 @@ impl Envelope {
     }
 
     pub fn datetime(&self) -> chrono::DateTime<chrono::FixedOffset> {
-        if let Some(d) = parser::date(&self.date.as_bytes()) {
+        if let Ok(d) = parser::date(&self.date.as_bytes()) {
             return d;
         }
         chrono::FixedOffset::west(0)
@@ -412,7 +412,7 @@ impl Envelope {
 
     pub fn subject(&self) -> Cow<str> {
         match self.subject {
-            Some(ref s) => String::from_utf8_lossy(s),
+            Some(ref s) => Cow::from(s),
             _ => Cow::from(String::new()),
         }
     }
@@ -467,10 +467,13 @@ impl Envelope {
         };
         self.in_reply_to = Some(MessageID::new(new_val, slice));
     }
-    pub fn set_subject(&mut self, mut new_val: Vec<u8>) {
+    pub fn set_subject(&mut self, new_val: Vec<u8>) {
+        let mut new_val = String::from_utf8(new_val)
+            .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into());
         while new_val
+            .chars()
             .last()
-            .map(|&u| char::is_control(u as char))
+            .map(|c| char::is_control(c))
             .unwrap_or(false)
         {
             new_val.pop();

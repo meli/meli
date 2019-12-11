@@ -719,7 +719,7 @@ named!(
             let mut env = Envelope::new(0);
             if let Some(date) = date {
                 env.set_date(&date);
-                if let Some(d) = crate::email::parser::date(env.date_as_str().as_bytes()) {
+                if let Ok(d) = crate::email::parser::date(env.date_as_str().as_bytes()) {
                     env.set_datetime(d);
                 }
             }
