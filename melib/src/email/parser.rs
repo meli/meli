@@ -119,6 +119,8 @@ fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
             input[2] - 87
         };
         IResult::Done(&input[3..], a * 16 + b)
+    } else if input.starts_with(b"\r\n") {
+        IResult::Done(&input[2..], b'\n')
     } else {
         IResult::Error(error_code!(ErrorKind::Custom(43)))
     }
@@ -406,6 +408,8 @@ fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
         IResult::Incomplete(Needed::Size(1))
     } else if input[0] == b'=' && input[1] == b'\n' {
         IResult::Done(&input[2..], &input[0..2]) // `=\n` is an escaped space character.
+    } else if input.len() > 3 && input.starts_with(b"=\r\n") {
+        IResult::Done(&input[3..], &input[0..3]) // `=\r\n` is an escaped space character.
     } else {
         IResult::Error(error_code!(ErrorKind::Custom(43)))
     }
@@ -1214,5 +1218,37 @@ mod tests {
                 _ => {}
             }
         }
+    }
+
+    #[test]
+    fn test_quoted_printable() {
+        let input = r#"<=21-- SEPARATOR  -->
+   <tr>
+    <td style=3D=22padding-left: 10px;padding-right: 10px;background-color:=
+ =23f3f5fa;=22>
+     <table width=3D=22100%=22 cellspacing=3D=220=22 cellpadding=3D=220=22 =
+border=3D=220=22>
+      <tr>
+       <td style=3D=22height:5px;background-color: =23f3f5fa;=22>&nbsp;</td>
+      </tr>
+     </table>
+    </td>
+   </tr>"#;
+        assert_eq!(
+            quoted_printable_bytes(input.as_bytes())
+                .to_full_result()
+                .as_ref()
+                .map(|b| unsafe { std::str::from_utf8_unchecked(b) }),
+            Ok(r#"<!-- SEPARATOR  -->
+   <tr>
+    <td style="padding-left: 10px;padding-right: 10px;background-color: #f3f5fa;">
+     <table width="100%" cellspacing="0" cellpadding="0" border="0">
+      <tr>
+       <td style="height:5px;background-color: #f3f5fa;">&nbsp;</td>
+      </tr>
+     </table>
+    </td>
+   </tr>"#)
+        );
     }
 }
