@@ -46,7 +46,7 @@ pub enum StatusEvent {
 /// to the main process.
 #[derive(Debug)]
 pub enum ThreadEvent {
-    ThreadJoin(thread::ThreadId),
+    NewThread(thread::ThreadId, String),
     /// User input.
     Input(Key),
     /// User input and input as raw bytes.

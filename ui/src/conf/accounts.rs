@@ -38,7 +38,7 @@ use melib::StackVec;
 use text_processing::GlobMatch;
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
-use crate::{workers::WorkController, StatusEvent, ThreadEvent};
+use crate::{StatusEvent, ThreadEvent};
 use crossbeam::Sender;
 use std::collections::VecDeque;
 use std::fs;
@@ -162,6 +162,7 @@ pub struct Account {
     pub(crate) runtime_settings: AccountConf,
     pub(crate) backend: Arc<RwLock<Box<dyn MailBackend>>>,
 
+    sender: Sender<ThreadEvent>,
     event_queue: VecDeque<(FolderHash, RefreshEvent)>,
     notify_fn: Arc<NotifyFn>,
 }
@@ -245,6 +246,7 @@ impl Account {
         mut settings: AccountConf,
         map: &Backends,
         work_context: WorkContext,
+        sender: Sender<ThreadEvent>,
         notify_fn: NotifyFn,
     ) -> Result<Self> {
         let s = settings.clone();
@@ -300,6 +302,7 @@ impl Account {
             settings,
             backend: Arc::new(RwLock::new(backend)),
             notify_fn,
+            sender,
 
             event_queue: VecDeque::with_capacity(8),
         })
@@ -514,16 +517,7 @@ impl Account {
         }
         Some(w)
     }
-    pub fn reload(
-        &mut self,
-        event: RefreshEvent,
-        folder_hash: FolderHash,
-        context: (
-            &mut WorkController,
-            &Sender<ThreadEvent>,
-            &mut VecDeque<UIEvent>,
-        ),
-    ) -> Option<UIEvent> {
+    pub fn reload(&mut self, event: RefreshEvent, folder_hash: FolderHash) -> Option<UIEvent> {
         if !self.folders[&folder_hash].is_available() {
             self.event_queue.push_back((folder_hash, event));
             return None;
@@ -683,6 +677,7 @@ impl Account {
                 }
                 RefreshEventKind::Failure(e) => {
                     debug!("RefreshEvent Failure: {}", e.to_string());
+                    /*
                     context
                         .1
                         .send(ThreadEvent::UIEvent(UIEvent::Notification(
@@ -691,43 +686,39 @@ impl Account {
                             Some(crate::types::NotificationType::ERROR),
                         )))
                         .expect("Could not send event on main channel");
-                    self.watch(context);
+                    */
+                    self.watch();
                 }
             }
         }
         None
     }
-    pub fn watch(
-        &self,
-        context: (
-            &mut WorkController,
-            &Sender<ThreadEvent>,
-            &mut VecDeque<UIEvent>,
-        ),
-    ) {
-        let (work_controller, sender, replies) = context;
-        let sender = sender.clone();
+    pub fn watch(&self) {
+        let sender_ = self.sender.clone();
         let r = RefreshEventConsumer::new(Box::new(move |r| {
-            sender.send(ThreadEvent::from(r)).unwrap();
+            sender_.send(ThreadEvent::from(r)).unwrap();
         }));
         match self
             .backend
             .read()
             .unwrap()
-            .watch(r, work_controller.get_context())
+            .watch(r, self.work_context.clone())
         {
             Ok(id) => {
-                work_controller
-                    .static_threads
-                    .lock()
-                    .unwrap()
-                    .insert(id, format!("watching {}", self.name()).into());
+                self.sender
+                    .send(ThreadEvent::NewThread(
+                        id,
+                        format!("watching {}", self.name()).into(),
+                    ))
+                    .unwrap();
             }
 
             Err(e) => {
-                replies.push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                    e.to_string(),
-                )));
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                        StatusEvent::DisplayMessage(e.to_string()),
+                    )))
+                    .unwrap();
             }
         }
     }

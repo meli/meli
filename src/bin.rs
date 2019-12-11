@@ -373,8 +373,8 @@ fn run_app() -> Result<()> {
                             state.check_accounts();
                             state.redraw();
                         },
-                        ThreadEvent::ThreadJoin(id) => {
-                            state.join(id);
+                        ThreadEvent::NewThread(id, name) => {
+                            state.new_thread(id, name);
                         },
                     }
                 },

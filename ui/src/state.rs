@@ -137,9 +137,6 @@ impl Context {
 
     pub fn is_online(&mut self, account_pos: usize) -> bool {
         let Context {
-            ref mut work_controller,
-            ref sender,
-            ref mut replies,
             ref mut accounts,
             ref mut mailbox_hashes,
             ..
@@ -158,7 +155,7 @@ impl Context {
                  *   inform the main binary that refresh events arrived
                  * - replies to report any failures to the user
                  */
-                accounts[account_pos].watch((work_controller, sender, replies));
+                accounts[account_pos].watch();
             }
             true
         } else {
@@ -184,7 +181,6 @@ pub struct State {
     components: Vec<Box<dyn Component>>,
     pub context: Context,
     timer: thread::JoinHandle<()>,
-    threads: FnvHashMap<thread::ThreadId, (Sender<bool>, thread::JoinHandle<()>)>,
 }
 
 impl Drop for State {
@@ -232,6 +228,7 @@ impl State {
                     a_s.clone(),
                     &backends,
                     work_controller.get_context(),
+                    sender.clone(),
                     NotifyFn::new(Box::new(move |f: FolderHash| {
                         sender
                             .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
@@ -286,7 +283,6 @@ impl State {
                     tx: input_thread.0,
                 },
             },
-            threads: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
         };
         if s.context.settings.terminal.ascii_drawing {
             s.grid.set_ascii_drawing(true);
@@ -319,41 +315,29 @@ impl State {
                 return;
             }
             let Context {
-                ref mut work_controller,
-                ref sender,
-                ref mut replies,
-                ref mut accounts,
-                ..
+                ref mut accounts, ..
             } = &mut self.context;
 
-            if let Some(notification) =
-                accounts[idxa].reload(event, hash, (work_controller, sender, replies))
-            {
+            if let Some(notification) = accounts[idxa].reload(event, hash) {
                 if let UIEvent::Notification(_, _, _) = notification {
                     self.rcv_event(UIEvent::MailboxUpdate((idxa, hash)));
                 }
                 self.rcv_event(notification);
             }
         } else {
-            if let melib::backends::RefreshEventKind::Failure(e) = event.kind() {
-                self.context
-                    .sender
-                    .send(ThreadEvent::UIEvent(UIEvent::Notification(
-                        Some("watcher thread exited with error".to_string()),
-                        e.to_string(),
-                        Some(crate::types::NotificationType::ERROR),
-                    )))
-                    .expect("Could not send event on main channel");
+            if let melib::backends::RefreshEventKind::Failure(err) = event.kind() {
+                debug!(err);
             }
         }
     }
 
-    /// If an owned thread returns a `ThreadEvent::ThreadJoin` event to `State` then it must remove
-    /// the thread from its list and `join` it.
-    pub fn join(&mut self, id: thread::ThreadId) {
-        let (tx, handle) = self.threads.remove(&id).unwrap();
-        tx.send(true).unwrap();
-        handle.join().unwrap();
+    pub fn new_thread(&mut self, id: thread::ThreadId, name: String) {
+        self.context
+            .work_controller
+            .static_threads
+            .lock()
+            .unwrap()
+            .insert(id, name.into());
     }
 
     /// Switch back to the terminal's main screen (The command line the user sees before opening
