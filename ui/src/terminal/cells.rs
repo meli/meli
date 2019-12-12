@@ -355,12 +355,12 @@ impl CellBuffer {
     }
 
     /// See `RowIterator` documentation.
-    pub fn row_iter(&self, bounds: (usize, usize), row: usize) -> RowIterator {
+    pub fn row_iter(&self, bounds: std::ops::Range<usize>, row: usize) -> RowIterator {
         if row < self.rows {
             RowIterator {
                 row,
-                col: std::cmp::min(self.cols.saturating_sub(1), bounds.0)
-                    ..(std::cmp::min(self.cols, bounds.1 + 1)),
+                col: std::cmp::min(self.cols.saturating_sub(1), bounds.start)
+                    ..(std::cmp::min(self.cols, bounds.end)),
             }
         } else {
             RowIterator { row, col: 0..0 }
@@ -1871,7 +1871,7 @@ pub mod ansi {
 /// `BoundsIterator` which iterates each row.
 /// ```norun
 /// for c in grid.row_iter(
-///     (x, x + 10),
+///     x..(x + 11),
 ///     0,
 /// ) {
 ///     grid[c].set_ch('w');

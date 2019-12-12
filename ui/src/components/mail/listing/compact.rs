@@ -157,7 +157,7 @@ impl ListingTrait for CompactListing {
 
         let (upper_left, bottom_right) = area;
         change_colors(grid, area, fg_color, bg_color);
-        let mut x = get_x(upper_left)
+        let x = get_x(upper_left)
             + self.data_columns.widths[0]
             + self.data_columns.widths[1]
             + self.data_columns.widths[2]
@@ -172,9 +172,8 @@ impl ListingTrait for CompactListing {
                 pos_dec(self.data_columns.columns[3].size(), (1, 1)),
             ),
         );
-        for _ in 0..self.data_columns.widths[3] {
-            grid[(x, get_y(upper_left))].set_bg(bg_color);
-            x += 1;
+        for c in grid.row_iter(x..(self.data_columns.widths[3] + x), get_y(upper_left)) {
+            grid[c].set_bg(bg_color);
         }
         return;
     }
@@ -280,9 +279,10 @@ impl ListingTrait for CompactListing {
             let remainder = width
                 .saturating_sub(self.data_columns.widths[0])
                 .saturating_sub(self.data_columns.widths[1])
-                - 4;
+                .saturating_sub(4);
             self.data_columns.widths[2] = remainder / 6;
-            self.data_columns.widths[4] = (2 * remainder) / 3 - self.data_columns.widths[3];
+            self.data_columns.widths[4] =
+                ((2 * remainder) / 3).saturating_sub(self.data_columns.widths[3]);
         } else {
             let remainder = width
                 .saturating_sub(self.data_columns.widths[0])
@@ -290,7 +290,7 @@ impl ListingTrait for CompactListing {
                 .saturating_sub(8);
             if min_col_width + self.data_columns.widths[4] > remainder {
                 self.data_columns.widths[4] =
-                    remainder - min_col_width - self.data_columns.widths[3];
+                    remainder.saturating_sub(min_col_width + self.data_columns.widths[3]);
                 self.data_columns.widths[2] = min_col_width;
             }
         }
@@ -980,7 +980,7 @@ impl CompactListing {
                 ((0, idx), (min_width.0, idx)),
                 None,
             );
-            for c in columns[0].row_iter((x, min_width.0.saturating_sub(1)), idx) {
+            for c in columns[0].row_iter(x..min_width.0, idx) {
                 columns[0][c].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
@@ -992,7 +992,7 @@ impl CompactListing {
                 ((0, idx), (min_width.1.saturating_sub(1), idx)),
                 None,
             );
-            for c in columns[1].row_iter((x, min_width.1.saturating_sub(1)), idx) {
+            for c in columns[1].row_iter(x..min_width.1, idx) {
                 columns[1][c].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
@@ -1004,7 +1004,7 @@ impl CompactListing {
                 ((0, idx), (min_width.2, idx)),
                 None,
             );
-            for c in columns[2].row_iter((x, min_width.2.saturating_sub(1)), idx) {
+            for c in columns[2].row_iter(x..min_width.2, idx) {
                 columns[2][c].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
@@ -1016,7 +1016,7 @@ impl CompactListing {
                 ((0, idx), (min_width.3, idx)),
                 None,
             );
-            for c in columns[3].row_iter((x, min_width.3.saturating_sub(1)), idx) {
+            for c in columns[3].row_iter(x..min_width.3, idx) {
                 columns[3][c].set_bg(bg_color);
             }
             let (x, _) = write_string_to_grid(
@@ -1040,25 +1040,25 @@ impl CompactListing {
                         ((x + 1, idx), (min_width.4, idx)),
                         None,
                     );
-                    for c in columns[4].row_iter((x, x), idx) {
+                    for c in columns[4].row_iter(x..(x + 1), idx) {
                         columns[4][c].set_bg(color);
                     }
-                    for c in columns[4].row_iter((_x, _x), idx) {
+                    for c in columns[4].row_iter(_x..(_x + 1), idx) {
                         columns[4][c].set_bg(color);
                         columns[4][c].set_keep_bg(true);
                     }
-                    for c in columns[4].row_iter((x + 1, _x), idx) {
+                    for c in columns[4].row_iter((x + 1)..(_x + 1), idx) {
                         columns[4][c].set_keep_fg(true);
                         columns[4][c].set_keep_bg(true);
                     }
-                    for c in columns[4].row_iter((x, x), idx) {
+                    for c in columns[4].row_iter(x..(x + 1), idx) {
                         columns[4][c].set_keep_bg(true);
                     }
                     x = _x + 1;
                 }
                 x
             };
-            for c in columns[4].row_iter((x, min_width.4.saturating_sub(1)), idx) {
+            for c in columns[4].row_iter(x..min_width.4, idx) {
                 columns[4][c].set_ch(' ');
                 columns[4][c].set_bg(bg_color);
             }

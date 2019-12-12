@@ -1000,7 +1000,7 @@ impl ConversationsListing {
             ((0, 3 * idx), (width - 1, 3 * idx)),
             None,
         );
-        for c in self.content.row_iter((x, x + 3), 3 * idx) {
+        for c in self.content.row_iter(x..(x + 4), 3 * idx) {
             self.content[c].set_bg(bg_color);
         }
         /* draw subject */
@@ -1025,25 +1025,25 @@ impl ConversationsListing {
                     ((x + 1, 3 * idx), (width - 1, 3 * idx)),
                     None,
                 );
-                for c in self.content.row_iter((x, x), 3 * idx) {
+                for c in self.content.row_iter(x..(x + 1), 3 * idx) {
                     self.content[c].set_bg(color);
                 }
-                for c in self.content.row_iter((_x, _x), 3 * idx) {
+                for c in self.content.row_iter(_x..(_x + 1), 3 * idx) {
                     self.content[c].set_bg(color);
                     self.content[c].set_keep_bg(true);
                 }
-                for c in self.content.row_iter((x + 1, _x), 3 * idx) {
+                for c in self.content.row_iter(x + 1..(_x + 1), 3 * idx) {
                     self.content[c].set_keep_fg(true);
                     self.content[c].set_keep_bg(true);
                 }
-                for c in self.content.row_iter((x, x), 3 * idx) {
+                for c in self.content.row_iter(x..(x + 1), 3 * idx) {
                     self.content[c].set_keep_bg(true);
                 }
                 x = _x + 1;
             }
             x
         };
-        for c in self.content.row_iter((x, width.saturating_sub(1)), 3 * idx) {
+        for c in self.content.row_iter(x..width, 3 * idx) {
             self.content[c].set_ch(' ');
             self.content[c].set_bg(bg_color);
         }
@@ -1057,7 +1057,7 @@ impl ConversationsListing {
             ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
             None,
         );
-        for c in self.content.row_iter((x, x + 4), 3 * idx + 1) {
+        for c in self.content.row_iter(x..(x + 5), 3 * idx + 1) {
             self.content[c].set_ch('▁');
             self.content[c].set_bg(bg_color);
         }
@@ -1072,17 +1072,11 @@ impl ConversationsListing {
             None,
         );
 
-        for c in self
-            .content
-            .row_iter((x, width.saturating_sub(1)), 3 * idx + 1)
-        {
+        for c in self.content.row_iter(x..width, 3 * idx + 1) {
             self.content[c].set_ch('▁');
             self.content[c].set_bg(bg_color);
         }
-        for c in self
-            .content
-            .row_iter((0, width.saturating_sub(1)), 3 * idx + 2)
-        {
+        for c in self.content.row_iter(0..width, 3 * idx + 2) {
             self.content[c].set_ch('▓');
             self.content[c].set_fg(padding_fg);
             self.content[c].set_bg(bg_color);
@@ -1131,7 +1125,7 @@ impl Component for ConversationsListing {
                     area,
                     Some(get_x(upper_left)),
                 );
-                for c in grid.row_iter((x, get_x(bottom_right)), y) {
+                for c in grid.row_iter(x..(get_x(bottom_right) + 1), y) {
                     grid[c] = Cell::default();
                 }
                 clear_area(grid, ((x, y), set_y(bottom_right, y)));
