@@ -14,10 +14,18 @@ pub trait Truncate {
 
 impl Truncate for &mut String {
     fn truncate_at_boundary(self, mut new_len: usize) {
-        while new_len > 0 && !self.is_char_boundary(new_len) {
-            new_len -= 1;
+        if new_len >= self.len() {
+            return;
         }
-        String::truncate(self, new_len);
+
+        extern crate unicode_segmentation;
+        use unicode_segmentation::UnicodeSegmentation;
+        if let Some((last, _)) = UnicodeSegmentation::grapheme_indices(self.as_str(), true)
+            .take(new_len)
+            .last()
+        {
+            String::truncate(self, last);
+        }
     }
 }
 
