@@ -310,7 +310,13 @@ impl Account {
 
     fn init(&mut self) {
         let ref_folders: FnvHashMap<FolderHash, Folder> =
-            self.backend.read().unwrap().folders().unwrap();
+            match self.backend.read().unwrap().folders() {
+                Ok(f) => f,
+                Err(err) => {
+                    debug!(&err);
+                    return;
+                }
+            };
         let mut folders: FnvHashMap<FolderHash, MailboxEntry> =
             FnvHashMap::with_capacity_and_hasher(ref_folders.len(), Default::default());
         let mut folders_order: Vec<FolderHash> = Vec::with_capacity(ref_folders.len());
