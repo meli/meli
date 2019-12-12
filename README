@@ -65,6 +65,15 @@ To build with notmuch support, prepend the environment variable "MELI_FEATURES='
 
 or if building directly with cargo, use the flag '--features="notmuch"'.
 
+BUILDING WITH JMAP
+=====================
+
+To build with JMAP support, prepend the environment variable "MELI_FEATURES='jmap'" to your make invocation:
+
+# MELI_FEATURES="jmap" make
+
+or if building directly with cargo, use the flag '--features="jmap"'.
+
 DEVELOPMENT
 ===========
 
