@@ -38,6 +38,10 @@ pub mod mbox;
 pub mod notmuch;
 #[cfg(feature = "notmuch_backend")]
 pub use self::notmuch::NotmuchDb;
+#[cfg(feature = "jmap_backend")]
+pub mod jmap;
+#[cfg(feature = "jmap_backend")]
+pub use self::jmap::JmapType;
 
 #[cfg(feature = "imap_backend")]
 pub use self::imap::ImapType;
@@ -126,6 +130,16 @@ impl Backends {
                 Backend {
                     create_fn: Box::new(|| Box::new(|f, i| NotmuchDb::new(f, i))),
                     validate_conf_fn: Box::new(NotmuchDb::validate_config),
+                },
+            );
+        }
+        #[cfg(feature = "jmap_backend")]
+        {
+            b.register(
+                "jmap".to_string(),
+                Backend {
+                    create_fn: Box::new(|| Box::new(|f, i| JmapType::new(f, i))),
+                    validate_conf_fn: Box::new(JmapType::validate_config),
                 },
             );
         }
@@ -353,6 +367,28 @@ pub enum SpecialUsageMailbox {
 impl Default for SpecialUsageMailbox {
     fn default() -> Self {
         SpecialUsageMailbox::Normal
+    }
+}
+
+impl SpecialUsageMailbox {
+    pub fn detect_usage(name: &str) -> Option<SpecialUsageMailbox> {
+        if name.eq_ignore_ascii_case("inbox") {
+            Some(SpecialUsageMailbox::Inbox)
+        } else if name.eq_ignore_ascii_case("archive") {
+            Some(SpecialUsageMailbox::Archive)
+        } else if name.eq_ignore_ascii_case("drafts") {
+            Some(SpecialUsageMailbox::Drafts)
+        } else if name.eq_ignore_ascii_case("junk") {
+            Some(SpecialUsageMailbox::Junk)
+        } else if name.eq_ignore_ascii_case("spam") {
+            Some(SpecialUsageMailbox::Junk)
+        } else if name.eq_ignore_ascii_case("sent") {
+            Some(SpecialUsageMailbox::Sent)
+        } else if name.eq_ignore_ascii_case("trash") {
+            Some(SpecialUsageMailbox::Trash)
+        } else {
+            Some(SpecialUsageMailbox::Normal)
+        }
     }
 }
 

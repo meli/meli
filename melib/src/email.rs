@@ -125,7 +125,7 @@ pub struct Envelope {
     subject: Option<String>,
     message_id: MessageID,
     in_reply_to: Option<MessageID>,
-    references: Option<References>,
+    pub references: Option<References>,
     other_headers: FnvHashMap<String, String>,
 
     timestamp: UnixTimestamp,
@@ -490,14 +490,14 @@ impl Envelope {
         self.subject = Some(new_val);
     }
     pub fn set_message_id(&mut self, new_val: &[u8]) {
-        let slice = match parser::message_id(new_val).to_full_result() {
-            Ok(v) => v,
-            Err(e) => {
-                debug!(e);
-                return;
+        match parser::message_id(new_val).to_full_result() {
+            Ok(slice) => {
+                self.message_id = MessageID::new(new_val, slice);
             }
-        };
-        self.message_id = MessageID::new(new_val, slice);
+            Err(_) => {
+                self.message_id = MessageID::new(new_val, new_val);
+            }
+        }
     }
     pub fn push_references(&mut self, new_val: &[u8]) {
         let slice = match parser::message_id(new_val).to_full_result() {
@@ -557,6 +557,7 @@ impl Envelope {
             None => Vec::new(),
         }
     }
+
     pub fn other_headers(&self) -> &FnvHashMap<String, String> {
         &self.other_headers
     }

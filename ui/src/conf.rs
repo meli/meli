@@ -182,7 +182,8 @@ impl From<FileAccount> for AccountConf {
                     .split(if s.contains('/') { '/' } else { '.' })
                     .last()
                     .unwrap_or("");
-                folder_confs.get_mut(s).unwrap().folder_conf.usage = usage(name);
+                folder_confs.get_mut(s).unwrap().folder_conf.usage =
+                    SpecialUsageMailbox::detect_usage(name);
             }
 
             if folder_confs[s].folder_conf().ignore.is_unset() {
@@ -561,26 +562,6 @@ impl Serialize for CacheType {
             CacheType::Sqlite3 => serializer.serialize_str("sqlite3"),
             CacheType::None => serializer.serialize_str("none"),
         }
-    }
-}
-
-pub fn usage(name: &str) -> Option<SpecialUsageMailbox> {
-    if name.eq_ignore_ascii_case("inbox") {
-        Some(SpecialUsageMailbox::Inbox)
-    } else if name.eq_ignore_ascii_case("archive") {
-        Some(SpecialUsageMailbox::Archive)
-    } else if name.eq_ignore_ascii_case("drafts") {
-        Some(SpecialUsageMailbox::Drafts)
-    } else if name.eq_ignore_ascii_case("junk") {
-        Some(SpecialUsageMailbox::Junk)
-    } else if name.eq_ignore_ascii_case("spam") {
-        Some(SpecialUsageMailbox::Junk)
-    } else if name.eq_ignore_ascii_case("sent") {
-        Some(SpecialUsageMailbox::Sent)
-    } else if name.eq_ignore_ascii_case("trash") {
-        Some(SpecialUsageMailbox::Trash)
-    } else {
-        Some(SpecialUsageMailbox::Normal)
     }
 }
 

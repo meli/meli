@@ -353,7 +353,7 @@ impl Account {
             } else {
                 let mut new = FileFolderConf::default();
                 new.folder_conf.subscribe = super::ToggleFlag::InternalVal(true);
-                new.folder_conf.usage = super::usage(f.name());
+                new.folder_conf.usage = SpecialUsageMailbox::detect_usage(f.name());
                 folder_confs.insert(f.hash(), new);
             }
             folder_names.insert(f.hash(), f.path().to_string());
