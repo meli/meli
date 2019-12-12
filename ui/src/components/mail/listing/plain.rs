@@ -536,9 +536,11 @@ impl PlainListing {
                 tags.pop();
             }
         }
+        let mut subject = e.subject().to_string();
+        subject.truncate_at_boundary(150);
         EntryStrings {
             date: DateString(PlainListing::format_date(&e)),
-            subject: SubjectString(format!("{}", e.subject())),
+            subject: SubjectString(subject),
             flag: FlagString(format!("{}", if e.has_attachments() { "📎" } else { "" },)),
             from: FromString(address_list!((e.from()) as comma_sep_list)),
             tags: TagString(tags, colors),

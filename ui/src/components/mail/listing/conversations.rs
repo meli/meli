@@ -558,10 +558,12 @@ impl ConversationsListing {
                 tags.pop();
             }
         }
+        let mut subject = e.subject().to_string();
+        subject.truncate_at_boundary(150);
         if thread_node.len() > 0 {
             EntryStrings {
                 date: DateString(ConversationsListing::format_date(thread_node)),
-                subject: SubjectString(format!("{} ({})", e.subject(), thread_node.len(),)),
+                subject: SubjectString(format!("{} ({})", subject, thread_node.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
                     if e.has_attachments() { "📎" } else { "" },
@@ -573,7 +575,7 @@ impl ConversationsListing {
         } else {
             EntryStrings {
                 date: DateString(ConversationsListing::format_date(thread_node)),
-                subject: SubjectString(e.subject().to_string()),
+                subject: SubjectString(subject),
                 flag: FlagString(format!(
                     "{}{}",
                     if e.has_attachments() { "📎" } else { "" },
