@@ -30,7 +30,7 @@ reqwest = { version ="0.10.0-alpha.2", optional=true, features = ["json", "block
 serde_json = { version = "1.0", optional = true, features = ["raw_value",] }
 
 [features]
-default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "jmap_backend", "vcard"]
+default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "vcard"]
 
 debug-tracing = []
 unicode_algorithms = ["text_processing"]
