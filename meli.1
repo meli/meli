@@ -144,9 +144,9 @@ alias:
 .Pc
 String keywords with spaces must be quoted. Quotes should always be escaped.
 .sp
-.Sy Important Notice about IMAP
+.Sy Important Notice about IMAP/JMAP
 .sp
-To prevent downloading all your messages from your IMAP server, don't set
+To prevent downloading all your messages from your IMAP/JMAP server, don't set
 .Em cache_type
 to
 .Em sqlite3 Ns
@@ -155,7 +155,7 @@ to
 will relay your queries to the IMAP server. Expect a delay between query and response. Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable delay.
 .Sh TAGS
 .Nm
-supports tagging in notmuch and IMAP backends. Tags can be searched with the `tags:` or `flags:` prefix in a search query, and can be modified by
+supports tagging in notmuch and IMAP/JMAP backends. Tags can be searched with the `tags:` or `flags:` prefix in a search query, and can be modified by
 .Cm tag add TAG
 and
 .Cm tag remove TAG
@@ -464,7 +464,7 @@ XDG Standard
 .Aq https://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html Ns
 , maildir
 .Aq https://cr.yp.to/proto/maildir.html Ns
-, IMAPv4rev1 RFC3501.
+, IMAPv4rev1 RFC3501, The JSON Meta Application Protocol (JMAP) RFC8620, The JSON Meta Application Protocol (JMAP) for Mail RFC8621.
 .Sh AUTHORS
 Copyright 2017-2019
 .An Manos Pitsidianakis Aq epilys@nessuent.xyz

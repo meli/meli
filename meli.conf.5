@@ -110,7 +110,7 @@ available options are listed below.
 .Bl -tag -width 36n
 .It Ic root_folder Ar String
 the backend-specific path of the root_folder, usually INBOX.
-.It Ic format Ar String Op maildir mbox imap notmuch
+.It Ic format Ar String Op maildir mbox imap notmuch jmap
 the format of the mail backend.
 .It Ic subscribed_folders Ar [String,]
 an array of folder paths to display in the UI. Paths are relative to the root folder (eg "INBOX/Sent", not "Sent").
@@ -181,6 +181,23 @@ example:
 (optional) if port is 993 and use_starttls is unspecified, it becomes false by default.
 .\" default value
 .Pq Em true
+.It Ic danger_accept_invalid_certs Ar boolean
+(optional) do not validate TLS certificates.
+.\" default value
+.Pq Em false
+.El
+.Sh JMAP only
+JMAP specific options are:
+.Bl -tag -width 36n
+.It Ic server_hostname Ar String
+example:
+.Qq mail.example.tld
+.It Ic server_username Ar String
+.It Ic server_password Ar String
+.It Ic server_port Ar number
+(optional)
+.\" default value
+.Pq Em 443
 .It Ic danger_accept_invalid_certs Ar boolean
 (optional) do not validate TLS certificates.
 .\" default value
