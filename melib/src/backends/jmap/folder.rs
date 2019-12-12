@@ -73,6 +73,22 @@ impl BackendFolder for JmapFolder {
     }
 
     fn special_usage(&self) -> SpecialUsageMailbox {
-        self.usage
+        match self.role.as_ref().map(String::as_str) {
+            Some("inbox") => SpecialUsageMailbox::Inbox,
+            Some("archive") => SpecialUsageMailbox::Archive,
+            Some("junk") => SpecialUsageMailbox::Junk,
+            Some("trash") => SpecialUsageMailbox::Trash,
+            Some("drafts") => SpecialUsageMailbox::Drafts,
+            Some("sent") => SpecialUsageMailbox::Sent,
+            Some(other) => {
+                debug!(
+                    "unknown JMAP mailbox role for folder {}: {}",
+                    self.path(),
+                    other
+                );
+                SpecialUsageMailbox::Normal
+            }
+            None => SpecialUsageMailbox::Normal,
+        }
     }
 }

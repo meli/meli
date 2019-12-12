@@ -104,32 +104,22 @@ impl Request {
     }
 }
 
-#[derive(Serialize, Debug)]
-#[serde(untagged)]
-pub enum MethodCall {
-    #[serde(rename_all = "camelCase")]
-    EmailQuery {
-        filter: Vec<String>, /* "inMailboxes": [ folder.id ] },*/
-        collapse_threads: bool,
-        position: u64,
-        fetch_threads: bool,
-        fetch_messages: bool,
-        fetch_message_properties: Vec<MessageProperty>,
-    },
-    MailboxGet {},
-    Empty {},
-}
-
 pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<FolderHash, JmapFolder>> {
     let seq = get_request_no!(conn.request_no);
     let res = conn
         .client
         .lock()
         .unwrap()
-        .post("https://jmap-proxy.local/jmap/fc32dffe-14e7-11ea-a277-2477037a1804/")
+        .post(&conn.session.api_url)
+        .basic_auth(
+            &conn.server_conf.server_username,
+            Some(&conn.server_conf.server_password),
+        )
         .json(&json!({
             "using": ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"],
-            "methodCalls": [["Mailbox/get", {},
+            "methodCalls": [["Mailbox/get", {
+            "accountId": conn.mail_account_id()
+            },
              format!("#m{}",seq).as_str()]],
         }))
         .send();
@@ -191,14 +181,15 @@ pub struct JsonResponse<'a> {
 }
 
 pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<String>> {
-    let email_call: EmailQueryCall = EmailQueryCall {
-        filter: EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
-        collapse_threads: false,
-        position: 0,
-        fetch_threads: true,
-        fetch_messages: true,
-        fetch_message_properties: vec![],
-    };
+    let email_call: EmailQuery = EmailQuery::new(
+        Query::new()
+            .account_id(conn.mail_account_id().to_string())
+            .filter(Some(
+                EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
+            ))
+            .position(0),
+    )
+    .collapse_threads(false);
 
     let mut req = Request::new(conn.request_no.clone());
     req.add_call(&email_call);
@@ -207,7 +198,11 @@ pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Ve
         .client
         .lock()
         .unwrap()
-        .post("https://jmap-proxy.local/jmap/fc32dffe-14e7-11ea-a277-2477037a1804/")
+        .post(&conn.session.api_url)
+        .basic_auth(
+            &conn.server_conf.server_username,
+            Some(&conn.server_conf.server_password),
+        )
         .json(&req)
         .send();
 
@@ -225,7 +220,7 @@ pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope
             .ids(Some(JmapArgument::value(
                 ids.iter().cloned().collect::<Vec<String>>(),
             )))
-            .account_id(conn.account_id.lock().unwrap().clone()),
+            .account_id(conn.mail_account_id().to_string()),
     );
 
     let mut req = Request::new(conn.request_no.clone());
@@ -234,7 +229,11 @@ pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope
         .client
         .lock()
         .unwrap()
-        .post("https://jmap-proxy.local/jmap/fc32dffe-14e7-11ea-a277-2477037a1804/")
+        .post(&conn.session.api_url)
+        .basic_auth(
+            &conn.server_conf.server_username,
+            Some(&conn.server_conf.server_password),
+        )
         .json(&req)
         .send();
 
@@ -254,26 +253,15 @@ pub fn get(
     tag_index: &Arc<RwLock<BTreeMap<u64, String>>>,
     folder: &JmapFolder,
 ) -> Result<Vec<Envelope>> {
-    let email_query_call: EmailQueryCall = EmailQueryCall {
-        filter: EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
-        collapse_threads: false,
-        position: 0,
-        fetch_threads: true,
-        fetch_messages: true,
-        fetch_message_properties: vec![
-            MessageProperty::ThreadId,
-            MessageProperty::MailboxIds,
-            MessageProperty::IsUnread,
-            MessageProperty::IsFlagged,
-            MessageProperty::IsAnswered,
-            MessageProperty::IsDraft,
-            MessageProperty::HasAttachment,
-            MessageProperty::From,
-            MessageProperty::To,
-            MessageProperty::Subject,
-            MessageProperty::Preview,
-        ],
-    };
+    let email_query_call: EmailQuery = EmailQuery::new(
+        Query::new()
+            .account_id(conn.mail_account_id().to_string())
+            .filter(Some(
+                EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
+            ))
+            .position(0),
+    )
+    .collapse_threads(false);
 
     let mut req = Request::new(conn.request_no.clone());
     let prev_seq = req.add_call(&email_query_call);
@@ -282,9 +270,9 @@ pub fn get(
         Get::new()
             .ids(Some(JmapArgument::reference(
                 prev_seq,
-                EmailQueryCall::RESULT_FIELD_IDS,
+                EmailQuery::RESULT_FIELD_IDS,
             )))
-            .account_id(conn.account_id.lock().unwrap().clone()),
+            .account_id(conn.mail_account_id().to_string()),
     );
 
     req.add_call(&email_call);
@@ -293,7 +281,11 @@ pub fn get(
         .client
         .lock()
         .unwrap()
-        .post("https://jmap-proxy.local/jmap/fc32dffe-14e7-11ea-a277-2477037a1804/")
+        .post(&conn.session.api_url)
+        .basic_auth(
+            &conn.server_conf.server_username,
+            Some(&conn.server_conf.server_password),
+        )
         .json(&req)
         .send();
 

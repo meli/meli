@@ -71,12 +71,22 @@ impl BackendOp for JmapOp {
                 && store_lck.byte_cache[&self.hash].bytes.is_some())
             {
                 let blob_id = &store_lck.blob_id_store[&self.hash];
-                let res = self.connection
-        .client
-        .lock()
-        .unwrap()
-        .get(&format!("https://jmap-proxy.local/raw/fc32dffe-14e7-11ea-a277-2477037a1804/{blob_id}/{name}", blob_id = blob_id, name = ""))
-        .send();
+                let res = self
+                    .connection
+                    .client
+                    .lock()
+                    .unwrap()
+                    .get(&downloadRequestFormat(
+                        &self.connection.session,
+                        self.connection.mail_account_id(),
+                        blob_id,
+                        None,
+                    ))
+                    .basic_auth(
+                        &self.connection.server_conf.server_username,
+                        Some(&self.connection.server_conf.server_password),
+                    )
+                    .send();
 
                 let res_text = res?.text()?;
 

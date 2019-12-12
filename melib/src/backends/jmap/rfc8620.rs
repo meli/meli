@@ -20,6 +20,7 @@
  */
 
 use super::Id;
+use crate::email::parser::BytesExt;
 use core::marker::PhantomData;
 use serde::de::DeserializeOwned;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -41,30 +42,38 @@ pub trait Object {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapSession {
-    capabilities: HashMap<String, CapabilitiesObject>,
-    accounts: HashMap<Id, Account>,
-    primary_accounts: Vec<Id>,
-    username: String,
-    api_url: String,
-    download_url: String,
+    pub capabilities: HashMap<String, CapabilitiesObject>,
+    pub accounts: HashMap<Id, Account>,
+    pub primary_accounts: HashMap<String, Id>,
+    pub username: String,
+    pub api_url: String,
+    pub download_url: String,
 
-    upload_url: String,
-    event_source_url: String,
-    state: String,
+    pub upload_url: String,
+    pub event_source_url: String,
+    pub state: String,
     #[serde(flatten)]
-    extra_properties: HashMap<String, Value>,
+    pub extra_properties: HashMap<String, Value>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilitiesObject {
+    #[serde(default)]
     max_size_upload: u64,
+    #[serde(default)]
     max_concurrent_upload: u64,
+    #[serde(default)]
     max_size_request: u64,
+    #[serde(default)]
     max_concurrent_requests: u64,
+    #[serde(default)]
     max_calls_in_request: u64,
+    #[serde(default)]
     max_objects_in_get: u64,
+    #[serde(default)]
     max_objects_in_set: u64,
+    #[serde(default)]
     collation_algorithms: Vec<String>,
 }
 
@@ -251,18 +260,19 @@ enum JmapError {
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct QueryCall<F: FilterTrait<OBJ>, OBJ: Object>
+pub struct Query<F: FilterTrait<OBJ>, OBJ: Object>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
     account_id: String,
-    filter: Option<Filter<F, OBJ>>,
+    filter: Option<F>,
     sort: Option<Comparator<OBJ>>,
     #[serde(default)]
     position: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     anchor: Option<String>,
     #[serde(default)]
+    #[serde(skip_serializing_if = "u64_zero")]
     anchor_offset: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     limit: Option<u64>,
@@ -272,7 +282,7 @@ where
     _ph: PhantomData<*const OBJ>,
 }
 
-impl<F: FilterTrait<OBJ>, OBJ: Object> QueryCall<F, OBJ>
+impl<F: FilterTrait<OBJ>, OBJ: Object> Query<F, OBJ>
 where
     OBJ: std::fmt::Debug + Serialize,
 {
@@ -291,13 +301,17 @@ where
     }
 
     _impl!(account_id: String);
-    _impl!(filter: Option<Filter<F, OBJ>>);
+    _impl!(filter: Option<F>);
     _impl!(sort: Option<Comparator<OBJ>>);
     _impl!(position: u64);
     _impl!(anchor: Option<String>);
     _impl!(anchor_offset: u64);
     _impl!(limit: Option<u64>);
     _impl!(calculate_total: bool);
+}
+
+pub fn u64_zero(num: &u64) -> bool {
+    *num == 0
 }
 
 pub fn bool_false() -> bool {
@@ -469,4 +483,62 @@ impl<OBJ: Object> ChangesResponse<OBJ> {
     _impl!(get_mut  created_mut, created: Vec<String>);
     _impl!(get_mut  updated_mut, updated: Vec<String>);
     _impl!(get_mut  destroyed_mut, destroyed: Vec<String>);
+}
+
+pub fn downloadRequestFormat(
+    session: &JmapSession,
+    account_id: &Id,
+    blob_id: &Id,
+    name: Option<String>,
+) -> String {
+    // https://jmap.fastmail.com/download/{accountId}/{blobId}/{name}
+    let mut ret = String::with_capacity(
+        session.download_url.len()
+            + blob_id.len()
+            + name.as_ref().map(|n| n.len()).unwrap_or(0)
+            + account_id.len(),
+    );
+    let mut prev_pos = 0;
+
+    while let Some(pos) = session.download_url.as_bytes()[prev_pos..].find(b"{") {
+        ret.push_str(&session.download_url[prev_pos..prev_pos + pos]);
+        prev_pos += pos;
+        if session.download_url[prev_pos..].starts_with("{accountId}") {
+            ret.push_str(account_id);
+            prev_pos += "{accountId}".len();
+        } else if session.download_url[prev_pos..].starts_with("{blobId}") {
+            ret.push_str(blob_id);
+            prev_pos += "{blobId}".len();
+        } else if session.download_url[prev_pos..].starts_with("{name}") {
+            ret.push_str(name.as_ref().map(String::as_str).unwrap_or(""));
+            prev_pos += "{name}".len();
+        }
+    }
+    if prev_pos != session.download_url.len() {
+        ret.push_str(&session.download_url[prev_pos..]);
+    }
+    ret
+}
+
+pub fn uploadRequestFormat(session: &JmapSession, account_id: &Id) -> String {
+    //"uploadUrl": "https://jmap.fastmail.com/upload/{accountId}/",
+    let mut ret = String::with_capacity(session.upload_url.len() + account_id.len());
+    let mut prev_pos = 0;
+
+    while let Some(pos) = session.upload_url.as_bytes()[prev_pos..].find(b"{") {
+        ret.push_str(&session.upload_url[prev_pos..prev_pos + pos]);
+        prev_pos += pos;
+        if session.upload_url[prev_pos..].starts_with("{accountId}") {
+            ret.push_str(account_id);
+            prev_pos += "{accountId}".len();
+            break;
+        } else {
+            ret.push('{');
+            prev_pos += 1;
+        }
+    }
+    if prev_pos != session.upload_url.len() {
+        ret.push_str(&session.upload_url[prev_pos..]);
+    }
+    ret
 }

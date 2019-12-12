@@ -23,6 +23,7 @@ use super::*;
 
 #[derive(Debug)]
 pub struct JmapConnection {
+    pub session: JmapSession,
     pub request_no: Arc<Mutex<usize>>,
     pub client: Arc<Mutex<Client>>,
     pub online_status: Arc<Mutex<bool>>,
@@ -36,10 +37,6 @@ impl JmapConnection {
         use reqwest::header;
         let mut headers = header::HeaderMap::new();
         headers.insert(
-            header::AUTHORIZATION,
-            header::HeaderValue::from_static("fc32dffe-14e7-11ea-a277-2477037a1804"),
-        );
-        headers.insert(
             header::ACCEPT,
             header::HeaderValue::from_static("application/json"),
         );
@@ -51,12 +48,34 @@ impl JmapConnection {
             .danger_accept_invalid_certs(server_conf.danger_accept_invalid_certs)
             .default_headers(headers)
             .build()?;
-
-        let res_text = client.get(&server_conf.server_hostname).send()?.text()?;
+        let req = client
+            .get(&server_conf.server_hostname)
+            .basic_auth(
+                &server_conf.server_username,
+                Some(&server_conf.server_password),
+            )
+            .send()?;
+        let res_text = req.text()?;
         debug!(&res_text);
+
+        let session: JmapSession = serde_json::from_str(&res_text)?;
+
+        if !session
+            .capabilities
+            .contains_key("urn:ietf:params:jmap:core")
+        {
+            return Err(MeliError::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "))));
+        }
+        if !session
+            .capabilities
+            .contains_key("urn:ietf:params:jmap:mail")
+        {
+            return Err(MeliError::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "))));
+        }
 
         let server_conf = server_conf.clone();
         Ok(JmapConnection {
+            session,
             request_no: Arc::new(Mutex::new(0)),
             client: Arc::new(Mutex::new(client)),
             online_status,
@@ -64,5 +83,9 @@ impl JmapConnection {
             account_id: Arc::new(Mutex::new(String::new())),
             method_call_states: Arc::new(Mutex::new(Default::default())),
         })
+    }
+
+    pub fn mail_account_id(&self) -> &Id {
+        &self.session.primary_accounts["urn:ietf:params:jmap:mail"]
     }
 }

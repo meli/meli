@@ -139,17 +139,23 @@ pub struct EmailObject {
     #[serde(default)]
     received_at: String,
     #[serde(default)]
+    message_id: Vec<String>,
+    #[serde(default)]
     to: Vec<EmailAddress>,
     #[serde(default)]
-    bcc: Vec<EmailAddress>,
+    bcc: Option<Vec<EmailAddress>>,
     #[serde(default)]
-    reply_to: Option<EmailAddress>,
+    reply_to: Option<Vec<EmailAddress>>,
     #[serde(default)]
-    cc: Vec<EmailAddress>,
+    cc: Option<Vec<EmailAddress>>,
+    #[serde(default)]
+    sender: Option<Vec<EmailAddress>>,
     #[serde(default)]
     from: Vec<EmailAddress>,
     #[serde(default)]
-    in_reply_to_email_id: Id,
+    in_reply_to: Option<Vec<String>>,
+    #[serde(default)]
+    references: Option<Vec<String>>,
     #[serde(default)]
     keywords: HashMap<String, bool>,
     #[serde(default)]
@@ -166,13 +172,15 @@ pub struct EmailObject {
     #[serde(default)]
     preview: Option<String>,
     #[serde(default)]
-    sent_at: String,
+    sent_at: Option<String>,
     #[serde(default)]
-    subject: String,
+    subject: Option<String>,
     #[serde(default)]
     text_body: Vec<TextBody>,
     #[serde(default)]
     thread_id: Id,
+    #[serde(flatten)]
+    extra: HashMap<String, Value>,
 }
 
 impl EmailObject {
@@ -223,17 +231,19 @@ impl std::fmt::Display for EmailAddress {
 impl std::convert::From<EmailObject> for crate::Envelope {
     fn from(mut t: EmailObject) -> crate::Envelope {
         let mut env = crate::Envelope::new(0);
-        env.set_date(std::mem::replace(&mut t.sent_at, String::new()).as_bytes());
+        if let Some(ref mut sent_at) = t.sent_at {
+            env.set_date(std::mem::replace(sent_at, String::new()).as_bytes());
+        }
         if let Ok(d) = crate::email::parser::date(env.date_as_str().as_bytes()) {
             env.set_datetime(d);
         }
 
-        if let Some(v) = t.headers.get("Message-ID").or(t.headers.get("Message-Id")) {
+        if let Some(v) = t.message_id.get(0) {
             env.set_message_id(v.as_bytes());
         }
-        if let Some(v) = t.headers.get("In-Reply-To") {
-            env.set_in_reply_to(v.as_bytes());
-            env.push_references(v.as_bytes());
+        if let Some(ref in_reply_to) = t.in_reply_to {
+            env.set_in_reply_to(in_reply_to[0].as_bytes());
+            env.push_references(in_reply_to[0].as_bytes());
         }
         if let Some(v) = t.headers.get("References") {
             let parse_result = crate::email::parser::references(v.as_bytes());
@@ -251,7 +261,9 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             }
         }
         env.set_has_attachments(t.has_attachment);
-        env.set_subject(std::mem::replace(&mut t.subject, String::new()).into_bytes());
+        if let Some(ref mut subject) = t.subject {
+            env.set_subject(std::mem::replace(subject, String::new()).into_bytes());
+        }
 
         env.set_from(
             std::mem::replace(&mut t.from, Vec::new())
@@ -266,19 +278,23 @@ impl std::convert::From<EmailObject> for crate::Envelope {
                 .collect::<Vec<crate::email::Address>>(),
         );
 
-        env.set_cc(
-            std::mem::replace(&mut t.cc, Vec::new())
-                .into_iter()
-                .map(|addr| addr.into())
-                .collect::<Vec<crate::email::Address>>(),
-        );
+        if let Some(ref mut cc) = t.cc {
+            env.set_cc(
+                std::mem::replace(cc, Vec::new())
+                    .into_iter()
+                    .map(|addr| addr.into())
+                    .collect::<Vec<crate::email::Address>>(),
+            );
+        }
 
-        env.set_bcc(
-            std::mem::replace(&mut t.bcc, Vec::new())
-                .into_iter()
-                .map(|addr| addr.into())
-                .collect::<Vec<crate::email::Address>>(),
-        );
+        if let Some(ref mut bcc) = t.bcc {
+            env.set_bcc(
+                std::mem::replace(bcc, Vec::new())
+                    .into_iter()
+                    .map(|addr| addr.into())
+                    .collect::<Vec<crate::email::Address>>(),
+            );
+        }
 
         if env.references.is_some() {
             if let Some(pos) = env
@@ -304,12 +320,21 @@ impl std::convert::From<EmailObject> for crate::Envelope {
 #[serde(rename_all = "camelCase")]
 struct HtmlBody {
     blob_id: Id,
+    #[serde(default)]
+    charset: String,
+    #[serde(default)]
     cid: Option<String>,
-    disposition: String,
+    #[serde(default)]
+    disposition: Option<String>,
+    #[serde(default)]
     headers: Value,
+    #[serde(default)]
     language: Option<Vec<String>>,
+    #[serde(default)]
     location: Option<String>,
+    #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
     part_id: Option<String>,
     size: u64,
     #[serde(alias = "type")]
@@ -322,12 +347,21 @@ struct HtmlBody {
 #[serde(rename_all = "camelCase")]
 struct TextBody {
     blob_id: Id,
+    #[serde(default)]
+    charset: String,
+    #[serde(default)]
     cid: Option<String>,
-    disposition: String,
+    #[serde(default)]
+    disposition: Option<String>,
+    #[serde(default)]
     headers: Value,
+    #[serde(default)]
     language: Option<Vec<String>>,
+    #[serde(default)]
     location: Option<String>,
+    #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
     part_id: Option<String>,
     size: u64,
     #[serde(alias = "type")]
@@ -355,27 +389,34 @@ pub struct EmailQueryResponse {
     pub total: usize,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct EmailQueryCall {
-    pub filter: EmailFilterCondition, /* "inMailboxes": [ folder.id ] },*/
+pub struct EmailQuery {
+    #[serde(flatten)]
+    pub query_call: Query<EmailFilterCondition, EmailObject>,
+    //pub filter: EmailFilterCondition, /* "inMailboxes": [ folder.id ] },*/
     pub collapse_threads: bool,
-    pub position: u64,
-    pub fetch_threads: bool,
-    pub fetch_messages: bool,
-    pub fetch_message_properties: Vec<MessageProperty>,
 }
 
-impl Method<EmailObject> for EmailQueryCall {
+impl Method<EmailObject> for EmailQuery {
     const NAME: &'static str = "Email/query";
 }
 
-impl EmailQueryCall {
-    pub const RESULT_FIELD_IDS: ResultField<EmailQueryCall, EmailObject> =
-        ResultField::<EmailQueryCall, EmailObject> {
+impl EmailQuery {
+    pub const RESULT_FIELD_IDS: ResultField<EmailQuery, EmailObject> =
+        ResultField::<EmailQuery, EmailObject> {
             field: "/ids",
             _ph: PhantomData,
         };
+
+    pub fn new(query_call: Query<EmailFilterCondition, EmailObject>) -> Self {
+        EmailQuery {
+            query_call,
+            collapse_threads: false,
+        }
+    }
+
+    _impl!(collapse_threads: bool);
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -388,10 +429,12 @@ pub struct EmailGet {
     #[serde(default = "bool_false")]
     pub fetch_text_body_values: bool,
     #[serde(default = "bool_false")]
+    #[serde(rename = "fetchHTMLBodyValues")]
     pub fetch_html_body_values: bool,
     #[serde(default = "bool_false")]
     pub fetch_all_body_values: bool,
     #[serde(default)]
+    #[serde(skip_serializing_if = "u64_zero")]
     pub max_body_value_bytes: u64,
 }
 
