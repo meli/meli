@@ -302,8 +302,16 @@ impl Envelope {
                 }
             } else {
                 self.other_headers.insert(
-                    String::from_utf8_lossy(name).into(),
-                    String::from_utf8_lossy(value).into(),
+                    String::from_utf8(name.to_vec())
+                        .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into()),
+                    parser::phrase(value)
+                        .to_full_result()
+                        .map(|value| {
+                            String::from_utf8(value).unwrap_or_else(|err| {
+                                String::from_utf8_lossy(&err.into_bytes()).into()
+                            })
+                        })
+                        .unwrap_or_else(|_| String::from_utf8_lossy(value).into()),
                 );
             }
         }
