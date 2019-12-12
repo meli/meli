@@ -48,18 +48,27 @@ impl JmapConnection {
             .danger_accept_invalid_certs(server_conf.danger_accept_invalid_certs)
             .default_headers(headers)
             .build()?;
+        let mut jmap_session_resource_url = if server_conf.server_hostname.starts_with("https://") {
+            server_conf.server_hostname.to_string()
+        } else {
+            format!("https://{}", &server_conf.server_hostname)
+        };
+        if server_conf.server_port != 443 {
+            jmap_session_resource_url.push(':');
+            jmap_session_resource_url.extend(server_conf.server_port.to_string().chars());
+        }
+        jmap_session_resource_url.push_str("/.well-known/jmap");
+
         let req = client
-            .get(&server_conf.server_hostname)
+            .get(&jmap_session_resource_url)
             .basic_auth(
                 &server_conf.server_username,
                 Some(&server_conf.server_password),
             )
             .send()?;
         let res_text = req.text()?;
-        debug!(&res_text);
 
-        let session: JmapSession = serde_json::from_str(&res_text)?;
-
+        let session: JmapSession = serde_json::from_str(&res_text).map_err(|_| MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)", &server_conf.server_hostname)))?;
         if !session
             .capabilities
             .contains_key("urn:ietf:params:jmap:core")

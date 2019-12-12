@@ -76,7 +76,7 @@ impl BackendOp for JmapOp {
                     .client
                     .lock()
                     .unwrap()
-                    .get(&downloadRequestFormat(
+                    .get(&download_request_format(
                         &self.connection.session,
                         self.connection.mail_account_id(),
                         blob_id,

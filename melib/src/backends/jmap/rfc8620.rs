@@ -485,7 +485,7 @@ impl<OBJ: Object> ChangesResponse<OBJ> {
     _impl!(get_mut  destroyed_mut, destroyed: Vec<String>);
 }
 
-pub fn downloadRequestFormat(
+pub fn download_request_format(
     session: &JmapSession,
     account_id: &Id,
     blob_id: &Id,
@@ -520,7 +520,7 @@ pub fn downloadRequestFormat(
     ret
 }
 
-pub fn uploadRequestFormat(session: &JmapSession, account_id: &Id) -> String {
+pub fn upload_request_format(session: &JmapSession, account_id: &Id) -> String {
     //"uploadUrl": "https://jmap.fastmail.com/upload/{accountId}/",
     let mut ret = String::with_capacity(session.upload_url.len() + account_id.len());
     let mut prev_pos = 0;
