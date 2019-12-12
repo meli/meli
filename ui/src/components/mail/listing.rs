@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use crate::types::segment_tree::SegmentTree;
 
 mod conversations;
 pub use self::conversations::*;
@@ -37,6 +38,7 @@ pub use self::plain::*;
 pub struct DataColumns {
     pub columns: [CellBuffer; 12],
     pub widths: [usize; 12], // widths of columns calculated in first draw and after size changes
+    pub segment_tree: [SegmentTree; 12],
 }
 
 #[derive(Debug)]

@@ -147,3 +147,97 @@ pub struct Notification {
 
     _timestamp: std::time::Instant,
 }
+
+pub mod segment_tree {
+    /*! Simple segment tree implementation for maximum in range queries. This is useful if given an
+     *  array of numbers you want to get the maximum value inside an interval quickly.
+     */
+    use melib::StackVec;
+    use std::convert::TryFrom;
+    use std::iter::FromIterator;
+
+    #[derive(Default, Debug, Clone)]
+    pub struct SegmentTree {
+        array: StackVec<u8>,
+        tree: StackVec<u8>,
+    }
+
+    impl From<StackVec<u8>> for SegmentTree {
+        fn from(val: StackVec<u8>) -> SegmentTree {
+            SegmentTree::new(val)
+        }
+    }
+
+    impl SegmentTree {
+        pub fn new(val: StackVec<u8>) -> SegmentTree {
+            if val.is_empty() {
+                return SegmentTree {
+                    array: val.clone(),
+                    tree: val,
+                };
+            }
+
+            let height = (f64::from(u32::try_from(val.len()).unwrap_or(0)))
+                .log2()
+                .ceil() as u32;
+            let max_size = 2 * (2_usize.pow(height)) - 1;
+
+            let mut segment_tree: StackVec<u8> =
+                StackVec::from_iter(core::iter::repeat(0).take(max_size));
+            for i in 0..val.len() {
+                segment_tree[val.len() + i] = val[i];
+            }
+
+            for i in (1..val.len()).rev() {
+                segment_tree[i] = std::cmp::max(segment_tree[2 * i], segment_tree[2 * i + 1]);
+            }
+
+            SegmentTree {
+                array: val,
+                tree: segment_tree,
+            }
+        }
+
+        /// (left, right) is inclusive
+        pub fn get_max(&self, mut left: usize, mut right: usize) -> u8 {
+            let len = self.array.len();
+            debug_assert!(left <= right);
+            if right >= len {
+                right = len.saturating_sub(1);
+            }
+
+            left += len;
+            right += len + 1;
+
+            let mut max = 0;
+
+            while left < right {
+                if (left & 1) > 0 {
+                    max = std::cmp::max(max, self.tree[left]);
+                    left += 1;
+                }
+
+                if (right & 1) > 0 {
+                    right -= 1;
+                    max = std::cmp::max(max, self.tree[right]);
+                }
+
+                left /= 2;
+                right /= 2;
+            }
+            max
+        }
+    }
+
+    #[test]
+    fn test_segment_tree() {
+        let array: StackVec<u8> = [9, 1, 17, 2, 3, 23, 4, 5, 6, 37]
+            .into_iter()
+            .cloned()
+            .collect::<StackVec<u8>>();
+        let segment_tree = SegmentTree::from(array.clone());
+
+        assert_eq!(segment_tree.get_max(0, 5), 23);
+        assert_eq!(segment_tree.get_max(6, 9), 37);
+    }
+}

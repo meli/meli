@@ -21,6 +21,7 @@
 
 use std::iter::{Extend, FromIterator};
 use std::ops::Index;
+use std::ops::IndexMut;
 
 const STACK_VEC_CAPACITY: usize = 32;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -150,6 +151,16 @@ impl<T: Default + Copy + std::fmt::Debug> Index<usize> for StackVec<T> {
             &self.heap_vec[idx]
         } else {
             &self.array[idx]
+        }
+    }
+}
+
+impl<T: Default + Copy + std::fmt::Debug> IndexMut<usize> for StackVec<T> {
+    fn index_mut(&mut self, idx: usize) -> &mut T {
+        if self.len > self.array.len() {
+            &mut self.heap_vec[idx]
+        } else {
+            &mut self.array[idx]
         }
     }
 }

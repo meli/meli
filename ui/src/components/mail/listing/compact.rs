@@ -23,6 +23,7 @@ use super::EntryStrings;
 use super::*;
 use crate::components::utilities::PageMovement;
 use std::cmp;
+use std::convert::TryInto;
 use std::iter::FromIterator;
 
 const MAX_COLS: usize = 500;
@@ -292,6 +293,29 @@ impl ListingTrait for CompactListing {
                 self.data_columns.widths[4] =
                     remainder.saturating_sub(min_col_width + self.data_columns.widths[3]);
                 self.data_columns.widths[2] = min_col_width;
+            }
+        }
+        for &i in &[2, 4] {
+            /* Set From and Subject column widths to their maximum value width in the range
+             * [top_idx, top_idx + rows]. By using a segment tree the query is O(logn), which is
+             * great!
+             */
+            self.data_columns.widths[i] =
+                self.data_columns.segment_tree[i].get_max(top_idx, top_idx + rows) as usize;
+        }
+        if self.data_columns.widths.iter().fold(0, |acc, &w| acc + w) > width {
+            let diff = self.data_columns.widths.iter().fold(0, |acc, &w| acc + w) - width;
+            if self.data_columns.widths[2] > 2 * diff {
+                self.data_columns.widths[2] -= diff;
+            } else {
+                self.data_columns.widths[2] = std::cmp::max(
+                    15,
+                    self.data_columns.widths[2].saturating_sub((2 * diff) / 3),
+                );
+                self.data_columns.widths[4] = std::cmp::max(
+                    15,
+                    self.data_columns.widths[4].saturating_sub(diff / 3 + diff % 3),
+                );
             }
         }
         clear_area(grid, area);
@@ -656,6 +680,19 @@ impl CompactListing {
         self.length = 0;
         let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0, 0);
+        let mut row_widths: (
+            StackVec<u8>,
+            StackVec<u8>,
+            StackVec<u8>,
+            StackVec<u8>,
+            StackVec<u8>,
+        ) = (
+            StackVec::new(),
+            StackVec::new(),
+            StackVec::new(),
+            StackVec::new(),
+            StackVec::new(),
+        );
 
         threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);
 
@@ -700,6 +737,32 @@ impl CompactListing {
                 thread_node,
                 threads.is_snoozed(root_idx),
             );
+            row_widths.1.push(
+                entry_strings
+                    .date
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            ); /* date */
+            row_widths.2.push(
+                entry_strings
+                    .from
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            ); /* from */
+            row_widths.3.push(
+                entry_strings
+                    .flag
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            ); /* flags */
+            row_widths.4.push(
+                (entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width())
+                    .try_into()
+                    .unwrap_or(255),
+            );
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
             min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
             min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
@@ -721,18 +784,21 @@ impl CompactListing {
         /* index column */
         self.data_columns.columns[0] =
             CellBuffer::new_with_context(min_width.0, rows.len(), Cell::with_char(' '), context);
+
         /* date column */
         self.data_columns.columns[1] =
             CellBuffer::new_with_context(min_width.1, rows.len(), Cell::with_char(' '), context);
         /* from column */
         self.data_columns.columns[2] =
             CellBuffer::new_with_context(min_width.2, rows.len(), Cell::with_char(' '), context);
+        self.data_columns.segment_tree[2] = row_widths.2.into();
         /* flags column */
         self.data_columns.columns[3] =
             CellBuffer::new_with_context(min_width.3, rows.len(), Cell::with_char(' '), context);
         /* subject column */
         self.data_columns.columns[4] =
             CellBuffer::new_with_context(min_width.4, rows.len(), Cell::with_char(' '), context);
+        self.data_columns.segment_tree[4] = row_widths.4.into();
         let threads_iter = if self.filter_term.is_empty() {
             Box::new(threads.root_iter()) as Box<dyn Iterator<Item = ThreadHash>>
         } else {
