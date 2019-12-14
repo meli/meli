@@ -246,6 +246,7 @@ type NewFolderName = String;
 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online(&self) -> Result<()>;
+    fn connect(&mut self) {}
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(
         &self,

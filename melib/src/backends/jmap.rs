@@ -196,6 +196,17 @@ impl MailBackend for JmapType {
     fn is_online(&self) -> Result<()> {
         self.online.lock().unwrap().1.clone()
     }
+
+    fn connect(&mut self) {
+        if self.is_online().is_err() {
+            if Instant::now().duration_since(self.online.lock().unwrap().0)
+                >= std::time::Duration::new(2, 0)
+            {
+                let _ = self.folders();
+            }
+        }
+    }
+
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let folders = self.folders.clone();
