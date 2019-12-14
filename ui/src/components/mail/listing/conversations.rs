@@ -469,7 +469,7 @@ impl ListingTrait for ConversationsListing {
 
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
-        self.set_dirty();
+        self.set_dirty(true);
     }
 }
 
@@ -1353,14 +1353,14 @@ impl Component for ConversationsListing {
                     ) =>
             {
                 self.refresh_mailbox(context);
-                self.set_dirty();
+                self.set_dirty(true);
             }
             UIEvent::StartupCheck(ref f)
                 if *f
                     == context.accounts[self.cursor_pos.0].folders_order[self.new_cursor_pos.1] =>
             {
                 self.refresh_mailbox(context);
-                self.set_dirty();
+                self.set_dirty(true);
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
@@ -1395,7 +1395,7 @@ impl Component for ConversationsListing {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.refresh_mailbox(context);
                 self.force_draw = false;
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             _ => {}
@@ -1411,11 +1411,11 @@ impl Component for ConversationsListing {
                 false
             }
     }
-    fn set_dirty(&mut self) {
+    fn set_dirty(&mut self, value: bool) {
         if self.unfocused {
-            self.view.set_dirty();
+            self.view.set_dirty(value);
         }
-        self.dirty = true;
+        self.dirty = value;
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {

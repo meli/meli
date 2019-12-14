@@ -656,7 +656,7 @@ impl Component for ContactList {
                     }
                     if self.account_pos + amount < self.accounts.len() {
                         self.account_pos += amount;
-                        self.set_dirty();
+                        self.set_dirty(true);
                         self.initialized = false;
                         self.cursor_pos = 0;
                         self.new_cursor_pos = 0;
@@ -693,7 +693,7 @@ impl Component for ContactList {
                     }
                     if self.account_pos >= amount {
                         self.account_pos -= amount;
-                        self.set_dirty();
+                        self.set_dirty(true);
                         self.cursor_pos = 0;
                         self.new_cursor_pos = 0;
                         self.length = 0;
@@ -710,7 +710,7 @@ impl Component for ContactList {
                     if shortcut!(k == shortcuts[Self::DESCRIPTION]["toggle_menu_visibility"]) =>
                 {
                     self.menu_visibility = !self.menu_visibility;
-                    self.set_dirty();
+                    self.set_dirty(true);
                 }
                 UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) => {
                     self.cmd_buf.clear();
@@ -747,7 +747,7 @@ impl Component for ContactList {
                         return true;
                     };
                     self.movement = Some(PageMovement::Up(amount));
-                    self.set_dirty();
+                    self.set_dirty(true);
                     return true;
                 }
                 UIEvent::Input(ref key)
@@ -769,7 +769,7 @@ impl Component for ContactList {
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         return true;
                     };
-                    self.set_dirty();
+                    self.set_dirty(true);
                     self.movement = Some(PageMovement::Down(amount));
                     return true;
                 }
@@ -789,7 +789,7 @@ impl Component for ContactList {
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         return true;
                     };
-                    self.set_dirty();
+                    self.set_dirty(true);
                     self.movement = Some(PageMovement::PageUp(mult));
                     return true;
                 }
@@ -809,17 +809,17 @@ impl Component for ContactList {
                             .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         return true;
                     };
-                    self.set_dirty();
+                    self.set_dirty(true);
                     self.movement = Some(PageMovement::PageDown(mult));
                     return true;
                 }
                 UIEvent::Input(ref key) if *key == Key::Home => {
-                    self.set_dirty();
+                    self.set_dirty(true);
                     self.movement = Some(PageMovement::Home);
                     return true;
                 }
                 UIEvent::Input(ref key) if *key == Key::End => {
-                    self.set_dirty();
+                    self.set_dirty(true);
                     self.movement = Some(PageMovement::End);
                     return true;
                 }
@@ -830,14 +830,14 @@ impl Component for ContactList {
                 UIEvent::ComponentKill(ref kill_id) if self.mode == ViewMode::View(*kill_id) => {
                     self.mode = ViewMode::List;
                     self.view.take();
-                    self.set_dirty();
+                    self.set_dirty(true);
                     return true;
                 }
                 UIEvent::ChangeMode(UIMode::Normal) => {
-                    self.set_dirty();
+                    self.set_dirty(true);
                 }
                 UIEvent::Resize => {
-                    self.set_dirty();
+                    self.set_dirty(true);
                 }
                 _ => {}
             }
@@ -849,11 +849,11 @@ impl Component for ContactList {
         self.dirty || self.view.as_ref().map(|v| v.is_dirty()).unwrap_or(false)
     }
 
-    fn set_dirty(&mut self) {
+    fn set_dirty(&mut self, value: bool) {
         if let Some(p) = self.view.as_mut() {
-            p.set_dirty();
+            p.set_dirty(value);
         };
-        self.dirty = true;
+        self.dirty = value;
     }
 
     fn kill(&mut self, uuid: Uuid, context: &mut Context) {

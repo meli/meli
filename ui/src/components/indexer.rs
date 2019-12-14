@@ -124,8 +124,8 @@ impl Component for Indexer {
         self.dirty
     }
 
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
     }
 
     fn id(&self) -> ComponentId {

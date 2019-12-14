@@ -72,7 +72,8 @@ impl Component for XDGNotifications {
         }
         false
     }
-    fn set_dirty(&mut self) {}
+    fn set_dirty(&mut self, _value: bool) {}
+
     fn is_dirty(&self) -> bool {
         false
     }
@@ -153,10 +154,7 @@ impl Component for NotificationFilter {
                     .spawn()
                 {
                     log(
-                        format!(
-                            "Could not run notification script: {}.",
-                            err.to_string()
-                        ),
+                        format!("Could not run notification script: {}.", err.to_string()),
                         ERROR,
                     );
                     debug!("{:?}", err);
@@ -187,6 +185,6 @@ impl Component for NotificationFilter {
     fn is_dirty(&self) -> bool {
         false
     }
-    fn set_dirty(&mut self) {}
+    fn set_dirty(&mut self, _value: bool) {}
     fn set_id(&mut self, _id: ComponentId) {}
 }

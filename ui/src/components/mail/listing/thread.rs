@@ -216,7 +216,7 @@ impl ListingTrait for ThreadListing {
 
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
-        self.set_dirty();
+        self.set_dirty(true);
     }
 }
 
@@ -628,7 +628,7 @@ impl Component for ThreadListing {
                     ) =>
             {
                 self.refresh_mailbox(context);
-                self.set_dirty();
+                self.set_dirty(true);
             }
             UIEvent::StartupCheck(ref f)
                 if *f
@@ -636,7 +636,7 @@ impl Component for ThreadListing {
                         [self.new_cursor_pos.1] =>
             {
                 self.refresh_mailbox(context);
-                self.set_dirty();
+                self.set_dirty(true);
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
@@ -674,11 +674,11 @@ impl Component for ThreadListing {
     fn is_dirty(&self) -> bool {
         self.dirty || self.view.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }
-    fn set_dirty(&mut self) {
+    fn set_dirty(&mut self, value: bool) {
         if let Some(p) = self.view.as_mut() {
-            p.set_dirty();
+            p.set_dirty(value);
         };
-        self.dirty = true;
+        self.dirty = value;
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         self.view

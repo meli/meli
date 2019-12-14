@@ -194,7 +194,7 @@ impl Component for ContactManager {
                             _ => {}
                         }
                     }
-                    self.set_dirty();
+                    self.set_dirty(true);
                     return true;
                 }
             }
@@ -240,7 +240,7 @@ impl Component for ContactManager {
                             context.replies.push_back(UIEvent::ComponentKill(self.id));
                         }
                     }
-                    self.set_dirty();
+                    self.set_dirty(true);
                     if let UIEvent::InsertInput(_) = event {
                         self.has_changes = true;
                     }
@@ -269,11 +269,11 @@ impl Component for ContactManager {
             }
     }
 
-    fn set_dirty(&mut self) {
-        self.dirty = true;
-        self.form.set_dirty();
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+        self.form.set_dirty(value);
         if let ViewMode::Discard(ref mut selector) = self.mode {
-            selector.set_dirty();
+            selector.set_dirty(value);
         }
     }
 
@@ -301,7 +301,7 @@ impl Component for ContactManager {
             true,
             context,
         ));
-        self.set_dirty();
+        self.set_dirty(true);
         false
     }
 }

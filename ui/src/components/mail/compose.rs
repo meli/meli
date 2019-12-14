@@ -507,7 +507,7 @@ impl Component for Composer {
             }
         } else {
             self.embed_area = (upper_left!(header_area), bottom_right!(body_area));
-            self.pager.set_dirty();
+            self.pager.set_dirty(true);
             self.pager.draw(grid, body_area, context);
         }
 
@@ -642,7 +642,7 @@ impl Component for Composer {
                             }
                             _ => {}
                         }
-                        self.set_dirty();
+                        self.set_dirty(true);
                     }
                     return true;
                 }
@@ -661,7 +661,7 @@ impl Component for Composer {
 
         match *event {
             UIEvent::Resize => {
-                self.set_dirty();
+                self.set_dirty(true);
             }
             /*
             /* Switch e-mail From: field to the `left` configured account. */
@@ -812,7 +812,7 @@ impl Component for Composer {
                         }
                     }
                 }
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -830,7 +830,7 @@ impl Component for Composer {
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Embed));
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -997,10 +997,10 @@ impl Component for Composer {
         }
     }
 
-    fn set_dirty(&mut self) {
-        self.dirty = true;
-        self.pager.set_dirty();
-        self.form.set_dirty();
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+        self.pager.set_dirty(value);
+        self.form.set_dirty(value);
     }
 
     fn kill(&mut self, uuid: Uuid, context: &mut Context) {
@@ -1063,7 +1063,7 @@ impl Component for Composer {
                 context,
             ),
         );
-        self.set_dirty();
+        self.set_dirty(true);
         false
     }
 }

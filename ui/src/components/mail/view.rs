@@ -269,7 +269,7 @@ impl MailView {
     pub fn update(&mut self, new_coordinates: (usize, usize, EnvelopeHash)) {
         self.coordinates = new_coordinates;
         self.mode = ViewMode::Normal;
-        self.set_dirty();
+        self.set_dirty(true);
     }
 }
 
@@ -615,7 +615,7 @@ impl Component for MailView {
                                 }
                             }
                         }
-                        self.set_dirty();
+                        self.set_dirty(true);
                     }
                     return true;
                 }
@@ -637,7 +637,7 @@ impl Component for MailView {
                             return true;
                         }
                     }
-                    self.pager.set_dirty();
+                    self.pager.set_dirty(true);
                     return true;
                 }
                 UIEvent::Input(ref key)
@@ -647,7 +647,7 @@ impl Component for MailView {
                 {
                     self.force_draw_headers = true;
                     self.headers_cursor += 1;
-                    self.pager.set_dirty();
+                    self.pager.set_dirty(true);
                     return true;
                 }
                 _ => {
@@ -718,7 +718,7 @@ impl Component for MailView {
                 if self.mode.is_contact_selector() =>
             {
                 self.mode = ViewMode::Normal;
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) => {
@@ -742,7 +742,7 @@ impl Component for MailView {
                     && shortcut!(key == shortcuts[MailView::DESCRIPTION]["view_raw_source"]) =>
             {
                 self.mode = ViewMode::Raw;
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -755,7 +755,7 @@ impl Component for MailView {
                     ) =>
             {
                 self.mode = ViewMode::Normal;
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -797,7 +797,7 @@ impl Component for MailView {
                     drop(account);
                     if let Some(u) = attachments.get(lidx) {
                         if let Ok(()) = crate::mailcap::MailcapEntry::execute(u, context) {
-                            self.set_dirty();
+                            self.set_dirty(true);
                         } else {
                             context.replies.push_back(UIEvent::StatusEvent(
                                 StatusEvent::DisplayMessage(format!(
@@ -1270,15 +1270,15 @@ impl Component for MailView {
                 false
             }
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
         match self.mode {
             ViewMode::Normal => {
-                self.pager.set_dirty();
+                self.pager.set_dirty(value);
             }
             ViewMode::Subview => {
                 if let Some(s) = self.subview.as_mut() {
-                    s.set_dirty();
+                    s.set_dirty(value);
                 }
             }
             _ => {}

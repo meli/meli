@@ -155,7 +155,7 @@ impl ThreadView {
                 self.expanded_pos = new_entry_idx;
             }
         }
-        self.set_dirty();
+        self.set_dirty(true);
     }
     fn initiate(&mut self, expanded_hash: Option<ThreadHash>, context: &Context) {
         /* stack to push thread messages in order in order to pop and print them later */
@@ -1014,7 +1014,7 @@ impl Component for ThreadView {
                 self.new_expanded_pos = self.current_pos();
                 self.show_mailview = true;
                 //self.initiated = false;
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1022,7 +1022,7 @@ impl Component for ThreadView {
             {
                 self.show_mailview = !self.show_mailview;
                 self.initiated = false;
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1030,7 +1030,7 @@ impl Component for ThreadView {
             {
                 self.show_thread = !self.show_thread;
                 self.initiated = false;
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1076,7 +1076,7 @@ impl Component for ThreadView {
                 return true;
             }
             UIEvent::Resize => {
-                self.set_dirty();
+                self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[self.coordinates.0];
@@ -1104,9 +1104,9 @@ impl Component for ThreadView {
     fn is_dirty(&self) -> bool {
         self.dirty || (self.show_mailview && self.mailview.is_dirty())
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
-        self.mailview.set_dirty();
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+        self.mailview.set_dirty(value);
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self.mailview.get_shortcuts(context);

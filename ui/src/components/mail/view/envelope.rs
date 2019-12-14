@@ -541,8 +541,8 @@ impl Component for EnvelopeView {
             || self.pager.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
     }
 
     fn id(&self) -> ComponentId {

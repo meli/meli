@@ -160,8 +160,8 @@ impl Component for HtmlView {
     fn is_dirty(&self) -> bool {
         self.pager.is_dirty()
     }
-    fn set_dirty(&mut self) {
-        self.pager.set_dirty();
+    fn set_dirty(&mut self, value: bool) {
+        self.pager.set_dirty(value);
     }
 
     fn id(&self) -> ComponentId {

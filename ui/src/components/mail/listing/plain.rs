@@ -451,7 +451,7 @@ impl ListingTrait for PlainListing {
 
     fn set_movement(&mut self, mvm: PageMovement) {
         self.movement = Some(mvm);
-        self.set_dirty();
+        self.set_dirty(true);
     }
 }
 
@@ -1112,14 +1112,14 @@ impl Component for PlainListing {
                     ) =>
             {
                 self.refresh_mailbox(context);
-                self.set_dirty();
+                self.set_dirty(true);
             }
             UIEvent::StartupCheck(ref f)
                 if *f
                     == context.accounts[self.cursor_pos.0].folders_order[self.new_cursor_pos.1] =>
             {
                 self.refresh_mailbox(context);
-                self.set_dirty();
+                self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
@@ -1156,7 +1156,7 @@ impl Component for PlainListing {
             }
             UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
-                self.set_dirty();
+                self.set_dirty(true);
                 self.refresh_mailbox(context);
                 return true;
             }
@@ -1192,11 +1192,11 @@ impl Component for PlainListing {
                 false
             }
     }
-    fn set_dirty(&mut self) {
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
         if self.unfocused {
-            self.view.set_dirty();
+            self.view.set_dirty(value);
         }
-        self.dirty = true;
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {

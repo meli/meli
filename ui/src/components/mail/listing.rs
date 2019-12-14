@@ -387,7 +387,7 @@ impl Component for Listing {
                             self.cursor_pos.1 += amount;
                             self.component
                                 .set_coordinates((self.cursor_pos.0, self.cursor_pos.1));
-                            self.set_dirty();
+                            self.set_dirty(true);
                         } else {
                             return true;
                         }
@@ -397,7 +397,7 @@ impl Component for Listing {
                             self.cursor_pos.1 -= amount;
                             self.component
                                 .set_coordinates((self.cursor_pos.0, self.cursor_pos.1));
-                            self.set_dirty();
+                            self.set_dirty(true);
                         } else {
                             return true;
                         }
@@ -451,7 +451,7 @@ impl Component for Listing {
                         if self.cursor_pos.0 + amount < self.accounts.len() {
                             self.cursor_pos = (self.cursor_pos.0 + amount, 0);
                             self.component.set_coordinates((self.cursor_pos.0, 0));
-                            self.set_dirty();
+                            self.set_dirty(true);
                         } else {
                             return true;
                         }
@@ -460,7 +460,7 @@ impl Component for Listing {
                         if self.cursor_pos.0 >= amount {
                             self.cursor_pos = (self.cursor_pos.0 - amount, 0);
                             self.component.set_coordinates((self.cursor_pos.0, 0));
-                            self.set_dirty();
+                            self.set_dirty(true);
                         } else {
                             return true;
                         }
@@ -520,7 +520,7 @@ impl Component for Listing {
                     for i in focused {
                         self.component.perform_action(context, i, a);
                     }
-                    self.component.set_dirty();
+                    self.component.set_dirty(true);
                     return true;
                 }
                 _ => {}
@@ -545,7 +545,7 @@ impl Component for Listing {
                 self.dirty = true;
             }
             UIEvent::Resize => {
-                self.set_dirty();
+                self.set_dirty(true);
             }
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_up"]) =>
@@ -643,7 +643,7 @@ impl Component for Listing {
                 if shortcut!(k == shortcuts[Listing::DESCRIPTION]["toggle_menu_visibility"]) =>
             {
                 self.menu_visibility = !self.menu_visibility;
-                self.set_dirty();
+                self.set_dirty(true);
             }
             UIEvent::Input(ref k)
                 if shortcut!(k == shortcuts[Listing::DESCRIPTION]["new_mail"]) =>
@@ -711,9 +711,9 @@ impl Component for Listing {
     fn is_dirty(&self) -> bool {
         self.dirty || self.component.is_dirty()
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
-        self.component.set_dirty();
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+        self.component.set_dirty(value);
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {

@@ -208,10 +208,10 @@ impl Component for StatusPanel {
     fn is_dirty(&self) -> bool {
         self.dirty || self.status.as_ref().map(|s| s.is_dirty()).unwrap_or(false)
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
         if let Some(ref mut status) = self.status {
-            status.set_dirty();
+            status.set_dirty(value);
         }
     }
 
@@ -575,8 +575,8 @@ impl Component for AccountStatus {
     fn is_dirty(&self) -> bool {
         self.dirty
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
     }
 
     fn id(&self) -> ComponentId {

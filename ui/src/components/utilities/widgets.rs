@@ -246,13 +246,13 @@ impl Component for Field {
                 return false;
             }
         }
-        self.set_dirty();
+        self.set_dirty(true);
         true
     }
     fn is_dirty(&self) -> bool {
         false
     }
-    fn set_dirty(&mut self) {}
+    fn set_dirty(&mut self, _value: bool) {}
 
     fn id(&self) -> ComponentId {
         ComponentId::nil()
@@ -490,7 +490,7 @@ impl Component for FormWidget {
                 self.focus = FormFocus::Buttons;
                 self.buttons.set_focus(true);
                 if self.hide_buttons {
-                    self.set_dirty();
+                    self.set_dirty(true);
                     return false;
                 }
             }
@@ -532,15 +532,15 @@ impl Component for FormWidget {
                 return false;
             }
         }
-        self.set_dirty();
+        self.set_dirty(true);
         true
     }
     fn is_dirty(&self) -> bool {
         self.dirty || self.buttons.is_dirty()
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
-        self.buttons.set_dirty();
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+        self.buttons.set_dirty(value);
     }
 
     fn id(&self) -> ComponentId {
@@ -658,14 +658,14 @@ where
                 return false;
             }
         }
-        self.set_dirty();
+        self.set_dirty(true);
         true
     }
     fn is_dirty(&self) -> bool {
         self.dirty
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
     }
 
     fn id(&self) -> ComponentId {
@@ -766,8 +766,8 @@ impl Component for AutoComplete {
     fn is_dirty(&self) -> bool {
         self.dirty
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
     }
 
     fn id(&self) -> ComponentId {
@@ -845,12 +845,12 @@ impl AutoComplete {
     pub fn inc_cursor(&mut self) {
         if self.cursor < self.entries.len().saturating_sub(1) {
             self.cursor += 1;
-            self.set_dirty();
+            self.set_dirty(true);
         }
     }
     pub fn dec_cursor(&mut self) {
         self.cursor = self.cursor.saturating_sub(1);
-        self.set_dirty();
+        self.set_dirty(true);
     }
 
     pub fn cursor(&self) -> usize {

@@ -105,9 +105,9 @@ impl Component for HSplit {
         self.top.is_dirty() || self.bottom.is_dirty()
     }
 
-    fn set_dirty(&mut self) {
-        self.top.set_dirty();
-        self.bottom.set_dirty();
+    fn set_dirty(&mut self, value: bool) {
+        self.top.set_dirty(value);
+        self.bottom.set_dirty(value);
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
@@ -171,7 +171,7 @@ impl Component for VSplit {
         let total_cols = get_x(bottom_right) - get_x(upper_left);
         let visibility = (self.left.is_visible(), self.right.is_visible());
         if visibility != self.prev_visibility {
-            self.set_dirty();
+            self.set_dirty(true);
             self.prev_visibility = visibility;
         }
         let right_component_width = match visibility {
@@ -245,9 +245,9 @@ impl Component for VSplit {
         self.left.is_dirty() || self.right.is_dirty()
     }
 
-    fn set_dirty(&mut self) {
-        self.left.set_dirty();
-        self.right.set_dirty();
+    fn set_dirty(&mut self, value: bool) {
+        self.left.set_dirty(value);
+        self.right.set_dirty(value);
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
@@ -676,8 +676,8 @@ impl Component for Pager {
     fn is_dirty(&self) -> bool {
         self.dirty
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let config_map: FnvHashMap<&'static str, Key> =
@@ -901,19 +901,19 @@ impl Component for StatusBar {
                     self.auto_complete.set_suggestions(suggestions);
                     /* redraw self.container because we have got ridden of an autocomplete
                      * box, and it must be drawn over */
-                    self.container.set_dirty();
+                    self.container.set_dirty(true);
                     return;
                 }
                 /* redraw self.container because we have less suggestions than before */
                 if suggestions.len() < self.auto_complete.suggestions().len() {
-                    self.container.set_dirty();
+                    self.container.set_dirty(true);
                 }
 
                 if self.auto_complete.set_suggestions(suggestions) {
                     let len = self.auto_complete.suggestions().len() - 1;
                     self.auto_complete.set_cursor(len);
 
-                    self.container.set_dirty();
+                    self.container.set_dirty(true);
                 }
                 let hist_height = std::cmp::min(15, self.auto_complete.suggestions().len());
                 let hist_area = if height < self.auto_complete.suggestions().len() {
@@ -1064,8 +1064,8 @@ impl Component for StatusBar {
             UIEvent::ChangeMode(m) => {
                 let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
                 self.status.replace_range(..offset, &format!("{} ", m));
-                self.set_dirty();
-                self.container.set_dirty();
+                self.set_dirty(true);
+                self.container.set_dirty(true);
                 self.mode = *m;
                 match m {
                     UIMode::Normal => {
@@ -1098,8 +1098,8 @@ impl Component for StatusBar {
                     let mut utext = UText::new(suggestion);
                     let len = utext.as_str().len();
                     utext.set_cursor(len);
-                    self.container.set_dirty();
-                    self.set_dirty();
+                    self.container.set_dirty(true);
+                    self.set_dirty(true);
                     self.ex_buffer = Field::Text(utext, None);
                 }
             }
@@ -1145,8 +1145,8 @@ impl Component for StatusBar {
                     );
                     let len = utext.as_str().len();
                     utext.set_cursor(len);
-                    self.container.set_dirty();
-                    self.set_dirty();
+                    self.container.set_dirty(true);
+                    self.set_dirty(true);
                     self.ex_buffer = Field::Text(utext, None);
                     self.ex_buffer_cmd_history_pos = pos;
                     self.dirty = true;
@@ -1167,8 +1167,8 @@ impl Component for StatusBar {
                     );
                     let len = utext.as_str().len();
                     utext.set_cursor(len);
-                    self.container.set_dirty();
-                    self.set_dirty();
+                    self.container.set_dirty(true);
+                    self.set_dirty(true);
                     self.ex_buffer = Field::Text(utext, None);
                     self.ex_buffer_cmd_history_pos = pos;
                     self.dirty = true;
@@ -1202,8 +1202,8 @@ impl Component for StatusBar {
     fn is_dirty(&self) -> bool {
         self.dirty || self.container.is_dirty()
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
     }
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
@@ -1274,7 +1274,8 @@ impl Component for Progress {
     fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
         false
     }
-    fn set_dirty(&mut self) {}
+    fn set_dirty(&mut self, _value: bool) {}
+
     fn is_dirty(&self) -> bool {
         false
     }
@@ -1585,7 +1586,7 @@ impl Component for Tabbed {
                                 .get_status(context)
                                 .unwrap_or_default(),
                         )));
-                    self.set_dirty();
+                    self.set_dirty(true);
                 }
                 return true;
             }
@@ -1598,13 +1599,13 @@ impl Component for Tabbed {
                             .get_status(context)
                             .unwrap_or_default(),
                     )));
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(Key::Char('?')) => {
                 if self.show_shortcuts {
                     /* children below the shortcut overlay must be redrawn */
-                    self.set_dirty();
+                    self.set_dirty(true);
                 }
                 self.show_shortcuts = !self.show_shortcuts;
                 self.dirty = true;
@@ -1617,13 +1618,13 @@ impl Component for Tabbed {
                 }
                 self.add_component(Box::new(composer));
                 self.cursor_pos = self.children.len() - 1;
-                self.children[self.cursor_pos].set_dirty();
+                self.children[self.cursor_pos].set_dirty(true);
                 return true;
             }
             UIEvent::Action(Tab(Reply(coordinates, msg))) => {
                 self.add_component(Box::new(Composer::with_context(coordinates, msg, context)));
                 self.cursor_pos = self.children.len() - 1;
-                self.children[self.cursor_pos].set_dirty();
+                self.children[self.cursor_pos].set_dirty(true);
                 return true;
             }
             UIEvent::Action(Tab(Edit(account_pos, msg))) => {
@@ -1651,13 +1652,13 @@ impl Component for Tabbed {
                 };
                 self.add_component(Box::new(composer));
                 self.cursor_pos = self.children.len() - 1;
-                self.children[self.cursor_pos].set_dirty();
+                self.children[self.cursor_pos].set_dirty(true);
                 return true;
             }
             UIEvent::Action(Tab(New(ref mut e))) if e.is_some() => {
                 self.add_component(e.take().unwrap());
                 self.cursor_pos = self.children.len() - 1;
-                self.children[self.cursor_pos].set_dirty();
+                self.children[self.cursor_pos].set_dirty(true);
                 return true;
             }
             UIEvent::Action(Tab(Close)) => {
@@ -1666,7 +1667,7 @@ impl Component for Tabbed {
                 }
                 let id = self.children[self.cursor_pos].id();
                 self.children[self.cursor_pos].kill(id, context);
-                self.set_dirty();
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Action(Tab(Kill(id))) => {
@@ -1676,7 +1677,7 @@ impl Component for Tabbed {
                 if let Some(c_idx) = self.children.iter().position(|x| x.id() == id) {
                     self.children.remove(c_idx);
                     self.cursor_pos = 0;
-                    self.set_dirty();
+                    self.set_dirty(true);
                     return true;
                 } else {
                     debug!(
@@ -1717,9 +1718,9 @@ impl Component for Tabbed {
     fn is_dirty(&self) -> bool {
         self.dirty || self.children[self.cursor_pos].is_dirty()
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
-        self.children[self.cursor_pos].set_dirty();
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+        self.children[self.cursor_pos].set_dirty(value);
     }
 
     fn id(&self) -> ComponentId {
@@ -1739,7 +1740,7 @@ impl Component for Tabbed {
         for (i, c) in self.children.iter_mut().enumerate() {
             if !c.can_quit_cleanly(context) {
                 self.cursor_pos = i;
-                self.set_dirty();
+                self.set_dirty(true);
                 return false;
             }
         }
@@ -2038,8 +2039,8 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
     fn is_dirty(&self) -> bool {
         self.dirty
     }
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
     }
 
     fn id(&self) -> ComponentId {
@@ -2318,8 +2319,8 @@ impl Component for RawBuffer {
         self.dirty
     }
 
-    fn set_dirty(&mut self) {
-        self.dirty = true;
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
     }
 
     fn id(&self) -> ComponentId {
