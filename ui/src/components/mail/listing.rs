@@ -344,6 +344,7 @@ impl Component for Listing {
                     (set_x(upper_left, x + 1), bottom_right),
                     None,
                 );
+                self.component.set_dirty(false);
                 context.dirty_areas.push_back(area);
             } else {
                 self.component
