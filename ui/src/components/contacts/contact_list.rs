@@ -728,7 +728,9 @@ impl Component for ContactList {
                         )));
                     return true;
                 }
-                UIEvent::Input(Key::Up) => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
+                {
                     let amount = if self.cmd_buf.is_empty() {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
@@ -748,7 +750,10 @@ impl Component for ContactList {
                     self.set_dirty();
                     return true;
                 }
-                UIEvent::Input(Key::Down) if self.cursor_pos < self.length.saturating_sub(1) => {
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_down"])
+                        && self.cursor_pos < self.length.saturating_sub(1) =>
+                {
                     let amount = if self.cmd_buf.is_empty() {
                         1
                     } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {

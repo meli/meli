@@ -105,6 +105,8 @@ shortcut_key_values! { "compact-listing",
 shortcut_key_values! { "listing",
     /// Shortcut listing for a mail listing.
     pub struct ListingShortcuts {
+        scroll_up |> "Scroll up list." |> Key::Up,
+        scroll_down |> "Scroll down list." |> Key::Down,
         new_mail |> "Start new mail draft in new tab." |>  Key::Char('m'),
         next_account |> "Go to next account." |> Key::Char('h'),
         next_folder |> "Go to next folder." |> Key::Char('J'),
@@ -121,6 +123,8 @@ shortcut_key_values! { "listing",
 shortcut_key_values! { "contact-list",
     /// Shortcut listing for the contact list view
     pub struct ContactListShortcuts {
+        scroll_up |> "Scroll up list." |> Key::Up,
+        scroll_down |> "Scroll down list." |> Key::Down,
         create_contact |> "Create new contact." |> Key::Char('c'),
         edit_contact |> "Edit contact under cursor." |> Key::Char('e'),
         mail_contact |> "Mail contact under cursor." |> Key::Char('m'),
@@ -143,14 +147,20 @@ shortcut_key_values! { "pager",
 shortcut_key_values! { "general",
     pub struct GeneralShortcuts {
         go_to_tab |> "Go to the nth tab" |> Key::Alt('n'),
-        next_tab |> "Next tab." |> Key::Char('T')
+        next_tab |> "Next tab." |> Key::Char('T'),
+        scroll_right |> "Generic scroll right (catch-all setting)" |> Key::Right,
+        scroll_left |> "Generic scroll left (catch-all setting)" |> Key::Left,
+        scroll_up |> "Generic scroll up (catch-all setting)" |> Key::Up,
+        scroll_down |> "Generic scroll down (catch-all setting)" |> Key::Down
     }
 }
 
 shortcut_key_values! { "composing",
     pub struct ComposingShortcuts {
         edit_mail |> "Edit mail." |> Key::Char('e'),
-        send_mail |> "Deliver draft to mailer" |> Key::Char('s')
+        send_mail |> "Deliver draft to mailer" |> Key::Char('s'),
+        scroll_up |> "Change field focus." |> Key::Up,
+        scroll_down |> "Change field focus." |> Key::Down
     }
 }
 
@@ -171,6 +181,8 @@ shortcut_key_values! { "envelope-view",
 
 shortcut_key_values! { "thread-view",
     pub struct ThreadViewShortcuts {
+        scroll_up |> "Scroll up list." |> Key::Up,
+        scroll_down |> "Scroll down list." |> Key::Down,
         collapse_subtree |> "collapse thread branches" |> Key::Char('h'),
         next_page |> "Go to next page." |> Key::PageDown,
         prev_page |> "Go to previous page." |> Key::PageUp,

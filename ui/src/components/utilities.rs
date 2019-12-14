@@ -1688,18 +1688,18 @@ impl Component for Tabbed {
             UIEvent::Resize => {
                 self.dirty = true;
             }
-            UIEvent::Input(ref k) if self.show_shortcuts => {
-                match k {
-                    Key::Up => {
+            UIEvent::Input(ref key) if self.show_shortcuts => {
+                match key {
+                    _ if shortcut!(key == shortcuts["general"]["scroll_up"]) => {
                         self.help_screen_cursor.1 = self.help_screen_cursor.1.saturating_sub(1);
                     }
-                    Key::Down => {
+                    _ if shortcut!(key == shortcuts["general"]["scroll_down"]) => {
                         self.help_screen_cursor.1 = self.help_screen_cursor.1 + 1;
                     }
-                    Key::Left => {
+                    _ if shortcut!(key == shortcuts["general"]["scroll_left"]) => {
                         self.help_screen_cursor.0 = self.help_screen_cursor.0.saturating_sub(1);
                     }
-                    Key::Right => {
+                    _ if shortcut!(key == shortcuts["general"]["scroll_right"]) => {
                         self.help_screen_cursor.0 = self.help_screen_cursor.0 + 1;
                     }
                     _ => {
@@ -1790,8 +1790,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
         copy_area_with_break(grid, &self.content, area, ((0, 0), (width, height)));
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let (width, height) = self.content.size();
+        let shortcuts = self.get_shortcuts(context);
         match (event, self.cursor) {
             (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
                 /* User can only select one entry, so Enter key finalises the selection */
@@ -1880,8 +1881,10 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.dirty = true;
                 return true;
             }
-            (UIEvent::Input(Key::Up), SelectorCursor::Ok)
-            | (UIEvent::Input(Key::Up), SelectorCursor::Cancel) => {
+            (UIEvent::Input(ref key), SelectorCursor::Ok)
+            | (UIEvent::Input(ref key), SelectorCursor::Cancel)
+                if shortcut!(key == shortcuts["general"]["scroll_up"]) =>
+            {
                 change_colors(
                     &mut self.content,
                     (
@@ -1902,8 +1905,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.dirty = true;
                 return true;
             }
-            (UIEvent::Input(Key::Down), SelectorCursor::Entry(c))
-                if c < self.entries.len().saturating_sub(1) =>
+            (UIEvent::Input(ref key), SelectorCursor::Entry(c))
+                if c < self.entries.len().saturating_sub(1)
+                    && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
             {
                 if self.single_only {
                     // Redraw selection
@@ -1940,7 +1944,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.dirty = true;
                 return true;
             }
-            (UIEvent::Input(Key::Down), SelectorCursor::Entry(c)) if !self.single_only => {
+            (UIEvent::Input(ref key), SelectorCursor::Entry(c))
+                if !self.single_only && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+            {
                 self.cursor = SelectorCursor::Ok;
                 change_colors(
                     &mut self.content,
@@ -1960,8 +1966,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.dirty = true;
                 return true;
             }
-            (UIEvent::Input(Key::Down), _) | (UIEvent::Input(Key::Up), _) => return true,
-            (UIEvent::Input(Key::Right), SelectorCursor::Ok) => {
+            (UIEvent::Input(ref key), SelectorCursor::Ok)
+                if shortcut!(key == shortcuts["general"]["scroll_right"]) =>
+            {
                 self.cursor = SelectorCursor::Cancel;
                 change_colors(
                     &mut self.content,
@@ -1984,7 +1991,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.dirty = true;
                 return true;
             }
-            (UIEvent::Input(Key::Left), SelectorCursor::Cancel) => {
+            (UIEvent::Input(ref key), SelectorCursor::Cancel)
+                if shortcut!(key == shortcuts["general"]["scroll_left"]) =>
+            {
                 self.cursor = SelectorCursor::Ok;
                 change_colors(
                     &mut self.content,
@@ -2007,12 +2016,25 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.dirty = true;
                 return true;
             }
-            (UIEvent::Input(Key::Left), _) | (UIEvent::Input(Key::Right), _) => return true,
+            (UIEvent::Input(ref key), _)
+                if shortcut!(key == shortcuts["general"]["scroll_left"])
+                    || shortcut!(key == shortcuts["general"]["scroll_right"])
+                    || shortcut!(key == shortcuts["general"]["scroll_up"])
+                    || shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+            {
+                return true
+            }
             _ => {}
         }
 
         false
     }
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map = ShortcutMaps::default();
+        map.insert("general", context.settings.shortcuts.general.key_values());
+        map
+    }
+
     fn is_dirty(&self) -> bool {
         self.dirty
     }

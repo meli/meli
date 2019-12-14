@@ -528,7 +528,9 @@ impl Component for Listing {
             UIEvent::Resize => {
                 self.set_dirty();
             }
-            UIEvent::Input(Key::Up) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_up"]) =>
+            {
                 let amount = if self.cmd_buf.is_empty() {
                     1
                 } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
@@ -547,7 +549,9 @@ impl Component for Listing {
                 self.component.set_movement(PageMovement::Up(amount));
                 return true;
             }
-            UIEvent::Input(Key::Down) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_down"]) =>
+            {
                 let amount = if self.cmd_buf.is_empty() {
                     1
                 } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {

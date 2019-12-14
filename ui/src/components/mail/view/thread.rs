@@ -968,14 +968,18 @@ impl Component for ThreadView {
 
         let shortcuts = self.get_shortcuts(context);
         match *event {
-            UIEvent::Input(Key::Up) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["scroll_up"]) =>
+            {
                 if self.cursor_pos > 0 {
                     self.new_cursor_pos = self.new_cursor_pos.saturating_sub(1);
                     self.dirty = true;
                 }
                 return true;
             }
-            UIEvent::Input(Key::Down) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["scroll_down"]) =>
+            {
                 let height = self.visible_entries.iter().flat_map(|v| v.iter()).count();
                 if height > 0 && self.new_cursor_pos + 1 < height {
                     self.new_cursor_pos += 1;

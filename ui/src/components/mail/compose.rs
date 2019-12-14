@@ -686,12 +686,16 @@ impl Component for Composer {
             }
             return true;
             }*/
-            UIEvent::Input(Key::Up) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_up"]) =>
+            {
                 self.cursor = Cursor::Headers;
                 self.form.process_event(event, context);
                 self.dirty = true;
             }
-            UIEvent::Input(Key::Down) => {
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Self::DESCRIPTION]["scroll_down"]) =>
+            {
                 self.cursor = Cursor::Body;
                 self.dirty = true;
             }
