@@ -295,29 +295,10 @@ impl Component for Listing {
         }
 
         if right_component_width == total_cols {
-            if !context.is_online(self.cursor_pos.0) {
+            if let Err(err) = context.is_online(self.cursor_pos.0) {
                 clear_area(grid, area);
-                write_string_to_grid(
-                    "offline",
-                    grid,
-                    Color::Byte(243),
-                    Color::Default,
-                    Attr::Default,
-                    area,
-                    None,
-                );
-                context.dirty_areas.push_back(area);
-                return;
-            }
-            self.component.draw(grid, area, context);
-        } else if right_component_width == 0 {
-            self.draw_menu(grid, area, context);
-        } else {
-            self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
-            if !context.is_online(self.cursor_pos.0) {
-                clear_area(grid, (set_x(upper_left, mid + 1), bottom_right));
-                write_string_to_grid(
-                    "offline",
+                let (x, _) = write_string_to_grid(
+                    "offline: ",
                     grid,
                     Color::Byte(243),
                     Color::Default,
@@ -325,11 +306,49 @@ impl Component for Listing {
                     (set_x(upper_left, mid + 1), bottom_right),
                     None,
                 );
+                write_string_to_grid(
+                    &err.to_string(),
+                    grid,
+                    Color::Red,
+                    Color::Default,
+                    Attr::Default,
+                    (set_x(upper_left, x + 1), bottom_right),
+                    None,
+                );
                 context.dirty_areas.push_back(area);
                 return;
+            } else {
+                self.component.draw(grid, area, context);
             }
-            self.component
-                .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+        } else if right_component_width == 0 {
+            self.draw_menu(grid, area, context);
+        } else {
+            self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
+            if let Err(err) = context.is_online(self.cursor_pos.0) {
+                clear_area(grid, (set_x(upper_left, mid + 1), bottom_right));
+                let (x, _) = write_string_to_grid(
+                    "offline: ",
+                    grid,
+                    Color::Byte(243),
+                    Color::Default,
+                    Attr::Default,
+                    (set_x(upper_left, mid + 1), bottom_right),
+                    None,
+                );
+                write_string_to_grid(
+                    &err.to_string(),
+                    grid,
+                    Color::Red,
+                    Color::Default,
+                    Attr::Default,
+                    (set_x(upper_left, x + 1), bottom_right),
+                    None,
+                );
+                context.dirty_areas.push_back(area);
+            } else {
+                self.component
+                    .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+            }
         }
         self.dirty = false;
     }

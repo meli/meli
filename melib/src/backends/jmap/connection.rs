@@ -26,16 +26,17 @@ pub struct JmapConnection {
     pub session: JmapSession,
     pub request_no: Arc<Mutex<usize>>,
     pub client: Arc<Mutex<Client>>,
-    pub online_status: Arc<Mutex<bool>>,
+    pub online_status: Arc<Mutex<(Instant, Result<()>)>>,
     pub server_conf: JmapServerConf,
     pub account_id: Arc<Mutex<String>>,
     pub method_call_states: Arc<Mutex<FnvHashMap<&'static str, String>>>,
 }
 
 impl JmapConnection {
-    pub fn new(server_conf: &JmapServerConf, online_status: Arc<Mutex<bool>>) -> Result<Self> {
+    pub fn new(server_conf: &JmapServerConf, online_status: Arc<Mutex<(Instant, Result<()>)>>) -> Result<Self> {
         use reqwest::header;
         let mut headers = header::HeaderMap::new();
+        let connection_start = std::time::Instant::now();
         headers.insert(
             header::ACCEPT,
             header::HeaderValue::from_static("application/json"),
@@ -68,20 +69,29 @@ impl JmapConnection {
             .send()?;
         let res_text = req.text()?;
 
-        let session: JmapSession = serde_json::from_str(&res_text).map_err(|_| MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)", &server_conf.server_hostname)))?;
+        let session: JmapSession = serde_json::from_str(&res_text).map_err(|_| {
+            let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)", &server_conf.server_hostname);
+                *online_status.lock().unwrap() = (Instant::new(), Err(err.clone()));
+                err
+                ))?;
         if !session
             .capabilities
             .contains_key("urn:ietf:params:jmap:core")
         {
-            return Err(MeliError::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "))));
+            let err = Err(MeliError::new(format!("Server {} did not return JMAP Core capability (urn:ietf:params:jmap:core). Returned capabilities were: {}", &server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "))));
+                *online_status.lock().unwrap() = (Instant::new(), Err(err.clone()));
+                return err;
         }
         if !session
             .capabilities
             .contains_key("urn:ietf:params:jmap:mail")
         {
-            return Err(MeliError::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "))));
+            let err = Err(MeliError::new(format!("Server {} does not support JMAP Mail capability (urn:ietf:params:jmap:mail). Returned capabilities were: {}", &server_conf.server_hostname, session.capabilities.keys().map(String::as_str).collect::<Vec<&str>>().join(", "))));
+                *online_status.lock().unwrap() = (Instant::new(), Err(err.clone()));
+                return err;
         }
 
+        *online_status.lock().unwrap() = (Instant::new(), Ok(()));
         let server_conf = server_conf.clone();
         Ok(JmapConnection {
             session,

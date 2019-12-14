@@ -242,8 +242,8 @@ impl NotmuchDb {
 }
 
 impl MailBackend for NotmuchDb {
-    fn is_online(&self) -> bool {
-        true
+    fn is_online(&self) -> Result<()> {
+        Ok(())
     }
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();

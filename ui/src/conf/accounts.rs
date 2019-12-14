@@ -991,12 +991,12 @@ impl Account {
 
     /* Call only in Context::is_online, since only Context can launch the watcher threads if an
      * account goes from offline to online. */
-    pub fn is_online(&mut self) -> bool {
+    pub fn is_online(&mut self) -> Result<()> {
         let ret = self.backend.read().unwrap().is_online();
-        if ret != self.is_online && ret {
+        if ret.is_ok() != self.is_online && ret.is_ok() {
             self.init();
         }
-        self.is_online = ret;
+        self.is_online = ret.is_ok();
         ret
     }
 

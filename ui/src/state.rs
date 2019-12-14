@@ -135,14 +135,15 @@ impl Context {
         }
     }
 
-    pub fn is_online(&mut self, account_pos: usize) -> bool {
+    pub fn is_online(&mut self, account_pos: usize) -> Result<()> {
         let Context {
             ref mut accounts,
             ref mut mailbox_hashes,
             ..
         } = self;
         let was_online = accounts[account_pos].is_online;
-        if accounts[account_pos].is_online() {
+        let ret = accounts[account_pos].is_online();
+        if ret.is_ok() {
             if !was_online {
                 for folder in accounts[account_pos].list_folders() {
                     debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
@@ -157,10 +158,8 @@ impl Context {
                  */
                 accounts[account_pos].watch();
             }
-            true
-        } else {
-            false
         }
+        ret
     }
 
     pub fn work_controller(&self) -> &WorkController {
@@ -291,7 +290,7 @@ impl State {
         s.switch_to_alternate_screen();
         debug!("inserting mailbox hashes:");
         for i in 0..s.context.accounts.len() {
-            if s.context.is_online(i) && s.context.accounts[i].is_empty() {
+            if s.context.is_online(i).is_ok() && s.context.accounts[i].is_empty() {
                 return Err(MeliError::new(format!(
                     "Account {} has no folders configured.",
                     s.context.accounts[i].name()
@@ -722,7 +721,7 @@ impl State {
     pub fn check_accounts(&mut self) {
         let mut ctr = 0;
         for i in 0..self.context.accounts.len() {
-            if self.context.is_online(i) {
+            if self.context.is_online(i).is_ok() {
                 ctr += 1;
             }
         }

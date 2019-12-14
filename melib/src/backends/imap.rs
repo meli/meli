@@ -45,6 +45,7 @@ use std::collections::{hash_map::DefaultHasher, BTreeMap};
 use std::hash::Hasher;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::Instant;
 pub type UID = usize;
 
 pub static SUPPORTED_CAPABILITIES: &'static [&'static str] =
@@ -123,7 +124,7 @@ pub struct UIDStore {
 #[derive(Debug)]
 pub struct ImapType {
     account_name: String,
-    online: Arc<Mutex<bool>>,
+    online: Arc<Mutex<(Instant, Result<()>)>>,
     is_subscribed: Arc<IsSubscribedFn>,
     connection: Arc<Mutex<ImapConnection>>,
     server_conf: ImapServerConf,
@@ -135,8 +136,8 @@ pub struct ImapType {
 }
 
 impl MailBackend for ImapType {
-    fn is_online(&self) -> bool {
-        *self.online.lock().unwrap()
+    fn is_online(&self) -> Result<()> {
+        self.online.lock().unwrap().1.clone()
     }
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         macro_rules! exit_on_error {
@@ -285,7 +286,7 @@ impl MailBackend for ImapType {
     ) -> Result<std::thread::ThreadId> {
         let folders = self.folders.clone();
         let tag_index = self.tag_index.clone();
-        let conn = ImapConnection::new_connection(&self.server_conf);
+        let conn = ImapConnection::new_connection(&self.server_conf, self.online.clone());
         let main_conn = self.connection.clone();
         let is_online = self.online.clone();
         let uid_store = self.uid_store.clone();
@@ -342,7 +343,6 @@ impl MailBackend for ImapType {
             f.children.retain(|c| keys.contains(c));
         }
         drop(uid_lock);
-        *self.online.lock().unwrap() = true;
         Ok(folders
             .iter()
             .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
@@ -510,11 +510,15 @@ impl ImapType {
             use_starttls,
             danger_accept_invalid_certs,
         };
-        let connection = ImapConnection::new_connection(&server_conf);
+        let online = Arc::new(Mutex::new((
+            Instant::now(),
+            Err(MeliError::new("Account is uninitialised.")),
+        )));
+        let connection = ImapConnection::new_connection(&server_conf, online.clone());
 
         Ok(Box::new(ImapType {
             account_name: s.name().to_string(),
-            online: Arc::new(Mutex::new(false)),
+            online,
             server_conf,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
 
@@ -532,7 +536,7 @@ impl ImapType {
     }
 
     pub fn shell(&mut self) {
-        let mut conn = ImapConnection::new_connection(&self.server_conf);
+        let mut conn = ImapConnection::new_connection(&self.server_conf, self.online.clone());
         let mut res = String::with_capacity(8 * 1024);
         conn.send_command(b"NOOP").unwrap();
         conn.read_response(&mut res).unwrap();

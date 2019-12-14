@@ -31,6 +31,7 @@ use reqwest::blocking::Client;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::Instant;
 
 #[macro_export]
 macro_rules! _impl {
@@ -182,7 +183,7 @@ pub struct Store {
 #[derive(Debug)]
 pub struct JmapType {
     account_name: String,
-    online: Arc<Mutex<bool>>,
+    online: Arc<Mutex<(Instant, Result<()>)>>,
     is_subscribed: Arc<IsSubscribedFn>,
     server_conf: JmapServerConf,
     connection: Arc<JmapConnection>,
@@ -192,8 +193,8 @@ pub struct JmapType {
 }
 
 impl MailBackend for JmapType {
-    fn is_online(&self) -> bool {
-        *self.online.lock().unwrap()
+    fn is_online(&self) -> Result<()> {
+        self.online.lock().unwrap().1.clone()
     }
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
@@ -277,7 +278,7 @@ impl JmapType {
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
     ) -> Result<Box<dyn MailBackend>> {
-        let online = Arc::new(Mutex::new(false));
+        let online = Arc::new(Mutex::new(Err(MeliError::new("Account is uninitialised."))));
         let server_conf = JmapServerConf::new(s)?;
 
         Ok(Box::new(JmapType {

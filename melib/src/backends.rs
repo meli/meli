@@ -245,7 +245,7 @@ pub enum FolderOperation {
 type NewFolderName = String;
 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
-    fn is_online(&self) -> bool;
+    fn is_online(&self) -> Result<()>;
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
     fn watch(
         &self,

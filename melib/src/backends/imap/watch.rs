@@ -25,7 +25,7 @@ use std::sync::{Arc, Mutex, RwLock};
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
     pub conn: ImapConnection,
-    pub is_online: Arc<Mutex<bool>>,
+    pub is_online: Arc<Mutex<(Instant, Result<()>)>>,
     pub main_conn: Arc<Mutex<ImapConnection>>,
     pub uid_store: Arc<UIDStore>,
     pub folders: Arc<RwLock<FnvHashMap<FolderHash, ImapFolder>>>,
@@ -62,7 +62,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         tag_index,
     } = kit;
     loop {
-        if *is_online.lock().unwrap() {
+        if is_online.lock().unwrap().1.is_ok() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -114,7 +114,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         tag_index,
     } = kit;
     loop {
-        if *is_online.lock().unwrap() {
+        if is_online.lock().unwrap().1.is_ok() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));

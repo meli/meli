@@ -29,6 +29,8 @@ use fnv::FnvHashSet;
 use native_tls::TlsConnector;
 use std::iter::FromIterator;
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use super::protocol_parser;
 use super::{Capabilities, ImapServerConf};
@@ -44,6 +46,7 @@ pub struct ImapConnection {
     pub stream: Result<ImapStream>,
     pub server_conf: ImapServerConf,
     pub capabilities: Capabilities,
+    pub online: Arc<Mutex<(Instant, Result<()>)>>,
 }
 
 impl Drop for ImapStream {
@@ -317,11 +320,15 @@ impl ImapStream {
 }
 
 impl ImapConnection {
-    pub fn new_connection(server_conf: &ImapServerConf) -> ImapConnection {
+    pub fn new_connection(
+        server_conf: &ImapServerConf,
+        online: Arc<Mutex<(Instant, Result<()>)>>,
+    ) -> ImapConnection {
         ImapConnection {
             stream: Err(MeliError::new("Offline".to_string())),
             server_conf: server_conf.clone(),
             capabilities: Capabilities::default(),
+            online,
         }
     }
 
@@ -331,7 +338,16 @@ impl ImapConnection {
                 return Ok(());
             }
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
+        let new_stream = ImapStream::new_connection(&self.server_conf);
+        if new_stream.is_err() {
+            *self.online.lock().unwrap() = (
+                Instant::now(),
+                Err(new_stream.as_ref().unwrap_err().clone()),
+            );
+        } else {
+            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+        }
+        let (capabilities, mut stream) = new_stream?;
         let ret = stream.read_response(ret);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -346,7 +362,16 @@ impl ImapConnection {
                 return Ok(());
             }
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
+        let new_stream = ImapStream::new_connection(&self.server_conf);
+        if new_stream.is_err() {
+            *self.online.lock().unwrap() = (
+                Instant::now(),
+                Err(new_stream.as_ref().unwrap_err().clone()),
+            );
+        } else {
+            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+        }
+        let (capabilities, mut stream) = new_stream?;
         let ret = stream.read_lines(ret, &termination_string);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -361,7 +386,16 @@ impl ImapConnection {
                 return Ok(());
             }
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
+        let new_stream = ImapStream::new_connection(&self.server_conf);
+        if new_stream.is_err() {
+            *self.online.lock().unwrap() = (
+                Instant::now(),
+                Err(new_stream.as_ref().unwrap_err().clone()),
+            );
+        } else {
+            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+        }
+        let (capabilities, mut stream) = new_stream?;
         let ret = stream.wait_for_continuation_request();
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -376,7 +410,16 @@ impl ImapConnection {
                 return Ok(ret);
             }
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
+        let new_stream = ImapStream::new_connection(&self.server_conf);
+        if new_stream.is_err() {
+            *self.online.lock().unwrap() = (
+                Instant::now(),
+                Err(new_stream.as_ref().unwrap_err().clone()),
+            );
+        } else {
+            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+        }
+        let (capabilities, mut stream) = new_stream?;
         let ret = stream.send_command(command);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -391,7 +434,16 @@ impl ImapConnection {
                 return Ok(());
             }
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
+        let new_stream = ImapStream::new_connection(&self.server_conf);
+        if new_stream.is_err() {
+            *self.online.lock().unwrap() = (
+                Instant::now(),
+                Err(new_stream.as_ref().unwrap_err().clone()),
+            );
+        } else {
+            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+        }
+        let (capabilities, mut stream) = new_stream?;
         let ret = stream.send_literal(data);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -406,8 +458,16 @@ impl ImapConnection {
                 return Ok(());
             }
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
-
+        let new_stream = ImapStream::new_connection(&self.server_conf);
+        if new_stream.is_err() {
+            *self.online.lock().unwrap() = (
+                Instant::now(),
+                Err(new_stream.as_ref().unwrap_err().clone()),
+            );
+        } else {
+            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+        }
+        let (capabilities, mut stream) = new_stream?;
         let ret = stream.send_raw(raw);
         if ret.is_ok() {
             self.stream = Ok(stream);
@@ -422,7 +482,16 @@ impl ImapConnection {
                 return Ok(());
             }
         }
-        let (capabilities, mut stream) = ImapStream::new_connection(&self.server_conf)?;
+        let new_stream = ImapStream::new_connection(&self.server_conf);
+        if new_stream.is_err() {
+            *self.online.lock().unwrap() = (
+                Instant::now(),
+                Err(new_stream.as_ref().unwrap_err().clone()),
+            );
+        } else {
+            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+        }
+        let (capabilities, mut stream) = new_stream?;
         let ret = stream.set_nonblocking(val);
         if ret.is_ok() {
             self.stream = Ok(stream);
