@@ -230,7 +230,7 @@ impl State {
                     sender.clone(),
                     NotifyFn::new(Box::new(move |f: FolderHash| {
                         sender
-                            .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
+                            .send(ThreadEvent::UIEvent(UIEvent::WorkerProgress(f)))
                             .unwrap();
                     })),
                 )
@@ -637,6 +637,12 @@ impl State {
             UIEvent::Fork(child) => {
                 self.mode = UIMode::Fork;
                 self.child = Some(child);
+                return;
+            }
+            UIEvent::WorkerProgress(folder_hash) => {
+                if let Some(&account_idx) = self.context.mailbox_hashes.get(&folder_hash) {
+                    let _ = self.context.accounts[account_idx].status(folder_hash);
+                }
                 return;
             }
             UIEvent::ChangeMode(m) => {

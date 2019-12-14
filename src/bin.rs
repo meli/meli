@@ -367,7 +367,7 @@ fn run_app() -> Result<()> {
                         }
                         ThreadEvent::UIEvent(e) => {
                             state.rcv_event(e);
-                            state.render();
+                            state.redraw();
                         },
                         ThreadEvent::Pulse => {
                             state.check_accounts();

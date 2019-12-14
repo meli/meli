@@ -809,6 +809,9 @@ impl Account {
         if payload.is_err() {
             self.folders
                 .insert(folder_hash, MailboxEntry::Failed(payload.unwrap_err()));
+            self.sender
+                .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(folder_hash)))
+                .unwrap();
             return;
         }
         let envelopes = payload
@@ -825,60 +828,66 @@ impl Account {
                         .merge(envelopes, folder_hash, self.sent_folder)
                 {
                     for f in updated_folders {
-                        self.notify_fn.notify(f);
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
+                            .unwrap();
                     }
                 }
             }
         }
-        self.notify_fn.notify(folder_hash);
+        self.sender
+            .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(folder_hash)))
+            .unwrap();
     }
 
     pub fn status(&mut self, folder_hash: FolderHash) -> result::Result<(), usize> {
-        match self.workers.get_mut(&folder_hash).unwrap() {
-            None => {
-                return if self.folders[&folder_hash].is_available()
-                    || (self.folders[&folder_hash].is_parsing()
-                        && self.collection.threads.contains_key(&folder_hash))
-                {
-                    Ok(())
-                } else {
-                    Err(0)
-                };
-            }
-            Some(ref mut w) => match w.poll() {
-                Ok(AsyncStatus::NoUpdate) => {
-                    //return Err(0);
+        loop {
+            match self.workers.get_mut(&folder_hash).unwrap() {
+                None => {
+                    return if self.folders[&folder_hash].is_available()
+                        || (self.folders[&folder_hash].is_parsing()
+                            && self.collection.threads.contains_key(&folder_hash))
+                    {
+                        Ok(())
+                    } else {
+                        Err(0)
+                    };
                 }
-                Ok(AsyncStatus::Payload(envs)) => {
-                    debug!("got payload in status for {}", folder_hash);
-                    self.load_mailbox(folder_hash, envs);
-                }
-                Ok(AsyncStatus::Finished) => {
-                    debug!("got finished in status for {}", folder_hash);
-                    self.folders.entry(folder_hash).and_modify(|f| {
-                        let m = if let MailboxEntry::Parsing(m, _, _) = f {
-                            std::mem::replace(m, Mailbox::default())
-                        } else {
-                            return;
-                        };
-                        *f = MailboxEntry::Available(m);
-                    });
+                Some(ref mut w) => match debug!(w.poll()) {
+                    Ok(AsyncStatus::NoUpdate) => {
+                        break;
+                    }
+                    Ok(AsyncStatus::Payload(envs)) => {
+                        debug!("got payload in status for {}", folder_hash);
+                        self.load_mailbox(folder_hash, envs);
+                    }
+                    Ok(AsyncStatus::Finished) => {
+                        debug!("got finished in status for {}", folder_hash);
+                        self.folders.entry(folder_hash).and_modify(|f| {
+                            let m = if let MailboxEntry::Parsing(m, _, _) = f {
+                                std::mem::replace(m, Mailbox::default())
+                            } else {
+                                return;
+                            };
+                            *f = MailboxEntry::Available(m);
+                        });
 
-                    self.workers.insert(folder_hash, None);
-                }
-                Ok(AsyncStatus::ProgressReport(n)) => {
-                    self.folders.entry(folder_hash).and_modify(|f| {
-                        if let MailboxEntry::Parsing(_, ref mut d, _) = f {
-                            *d += n;
-                        }
-                    });
-                    //return Err(n);
-                }
-                _ => {
-                    //return Err(0);
-                }
-            },
-        };
+                        self.workers.insert(folder_hash, None);
+                    }
+                    Ok(AsyncStatus::ProgressReport(n)) => {
+                        self.folders.entry(folder_hash).and_modify(|f| {
+                            if let MailboxEntry::Parsing(_, ref mut d, _) = f {
+                                *d += n;
+                            }
+                        });
+                        //return Err(n);
+                    }
+                    _ => {
+                        break;
+                    }
+                },
+            };
+        }
         if self.folders[&folder_hash].is_available()
             || (self.folders[&folder_hash].is_parsing()
                 && self.collection.threads.contains_key(&folder_hash))
