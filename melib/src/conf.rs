@@ -33,6 +33,8 @@ pub struct AccountSettings {
     pub subscribed_folders: Vec<String>,
     #[serde(default)]
     pub folders: HashMap<String, FolderConf>,
+    #[serde(default)]
+    pub manual_refresh: bool,
     #[serde(flatten)]
     pub extra: HashMap<String, String>,
 }

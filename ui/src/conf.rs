@@ -100,10 +100,6 @@ pub struct FileAccount {
     root_folder: String,
     format: String,
     identity: String,
-    #[serde(flatten)]
-    #[serde(deserialize_with = "extra_settings")]
-    pub extra: HashMap<String, String>, /* use custom deserializer to convert any given value (eg bool, number, etc) to string */
-
     #[serde(default = "none")]
     display_name: Option<String>,
     index_style: IndexStyle,
@@ -115,6 +111,11 @@ pub struct FileAccount {
     folders: HashMap<String, FileFolderConf>,
     #[serde(default)]
     cache_type: CacheType,
+    #[serde(default)]
+    pub manual_refresh: bool,
+    #[serde(flatten)]
+    #[serde(deserialize_with = "extra_settings")]
+    pub extra: HashMap<String, String>, /* use custom deserializer to convert any given value (eg bool, number, etc) to string */
 }
 
 impl From<FileAccount> for AccountConf {
@@ -138,6 +139,7 @@ impl From<FileAccount> for AccountConf {
             display_name,
             subscribed_folders: x.subscribed_folders.clone(),
             folders,
+            manual_refresh: x.manual_refresh,
             extra: x.extra.clone(),
         };
 
@@ -344,6 +346,7 @@ impl FileSettings {
                 subscribed_folders,
                 folders,
                 extra,
+                manual_refresh,
                 index_style: _,
                 cache_type: _,
             } = acc;
@@ -357,6 +360,7 @@ impl FileSettings {
                 read_only,
                 display_name,
                 subscribed_folders,
+                manual_refresh,
                 folders: folders
                     .into_iter()
                     .map(|(k, v)| (k, v.folder_conf))

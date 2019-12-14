@@ -248,6 +248,13 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online(&self) -> Result<()>;
     fn connect(&mut self) {}
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
+    fn refresh(
+        &mut self,
+        folder_hash: FolderHash,
+        sender: RefreshEventConsumer,
+    ) -> Async<Result<Vec<RefreshEvent>>> {
+        unimplemented!()
+    }
     fn watch(
         &self,
         sender: RefreshEventConsumer,

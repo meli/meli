@@ -673,6 +673,15 @@ impl Component for Listing {
                     return true;
                 }
             }
+            UIEvent::Input(ref key)
+                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["refresh"]) =>
+            {
+                let folder_hash =
+                    context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
+                let account = &mut context.accounts[self.cursor_pos.0];
+                account.refresh(folder_hash);
+                return true;
+            }
             UIEvent::StartupCheck(_) => {
                 self.dirty = true;
                 context

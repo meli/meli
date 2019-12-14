@@ -115,6 +115,7 @@ shortcut_key_values! { "listing",
         prev_folder |> "Go to previous folder." |> Key::Char('K'),
         prev_page |> "Go to previous page." |> Key::PageUp,
         search |> "Search within list of e-mails." |> Key::Char('/'),
+        refresh |> "Manually request a folder refresh." |> Key::F(5),
         set_seen |> "Set thread as seen." |> Key::Char('n'),
         toggle_menu_visibility |> "Toggle visibility of side menu in mail list." |> Key::Char('`')
     }

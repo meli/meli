@@ -199,6 +199,136 @@ impl MailBackend for MaildirType {
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         self.multicore(4, folder)
     }
+    fn refresh(
+        &mut self,
+        folder_hash: FolderHash,
+        sender: RefreshEventConsumer,
+    ) -> Async<Result<Vec<RefreshEvent>>> {
+        let w = AsyncBuilder::new();
+        let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
+
+        let handle = {
+            let folder: &MaildirFolder = &self.folders[&folder_hash];
+            let path: PathBuf = folder.fs_path().into();
+            let name = format!("refresh {:?}", folder.name());
+            let root_path = self.path.to_path_buf();
+            let map = self.hash_indexes.clone();
+            let folder_index = self.folder_index.clone();
+            let cache_dir = cache_dir.clone();
+            let sender = Arc::new(sender);
+
+            Box::new(move |work_context: crate::async_workers::WorkContext| {
+                let cache_dir = cache_dir.clone();
+                let folder_index = folder_index.clone();
+                let root_path = root_path.clone();
+                let path = path.clone();
+                let name = name.clone();
+                let map = map.clone();
+                let sender = sender.clone();
+                work_context
+                    .set_name
+                    .send((std::thread::current().id(), name.clone()))
+                    .unwrap();
+                let thunk = move |sender: &RefreshEventConsumer| {
+                    debug!("refreshing");
+                    let cache_dir = cache_dir.clone();
+                    let map = map.clone();
+                    let folder_index = folder_index.clone();
+                    let folder_hash = folder_hash.clone();
+                    let root_path = root_path.clone();
+                    let mut path = path.clone();
+                    let cache_dir = cache_dir.clone();
+                    path.push("new");
+                    for d in path.read_dir()? {
+                        if let Ok(p) = d {
+                            move_to_cur(p.path()).ok().take();
+                        }
+                    }
+                    path.pop();
+
+                    path.push("cur");
+                    let iter = path.read_dir()?;
+                    let count = path.read_dir()?.count();
+                    let mut files: Vec<PathBuf> = Vec::with_capacity(count);
+                    for e in iter {
+                        let e = e.and_then(|x| {
+                            let path = x.path();
+                            Ok(path)
+                        })?;
+                        files.push(e);
+                    }
+                    let mut current_hashes = {
+                        let mut map = map.lock().unwrap();
+                        let map = map.entry(folder_hash).or_default();
+                        map.keys().cloned().collect::<FnvHashSet<EnvelopeHash>>()
+                    };
+                    for file in files {
+                        let hash = get_file_hash(&file);
+                        {
+                            let mut map = map.lock().unwrap();
+                            let map = map.entry(folder_hash).or_default();
+                            if map.contains_key(&hash) {
+                                map.remove(&hash);
+                                current_hashes.remove(&hash);
+                                continue;
+                            }
+                            (*map).insert(hash, PathBuf::from(&file).into());
+                        }
+                        let op = Box::new(MaildirOp::new(hash, map.clone(), folder_hash));
+                        if let Some(e) = Envelope::from_token(op, hash) {
+                            folder_index.lock().unwrap().insert(e.hash(), folder_hash);
+                            let file_name = PathBuf::from(file)
+                                .strip_prefix(&root_path)
+                                .unwrap()
+                                .to_path_buf();
+                            if let Ok(cached) = cache_dir.place_cache_file(file_name) {
+                                /* place result in cache directory */
+                                let f = match fs::File::create(cached) {
+                                    Ok(f) => f,
+                                    Err(e) => {
+                                        panic!("{}", e);
+                                    }
+                                };
+                                let metadata = f.metadata().unwrap();
+                                let mut permissions = metadata.permissions();
+
+                                permissions.set_mode(0o600); // Read/write for owner only.
+                                f.set_permissions(permissions).unwrap();
+
+                                let writer = io::BufWriter::new(f);
+                                bincode::serialize_into(writer, &e).unwrap();
+                            }
+                            sender.send(RefreshEvent {
+                                hash: folder_hash,
+                                kind: Create(Box::new(e)),
+                            });
+                        } else {
+                            debug!(
+                                "DEBUG: hash {}, path: {} couldn't be parsed",
+                                hash,
+                                file.as_path().display()
+                            );
+                            continue;
+                        }
+                    }
+                    for ev in current_hashes.into_iter().map(|h| RefreshEvent {
+                        hash: folder_hash,
+                        kind: Remove(h),
+                    }) {
+                        sender.send(ev);
+                    }
+                    Ok(())
+                };
+                if let Err(err) = thunk(&sender) {
+                    sender.send(RefreshEvent {
+                        hash: folder_hash,
+                        kind: Failure(err),
+                    });
+                }
+            })
+        };
+        w.build(handle)
+    }
     fn watch(
         &self,
         sender: RefreshEventConsumer,
