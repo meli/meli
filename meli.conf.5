@@ -56,6 +56,7 @@ The accepted regular expression is
 The top level sections of the config are accounts, shortcuts, notifications, pager, composing, pgp, terminal.
 .Pp
 .Sy example configuration
+
 .Bd -literal
 # Setting up a Maildir account
 [accounts.account-name]
@@ -565,21 +566,22 @@ enable freedesktop-spec notifications. this is usually what you want
 .Bl -tag -width 36n
 .It Ic colours Ar hash table String[Color]
 (optional) set UI colors for tags
-.It Ic ignore_Tags Ar Array String
+.It Ic ignore_tags Ar Array String
 (optional) hide tags (not the tagged messages themselves)
+.El
 
-.Sy example configuration
+example configuration:
+
 .Bd -literal
 [tags]
 # valid inputs: #HHHHHH, #ABC -> #AABBCC, XTERM_NAME, 0-255 byte
 colors = { signed="#Ff6600", replied="DeepSkyBlue4", draft="#f00", replied="8" }
 [accounts.dummy]
-\&...8<--
+#...8<--
   [accounts.dummy.folders]
   # per folder override:
   "INBOX" = {  tags.ignore_tags=["inbox", ] }
 .Ed
-.El
 .Sh PGP
 .Bl -tag -width 36n
 .It Ic auto_verify_signatures Ar boolean
