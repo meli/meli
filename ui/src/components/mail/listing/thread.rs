@@ -264,7 +264,14 @@ impl ThreadListing {
         }
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
-        let folder_hash = context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
+        let folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
+            .folders_order
+            .get(self.cursor_pos.1)
+        {
+            *h
+        } else {
+            return;
+        };
 
         // Inform State that we changed the current folder view.
         context
@@ -620,20 +627,21 @@ impl Component for ThreadListing {
                 self.view = None;
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
-                if (*idxa, *idxf)
-                    == (
-                        self.new_cursor_pos.0,
-                        context.accounts[self.new_cursor_pos.0].folders_order
-                            [self.new_cursor_pos.1],
-                    ) =>
+                if context.accounts[self.new_cursor_pos.0]
+                    .folders_order
+                    .get(self.new_cursor_pos.1)
+                    .map(|&folder_hash| (*idxa, *idxf) == (self.new_cursor_pos.0, folder_hash))
+                    .unwrap_or(false) =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty(true);
             }
             UIEvent::StartupCheck(ref f)
-                if *f
-                    == context.accounts[self.new_cursor_pos.0].folders_order
-                        [self.new_cursor_pos.1] =>
+                if context.accounts[self.new_cursor_pos.0]
+                    .folders_order
+                    .get(self.new_cursor_pos.1)
+                    .map(|&folder_hash| *f == folder_hash)
+                    .unwrap_or(false) =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty(true);

@@ -1104,19 +1104,21 @@ impl Component for PlainListing {
         }
         match *event {
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
-                if (*idxa, *idxf)
-                    == (
-                        self.new_cursor_pos.0,
-                        context.accounts[self.new_cursor_pos.0].folders_order
-                            [self.new_cursor_pos.1],
-                    ) =>
+                if context.accounts[self.new_cursor_pos.0]
+                    .folders_order
+                    .get(self.new_cursor_pos.1)
+                    .map(|&folder_hash| (*idxa, *idxf) == (self.new_cursor_pos.0, folder_hash))
+                    .unwrap_or(false) =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty(true);
             }
             UIEvent::StartupCheck(ref f)
-                if *f
-                    == context.accounts[self.cursor_pos.0].folders_order[self.new_cursor_pos.1] =>
+                if context.accounts[self.new_cursor_pos.0]
+                    .folders_order
+                    .get(self.new_cursor_pos.1)
+                    .map(|&folder_hash| *f == folder_hash)
+                    .unwrap_or(false) =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty(true);

@@ -75,9 +75,7 @@ pub fn create_temp_file(
 ) -> File {
     let mut dir = std::env::temp_dir();
 
-    let path = if let Some(p) = path {
-        p
-    } else {
+    let path = path.unwrap_or_else(|| {
         dir.push("meli");
         std::fs::DirBuilder::new()
             .recursive(true)
@@ -90,7 +88,7 @@ pub fn create_temp_file(
             dir.push(u.to_hyphenated().to_string());
         }
         &dir
-    };
+    });
 
     let mut f = std::fs::File::create(path).unwrap();
     let metadata = f.metadata().unwrap();

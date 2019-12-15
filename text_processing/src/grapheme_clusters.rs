@@ -33,7 +33,7 @@ pub trait TextProcessing: UnicodeSegmentation + CodePointsIter {
     fn grapheme_width(&self) -> usize {
         let mut count = 0;
         for c in self.code_points() {
-            count += if let Some(w) = wcwidth(c) { w } else { 0 };
+            count += wcwidth(c).unwrap_or(0);
         }
 
         count

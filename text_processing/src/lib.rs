@@ -13,7 +13,7 @@ pub trait Truncate {
 }
 
 impl Truncate for &mut String {
-    fn truncate_at_boundary(self, mut new_len: usize) {
+    fn truncate_at_boundary(self, new_len: usize) {
         if new_len >= self.len() {
             return;
         }

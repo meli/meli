@@ -634,15 +634,13 @@ impl ThreadView {
             let mailbox = &account[self.coordinates.1].unwrap();
             let threads = &account.collection.threads[&mailbox.folder.hash()];
             let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
-            let i = if let Some(i) = thread_node.message() {
-                i
-            } else {
+            let i = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
                 while threads.thread_nodes()[&iter_ptr].message().is_none() {
                     iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
-            };
+            });
             let envelope: EnvelopeRef = account.collection.get_env(i);
 
             let (x, y) = write_string_to_grid(
@@ -726,15 +724,13 @@ impl ThreadView {
             let mailbox = &account[self.coordinates.1].unwrap();
             let threads = &account.collection.threads[&mailbox.folder.hash()];
             let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
-            let i = if let Some(i) = thread_node.message() {
-                i
-            } else {
+            let i = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
                 while threads.thread_nodes()[&iter_ptr].message().is_none() {
                     iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
-            };
+            });
             let envelope: EnvelopeRef = account.collection.get_env(i);
 
             let (x, y) = write_string_to_grid(

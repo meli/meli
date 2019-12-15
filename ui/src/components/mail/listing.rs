@@ -257,7 +257,7 @@ impl fmt::Display for Listing {
 impl Component for Listing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         for i in 0..context.accounts.len() {
-            context.is_online(i);
+            let _ = context.is_online(i);
         }
 
         if !self.is_dirty() {
@@ -405,21 +405,25 @@ impl Component for Listing {
                     }
                     _ => return false,
                 }
-                let folder_hash =
-                    context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
-                /* Check if per-folder configuration overrides general configuration */
-                if let Some(index_style) = context
-                    .accounts
-                    .get(self.cursor_pos.0)
-                    .and_then(|account| account.folder_confs(folder_hash).conf_override.index_style)
+                /* Account might have no folders yet if it's offline */
+                if let Some(&folder_hash) = context.accounts[self.cursor_pos.0]
+                    .folders_order
+                    .get(self.cursor_pos.1)
                 {
-                    self.component.set_style(index_style);
-                } else if let Some(index_style) = context
-                    .accounts
-                    .get(self.cursor_pos.0)
-                    .and_then(|account| Some(account.settings.conf.index_style()))
-                {
-                    self.component.set_style(index_style);
+                    /* Check if per-folder configuration overrides general configuration */
+                    if let Some(index_style) =
+                        context.accounts.get(self.cursor_pos.0).and_then(|account| {
+                            account.folder_confs(folder_hash).conf_override.index_style
+                        })
+                    {
+                        self.component.set_style(index_style);
+                    } else if let Some(index_style) = context
+                        .accounts
+                        .get(self.cursor_pos.0)
+                        .and_then(|account| Some(account.settings.conf.index_style()))
+                    {
+                        self.component.set_style(index_style);
+                    }
                 }
                 context
                     .replies
