@@ -699,13 +699,14 @@ impl Account {
         }
         None
     }
-    pub fn refresh(&mut self, folder_hash: FolderHash) {
+    pub fn refresh(&mut self, folder_hash: FolderHash) -> Result<()> {
         let sender_ = self.sender.clone();
         let r = RefreshEventConsumer::new(Box::new(move |r| {
             sender_.send(ThreadEvent::from(r)).unwrap();
         }));
-        let mut h = self.backend.write().unwrap().refresh(folder_hash, r);
+        let mut h = self.backend.write().unwrap().refresh(folder_hash, r)?;
         self.work_context.new_work.send(h.work().unwrap()).unwrap();
+        Ok(())
     }
     pub fn watch(&self) {
         if self.settings.account().manual_refresh {

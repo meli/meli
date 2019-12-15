@@ -252,8 +252,8 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         &mut self,
         folder_hash: FolderHash,
         sender: RefreshEventConsumer,
-    ) -> Async<Result<Vec<RefreshEvent>>> {
-        unimplemented!()
+    ) -> Result<Async<Result<Vec<RefreshEvent>>>> {
+        Err(MeliError::new("Unimplemented."))
     }
     fn watch(
         &self,

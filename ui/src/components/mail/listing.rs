@@ -676,10 +676,16 @@ impl Component for Listing {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[Listing::DESCRIPTION]["refresh"]) =>
             {
-                let folder_hash =
-                    context.accounts[self.cursor_pos.0].folders_order[self.cursor_pos.1];
                 let account = &mut context.accounts[self.cursor_pos.0];
-                account.refresh(folder_hash);
+                if let Some(&folder_hash) = account.folders_order.get(self.cursor_pos.1) {
+                    if let Err(err) = account.refresh(folder_hash) {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not refresh.".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::INFO),
+                        ));
+                    }
+                }
                 return true;
             }
             UIEvent::StartupCheck(_) => {

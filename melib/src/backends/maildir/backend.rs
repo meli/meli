@@ -203,7 +203,7 @@ impl MailBackend for MaildirType {
         &mut self,
         folder_hash: FolderHash,
         sender: RefreshEventConsumer,
-    ) -> Async<Result<Vec<RefreshEvent>>> {
+    ) -> Result<Async<Result<Vec<RefreshEvent>>>> {
         let w = AsyncBuilder::new();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
 
@@ -327,7 +327,7 @@ impl MailBackend for MaildirType {
                 }
             })
         };
-        w.build(handle)
+        Ok(w.build(handle))
     }
     fn watch(
         &self,
