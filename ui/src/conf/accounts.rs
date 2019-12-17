@@ -146,6 +146,7 @@ pub struct Account {
     name: String,
     pub is_online: bool,
     pub(crate) folders: FnvHashMap<FolderHash, MailboxEntry>,
+    pub(crate) ref_folders: FnvHashMap<FolderHash, Folder>,
     pub(crate) folder_confs: FnvHashMap<FolderHash, FileFolderConf>,
     pub(crate) folders_order: Vec<FolderHash>,
     pub(crate) folder_names: FnvHashMap<FolderHash, String>,
@@ -289,6 +290,7 @@ impl Account {
             name,
             is_online: false,
             folders: Default::default(),
+            ref_folders: Default::default(),
             folder_confs: Default::default(),
             folders_order: Default::default(),
             folder_names: Default::default(),
@@ -309,7 +311,7 @@ impl Account {
     }
 
     fn init(&mut self) {
-        let ref_folders: FnvHashMap<FolderHash, Folder> =
+        let mut ref_folders: FnvHashMap<FolderHash, Folder> =
             match self.backend.read().unwrap().folders() {
                 Ok(f) => f,
                 Err(err) => {
@@ -325,7 +327,7 @@ impl Account {
         let mut folder_confs = FnvHashMap::default();
 
         let mut sent_folder = None;
-        for f in ref_folders.values() {
+        for f in ref_folders.values_mut() {
             if !((self.settings.folder_confs.contains_key(f.path())
                 && self.settings.folder_confs[f.path()]
                     .folder_conf()
@@ -342,18 +344,41 @@ impl Account {
                 continue;
             }
 
-            if self.settings.folder_confs.contains_key(f.path()) {
-                match self.settings.folder_confs[f.path()].folder_conf().usage {
+            if let Some(conf) = self.settings.folder_confs.get_mut(f.path()) {
+                conf.folder_conf.usage = if f.special_usage() != SpecialUsageMailbox::Normal {
+                    Some(f.special_usage())
+                } else {
+                    let tmp = SpecialUsageMailbox::detect_usage(f.name());
+                    if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
+                        let _ = f.set_special_usage(tmp.unwrap());
+                    }
+                    tmp
+                };
+                match conf.folder_conf.usage {
                     Some(SpecialUsageMailbox::Sent) => {
                         sent_folder = Some(f.hash());
                     }
+                    None => {
+                        if f.special_usage() == SpecialUsageMailbox::Sent {
+                            sent_folder = Some(f.hash());
+                        }
+                    }
                     _ => {}
                 }
-                folder_confs.insert(f.hash(), self.settings.folder_confs[f.path()].clone());
+                folder_confs.insert(f.hash(), conf.clone());
             } else {
                 let mut new = FileFolderConf::default();
                 new.folder_conf.subscribe = super::ToggleFlag::InternalVal(true);
-                new.folder_conf.usage = SpecialUsageMailbox::detect_usage(f.name());
+                new.folder_conf.usage = if f.special_usage() != SpecialUsageMailbox::Normal {
+                    Some(f.special_usage())
+                } else {
+                    let tmp = SpecialUsageMailbox::detect_usage(f.name());
+                    if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
+                        let _ = f.set_special_usage(tmp.unwrap());
+                    }
+                    tmp
+                };
+
                 folder_confs.insert(f.hash(), new);
             }
             folder_names.insert(f.hash(), f.path().to_string());
@@ -396,7 +421,6 @@ impl Account {
             workers.insert(
                 *h,
                 Account::new_worker(
-                    &folder_confs,
                     f.clone(),
                     &mut self.backend,
                     &self.work_context,
@@ -440,6 +464,7 @@ impl Account {
         }
 
         self.folders = folders;
+        self.ref_folders = ref_folders;
         self.folder_confs = folder_confs;
         self.folders_order = folders_order;
         self.folder_names = folder_names;
@@ -450,7 +475,6 @@ impl Account {
     }
 
     fn new_worker(
-        folder_confs: &FnvHashMap<FolderHash, FileFolderConf>,
         folder: Folder,
         backend: &Arc<RwLock<Box<dyn MailBackend>>>,
         work_context: &WorkContext,
@@ -460,11 +484,11 @@ impl Account {
         let mut builder = AsyncBuilder::new();
         let our_tx = builder.tx();
         let folder_hash = folder.hash();
-        let priority = match folder_confs[&folder.hash()].folder_conf().usage {
-            Some(SpecialUsageMailbox::Inbox) => 0,
-            Some(SpecialUsageMailbox::Sent) => 1,
-            Some(SpecialUsageMailbox::Drafts) | Some(SpecialUsageMailbox::Trash) => 2,
-            Some(_) | None => {
+        let priority = match folder.special_usage() {
+            SpecialUsageMailbox::Inbox => 0,
+            SpecialUsageMailbox::Sent => 1,
+            SpecialUsageMailbox::Drafts | SpecialUsageMailbox::Trash => 2,
+            _ => {
                 3 * folder
                     .path()
                     .split(if folder.path().contains('/') {
@@ -673,7 +697,6 @@ impl Account {
                     let ref_folders: FnvHashMap<FolderHash, Folder> =
                         self.backend.read().unwrap().folders().unwrap();
                     let handle = Account::new_worker(
-                        &self.folder_confs,
                         ref_folders[&folder_hash].clone(),
                         &mut self.backend,
                         &self.work_context,

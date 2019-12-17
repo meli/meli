@@ -126,7 +126,7 @@ pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<FolderHash, Jma
 
     let res_text = res?.text()?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
-    *conn.online_status.lock().unwrap() = true;
+    *conn.online_status.lock().unwrap() = (std::time::Instant::now(), Ok(()));
     let m = GetResponse::<MailboxObject>::try_from(v.method_responses.remove(0))?;
     let GetResponse::<MailboxObject> {
         list, account_id, ..
@@ -163,9 +163,9 @@ pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<FolderHash, Jma
                     role,
                     usage: Default::default(),
                     sort_order,
-                    total_emails,
+                    total_emails: Arc::new(Mutex::new(total_emails)),
                     total_threads,
-                    unread_emails,
+                    unread_emails: Arc::new(Mutex::new(unread_emails)),
                     unread_threads,
                 },
             )
@@ -208,7 +208,7 @@ pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Ve
 
     let res_text = res?.text()?;
     let mut v: MethodResponse = serde_json::from_str(&res_text).unwrap();
-    *conn.online_status.lock().unwrap() = true;
+    *conn.online_status.lock().unwrap() = (std::time::Instant::now(), Ok(()));
     let m = QueryResponse::<EmailObject>::try_from(v.method_responses.remove(0))?;
     let QueryResponse::<EmailObject> { ids, .. } = m;
     Ok(ids)

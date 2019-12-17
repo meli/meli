@@ -372,6 +372,26 @@ pub enum SpecialUsageMailbox {
     Trash,
 }
 
+impl std::fmt::Display for SpecialUsageMailbox {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use SpecialUsageMailbox::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                Normal => "Normal",
+                Inbox => "Inbox",
+                Archive => "Archive",
+                Drafts => "Drafts",
+                Flagged => "Flagged",
+                Junk => "Junk",
+                Sent => "Sent",
+                Trash => "Trash",
+            }
+        )
+    }
+}
+
 impl Default for SpecialUsageMailbox {
     fn default() -> Self {
         SpecialUsageMailbox::Normal
@@ -409,8 +429,12 @@ pub trait BackendFolder: Debug {
     fn clone(&self) -> Folder;
     fn children(&self) -> &[FolderHash];
     fn parent(&self) -> Option<FolderHash>;
+    fn is_subscribed(&self) -> bool;
+    fn set_is_subscribed(&mut self, new_val: bool) -> Result<()>;
+    fn set_special_usage(&mut self, new_val: SpecialUsageMailbox) -> Result<()>;
     fn special_usage(&self) -> SpecialUsageMailbox;
     fn permissions(&self) -> FolderPermissions;
+    fn count(&self) -> Result<(usize, usize)>;
 }
 
 #[derive(Debug)]
@@ -451,6 +475,18 @@ impl BackendFolder for DummyFolder {
 
     fn permissions(&self) -> FolderPermissions {
         FolderPermissions::default()
+    }
+    fn is_subscribed(&self) -> bool {
+        true
+    }
+    fn set_is_subscribed(&mut self, _new_val: bool) -> Result<()> {
+        Ok(())
+    }
+    fn set_special_usage(&mut self, _new_val: SpecialUsageMailbox) -> Result<()> {
+        Ok(())
+    }
+    fn count(&self) -> Result<(usize, usize)> {
+        Ok((0, 0))
     }
 }
 

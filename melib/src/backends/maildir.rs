@@ -33,6 +33,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 /// `BackendOp` implementor for Maildir
 #[derive(Debug)]
@@ -168,7 +169,7 @@ impl<'a> BackendOp for MaildirOp {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MaildirFolder {
     hash: FolderHash,
     name: String,
@@ -176,8 +177,11 @@ pub struct MaildirFolder {
     path: PathBuf,
     parent: Option<FolderHash>,
     children: Vec<FolderHash>,
-    usage: SpecialUsageMailbox,
+    pub usage: Arc<RwLock<SpecialUsageMailbox>>,
+    pub is_subscribed: bool,
     permissions: FolderPermissions,
+    pub total: Arc<Mutex<usize>>,
+    pub unseen: Arc<Mutex<usize>>,
 }
 
 impl MaildirFolder {
@@ -238,7 +242,8 @@ impl MaildirFolder {
             fs_path: pathbuf,
             parent,
             children,
-            usage: SpecialUsageMailbox::Normal,
+            usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
+            is_subscribed: true,
             permissions: FolderPermissions {
                 create_messages: !read_only,
                 remove_messages: !read_only,
@@ -249,6 +254,8 @@ impl MaildirFolder {
                 delete_mailbox: !read_only,
                 change_permissions: false,
             },
+            unseen: Arc::new(Mutex::new(0)),
+            total: Arc::new(Mutex::new(0)),
         };
         ret.is_valid()?;
         Ok(ret)
@@ -274,6 +281,7 @@ impl MaildirFolder {
         Ok(())
     }
 }
+
 impl BackendFolder for MaildirFolder {
     fn hash(&self) -> FolderHash {
         self.hash
@@ -296,20 +304,11 @@ impl BackendFolder for MaildirFolder {
     }
 
     fn clone(&self) -> Folder {
-        Box::new(MaildirFolder {
-            hash: self.hash,
-            name: self.name.clone(),
-            fs_path: self.fs_path.clone(),
-            path: self.path.clone(),
-            children: self.children.clone(),
-            usage: self.usage,
-            parent: self.parent,
-            permissions: self.permissions,
-        })
+        Box::new(std::clone::Clone::clone(self))
     }
 
     fn special_usage(&self) -> SpecialUsageMailbox {
-        self.usage
+        *self.usage.read().unwrap()
     }
 
     fn parent(&self) -> Option<FolderHash> {
@@ -318,5 +317,21 @@ impl BackendFolder for MaildirFolder {
 
     fn permissions(&self) -> FolderPermissions {
         self.permissions
+    }
+    fn is_subscribed(&self) -> bool {
+        self.is_subscribed
+    }
+    fn set_is_subscribed(&mut self, new_val: bool) -> Result<()> {
+        self.is_subscribed = new_val;
+        Ok(())
+    }
+
+    fn set_special_usage(&mut self, new_val: SpecialUsageMailbox) -> Result<()> {
+        *self.usage.write()? = new_val;
+        Ok(())
+    }
+
+    fn count(&self) -> Result<(usize, usize)> {
+        Ok((*self.unseen.lock()?, *self.total.lock()?))
     }
 }

@@ -192,7 +192,7 @@ impl MailBackend for MaildirType {
         Ok(self
             .folders
             .iter()
-            .map(|(h, f)| (*h, f.clone() as Folder))
+            .map(|(h, f)| (*h, BackendFolder::clone(f)))
             .collect())
     }
 
@@ -342,6 +342,11 @@ impl MailBackend for MaildirType {
         debug!("watching {:?}", root_path);
         let hash_indexes = self.hash_indexes.clone();
         let folder_index = self.folder_index.clone();
+        let folder_counts = self
+            .folders
+            .iter()
+            .map(|(&k, v)| (k, (v.unseen.clone(), v.total.clone())))
+            .collect::<FnvHashMap<FolderHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>>();
         let handle = thread::Builder::new()
             .name("folder watch".to_string())
             .spawn(move || {
@@ -397,6 +402,10 @@ impl MailBackend for MaildirType {
                                         env.subject(),
                                         pathbuf.display()
                                     );
+                                        if !env.is_seen() {
+                                            *folder_counts[&folder_hash].0.lock().unwrap() += 1;
+                                        }
+                                            *folder_counts[&folder_hash].1.lock().unwrap() += 1;
                                     sender.send(RefreshEvent {
                                         hash: folder_hash,
                                         kind: Create(Box::new(env)),
@@ -505,6 +514,8 @@ impl MailBackend for MaildirType {
                                     e.removed = true;
                                 });
 
+                                //FIXME: check if envelope was unseen to update unseen count
+                                *folder_counts[&folder_hash].1.lock().unwrap() += 1;
                                 sender.send(RefreshEvent {
                                     hash: folder_hash,
                                     kind: Remove(hash),
@@ -579,6 +590,10 @@ impl MailBackend for MaildirType {
                                             env.subject(),
                                             dest.display()
                                         );
+                                        if !env.is_seen() {
+                                            *folder_counts[&folder_hash].0.lock().unwrap() += 1;
+                                        }
+                                            *folder_counts[&folder_hash].1.lock().unwrap() += 1;
                                         sender.send(RefreshEvent {
                                             hash: folder_hash,
                                             kind: Create(Box::new(env)),
@@ -777,6 +792,8 @@ impl MaildirType {
             // TODO: Avoid clone
             let folder: &MaildirFolder = &self.folders[&self.owned_folder_idx(folder)];
             let folder_hash = folder.hash();
+            let unseen = folder.unseen.clone();
+            let total = folder.total.clone();
             let tx_final = w.tx();
             let path: PathBuf = folder.fs_path().into();
             let name = format!("parsing {:?}", folder.name());
@@ -785,6 +802,8 @@ impl MaildirType {
             let folder_index = self.folder_index.clone();
 
             let closure = move |work_context: crate::async_workers::WorkContext| {
+                let unseen = unseen.clone();
+                let total = total.clone();
                 let name = name.clone();
                 work_context
                     .set_name
@@ -829,6 +848,8 @@ impl MaildirType {
                                 count
                             };
                             for chunk in files.chunks(chunk_size) {
+                                let unseen = unseen.clone();
+                                let total = total.clone();
                                 let cache_dir = cache_dir.clone();
                                 let tx = tx.clone();
                                 let map = map.clone();
@@ -869,6 +890,10 @@ impl MaildirType {
                                                         .lock()
                                                         .unwrap()
                                                         .insert(hash, folder_hash);
+                                                    if !env.is_seen() {
+                                                        *unseen.lock().unwrap() += 1;
+                                                    }
+                                                    *total.lock().unwrap() += 1;
                                                     local_r.push(env);
                                                     continue;
                                                 }
@@ -908,6 +933,10 @@ impl MaildirType {
                                                     let writer = io::BufWriter::new(f);
                                                     bincode::serialize_into(writer, &e).unwrap();
                                                 }
+                                                if !e.is_seen() {
+                                                    *unseen.lock().unwrap() += 1;
+                                                }
+                                                *total.lock().unwrap() += 1;
                                                 local_r.push(e);
                                             } else {
                                                 debug!(

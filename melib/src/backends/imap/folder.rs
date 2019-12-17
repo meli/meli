@@ -19,7 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use crate::backends::{BackendFolder, Folder, FolderHash, FolderPermissions, SpecialUsageMailbox};
-use std::sync::{Arc, Mutex};
+use crate::error::*;
+use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Debug, Default, Clone)]
 pub struct ImapFolder {
@@ -28,11 +29,13 @@ pub struct ImapFolder {
     pub(super) name: String,
     pub(super) parent: Option<FolderHash>,
     pub(super) children: Vec<FolderHash>,
-    pub usage: SpecialUsageMailbox,
+    pub usage: Arc<RwLock<SpecialUsageMailbox>>,
     pub no_select: bool,
+    pub is_subscribed: bool,
 
     pub permissions: Arc<Mutex<FolderPermissions>>,
     pub exists: Arc<Mutex<usize>>,
+    pub unseen: Arc<Mutex<usize>>,
 }
 
 impl BackendFolder for ImapFolder {
@@ -57,21 +60,11 @@ impl BackendFolder for ImapFolder {
     }
 
     fn clone(&self) -> Folder {
-        Box::new(ImapFolder {
-            hash: self.hash,
-            path: self.path.clone(),
-            name: self.name.clone(),
-            parent: self.parent,
-            children: self.children.clone(),
-            usage: self.usage,
-            no_select: self.no_select,
-            permissions: self.permissions.clone(),
-            exists: self.exists.clone(),
-        })
+        Box::new(std::clone::Clone::clone(self))
     }
 
     fn special_usage(&self) -> SpecialUsageMailbox {
-        self.usage
+        *self.usage.read().unwrap()
     }
 
     fn parent(&self) -> Option<FolderHash> {
@@ -80,5 +73,22 @@ impl BackendFolder for ImapFolder {
 
     fn permissions(&self) -> FolderPermissions {
         *self.permissions.lock().unwrap()
+    }
+    fn is_subscribed(&self) -> bool {
+        self.is_subscribed
+    }
+    fn set_is_subscribed(&mut self, new_val: bool) -> Result<()> {
+        self.is_subscribed = new_val;
+        // FIXME: imap subscribe
+        Ok(())
+    }
+
+    fn set_special_usage(&mut self, new_val: SpecialUsageMailbox) -> Result<()> {
+        *self.usage.write()? = new_val;
+        Ok(())
+    }
+
+    fn count(&self) -> Result<(usize, usize)> {
+        Ok((*self.unseen.lock()?, *self.exists.lock()?))
     }
 }

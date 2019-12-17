@@ -124,7 +124,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         .read()
         .unwrap()
         .values()
-        .find(|f| f.parent.is_none() && (f.usage == SpecialUsageMailbox::Inbox))
+        .find(|f| f.parent.is_none() && (f.special_usage() == SpecialUsageMailbox::Inbox))
         .map(std::clone::Clone::clone)
     {
         Some(folder) => folder,
@@ -166,6 +166,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                 hash: folder_hash,
                                 kind: RefreshEventKind::Rescan,
                             });
+                            *prev_exists = 0;
                             uid_store.uid_index.lock().unwrap().clear();
                             uid_store.hash_index.lock().unwrap().clear();
                             uid_store.byte_cache.lock().unwrap().clear();
@@ -346,6 +347,11 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                                 env.labels_mut().push(hash);
                                             }
                                         }
+                                        if !env.is_seen() {
+                                            *folder.unseen.lock().unwrap() += 1;
+                                        }
+                                        *folder.exists.lock().unwrap() += 1;
+
                                         sender.send(RefreshEvent {
                                             hash: folder_hash,
                                             kind: Create(Box::new(env)),
@@ -460,6 +466,9 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         env.subject(),
                                         folder.path(),
                                     );
+                                    if !env.is_seen() {
+                                        *folder.unseen.lock().unwrap() += 1;
+                                    }
                                     sender.send(RefreshEvent {
                                         hash: folder_hash,
                                         kind: Create(Box::new(env)),
@@ -626,6 +635,9 @@ fn examine_updates(
                                                     env.labels_mut().push(hash);
                                                 }
                                             }
+                                            if !env.is_seen() {
+                                                *folder.unseen.lock().unwrap() += 1;
+                                            }
                                             sender.send(RefreshEvent {
                                                 hash: folder_hash,
                                                 kind: Create(Box::new(env)),
@@ -697,6 +709,9 @@ fn examine_updates(
                                     env.subject(),
                                     folder.path(),
                                 );
+                                if !env.is_seen() {
+                                    *folder.unseen.lock().unwrap() += 1;
+                                }
                                 sender.send(RefreshEvent {
                                     hash: folder_hash,
                                     kind: Create(Box::new(env)),

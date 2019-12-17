@@ -21,6 +21,7 @@
 
 use super::*;
 use crate::backends::{FolderPermissions, SpecialUsageMailbox};
+use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Debug, Clone)]
 pub struct JmapFolder {
@@ -34,11 +35,11 @@ pub struct JmapFolder {
     pub parent_id: Option<String>,
     pub role: Option<String>,
     pub sort_order: u64,
-    pub total_emails: u64,
+    pub total_emails: Arc<Mutex<u64>>,
     pub total_threads: u64,
-    pub unread_emails: u64,
+    pub unread_emails: Arc<Mutex<u64>>,
     pub unread_threads: u64,
-    pub usage: SpecialUsageMailbox,
+    pub usage: Arc<RwLock<SpecialUsageMailbox>>,
 }
 
 impl BackendFolder for JmapFolder {
@@ -90,5 +91,25 @@ impl BackendFolder for JmapFolder {
             }
             None => SpecialUsageMailbox::Normal,
         }
+    }
+    fn is_subscribed(&self) -> bool {
+        self.is_subscribed
+    }
+    fn set_is_subscribed(&mut self, new_val: bool) -> Result<()> {
+        self.is_subscribed = new_val;
+        // FIXME: jmap subscribe
+        Ok(())
+    }
+
+    fn set_special_usage(&mut self, new_val: SpecialUsageMailbox) -> Result<()> {
+        *self.usage.write()? = new_val;
+        Ok(())
+    }
+
+    fn count(&self) -> Result<(usize, usize)> {
+        Ok((
+            *self.unread_emails.lock()? as usize,
+            *self.total_emails.lock()? as usize,
+        ))
     }
 }

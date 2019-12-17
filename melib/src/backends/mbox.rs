@@ -49,7 +49,7 @@ use std::io::Read;
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 const F_OFD_SETLKW: libc::c_int = 38;
 
@@ -87,7 +87,11 @@ struct MboxFolder {
     content: Vec<u8>,
     children: Vec<FolderHash>,
     parent: Option<FolderHash>,
+    usage: Arc<RwLock<SpecialUsageMailbox>>,
+    is_subscribed: bool,
     permissions: FolderPermissions,
+    pub total: Arc<Mutex<usize>>,
+    pub unseen: Arc<Mutex<usize>>,
 }
 
 impl BackendFolder for MboxFolder {
@@ -115,8 +119,12 @@ impl BackendFolder for MboxFolder {
             path: self.path.clone(),
             content: self.content.clone(),
             children: self.children.clone(),
+            usage: self.usage.clone(),
+            is_subscribed: self.is_subscribed,
             parent: self.parent,
             permissions: self.permissions,
+            unseen: self.unseen.clone(),
+            total: self.total.clone(),
         })
     }
 
@@ -129,11 +137,26 @@ impl BackendFolder for MboxFolder {
     }
 
     fn special_usage(&self) -> SpecialUsageMailbox {
-        SpecialUsageMailbox::Normal
+        *self.usage.read().unwrap()
     }
 
     fn permissions(&self) -> FolderPermissions {
         self.permissions
+    }
+    fn is_subscribed(&self) -> bool {
+        self.is_subscribed
+    }
+    fn set_is_subscribed(&mut self, new_val: bool) -> Result<()> {
+        self.is_subscribed = new_val;
+        Ok(())
+    }
+    fn set_special_usage(&mut self, new_val: SpecialUsageMailbox) -> Result<()> {
+        *self.usage.write()? = new_val;
+        Ok(())
+    }
+
+    fn count(&self) -> Result<(usize, usize)> {
+        Ok((*self.unseen.lock()?, *self.total.lock()?))
     }
 }
 
@@ -631,6 +654,8 @@ impl MboxType {
                 content: Vec::new(),
                 children: Vec::new(),
                 parent: None,
+                usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
+                is_subscribed: true,
                 permissions: FolderPermissions {
                     create_messages: !read_only,
                     remove_messages: !read_only,
@@ -641,6 +666,8 @@ impl MboxType {
                     delete_mailbox: !read_only,
                     change_permissions: false,
                 },
+                unseen: Arc::new(Mutex::new(0)),
+                total: Arc::new(Mutex::new(0)),
             },
         );
         /*

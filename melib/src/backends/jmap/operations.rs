@@ -105,7 +105,7 @@ impl BackendOp for JmapOp {
         Ok(())
     }
 
-    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, value: bool) -> Result<()> {
+    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
         Ok(())
     }
 }

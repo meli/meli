@@ -770,17 +770,11 @@ impl Component for Listing {
             } else {
                 return Some(String::new());
             };
-            let envelopes = account.collection.envelopes.clone();
-            let envelopes = envelopes.read().unwrap();
             format!(
                 "Mailbox: {}, Messages: {}, New: {}",
                 m.folder.name(),
                 m.envelopes.len(),
-                m.envelopes
-                    .iter()
-                    .map(|h| &envelopes[&h])
-                    .filter(|e| !e.is_seen())
-                    .count()
+                m.folder.count().ok().map(|(v, _)| v).unwrap_or(0),
             )
         })
     }
@@ -903,20 +897,12 @@ impl Listing {
         ) {
             match context.accounts[index].status(entries[&folder_idx].hash()) {
                 Ok(_) => {
-                    let account = &context.accounts[index];
-                    let count = account[entries[&folder_idx].hash()]
-                        .unwrap()
-                        .envelopes
-                        .iter()
-                        .filter_map(|&h| {
-                            if account.collection.get_env(h).is_seen() {
-                                None
-                            } else {
-                                Some(())
-                            }
-                        })
-                        .count();
-                    lines.push((*depth, *inc, folder_idx, Some(count)));
+                    lines.push((
+                        *depth,
+                        *inc,
+                        folder_idx,
+                        entries[&folder_idx].count().ok().map(|(v, _)| v),
+                    ));
                 }
                 Err(_) => {
                     lines.push((*depth, *inc, folder_idx, None));

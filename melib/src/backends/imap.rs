@@ -169,9 +169,14 @@ impl MailBackend for ImapType {
             let can_create_flags = self.can_create_flags.clone();
             let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
-            let (permissions, folder_exists, no_select) = {
+            let (permissions, folder_exists, no_select, unseen) = {
                 let f = &self.folders.read().unwrap()[&folder_hash];
-                (f.permissions.clone(), f.exists.clone(), f.no_select)
+                (
+                    f.permissions.clone(),
+                    f.exists.clone(),
+                    f.no_select,
+                    f.unseen.clone(),
+                )
             };
             let connection = self.connection.clone();
             let closure = move |_work_context| {
@@ -228,10 +233,11 @@ impl MailBackend for ImapType {
                 );
 
                 let mut tag_lck = tag_index.write().unwrap();
+                let mut our_unseen = 0;
                 while exists > 1 {
                     let mut envelopes = vec![];
                     exit_on_error!(&tx,
-                                   conn.send_command(format!("UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)", std::cmp::max(exists.saturating_sub(20000), 1), exists).as_bytes())
+                                   conn.send_command(format!("UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)", std::cmp::max(exists.saturating_sub(500), 1), exists).as_bytes())
                                    conn.read_response(&mut response)
                     );
                     debug!(
@@ -255,6 +261,9 @@ impl MailBackend for ImapType {
                                 h.write(folder_path.as_bytes());
                                 env.set_hash(h.finish());
                                 if let Some((flags, keywords)) = flags {
+                                    if !flags.contains(Flag::SEEN) {
+                                        our_unseen += 1;
+                                    }
                                     env.set_flags(flags);
                                     for f in keywords {
                                         let hash = tag_hash!(f);
@@ -278,8 +287,10 @@ impl MailBackend for ImapType {
                             tx.send(AsyncStatus::Payload(Err(e))).unwrap();
                         }
                     }
-                    exists = std::cmp::max(exists.saturating_sub(20000), 1);
+                    exists = std::cmp::max(exists.saturating_sub(500), 1);
                     debug!("sending payload");
+
+                    *unseen.lock().unwrap() = our_unseen;
                     tx.send(AsyncStatus::Payload(Ok(envelopes))).unwrap();
                 }
                 drop(conn);
@@ -288,6 +299,17 @@ impl MailBackend for ImapType {
             Box::new(closure)
         };
         w.build(handle)
+    }
+
+    fn refresh(
+        &mut self,
+        _folder_hash: FolderHash,
+        _sender: RefreshEventConsumer,
+    ) -> Result<Async<Result<Vec<RefreshEvent>>>> {
+        let mut res = String::with_capacity(8 * 1024);
+        self.connection.lock()?.send_command(b"NOOP")?;
+        self.connection.lock()?.read_response(&mut res)?;
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn watch(

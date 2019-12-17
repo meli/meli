@@ -16,7 +16,7 @@ use std::ffi::{CStr, CString};
 use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 pub mod bindings;
 use bindings::*;
@@ -67,10 +67,13 @@ struct NotmuchFolder {
     parent: Option<FolderHash>,
     name: String,
     path: String,
-    usage: SpecialUsageMailbox,
     query_str: String,
     query: Option<*mut notmuch_query_t>,
     phantom: std::marker::PhantomData<&'static mut notmuch_query_t>,
+    usage: Arc<RwLock<SpecialUsageMailbox>>,
+
+    total: Arc<Mutex<usize>>,
+    unseen: Arc<Mutex<usize>>,
 }
 
 impl BackendFolder for NotmuchFolder {
@@ -101,11 +104,28 @@ impl BackendFolder for NotmuchFolder {
     }
 
     fn special_usage(&self) -> SpecialUsageMailbox {
-        self.usage
+        *self.usage.read().unwrap()
     }
 
     fn permissions(&self) -> FolderPermissions {
         FolderPermissions::default()
+    }
+
+    fn is_subscribed(&self) -> bool {
+        true
+    }
+
+    fn set_is_subscribed(&mut self, _new_val: bool) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_special_usage(&mut self, new_val: SpecialUsageMailbox) -> Result<()> {
+        *self.usage.write()? = new_val;
+        Ok(())
+    }
+
+    fn count(&self) -> Result<(usize, usize)> {
+        Ok((*self.unseen.lock()?, *self.total.lock()?))
     }
 }
 
@@ -162,8 +182,10 @@ impl NotmuchDb {
                         parent: None,
                         query: None,
                         query_str: query_str.to_string(),
-                        usage: SpecialUsageMailbox::Normal,
+                        usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
                         phantom: std::marker::PhantomData,
+                        total: Arc::new(Mutex::new(0)),
+                        unseen: Arc::new(Mutex::new(0)),
                     },
                 );
             } else {

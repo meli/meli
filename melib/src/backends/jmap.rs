@@ -289,7 +289,10 @@ impl JmapType {
         s: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool + Send + Sync>,
     ) -> Result<Box<dyn MailBackend>> {
-        let online = Arc::new(Mutex::new(Err(MeliError::new("Account is uninitialised."))));
+        let online = Arc::new(Mutex::new((
+            std::time::Instant::now(),
+            Err(MeliError::new("Account is uninitialised.")),
+        )));
         let server_conf = JmapServerConf::new(s)?;
 
         Ok(Box::new(JmapType {

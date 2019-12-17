@@ -291,18 +291,12 @@ impl StatusPanel {
                     self.content[(2, h + y + 1)].set_ch(' ');
                 }
             }
+            let count = a.ref_folders.values().fold((0, 0), |acc, f| {
+                let count = f.count().unwrap_or((0, 0));
+                (acc.0 + count.0, acc.1 + count.1)
+            });
             let (mut column_width, _) = write_string_to_grid(
-                &format!(
-                    "Messages total {}, unseen {}",
-                    a.collection.len(),
-                    a.collection
-                        .envelopes
-                        .read()
-                        .unwrap()
-                        .values()
-                        .filter(|e| !e.is_seen())
-                        .count()
-                ),
+                &format!("Messages total {}, unseen {}", count.1, count.0),
                 &mut self.content,
                 Color::Default,
                 Color::Default,
@@ -338,17 +332,7 @@ impl StatusPanel {
             );
             /* next column */
             write_string_to_grid(
-                &format!(
-                    "Messages total {}, unseen {}",
-                    a.collection.len(),
-                    a.collection
-                        .envelopes
-                        .read()
-                        .unwrap()
-                        .values()
-                        .filter(|e| !e.is_seen())
-                        .count()
-                ),
+                "Special Mailboxes:",
                 &mut self.content,
                 Color::Default,
                 Color::Default,
@@ -356,6 +340,22 @@ impl StatusPanel {
                 ((5 + column_width, y + 2), (120 - 2, y + 2)),
                 None,
             );
+            for (i, f) in a
+                .ref_folders
+                .values()
+                .filter(|f| f.special_usage() != SpecialUsageMailbox::Normal)
+                .enumerate()
+            {
+                write_string_to_grid(
+                    &format!("{}: {}", f.path(), f.special_usage()),
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((5 + column_width, y + 3 + i), (120 - 2, y + 2)),
+                    None,
+                );
+            }
         }
     }
 }

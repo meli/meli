@@ -93,11 +93,11 @@ named!(
                     if p.eq_ignore_ascii_case(b"\\NoSelect") {
                         f.no_select = true;
                     } else if p.eq_ignore_ascii_case(b"\\Sent") {
-                        f.usage = SpecialUsageMailbox::Sent;
+                        let _ = f.set_special_usage(SpecialUsageMailbox::Sent);
                     } else if p.eq_ignore_ascii_case(b"\\Junk") {
-                        f.usage = SpecialUsageMailbox::Trash;
+                        let _ = f.set_special_usage(SpecialUsageMailbox::Trash);
                     } else if p.eq_ignore_ascii_case(b"\\Drafts") {
-                        f.usage = SpecialUsageMailbox::Drafts;
+                        let _ = f.set_special_usage(SpecialUsageMailbox::Drafts);
                     }
                 }
                 f.hash = get_path_hash!(path);
