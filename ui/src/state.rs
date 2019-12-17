@@ -584,22 +584,24 @@ impl State {
                         ));
                     }
                 }
-                AccountAction(_, ReIndex) => match crate::sqlite3::index(&mut self.context) {
-                    Ok(()) => {
-                        self.context.replies.push_back(UIEvent::Notification(
-                            None,
-                            "Message index rebuild started.".to_string(),
-                            Some(NotificationType::INFO),
-                        ));
+                AccountAction(ref account_name, ReIndex) => {
+                    match crate::sqlite3::index(&mut self.context, account_name) {
+                        Ok(()) => {
+                            self.context.replies.push_back(UIEvent::Notification(
+                                None,
+                                "Message index rebuild started.".to_string(),
+                                Some(NotificationType::INFO),
+                            ));
+                        }
+                        Err(e) => {
+                            self.context.replies.push_back(UIEvent::Notification(
+                                None,
+                                format!("Message index rebuild failed: {}.", e),
+                                Some(NotificationType::ERROR),
+                            ));
+                        }
                     }
-                    Err(e) => {
-                        self.context.replies.push_back(UIEvent::Notification(
-                            None,
-                            format!("Message index rebuild failed: {}.", e),
-                            Some(NotificationType::ERROR),
-                        ));
-                    }
-                },
+                }
                 v => {
                     self.rcv_event(UIEvent::Action(v));
                 }

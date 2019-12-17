@@ -269,32 +269,30 @@ pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
     Ok(())
 }
 
-pub fn index(context: &mut crate::state::Context) -> Result<()> {
+pub fn index(context: &mut crate::state::Context, account_name: &str) -> Result<()> {
+    let account = if let Some(a) =  context.accounts.iter().find(|acc| acc.name() == account_name) {
+        a} else {
+            return Err(MeliError::new(format!("Account {} was not found.", account_name)));
+    };
+
+    let (acc_name, acc_mutex, backend_mutex):( String, Arc<RwLock<_>>, Arc<_>) = if *account.settings.conf.cache_type() != crate::conf::CacheType::Sqlite3 {
+            return Err(MeliError::new(format!("Account {} doesn't have an sqlite3 search backend.", account_name)));
+    } else {
+            (
+                account.name().to_string(),
+                account.collection.envelopes.clone(),
+                account.backend.clone(),
+            )};
     let conn = open_or_create_db()?;
     let work_context = context.work_controller().get_context();
-    let mutexes = context
-        .accounts
-        .iter()
-        .filter(|acc| *acc.settings.conf.cache_type() == crate::conf::CacheType::Sqlite3)
-        .map(|acc| {
-            (
-                acc.name().to_string(),
-                acc.collection.envelopes.clone(),
-                acc.backend.clone(),
-            )
-        })
-        .collect::<Vec<(String, Arc<RwLock<_>>, Arc<_>)>>();
-    let env_hashes = mutexes
-        .iter()
-        .map(|m| m.1.read().unwrap().keys().cloned().collect::<Vec<_>>())
-        .collect::<Vec<Vec<_>>>();
+    let env_hashes =
+        acc_mutex.read().unwrap().keys().cloned().collect::<Vec<_>>();
 
     /* Sleep, index and repeat in order not to block the main process */
     let handle = std::thread::Builder::new().name(String::from("rebuilding index")).spawn(move || {
         let thread_id = std::thread::current().id();
 
         let sleep_dur = std::time::Duration::from_millis(20);
-        for ((acc_name, acc_mutex, backend_mutex), env_hashes) in mutexes.into_iter().zip(env_hashes.into_iter())  {
             if let Err(err) = conn.execute(
                 "INSERT OR REPLACE INTO accounts (name) VALUES (?1)", params![acc_name.as_str(),],).map_err(|e| MeliError::new(e.to_string())) {
                 debug!("{}",
@@ -377,7 +375,6 @@ pub fn index(context: &mut crate::state::Context) -> Result<()> {
                     .send((thread_id, format!("Rebuilding {} index. {}/{}", acc_name, ctr, env_hashes.len())))
                     .unwrap();
                 std::thread::sleep(sleep_dur);
-            }
         }
         work_context.finished.send(thread_id).unwrap();
     })?;
