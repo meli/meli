@@ -1051,6 +1051,7 @@ impl<'a> Iterator for HeaderIterator<'a> {
 mod tests {
 
     use super::*;
+    use crate::make_address;
 
     #[test]
     fn test_subject() {
