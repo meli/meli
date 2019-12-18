@@ -219,14 +219,66 @@ impl MailView {
                 let mut t = body_text.to_string();
                 t.push('\n');
                 if body.count_attachments() > 1 {
-                    t = body
-                        .attachments()
-                        .iter()
-                        .enumerate()
-                        .fold(t, |mut s, (idx, a)| {
-                            s.push_str(&format!("\n[{}] {}\n", idx, a));
-                            s
-                        });
+                    fn attachment_tree(
+                        (idx, (depth, att)): (&mut usize, (usize, &Attachment)),
+                        branches: &mut StackVec<bool>,
+                        has_sibling: bool,
+                        s: &mut String,
+                    ) {
+                        s.extend(format!("\n[{}]", idx).chars());
+                        for &b in branches.iter() {
+                            if b {
+                                s.push('|');
+                            } else {
+                                s.push(' ');
+                            }
+                            s.push(' ');
+                        }
+                        if depth > 0 {
+                            if has_sibling {
+                                s.push('|');
+                            } else {
+                                s.push(' ');
+                            }
+                            s.push('\\');
+                            s.push(' ');
+                        } else {
+                            if has_sibling {
+                                s.push('|');
+                                s.push('\\');
+                            } else {
+                                s.push(' ');
+                            }
+                            s.push(' ');
+                        }
+
+                        s.extend(att.to_string().chars());
+                        match att.content_type {
+                            ContentType::Multipart {
+                                parts: ref sub_att_vec,
+                                ..
+                            } => {
+                                let mut iter = (0..sub_att_vec.len()).peekable();
+                                if has_sibling {
+                                    branches.push(true);
+                                } else {
+                                    branches.push(false);
+                                }
+                                while let Some(i) = iter.next() {
+                                    *idx += 1;
+                                    attachment_tree(
+                                        (idx, (depth + 1, &sub_att_vec[i])),
+                                        branches,
+                                        !(iter.peek() == None),
+                                        s,
+                                    );
+                                }
+                                branches.pop();
+                            }
+                            _ => {}
+                        }
+                    }
+                    attachment_tree((&mut 0, (0, &body)), &mut StackVec::new(), false, &mut t);
                 }
                 t
             }
