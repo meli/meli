@@ -486,9 +486,7 @@ impl Attachment {
         self.get_text_recursive(&mut text);
         String::from_utf8_lossy(text.as_slice().trim()).into()
     }
-    pub fn description(&self) -> Vec<String> {
-        self.attachments().iter().map(Attachment::text).collect()
-    }
+
     pub fn mime_type(&self) -> String {
         format!("{}", self.content_type).to_string()
     }
@@ -540,41 +538,9 @@ impl Attachment {
                 kind: MultipartType::Alternative,
                 ref parts,
                 ..
-            } => {
-                for a in parts.iter() {
-                    if let ContentType::Text {
-                        kind: Text::Plain, ..
-                    } = a.content_type
-                    {
-                        return false;
-                    }
-                }
-                true
-            }
-            ContentType::Multipart {
-                kind: MultipartType::Signed,
-                ref parts,
-                ..
-            } => parts
-                .iter()
-                .find(|s| s.content_type != ContentType::PGPSignature)
-                .map(Attachment::is_html)
-                .unwrap_or(false),
-            ContentType::Multipart { ref parts, .. } => {
-                parts.iter().fold(true, |acc, a| match &a.content_type {
-                    ContentType::Text {
-                        kind: Text::Plain, ..
-                    } => false,
-                    ContentType::Text {
-                        kind: Text::Html, ..
-                    } => acc,
-                    ContentType::Multipart {
-                        kind: MultipartType::Alternative,
-                        ..
-                    } => a.is_html(),
-                    _ => acc,
-                })
-            }
+            } => parts.iter().all(Attachment::is_html),
+
+            ContentType::Multipart { ref parts, .. } => parts.iter().any(Attachment::is_html),
             _ => false,
         }
     }

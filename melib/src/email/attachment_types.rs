@@ -97,9 +97,10 @@ impl Display for Charset {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MultipartType {
-    Mixed,
     Alternative,
     Digest,
+    Mixed,
+    Related,
     Signed,
 }
 
@@ -112,9 +113,10 @@ impl Default for MultipartType {
 impl Display for MultipartType {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
-            MultipartType::Mixed => write!(f, "multipart/mixed"),
             MultipartType::Alternative => write!(f, "multipart/alternative"),
             MultipartType::Digest => write!(f, "multipart/digest"),
+            MultipartType::Mixed => write!(f, "multipart/mixed"),
+            MultipartType::Related => write!(f, "multipart/related"),
             MultipartType::Signed => write!(f, "multipart/signed"),
         }
     }
@@ -130,6 +132,8 @@ impl From<&[u8]> for MultipartType {
             MultipartType::Digest
         } else if val.eq_ignore_ascii_case(b"signed") {
             MultipartType::Signed
+        } else if val.eq_ignore_ascii_case(b"related") {
+            MultipartType::Related
         } else {
             Default::default()
         }
