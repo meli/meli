@@ -36,7 +36,7 @@ use crate::backends::BackendOp;
 use crate::backends::FolderHash;
 use crate::backends::RefreshEvent;
 use crate::backends::RefreshEventKind::{self, *};
-use crate::backends::{BackendFolder, Folder, FolderOperation, MailBackend, RefreshEventConsumer};
+use crate::backends::{BackendFolder, Folder, MailBackend, RefreshEventConsumer};
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
@@ -438,6 +438,7 @@ impl MailBackend for ImapType {
         Ok(())
     }
 
+    /*
     fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
         use FolderOperation::*;
 
@@ -499,6 +500,7 @@ impl MailBackend for ImapType {
         }
         Ok(())
     }
+    */
 
     fn as_any(&self) -> &dyn::std::any::Any {
         self

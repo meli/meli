@@ -264,10 +264,9 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp>;
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()>;
-    fn folder_operation(&mut self, _path: &str, _op: FolderOperation) -> Result<()> {
-        Ok(())
+    fn create_folder(&mut self, name: NewFolderName) -> Result<Folder> {
+        unimplemented!()
     }
-
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         None
     }

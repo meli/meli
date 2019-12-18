@@ -1003,7 +1003,7 @@ impl Account {
     }
 
     pub fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
-        self.backend.write().unwrap().folder_operation(path, op)
+        Err(MeliError::new("Not implemented."))
     }
 
     pub fn folder_confs(&self, folder_hash: FolderHash) -> &FileFolderConf {
