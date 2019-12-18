@@ -75,7 +75,7 @@ impl AccountSettings {
 #[serde(default)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FolderConf {
-    pub rename: Option<String>,
+    pub alias: Option<String>,
     #[serde(default = "true_val")]
     pub autoload: bool,
     #[serde(deserialize_with = "toggleflag_de")]
@@ -91,7 +91,7 @@ pub struct FolderConf {
 impl Default for FolderConf {
     fn default() -> Self {
         FolderConf {
-            rename: None,
+            alias: None,
             autoload: true,
             subscribe: ToggleFlag::Unset,
             ignore: ToggleFlag::Unset,
@@ -102,8 +102,8 @@ impl Default for FolderConf {
 }
 
 impl FolderConf {
-    pub fn rename(&self) -> Option<&str> {
-        self.rename.as_ref().map(String::as_str)
+    pub fn alias(&self) -> Option<&str> {
+        self.alias.as_ref().map(String::as_str)
     }
 }
 

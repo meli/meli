@@ -69,8 +69,8 @@ display_name = "Name"
 
 # Set folder-specific settings
   [accounts.account-name.folders]
-  "INBOX" = { rename="Inbox" } #inline table
-  "drafts" = { rename="Drafts" } #inline table
+  "INBOX" = { alias="Inbox" } #inline table
+  "drafts" = { alias="Drafts" } #inline table
   [accounts.account-name.folders."foobar-devel"] # or a regular table
     ignore = true # don't show notifications for this folder
 
@@ -206,7 +206,7 @@ example:
 .El
 .Sh FOLDERS
 .Bl -tag -width 36n
-.It Ic rename Ar String
+.It Ic alias Ar String
 (optional) show a different name for this folder in the UI
 .It Ic autoload Ar boolean
 (optional) load this folder on startup (not functional yet)
@@ -307,6 +307,7 @@ open_thread = "Enter"
 exit_thread = 'i'
 .Bd
 
+.Pp
 .Sy Em general
 .Bl -tag -width 36n
 .It Ic next_tab
@@ -430,7 +431,7 @@ Edit mail.
 .El
 
 .Sy Em envelope-view
-
+.Pp
 To "select" an attachment, type its index (you will see the typed result in the command buffer on your bottom right of the status line) and then issue the corresponding command.
 .Bl -tag -width 36n
 .It Ic add_addresses_to_contacts Ns

@@ -781,7 +781,7 @@ impl Account {
         //debug!("folder renames: {:?}", folder_renames);
         for f in folders.values_mut() {
             if let Some(r) = folder_confs.get(&f.hash()) {
-                if let Some(rename) = r.folder_conf().rename() {
+                if let Some(rename) = r.folder_conf().alias() {
                     f.change_name(rename);
                 }
             }
