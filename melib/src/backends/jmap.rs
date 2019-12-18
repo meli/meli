@@ -242,21 +242,17 @@ impl MailBackend for JmapType {
     fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
         if self.folders.read().unwrap().is_empty() {
             let folders = std::dbg!(protocol::get_mailboxes(&self.connection))?;
-            let ret = Ok(folders
-                .iter()
-                .map(|(&h, f)| (h, BackendFolder::clone(f) as Folder))
-                .collect());
             *self.folders.write().unwrap() = folders;
-            ret
-        } else {
-            Ok(self
-                .folders
-                .read()
-                .unwrap()
-                .iter()
-                .map(|(&h, f)| (h, BackendFolder::clone(f) as Folder))
-                .collect())
         }
+
+        Ok(self
+            .folders
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|(_, f)| f.is_subscribed)
+            .map(|(&h, f)| (h, BackendFolder::clone(f) as Folder))
+            .collect())
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {

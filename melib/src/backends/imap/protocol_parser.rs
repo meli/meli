@@ -78,7 +78,7 @@ macro_rules! get_path_hash {
 named!(
     pub list_folder_result<ImapFolder>,
     do_parse!(
-        ws!(tag!("* LIST ("))
+        ws!(alt_complete!(tag!("* LIST (") | tag!("* LSUB (")))
             >> properties: take_until!(&b")"[0..])
             >> tag!(b") ")
             >> separator: delimited!(tag!(b"\""), take!(1), tag!(b"\""))
@@ -88,6 +88,7 @@ named!(
                 let separator: u8 = separator[0];
                 let mut f = ImapFolder::default();
                 f.no_select = false;
+                f.is_subscribed = false;
                 for p in properties.split(|&b| b == b' ') {
                     use crate::backends::SpecialUsageMailbox;
                     if p.eq_ignore_ascii_case(b"\\NoSelect") {

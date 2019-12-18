@@ -378,6 +378,7 @@ impl MailBackend for ImapType {
         drop(uid_lock);
         Ok(folders
             .iter()
+            .filter(|(_, f)| f.is_subscribed)
             .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
             .collect())
     }
@@ -639,6 +640,23 @@ impl ImapType {
                     *entry = folder;
                 } else {
                     folders.insert(folder.hash, folder);
+                }
+            } else {
+                debug!("parse error for {:?}", l);
+            }
+        }
+        conn.send_command(b"LSUB \"\" \"*\"")?;
+        conn.read_response(&mut res)?;
+        debug!("out: {}", &res);
+        for l in res.lines().map(|l| l.trim()) {
+            if let Ok(subscription) =
+                protocol_parser::list_folder_result(l.as_bytes()).to_full_result()
+            {
+                if let Some(f) = folders.get_mut(&subscription.hash()) {
+                    if subscription.no_select {
+                        continue;
+                    }
+                    f.is_subscribed = true;
                 }
             } else {
                 debug!("parse error for {:?}", l);

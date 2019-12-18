@@ -446,6 +446,59 @@ impl Component for AccountStatus {
             ((_x, _y), (width - 1, height - 1)),
             None,
         );
+        line += 1;
+
+        write_string_to_grid(
+            "Special Mailboxes:",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            Attr::Bold,
+            ((1, line), (width - 1, height - 1)),
+            None,
+        );
+        for (i, f) in a
+            .ref_folders
+            .values()
+            .filter(|f| f.special_usage() != SpecialUsageMailbox::Normal)
+            .enumerate()
+        {
+            line += 1;
+            write_string_to_grid(
+                &format!("{}: {}", f.path(), f.special_usage()),
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                ((1, line), (width - 1, height - 1)),
+                None,
+            );
+        }
+        line += 2;
+        write_string_to_grid(
+            "Subscribed folders:",
+            &mut self.content,
+            Color::Default,
+            Color::Default,
+            Attr::Bold,
+            ((1, line), (width - 1, height - 1)),
+            None,
+        );
+        line += 2;
+        for f in a.list_folders() {
+            if f.is_subscribed() {
+                write_string_to_grid(
+                    f.path(),
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((1, line), (width - 1, height - 1)),
+                    None,
+                );
+                line += 1;
+            }
+        }
 
         line += 1;
         if a.settings.account().format() == "imap" {
