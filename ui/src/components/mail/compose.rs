@@ -566,7 +566,7 @@ impl Component for Composer {
                             ViewMode::Send(s) => s,
                             _ => unreachable!(),
                         };
-                        let result: bool = s.collect()[0];
+                        let result: bool = s.collect().get(0).map(|b| *b).unwrap_or(false);
                         if result {
                             self.update_draft();
                             if send_draft(
