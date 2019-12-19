@@ -218,26 +218,13 @@ impl MailBackend for MaildirType {
             let sender = Arc::new(sender);
 
             Box::new(move |work_context: crate::async_workers::WorkContext| {
-                let cache_dir = cache_dir.clone();
-                let folder_index = folder_index.clone();
-                let root_path = root_path.clone();
-                let path = path.clone();
-                let name = name.clone();
-                let map = map.clone();
-                let sender = sender.clone();
                 work_context
                     .set_name
                     .send((std::thread::current().id(), name.clone()))
                     .unwrap();
                 let thunk = move |sender: &RefreshEventConsumer| {
                     debug!("refreshing");
-                    let cache_dir = cache_dir.clone();
-                    let map = map.clone();
-                    let folder_index = folder_index.clone();
-                    let folder_hash = folder_hash.clone();
-                    let root_path = root_path.clone();
                     let mut path = path.clone();
-                    let cache_dir = cache_dir.clone();
                     path.push("new");
                     for d in path.read_dir()? {
                         if let Ok(p) = d {
@@ -789,35 +776,23 @@ impl MaildirType {
 
         let handle = {
             let tx = w.tx();
-            // TODO: Avoid clone
             let folder: &MaildirFolder = &self.folders[&self.owned_folder_idx(folder)];
             let folder_hash = folder.hash();
             let unseen = folder.unseen.clone();
             let total = folder.total.clone();
             let tx_final = w.tx();
-            let path: PathBuf = folder.fs_path().into();
+            let mut path: PathBuf = folder.fs_path().into();
             let name = format!("parsing {:?}", folder.name());
             let root_path = self.path.to_path_buf();
             let map = self.hash_indexes.clone();
             let folder_index = self.folder_index.clone();
 
             let closure = move |work_context: crate::async_workers::WorkContext| {
-                let unseen = unseen.clone();
-                let total = total.clone();
-                let name = name.clone();
                 work_context
                     .set_name
                     .send((std::thread::current().id(), name.clone()))
                     .unwrap();
-                let root_path = root_path.clone();
-                let map = map.clone();
-                let folder_index = folder_index.clone();
-                let tx = tx.clone();
-                let cache_dir = cache_dir.clone();
-                let path = path.clone();
-                let thunk = move || {
-                    let mut path = path.clone();
-                    let cache_dir = cache_dir.clone();
+                let mut thunk = move || {
                     path.push("new");
                     for d in path.read_dir()? {
                         if let Ok(p) = d {
@@ -841,7 +816,6 @@ impl MaildirType {
                     if !files.is_empty() {
                         crossbeam::scope(|scope| {
                             let mut threads = Vec::with_capacity(cores);
-                            let cache_dir = cache_dir.clone();
                             let chunk_size = if count / cores > 0 {
                                 count / cores
                             } else {

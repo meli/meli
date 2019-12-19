@@ -306,7 +306,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         );
                         debug!(&response);
                         match protocol_parser::uid_fetch_responses(&response) {
-                            Ok((_, v)) => {
+                            Ok((_, v, _)) => {
                                 let len = v.len();
                                 let mut ctr = 0;
                                 for UidFetchResponse {
@@ -421,7 +421,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         conn.read_response(&mut response)
                     );
                     match protocol_parser::uid_fetch_responses(&response) {
-                        Ok((_, v)) => {
+                        Ok((_, v, _)) => {
                             let len = v.len();
                             let mut ctr = 0;
                             for UidFetchResponse {
@@ -600,7 +600,7 @@ fn examine_updates(
                             );
                             debug!(&response);
                             match protocol_parser::uid_fetch_responses(&response) {
-                                Ok((_, v)) => {
+                                Ok((_, v, _)) => {
                                     for UidFetchResponse {
                                         uid, flags, body, ..
                                     } in v
@@ -679,7 +679,7 @@ fn examine_updates(
                     conn.read_response(&mut response)
                 );
                 match protocol_parser::uid_fetch_responses(&response) {
-                    Ok((_, v)) => {
+                    Ok((_, v, _)) => {
                         for UidFetchResponse {
                             uid, flags, body, ..
                         } in v

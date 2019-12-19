@@ -37,7 +37,6 @@ use crossbeam::{
     select,
 };
 use std::fmt;
-use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct WorkContext {
@@ -47,11 +46,10 @@ pub struct WorkContext {
     pub finished: Sender<std::thread::ThreadId>,
 }
 
-#[derive(Clone)]
 pub struct Work {
     priority: u64,
     pub is_static: bool,
-    pub closure: Arc<Box<dyn Fn(WorkContext) -> () + Send + Sync>>,
+    pub closure: Box<dyn FnOnce(WorkContext) -> () + Send + Sync>,
     name: String,
     status: String,
 }
@@ -77,7 +75,7 @@ impl PartialEq for Work {
 impl Eq for Work {}
 
 impl Work {
-    pub fn compute(&self, work_context: WorkContext) {
+    pub fn compute(self, work_context: WorkContext) {
         (self.closure)(work_context);
     }
 }
@@ -118,9 +116,9 @@ pub struct AsyncBuilder<T: Send + Sync> {
     is_static: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Async<T: Send + Sync> {
-    work: Work,
+    work: Option<Work>,
     active: bool,
     tx: Sender<AsyncStatus<T>>,
     rx: Receiver<AsyncStatus<T>>,
@@ -165,15 +163,15 @@ where
     }
 
     /// Returns an `Async<T>` object that contains a `Thread` join handle that returns a `T`
-    pub fn build(self, work: Box<dyn Fn(WorkContext) -> () + Send + Sync>) -> Async<T> {
+    pub fn build(self, work: Box<dyn FnOnce(WorkContext) -> () + Send + Sync>) -> Async<T> {
         Async {
-            work: Work {
+            work: Some(Work {
                 priority: self.priority,
                 is_static: self.is_static,
-                closure: Arc::new(work),
+                closure: work,
                 name: String::new(),
                 status: String::new(),
-            },
+            }),
             tx: self.tx,
             rx: self.rx,
             active: false,
@@ -188,7 +186,7 @@ where
     pub fn work(&mut self) -> Option<Work> {
         if !self.active {
             self.active = true;
-            Some(self.work.clone())
+            self.work.take()
         } else {
             None
         }

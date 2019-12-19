@@ -5,7 +5,9 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
-pub type ImapParseResult<'a, T> = Result<(&'a str, T)>;
+#[derive(Debug)]
+pub struct Alert(String);
+pub type ImapParseResult<'a, T> = Result<(&'a str, T, Option<Alert>)>;
 pub struct ImapLineIterator<'a> {
     slice: &'a str,
 }
@@ -328,13 +330,22 @@ pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> 
         env.set_has_attachments(has_attachments);
     }
 
-    Ok((&input[i..], ret))
+    Ok((&input[i..], ret, None))
 }
 
 pub fn uid_fetch_responses(mut input: &str) -> ImapParseResult<Vec<UidFetchResponse<'_>>> {
     let mut ret = Vec::new();
+    let mut alert: Option<Alert> = None;
 
-    while let Ok((rest, el)) = uid_fetch_response(input) {
+    while let Ok((rest, el, el_alert)) = uid_fetch_response(input) {
+        if let Some(el_alert) = el_alert {
+            match &mut alert {
+                Some(Alert(ref mut alert)) => {
+                    alert.extend(el_alert.0.chars());
+                }
+                a @ None => *a = Some(el_alert),
+            }
+        }
         input = rest;
         ret.push(el);
     }
@@ -345,7 +356,7 @@ pub fn uid_fetch_responses(mut input: &str) -> ImapParseResult<Vec<UidFetchRespo
             input
         )));
     }
-    Ok((input, ret))
+    Ok((input, ret, None))
 }
 
 /*

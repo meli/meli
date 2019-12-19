@@ -185,8 +185,6 @@ impl MailBackend for ImapType {
                     tx.send(AsyncStatus::Finished).unwrap();
                     return;
                 }
-                let connection = connection.clone();
-                let tx = tx.clone();
                 let mut response = String::with_capacity(8 * 1024);
                 let conn = connection.lock();
                 exit_on_error!(&tx, conn);
@@ -246,7 +244,7 @@ impl MailBackend for ImapType {
                         response.lines().collect::<Vec<&str>>().len()
                     );
                     match protocol_parser::uid_fetch_responses(&response) {
-                        Ok((_, v)) => {
+                        Ok((_, v, _)) => {
                             debug!("responses len is {}", v.len());
                             for UidFetchResponse {
                                 uid,

@@ -480,7 +480,7 @@ impl Account {
         work_context: &WorkContext,
         notify_fn: Arc<NotifyFn>,
     ) -> Worker {
-        let mailbox_handle = backend.write().unwrap().get(&folder);
+        let mut mailbox_handle = backend.write().unwrap().get(&folder);
         let mut builder = AsyncBuilder::new();
         let our_tx = builder.tx();
         let folder_hash = folder.hash();
@@ -508,7 +508,6 @@ impl Account {
         builder.set_priority(priority).set_is_static(true);
         let mut w = builder.build(Box::new(move |work_context| {
             let name = format!("Parsing {}", folder.path());
-            let mut mailbox_handle = mailbox_handle.clone();
             let work = mailbox_handle.work().unwrap();
             work_context.new_work.send(work).unwrap();
             let thread_id = std::thread::current().id();
