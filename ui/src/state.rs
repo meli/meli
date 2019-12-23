@@ -29,6 +29,7 @@ Input is received in the main loop from threads which listen on the stdin for us
 */
 
 use super::*;
+use crate::plugins::{Plugin, PluginManager};
 use melib::backends::{FolderHash, NotifyFn};
 
 use crossbeam::channel::{bounded, unbounded, Receiver, Sender};
@@ -96,6 +97,7 @@ pub struct Context {
     receiver: Receiver<ThreadEvent>,
     input: InputHandler,
     work_controller: WorkController,
+    plugin_manager: PluginManager,
 
     pub temp_files: Vec<File>,
 }
@@ -209,6 +211,10 @@ impl State {
         let input_thread = unbounded();
         let backends = Backends::new();
         let settings = Settings::new()?;
+        let mut plugin_manager = PluginManager::new();
+        for (_, p) in settings.plugins.clone() {
+            plugin_manager.register(p)?;
+        }
 
         let termsize = termion::terminal_size()?;
         let cols = termsize.0 as usize;
@@ -274,6 +280,7 @@ impl State {
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),
                 work_controller,
+                plugin_manager,
 
                 sender,
                 receiver,

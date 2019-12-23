@@ -44,6 +44,7 @@ use self::default_vals::*;
 use self::notifications::NotificationsSettings;
 use self::terminal::TerminalSettings;
 use crate::pager::PagerSettings;
+use crate::plugins::Plugin;
 use melib::backends::SpecialUsageMailbox;
 use melib::conf::{toggleflag_de, AccountSettings, FolderConf, ToggleFlag};
 use melib::error::*;
@@ -241,6 +242,8 @@ pub struct FileSettings {
     pgp: PGPSettings,
     #[serde(default)]
     terminal: TerminalSettings,
+    #[serde(default)]
+    plugins: HashMap<String, Plugin>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -272,6 +275,7 @@ pub struct Settings {
     pub composing: ComposingSettings,
     pub pgp: PGPSettings,
     pub terminal: TerminalSettings,
+    pub plugins: HashMap<String, Plugin>,
 }
 
 impl FileSettings {
@@ -395,6 +399,7 @@ impl Settings {
             composing: fs.composing,
             pgp: fs.pgp,
             terminal: fs.terminal,
+            plugins: fs.plugins,
         })
     }
 }

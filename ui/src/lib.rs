@@ -77,6 +77,8 @@ pub mod cache;
 
 pub mod mailcap;
 
+pub mod plugins;
+
 pub use crate::username::*;
 pub mod username {
     use libc;
