@@ -2246,9 +2246,10 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RawBuffer {
     pub buf: CellBuffer,
+    title: Option<String>,
     cursor: (usize, usize),
     dirty: bool,
 }
@@ -2329,11 +2330,18 @@ impl Component for RawBuffer {
 }
 
 impl RawBuffer {
-    pub fn new(buf: CellBuffer) -> Self {
+    pub fn new(buf: CellBuffer, title: Option<String>) -> Self {
         RawBuffer {
             buf,
+            title,
             dirty: true,
             cursor: (0, 0),
         }
+    }
+    pub fn title(&self) -> &str {
+        self.title
+            .as_ref()
+            .map(String::as_str)
+            .unwrap_or("untitled")
     }
 }

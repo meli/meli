@@ -437,7 +437,7 @@ impl Component for EnvelopeView {
                                 if let Ok(binary) = binary {
                                     let p = create_temp_file(
                                         &decode(u, None),
-                                        name.as_ref().map(|n| n.clone()),
+                                        name.as_ref().map(String::as_str),
                                         None,
                                         true,
                                     );

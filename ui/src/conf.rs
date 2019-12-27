@@ -148,10 +148,8 @@ impl From<FileAccount> for AccountConf {
         let root_tmp = root_path
             .components()
             .last()
-            .unwrap()
-            .as_os_str()
-            .to_str()
-            .unwrap()
+            .and_then(|c| c.as_os_str().to_str())
+            .unwrap_or("")
             .to_string();
         if !acc.subscribed_folders.contains(&root_tmp) {
             acc.subscribed_folders.push(root_tmp);
@@ -339,7 +337,17 @@ impl FileSettings {
                 e.to_string()
             ))
         })?;
-        let backends = melib::backends::Backends::new();
+        let mut backends = melib::backends::Backends::new();
+        let plugin_manager = crate::plugins::PluginManager::new();
+        for (_, p) in s.plugins.clone() {
+            if crate::plugins::PluginKind::Backend == p.kind() {
+                crate::plugins::backend::PluginBackend::register(
+                    plugin_manager.listener(),
+                    p.clone(),
+                    &mut backends,
+                );
+            }
+        }
         for (name, acc) in s.accounts {
             let FileAccount {
                 root_folder,

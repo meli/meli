@@ -69,7 +69,7 @@ impl File {
 /// to reap it later.
 pub fn create_temp_file(
     bytes: &[u8],
-    filename: Option<String>,
+    filename: Option<&str>,
     path: Option<&PathBuf>,
     delete_on_drop: bool,
 ) -> File {

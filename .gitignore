@@ -6,3 +6,6 @@ target/
 **/*.rs.bk
 .gdb_history
 *.log
+
+__pycache__/
+*.py[cod]

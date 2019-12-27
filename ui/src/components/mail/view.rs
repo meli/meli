@@ -42,6 +42,7 @@ enum ViewMode {
     Url,
     Attachment(usize),
     Raw,
+    Ansi(RawBuffer),
     Subview,
     ContactSelector(Selector<Card>),
 }
@@ -53,6 +54,12 @@ impl Default for ViewMode {
 }
 
 impl ViewMode {
+    fn is_ansi(&self) -> bool {
+        match self {
+            ViewMode::Ansi(_) => true,
+            _ => false,
+        }
+    }
     fn is_attachment(&self) -> bool {
         match self {
             ViewMode::Attachment(_) => true,
@@ -315,6 +322,7 @@ impl MailView {
                 ret.push_str(&attachments[aidx].text());
                 ret
             }
+            ViewMode::Ansi(_) => "Viewing attachment. Press `r` to return \n".to_string(),
         }
     }
 
@@ -609,6 +617,17 @@ impl Component for MailView {
                     };
                     self.pager = Pager::from_string(text, Some(context), None, None);
                 }
+                ViewMode::Ansi(ref buf) => {
+                    write_string_to_grid(
+                        &format!("Viewing `{}`. Press `r` to return", buf.title()),
+                        grid,
+                        Color::Default,
+                        Color::Default,
+                        Attr::Default,
+                        (set_y(upper_left, y), bottom_right),
+                        Some(get_x(upper_left)),
+                    );
+                }
                 _ => {
                     let text = {
                         self.attachment_to_text(&body, context)
@@ -633,6 +652,9 @@ impl Component for MailView {
                     s.draw(grid, (set_y(upper_left, y), bottom_right), context);
                 }
             }
+            ViewMode::Ansi(ref mut buf) => {
+                buf.draw(grid, (set_y(upper_left, y + 1), bottom_right), context);
+            }
             _ => {
                 self.pager
                     .draw(grid, (set_y(upper_left, y), bottom_right), context);
@@ -647,6 +669,11 @@ impl Component for MailView {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
         match self.mode {
+            ViewMode::Ansi(ref mut buf) => {
+                if buf.process_event(event, context) {
+                    return true;
+                }
+            }
             ViewMode::Subview => {
                 if let Some(s) = self.subview.as_mut() {
                     if s.process_event(event, context) {
@@ -799,6 +826,7 @@ impl Component for MailView {
             }
             UIEvent::Input(ref key)
                 if (self.mode.is_attachment()
+                    || self.mode.is_ansi()
                     || self.mode == ViewMode::Subview
                     || self.mode == ViewMode::Url
                     || self.mode == ViewMode::Raw)
@@ -952,8 +980,35 @@ impl Component for MailView {
                                     name_opt = name.as_ref().map(|n| n.clone());
                                 }
                                 if let Ok(binary) = binary {
-                                    let p =
-                                        create_temp_file(&decode(u, None), name_opt, None, true);
+                                    let p = create_temp_file(
+                                        &decode(u, None),
+                                        name_opt.as_ref().map(String::as_str),
+                                        None,
+                                        true,
+                                    );
+                                    match debug!(context.plugin_manager.activate_hook(
+                                        "attachment-view",
+                                        p.path().display().to_string().into_bytes()
+                                    )) {
+                                        Ok(crate::plugins::FilterResult::Ansi(s)) => {
+                                            if let Some(buf) =
+                                                crate::terminal::ansi::ansi_to_cellbuffer(&s)
+                                            {
+                                                let raw_buf = RawBuffer::new(buf, name_opt);
+                                                self.mode = ViewMode::Ansi(raw_buf);
+                                                self.dirty = true;
+                                                return true;
+                                            }
+                                        }
+                                        Ok(crate::plugins::FilterResult::UiMessage(s)) => {
+                                            context.replies.push_back(UIEvent::Notification(
+                                                None,
+                                                s,
+                                                Some(NotificationType::ERROR),
+                                            ));
+                                        }
+                                        _ => {}
+                                    }
                                     Command::new(&binary)
                                         .arg(p.path())
                                         .stdin(Stdio::piped())
@@ -1318,6 +1373,8 @@ impl Component for MailView {
             || self.subview.as_ref().map(|p| p.is_dirty()).unwrap_or(false)
             || if let ViewMode::ContactSelector(ref s) = self.mode {
                 s.is_dirty()
+            } else if let ViewMode::Ansi(ref r) = self.mode {
+                r.is_dirty()
             } else {
                 false
             }
@@ -1346,6 +1403,7 @@ impl Component for MailView {
         let mut our_map = context.settings.shortcuts.envelope_view.key_values();
 
         if !(self.mode.is_attachment()
+            || self.mode.is_ansi()
             || self.mode == ViewMode::Subview
             || self.mode == ViewMode::Raw
             || self.mode == ViewMode::Url)

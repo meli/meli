@@ -29,7 +29,7 @@ Input is received in the main loop from threads which listen on the stdin for us
 */
 
 use super::*;
-use crate::plugins::{Plugin, PluginManager};
+use crate::plugins::PluginManager;
 use melib::backends::{FolderHash, NotifyFn};
 
 use crossbeam::channel::{bounded, unbounded, Receiver, Sender};
@@ -97,7 +97,7 @@ pub struct Context {
     receiver: Receiver<ThreadEvent>,
     input: InputHandler,
     work_controller: WorkController,
-    plugin_manager: PluginManager,
+    pub plugin_manager: PluginManager,
 
     pub temp_files: Vec<File>,
 }
@@ -209,10 +209,18 @@ impl State {
          * stdin, see get_events() for details
          * */
         let input_thread = unbounded();
-        let backends = Backends::new();
+        let mut backends = Backends::new();
         let settings = Settings::new()?;
         let mut plugin_manager = PluginManager::new();
         for (_, p) in settings.plugins.clone() {
+            if crate::plugins::PluginKind::Backend == p.kind() {
+                debug!("registering {:?}", &p);
+                crate::plugins::backend::PluginBackend::register(
+                    plugin_manager.listener(),
+                    p.clone(),
+                    &mut backends,
+                );
+            }
             plugin_manager.register(p)?;
         }
 
