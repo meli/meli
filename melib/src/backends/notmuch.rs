@@ -278,10 +278,7 @@ impl MailBackend for NotmuchDb {
             let tx = w.tx();
             let closure = move |_work_context| {
                 let mut ret: Vec<Envelope> = Vec::new();
-                let database = database.clone();
                 let database_lck = database.inner.read().unwrap();
-                let folders = folders.clone();
-                let tx = tx.clone();
                 let mut folders_lck = folders.write().unwrap();
                 let folder = folders_lck.get_mut(&folder_hash).unwrap();
                 let query_str = std::ffi::CString::new(folder.query_str.as_str()).unwrap();
