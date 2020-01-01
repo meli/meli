@@ -750,9 +750,12 @@ pub fn multipart_parts<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8]
                 offset += 2;
                 input = &input[2..];
             }
-            continue;
         } else {
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+            ret.push(StrBuilder {
+                offset,
+                length: input.len(),
+            });
+            break;
         }
     }
     IResult::Done(input, ret)
@@ -805,9 +808,9 @@ fn parts_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<&'a [u
             } else if input[0..].starts_with(b"\r\n") {
                 input = &input[2..];
             }
-            continue;
         } else {
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+            ret.push(input);
+            break;
         }
     }
     IResult::Done(input, ret)
