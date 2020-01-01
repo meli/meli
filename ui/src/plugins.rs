@@ -20,7 +20,6 @@
  */
 
 use melib::error::{MeliError, Result};
-use rmpv::Value;
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -32,6 +31,7 @@ pub mod rpc;
 pub use rpc::*;
 
 pub const BACKEND_FN: i8 = 0;
+pub const BACKEND_OP_FN: i8 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum PluginKind {
@@ -74,6 +74,16 @@ pub struct PluginManager {
 impl Drop for PluginManager {
     fn drop(&mut self) {
         let _ = std::fs::remove_file("./soworkfile");
+        for (k, c) in self.instances.iter_mut() {
+            if let Err(err) = debug!(c.kill()) {
+                eprintln!(
+                    "Error: could not kill process {} spawned by plugin {} ({})",
+                    c.id(),
+                    &self.plugins[&self.sessions[k]].name,
+                    err
+                );
+            }
+        }
     }
 }
 
@@ -170,7 +180,7 @@ impl PluginManager {
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()?;
-                let (mut stream, _) = self.listener.accept()?;
+                let (stream, _) = self.listener.accept()?;
                 /* send init message to plugin to register hooks */
                 let session = Uuid::new_v4();
                 let channel = RpcChannel::new(stream, &session)?;
@@ -224,21 +234,22 @@ impl PluginManager {
                 PluginKind::LongLived => {
                     debug!("listener: {}", l);
                     let channel = self.streams.get_mut(l).unwrap();
-                    channel.write_ref(&rmpv::ValueRef::Binary(bytes.as_slice()));
+                    channel.write_ref(&rmpv::ValueRef::Binary(bytes.as_slice()))?;
                     let reply: Result<FilterResult> = channel.from_read();
                     return reply;
                 }
                 PluginKind::Filter => {
                     let parts = split_command!(&plugin.executable);
-                    let child = std::process::Command::new(&parts[0])
+                    let mut child = std::process::Command::new(&parts[0])
                         .args(&parts[1..])
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
                         .spawn()?;
-                    let (mut stream, _) = self.listener.accept()?;
+                    let (stream, _) = self.listener.accept()?;
                     let mut channel = RpcChannel::new(stream, l)?;
-                    channel.write_ref(&rmpv::ValueRef::Binary(bytes.as_slice()));
+                    channel.write_ref(&rmpv::ValueRef::Binary(bytes.as_slice()))?;
                     let reply: Result<FilterResult> = channel.from_read();
+                    child.kill()?;
                     return reply;
                 }
                 k => {

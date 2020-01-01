@@ -45,10 +45,7 @@ def _read_objects(sock):
     unpacker = msgpack.Unpacker()
     ret = []
     #reader = socket.socket.makefile(sock, 'rb')
-    counter = 0
     while True:
-        print("[libmeliapi]: _read_objects loop = ", counter, flush=True, file=sys.stderr)
-        counter += 1
         try:
             buf = sock.recv(1024**2)
             if not buf:
@@ -85,6 +82,9 @@ def _write_objects(sock, objects):
             sys.stderr.flush()
             if e.errno == errno.EWOULDBLOCK:
                 break
+            elif e.errno == errno.EAGAIN:
+                time.sleep(0.001)
+                continue
             else:
                 raise
 
@@ -126,35 +126,37 @@ class Client(object):
 
     def send(self, objects):
         sys.stderr.flush()
-        print("[libmeliapi]: ", "stuck in send ", self.buffer, flush=True, file=sys.stderr, )
+        #print("[libmeliapi]: ", "stuck in send ", self.buffer, flush=True, file=sys.stderr, )
         _write_objects(self.sock, objects)
-        print("[libmeliapi]: ", "unstuck wrote objs", flush=True, file=sys.stderr, )
+        #print("[libmeliapi]: ", "unstuck wrote objs", flush=True, file=sys.stderr, )
         #print("[libmeliapi]: ", "wrote object ", objects, file=sys.stderr)
-        time.sleep(0.1)
+        time.sleep(0.001)
 
     def ack(self):
         sys.stderr.flush()
         _write_objects(self.sock, 0x06)
-        time.sleep(0.1)
+        time.sleep(0.001)
 
     def expect_ack(self):
-        print("[libmeliapi]: expect_ack, ", self.buffer, flush=True, file=sys.stderr, )
-        read_list = _read_objects(self.sock)
-        time.sleep(0.1)
-        self.buffer.extend(read_list)
-        if len(self.buffer) > 0 and self.buffer.popleft() == 0x6:
-            print("[libmeliapi]: got_ack, ", self.buffer, flush=True, file=sys.stderr, )
-            return
-        else:
-            raise "ACK expected"
+        #print("[libmeliapi]: expect_ack, ", self.buffer, flush=True, file=sys.stderr, )
+        while True:
+            time.sleep(0.1)
+            read_list = _read_objects(self.sock)
+            self.buffer.extend(read_list)
+            try:
+                self.buffer.remove(0x6)
+                #print("[libmeliapi]: got_ack, ", self.buffer, flush=True, file=sys.stderr, )
+                return
+            except ValueError:
+                pass
 
     def read(self):
         sys.stderr.flush()
-        print("[libmeliapi]: ", "stuck in read ", self.buffer, flush=True, file=sys.stderr, )
+        #print("[libmeliapi]: ", "stuck in read ", self.buffer, flush=True, file=sys.stderr, )
         read_list = _read_objects(self.sock)
-        time.sleep(0.1)
+        time.sleep(0.01)
         self.buffer.extend(read_list)
-        print("[libmeliapi]: ", "unstuck read self.buffer =", self.buffer, flush=True, file=sys.stderr, )
+        #print("[libmeliapi]: ", "unstuck read self.buffer =", self.buffer, flush=True, file=sys.stderr, )
         if len(self.buffer) > 0:
             return self.buffer.popleft()
         else:
@@ -164,10 +166,14 @@ class Client(object):
     def backend_fn_type(self):
         return 0
 
-    def backend_fn_ok_send(self, objects):
+    @property
+    def backend_op_fn_type(self):
+        return 1
+
+    def ok_send(self, objects):
         self.send({"t": "ok", "c": objects })
         self.expect_ack()
 
-    def backend_fn_err_send(self, objects):
+    def err_send(self, objects):
         self.send({"t": "err", "c": objects })
         self.expect_ack()

@@ -20,8 +20,6 @@
  */
 
 use super::*;
-use rmp_serde::Deserializer;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct RpcChannel {
@@ -36,7 +34,7 @@ pub struct PluginGreeting {
 }
 
 impl RpcChannel {
-    pub fn new(mut stream: UnixStream, session: &Uuid) -> Result<RpcChannel> {
+    pub fn new(stream: UnixStream, session: &Uuid) -> Result<RpcChannel> {
         let mut ret = RpcChannel {
             stream,
             session: session.clone(),
@@ -88,7 +86,7 @@ impl RpcChannel {
         let ret: RpcResult = debug!(rmp_serde::decode::from_read(&mut self.stream))
             .map_err(|err| MeliError::new(err.to_string()))?;
         let _ = self.stream.flush();
-        self.ack();
+        self.ack()?;
         debug!("read() ret={:?}", &ret);
         ret.into()
     }
@@ -101,7 +99,7 @@ impl RpcChannel {
         let ret: Result<T> = debug!(rmp_serde::decode::from_read(&mut self.stream))
             .map_err(|err| MeliError::new(err.to_string()));
         let _ = self.stream.flush();
-        self.ack();
+        self.ack()?;
         debug!("read() ret={:?}", &ret);
         ret
     }

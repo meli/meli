@@ -32,12 +32,39 @@ use melib::error::{MeliError, Result};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 
+// TODO replace with melib::Envelope after simplifying melib::Envelope's
+// fields/interface/deserializing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SimpleEnvelope {
+    hash: EnvelopeHash,
+    subject: String,
+    from: String,
+    to: String,
+    date: String,
+    message_id: String,
+    references: String,
+}
+
 #[derive(Debug)]
 pub struct PluginBackend {
     plugin: Plugin,
     child: std::process::Child,
     channel: Arc<Mutex<RpcChannel>>,
+    tag_index: Option<Arc<RwLock<BTreeMap<u64, String>>>>,
     is_online: Arc<Mutex<(std::time::Instant, Result<()>)>>,
+}
+
+impl Drop for PluginBackend {
+    fn drop(&mut self) {
+        if let Err(err) = debug!(self.child.kill()) {
+            eprintln!(
+                "Error: could not kill process {} spawned by plugin {} ({})",
+                self.child.id(),
+                &self.plugin.name,
+                err
+            );
+        }
+    }
 }
 
 impl MailBackend for PluginBackend {
@@ -45,12 +72,13 @@ impl MailBackend for PluginBackend {
         if let Ok(mut is_online) = self.is_online.try_lock() {
             let now = std::time::Instant::now();
             if now.duration_since(is_online.0) >= std::time::Duration::new(2, 0) {
-                let mut channel = self.channel.lock().unwrap();
-                channel.write_ref(&rmpv::ValueRef::Ext(BACKEND_FN, b"is_online"))?;
-                debug!(channel.expect_ack())?;
-                let ret: PluginResult<()> = debug!(channel.from_read())?;
-                is_online.0 = now;
-                is_online.1 = ret.into();
+                if let Ok(mut channel) = self.channel.try_lock() {
+                    channel.write_ref(&rmpv::ValueRef::Ext(BACKEND_FN, b"is_online"))?;
+                    debug!(channel.expect_ack())?;
+                    let ret: PluginResult<()> = debug!(channel.from_read())?;
+                    is_online.0 = now;
+                    is_online.1 = ret.into();
+                }
             }
             is_online.1.clone()
         } else {
@@ -62,7 +90,7 @@ impl MailBackend for PluginBackend {
 
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
-        let folder_hash = folder.hash();
+        let _folder_hash = folder.hash();
         let channel = self.channel.clone();
         let handle = {
             let tx = w.tx();
@@ -73,13 +101,65 @@ impl MailBackend for PluginBackend {
                     .unwrap();
                 channel.expect_ack().unwrap();
                 loop {
-                    let read_val: Result<PluginResult<Option<Vec<String>>>> =
+                    let read_val: Result<PluginResult<Option<Vec<SimpleEnvelope>>>> =
                         debug!(channel.from_read());
                     match read_val.map(Into::into).and_then(std::convert::identity) {
                         Ok(Some(a)) => {
                             tx.send(AsyncStatus::Payload(Ok(a
                                 .into_iter()
-                                .filter_map(|s| Envelope::from_bytes(s.as_bytes(), None).ok())
+                                .filter_map(
+                                    |SimpleEnvelope {
+                                         hash,
+                                         date,
+                                         from,
+                                         to,
+                                         subject,
+                                         message_id,
+                                         references,
+                                     }| {
+                                        let mut env = melib::Envelope::new(hash);
+                                        env.set_date(date.as_bytes());
+                                        if let Ok(d) = melib::email::parser::date(date.as_bytes()) {
+                                            env.set_datetime(d);
+                                        }
+                                        env.set_message_id(message_id.as_bytes());
+                                        let parse_result =
+                                            melib::email::parser::rfc2822address_list(
+                                                from.as_bytes(),
+                                            );
+                                        if parse_result.is_done() {
+                                            let value = parse_result.to_full_result().unwrap();
+                                            env.set_from(value);
+                                        }
+                                        let parse_result =
+                                            melib::email::parser::rfc2822address_list(
+                                                to.as_bytes(),
+                                            );
+                                        if parse_result.is_done() {
+                                            let value = parse_result.to_full_result().unwrap();
+                                            env.set_to(value);
+                                        }
+                                        let parse_result =
+                                            melib::email::parser::phrase(subject.as_bytes());
+                                        if parse_result.is_done() {
+                                            let value = parse_result.to_full_result().unwrap();
+                                            env.set_subject(value);
+                                        }
+                                        if !references.is_empty() {
+                                            let parse_result = melib::email::parser::references(
+                                                references.as_bytes(),
+                                            );
+                                            if parse_result.is_done() {
+                                                for v in parse_result.to_full_result().unwrap() {
+                                                    env.push_references(v);
+                                                }
+                                            }
+                                            env.set_references(references.as_bytes());
+                                        }
+
+                                        Some(env)
+                                    },
+                                )
                                 .collect::<Vec<Envelope>>())))
                                 .unwrap();
                         }
@@ -109,28 +189,35 @@ impl MailBackend for PluginBackend {
     }
     fn watch(
         &self,
-        sender: RefreshEventConsumer,
-        work_context: WorkContext,
+        _sender: RefreshEventConsumer,
+        _work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
         Err(MeliError::new("Unimplemented."))
     }
+
     fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
         let mut ret: FnvHashMap<FolderHash, Folder> = Default::default();
         ret.insert(0, Folder::default());
         Ok(ret)
     }
+
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
-        unimplemented!()
+        Box::new(PluginOp {
+            hash,
+            channel: self.channel.clone(),
+            tag_index: self.tag_index.clone(),
+            bytes: None,
+        })
     }
 
-    fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
+    fn save(&self, _bytes: &[u8], _folder: &str, _flags: Option<Flag>) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn create_folder(&mut self, name: String) -> Result<Folder> {
+    fn create_folder(&mut self, _name: String) -> Result<Folder> {
         Err(MeliError::new("Unimplemented."))
     }
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
-        None
+        self.tag_index.clone()
     }
     fn as_any(&self) -> &dyn::std::any::Any {
         self
@@ -156,7 +243,7 @@ impl PluginBackend {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;
-        let (mut stream, _) = listener.accept()?;
+        let (stream, _) = listener.accept()?;
         /* send init message to plugin to register hooks */
         let session = Uuid::new_v4();
         let channel = RpcChannel::new(stream, &session)?;
@@ -166,6 +253,7 @@ impl PluginBackend {
             child,
             plugin,
             channel: Arc::new(Mutex::new(channel)),
+            tag_index: None,
             is_online: Arc::new(Mutex::new((now, Err(MeliError::new("Unitialized"))))),
         }))
     }
@@ -186,5 +274,54 @@ impl PluginBackend {
                 validate_conf_fn: Box::new(|_| Ok(())),
             },
         );
+    }
+}
+
+#[derive(Debug)]
+struct PluginOp {
+    hash: EnvelopeHash,
+    channel: Arc<Mutex<RpcChannel>>,
+    tag_index: Option<Arc<RwLock<BTreeMap<u64, String>>>>,
+    bytes: Option<String>,
+}
+
+impl BackendOp for PluginOp {
+    fn description(&self) -> String {
+        String::new()
+    }
+
+    fn as_bytes(&mut self) -> Result<&[u8]> {
+        if let Some(ref bytes) = self.bytes {
+            return Ok(bytes.as_bytes());
+        }
+
+        if let Ok(mut channel) = self.channel.try_lock() {
+            channel.write_ref(&rmpv::ValueRef::Ext(BACKEND_OP_FN, b"as_bytes"))?;
+            debug!(channel.expect_ack())?;
+            channel.write_ref(&rmpv::ValueRef::Integer(self.hash.into()))?;
+            debug!(channel.expect_ack())?;
+            let bytes: Result<PluginResult<String>> = debug!(channel.from_read());
+            self.bytes = Some(bytes.map(Into::into).and_then(std::convert::identity)?);
+            if let Some(ref bytes) = self.bytes {
+                debug!(Envelope::from_bytes(bytes.as_bytes(), None));
+            }
+            Ok(self.bytes.as_ref().map(String::as_bytes).unwrap())
+        } else {
+            Err(MeliError::new("busy"))
+        }
+    }
+
+    fn fetch_flags(&self) -> Flag {
+        let flag = Flag::default();
+
+        flag
+    }
+
+    fn set_flag(&mut self, __envelope: &mut Envelope, _f: Flag, _value: bool) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
     }
 }

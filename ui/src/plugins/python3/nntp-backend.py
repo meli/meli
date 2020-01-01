@@ -35,19 +35,70 @@ def chunks(iterable, n):
         except:
             break
 
+class NNTPClient(libmeliapi.Client):
+    def __init__(self, stream_address, server_address, newsgroup):
+        super().__init__(stream_address)
+        self.bytes_cache = {}
+        self.conn = nntplib.NNTP(server_address)
+        self.newsgroup = newsgroup
+    def backend_req(self, req):
+        print("[nntp-plugin]: backend_req = ", req, flush=True, file=sys.stderr)
+        if req.data == b'is_online':
+            self.ok_send(None)
+        elif req.data == b'get':
+            resp, count, first, last, name = self.conn.group(self.newsgroup)
+            print('Group', name, 'has', count, 'articles, range', first, 'to', last, flush=True, file=sys.stderr)
+
+            resp, overviews = self.conn.over((0, last))
+            for chunk in chunks(iter(reversed(overviews)), 100):
+                ret = []
+                for id, over in chunk:
+                    #print(id, nntplib.decode_header(over['subject']), flush=True, file=sys.stderr)
+                    env = {}
+                    env["hash"] = id
+                    env["subject"] = nntplib.decode_header(over["subject"])
+                    env["from"] = nntplib.decode_header(over["from"])
+                    env["date"] = nntplib.decode_header(over["date"])
+                    env["message_id"] = nntplib.decode_header(over["message-id"])
+                    env["references"] = nntplib.decode_header(over["references"])
+                    try:
+                        env["to"] = nntplib.decode_header(over["to"])
+                    except KeyError:
+                        env["to"] = self.newsgroup
+                    ret.append(env)
+                print("ret len = ", len(ret), flush=True,file=sys.stderr)
+                self.ok_send(ret)
+            self.ok_send(None)
+    def backend_op_req(self, req):
+        print("[nntp-plugin]: backend_op_req = ", req, flush=True, file=sys.stderr)
+        if req.data == b'as_bytes':
+            _hash = self.read()
+            print("[nntp-plugin]: hash = ", _hash, flush=True, file=sys.stderr)
+            self.ack()
+            try:
+                try:
+                    self.ok_send(self.bytes_cache[_hash])
+                except KeyError:
+                    resp, info = self.conn.article(_hash)
+                    #print(_id, " line0 = ", str(info.lines[0], 'utf-8', 'ignore'))
+                    elem = b'\n'.join(info.lines)
+                    self.bytes_cache[_hash] = str(elem, 'utf-8', 'ignore')
+                    self.ok_send(self.bytes_cache[_hash])
+            except Exception as e:
+                self.err_send(str(e))
+
 
 if __name__ == "__main__":
     import importlib
     importlib.reload(libmeliapi)
-    server_address = './soworkfile'
-    client = libmeliapi.Client(server_address)
+    stream_address = './soworkfile'
+    server_address = 'news.gmane.org'
+    newsgroup = 'gmane.comp.python.committers'
+    client = NNTPClient(stream_address, server_address, newsgroup)
     client.connect()
     #client.setblocking(True)
     try:
-        counter = 0
         while True:
-            print("[nntp-plugin]: loop = ", counter, flush=True, file=sys.stderr)
-            counter += 1
             req = client.read()
             if req is None:
                 time.sleep(0.15)
@@ -57,36 +108,12 @@ if __name__ == "__main__":
             print("[nntp-plugin]: ", "req: ", req, flush=True, file=sys.stderr)
             sys.stderr.flush()
             if isinstance(req, msgpack.ExtType):
+                if req.code == client.backend_fn_type:
+                    client.backend_req(req)
+                elif req.code == client.backend_op_fn_type:
+                    client.backend_op_req(req)
                 print("[nntp-plugin]: ", req, flush=True, file=sys.stderr)
-                if req.data == b'is_online':
-                    client.backend_fn_ok_send(None)
-                elif req.data == b'get':
-                    s = nntplib.NNTP('news.gmane.org')
-                    resp, count, first, last, name = s.group('gmane.comp.python.committers')
-                    print('Group', name, 'has', count, 'articles, range', first, 'to', last, flush=True, file=sys.stderr)
-
-                    resp, overviews = s.over((last - 9, last))
-                    ids = []
-                    for id, over in overviews:
-                        ids.append(id)
-                        print(id, nntplib.decode_header(over['subject']), flush=True, file=sys.stderr)
-                    for chunk in chunks(iter(ids), 2):
-                        ret = []
-                        for _id in chunk:
-                            resp, info = s.article(_id)
-                            #print(_id, " line0 = ", str(info.lines[0], 'utf-8', 'ignore'))
-                            elem = b'\n'.join(info.lines)
-                            ret.append(str(elem, 'utf-8', 'ignore'))
-                        print("ret len = ", len(ret), flush=True,file=sys.stderr)
-                        client.backend_fn_ok_send(ret)
-                        time.sleep(0.85)
-                    s.quit()
-                    client.backend_fn_ok_send(None)
             #client.setblocking(True)
             time.sleep(0.15)
-
-
-    except Exception as msg:
-        print("[nntp-plugin]: ", msg, flush=True, file=sys.stderr,)
-        sys.stderr.flush()
-
+    except:
+        raise RuntimeError("Something bad happened")
