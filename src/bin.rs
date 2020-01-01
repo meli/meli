@@ -226,6 +226,7 @@ fn run_app() -> Result<()> {
 
     /* Catch SIGWINCH to handle terminal resizing */
     let signals = &[
+        signal_hook::SIGALRM,
         /* Catch SIGWINCH to handle terminal resizing */
         signal_hook::SIGWINCH,
         /* Catch SIGCHLD to handle embed applications status change */
@@ -387,7 +388,13 @@ fn run_app() -> Result<()> {
                                 state.redraw();
                             }
                         },
-                        _ => {}
+                        signal_hook::SIGALRM => {
+                            state.rcv_event(UIEvent::Timer);
+                            state.redraw();
+                        },
+                        other => {
+                            debug!("got other signal: {:?}", other);
+                        }
                     }
                 },
             }

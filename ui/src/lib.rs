@@ -183,3 +183,205 @@ pub mod username {
         ptr_to_string(pwent.pw_name)
     }
 }
+
+pub mod timer {
+    use super::{MeliError, Result};
+    use libc::clockid_t;
+    use libc::sigevent;
+    use libc::{itimerspec, timespec};
+    use nix::sys::signal::{SigEvent, SigevNotify};
+    use std::convert::TryInto;
+    use std::time::Duration;
+
+    #[allow(non_camel_case_types)]
+    pub type timer_t = libc::intptr_t;
+
+    #[link(name = "rt")]
+    extern "C" {
+        fn timer_create(clockid: clockid_t, sevp: *const sigevent, timerid: *mut timer_t) -> i32;
+        fn timer_settime(
+            timerid: timer_t,
+            flags: i32,
+            new_value: *const itimerspec,
+            old_value: *const itimerspec,
+        ) -> i32;
+
+        fn timer_delete(timerid: timer_t) -> i32;
+    }
+
+    #[derive(Debug)]
+    pub struct PosixTimer {
+        timer_id: timer_t,
+        interval: Duration,
+        value: Duration,
+    }
+
+    impl Drop for PosixTimer {
+        fn drop(&mut self) {
+            unsafe {
+                timer_delete(self.timer_id);
+            }
+        }
+    }
+
+    impl PosixTimer {
+        pub fn rearm(&mut self) {
+            debug!("posixtimer rearm");
+            let spec = itimerspec {
+                it_interval: timespec {
+                    tv_sec: self.interval.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: self.interval.subsec_nanos().try_into().unwrap_or(0),
+                },
+                it_value: timespec {
+                    tv_sec: self.value.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: self.value.subsec_nanos().try_into().unwrap_or(0),
+                },
+            };
+            let ret =
+                unsafe { timer_settime(self.timer_id, 0, &spec as *const _, std::ptr::null_mut()) };
+            if ret != 0 {
+                match ret {
+                    libc::EFAULT => {
+                        panic!(
+                            "EFAULT: new_value, old_value, or curr_value is not a valid pointer."
+                        );
+                    }
+                    libc::EINVAL => {
+                        panic!("EINVAL: timerid is invalid.");
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        pub fn set_interval(&mut self, interval: Duration) {
+            let spec = itimerspec {
+                it_interval: timespec {
+                    tv_sec: interval.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: interval.subsec_nanos().try_into().unwrap_or(0),
+                },
+                it_value: timespec {
+                    tv_sec: self.value.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: self.value.subsec_nanos().try_into().unwrap_or(0),
+                },
+            };
+            let ret =
+                unsafe { timer_settime(self.timer_id, 0, &spec as *const _, std::ptr::null_mut()) };
+            if ret != 0 {
+                match ret {
+                    libc::EFAULT => {
+                        panic!(
+                            "EFAULT: new_value, old_value, or curr_value is not a valid pointer."
+                        );
+                    }
+                    libc::EINVAL => {
+                        panic!("EINVAL: timerid is invalid.");
+                    }
+                    _ => {}
+                }
+            }
+            self.interval = interval;
+        }
+
+        pub fn arm(&mut self, value: Duration) {
+            let spec = itimerspec {
+                it_interval: timespec {
+                    tv_sec: self.interval.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: self.interval.subsec_nanos().try_into().unwrap_or(0),
+                },
+                it_value: timespec {
+                    tv_sec: value.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: value.subsec_nanos().try_into().unwrap_or(0),
+                },
+            };
+            let ret =
+                unsafe { timer_settime(self.timer_id, 0, &spec as *const _, std::ptr::null_mut()) };
+            if ret != 0 {
+                match ret {
+                    libc::EFAULT => {
+                        panic!(
+                            "EFAULT: new_value, old_value, or curr_value is not a valid pointer."
+                        );
+                    }
+                    libc::EINVAL => {
+                        panic!("EINVAL: timerid is invalid.");
+                    }
+                    _ => {}
+                }
+            }
+            self.value = value;
+        }
+
+        pub fn new_with_signal(
+            interval: Duration,
+            value: Duration,
+            signal: nix::sys::signal::Signal,
+        ) -> Result<PosixTimer> {
+            let mut timer_id = Default::default();
+
+            let sigev_notify = SigevNotify::SigevSignal {
+                signal,
+                si_value: 0,
+            };
+            let event = SigEvent::new(sigev_notify);
+
+            let ret = unsafe {
+                timer_create(
+                    libc::CLOCK_MONOTONIC,
+                    &event.sigevent() as *const _,
+                    &mut timer_id as *mut _,
+                )
+            };
+
+            if ret != 0 {
+                match ret {
+                    libc::EAGAIN => {
+                        return Err(MeliError::new(
+                            "Temporary error during kernel allocation of timer",
+                        ));
+                    }
+                    libc::EINVAL => {
+                        panic!("Clock ID, sigev_notify, sigev_signo, or sigev_notify_thread_id is invalid.");
+                    }
+                    libc::ENOMEM => {
+                        return Err(MeliError::new("Could not allocate memory."));
+                    }
+                    _ => {}
+                }
+            }
+
+            let spec = itimerspec {
+                it_interval: timespec {
+                    tv_sec: interval.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: interval.subsec_nanos().try_into().unwrap_or(0),
+                },
+                it_value: timespec {
+                    tv_sec: value.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: value.subsec_nanos().try_into().unwrap_or(0),
+                },
+            };
+
+            let ret =
+                unsafe { timer_settime(timer_id, 0, &spec as *const _, std::ptr::null_mut()) };
+            if ret != 0 {
+                match ret {
+                    libc::EFAULT => {
+                        panic!(
+                            "EFAULT: new_value, old_value, or curr_value is not a valid pointer."
+                        );
+                    }
+                    libc::EINVAL => {
+                        panic!("EINVAL: timerid is invalid.");
+                    }
+                    _ => {}
+                }
+            }
+
+            Ok(PosixTimer {
+                timer_id,
+                interval,
+                value,
+            })
+        }
+    }
+}
