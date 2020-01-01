@@ -20,7 +20,6 @@
  */
 
 use super::default_vals::internal_value_false;
-use super::toggleflag_de;
 
 fn none() -> Option<String> {
     None
@@ -38,7 +37,7 @@ pub struct NotificationsSettings {
     /// Default: None
     #[serde(default = "none")]
     pub xbiff_file_path: Option<String>,
-    #[serde(deserialize_with = "toggleflag_de", default = "internal_value_false")]
+    #[serde(default = "internal_value_false")]
     pub play_sound: super::ToggleFlag,
     #[serde(default = "none")]
     pub sound_file: Option<String>,

@@ -46,7 +46,7 @@ use self::terminal::TerminalSettings;
 use crate::pager::PagerSettings;
 use crate::plugins::Plugin;
 use melib::backends::SpecialUsageMailbox;
-use melib::conf::{toggleflag_de, AccountSettings, FolderConf, ToggleFlag};
+use melib::conf::{AccountSettings, FolderConf, ToggleFlag};
 use melib::error::*;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -453,6 +453,10 @@ mod default_vals {
 
     pub(in crate::conf) fn internal_value_false() -> super::ToggleFlag {
         super::ToggleFlag::InternalVal(false)
+    }
+
+    pub(in crate::conf) fn internal_value_true() -> super::ToggleFlag {
+        super::ToggleFlag::InternalVal(true)
     }
 }
 

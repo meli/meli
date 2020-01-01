@@ -249,6 +249,14 @@ impl ContentType {
             _ => None,
         }
     }
+
+    pub fn parts(&self) -> Option<&Vec<Attachment>> {
+        if let ContentType::Multipart { ref parts, .. } = self {
+            Some(parts)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

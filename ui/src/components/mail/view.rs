@@ -21,6 +21,7 @@
 
 use super::*;
 use melib::list_management;
+use melib::parser::BytesExt;
 
 use std::convert::TryFrom;
 use std::process::{Command, Stdio};
@@ -603,6 +604,35 @@ impl Component for MailView {
                 }
                 ViewMode::Normal if body.is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(&body, context)));
+                    self.mode = ViewMode::Subview;
+                }
+                ViewMode::Normal
+                    if context
+                        .settings
+                        .pager
+                        .auto_choose_multipart_alternative
+                        .is_true()
+                        && match body.content_type {
+                            ContentType::Multipart {
+                                kind: MultipartType::Alternative,
+                                ref parts,
+                                ..
+                            } => parts.iter().all(|p| {
+                                p.is_html() || (p.is_text() && p.body().trim().is_empty())
+                            }),
+                            _ => false,
+                        } =>
+                {
+                    self.subview = Some(Box::new(HtmlView::new(
+                        &body
+                            .content_type
+                            .parts()
+                            .unwrap()
+                            .into_iter()
+                            .find(|a| a.is_html())
+                            .unwrap_or(&body),
+                        context,
+                    )));
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Subview | ViewMode::ContactSelector(_) => {}

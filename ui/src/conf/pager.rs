@@ -21,6 +21,8 @@
 
 use super::default_vals::*;
 use super::deserializers::*;
+use melib::ToggleFlag;
+
 /// Settings for the pager function.
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
 pub struct PagerSettings {
@@ -68,6 +70,12 @@ pub struct PagerSettings {
     /// Default: 80
     #[serde(default = "eighty_val")]
     pub minimum_width: usize,
+
+    /// Choose `text/html` alternative if `text/plain` is empty in `multipart/alternative`
+    /// attachments.
+    /// Default: true
+    #[serde(default = "internal_value_true")]
+    pub auto_choose_multipart_alternative: ToggleFlag,
 }
 
 fn eighty_val() -> usize {

@@ -78,9 +78,9 @@ pub struct FolderConf {
     pub alias: Option<String>,
     #[serde(default = "true_val")]
     pub autoload: bool,
-    #[serde(deserialize_with = "toggleflag_de")]
+    #[serde(default)]
     pub subscribe: ToggleFlag,
-    #[serde(deserialize_with = "toggleflag_de")]
+    #[serde(default)]
     pub ignore: ToggleFlag,
     #[serde(default = "none")]
     pub usage: Option<SpecialUsageMailbox>,
@@ -158,18 +158,6 @@ impl ToggleFlag {
     }
 }
 
-pub fn toggleflag_de<'de, D>(deserializer: D) -> std::result::Result<ToggleFlag, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s = <bool>::deserialize(deserializer);
-    Ok(match s {
-        Err(_) => ToggleFlag::Unset,
-        Ok(true) => ToggleFlag::True,
-        Ok(false) => ToggleFlag::False,
-    })
-}
-
 impl Serialize for ToggleFlag {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -180,5 +168,18 @@ impl Serialize for ToggleFlag {
             ToggleFlag::False => serializer.serialize_bool(false),
             ToggleFlag::True => serializer.serialize_bool(true),
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for ToggleFlag {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <bool>::deserialize(deserializer);
+        Ok(match s? {
+            true => ToggleFlag::True,
+            false => ToggleFlag::False,
+        })
     }
 }
