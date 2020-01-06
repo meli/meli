@@ -19,8 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use melib::email::UnixTimestamp;
 use melib::parsec::*;
+use melib::UnixTimestamp;
 use melib::{
     backends::{FolderHash, MailBackend},
     email::EnvelopeHash,

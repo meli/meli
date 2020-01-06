@@ -104,6 +104,9 @@ pub mod dbg {
 #[cfg(feature = "unicode_algorithms")]
 extern crate text_processing;
 
+pub mod datetime;
+pub use datetime::UnixTimestamp;
+
 #[macro_use]
 mod logging;
 pub use self::logging::LoggingLevel::*;
@@ -129,7 +132,6 @@ extern crate serde_derive;
 /* parser */
 #[macro_use]
 extern crate nom;
-extern crate chrono;
 extern crate data_encoding;
 extern crate encoding;
 

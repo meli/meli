@@ -2,7 +2,6 @@ use super::*;
 use crate::backends::BackendOp;
 use crate::email::attachments::AttachmentBuilder;
 use crate::shellexpand::ShellExpandTrait;
-use chrono::{DateTime, Local};
 use data_encoding::BASE64_MIME;
 use std::ffi::OsStr;
 use std::io::Read;
@@ -35,8 +34,10 @@ impl Default for Draft {
         headers.insert("Cc".into(), "".into());
         headers.insert("Bcc".into(), "".into());
 
-        let now: DateTime<Local> = Local::now();
-        headers.insert("Date".into(), now.to_rfc2822());
+        headers.insert(
+            "Date".into(),
+            crate::datetime::timestamp_to_string(crate::datetime::now(), None),
+        );
         headers.insert("Subject".into(), "".into());
         headers.insert(
             "User-Agent".into(),

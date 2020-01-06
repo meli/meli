@@ -906,7 +906,7 @@ impl PlainListing {
             n if n < 4 * 24 * 60 * 60 => {
                 format!("{} days ago{}", n / (24 * 60 * 60), " ".repeat(9))
             }
-            _ => envelope.datetime().format("%Y-%m-%d %H:%M:%S").to_string(),
+            _ => melib::datetime::timestamp_to_string(envelope.datetime(), None),
         }
     }
 

@@ -39,6 +39,7 @@ pub use address::*;
 pub mod signatures;
 
 use crate::backends::BackendOp;
+use crate::datetime::UnixTimestamp;
 use crate::error::{MeliError, Result};
 use crate::thread::ThreadHash;
 
@@ -50,9 +51,6 @@ use std::hash::Hasher;
 use std::option::Option;
 use std::str;
 use std::string::String;
-
-use chrono;
-use chrono::TimeZone;
 
 bitflags! {
     #[derive(Default, Serialize, Deserialize)]
@@ -105,7 +103,6 @@ impl EnvelopeWrapper {
     }
 }
 
-pub type UnixTimestamp = u64;
 pub type EnvelopeHash = u64;
 
 /// `Envelope` represents all the data of an email we need to know.
@@ -350,14 +347,10 @@ impl Envelope {
         self.timestamp
     }
 
-    pub fn datetime(&self) -> chrono::DateTime<chrono::FixedOffset> {
-        if let Ok(d) = parser::date(&self.date.as_bytes()) {
-            return d;
-        }
-        chrono::FixedOffset::west(0)
-            .ymd(1970, 1, 1)
-            .and_hms(0, 0, 0)
+    pub fn datetime(&self) -> UnixTimestamp {
+        self.timestamp
     }
+
     pub fn date_as_str(&self) -> &str {
         &self.date
     }
@@ -572,8 +565,8 @@ impl Envelope {
     pub fn set_thread(&mut self, new_val: ThreadHash) {
         self.thread = new_val;
     }
-    pub fn set_datetime(&mut self, new_val: chrono::DateTime<chrono::FixedOffset>) {
-        self.timestamp = new_val.timestamp() as UnixTimestamp;
+    pub fn set_datetime(&mut self, new_val: UnixTimestamp) {
+        self.timestamp = new_val;
     }
     pub fn set_flag(
         &mut self,

@@ -19,7 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use super::*;
-use chrono;
 use data_encoding::BASE64_MIME;
 use encoding::{DecoderTrap, Encoding};
 use nom::{is_hex_digit, le_u8};
@@ -658,18 +657,13 @@ fn eat_comments(input: &[u8]) -> Vec<u8> {
  * right now we expect input will have no extra spaces in between tokens
  *
  * We should use a custom parser here*/
-pub fn date(input: &[u8]) -> Result<chrono::DateTime<chrono::FixedOffset>> {
+pub fn date(input: &[u8]) -> Result<UnixTimestamp> {
     let mut parsed_result = phrase(&eat_comments(input)).to_full_result()?;
     if let Some(pos) = parsed_result.find(b"-0000") {
         parsed_result[pos] = b'+';
     }
 
-    Ok(
-        chrono::DateTime::parse_from_rfc2822(
-            String::from_utf8_lossy(parsed_result.trim()).as_ref(),
-        )
-        .map_err(|err| MeliError::new(err.to_string()))?,
-    )
+    Ok(crate::datetime::rfc822_to_timestamp(parsed_result.trim()))
 }
 
 named!(pub message_id<&[u8]>,

@@ -32,6 +32,7 @@
  * ownership.
  */
 
+use crate::datetime::UnixTimestamp;
 use crate::email::parser::BytesExt;
 use crate::email::*;
 use crate::structs::StackVec;
@@ -430,13 +431,6 @@ impl ThreadNode {
 
     pub fn date(&self) -> UnixTimestamp {
         self.date
-    }
-
-    pub fn datetime(&self) -> chrono::DateTime<chrono::Utc> {
-        use chrono::{TimeZone, Utc};
-        use std::convert::TryInto;
-
-        Utc.timestamp(self.date.try_into().unwrap_or(0), 0)
     }
 
     pub fn is_empty(&self) -> bool {

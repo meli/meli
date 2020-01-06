@@ -22,7 +22,7 @@
 #[cfg(feature = "vcard")]
 pub mod vcard;
 
-use chrono::{DateTime, Local};
+use crate::datetime::{self, UnixTimestamp};
 use fnv::FnvHashMap;
 use uuid::Uuid;
 
@@ -59,8 +59,8 @@ impl From<String> for CardId {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct AddressBook {
     display_name: String,
-    created: DateTime<Local>,
-    last_edited: DateTime<Local>,
+    created: UnixTimestamp,
+    last_edited: UnixTimestamp,
     pub cards: FnvHashMap<CardId, Card>,
 }
 
@@ -73,13 +73,13 @@ pub struct Card {
     name_prefix: String,
     name_suffix: String,
     //address
-    birthday: Option<DateTime<Local>>,
+    birthday: Option<UnixTimestamp>,
     email: String,
     url: String,
     key: String,
 
     color: u8,
-    last_edited: DateTime<Local>,
+    last_edited: UnixTimestamp,
     extra_properties: FnvHashMap<String, String>,
 
     /// If true, we can't make any changes because we do not manage this resource.
@@ -90,8 +90,8 @@ impl AddressBook {
     pub fn new(display_name: String) -> AddressBook {
         AddressBook {
             display_name,
-            created: Local::now(),
-            last_edited: Local::now(),
+            created: datetime::now(),
+            last_edited: datetime::now(),
             cards: FnvHashMap::default(),
         }
     }
@@ -154,7 +154,7 @@ impl Card {
             url: String::new(),
             key: String::new(),
 
-            last_edited: Local::now(),
+            last_edited: datetime::now(),
             external_resource: false,
             extra_properties: FnvHashMap::default(),
             color: 0,
@@ -190,7 +190,7 @@ impl Card {
         self.key.as_str()
     }
     pub fn last_edited(&self) -> String {
-        self.last_edited.to_rfc2822()
+        datetime::timestamp_to_string(self.last_edited, None)
     }
 
     pub fn set_id(&mut self, new_val: CardId) {

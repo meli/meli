@@ -911,10 +911,7 @@ impl ConversationsListing {
                 n / (24 * 60 * 60),
                 if n / (24 * 60 * 60) == 1 { "" } else { "s" }
             ),
-            _ => thread_node
-                .datetime()
-                .format("%Y-%m-%d %H:%M:%S")
-                .to_string(),
+            _ => melib::datetime::timestamp_to_string(thread_node.date(), Some("%Y-%m-%d %T")),
         }
     }
 

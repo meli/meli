@@ -21,7 +21,6 @@
 
 /// Convert VCard strings to meli Cards (contacts).
 use super::*;
-use crate::chrono::TimeZone;
 use crate::error::{MeliError, Result};
 use crate::parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser};
 use fnv::FnvHashMap;
@@ -202,7 +201,7 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
                       T102200Z
                       T102200-0800
                       */
-            card.birthday = chrono::Local.datetime_from_str(&val.value, "%Y%m%d").ok();
+            card.birthday = crate::datetime::timestamp_from_string(val.value.as_str(), "%Y%m%d");
         }
         if let Some(val) = self.0.remove("EMAIL") {
             card.set_email(val.value);

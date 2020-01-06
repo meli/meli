@@ -20,7 +20,6 @@
  */
 
 use crate::shellexpand::ShellExpandTrait;
-use chrono::offset::Local;
 use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
@@ -79,7 +78,9 @@ pub fn log(val: String, level: LoggingLevel) {
         let mut b = f.lock().unwrap();
         if level <= b.level {
             b.dest
-                .write_all(Local::now().to_string().as_bytes())
+                .write_all(
+                    crate::datetime::timestamp_to_string(crate::datetime::now(), None).as_bytes(),
+                )
                 .unwrap();
             b.dest.write_all(b" [").unwrap();
             b.dest.write_all(level.to_string().as_bytes()).unwrap();
