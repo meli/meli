@@ -135,7 +135,7 @@ impl MailcapEntry {
         }
 
         match result {
-            None => Err(MeliError::new("Not found".to_string())),
+            None => Err(MeliError::new("Not found")),
             Some(MailcapEntry {
                 command,
                 copiousoutput,

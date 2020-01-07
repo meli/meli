@@ -619,7 +619,7 @@ pub fn select_response(input: &str) -> Result<SelectResponse> {
         Ok(ret)
     } else {
         debug!("BAD/NO response in select: {}", input);
-        Err(MeliError::new(input))
+        Err(MeliError::new(input.to_string()))
     }
 }
 

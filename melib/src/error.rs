@@ -37,14 +37,14 @@ pub type Result<T> = result::Result<T, MeliError>;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MeliError {
-    pub summary: Option<String>,
-    pub details: String,
+    pub summary: Option<Cow<'static, str>>,
+    pub details: Cow<'static, str>,
 }
 
 impl MeliError {
     pub fn new<M>(msg: M) -> MeliError
     where
-        M: Into<String>,
+        M: Into<Cow<'static, str>>,
     {
         MeliError {
             summary: None,
@@ -54,7 +54,7 @@ impl MeliError {
 
     pub fn set_summary<M>(mut self, summary: M) -> MeliError
     where
-        M: Into<String>,
+        M: Into<Cow<'static, str>>,
     {
         self.summary = Some(summary.into());
         self
@@ -69,7 +69,7 @@ impl fmt::Display for MeliError {
 
 impl Into<String> for MeliError {
     fn into(self) -> String {
-        self.details
+        self.details.into()
     }
 }
 
@@ -82,7 +82,7 @@ impl Error for MeliError {
 impl From<io::Error> for MeliError {
     #[inline]
     fn from(kind: io::Error) -> MeliError {
-        MeliError::new(kind.description())
+        MeliError::new(kind.description().to_string())
     }
 }
 

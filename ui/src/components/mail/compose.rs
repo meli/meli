@@ -1228,8 +1228,8 @@ pub fn save_draft(
         context.accounts[account_cursor].save_special(bytes, folder_type, flags)
     {
         context.replies.push_back(UIEvent::Notification(
-            summary,
-            details,
+            summary.map(|s| s.into()),
+            details.into(),
             Some(NotificationType::ERROR),
         ));
     }
