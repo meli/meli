@@ -88,7 +88,6 @@ pub enum UIEvent {
     ExInput(Key),
     InsertInput(Key),
     EmbedInput((Key, Vec<u8>)),
-    RefreshMailbox((usize, FolderHash)), //view has changed to FolderHash mailbox
     //Quit?
     Resize,
     /// Force redraw.

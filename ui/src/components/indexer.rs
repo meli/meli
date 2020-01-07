@@ -106,9 +106,6 @@ impl Component for Indexer {
         }
 
         match *event {
-            UIEvent::RefreshMailbox(_) => {
-                self.dirty = true;
-            }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }

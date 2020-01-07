@@ -530,22 +530,6 @@ impl Component for Listing {
                 }
                 _ => {}
             },
-            UIEvent::RefreshMailbox((idxa, folder_hash)) => {
-                self.cursor_pos = (
-                    idxa,
-                    context.accounts[idxa]
-                        .folders_order
-                        .iter()
-                        .position(|&h| h == folder_hash)
-                        .unwrap_or(0),
-                );
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context).unwrap(),
-                    )));
-                self.dirty = true;
-            }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }

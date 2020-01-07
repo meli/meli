@@ -273,10 +273,6 @@ impl ThreadListing {
             return;
         };
 
-        // Inform State that we changed the current folder view.
-        context
-            .replies
-            .push_back(UIEvent::RefreshMailbox((self.cursor_pos.0, folder_hash)));
         // Get mailbox as a reference.
         //
         match context.accounts[self.cursor_pos.0].status(folder_hash) {
@@ -621,10 +617,6 @@ impl Component for ThreadListing {
                 self.dirty = true;
                 self.view = None;
                 return true;
-            }
-            UIEvent::RefreshMailbox(_) => {
-                self.dirty = true;
-                self.view = None;
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if context.accounts[self.new_cursor_pos.0]
