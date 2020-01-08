@@ -848,7 +848,7 @@ impl ThreadView {
                 .iter()
                 .enumerate()
                 .fold(
-                    (vec![Vec::new()], StackVec::new(), false),
+                    (vec![Vec::new()], SmallVec::<[_; 8]>::new(), false),
                     |(mut visies, mut stack, is_prev_hidden), (idx, e)| {
                         match (e.hidden, is_prev_hidden) {
                             (true, false) => {

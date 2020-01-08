@@ -35,7 +35,6 @@
 use crate::datetime::UnixTimestamp;
 use crate::email::parser::BytesExt;
 use crate::email::*;
-use crate::structs::StackVec;
 
 #[cfg(feature = "unicode_algorithms")]
 use text_processing::grapheme_clusters::*;
@@ -52,6 +51,8 @@ use std::result::Result as StdResult;
 use std::str::FromStr;
 use std::string::ToString;
 use std::sync::{Arc, RwLock};
+
+use smallvec::SmallVec;
 
 type Envelopes = Arc<RwLock<FnvHashMap<EnvelopeHash, Envelope>>>;
 
@@ -279,7 +280,7 @@ impl FromStr for SortOrder {
 
 pub struct ThreadsIterator<'a> {
     pos: usize,
-    stack: StackVec<usize>,
+    stack: SmallVec<[usize; 16]>,
     root_tree: Ref<'a, Vec<ThreadHash>>,
     thread_nodes: &'a FnvHashMap<ThreadHash, ThreadNode>,
 }
@@ -332,7 +333,7 @@ impl<'a> Iterator for ThreadsIterator<'a> {
 pub struct ThreadIterator<'a> {
     init_pos: usize,
     pos: usize,
-    stack: StackVec<usize>,
+    stack: SmallVec<[usize; 16]>,
     root_tree: Ref<'a, Vec<ThreadHash>>,
     thread_nodes: &'a FnvHashMap<ThreadHash, ThreadNode>,
 }
@@ -724,7 +725,7 @@ impl Threads {
     pub fn threads_iter(&self) -> ThreadsIterator {
         ThreadsIterator {
             pos: 0,
-            stack: StackVec::new(),
+            stack: SmallVec::new(),
             root_tree: self.tree_index.borrow(),
             thread_nodes: &self.thread_nodes,
         }
@@ -734,7 +735,7 @@ impl Threads {
         ThreadIterator {
             init_pos: index,
             pos: index,
-            stack: StackVec::new(),
+            stack: SmallVec::new(),
             root_tree: self.tree_index.borrow(),
             thread_nodes: &self.thread_nodes,
         }

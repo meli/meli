@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use smallvec::SmallVec;
 #[macro_use]
 mod protocol_parser;
 pub use protocol_parser::{UntaggedResponse::*, *};
@@ -677,7 +678,7 @@ impl ImapType {
         &self,
         query: String,
         folder_hash: FolderHash,
-    ) -> Result<crate::structs::StackVec<EnvelopeHash>> {
+    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
         let folders_lck = self.folders.read()?;
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock()?;
@@ -692,7 +693,7 @@ impl ImapType {
             if l.starts_with("* SEARCH") {
                 use std::iter::FromIterator;
                 let uid_index = self.uid_store.uid_index.lock()?;
-                return Ok(crate::structs::StackVec::from_iter(
+                return Ok(SmallVec::from_iter(
                     l["* SEARCH".len()..]
                         .trim()
                         .split_whitespace()

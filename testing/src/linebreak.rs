@@ -1,6 +1,5 @@
 extern crate melib;
 use melib::Result;
-use melib::StackVec;
 
 extern crate text_processing;
 use text_processing::line_break::*;
@@ -14,14 +13,14 @@ fn cost(i: usize, j: usize, width: usize, minima: &Vec<usize>, offsets: &Vec<usi
 }
 
 fn smawk(
-    rows: &mut StackVec<usize>,
-    columns: &mut StackVec<usize>,
+    rows: &mut Vec<usize>,
+    columns: &mut Vec<usize>,
     minima: &mut Vec<usize>,
     breaks: &mut Vec<usize>,
     width: usize,
     offsets: &Vec<usize>,
 ) {
-    let mut stack = StackVec::new();
+    let mut stack = Vec::new();
     let mut i = 0;
     while i < rows.len() {
         if stack.len() > 0 {
@@ -46,7 +45,7 @@ fn smawk(
         let mut odd_columns = columns.iter().skip(1).step_by(2).cloned().collect();
         smawk(rows, &mut odd_columns, minima, breaks, width, offsets);
         for (i, o) in odd_columns.into_iter().enumerate() {
-            columns.set(2 * i + 1, o);
+            columns[2 * i + 1] = o;
         }
     }
     let mut i = 0;

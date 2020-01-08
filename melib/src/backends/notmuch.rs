@@ -1,3 +1,24 @@
+/*
+ * meli - notmuch backend
+ *
+ * Copyright 2019 - 2020 Manos Pitsidianakis
+ *
+ * This file is part of meli.
+ *
+ * meli is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * meli is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with meli. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::FolderHash;
 use crate::backends::{
@@ -8,8 +29,8 @@ use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
-use crate::structs::StackVec;
 use fnv::FnvHashMap;
+use smallvec::SmallVec;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
 use std::ffi::{CStr, CString};
@@ -229,7 +250,7 @@ impl NotmuchDb {
         Ok(())
     }
 
-    pub fn search(&self, query_s: &str) -> Result<crate::structs::StackVec<EnvelopeHash>> {
+    pub fn search(&self, query_s: &str) -> Result<SmallVec<[EnvelopeHash; 512]>> {
         let database_lck = self.database.inner.read().unwrap();
         let query_str = std::ffi::CString::new(query_s).unwrap();
         let query: *mut notmuch_query_t =
@@ -247,7 +268,7 @@ impl NotmuchDb {
         }
         assert!(!messages.is_null());
         let iter = MessageIterator { messages };
-        let mut ret = StackVec::new();
+        let mut ret = SmallVec::new();
         for message in iter {
             let fs_path = unsafe { notmuch_message_get_filename(message) };
             let c_str = unsafe { CStr::from_ptr(fs_path) };

@@ -43,6 +43,7 @@ use crate::datetime::UnixTimestamp;
 use crate::error::{MeliError, Result};
 use crate::thread::ThreadHash;
 
+use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
@@ -132,7 +133,7 @@ pub struct Envelope {
 
     flags: Flag,
     has_attachments: bool,
-    labels: crate::structs::StackVec<u64>,
+    labels: SmallVec<[u64; 8]>,
 }
 
 impl fmt::Debug for Envelope {
@@ -170,7 +171,7 @@ impl Envelope {
             hash,
             has_attachments: false,
             flags: Flag::default(),
-            labels: crate::structs::StackVec::new(),
+            labels: SmallVec::new(),
         }
     }
 
@@ -609,11 +610,11 @@ impl Envelope {
         self.has_attachments
     }
 
-    pub fn labels(&self) -> &crate::structs::StackVec<u64> {
+    pub fn labels(&self) -> &SmallVec<[u64; 8]> {
         &self.labels
     }
 
-    pub fn labels_mut(&mut self) -> &mut crate::structs::StackVec<u64> {
+    pub fn labels_mut(&mut self) -> &mut SmallVec<[u64; 8]> {
         &mut self.labels
     }
 }

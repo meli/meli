@@ -103,7 +103,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn replies(&mut self) -> Vec<UIEvent> {
+    pub fn replies(&mut self) -> smallvec::SmallVec<[UIEvent; 8]> {
         self.replies.drain(0..).collect()
     }
 
@@ -437,7 +437,8 @@ impl State {
         for i in 0..self.components.len() {
             self.draw_component(i);
         }
-        let mut areas: Vec<Area> = self.context.dirty_areas.drain(0..).collect();
+        let mut areas: smallvec::SmallVec<[Area; 8]> =
+            self.context.dirty_areas.drain(0..).collect();
         if areas.is_empty() {
             return;
         }
@@ -682,7 +683,8 @@ impl State {
         }
 
         if !self.context.replies.is_empty() {
-            let replies: Vec<UIEvent> = self.context.replies.drain(0..).collect();
+            let replies: smallvec::SmallVec<[UIEvent; 8]> =
+                self.context.replies.drain(0..).collect();
             // Pass replies to self and call count on the map iterator to force evaluation
             replies.into_iter().map(|r| self.rcv_event(r)).count();
         }

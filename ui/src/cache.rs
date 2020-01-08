@@ -25,7 +25,7 @@ use melib::{
     backends::{FolderHash, MailBackend},
     email::EnvelopeHash,
     thread::{SortField, SortOrder},
-    Result, StackVec,
+    Result,
 };
 use std::sync::{Arc, RwLock};
 
@@ -429,7 +429,7 @@ pub fn imap_search(
     (_sort_field, _sort_order): (SortField, SortOrder),
     folder_hash: FolderHash,
     backend: &Arc<RwLock<Box<dyn MailBackend>>>,
-) -> Result<StackVec<EnvelopeHash>> {
+) -> Result<smallvec::SmallVec<[EnvelopeHash; 512]>> {
     let query = query().parse(term)?.1;
     let backend_lck = backend.read().unwrap();
 

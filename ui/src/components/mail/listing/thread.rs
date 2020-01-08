@@ -37,7 +37,7 @@ pub struct ThreadListing {
     /// Cache current view.
     content: CellBuffer,
 
-    row_updates: StackVec<ThreadHash>,
+    row_updates: SmallVec<[ThreadHash; 8]>,
     locations: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
     dirty: bool,
@@ -50,12 +50,12 @@ pub struct ThreadListing {
 }
 
 impl MailListingTrait for ThreadListing {
-    fn row_updates(&mut self) -> &mut StackVec<ThreadHash> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, _context: &Context) -> StackVec<ThreadHash> {
-        StackVec::new()
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
+        SmallVec::new()
     }
 }
 
@@ -242,7 +242,7 @@ impl ThreadListing {
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
             content,
-            row_updates: StackVec::new(),
+            row_updates: SmallVec::new(),
             locations: Vec::new(),
             dirty: true,
             unfocused: false,

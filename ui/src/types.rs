@@ -152,24 +152,24 @@ pub mod segment_tree {
     /*! Simple segment tree implementation for maximum in range queries. This is useful if given an
      *  array of numbers you want to get the maximum value inside an interval quickly.
      */
-    use melib::StackVec;
+    use smallvec::SmallVec;
     use std::convert::TryFrom;
     use std::iter::FromIterator;
 
     #[derive(Default, Debug, Clone)]
     pub struct SegmentTree {
-        array: StackVec<u8>,
-        tree: StackVec<u8>,
+        array: SmallVec<[u8; 1024]>,
+        tree: SmallVec<[u8; 1024]>,
     }
 
-    impl From<StackVec<u8>> for SegmentTree {
-        fn from(val: StackVec<u8>) -> SegmentTree {
+    impl From<SmallVec<[u8; 1024]>> for SegmentTree {
+        fn from(val: SmallVec<[u8; 1024]>) -> SegmentTree {
             SegmentTree::new(val)
         }
     }
 
     impl SegmentTree {
-        pub fn new(val: StackVec<u8>) -> SegmentTree {
+        pub fn new(val: SmallVec<[u8; 1024]>) -> SegmentTree {
             if val.is_empty() {
                 return SegmentTree {
                     array: val.clone(),
@@ -182,8 +182,8 @@ pub mod segment_tree {
                 .ceil() as u32;
             let max_size = 2 * (2_usize.pow(height)) - 1;
 
-            let mut segment_tree: StackVec<u8> =
-                StackVec::from_iter(core::iter::repeat(0).take(max_size));
+            let mut segment_tree: SmallVec<[u8; 1024]> =
+                SmallVec::from_iter(core::iter::repeat(0).take(max_size));
             for i in 0..val.len() {
                 segment_tree[val.len() + i] = val[i];
             }
@@ -231,10 +231,10 @@ pub mod segment_tree {
 
     #[test]
     fn test_segment_tree() {
-        let array: StackVec<u8> = [9, 1, 17, 2, 3, 23, 4, 5, 6, 37]
+        let array: SmallVec<[u8; 1024]> = [9, 1, 17, 2, 3, 23, 4, 5, 6, 37]
             .into_iter()
             .cloned()
-            .collect::<StackVec<u8>>();
+            .collect::<SmallVec<[u8; 1024]>>();
         let segment_tree = SegmentTree::from(array.clone());
 
         assert_eq!(segment_tree.get_max(0, 5), 23);

@@ -1,5 +1,6 @@
 use super::*;
 use crate::backends::FolderHash;
+use smallvec::SmallVec;
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -160,7 +161,7 @@ impl Collection {
         mut new_envelopes: FnvHashMap<EnvelopeHash, Envelope>,
         folder_hash: FolderHash,
         sent_folder: Option<FolderHash>,
-    ) -> Option<StackVec<FolderHash>> {
+    ) -> Option<SmallVec<[FolderHash; 8]>> {
         self.sent_folder = sent_folder;
         for (h, e) in new_envelopes.iter() {
             self.message_ids.insert(e.message_id().raw().to_vec(), *h);
@@ -198,7 +199,7 @@ impl Collection {
             });
         }
 
-        let mut ret = StackVec::new();
+        let mut ret = SmallVec::new();
         let keys = threads.keys().cloned().collect::<Vec<FolderHash>>();
         for t_fh in keys {
             if t_fh == folder_hash {

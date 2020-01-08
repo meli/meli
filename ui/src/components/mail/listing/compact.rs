@@ -69,18 +69,18 @@ pub struct CompactListing {
     /// If `self.view` exists or not.
     unfocused: bool,
     view: ThreadView,
-    row_updates: StackVec<ThreadHash>,
+    row_updates: SmallVec<[ThreadHash; 8]>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
 }
 
 impl MailListingTrait for CompactListing {
-    fn row_updates(&mut self) -> &mut StackVec<ThreadHash> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> StackVec<ThreadHash> {
+    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
         let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
         let cursor_iter;
@@ -96,7 +96,7 @@ impl MailListingTrait for CompactListing {
             .flatten()
             .chain(cursor_iter.into_iter().flatten())
             .cloned();
-        StackVec::from_iter(iter.into_iter())
+        SmallVec::from_iter(iter.into_iter())
     }
 }
 
@@ -530,7 +530,7 @@ impl CompactListing {
             filtered_selection: Vec::new(),
             filtered_order: FnvHashMap::default(),
             selection: FnvHashMap::default(),
-            row_updates: StackVec::new(),
+            row_updates: SmallVec::new(),
             data_columns: DataColumns::default(),
             dirty: true,
             force_draw: true,
@@ -554,7 +554,7 @@ impl CompactListing {
             .hash();
         let folder = &context.accounts[self.cursor_pos.0].folder_confs[&folder_hash];
         let mut tags = String::new();
-        let mut colors = StackVec::new();
+        let mut colors: SmallVec<[_; 8]> = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
@@ -681,17 +681,17 @@ impl CompactListing {
         let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0, 0);
         let mut row_widths: (
-            StackVec<u8>,
-            StackVec<u8>,
-            StackVec<u8>,
-            StackVec<u8>,
-            StackVec<u8>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
         ) = (
-            StackVec::new(),
-            StackVec::new(),
-            StackVec::new(),
-            StackVec::new(),
-            StackVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
         );
 
         threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);

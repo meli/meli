@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use smallvec::SmallVec;
 use crate::cache::query;
 use crate::cache::Query::{self, *};
 use crate::melib::parsec::Parser;
@@ -27,7 +28,7 @@ use melib::{
     email::{Envelope, EnvelopeHash},
     log,
     thread::{SortField, SortOrder},
-    MeliError, Result, StackVec, ERROR,
+    MeliError, Result, ERROR,
 };
 use rusqlite::{params, Connection};
 use std::borrow::Cow;
@@ -389,7 +390,7 @@ pub fn index(context: &mut crate::state::Context, account_name: &str) -> Result<
 pub fn search(
     term: &str,
     (sort_field, sort_order): (SortField, SortOrder),
-) -> Result<StackVec<EnvelopeHash>> {
+) -> Result<SmallVec<[EnvelopeHash; 512]>> {
     let conn = open_db()?;
 
     let sort_field = match debug!(sort_field) {
@@ -425,7 +426,7 @@ pub fn search(
                     .map_err(|e: std::array::TryFromSliceError| MeliError::new(e.to_string()))?,
             ))
         })
-        .collect::<Result<StackVec<EnvelopeHash>>>();
+        .collect::<Result<SmallVec<[EnvelopeHash; 512]>>>();
     results
 }
 

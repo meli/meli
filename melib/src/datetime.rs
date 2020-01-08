@@ -61,7 +61,7 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>) -> Strin
     };
     let s: CString;
     unsafe {
-        let mut vec: Vec<u8> = vec![0; 256];
+        let mut vec: [u8; 256] = [0; 256];
         let ret = strftime(
             vec.as_mut_ptr() as *mut _,
             256,

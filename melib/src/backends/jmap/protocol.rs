@@ -21,9 +21,9 @@
 
 use super::folder::JmapFolder;
 use super::*;
-use crate::structs::StackVec;
 use serde::Serialize;
 use serde_json::{json, Value};
+use smallvec::SmallVec;
 use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
@@ -327,10 +327,10 @@ pub fn get(
                     }
                     tag_hash
                 })
-                .collect::<StackVec<u64>>();
+                .collect::<SmallVec<[u64; 1024]>>();
             (tags, obj.id.clone(), obj.blob_id.clone())
         })
-        .collect::<Vec<(StackVec<u64>, Id, Id)>>();
+        .collect::<Vec<(SmallVec<[u64; 1024]>, Id, Id)>>();
     drop(tag_lck);
     let mut ret = list
         .into_iter()

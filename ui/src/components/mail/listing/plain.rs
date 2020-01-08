@@ -70,19 +70,19 @@ pub struct PlainListing {
     /// If `self.view` exists or not.
     unfocused: bool,
     view: MailView,
-    row_updates: StackVec<EnvelopeHash>,
-    _row_updates: StackVec<ThreadHash>,
+    row_updates: SmallVec<[EnvelopeHash; 8]>,
+    _row_updates: SmallVec<[ThreadHash; 8]>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
 }
 
 impl MailListingTrait for PlainListing {
-    fn row_updates(&mut self) -> &mut StackVec<ThreadHash> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self._row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> StackVec<ThreadHash> {
+    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
         if is_selection_empty {
             self.selection
@@ -91,7 +91,7 @@ impl MailListingTrait for PlainListing {
                 .map(|(k, _)| self.thread_hashes[k])
                 .collect()
         } else {
-            let mut ret = StackVec::new();
+            let mut ret = SmallVec::new();
             ret.push(self.get_thread_under_cursor(self.cursor_pos.2, context));
             ret
         }
@@ -484,8 +484,8 @@ impl PlainListing {
             filtered_selection: Vec::new(),
             filtered_order: FnvHashMap::default(),
             selection: FnvHashMap::default(),
-            row_updates: StackVec::new(),
-            _row_updates: StackVec::new(),
+            row_updates: SmallVec::new(),
+            _row_updates: SmallVec::new(),
             data_columns: DataColumns::default(),
             dirty: true,
             force_draw: true,
@@ -503,7 +503,7 @@ impl PlainListing {
             .hash();
         let folder = &context.accounts[self.cursor_pos.0].folder_confs[&folder_hash];
         let mut tags = String::new();
-        let mut colors = StackVec::new();
+        let mut colors = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
@@ -1086,7 +1086,7 @@ impl Component for PlainListing {
                             .flatten()
                             .chain(cursor_iter.into_iter().flatten())
                             .cloned();
-                        let stack = StackVec::from_iter(iter.into_iter());
+                        let stack: SmallVec<[_; 8]> = SmallVec::from_iter(iter.into_iter());
                         for i in stack {
                             self.perform_action(context, i, a);
                         }

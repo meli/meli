@@ -73,7 +73,7 @@ column_str!(struct DateString(String));
 column_str!(struct FromString(String));
 column_str!(struct SubjectString(String));
 column_str!(struct FlagString(String));
-column_str!(struct TagString(String, StackVec<Color>));
+column_str!(struct TagString(String, SmallVec<[Color; 8]>));
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `ThreadView`.
@@ -100,18 +100,18 @@ pub struct ConversationsListing {
     /// If `self.view` exists or not.
     unfocused: bool,
     view: ThreadView,
-    row_updates: StackVec<ThreadHash>,
+    row_updates: SmallVec<[ThreadHash; 8]>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
 }
 
 impl MailListingTrait for ConversationsListing {
-    fn row_updates(&mut self) -> &mut StackVec<ThreadHash> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> StackVec<ThreadHash> {
+    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
         let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
         let cursor_iter;
@@ -127,7 +127,7 @@ impl MailListingTrait for ConversationsListing {
             .flatten()
             .chain(cursor_iter.into_iter().flatten())
             .cloned();
-        StackVec::from_iter(iter.into_iter())
+        SmallVec::from_iter(iter.into_iter())
     }
 }
 
@@ -500,7 +500,7 @@ impl ConversationsListing {
             filtered_selection: Vec::new(),
             filtered_order: FnvHashMap::default(),
             selection: FnvHashMap::default(),
-            row_updates: StackVec::new(),
+            row_updates: SmallVec::new(),
             content: Default::default(),
             dirty: true,
             force_draw: true,
@@ -525,7 +525,7 @@ impl ConversationsListing {
             .hash();
         let folder = &context.accounts[self.cursor_pos.0].folder_confs[&folder_hash];
         let mut tags = String::new();
-        let mut colors = StackVec::new();
+        let mut colors = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
@@ -690,7 +690,7 @@ impl ConversationsListing {
             }
             from_address_list.clear();
             from_address_set.clear();
-            let mut stack = StackVec::new();
+            let mut stack: SmallVec<[ThreadHash; 8]> = SmallVec::new();
             stack.push(root_idx);
             while let Some(h) = stack.pop() {
                 let env_hash = if let Some(h) = threads.thread_nodes()[&h].message() {
@@ -952,7 +952,7 @@ impl ConversationsListing {
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
-        let mut stack = StackVec::new();
+        let mut stack: SmallVec<[ThreadHash; 8]> = SmallVec::new();
         stack.push(thread_hash);
         while let Some(h) = stack.pop() {
             let env_hash = if let Some(h) = threads.thread_nodes()[&h].message() {

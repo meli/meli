@@ -123,8 +123,6 @@ pub mod mailbox;
 pub mod thread;
 pub use crate::email::*;
 pub use crate::thread::*;
-mod structs;
-pub use self::structs::*;
 pub mod parsec;
 
 #[macro_use]

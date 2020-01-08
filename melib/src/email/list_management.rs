@@ -18,9 +18,10 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
+
 use super::parser;
 use super::Envelope;
-use crate::StackVec;
+use smallvec::SmallVec;
 use std::convert::From;
 
 #[derive(Debug, Copy)]
@@ -46,7 +47,7 @@ impl<'a> From<&'a [u8]> for ListAction<'a> {
 }
 
 impl<'a> ListAction<'a> {
-    pub fn parse_options_list(input: &'a [u8]) -> Option<StackVec<ListAction<'a>>> {
+    pub fn parse_options_list(input: &'a [u8]) -> Option<SmallVec<[ListAction<'a>; 4]>> {
         parser::angle_bracket_delimeted_list(input)
             .map(|mut vec| {
                 /* Prefer email options first, since this _is_ a mail client after all and it's
@@ -61,17 +62,10 @@ impl<'a> ListAction<'a> {
 
                 vec.into_iter()
                     .map(|elem| ListAction::from(elem))
-                    .collect::<StackVec<ListAction<'a>>>()
+                    .collect::<SmallVec<[ListAction<'a>; 4]>>()
             })
             .to_full_result()
             .ok()
-    }
-}
-
-/* Required for StackVec's place holder elements, never actually used */
-impl<'a> Default for ListAction<'a> {
-    fn default() -> Self {
-        ListAction::Email(b"")
     }
 }
 
@@ -88,8 +82,8 @@ impl<'a> Clone for ListAction<'a> {
 pub struct ListActions<'a> {
     pub id: Option<&'a str>,
     pub archive: Option<&'a str>,
-    pub post: Option<StackVec<ListAction<'a>>>,
-    pub unsubscribe: Option<StackVec<ListAction<'a>>>,
+    pub post: Option<SmallVec<[ListAction<'a>; 4]>>,
+    pub unsubscribe: Option<SmallVec<[ListAction<'a>; 4]>>,
 }
 
 pub fn list_id_header<'a>(envelope: &'a Envelope) -> Option<&'a str> {

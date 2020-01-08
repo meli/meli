@@ -30,6 +30,7 @@ rusqlite = {version = "0.20.0", optional =true }
 rmp = "^0.8"
 rmpv = { version = "^0.4.2", features=["with-serde",] }
 rmp-serde = "^0.14.0"
+smallvec = { version = "1.1.0", features = ["serde", ] }
 
 [features]
 default = ["sqlite3"]

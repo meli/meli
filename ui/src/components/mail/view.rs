@@ -22,6 +22,7 @@
 use super::*;
 use melib::list_management;
 use melib::parser::BytesExt;
+use smallvec::SmallVec;
 
 use std::convert::TryFrom;
 use std::process::{Command, Stdio};
@@ -229,7 +230,7 @@ impl MailView {
                 if body.count_attachments() > 1 {
                     fn attachment_tree(
                         (idx, (depth, att)): (&mut usize, (usize, &Attachment)),
-                        branches: &mut StackVec<bool>,
+                        branches: &mut SmallVec<[bool; 8]>,
                         has_sibling: bool,
                         s: &mut String,
                     ) {
@@ -286,7 +287,7 @@ impl MailView {
                             _ => {}
                         }
                     }
-                    attachment_tree((&mut 0, (0, &body)), &mut StackVec::new(), false, &mut t);
+                    attachment_tree((&mut 0, (0, &body)), &mut SmallVec::new(), false, &mut t);
                 }
                 t
             }
@@ -1385,7 +1386,7 @@ impl Component for MailView {
                         }
                         _ => { /* error print message to user */ }
                     }
-                }
+                };
             }
             UIEvent::Action(Listing(OpenInNewTab)) => {
                 context

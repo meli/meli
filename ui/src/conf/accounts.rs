@@ -34,7 +34,7 @@ use melib::error::{MeliError, Result};
 use melib::mailbox::*;
 use melib::thread::{SortField, SortOrder, ThreadHash, ThreadNode, Threads};
 use melib::AddressBook;
-use melib::StackVec;
+use smallvec::SmallVec;
 use text_processing::GlobMatch;
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
@@ -384,7 +384,7 @@ impl Account {
             folder_names.insert(f.hash(), f.path().to_string());
         }
 
-        let mut stack: StackVec<FolderHash> = StackVec::new();
+        let mut stack: SmallVec<[FolderHash; 8]> = SmallVec::new();
         let mut tree: Vec<FolderNode> = Vec::new();
         let mut collection: Collection = Collection::new(Default::default());
         for (h, f) in ref_folders.iter() {
@@ -442,7 +442,7 @@ impl Account {
             }
         });
 
-        let mut stack: StackVec<Option<&FolderNode>> = StackVec::new();
+        let mut stack: SmallVec<[Option<&FolderNode>; 8]> = SmallVec::new();
         for n in tree.iter_mut() {
             folders_order.push(n.hash);
             n.kids.sort_unstable_by(|a, b| {
@@ -462,6 +462,7 @@ impl Account {
                 stack.extend(next.kids.iter().rev().map(Some));
             }
         }
+        drop(stack);
 
         self.folders = folders;
         self.ref_folders = ref_folders;
@@ -1053,7 +1054,7 @@ impl Account {
         search_term: &str,
         sort: (SortField, SortOrder),
         folder_hash: FolderHash,
-    ) -> Result<StackVec<EnvelopeHash>> {
+    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
         if self.settings.account().format() == "imap" {
             return crate::cache::imap_search(search_term, sort, folder_hash, &self.backend);
         }
@@ -1081,7 +1082,7 @@ impl Account {
 
         #[cfg(not(feature = "sqlite3"))]
         {
-            let mut ret = StackVec::new();
+            let mut ret = SmallVec::new();
             let envelopes = self.collection.envelopes.clone().read();
             let envelopes = envelopes.unwrap();
 

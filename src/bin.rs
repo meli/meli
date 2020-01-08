@@ -256,7 +256,7 @@ fn run_app() -> Result<()> {
 
         'inner: loop {
             /* Check if any components have sent reply events to State. */
-            let events: Vec<UIEvent> = state.context.replies();
+            let events: ui::smallvec::SmallVec<[UIEvent; 8]> = state.context.replies();
             for e in events {
                 state.rcv_event(e);
             }

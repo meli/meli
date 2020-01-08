@@ -40,6 +40,7 @@ extern crate termion;
 extern crate nom;
 
 extern crate serde_json;
+pub extern crate smallvec;
 
 use melib::*;
 use std::collections::VecDeque;

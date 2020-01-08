@@ -21,6 +21,7 @@
 
 use super::*;
 use crate::types::segment_tree::SegmentTree;
+use smallvec::SmallVec;
 
 mod conversations;
 pub use self::conversations::*;
@@ -56,10 +57,10 @@ pub trait MailListingTrait: ListingTrait {
         a: &ListingAction,
     ) {
         let account = &mut context.accounts[self.coordinates().0];
-        let mut envs_to_set: StackVec<EnvelopeHash> = StackVec::new();
+        let mut envs_to_set: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
         let folder_hash = account[self.coordinates().1].unwrap().folder.hash();
         {
-            let mut stack = StackVec::new();
+            let mut stack: SmallVec<[ThreadHash; 8]> = SmallVec::new();
             stack.push(thread_hash);
             while let Some(thread_iter) = stack.pop() {
                 {
@@ -138,8 +139,8 @@ pub trait MailListingTrait: ListingTrait {
         }
     }
 
-    fn row_updates(&mut self) -> &mut StackVec<ThreadHash>;
-    fn get_focused_items(&self, _context: &Context) -> StackVec<ThreadHash>;
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]>;
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]>;
 }
 
 pub trait ListingTrait: Component {
