@@ -191,8 +191,11 @@ pub mod timer {
     use libc::sigevent;
     use libc::{itimerspec, timespec};
     use nix::sys::signal::{SigEvent, SigevNotify};
+    use std::cell::RefCell;
     use std::convert::TryInto;
     use std::time::Duration;
+
+    thread_local!(static TIMER_IDS: RefCell<u8> = RefCell::new(0));
 
     #[allow(non_camel_case_types)]
     pub type timer_t = libc::intptr_t;
@@ -215,6 +218,7 @@ pub mod timer {
         timer_id: timer_t,
         interval: Duration,
         value: Duration,
+        pub si_value: u8,
     }
 
     impl Drop for PosixTimer {
@@ -253,6 +257,35 @@ pub mod timer {
                     _ => {}
                 }
             }
+        }
+
+        pub fn set_value(&mut self, value: Duration) {
+            let spec = itimerspec {
+                it_interval: timespec {
+                    tv_sec: self.interval.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: self.interval.subsec_nanos().try_into().unwrap_or(0),
+                },
+                it_value: timespec {
+                    tv_sec: value.as_secs().try_into().unwrap_or(0),
+                    tv_nsec: value.subsec_nanos().try_into().unwrap_or(0),
+                },
+            };
+            let ret =
+                unsafe { timer_settime(self.timer_id, 0, &spec as *const _, std::ptr::null_mut()) };
+            if ret != 0 {
+                match ret {
+                    libc::EFAULT => {
+                        panic!(
+                            "EFAULT: new_value, old_value, or curr_value is not a valid pointer."
+                        );
+                    }
+                    libc::EINVAL => {
+                        panic!("EINVAL: timerid is invalid.");
+                    }
+                    _ => {}
+                }
+            }
+            self.value = value;
         }
 
         pub fn set_interval(&mut self, interval: Duration) {
@@ -320,9 +353,15 @@ pub mod timer {
         ) -> Result<PosixTimer> {
             let mut timer_id = Default::default();
 
+            let mut si_value = 0;
+            TIMER_IDS.with(|t| {
+                si_value = *t.borrow_mut();
+                *t.borrow_mut() += 1;
+            });
+
             let sigev_notify = SigevNotify::SigevSignal {
                 signal,
-                si_value: 0,
+                si_value: si_value as isize,
             };
             let event = SigEvent::new(sigev_notify);
 
@@ -382,6 +421,7 @@ pub mod timer {
                 timer_id,
                 interval,
                 value,
+                si_value,
             })
         }
     }

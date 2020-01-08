@@ -42,12 +42,23 @@ use ui::*;
 
 use nix;
 use std::os::raw::c_int;
+
 use xdg;
 
 fn notify(
     signals: &[c_int],
     sender: crossbeam::channel::Sender<ThreadEvent>,
 ) -> std::result::Result<crossbeam::channel::Receiver<c_int>, std::io::Error> {
+    let alarm_sender = sender.clone();
+    let alarm_handler = move |info: &nix::libc::siginfo_t| {
+        let value = unsafe { info.si_value().sival_ptr as u8 };
+        alarm_sender
+            .send(ThreadEvent::UIEvent(UIEvent::Timer(value)))
+            .unwrap();
+    };
+    unsafe {
+        signal_hook_registry::register_sigaction(signal_hook::SIGALRM, alarm_handler)?;
+    }
     let (s, r) = crossbeam::channel::bounded(100);
     let signals = signal_hook::iterator::Signals::new(signals)?;
     std::thread::spawn(move || {
@@ -218,22 +229,21 @@ fn run_app() -> Result<()> {
         std::env::set_var("MELI_CONFIG", config_location);
     }
 
-    /* Create the application State. */
-    let mut state = State::new()?;
-
-    let receiver = state.receiver();
-    let sender = state.sender();
-
+    /* Create a channel to communicate with other threads. The main process is the sole receiver.
+     * */
+    let (sender, receiver) = crossbeam::channel::bounded(32 * ::std::mem::size_of::<ThreadEvent>());
     /* Catch SIGWINCH to handle terminal resizing */
     let signals = &[
-        signal_hook::SIGALRM,
         /* Catch SIGWINCH to handle terminal resizing */
         signal_hook::SIGWINCH,
         /* Catch SIGCHLD to handle embed applications status change */
         signal_hook::SIGCHLD,
     ];
 
-    let signal_recvr = notify(signals, sender)?;
+    let signal_recvr = notify(signals, sender.clone())?;
+
+    /* Create the application State. */
+    let mut state = State::new(sender, receiver.clone())?;
 
     let window = Box::new(Tabbed::new(vec![
         Box::new(listing::Listing::new(&state.context.accounts)),
@@ -387,10 +397,6 @@ fn run_app() -> Result<()> {
                                 state.render();
                                 state.redraw();
                             }
-                        },
-                        signal_hook::SIGALRM => {
-                            state.rcv_event(UIEvent::Timer);
-                            state.redraw();
                         },
                         other => {
                             debug!("got other signal: {:?}", other);

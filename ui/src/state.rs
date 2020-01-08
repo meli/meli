@@ -32,7 +32,7 @@ use super::*;
 use crate::plugins::PluginManager;
 use melib::backends::{FolderHash, NotifyFn};
 
-use crossbeam::channel::{bounded, unbounded, Receiver, Sender};
+use crossbeam::channel::{unbounded, Receiver, Sender};
 use fnv::FnvHashMap;
 use std::env;
 use std::io::Write;
@@ -199,11 +199,7 @@ impl Drop for State {
 }
 
 impl State {
-    pub fn new() -> Result<Self> {
-        /* Create a channel to communicate with other threads. The main process is the sole receiver.
-         * */
-        let (sender, receiver) = bounded(32 * ::std::mem::size_of::<ThreadEvent>());
-
+    pub fn new(sender: Sender<ThreadEvent>, receiver: Receiver<ThreadEvent>) -> Result<Self> {
         /*
          * Create async channel to block the input-thread if we need to fork and stop it from reading
          * stdin, see get_events() for details

@@ -106,6 +106,7 @@ pub enum UIEvent {
     EnvelopeUpdate(EnvelopeHash),
     EnvelopeRename(EnvelopeHash, EnvelopeHash), // old_hash, new_hash
     EnvelopeRemove(EnvelopeHash),
+    Timer(u8),
 }
 
 impl From<RefreshEvent> for UIEvent {
