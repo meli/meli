@@ -31,6 +31,7 @@ pub mod pgp;
 pub mod tags;
 #[macro_use]
 pub mod shortcuts;
+mod listing;
 pub mod terminal;
 
 pub mod accounts;
@@ -41,6 +42,7 @@ pub use self::shortcuts::*;
 pub use self::tags::*;
 
 use self::default_vals::*;
+use self::listing::ListingSettings;
 use self::notifications::NotificationsSettings;
 use self::terminal::TerminalSettings;
 use crate::pager::PagerSettings;
@@ -68,6 +70,7 @@ macro_rules! split_command {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MailUIConf {
     pub pager: Option<PagerSettings>,
+    pub listing: Option<ListingSettings>,
     pub notifications: Option<NotificationsSettings>,
     pub shortcuts: Option<Shortcuts>,
     pub composing: Option<ComposingSettings>,
@@ -114,6 +117,8 @@ pub struct FileAccount {
     cache_type: CacheType,
     #[serde(default)]
     pub manual_refresh: bool,
+    #[serde(default = "none")]
+    pub refresh_command: Option<String>,
     #[serde(flatten)]
     #[serde(deserialize_with = "extra_settings")]
     pub extra: HashMap<String, String>, /* use custom deserializer to convert any given value (eg bool, number, etc) to string */
@@ -230,6 +235,8 @@ pub struct FileSettings {
     #[serde(default)]
     pager: PagerSettings,
     #[serde(default)]
+    listing: ListingSettings,
+    #[serde(default)]
     notifications: NotificationsSettings,
     #[serde(default)]
     shortcuts: Shortcuts,
@@ -267,6 +274,7 @@ impl AccountConf {
 pub struct Settings {
     pub accounts: HashMap<String, AccountConf>,
     pub pager: PagerSettings,
+    pub listing: ListingSettings,
     pub notifications: NotificationsSettings,
     pub shortcuts: Shortcuts,
     pub tags: TagsSettings,
@@ -359,6 +367,7 @@ impl FileSettings {
                 folders,
                 extra,
                 manual_refresh,
+                refresh_command: _,
                 index_style: _,
                 cache_type: _,
             } = acc;
@@ -401,6 +410,7 @@ impl Settings {
         Ok(Settings {
             accounts: s,
             pager: fs.pager,
+            listing: fs.listing,
             notifications: fs.notifications,
             shortcuts: fs.shortcuts,
             tags: fs.tags,

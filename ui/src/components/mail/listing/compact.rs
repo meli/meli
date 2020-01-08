@@ -591,7 +591,7 @@ impl CompactListing {
         subject.truncate_at_boundary(150);
         if thread_node.len() > 0 {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(thread_node)),
+                date: DateString(ConversationsListing::format_date(context, thread_node)),
                 subject: SubjectString(format!("{} ({})", subject, thread_node.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
@@ -603,7 +603,7 @@ impl CompactListing {
             }
         } else {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(thread_node)),
+                date: DateString(ConversationsListing::format_date(context, thread_node)),
                 subject: SubjectString(subject),
                 flag: FlagString(format!(
                     "{}{}",

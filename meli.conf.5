@@ -53,7 +53,7 @@ is not a comment:
 The accepted regular expression is
 .Li ^\es*include\es*\&\\&\e"(\e\e.|[^\e"])+\e"\es*$
 .Sh SECTIONS
-The top level sections of the config are accounts, shortcuts, notifications, pager, composing, pgp, terminal.
+The top level sections of the config are accounts, shortcuts, notifications, pager, listing, composing, pgp, terminal.
 .Pp
 .Sy example configuration
 
@@ -138,6 +138,12 @@ plain:shows one row per mail, regardless of threading
 .It Ic read_only Ar boolean
 attempt to not make any changes to this account.
 .Pq Em false
+.It Ic manual_refresh Ar boolean
+(optional) if true, do not monitor account for changes (shortcut listing.refresh)
+.Pq Em false
+.It Ic refresh_command Ar String
+(optional) command to execute when manually refreshing (shortcut listing.refresh)
+.Pq Em None
 .It Ic cache_type Ar String
 (optional) choose which cache backend to use. Available options are 'none' and 'sqlite3'
 .Pq Em "sqlite3"
@@ -351,6 +357,14 @@ Go to next account.
 Start new mail draft in new tab
 .\" default value
 .Pq Em m
+.It Ic set_seen
+Set thread as seen.
+.\" default value
+.Pq Em n
+.It Ic refresh
+Manually request a folder refresh.
+.\" default value
+.Pq Em F5
 .It Ic search
 Search within list of e-mails.
 .\" default value
@@ -562,6 +576,21 @@ enable freedesktop-spec notifications. this is usually what you want
 (optional) Minimum text width in columns.
 .\" default value
 .Pq Em 80
+.El
+.Sh LISTING
+.Bl -tag -width 36n
+.It Ic context_lines Ar num
+(optional) number of context lines when going to next page. (Unimplemented)
+.\" default value
+.Pq Em 0
+.It Ic datetime_fmt Ar String
+(optional) datetime formatting passed verbatim to strftime(3).
+.\" default value
+.Pq Em \&%Y-\&%m-\&%d \&%T
+.It Ic recent_dates Ar Boolean
+(optional) Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
+.\" default value
+.Pq Em true
 .El
 .Sh TAGS
 .Bl -tag -width 36n

@@ -723,6 +723,18 @@ impl Account {
         None
     }
     pub fn refresh(&mut self, folder_hash: FolderHash) -> Result<()> {
+        if let Some(ref refresh_command) = self.settings.conf().refresh_command {
+            let parts = crate::split_command!(refresh_command);
+            let (cmd, args) = (parts[0], &parts[1..]);
+            std::process::Command::new(cmd)
+                .args(args)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
+                .spawn()?;
+            return Ok(());
+        }
+
         let sender_ = self.sender.clone();
         let r = RefreshEventConsumer::new(Box::new(move |r| {
             sender_.send(ThreadEvent::from(r)).unwrap();

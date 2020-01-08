@@ -562,7 +562,7 @@ impl ConversationsListing {
         subject.truncate_at_boundary(150);
         if thread_node.len() > 0 {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(thread_node)),
+                date: DateString(ConversationsListing::format_date(context, thread_node)),
                 subject: SubjectString(format!("{} ({})", subject, thread_node.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
@@ -574,7 +574,7 @@ impl ConversationsListing {
             }
         } else {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(thread_node)),
+                date: DateString(ConversationsListing::format_date(context, thread_node)),
                 subject: SubjectString(subject),
                 flag: FlagString(format!(
                     "{}{}",
@@ -890,28 +890,37 @@ impl ConversationsListing {
         }
     }
 
-    pub(super) fn format_date(thread_node: &ThreadNode) -> String {
+    pub(super) fn format_date(context: &Context, thread_node: &ThreadNode) -> String {
         let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(thread_node.date());
         let now: std::time::Duration = std::time::SystemTime::now()
             .duration_since(d)
             .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
         match now.as_secs() {
-            n if n < 60 * 60 => format!(
+            n if context.settings.listing.recent_dates && n < 60 * 60 => format!(
                 "{} minute{} ago",
                 n / (60),
                 if n / 60 == 1 { "" } else { "s" }
             ),
-            n if n < 24 * 60 * 60 => format!(
+            n if context.settings.listing.recent_dates && n < 24 * 60 * 60 => format!(
                 "{} hour{} ago",
                 n / (60 * 60),
                 if n / (60 * 60) == 1 { "" } else { "s" }
             ),
-            n if n < 7 * 24 * 60 * 60 => format!(
+            n if context.settings.listing.recent_dates && n < 7 * 24 * 60 * 60 => format!(
                 "{} day{} ago",
                 n / (24 * 60 * 60),
                 if n / (24 * 60 * 60) == 1 { "" } else { "s" }
             ),
-            _ => melib::datetime::timestamp_to_string(thread_node.date(), Some("%Y-%m-%d %T")),
+            _ => melib::datetime::timestamp_to_string(
+                thread_node.date(),
+                context
+                    .settings
+                    .listing
+                    .datetime_fmt
+                    .as_ref()
+                    .map(String::as_str)
+                    .or(Some("%Y-%m-%d %T")),
+            ),
         }
     }
 
