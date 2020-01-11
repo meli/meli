@@ -391,6 +391,7 @@ pub fn decode_charset(s: &[u8], charset: Charset) -> Result<String> {
         Charset::ISO8859_7 => Ok(ISO_8859_7.decode(s, DecoderTrap::Strict)?),
         Charset::ISO8859_15 => Ok(ISO_8859_15.decode(s, DecoderTrap::Strict)?),
         Charset::GBK => Ok(GBK.decode(s, DecoderTrap::Strict)?),
+        Charset::Windows1250 => Ok(WINDOWS_1250.decode(s, DecoderTrap::Strict)?),
         Charset::Windows1251 => Ok(WINDOWS_1251.decode(s, DecoderTrap::Strict)?),
         Charset::Windows1252 => Ok(WINDOWS_1252.decode(s, DecoderTrap::Strict)?),
         Charset::Windows1253 => Ok(WINDOWS_1253.decode(s, DecoderTrap::Strict)?),
@@ -667,7 +668,7 @@ pub fn date(input: &[u8]) -> Result<UnixTimestamp> {
 }
 
 named!(pub message_id<&[u8]>,
-        complete!(delimited!(tag!("<"), take_until1!(">"), tag!(">")))
+        complete!(delimited!(ws!(tag!("<")), take_until1!(">"), tag!(">")))
  );
 
 fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
@@ -1096,6 +1097,20 @@ mod tests {
  =?UTF-8?B?zrHPhs6uz4I=?="#;
         assert_eq!(
             "[internal] Νέος Οδηγός Συγγραφής",
+            std::str::from_utf8(&phrase(words.as_bytes()).to_full_result().unwrap()).unwrap()
+        );
+
+        let words = r#"=?UTF-8?Q?Re=3a_Climate_crisis_reality_check_=e2=80=93=c2=a0EcoHust?=
+ =?UTF-8?Q?ler?="#;
+        assert_eq!(
+            "Re: Climate crisis reality check –\u{a0}EcoHustler",
+            std::str::from_utf8(&phrase(words.as_bytes()).to_full_result().unwrap()).unwrap()
+        );
+
+        let words = r#"Re: Climate crisis reality check =?windows-1250?B?lqBFY29IdXN0?=
+ =?windows-1250?B?bGVy?="#;
+        assert_eq!(
+            "Re: Climate crisis reality check –\u{a0}EcoHustler",
             std::str::from_utf8(&phrase(words.as_bytes()).to_full_result().unwrap()).unwrap()
         );
     }
