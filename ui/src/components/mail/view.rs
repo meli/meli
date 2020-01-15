@@ -418,19 +418,21 @@ impl Component for MailView {
                     format!("Subject: {}", envelope.subject())
                     format!("Message-ID: <{}>", envelope.message_id_raw())
                 );
-                if self.expand_headers && envelope.in_reply_to().is_some() {
-                    print_header!(
-                        format!("In-Reply-To: {}", envelope.in_reply_to_display().unwrap())
-                        format!(
-                            "References: {}",
-                            envelope
-                            .references()
-                            .iter()
-                            .map(std::string::ToString::to_string)
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                        )
-                    );
+                if self.expand_headers {
+                    if let Some(val) = envelope.in_reply_to_display() {
+                        print_header!(
+                            format!("In-Reply-To: {}", val)
+                            format!(
+                                "References: {}",
+                                envelope
+                                .references()
+                                .iter()
+                                .map(std::string::ToString::to_string)
+                                .collect::<Vec<String>>()
+                                .join(", ")
+                            )
+                        );
+                    }
                 }
                 if let Some(list_management::ListActions {
                     ref id,

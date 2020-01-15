@@ -141,6 +141,9 @@ pub trait MailListingTrait: ListingTrait {
 
     fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]>;
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]>;
+    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadHash>>) {
+        unimplemented!()
+    }
 }
 
 pub trait ListingTrait: Component {

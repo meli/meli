@@ -469,7 +469,11 @@ impl ListingTrait for CompactListing {
                     self.data_columns.columns[0] =
                         CellBuffer::new_with_context(0, 0, Cell::with_char(' '), context);
                 }
-                self.redraw_list(context);
+                self.redraw_list(
+                    context,
+                    Box::new(self.filtered_selection.clone().into_iter())
+                        as Box<dyn Iterator<Item = ThreadHash>>,
+                );
             }
             Err(e) => {
                 self.cursor_pos.2 = 0;
@@ -545,9 +549,13 @@ impl CompactListing {
         &self,
         e: &Envelope,
         context: &Context,
-        thread_node: &ThreadNode,
-        is_snoozed: bool,
+        threads: &Threads,
+        hash: ThreadHash,
     ) -> EntryStrings {
+        let is_snoozed: bool = threads.is_snoozed(hash);
+        let date =
+            threads.thread_dates[&melib::thread::find_thread_group(threads.thread_nodes(), hash)];
+        let thread_node = &threads[&hash];
         let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .unwrap()
             .folder
@@ -591,7 +599,7 @@ impl CompactListing {
         subject.truncate_at_boundary(150);
         if thread_node.len() > 0 {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, thread_node)),
+                date: DateString(ConversationsListing::format_date(context, date)),
                 subject: SubjectString(format!("{} ({})", subject, thread_node.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
@@ -603,7 +611,7 @@ impl CompactListing {
             }
         } else {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, thread_node)),
+                date: DateString(ConversationsListing::format_date(context, date)),
                 subject: SubjectString(subject),
                 flag: FlagString(format!(
                     "{}{}",
@@ -667,10 +675,22 @@ impl CompactListing {
             self.view = ThreadView::new(self.new_cursor_pos, None, context);
         }
 
-        self.redraw_list(context);
+        let threads = &context.accounts[self.cursor_pos.0].collection.threads[&folder_hash];
+        threads.sort_by(
+            self.sort,
+            self.subsort,
+            &context.accounts[self.cursor_pos.0].collection.envelopes,
+        );
+        self.all_threads.clear();
+
+        self.redraw_list(
+            context,
+            Box::new(threads.root_iter().collect::<Vec<ThreadHash>>().into_iter())
+                as Box<dyn Iterator<Item = ThreadHash>>,
+        );
     }
 
-    fn redraw_list(&mut self, context: &Context) {
+    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadHash>>) {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = &account[self.cursor_pos.1].unwrap();
 
@@ -694,18 +714,7 @@ impl CompactListing {
             SmallVec::new(),
         );
 
-        threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);
-
-        let mut refresh_mailbox = false;
-        let threads_iter = if self.filter_term.is_empty() {
-            refresh_mailbox = true;
-            self.all_threads.clear();
-            Box::new(threads.root_iter()) as Box<dyn Iterator<Item = ThreadHash>>
-        } else {
-            Box::new(self.filtered_selection.iter().map(|h| *h))
-                as Box<dyn Iterator<Item = ThreadHash>>
-        };
-        for (idx, root_idx) in threads_iter.enumerate() {
+        for (idx, root_idx) in items.enumerate() {
             self.length += 1;
             let thread_node = &threads.thread_nodes()[&root_idx];
             let i = thread_node.message().unwrap_or_else(|| {
@@ -729,12 +738,7 @@ impl CompactListing {
             let root_envelope: EnvelopeRef =
                 context.accounts[self.cursor_pos.0].collection.get_env(i);
 
-            let entry_strings = self.make_entry_string(
-                &root_envelope,
-                context,
-                thread_node,
-                threads.is_snoozed(root_idx),
-            );
+            let entry_strings = self.make_entry_string(&root_envelope, context, threads, root_idx);
             row_widths.1.push(
                 entry_strings
                     .date
@@ -768,10 +772,8 @@ impl CompactListing {
                 min_width.4,
                 entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
             ); /* subject */
-            rows.push(entry_strings);
-            if refresh_mailbox {
-                self.all_threads.insert(root_idx);
-            }
+            rows.push(((idx, root_idx), entry_strings));
+            self.all_threads.insert(root_idx);
 
             self.order.insert(root_idx, idx);
             self.selection.insert(root_idx, false);
@@ -797,14 +799,8 @@ impl CompactListing {
         self.data_columns.columns[4] =
             CellBuffer::new_with_context(min_width.4, rows.len(), Cell::with_char(' '), context);
         self.data_columns.segment_tree[4] = row_widths.4.into();
-        let threads_iter = if self.filter_term.is_empty() {
-            Box::new(threads.root_iter()) as Box<dyn Iterator<Item = ThreadHash>>
-        } else {
-            Box::new(self.filtered_selection.iter().map(|h| *h))
-                as Box<dyn Iterator<Item = ThreadHash>>
-        };
 
-        for ((idx, root_idx), strings) in threads_iter.enumerate().zip(rows) {
+        for ((idx, root_idx), strings) in rows {
             let thread_node = &threads.thread_nodes()[&root_idx];
             let i = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
@@ -975,11 +971,19 @@ impl CompactListing {
     }
 
     fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
-        let account = &context.accounts[self.cursor_pos.0];
-        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        let threads = &account.collection.threads[&folder_hash];
+        //let account = &context.accounts[self.cursor_pos.0];
+        //let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         if self.filter_term.is_empty() {
-            threads.root_set(cursor)
+            *self
+                .order
+                .iter()
+                .find(|(_, &r)| r == cursor)
+                .unwrap_or_else(|| {
+                    debug!("self.order empty ? cursor={} {:#?}", cursor, &self.order);
+                    panic!();
+                })
+                .0
+        //threads.root_set(cursor)
         } else {
             self.filtered_selection[cursor]
         }
@@ -1020,12 +1024,7 @@ impl CompactListing {
                     Color::Default
                 }
             };
-            let strings = self.make_entry_string(
-                &envelope,
-                context,
-                &threads[&thread_hash],
-                threads.is_snoozed(thread_hash),
-            );
+            let strings = self.make_entry_string(&envelope, context, threads, thread_hash);
             drop(envelope);
             let columns = &mut self.data_columns.columns;
             let min_width = (

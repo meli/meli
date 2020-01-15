@@ -562,7 +562,10 @@ impl ConversationsListing {
         subject.truncate_at_boundary(150);
         if thread_node.len() > 0 {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, thread_node)),
+                date: DateString(ConversationsListing::format_date(
+                    context,
+                    thread_node.date(),
+                )),
                 subject: SubjectString(format!("{} ({})", subject, thread_node.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
@@ -574,7 +577,10 @@ impl ConversationsListing {
             }
         } else {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, thread_node)),
+                date: DateString(ConversationsListing::format_date(
+                    context,
+                    thread_node.date(),
+                )),
                 subject: SubjectString(subject),
                 flag: FlagString(format!(
                     "{}{}",
@@ -890,8 +896,8 @@ impl ConversationsListing {
         }
     }
 
-    pub(super) fn format_date(context: &Context, thread_node: &ThreadNode) -> String {
-        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(thread_node.date());
+    pub(super) fn format_date(context: &Context, epoch: UnixTimestamp) -> String {
+        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(epoch);
         let now: std::time::Duration = std::time::SystemTime::now()
             .duration_since(d)
             .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
@@ -912,7 +918,7 @@ impl ConversationsListing {
                 if n / (24 * 60 * 60) == 1 { "" } else { "s" }
             ),
             _ => melib::datetime::timestamp_to_string(
-                thread_node.date(),
+                epoch,
                 context
                     .settings
                     .listing
@@ -925,11 +931,20 @@ impl ConversationsListing {
     }
 
     fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
-        let account = &context.accounts[self.cursor_pos.0];
-        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        let threads = &account.collection.threads[&folder_hash];
+        //let account = &context.accounts[self.cursor_pos.0];
+        //let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+        //let threads = &account.collection.threads[&folder_hash];
         if self.filter_term.is_empty() {
-            threads.root_set(cursor)
+            *self
+                .order
+                .iter()
+                .find(|(_, &r)| r == cursor)
+                .unwrap_or_else(|| {
+                    debug!("self.order empty ? cursor={} {:#?}", cursor, &self.order);
+                    panic!();
+                })
+                .0
+        //threads.root_set(cursor)
         } else {
             self.filtered_selection[cursor]
         }
