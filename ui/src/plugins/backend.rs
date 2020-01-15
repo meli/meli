@@ -102,7 +102,7 @@ impl MailBackend for PluginBackend {
                 channel.expect_ack().unwrap();
                 loop {
                     let read_val: Result<PluginResult<Option<Vec<SimpleEnvelope>>>> =
-                        debug!(channel.from_read());
+                        channel.from_read();
                     match read_val.map(Into::into).and_then(std::convert::identity) {
                         Ok(Some(a)) => {
                             tx.send(AsyncStatus::Payload(Ok(a
@@ -300,7 +300,7 @@ impl BackendOp for PluginOp {
             debug!(channel.expect_ack())?;
             channel.write_ref(&rmpv::ValueRef::Integer(self.hash.into()))?;
             debug!(channel.expect_ack())?;
-            let bytes: Result<PluginResult<String>> = debug!(channel.from_read());
+            let bytes: Result<PluginResult<String>> = channel.from_read();
             self.bytes = Some(bytes.map(Into::into).and_then(std::convert::identity)?);
             if let Some(ref bytes) = self.bytes {
                 debug!(Envelope::from_bytes(bytes.as_bytes(), None));

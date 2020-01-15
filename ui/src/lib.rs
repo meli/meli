@@ -231,7 +231,6 @@ pub mod timer {
 
     impl PosixTimer {
         pub fn rearm(&mut self) {
-            debug!("posixtimer rearm");
             let spec = itimerspec {
                 it_interval: timespec {
                     tv_sec: self.interval.as_secs().try_into().unwrap_or(0),

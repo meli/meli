@@ -181,7 +181,7 @@ pub mod segment_tree {
             let height = (f64::from(u32::try_from(val.len()).unwrap_or(0)))
                 .log2()
                 .ceil() as u32;
-            let max_size = 2 * (2_usize.pow(height)) - 1;
+            let max_size = 2 * (2_usize.pow(height));
 
             let mut segment_tree: SmallVec<[u8; 1024]> =
                 SmallVec::from_iter(core::iter::repeat(0).take(max_size));

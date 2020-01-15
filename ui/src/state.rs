@@ -254,7 +254,6 @@ impl State {
                 let sender = sender;
                 loop {
                     thread::park();
-                    debug!("unparked");
 
                     sender.send(ThreadEvent::Pulse).unwrap();
                     thread::sleep(std::time::Duration::from_millis(100));
@@ -585,6 +584,13 @@ impl State {
                         if let Err(e) = account.folder_operation(&path, op) {
                             self.context.replies.push_back(UIEvent::StatusEvent(
                                 StatusEvent::DisplayMessage(e.to_string()),
+                            ));
+                        } else {
+                            self.context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(format!(
+                                    "{} succesfully created in `{}`",
+                                    path, account_name
+                                )),
                             ));
                         }
                     } else {

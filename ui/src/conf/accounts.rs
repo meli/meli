@@ -384,35 +384,12 @@ impl Account {
             folder_names.insert(f.hash(), f.path().to_string());
         }
 
-        let mut stack: SmallVec<[FolderHash; 8]> = SmallVec::new();
         let mut tree: Vec<FolderNode> = Vec::new();
         let mut collection: Collection = Collection::new(Default::default());
         for (h, f) in ref_folders.iter() {
             if !folder_confs.contains_key(&h) {
                 /* Skip unsubscribed folder */
                 continue;
-            }
-            if f.parent().is_none() {
-                fn rec(h: FolderHash, ref_folders: &FnvHashMap<FolderHash, Folder>) -> FolderNode {
-                    let mut node = FolderNode {
-                        hash: h,
-                        kids: Vec::new(),
-                    };
-                    for &c in ref_folders[&h].children() {
-                        node.kids.push(rec(c, ref_folders));
-                    }
-                    node
-                };
-
-                tree.push(rec(*h, &ref_folders));
-                for &c in f.children() {
-                    stack.push(c);
-                }
-                while let Some(next) = stack.pop() {
-                    for c in ref_folders[&next].children() {
-                        stack.push(*c);
-                    }
-                }
             }
             folders.insert(
                 *h,
@@ -430,40 +407,7 @@ impl Account {
             collection.threads.insert(*h, Threads::default());
         }
 
-        tree.sort_unstable_by(|a, b| {
-            if ref_folders[&b.hash].path().eq_ignore_ascii_case("INBOX") {
-                std::cmp::Ordering::Greater
-            } else if ref_folders[&a.hash].path().eq_ignore_ascii_case("INBOX") {
-                std::cmp::Ordering::Less
-            } else {
-                ref_folders[&a.hash]
-                    .path()
-                    .cmp(&ref_folders[&b.hash].path())
-            }
-        });
-
-        let mut stack: SmallVec<[Option<&FolderNode>; 8]> = SmallVec::new();
-        for n in tree.iter_mut() {
-            folders_order.push(n.hash);
-            n.kids.sort_unstable_by(|a, b| {
-                if ref_folders[&b.hash].path().eq_ignore_ascii_case("INBOX") {
-                    std::cmp::Ordering::Greater
-                } else if ref_folders[&a.hash].path().eq_ignore_ascii_case("INBOX") {
-                    std::cmp::Ordering::Less
-                } else {
-                    ref_folders[&a.hash]
-                        .path()
-                        .cmp(&ref_folders[&b.hash].path())
-                }
-            });
-            stack.extend(n.kids.iter().rev().map(Some));
-            while let Some(Some(next)) = stack.pop() {
-                folders_order.push(next.hash);
-                stack.extend(next.kids.iter().rev().map(Some));
-            }
-        }
-        drop(stack);
-
+        build_folders_order(&folder_confs, &mut tree, &ref_folders, &mut folders_order);
         self.folders = folders;
         self.ref_folders = ref_folders;
         self.folder_confs = folder_confs;
@@ -784,11 +728,7 @@ impl Account {
         self.folders.is_empty()
     }
     pub fn list_folders(&self) -> Vec<Folder> {
-        let mut folders = if let Ok(folders) = self.backend.read().unwrap().folders() {
-            folders
-        } else {
-            return Vec::new();
-        };
+        let mut folders = self.ref_folders.clone();
         let folder_confs = &self.folder_confs;
         //debug!("folder renames: {:?}", folder_renames);
         for f in folders.values_mut() {
@@ -1015,7 +955,68 @@ impl Account {
     }
 
     pub fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
-        Err(MeliError::new("Not implemented."))
+        match op {
+            FolderOperation::Create => {
+                if self.settings.account.read_only() {
+                    Err(MeliError::new("Account is read-only."))
+                } else {
+                    let mut folder = self
+                        .backend
+                        .write()
+                        .unwrap()
+                        .create_folder(path.to_string())?;
+                    let mut new = FileFolderConf::default();
+                    new.folder_conf.subscribe = super::ToggleFlag::InternalVal(true);
+                    new.folder_conf.usage = if folder.special_usage() != SpecialUsageMailbox::Normal
+                    {
+                        Some(folder.special_usage())
+                    } else {
+                        let tmp = SpecialUsageMailbox::detect_usage(folder.name());
+                        if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
+                            let _ = folder.set_special_usage(tmp.unwrap());
+                        }
+                        tmp
+                    };
+
+                    self.folder_confs.insert(folder.hash(), new);
+                    self.folder_names
+                        .insert(folder.hash(), folder.path().to_string());
+                    self.folders.insert(
+                        folder.hash(),
+                        MailboxEntry::Parsing(
+                            Mailbox::new(folder.clone(), &FnvHashMap::default()),
+                            0,
+                            0,
+                        ),
+                    );
+                    self.workers.insert(
+                        folder.hash(),
+                        Account::new_worker(
+                            folder.clone(),
+                            &mut self.backend,
+                            &self.work_context,
+                            self.notify_fn.clone(),
+                        ),
+                    );
+                    self.collection
+                        .threads
+                        .insert(folder.hash(), Threads::default());
+                    self.ref_folders.insert(folder.hash(), folder);
+                    build_folders_order(
+                        &self.folder_confs,
+                        &mut self.tree,
+                        &self.ref_folders,
+                        &mut self.folders_order,
+                    );
+                    Ok(())
+                }
+            }
+            FolderOperation::Delete => Err(MeliError::new("Not implemented.")),
+            FolderOperation::Subscribe => Err(MeliError::new("Not implemented.")),
+            FolderOperation::Unsubscribe => Err(MeliError::new("Not implemented.")),
+            FolderOperation::Rename(_) => Err(MeliError::new("Not implemented.")),
+            FolderOperation::SetPermissions(_) => Err(MeliError::new("Not implemented.")),
+        }
     }
 
     pub fn folder_confs(&self, folder_hash: FolderHash) -> &FileFolderConf {
@@ -1145,5 +1146,77 @@ impl Index<usize> for Account {
 impl IndexMut<usize> for Account {
     fn index_mut(&mut self, index: usize) -> &mut MailboxEntry {
         self.folders.get_mut(&self.folders_order[index]).unwrap()
+    }
+}
+
+fn build_folders_order(
+    folder_confs: &FnvHashMap<FolderHash, FileFolderConf>,
+    tree: &mut Vec<FolderNode>,
+    ref_folders: &FnvHashMap<FolderHash, Folder>,
+    folders_order: &mut Vec<FolderHash>,
+) {
+    let mut stack: SmallVec<[FolderHash; 8]> = SmallVec::new();
+    tree.clear();
+    folders_order.clear();
+    for (h, f) in ref_folders.iter() {
+        if !folder_confs.contains_key(&h) {
+            continue;
+        }
+
+        if f.parent().is_none() {
+            fn rec(h: FolderHash, ref_folders: &FnvHashMap<FolderHash, Folder>) -> FolderNode {
+                let mut node = FolderNode {
+                    hash: h,
+                    kids: Vec::new(),
+                };
+                for &c in ref_folders[&h].children() {
+                    node.kids.push(rec(c, ref_folders));
+                }
+                node
+            };
+
+            tree.push(rec(*h, &ref_folders));
+            for &c in f.children() {
+                stack.push(c);
+            }
+            while let Some(next) = stack.pop() {
+                for c in ref_folders[&next].children() {
+                    stack.push(*c);
+                }
+            }
+        }
+    }
+
+    tree.sort_unstable_by(|a, b| {
+        if ref_folders[&b.hash].path().eq_ignore_ascii_case("INBOX") {
+            std::cmp::Ordering::Greater
+        } else if ref_folders[&a.hash].path().eq_ignore_ascii_case("INBOX") {
+            std::cmp::Ordering::Less
+        } else {
+            ref_folders[&a.hash]
+                .path()
+                .cmp(&ref_folders[&b.hash].path())
+        }
+    });
+
+    let mut stack: SmallVec<[Option<&FolderNode>; 8]> = SmallVec::new();
+    for n in tree.iter_mut() {
+        folders_order.push(n.hash);
+        n.kids.sort_unstable_by(|a, b| {
+            if ref_folders[&b.hash].path().eq_ignore_ascii_case("INBOX") {
+                std::cmp::Ordering::Greater
+            } else if ref_folders[&a.hash].path().eq_ignore_ascii_case("INBOX") {
+                std::cmp::Ordering::Less
+            } else {
+                ref_folders[&a.hash]
+                    .path()
+                    .cmp(&ref_folders[&b.hash].path())
+            }
+        });
+        stack.extend(n.kids.iter().rev().map(Some));
+        while let Some(Some(next)) = stack.pop() {
+            folders_order.push(next.hash);
+            stack.extend(next.kids.iter().rev().map(Some));
+        }
     }
 }

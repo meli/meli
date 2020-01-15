@@ -12,6 +12,125 @@ pub struct ImapLineIterator<'a> {
     slice: &'a str,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ResponseCode {
+    ///The human-readable text contains a special alert that MUST be presented to the user in a fashion that calls the user's attention to the message.
+    Alert(String),
+
+    ///Optionally followed by a parenthesized list of charsets.  A SEARCH failed because the given charset is not supported by this implementation.  If the optional list of charsets is given, this lists the charsets that are supported by this implementation.
+    Badcharset,
+
+    /// Followed by a list of capabilities.  This can appear in the initial OK or PREAUTH response to transmit an initial capabilities list.  This makes it unnecessary for a client to send a separate CAPABILITY command if it recognizes this response.
+    Capability,
+
+    /// The human-readable text represents an error in parsing the [RFC-2822] header or [MIME-IMB] headers of a message in the mailbox.
+    Parse(String),
+
+    /// Followed by a parenthesized list of flags, indicates which of the known flags the client can change permanently.  Any flags that are in the FLAGS untagged response, but not the PERMANENTFLAGS list, can not be set permanently.  If the client attempts to STORE a flag that is not in the PERMANENTFLAGS list, the server will either ignore the change or store the state change for the remainder of the current session only.  The PERMANENTFLAGS list can also include the special flag \*, which indicates that it is possible to create new keywords by attempting to store those flags in the mailbox.
+    Permanentflags,
+
+    /// The mailbox is selected read-only, or its access while selected has changed from read-write to read-only.
+    ReadOnly,
+
+    /// The mailbox is selected read-write, or its access while selected has changed from read-only to read-write.
+    ReadWrite,
+
+    /// An APPEND or COPY attempt is failing because the target mailbox does not exist (as opposed to some other reason).  This is a hint to the client that the operation can succeed if the mailbox is first created by the CREATE command.
+    Trycreate,
+
+    /// Followed by a decimal number, indicates the next unique identifier value.  Refer to section 2.3.1.1 for more information.
+    Uidnext(UID),
+    /// Followed by a decimal number, indicates the unique identifier validity value.  Refer to section 2.3.1.1 for more information.
+    Uidvalidity(UID),
+    /// Followed by a decimal number, indicates the number of the first message without the \Seen flag set.
+    Unseen(usize),
+}
+
+impl ResponseCode {
+    fn from(val: &str) -> Option<ResponseCode> {
+        if !val.starts_with("[") {
+            return None;
+        }
+
+        let val = &val[1..];
+        use ResponseCode::*;
+        if val.starts_with("BADCHARSET") {
+            Some(Badcharset)
+        } else if val.starts_with("READONLY") {
+            Some(ReadOnly)
+        } else if val.starts_with("READWRITE") {
+            Some(ReadWrite)
+        } else if val.starts_with("TRYCREATE") {
+            Some(Trycreate)
+        } else if val.starts_with("UIDNEXT") {
+            //FIXME
+            Some(Uidnext(0))
+        } else if val.starts_with("UIDVALIDITY") {
+            //FIXME
+            Some(Uidvalidity(0))
+        } else if val.starts_with("UNSEEN") {
+            //FIXME
+            Some(Unseen(0))
+        } else {
+            let msg = &val[val.as_bytes().find(b"] ").unwrap() + 1..].trim();
+            Some(Alert(msg.to_string()))
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ImapResponse {
+    Ok(Option<ResponseCode>),
+    No(Option<ResponseCode>),
+    Bad(Option<ResponseCode>),
+    Preauth(Option<ResponseCode>),
+    Bye(Option<ResponseCode>),
+}
+
+impl<T: AsRef<str>> From<T> for ImapResponse {
+    fn from(val: T) -> ImapResponse {
+        let val: &str = val.as_ref().split_rn().last().unwrap_or(val.as_ref());
+        debug!(&val);
+        assert!(val.starts_with("M"));
+        let mut val = val[val.as_bytes().find(b" ").unwrap() + 1..].trim();
+        // M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n
+        if val.ends_with(" secs).") {
+            val = &val[..val.as_bytes().rfind(b"(").unwrap()];
+        }
+
+        if val.starts_with("OK") {
+            Self::Ok(ResponseCode::from(&val["OK ".len()..]))
+        } else if val.starts_with("NO") {
+            Self::No(ResponseCode::from(&val["NO ".len()..]))
+        } else if val.starts_with("BAD") {
+            Self::Bad(ResponseCode::from(&val["BAD ".len()..]))
+        } else if val.starts_with("PREAUTH") {
+            Self::Preauth(ResponseCode::from(&val["PREAUTH ".len()..]))
+        } else if val.starts_with("BYE") {
+            Self::Bye(ResponseCode::from(&val["BYE ".len()..]))
+        } else {
+            panic!("Unknown IMAP response: `{}`", val);
+        }
+    }
+}
+
+impl Into<Result<()>> for ImapResponse {
+    fn into(self) -> Result<()> {
+        match self {
+            Self::Ok(_) | Self::Preauth(_) | Self::Bye(_) => Ok(()),
+            Self::No(Some(ResponseCode::Alert(msg)))
+            | Self::Bad(Some(ResponseCode::Alert(msg))) => Err(MeliError::new(msg)),
+            Self::No(_) => Err(MeliError::new("IMAP NO Response.")),
+            Self::Bad(_) => Err(MeliError::new("IMAP BAD Response.")),
+        }
+    }
+}
+
+#[test]
+fn test_imap_response() {
+    assert_eq!(ImapResponse::from("M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n"), ImapResponse::No(Some(ResponseCode::Alert("Invalid mailbox name: Name must not have '/' characters".to_string()))));
+}
+
 impl<'a> Iterator for ImapLineIterator<'a> {
     type Item = &'a str;
 

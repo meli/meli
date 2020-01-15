@@ -517,6 +517,38 @@ impl MailBackend for ImapType {
             None
         }
     }
+
+    fn create_folder(&mut self, path: String) -> Result<Folder> {
+        let mut response = String::with_capacity(8 * 1024);
+        if self
+            .folders
+            .read()
+            .unwrap()
+            .values()
+            .any(|f| f.path == path)
+        {
+            return Err(MeliError::new(format!(
+                "Folder named `{}` in account `{}` already exists.",
+                path, self.account_name,
+            )));
+        }
+        let mut conn_lck = self.connection.lock()?;
+        conn_lck.send_command(debug!(format!("CREATE \"{}\"", path,)).as_bytes())?;
+        conn_lck.read_response(&mut response)?;
+        conn_lck.send_command(debug!(format!("SUBSCRIBE \"{}\"", path,)).as_bytes())?;
+        conn_lck.read_response(&mut response)?;
+        drop(conn_lck);
+        self.folders.write().unwrap().clear();
+        self.folders().and_then(|f| {
+            debug!(f)
+                .into_iter()
+                .find(|(_, f)| f.path() == path)
+                .map(|f| f.1)
+                .ok_or(MeliError::new(
+                    "Internal error: could not find folder after creating it?",
+                ))
+        })
+    }
 }
 
 impl ImapType {

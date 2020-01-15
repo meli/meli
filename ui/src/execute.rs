@@ -23,7 +23,7 @@
 */
 use melib::backends::FolderOperation;
 pub use melib::thread::{SortField, SortOrder};
-use nom::{digit, not_line_ending};
+use nom::{digit, not_line_ending, IResult};
 use std;
 pub mod actions;
 pub mod history;
@@ -45,6 +45,26 @@ macro_rules! define_commands {
     };
 }
 
+pub fn quoted_argument(input: &[u8]) -> IResult<&[u8], &str> {
+    if input.is_empty() {
+        return IResult::Error(nom::ErrorKind::Custom(0));
+    }
+
+    if input[0] == b'"' {
+        let mut i = 1;
+        while i < input.len() {
+            if input[i] == b'\"' && input[i - 1] != b'\\' {
+                return IResult::Done(&input[i + 1..], unsafe {
+                    std::str::from_utf8_unchecked(&input[1..i])
+                });
+            }
+            i += 1;
+        }
+        return IResult::Error(nom::ErrorKind::Custom(0));
+    } else {
+        return map_res!(input, is_not!(" "), std::str::from_utf8);
+    }
+}
 define_commands!([
                  { tags: ["set"],
                    desc: "set [seen/unseen], toggles message's Seen flag.",
@@ -179,9 +199,9 @@ define_commands!([
                                   ws!(tag!("pipe"))
                                   >> bin: map_res!(is_not!(" "), std::str::from_utf8)
                                   >> is_a!(" ")
-                                  >> args: separated_list!(is_a!(" "), is_not!(" "))
+                                  >> args: separated_list!(is_a!(" "), quoted_argument)
                                   >> ({
-                                      View(Pipe(bin.to_string(), args.into_iter().map(|v| String::from_utf8(v.to_vec()).unwrap()).collect::<Vec<String>>()))
+                                      View(Pipe(bin.to_string(), args.into_iter().map(String::from).collect::<Vec<String>>()))
                                   })) | do_parse!(
                                           ws!(tag!("pipe"))
                                           >> bin: ws!(map_res!(is_not!(" "), std::str::from_utf8))
@@ -233,7 +253,7 @@ define_commands!([
                       named!( create_folder<Action>,
                               do_parse!(
                                   ws!(tag!("create-folder"))
-                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> account: quoted_argument
                                   >> is_a!(" ")
                                   >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
                                   >> (Folder(account.to_string(), path.to_string(), FolderOperation::Create))
@@ -247,7 +267,7 @@ define_commands!([
                       named!( sub_folder<Action>,
                               do_parse!(
                                   ws!(tag!("subscribe-folder"))
-                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> account: quoted_argument
                                   >> is_a!(" ")
                                   >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
                                   >> (Folder(account.to_string(), path.to_string(), FolderOperation::Subscribe))
@@ -261,7 +281,7 @@ define_commands!([
                       named!( unsub_folder<Action>,
                               do_parse!(
                                   ws!(tag!("unsubscribe-folder"))
-                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> account: quoted_argument
                                   >> is_a!(" ")
                                   >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
                                   >> (Folder(account.to_string(), path.to_string(), FolderOperation::Unsubscribe))
@@ -275,9 +295,9 @@ define_commands!([
                       named!( rename_folder<Action>,
                               do_parse!(
                                   ws!(tag!("rename-folder"))
-                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> account: quoted_argument
                                   >> is_a!(" ")
-                                  >> src: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> src: quoted_argument
                                   >> is_a!(" ")
                                   >> dest: map_res!(call!(not_line_ending), std::str::from_utf8)
                                   >> (Folder(account.to_string(), src.to_string(), FolderOperation::Rename(dest.to_string())))
@@ -291,9 +311,9 @@ define_commands!([
                       named!( delete_folder<Action>,
                               do_parse!(
                                   ws!(tag!("delete-folder"))
-                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> account: quoted_argument
                                   >> is_a!(" ")
-                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
+                                  >> path: quoted_argument
                                   >> (Folder(account.to_string(), path.to_string(), FolderOperation::Delete))
                               )
                       );
@@ -305,7 +325,7 @@ define_commands!([
                       named!( reindex<Action>,
                               do_parse!(
                                   ws!(tag!("reindex"))
-                                  >> account: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> account: quoted_argument
                                   >> (AccountAction(account.to_string(), ReIndex))
                               )
                       );
@@ -329,7 +349,7 @@ define_commands!([
                               do_parse!(
                                   ws!(tag!("save-attachment"))
                                   >> idx: map_res!(map_res!(is_not!(" "), std::str::from_utf8), usize::from_str)
-                                  >> path: ws!(map_res!(call!(not_line_ending), std::str::from_utf8))
+                                  >> path: ws!(quoted_argument)
                                   >> (View(SaveAttachment(idx, path.to_string())))
                               )
                       );
