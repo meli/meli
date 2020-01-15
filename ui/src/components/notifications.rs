@@ -22,6 +22,7 @@
 /*!
 Notification handling components.
 */
+use crate::types::RateLimit;
 use notify_rust;
 use std::process::{Command, Stdio};
 
@@ -29,7 +30,9 @@ use super::*;
 
 /// Passes notifications to the OS using the XDG specifications.
 #[derive(Debug)]
-pub struct XDGNotifications {}
+pub struct XDGNotifications {
+    rate_limit: RateLimit,
+}
 
 impl fmt::Display for XDGNotifications {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -38,10 +41,22 @@ impl fmt::Display for XDGNotifications {
     }
 }
 
+impl XDGNotifications {
+    pub fn new() -> Self {
+        XDGNotifications {
+            rate_limit: RateLimit::new(3, 1000),
+        }
+    }
+}
+
 impl Component for XDGNotifications {
     fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::Notification(ref title, ref body, ref kind) = event {
+            if !self.rate_limit.tick() {
+                return true;
+            }
+
             let settings = &context.runtime_settings.notifications;
             let mut notification = notify_rust::Notification::new();
             notification

@@ -254,7 +254,7 @@ fn run_app() -> Result<()> {
     let status_bar = Box::new(StatusBar::new(window));
     state.register_component(status_bar);
 
-    let xdg_notifications = Box::new(ui::components::notifications::XDGNotifications {});
+    let xdg_notifications = Box::new(ui::components::notifications::XDGNotifications::new());
     state.register_component(xdg_notifications);
     state.register_component(Box::new(
         ui::components::notifications::NotificationFilter {},

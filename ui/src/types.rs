@@ -242,3 +242,56 @@ pub mod segment_tree {
         assert_eq!(segment_tree.get_max(6, 9), 37);
     }
 }
+
+#[derive(Debug)]
+pub struct RateLimit {
+    last_tick: std::time::Instant,
+    pub timer: crate::timer::PosixTimer,
+    rate: std::time::Duration,
+    reqs: u64,
+    millis: std::time::Duration,
+    pub active: bool,
+}
+
+impl RateLimit {
+    pub fn new(reqs: u64, millis: u64) -> Self {
+        RateLimit {
+            last_tick: std::time::Instant::now(),
+            timer: crate::timer::PosixTimer::new_with_signal(
+                std::time::Duration::from_secs(0),
+                std::time::Duration::from_secs(1),
+                nix::sys::signal::Signal::SIGALRM,
+            )
+            .unwrap(),
+
+            rate: std::time::Duration::from_millis(millis / reqs),
+            reqs,
+            millis: std::time::Duration::from_millis(millis),
+            active: false,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.last_tick = std::time::Instant::now();
+        self.active = false;
+    }
+
+    pub fn tick(&mut self) -> bool {
+        let now = std::time::Instant::now();
+        self.last_tick += self.rate;
+        if self.last_tick < now {
+            self.last_tick = now + self.rate;
+        } else if self.last_tick > now + self.millis {
+            self.timer.rearm();
+            self.active = true;
+            return false;
+        }
+        self.active = false;
+        true
+    }
+
+    #[inline(always)]
+    pub fn id(&self) -> u8 {
+        self.timer.si_value
+    }
+}

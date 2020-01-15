@@ -176,6 +176,7 @@ pub struct State {
     rows: usize,
 
     grid: CellBuffer,
+    draw_rate_limit: RateLimit,
     stdout: Option<StateStdout>,
     child: Option<ForkType>,
     pub mode: UIMode,
@@ -272,6 +273,7 @@ impl State {
             mode: UIMode::Normal,
             components: Vec::with_capacity(1),
             timer,
+            draw_rate_limit: RateLimit::new(1, 3),
 
             context: Context {
                 accounts,
@@ -293,6 +295,9 @@ impl State {
                 },
             },
         };
+        s.draw_rate_limit
+            .timer
+            .set_value(std::time::Duration::from_millis(3));
         if s.context.settings.terminal.ascii_drawing {
             s.grid.set_ascii_drawing(true);
         }
@@ -429,6 +434,10 @@ impl State {
 
     /// Force a redraw for all dirty components.
     pub fn redraw(&mut self) {
+        if !self.draw_rate_limit.tick() {
+            return;
+        }
+
         for i in 0..self.components.len() {
             self.draw_component(i);
         }
@@ -676,6 +685,11 @@ impl State {
                 if m == UIMode::Embed {
                     self.context.input_to_raw();
                 }
+            }
+            UIEvent::Timer(id) if id == self.draw_rate_limit.id() => {
+                self.draw_rate_limit.reset();
+                self.redraw();
+                return;
             }
             _ => {}
         }
