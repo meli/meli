@@ -418,22 +418,22 @@ impl Envelope {
             _ => Cow::from(String::new()),
         }
     }
+
     pub fn in_reply_to(&self) -> Option<&MessageID> {
-        self.in_reply_to.as_ref()
+        self.in_reply_to
+            .as_ref()
+            .or(self.references.as_ref().and_then(|r| r.refs.last()))
     }
+
     pub fn in_reply_to_display(&self) -> Option<Cow<str>> {
-        if let Some(ref m) = self.in_reply_to {
-            Some(String::from_utf8_lossy(m.val()))
-        } else {
-            None
-        }
+        self.in_reply_to
+            .as_ref()
+            .map(|m| String::from_utf8_lossy(m.val()))
     }
     pub fn in_reply_to_raw(&self) -> Option<Cow<str>> {
-        if let Some(ref m) = self.in_reply_to {
-            Some(String::from_utf8_lossy(m.raw()))
-        } else {
-            None
-        }
+        self.in_reply_to
+            .as_ref()
+            .map(|m| String::from_utf8_lossy(m.raw()))
     }
     pub fn message_id(&self) -> &MessageID {
         &self.message_id
