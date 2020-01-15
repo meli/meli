@@ -152,16 +152,6 @@ impl MailBackend for ImapType {
     }
 
     fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
-        macro_rules! exit_on_error {
-            ($tx:expr,$($result:expr)+) => {
-                $(if let Err(e) = $result {
-                    $tx.send(AsyncStatus::Payload(Err(e.into()))).unwrap();
-                    $tx.send(AsyncStatus::Finished).unwrap();
-                    return;
-                })+
-            };
-        };
-
         let mut w = AsyncBuilder::new();
         let handle = {
             let tx = w.tx();
@@ -186,113 +176,110 @@ impl MailBackend for ImapType {
                     tx.send(AsyncStatus::Finished).unwrap();
                     return;
                 }
-                let mut response = String::with_capacity(8 * 1024);
-                let conn = connection.lock();
-                exit_on_error!(&tx, conn);
-                let mut conn = conn.unwrap();
-                debug!("locked for get {}", folder_path);
+                let _tx = tx.clone();
+                if let Err(err) = (move || {
+                    let tx = _tx;
+                    let mut response = String::with_capacity(8 * 1024);
+                    let mut conn = connection.lock()?;
+                    debug!("locked for get {}", folder_path);
 
-                /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
-                 * returns READ-ONLY for both cases) */
-                exit_on_error!(&tx,
-                               conn.send_command(format!("SELECT \"{}\"", folder_path).as_bytes())
-                               conn.read_response(&mut response)
-                );
-                let examine_response = protocol_parser::select_response(&response);
-                exit_on_error!(&tx, examine_response);
-                let examine_response = examine_response.unwrap();
-                *can_create_flags.lock().unwrap() = examine_response.can_create_flags;
-                debug!(
-                    "folder: {} examine_response: {:?}",
-                    folder_path, examine_response
-                );
-                let mut exists: usize = examine_response.uidnext - 1;
-                {
-                    let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
-
-                    let v = uidvalidities
-                        .entry(folder_hash)
-                        .or_insert(examine_response.uidvalidity);
-                    *v = examine_response.uidvalidity;
-
-                    let mut permissions = permissions.lock().unwrap();
-                    permissions.create_messages = !examine_response.read_only;
-                    permissions.remove_messages = !examine_response.read_only;
-                    permissions.set_flags = !examine_response.read_only;
-                    permissions.rename_messages = !examine_response.read_only;
-                    permissions.delete_messages = !examine_response.read_only;
-                    permissions.delete_messages = !examine_response.read_only;
-                    let mut folder_exists = folder_exists.lock().unwrap();
-                    *folder_exists = exists;
-                }
-                /* reselecting the same mailbox with EXAMINE prevents expunging it */
-                exit_on_error!(&tx,
-                               conn.send_command(format!("EXAMINE \"{}\"", folder_path).as_bytes())
-                               conn.read_response(&mut response)
-                );
-
-                let mut tag_lck = tag_index.write().unwrap();
-                let mut our_unseen = 0;
-                while exists > 1 {
-                    let mut envelopes = vec![];
-                    exit_on_error!(&tx,
-                                   conn.send_command(format!("UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)", std::cmp::max(exists.saturating_sub(500), 1), exists).as_bytes())
-                                   conn.read_response(&mut response)
-                    );
+                    /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
+                     * returns READ-ONLY for both cases) */
+                    conn.send_command(format!("SELECT \"{}\"", folder_path).as_bytes())?;
+                    conn.read_response(&mut response)?;
+                    let examine_response = protocol_parser::select_response(&response)?;
+                    *can_create_flags.lock().unwrap() = examine_response.can_create_flags;
                     debug!(
-                        "fetch response is {} bytes and {} lines",
-                        response.len(),
-                        response.lines().collect::<Vec<&str>>().len()
+                        "folder: {} examine_response: {:?}",
+                        folder_path, examine_response
                     );
-                    match protocol_parser::uid_fetch_responses(&response) {
-                        Ok((_, v, _)) => {
-                            debug!("responses len is {}", v.len());
-                            for UidFetchResponse {
-                                uid,
-                                flags,
-                                envelope,
-                                ..
-                            } in v
-                            {
-                                let mut env = envelope.unwrap();
-                                let mut h = DefaultHasher::new();
-                                h.write_usize(uid);
-                                h.write(folder_path.as_bytes());
-                                env.set_hash(h.finish());
-                                if let Some((flags, keywords)) = flags {
-                                    if !flags.contains(Flag::SEEN) {
-                                        our_unseen += 1;
-                                    }
-                                    env.set_flags(flags);
-                                    for f in keywords {
-                                        let hash = tag_hash!(f);
-                                        if !tag_lck.contains_key(&hash) {
-                                            tag_lck.insert(hash, f);
-                                        }
-                                        env.labels_mut().push(hash);
-                                    }
-                                }
-                                uid_store
-                                    .hash_index
-                                    .lock()
-                                    .unwrap()
-                                    .insert(env.hash(), (uid, folder_hash));
-                                uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
-                                envelopes.push(env);
-                            }
-                        }
-                        Err(e) => {
-                            debug!(&e);
-                            tx.send(AsyncStatus::Payload(Err(e))).unwrap();
-                        }
-                    }
-                    exists = std::cmp::max(exists.saturating_sub(500), 1);
-                    debug!("sending payload");
+                    let mut exists: usize = examine_response.uidnext - 1;
+                    {
+                        let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
-                    *unseen.lock().unwrap() = our_unseen;
-                    tx.send(AsyncStatus::Payload(Ok(envelopes))).unwrap();
+                        let v = uidvalidities
+                            .entry(folder_hash)
+                            .or_insert(examine_response.uidvalidity);
+                        *v = examine_response.uidvalidity;
+
+                        let mut permissions = permissions.lock().unwrap();
+                        permissions.create_messages = !examine_response.read_only;
+                        permissions.remove_messages = !examine_response.read_only;
+                        permissions.set_flags = !examine_response.read_only;
+                        permissions.rename_messages = !examine_response.read_only;
+                        permissions.delete_messages = !examine_response.read_only;
+                        permissions.delete_messages = !examine_response.read_only;
+                        let mut folder_exists = folder_exists.lock().unwrap();
+                        *folder_exists = exists;
+                    }
+                    /* reselecting the same mailbox with EXAMINE prevents expunging it */
+                    conn.send_command(format!("EXAMINE \"{}\"", folder_path).as_bytes())?;
+                    conn.read_response(&mut response)?;
+
+                    let mut tag_lck = tag_index.write().unwrap();
+                    let mut our_unseen = 0;
+                    while exists > 1 {
+                        let mut envelopes = vec![];
+                        conn.send_command(
+                            format!(
+                                "UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)",
+                                std::cmp::max(exists.saturating_sub(500), 1),
+                                exists
+                            )
+                            .as_bytes(),
+                        )?;
+                        conn.read_response(&mut response)?;
+                        debug!(
+                            "fetch response is {} bytes and {} lines",
+                            response.len(),
+                            response.lines().collect::<Vec<&str>>().len()
+                        );
+                        let (_, v, _) = protocol_parser::uid_fetch_responses(&response)?;
+                        debug!("responses len is {}", v.len());
+                        for UidFetchResponse {
+                            uid,
+                            flags,
+                            envelope,
+                            ..
+                        } in v
+                        {
+                            let mut env = envelope.unwrap();
+                            let mut h = DefaultHasher::new();
+                            h.write_usize(uid);
+                            h.write(folder_path.as_bytes());
+                            env.set_hash(h.finish());
+                            if let Some((flags, keywords)) = flags {
+                                if !flags.contains(Flag::SEEN) {
+                                    our_unseen += 1;
+                                }
+                                env.set_flags(flags);
+                                for f in keywords {
+                                    let hash = tag_hash!(f);
+                                    if !tag_lck.contains_key(&hash) {
+                                        tag_lck.insert(hash, f);
+                                    }
+                                    env.labels_mut().push(hash);
+                                }
+                            }
+                            uid_store
+                                .hash_index
+                                .lock()
+                                .unwrap()
+                                .insert(env.hash(), (uid, folder_hash));
+                            uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
+                            envelopes.push(env);
+                        }
+                        exists = std::cmp::max(exists.saturating_sub(500), 1);
+                        debug!("sending payload");
+
+                        *unseen.lock().unwrap() = our_unseen;
+                        tx.send(AsyncStatus::Payload(Ok(envelopes))).unwrap();
+                    }
+                    drop(conn);
+                    Ok(())
+                })() {
+                    tx.send(AsyncStatus::Payload(Err(err))).unwrap();
                 }
-                drop(conn);
                 tx.send(AsyncStatus::Finished).unwrap();
             };
             Box::new(closure)
