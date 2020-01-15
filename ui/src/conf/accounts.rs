@@ -847,6 +847,12 @@ impl Account {
                             };
                             *f = MailboxEntry::Available(m);
                         });
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
+                                self.index,
+                                folder_hash,
+                            ))))
+                            .unwrap();
 
                         self.workers.insert(folder_hash, None);
                     }

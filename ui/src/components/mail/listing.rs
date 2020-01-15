@@ -238,6 +238,7 @@ pub struct Listing {
     dirty: bool,
     visible: bool,
     cursor_pos: (usize, usize),
+    startup_checks_rate: RateLimit,
     id: ComponentId,
 
     show_divider: bool,
@@ -358,6 +359,34 @@ impl Component for Listing {
         self.dirty = false;
     }
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        match event {
+            UIEvent::StartupCheck(ref f) => {
+                if context.accounts[self.component.coordinates().0]
+                    .folders_order
+                    .get(self.component.coordinates().1)
+                    .map(|&folder_hash| *f == folder_hash)
+                    .unwrap_or(false)
+                {
+                    if !self.startup_checks_rate.tick() {
+                        return false;
+                    }
+                }
+            }
+            UIEvent::Timer(n) if *n == self.startup_checks_rate.id() => {
+                if self.startup_checks_rate.active {
+                    self.startup_checks_rate.reset();
+                    if let Some(folder_hash) = context.accounts[self.component.coordinates().0]
+                        .folders_order
+                        .get(self.component.coordinates().1)
+                    {
+                        return self
+                            .process_event(&mut UIEvent::StartupCheck(*folder_hash), context);
+                    }
+                }
+            }
+            _ => {}
+        }
+
         if self.component.process_event(event, context) {
             return true;
         }
@@ -811,6 +840,7 @@ impl Listing {
             visible: true,
             dirty: true,
             cursor_pos: (0, 0),
+            startup_checks_rate: RateLimit::new(2, 1000),
             id: ComponentId::new_v4(),
             show_divider: false,
             menu_visibility: true,
