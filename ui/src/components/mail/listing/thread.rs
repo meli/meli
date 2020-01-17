@@ -37,7 +37,7 @@ pub struct ThreadListing {
     /// Cache current view.
     content: CellBuffer,
 
-    row_updates: SmallVec<[ThreadHash; 8]>,
+    row_updates: SmallVec<[ThreadGroupHash; 8]>,
     locations: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
     dirty: bool,
@@ -50,11 +50,11 @@ pub struct ThreadListing {
 }
 
 impl MailListingTrait for ThreadListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadGroupHash; 8]> {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadGroupHash; 8]> {
         SmallVec::new()
     }
 }

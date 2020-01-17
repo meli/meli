@@ -54,33 +54,33 @@ pub struct CompactListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
-    all_threads: fnv::FnvHashSet<ThreadHash>,
-    order: FnvHashMap<ThreadHash, usize>,
+    all_threads: fnv::FnvHashSet<ThreadGroupHash>,
+    order: FnvHashMap<ThreadGroupHash, usize>,
     /// Cache current view.
     data_columns: DataColumns,
 
     filter_term: String,
-    filtered_selection: Vec<ThreadHash>,
-    filtered_order: FnvHashMap<ThreadHash, usize>,
-    selection: FnvHashMap<ThreadHash, bool>,
+    filtered_selection: Vec<ThreadGroupHash>,
+    filtered_order: FnvHashMap<ThreadGroupHash, usize>,
+    selection: FnvHashMap<ThreadGroupHash, bool>,
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
     /// If `self.view` exists or not.
     unfocused: bool,
     view: ThreadView,
-    row_updates: SmallVec<[ThreadHash; 8]>,
+    row_updates: SmallVec<[ThreadGroupHash; 8]>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
 }
 
 impl MailListingTrait for CompactListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadGroupHash; 8]> {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
+    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadGroupHash; 8]> {
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
         let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
         let cursor_iter;
@@ -118,14 +118,13 @@ impl ListingTrait for CompactListing {
         if self.length == 0 {
             return;
         }
-        let i = self.get_thread_under_cursor(idx, context);
+        let thread = self.get_thread_under_cursor(idx, context);
 
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
-        let thread_node = &threads.thread_nodes[&i];
 
-        let fg_color = if thread_node.has_unseen() {
+        let fg_color = if threads.groups[&thread].unseen() > 0 {
             Color::Byte(0)
         } else {
             Color::Default
@@ -133,9 +132,9 @@ impl ListingTrait for CompactListing {
         let bg_color = if context.settings.terminal.theme == "light" {
             if self.cursor_pos.2 == idx {
                 Color::Byte(244)
-            } else if self.selection[&i] {
+            } else if self.selection[&thread] {
                 Color::Byte(210)
-            } else if thread_node.has_unseen() {
+            } else if threads.groups[&thread].unseen() > 0 {
                 Color::Byte(251)
             } else if idx % 2 == 0 {
                 Color::Byte(252)
@@ -145,9 +144,9 @@ impl ListingTrait for CompactListing {
         } else {
             if self.cursor_pos.2 == idx {
                 Color::Byte(246)
-            } else if self.selection[&i] {
+            } else if self.selection[&thread] {
                 Color::Byte(210)
-            } else if thread_node.has_unseen() {
+            } else if threads.groups[&thread].unseen() > 0 {
                 Color::Byte(251)
             } else if idx % 2 == 0 {
                 Color::Byte(236)
@@ -444,21 +443,19 @@ impl ListingTrait for CompactListing {
                     if !threads.thread_nodes.contains_key(&env_hash_thread_hash) {
                         continue;
                     }
-                    let thread_group = melib::find_root_hash(
-                        &threads.thread_nodes,
-                        threads.thread_nodes[&env_hash_thread_hash].thread_group(),
-                    );
-                    if self.filtered_order.contains_key(&thread_group) {
+                    let thread =
+                        threads.find_group(threads.thread_nodes[&env_hash_thread_hash].group);
+                    if self.filtered_order.contains_key(&thread) {
                         continue;
                     }
-                    if self.all_threads.contains(&thread_group) {
-                        self.filtered_selection.push(thread_group);
+                    if self.all_threads.contains(&thread) {
+                        self.filtered_selection.push(thread);
                         self.filtered_order
-                            .insert(thread_group, self.filtered_selection.len() - 1);
+                            .insert(thread, self.filtered_selection.len() - 1);
                     }
                 }
                 if !self.filtered_selection.is_empty() {
-                    threads.vec_inner_sort_by(
+                    threads.group_inner_sort_by(
                         &mut self.filtered_selection,
                         self.sort,
                         &context.accounts[self.cursor_pos.0].collection.envelopes,
@@ -472,7 +469,7 @@ impl ListingTrait for CompactListing {
                 self.redraw_list(
                     context,
                     Box::new(self.filtered_selection.clone().into_iter())
-                        as Box<dyn Iterator<Item = ThreadHash>>,
+                        as Box<dyn Iterator<Item = ThreadGroupHash>>,
                 );
             }
             Err(e) => {
@@ -550,12 +547,9 @@ impl CompactListing {
         e: &Envelope,
         context: &Context,
         threads: &Threads,
-        hash: ThreadHash,
+        hash: ThreadGroupHash,
     ) -> EntryStrings {
-        let is_snoozed: bool = threads.is_snoozed(hash);
-        let date =
-            threads.thread_dates[&melib::thread::find_thread_group(threads.thread_nodes(), hash)];
-        let thread_node = &threads[&hash];
+        let thread = &threads.groups[&hash];
         let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .unwrap()
             .folder
@@ -597,26 +591,26 @@ impl CompactListing {
         }
         let mut subject = e.subject().to_string();
         subject.truncate_at_boundary(150);
-        if thread_node.len() > 0 {
+        if thread.len() > 1 {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, date)),
-                subject: SubjectString(format!("{} ({})", subject, thread_node.len(),)),
+                date: DateString(ConversationsListing::format_date(context, thread.date())),
+                subject: SubjectString(format!("{} ({})", subject, thread.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
                     if e.has_attachments() { "📎" } else { "" },
-                    if is_snoozed { "💤" } else { "" }
+                    if thread.snoozed() { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
                 tags: TagString(tags, colors),
             }
         } else {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(context, date)),
+                date: DateString(ConversationsListing::format_date(context, thread.date())),
                 subject: SubjectString(subject),
                 flag: FlagString(format!(
                     "{}{}",
                     if e.has_attachments() { "📎" } else { "" },
-                    if is_snoozed { "💤" } else { "" }
+                    if thread.snoozed() { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
                 tags: TagString(tags, colors),
@@ -669,28 +663,31 @@ impl CompactListing {
                 return;
             }
         }
-        if old_cursor_pos == self.new_cursor_pos {
-            self.view.update(context);
-        } else if self.unfocused {
-            self.view = ThreadView::new(self.new_cursor_pos, None, context);
-        }
 
         let threads = &context.accounts[self.cursor_pos.0].collection.threads[&folder_hash];
-        threads.sort_by(
+        self.all_threads.clear();
+        let mut roots = threads.roots();
+        threads.group_inner_sort_by(
+            &mut roots,
             self.sort,
-            self.subsort,
             &context.accounts[self.cursor_pos.0].collection.envelopes,
         );
-        self.all_threads.clear();
 
         self.redraw_list(
             context,
-            Box::new(threads.root_iter().collect::<Vec<ThreadHash>>().into_iter())
-                as Box<dyn Iterator<Item = ThreadHash>>,
+            Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadGroupHash>>,
         );
+
+        if old_cursor_pos == self.new_cursor_pos {
+            self.view.update(context);
+        } else if self.unfocused {
+            let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+
+            self.view = ThreadView::new(self.new_cursor_pos, thread, None, context);
+        }
     }
 
-    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadHash>>) {
+    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadGroupHash>>) {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = &account[self.cursor_pos.1].unwrap();
 
@@ -714,18 +711,19 @@ impl CompactListing {
             SmallVec::new(),
         );
 
-        for (idx, root_idx) in items.enumerate() {
+        for (idx, thread) in items.enumerate() {
+            debug!(thread);
             self.length += 1;
-            let thread_node = &threads.thread_nodes()[&root_idx];
-            let i = thread_node.message().unwrap_or_else(|| {
+            let thread_node = &threads.thread_nodes()[&threads.groups[&thread].root().unwrap()];
+            let root_env_hash = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
                 while threads.thread_nodes()[&iter_ptr].message().is_none() {
                     iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             });
-            if !context.accounts[self.cursor_pos.0].contains_key(i) {
-                debug!("key = {}", i);
+            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
+                debug!("key = {}", root_env_hash);
                 debug!(
                     "name = {} {}",
                     mailbox.name(),
@@ -735,10 +733,11 @@ impl CompactListing {
 
                 panic!();
             }
-            let root_envelope: EnvelopeRef =
-                context.accounts[self.cursor_pos.0].collection.get_env(i);
+            let root_envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
+                .collection
+                .get_env(root_env_hash);
 
-            let entry_strings = self.make_entry_string(&root_envelope, context, threads, root_idx);
+            let entry_strings = self.make_entry_string(&root_envelope, context, threads, thread);
             row_widths.1.push(
                 entry_strings
                     .date
@@ -772,11 +771,11 @@ impl CompactListing {
                 min_width.4,
                 entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
             ); /* subject */
-            rows.push(((idx, root_idx), entry_strings));
-            self.all_threads.insert(root_idx);
+            rows.push(((idx, (thread, root_env_hash)), entry_strings));
+            self.all_threads.insert(thread);
 
-            self.order.insert(root_idx, idx);
-            self.selection.insert(root_idx, false);
+            self.order.insert(thread, idx);
+            self.selection.insert(thread, false);
         }
 
         min_width.0 = self.length.saturating_sub(1).to_string().len();
@@ -800,17 +799,9 @@ impl CompactListing {
             CellBuffer::new_with_context(min_width.4, rows.len(), Cell::with_char(' '), context);
         self.data_columns.segment_tree[4] = row_widths.4.into();
 
-        for ((idx, root_idx), strings) in rows {
-            let thread_node = &threads.thread_nodes()[&root_idx];
-            let i = thread_node.message().unwrap_or_else(|| {
-                let mut iter_ptr = thread_node.children()[0];
-                while threads.thread_nodes()[&iter_ptr].message().is_none() {
-                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
-                }
-                threads.thread_nodes()[&iter_ptr].message().unwrap()
-            });
-            if !context.accounts[self.cursor_pos.0].contains_key(i) {
-                //debug!("key = {}", i);
+        for ((idx, (thread, root_env_hash)), strings) in rows {
+            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
+                //debug!("key = {}", root_env_hash);
                 //debug!(
                 //    "name = {} {}",
                 //    mailbox.name(),
@@ -820,13 +811,13 @@ impl CompactListing {
 
                 panic!();
             }
-            let fg_color = if thread_node.has_unseen() {
+            let fg_color = if threads.groups[&thread].unseen() > 0 {
                 Color::Byte(0)
             } else {
                 Color::Default
             };
             let bg_color = if context.settings.terminal.theme == "light" {
-                if thread_node.has_unseen() {
+                if threads.groups[&thread].unseen() > 0 {
                     Color::Byte(251)
                 } else if idx % 2 == 0 {
                     Color::Byte(252)
@@ -834,7 +825,7 @@ impl CompactListing {
                     Color::Default
                 }
             } else {
-                if thread_node.has_unseen() {
+                if threads.groups[&thread].unseen() > 0 {
                     Color::Byte(251)
                 } else if idx % 2 == 0 {
                     Color::Byte(236)
@@ -930,10 +921,10 @@ impl CompactListing {
                 self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
             }
             match (
-                threads.is_snoozed(root_idx),
+                threads.groups[&thread].snoozed(),
                 context.accounts[self.cursor_pos.0]
                     .collection
-                    .get_env(i)
+                    .get_env(root_env_hash)
                     .has_attachments(),
             ) {
                 (true, true) => {
@@ -970,7 +961,7 @@ impl CompactListing {
         }
     }
 
-    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
+    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadGroupHash {
         //let account = &context.accounts[self.cursor_pos.0];
         //let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         if self.filter_term.is_empty() {
@@ -983,17 +974,18 @@ impl CompactListing {
                     panic!();
                 })
                 .0
-        //threads.root_set(cursor)
         } else {
             self.filtered_selection[cursor]
         }
     }
 
-    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
+    fn update_line(&mut self, context: &Context, thread_hash: ThreadGroupHash) {
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
-        if let Some(env_hash) = threads[&thread_hash].message() {
+        if let Some(env_hash) =
+            threads.thread_nodes()[&threads.groups[&thread_hash].root().unwrap()].message()
+        {
             if !account.contains_key(env_hash) {
                 /* The envelope has been renamed or removed, so wait for the appropriate event to
                  * arrive */
@@ -1001,14 +993,14 @@ impl CompactListing {
             }
             let envelope: EnvelopeRef = account.collection.get_env(env_hash);
             let has_attachments = envelope.has_attachments();
-            let fg_color = if threads[&thread_hash].has_unseen() {
+            let fg_color = if threads.groups[&thread_hash].unseen() > 0 {
                 Color::Byte(0)
             } else {
                 Color::Default
             };
             let idx = self.order[&thread_hash];
             let bg_color = if context.settings.terminal.theme == "light" {
-                if threads[&thread_hash].has_unseen() {
+                if threads.groups[&thread_hash].unseen() > 0 {
                     Color::Byte(251)
                 } else if idx % 2 == 0 {
                     Color::Byte(252)
@@ -1016,7 +1008,7 @@ impl CompactListing {
                     Color::Default
                 }
             } else {
-                if threads[&thread_hash].has_unseen() {
+                if threads.groups[&thread_hash].unseen() > 0 {
                     Color::Byte(253)
                 } else if idx % 2 == 0 {
                     Color::Byte(236)
@@ -1125,7 +1117,7 @@ impl CompactListing {
                 columns[4][c].set_ch(' ');
                 columns[4][c].set_bg(bg_color);
             }
-            match (threads.is_snoozed(thread_hash), has_attachments) {
+            match (threads.groups[&thread_hash].snoozed(), has_attachments) {
                 (true, true) => {
                     columns[3][(0, idx)].set_fg(Color::Byte(103));
                     columns[3][(2, idx)].set_fg(Color::Red);
@@ -1225,22 +1217,8 @@ impl Component for CompactListing {
                             k == shortcuts[CompactListing::DESCRIPTION]["open_thread"]
                         ) =>
                 {
-                    if self.filtered_selection.is_empty() {
-                        self.view = ThreadView::new(self.cursor_pos, None, context);
-                    } else {
-                        let mut temp = self.cursor_pos;
-                        let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
-                        let account = &context.accounts[self.cursor_pos.0];
-                        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                        let threads = &account.collection.threads[&folder_hash];
-                        let root_thread_index = threads.root_iter().position(|t| t == thread_hash);
-                        if let Some(pos) = root_thread_index {
-                            temp.2 = pos;
-                            self.view = ThreadView::new(temp, Some(thread_hash), context);
-                        } else {
-                            return true;
-                        }
-                    }
+                    let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                    self.view = ThreadView::new(self.cursor_pos, thread, None, context);
                     self.unfocused = true;
                     self.dirty = true;
                     return true;
@@ -1269,48 +1247,34 @@ impl Component for CompactListing {
                     self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
                 }
                 UIEvent::Action(ref action) => match action {
-                    Action::SubSort(field, order) if !self.unfocused => {
-                        debug!("SubSort {:?} , {:?}", field, order);
-                        self.subsort = (*field, *order);
-                        //if !self.filtered_selection.is_empty() {
-                        //    let threads = &account.collection.threads[&folder_hash];
-                        //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
-                        //} else {
-                        //    self.refresh_mailbox(context);
-                        //}
-                        return true;
-                    }
                     Action::Sort(field, order) if !self.unfocused => {
                         debug!("Sort {:?} , {:?}", field, order);
                         self.sort = (*field, *order);
                         if !self.filtered_selection.is_empty() {
-                            let folder_hash = context.accounts[self.cursor_pos.0]
-                                [self.cursor_pos.1]
-                                .unwrap()
-                                .folder
-                                .hash();
-                            let threads = &context.accounts[self.cursor_pos.0].collection.threads
-                                [&folder_hash];
-                            threads.vec_inner_sort_by(
-                                &mut self.filtered_selection,
-                                self.sort,
-                                &context.accounts[self.cursor_pos.0].collection.envelopes,
-                            );
+                            // FIXME: perform sort
                             self.dirty = true;
                         } else {
                             self.refresh_mailbox(context);
                         }
                         return true;
                     }
+                    Action::SubSort(field, order) if !self.unfocused => {
+                        debug!("SubSort {:?} , {:?}", field, order);
+                        self.subsort = (*field, *order);
+                        // FIXME: perform subsort.
+                        return true;
+                    }
                     Action::ToggleThreadSnooze if !self.unfocused => {
-                        let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                        let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
                         let account = &mut context.accounts[self.cursor_pos.0];
                         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
                         let threads = account.collection.threads.entry(folder_hash).or_default();
-                        let root_node = threads.thread_nodes.entry(thread_hash).or_default();
-                        let is_snoozed = root_node.snoozed();
-                        root_node.set_snoozed(!is_snoozed);
-                        self.row_updates.push(thread_hash);
+                        let is_snoozed = threads.groups[&thread].snoozed();
+                        threads
+                            .groups
+                            .entry(thread)
+                            .and_modify(|entry| entry.set_snoozed(!is_snoozed));
+                        self.row_updates.push(thread);
                         self.refresh_mailbox(context);
                         return true;
                     }
@@ -1352,33 +1316,10 @@ impl Component for CompactListing {
                 if !threads.thread_nodes.contains_key(&new_env_thread_hash) {
                     return false;
                 }
-                let thread_group = melib::find_root_hash(
-                    &threads.thread_nodes,
-                    threads.thread_nodes[&new_env_thread_hash].thread_group(),
-                );
-                let (&thread_hash, &row): (&ThreadHash, &usize) = self
-                    .order
-                    .iter()
-                    .find(|(n, _)| {
-                        melib::find_root_hash(
-                            &threads.thread_nodes,
-                            threads.thread_nodes[&n].thread_group(),
-                        ) == thread_group
-                    })
-                    .unwrap();
-
-                let new_thread_hash = threads.root_set(row);
-                self.row_updates.push(new_thread_hash);
-                if let Some(row) = self.order.remove(&thread_hash) {
-                    self.order.insert(new_thread_hash, row);
-                    let selection_status = self.selection.remove(&thread_hash).unwrap();
-                    self.selection.insert(new_thread_hash, selection_status);
-                    for h in self.filtered_selection.iter_mut() {
-                        if *h == thread_hash {
-                            *h = new_thread_hash;
-                            break;
-                        }
-                    }
+                let thread: ThreadGroupHash =
+                    threads.find_group(threads.thread_nodes()[&new_env_thread_hash].group);
+                if self.order.contains_key(&thread) {
+                    self.row_updates.push(thread);
                 }
 
                 self.dirty = true;

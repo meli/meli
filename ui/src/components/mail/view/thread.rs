@@ -52,6 +52,7 @@ pub struct ThreadView {
     new_expanded_pos: usize,
     reversed: bool,
     coordinates: (usize, usize, usize),
+    thread_group: ThreadGroupHash,
     mailview: MailView,
     show_mailview: bool,
     show_thread: bool,
@@ -75,6 +76,7 @@ impl ThreadView {
      */
     pub fn new(
         coordinates: (usize, usize, usize),
+        thread_group: ThreadGroupHash,
         expanded_hash: Option<ThreadHash>,
         context: &Context,
     ) -> Self {
@@ -82,6 +84,7 @@ impl ThreadView {
             reversed: false,
             initiated: false,
             coordinates,
+            thread_group,
             mailview: MailView::default(),
             show_mailview: true,
             show_thread: true,
@@ -163,7 +166,7 @@ impl ThreadView {
         let mailbox = &account[self.coordinates.1].unwrap();
         let threads = &account.collection.threads[&mailbox.folder.hash()];
 
-        let thread_iter = threads.thread_iter(self.coordinates.2);
+        let thread_iter = threads.thread_group_iter(self.thread_group);
         self.entries.clear();
         for (line, (ind, thread_hash)) in thread_iter.enumerate() {
             let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_hash].message() {
@@ -633,7 +636,12 @@ impl ThreadView {
             let account = &context.accounts[self.coordinates.0];
             let mailbox = &account[self.coordinates.1].unwrap();
             let threads = &account.collection.threads[&mailbox.folder.hash()];
-            let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
+            let thread_root = threads
+                .thread_group_iter(self.thread_group)
+                .next()
+                .unwrap()
+                .1;
+            let thread_node = &threads.thread_nodes()[&thread_root];
             let i = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
                 while threads.thread_nodes()[&iter_ptr].message().is_none() {
@@ -723,7 +731,12 @@ impl ThreadView {
             let account = &context.accounts[self.coordinates.0];
             let mailbox = &account[self.coordinates.1].unwrap();
             let threads = &account.collection.threads[&mailbox.folder.hash()];
-            let thread_node = &threads.thread_nodes()[&threads.root_set(self.coordinates.2)];
+            let thread_root = threads
+                .thread_group_iter(self.thread_group)
+                .next()
+                .unwrap()
+                .1;
+            let thread_node = &threads.thread_nodes()[&thread_root];
             let i = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
                 while threads.thread_nodes()[&iter_ptr].message().is_none() {

@@ -71,18 +71,20 @@ pub struct PlainListing {
     unfocused: bool,
     view: MailView,
     row_updates: SmallVec<[EnvelopeHash; 8]>,
-    _row_updates: SmallVec<[ThreadHash; 8]>,
+    _row_updates: SmallVec<[ThreadGroupHash; 8]>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
 }
 
 impl MailListingTrait for PlainListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadGroupHash; 8]> {
         &mut self._row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
+    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadGroupHash; 8]> {
+        return SmallVec::new();
+        /*
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
         if is_selection_empty {
             self.selection
@@ -95,6 +97,7 @@ impl MailListingTrait for PlainListing {
             ret.push(self.get_thread_under_cursor(self.cursor_pos.2, context));
             ret
         }
+        */
     }
 }
 

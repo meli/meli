@@ -63,7 +63,7 @@ impl std::ops::DerefMut for EmbedStatus {
 
 #[derive(Debug)]
 pub struct Composer {
-    reply_context: Option<(usize, usize)>, // (folder_index, thread_node_index)
+    reply_context: Option<(FolderHash, EnvelopeHash)>,
     account_cursor: usize,
 
     cursor: Cursor,
@@ -148,11 +148,7 @@ impl Composer {
             ..Default::default()
         }
     }
-    /*
-     * coordinates: (account index, mailbox index, root set thread_node index)
-     * msg: index of message we reply to in thread_nodes
-     * context: current context
-     */
+
     pub fn edit(account_pos: usize, h: EnvelopeHash, context: &Context) -> Result<Self> {
         let mut ret = Composer::default();
         let op = context.accounts[account_pos].operation(h);
@@ -163,18 +159,15 @@ impl Composer {
         ret.account_cursor = account_pos;
         Ok(ret)
     }
+
     pub fn with_context(
-        coordinates: (usize, usize, usize),
-        msg: ThreadHash,
+        coordinates: (usize, FolderHash),
+        msg: EnvelopeHash,
         context: &Context,
     ) -> Self {
         let account = &context.accounts[coordinates.0];
-        let mailbox = &account[coordinates.1].unwrap();
-        let threads = &account.collection.threads[&mailbox.folder.hash()];
-        let thread_nodes = &threads.thread_nodes();
         let mut ret = Composer::default();
-        let p = &thread_nodes[&msg];
-        let parent_message = account.collection.get_env(p.message().unwrap());
+        let parent_message = account.collection.get_env(msg);
         /* If message is from a mailing list and we detect a List-Post header, ask user if they
          * want to reply to the mailing list or the submitter of the message */
         if let Some(actions) = list_management::ListActions::detect(&parent_message) {
@@ -202,32 +195,22 @@ impl Composer {
             }
         }
 
-        let mut op = account.operation(parent_message.hash());
+        let mut op = account.operation(msg);
         let parent_bytes = op.as_bytes();
 
         ret.draft = Draft::new_reply(&parent_message, parent_bytes.unwrap());
+        let subject = parent_message.subject();
         ret.draft.headers_mut().insert(
             "Subject".into(),
-            if p.show_subject() {
-                format!(
-                    "Re: {}",
-                    account
-                        .collection
-                        .get_env(p.message().unwrap())
-                        .subject()
-                        .clone()
-                )
+            if !subject.starts_with("Re: ") {
+                format!("Re: {}", subject)
             } else {
-                account
-                    .collection
-                    .get_env(p.message().unwrap())
-                    .subject()
-                    .into()
+                subject.into()
             },
         );
 
         ret.account_cursor = coordinates.0;
-        ret.reply_context = Some((coordinates.1, coordinates.2));
+        ret.reply_context = Some((coordinates.1, msg));
         ret
     }
 
@@ -553,13 +536,13 @@ impl Component for Composer {
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
-        match (&mut self.mode, &mut self.reply_context, &event) {
-            (ViewMode::Edit, _, _) => {
+        match (&mut self.mode, &event) {
+            (ViewMode::Edit, _) => {
                 if self.pager.process_event(event, context) {
                     return true;
                 }
             }
-            (ViewMode::Send(ref mut selector), _, _) => {
+            (ViewMode::Send(ref mut selector), _) => {
                 if selector.process_event(event, context) {
                     if selector.is_done() {
                         let s = match std::mem::replace(&mut self.mode, ViewMode::Edit) {
@@ -594,7 +577,7 @@ impl Component for Composer {
                     return true;
                 }
             }
-            (ViewMode::SelectRecipients(ref mut selector), _, _) => {
+            (ViewMode::SelectRecipients(ref mut selector), _) => {
                 if selector.process_event(event, context) {
                     if selector.is_done() {
                         let s = match std::mem::replace(&mut self.mode, ViewMode::Edit) {
@@ -615,7 +598,7 @@ impl Component for Composer {
                     return true;
                 }
             }
-            (ViewMode::Discard(_, ref mut selector), _, _) => {
+            (ViewMode::Discard(_, ref mut selector), _) => {
                 if selector.process_event(event, context) {
                     if selector.is_done() {
                         let (u, s) = match std::mem::replace(&mut self.mode, ViewMode::Edit) {

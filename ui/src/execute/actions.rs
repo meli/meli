@@ -24,8 +24,7 @@
  */
 
 use crate::components::Component;
-use melib::backends::FolderOperation;
-use melib::thread::ThreadHash;
+use melib::backends::{FolderHash, FolderOperation};
 pub use melib::thread::{SortField, SortOrder};
 use melib::{Draft, EnvelopeHash};
 
@@ -56,7 +55,7 @@ pub enum ListingAction {
 pub enum TabAction {
     New(Option<Box<dyn Component>>),
     NewDraft(usize, Option<Draft>),
-    Reply((usize, usize, usize), ThreadHash), // thread coordinates (account, mailbox, root_set idx) and thread hash
+    Reply((usize, FolderHash), EnvelopeHash), // thread coordinates (account, mailbox) and envelope
     Close,
     Edit(usize, EnvelopeHash), // account_position, envelope hash
     Kill(Uuid),

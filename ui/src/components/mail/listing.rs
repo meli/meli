@@ -53,37 +53,18 @@ pub trait MailListingTrait: ListingTrait {
     fn perform_action(
         &mut self,
         context: &mut Context,
-        thread_hash: ThreadHash,
+        thread_hash: ThreadGroupHash,
         a: &ListingAction,
     ) {
         let account = &mut context.accounts[self.coordinates().0];
         let mut envs_to_set: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
         let folder_hash = account[self.coordinates().1].unwrap().folder.hash();
-        {
-            let mut stack: SmallVec<[ThreadHash; 8]> = SmallVec::new();
-            stack.push(thread_hash);
-            while let Some(thread_iter) = stack.pop() {
-                {
-                    let threads = account.collection.threads.get_mut(&folder_hash).unwrap();
-                    threads
-                        .thread_nodes
-                        .entry(thread_iter)
-                        .and_modify(|t| t.set_has_unseen(false));
-                }
-                let threads = &account.collection.threads[&folder_hash];
-                if let Some(env_hash) = threads[&thread_iter].message() {
-                    if !account.contains_key(env_hash) {
-                        /* The envelope has been renamed or removed, so wait for the appropriate event to
-                         * arrive */
-                        continue;
-                    }
-                    envs_to_set.push(env_hash);
-                }
-                for c in 0..threads[&thread_iter].children().len() {
-                    let c = threads[&thread_iter].children()[c];
-                    stack.push(c);
-                }
-            }
+        for (_, h) in account.collection.threads[&folder_hash].thread_group_iter(thread_hash) {
+            envs_to_set.push(
+                account.collection.threads[&folder_hash].thread_nodes()[&h]
+                    .message()
+                    .unwrap(),
+            );
         }
         for env_hash in envs_to_set {
             let op = account.operation(env_hash);
@@ -139,9 +120,9 @@ pub trait MailListingTrait: ListingTrait {
         }
     }
 
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]>;
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]>;
-    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadHash>>) {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadGroupHash; 8]>;
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadGroupHash; 8]>;
+    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadGroupHash>>) {
         unimplemented!()
     }
 }

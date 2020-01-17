@@ -594,11 +594,12 @@ impl Account {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
 
-                    let thread_node = {
-                        let thread_hash = &mut self.collection.get_env(env_hash).thread();
-                        &self.collection.threads[&folder_hash][&thread_hash]
+                    let thread = {
+                        let thread_hash = self.collection.get_env(env_hash).thread();
+                        self.collection.threads[&folder_hash]
+                            .find_group(self.collection.threads[&folder_hash][&thread_hash].group)
                     };
-                    if thread_node.snoozed() {
+                    if self.collection.threads[&folder_hash].groups[&thread].snoozed() {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
                     if is_seen || is_draft {

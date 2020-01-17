@@ -85,33 +85,33 @@ pub struct ConversationsListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
-    all_threads: fnv::FnvHashSet<ThreadHash>,
-    order: FnvHashMap<ThreadHash, usize>,
+    all_threads: fnv::FnvHashSet<ThreadGroupHash>,
+    order: FnvHashMap<ThreadGroupHash, usize>,
     /// Cache current view.
     content: CellBuffer,
 
     filter_term: String,
-    filtered_selection: Vec<ThreadHash>,
-    filtered_order: FnvHashMap<ThreadHash, usize>,
-    selection: FnvHashMap<ThreadHash, bool>,
+    filtered_selection: Vec<ThreadGroupHash>,
+    filtered_order: FnvHashMap<ThreadGroupHash, usize>,
+    selection: FnvHashMap<ThreadGroupHash, bool>,
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
     /// If `self.view` exists or not.
     unfocused: bool,
     view: ThreadView,
-    row_updates: SmallVec<[ThreadHash; 8]>,
+    row_updates: SmallVec<[ThreadGroupHash; 8]>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
 }
 
 impl MailListingTrait for ConversationsListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadGroupHash; 8]> {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
+    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadGroupHash; 8]> {
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
         let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
         let cursor_iter;
@@ -149,23 +149,22 @@ impl ListingTrait for ConversationsListing {
         if self.length == 0 {
             return;
         }
-        let i = self.get_thread_under_cursor(idx, context);
+        let thread = self.get_thread_under_cursor(idx, context);
 
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
-        let thread_node = &threads.thread_nodes[&i];
 
-        let fg_color = if thread_node.has_unseen() {
+        let fg_color = if threads.groups[&thread].unseen() > 0 {
             Color::Byte(0)
         } else {
             Color::Default
         };
         let bg_color = if self.cursor_pos.2 == idx {
             Color::Byte(246)
-        } else if self.selection[&i] {
+        } else if self.selection[&thread] {
             Color::Byte(210)
-        } else if thread_node.has_unseen() {
+        } else if threads.groups[&thread].unseen() > 0 {
             Color::Byte(251)
         } else {
             Color::Default
@@ -187,7 +186,7 @@ impl ListingTrait for ConversationsListing {
         let (upper_left, bottom_right) = area;
         let width = self.content.size().0;
         let (x, y) = upper_left;
-        if self.cursor_pos.2 == idx || self.selection[&i] {
+        if self.cursor_pos.2 == idx || self.selection[&thread] {
             for x in x..=get_x(bottom_right) {
                 grid[(x, y)].set_fg(fg_color);
                 grid[(x, y)].set_bg(bg_color);
@@ -416,19 +415,19 @@ impl ListingTrait for ConversationsListing {
                     if !threads.thread_nodes.contains_key(&env_hash_thread_hash) {
                         continue;
                     }
-                    let thread_group =
-                        melib::find_root_hash(&threads.thread_nodes, env_hash_thread_hash);
-                    if self.filtered_order.contains_key(&thread_group) {
+                    let thread =
+                        threads.find_group(threads.thread_nodes[&env_hash_thread_hash].group);
+                    if self.filtered_order.contains_key(&thread) {
                         continue;
                     }
-                    if self.all_threads.contains(&thread_group) {
-                        self.filtered_selection.push(thread_group);
+                    if self.all_threads.contains(&thread) {
+                        self.filtered_selection.push(thread);
                         self.filtered_order
-                            .insert(thread_group, self.filtered_selection.len() - 1);
+                            .insert(thread, self.filtered_selection.len() - 1);
                     }
                 }
                 if !self.filtered_selection.is_empty() {
-                    threads.vec_inner_sort_by(
+                    threads.group_inner_sort_by(
                         &mut self.filtered_selection,
                         self.sort,
                         &context.accounts[self.cursor_pos.0].collection.envelopes,
@@ -439,7 +438,11 @@ impl ListingTrait for ConversationsListing {
                     self.content =
                         CellBuffer::new_with_context(0, 0, Cell::with_char(' '), context);
                 }
-                self.redraw_list(context);
+                self.redraw_list(
+                    context,
+                    Box::new(self.filtered_selection.clone().into_iter())
+                        as Box<dyn Iterator<Item = ThreadGroupHash>>,
+                );
             }
             Err(e) => {
                 self.cursor_pos.2 = 0;
@@ -516,9 +519,10 @@ impl ConversationsListing {
         e: &Envelope,
         context: &Context,
         from: &Vec<Address>,
-        thread_node: &ThreadNode,
-        is_snoozed: bool,
+        threads: &Threads,
+        hash: ThreadGroupHash,
     ) -> EntryStrings {
+        let thread = &threads.groups[&hash];
         let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .unwrap()
             .folder
@@ -560,32 +564,26 @@ impl ConversationsListing {
         }
         let mut subject = e.subject().to_string();
         subject.truncate_at_boundary(150);
-        if thread_node.len() > 0 {
+        if thread.len() > 1 {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(
-                    context,
-                    thread_node.date(),
-                )),
-                subject: SubjectString(format!("{} ({})", subject, thread_node.len(),)),
+                date: DateString(ConversationsListing::format_date(context, thread.date())),
+                subject: SubjectString(format!("{} ({})", subject, thread.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
                     if e.has_attachments() { "📎" } else { "" },
-                    if is_snoozed { "💤" } else { "" }
+                    if thread.snoozed() { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),
                 tags: TagString(tags, colors),
             }
         } else {
             EntryStrings {
-                date: DateString(ConversationsListing::format_date(
-                    context,
-                    thread_node.date(),
-                )),
+                date: DateString(ConversationsListing::format_date(context, thread.date())),
                 subject: SubjectString(subject),
                 flag: FlagString(format!(
                     "{}{}",
                     if e.has_attachments() { "📎" } else { "" },
-                    if is_snoozed { "💤" } else { "" }
+                    if thread.snoozed() { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),
                 tags: TagString(tags, colors),
@@ -638,16 +636,31 @@ impl ConversationsListing {
                 return;
             }
         }
+
+        let threads = &context.accounts[self.cursor_pos.0].collection.threads[&folder_hash];
+        self.all_threads.clear();
+        let mut roots = threads.roots();
+        threads.group_inner_sort_by(
+            &mut roots,
+            self.sort,
+            &context.accounts[self.cursor_pos.0].collection.envelopes,
+        );
+
+        self.redraw_list(
+            context,
+            Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadGroupHash>>,
+        );
+
         if old_cursor_pos == self.new_cursor_pos {
             self.view.update(context);
         } else if self.unfocused {
-            self.view = ThreadView::new(self.new_cursor_pos, None, context);
-        }
+            let thread_group = self.get_thread_under_cursor(self.cursor_pos.2, context);
 
-        self.redraw_list(context);
+            self.view = ThreadView::new(self.new_cursor_pos, thread_group, None, context);
+        }
     }
 
-    fn redraw_list(&mut self, context: &Context) {
+    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadGroupHash>>) {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = &account[self.cursor_pos.1].unwrap();
 
@@ -658,33 +671,21 @@ impl ConversationsListing {
         let mut rows = Vec::with_capacity(1024);
         let mut max_entry_columns = 0;
 
-        threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);
-
-        let mut refresh_mailbox = false;
-        let threads_iter = if self.filter_term.is_empty() {
-            refresh_mailbox = true;
-            self.all_threads.clear();
-            Box::new(threads.root_iter()) as Box<dyn Iterator<Item = ThreadHash>>
-        } else {
-            Box::new(self.filtered_selection.iter().map(|h| *h))
-                as Box<dyn Iterator<Item = ThreadHash>>
-        };
-
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
-        for (idx, root_idx) in threads_iter.enumerate() {
+        for (idx, thread) in items.enumerate() {
             self.length += 1;
-            let thread_node = &threads.thread_nodes()[&root_idx];
-            let i = thread_node.message().unwrap_or_else(|| {
+            let thread_node = &threads.thread_nodes()[&threads.groups[&thread].root().unwrap()];
+            let root_env_hash = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
                 while threads.thread_nodes()[&iter_ptr].message().is_none() {
                     iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
                 }
                 threads.thread_nodes()[&iter_ptr].message().unwrap()
             });
-            if !context.accounts[self.cursor_pos.0].contains_key(i) {
-                debug!("key = {}", i);
+            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
+                debug!("key = {}", root_env_hash);
                 debug!(
                     "name = {} {}",
                     mailbox.name(),
@@ -696,14 +697,8 @@ impl ConversationsListing {
             }
             from_address_list.clear();
             from_address_set.clear();
-            let mut stack: SmallVec<[ThreadHash; 8]> = SmallVec::new();
-            stack.push(root_idx);
-            while let Some(h) = stack.pop() {
-                let env_hash = if let Some(h) = threads.thread_nodes()[&h].message() {
-                    h
-                } else {
-                    break;
-                };
+            for (_, h) in threads.thread_group_iter(thread) {
+                let env_hash = threads.thread_nodes()[&h].message().unwrap();
 
                 let envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
                     .collection
@@ -715,21 +710,13 @@ impl ConversationsListing {
                     from_address_set.insert(addr.raw().to_vec());
                     from_address_list.push(addr.clone());
                 }
-                for c in threads.thread_nodes()[&h].children() {
-                    stack.push(*c);
-                }
             }
+            let root_envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
+                .collection
+                .get_env(root_env_hash);
 
-            let root_envelope: &EnvelopeRef =
-                &context.accounts[self.cursor_pos.0].collection.get_env(i);
-
-            let strings = self.make_entry_string(
-                root_envelope,
-                context,
-                &from_address_list,
-                thread_node,
-                threads.is_snoozed(root_idx),
-            );
+            let strings =
+                self.make_entry_string(root_envelope, context, &from_address_list, threads, thread);
             max_entry_columns = std::cmp::max(
                 max_entry_columns,
                 strings.flag.len()
@@ -742,20 +729,12 @@ impl ConversationsListing {
                 max_entry_columns,
                 strings.date.len() + 1 + strings.from.grapheme_width(),
             );
-            rows.push(strings);
-            if refresh_mailbox {
-                self.all_threads.insert(root_idx);
-            }
+            rows.push(((idx, (thread, root_env_hash)), strings));
+            self.all_threads.insert(thread);
 
-            self.order.insert(root_idx, idx);
-            self.selection.insert(root_idx, false);
+            self.order.insert(thread, idx);
+            self.selection.insert(thread, false);
         }
-        let ConversationsListing {
-            ref mut selection,
-            ref order,
-            ..
-        } = self;
-        selection.retain(|e, _| order.contains_key(e));
 
         let width = max_entry_columns;
         self.content =
@@ -766,31 +745,17 @@ impl ConversationsListing {
         } else {
             Color::Byte(235)
         };
-        let threads_iter = if self.filter_term.is_empty() {
-            Box::new(threads.root_iter()) as Box<dyn Iterator<Item = ThreadHash>>
-        } else {
-            Box::new(self.filtered_selection.iter().map(|h| *h))
-                as Box<dyn Iterator<Item = ThreadHash>>
-        };
 
-        for ((idx, root_idx), strings) in threads_iter.enumerate().zip(rows) {
-            let thread_node = &threads.thread_nodes()[&root_idx];
-            let i = thread_node.message().unwrap_or_else(|| {
-                let mut iter_ptr = thread_node.children()[0];
-                while threads.thread_nodes()[&iter_ptr].message().is_none() {
-                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
-                }
-                threads.thread_nodes()[&iter_ptr].message().unwrap()
-            });
-            if !context.accounts[self.cursor_pos.0].contains_key(i) {
+        for ((idx, (thread, root_env_hash)), strings) in rows {
+            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
                 panic!();
             }
-            let fg_color = if thread_node.has_unseen() {
+            let fg_color = if threads.groups[&thread].unseen() > 0 {
                 Color::Byte(0)
             } else {
                 Color::Default
             };
-            let bg_color = if thread_node.has_unseen() {
+            let bg_color = if threads.groups[&thread].unseen() > 0 {
                 Color::Byte(251)
             } else {
                 Color::Default
@@ -930,7 +895,7 @@ impl ConversationsListing {
         }
     }
 
-    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
+    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadGroupHash {
         //let account = &context.accounts[self.cursor_pos.0];
         //let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         //let threads = &account.collection.threads[&folder_hash];
@@ -950,20 +915,23 @@ impl ConversationsListing {
         }
     }
 
-    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
+    fn update_line(&mut self, context: &Context, thread_hash: ThreadGroupHash) {
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
-        let thread_node = &threads.thread_nodes[&thread_hash];
         let idx: usize = self.order[&thread_hash];
         let width = self.content.size().0;
 
-        let fg_color = if thread_node.has_unseen() {
+        let env_hash = threads.thread_nodes()[&threads.groups[&thread_hash].root().unwrap()]
+            .message()
+            .unwrap();
+
+        let fg_color = if threads.groups[&thread_hash].unseen() > 0 {
             Color::Byte(0)
         } else {
             Color::Default
         };
-        let bg_color = if thread_node.has_unseen() {
+        let bg_color = if threads.groups[&thread_hash].unseen() > 0 {
             Color::Byte(251)
         } else {
             Color::Default
@@ -976,14 +944,8 @@ impl ConversationsListing {
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
-        let mut stack: SmallVec<[ThreadHash; 8]> = SmallVec::new();
-        stack.push(thread_hash);
-        while let Some(h) = stack.pop() {
-            let env_hash = if let Some(h) = threads.thread_nodes()[&h].message() {
-                h
-            } else {
-                break;
-            };
+        for (_, h) in threads.thread_group_iter(thread_hash) {
+            let env_hash = threads.thread_nodes()[&h].message().unwrap();
 
             let envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
                 .collection
@@ -995,19 +957,10 @@ impl ConversationsListing {
                 from_address_set.insert(addr.raw().to_vec());
                 from_address_list.push(addr.clone());
             }
-            for c in threads.thread_nodes()[&h].children() {
-                stack.push(*c);
-            }
         }
-        let env_hash = threads[&thread_hash].message().unwrap();
         let envelope: EnvelopeRef = account.collection.get_env(env_hash);
-        let strings = self.make_entry_string(
-            &envelope,
-            context,
-            &from_address_list,
-            &threads[&thread_hash],
-            threads.is_snoozed(thread_hash),
-        );
+        let strings =
+            self.make_entry_string(&envelope, context, &from_address_list, threads, thread_hash);
         drop(envelope);
         /* draw flags */
         let (x, _) = write_string_to_grid(
@@ -1215,27 +1168,8 @@ impl Component for ConversationsListing {
                             k == shortcuts[ConversationsListing::DESCRIPTION]["open_thread"]
                         ) =>
                 {
-                    if self.length == 0 {
-                        return true;
-                    }
-
-                    if self.filter_term.is_empty() {
-                        self.view = ThreadView::new(self.cursor_pos, None, context);
-                    } else if !self.filtered_selection.is_empty() {
-                        let mut temp = self.cursor_pos;
-                        let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
-                        let account = &context.accounts[self.cursor_pos.0];
-                        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                        let threads = &account.collection.threads[&folder_hash];
-                        let root_thread_index = threads.root_iter().position(|t| t == thread_hash);
-                        if let Some(pos) = root_thread_index {
-                            temp.2 = pos;
-                            self.view = ThreadView::new(temp, Some(thread_hash), context);
-                        } else {
-                            return true;
-                        }
-                    }
-
+                    let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                    self.view = ThreadView::new(self.cursor_pos, thread, None, context);
                     self.unfocused = true;
                     self.dirty = true;
                     return true;
@@ -1260,8 +1194,8 @@ impl Component for ConversationsListing {
                             key == shortcuts[ConversationsListing::DESCRIPTION]["select_entry"]
                         ) =>
                 {
-                    let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
-                    self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
+                    let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                    self.selection.entry(thread).and_modify(|e| *e = !*e);
                     return true;
                 }
                 UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
@@ -1275,33 +1209,10 @@ impl Component for ConversationsListing {
                     if !threads.thread_nodes.contains_key(&new_env_thread_hash) {
                         return false;
                     }
-                    let thread_group = melib::find_root_hash(
-                        &threads.thread_nodes,
-                        threads.thread_nodes[&new_env_thread_hash].thread_group(),
-                    );
-                    let (&thread_hash, &row): (&ThreadHash, &usize) = self
-                        .order
-                        .iter()
-                        .find(|(n, _)| {
-                            melib::find_root_hash(
-                                &threads.thread_nodes,
-                                threads.thread_nodes[&n].thread_group(),
-                            ) == thread_group
-                        })
-                        .unwrap();
-
-                    let new_thread_hash = threads.root_set(row);
-                    self.row_updates.push(new_thread_hash);
-                    if let Some(row) = self.order.remove(&thread_hash) {
-                        self.order.insert(new_thread_hash, row);
-                        let selection_status = self.selection.remove(&thread_hash).unwrap();
-                        self.selection.insert(new_thread_hash, selection_status);
-                        for h in self.filtered_selection.iter_mut() {
-                            if *h == thread_hash {
-                                *h = new_thread_hash;
-                                break;
-                            }
-                        }
+                    let thread: ThreadGroupHash =
+                        threads.find_group(threads.thread_nodes()[&new_env_thread_hash].group);
+                    if self.order.contains_key(&thread) {
+                        self.row_updates.push(thread);
                     }
 
                     self.dirty = true;
@@ -1313,6 +1224,7 @@ impl Component for ConversationsListing {
                     Action::SubSort(field, order) if !self.unfocused => {
                         debug!("SubSort {:?} , {:?}", field, order);
                         self.subsort = (*field, *order);
+                        // FIXME subsort
                         //if !self.filtered_selection.is_empty() {
                         //    let threads = &account.collection.threads[&folder_hash];
                         //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
@@ -1323,6 +1235,8 @@ impl Component for ConversationsListing {
                     }
                     Action::Sort(field, order) if !self.unfocused => {
                         debug!("Sort {:?} , {:?}", field, order);
+                        // FIXME sort
+                        /*
                         self.sort = (*field, *order);
                         if !self.filtered_selection.is_empty() {
                             let folder_hash = context.accounts[self.cursor_pos.0]
@@ -1341,17 +1255,20 @@ impl Component for ConversationsListing {
                         } else {
                             self.refresh_mailbox(context);
                         }
+                            */
                         return true;
                     }
                     Action::ToggleThreadSnooze if !self.unfocused => {
-                        let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                        let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
                         let account = &mut context.accounts[self.cursor_pos.0];
                         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
                         let threads = account.collection.threads.entry(folder_hash).or_default();
-                        let root_node = threads.thread_nodes.entry(thread_hash).or_default();
-                        let is_snoozed = root_node.snoozed();
-                        root_node.set_snoozed(!is_snoozed);
-                        self.row_updates.push(thread_hash);
+                        let is_snoozed = threads.groups[&thread].snoozed();
+                        threads
+                            .groups
+                            .entry(thread)
+                            .and_modify(|entry| entry.set_snoozed(!is_snoozed));
+                        self.row_updates.push(thread);
                         self.refresh_mailbox(context);
                         return true;
                     }

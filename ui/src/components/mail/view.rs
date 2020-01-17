@@ -777,17 +777,9 @@ impl Component for MailView {
             {
                 let account = &context.accounts[self.coordinates.0];
                 let folder_hash = account[self.coordinates.1].unwrap().folder.hash();
-                let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-                let thread_hash = envelope.thread();
-                let threads = &account.collection.threads[&folder_hash];
-                let root_thread_hash = melib::find_root_hash(&threads.thread_nodes, thread_hash);
-                let root_idx = threads
-                    .root_iter()
-                    .position(|t| t == root_thread_hash)
-                    .unwrap();
                 context.replies.push_back(UIEvent::Action(Tab(Reply(
-                    (self.coordinates.0, self.coordinates.1, root_idx),
-                    thread_hash,
+                    (self.coordinates.0, folder_hash),
+                    self.coordinates.2,
                 ))));
                 return true;
             }

@@ -36,16 +36,18 @@ use crate::datetime::UnixTimestamp;
 use crate::email::parser::BytesExt;
 use crate::email::*;
 
+mod iterators;
+pub use iterators::*;
+
 #[cfg(feature = "unicode_algorithms")]
 use text_processing::grapheme_clusters::*;
 use uuid::Uuid;
 
 use fnv::{FnvHashMap, FnvHashSet};
-use std::cell::{Ref, RefCell};
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt;
 use std::iter::FromIterator;
-use std::mem;
 use std::ops::Index;
 use std::result::Result as StdResult;
 use std::str::FromStr;
@@ -56,63 +58,38 @@ use smallvec::SmallVec;
 
 type Envelopes = Arc<RwLock<FnvHashMap<EnvelopeHash, Envelope>>>;
 
-#[derive(PartialEq, Hash, Eq, Copy, Clone, Serialize, Deserialize, Default)]
-pub struct ThreadHash(Uuid);
+macro_rules! uuid_hash_type {
+    ($n:ident) => {
+        #[derive(PartialEq, Hash, Eq, Copy, Clone, Serialize, Deserialize, Default)]
+        pub struct $n(Uuid);
 
-impl fmt::Debug for ThreadHash {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0.to_string())
-    }
+        impl fmt::Debug for $n {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "{}", self.0.to_string())
+            }
+        }
+
+        impl fmt::Display for $n {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "{}", self.0.to_string())
+            }
+        }
+
+        impl $n {
+            fn new() -> Self {
+                $n(Uuid::new_v4())
+            }
+            pub fn null() -> Self {
+                $n(Uuid::nil())
+            }
+        }
+    };
 }
 
-impl fmt::Display for ThreadHash {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0.to_string())
-    }
-}
-
-impl ThreadHash {
-    fn new() -> Self {
-        ThreadHash(Uuid::new_v4())
-    }
-    pub fn null() -> Self {
-        ThreadHash(Uuid::nil())
-    }
-}
+uuid_hash_type!(ThreadHash);
+uuid_hash_type!(ThreadGroupHash);
 
 /* Helper macros to avoid repeating ourselves */
-
-fn rec_change_root_parent(
-    b: &mut FnvHashMap<ThreadHash, ThreadNode>,
-    idx: ThreadHash,
-    new_root: ThreadHash,
-) {
-    let parent = {
-        let entry = b.entry(idx).or_default();
-        entry.thread_group = new_root;
-        entry.parent
-    };
-    if let Some(p) = parent {
-        rec_change_children(b, p, new_root);
-        rec_change_root_parent(b, p, new_root);
-    }
-}
-fn rec_change_children(
-    b: &mut FnvHashMap<ThreadHash, ThreadNode>,
-    idx: ThreadHash,
-    new_root: ThreadHash,
-) {
-    b.entry(idx).and_modify(|e| {
-        e.thread_group = new_root;
-    });
-
-    let mut ctr = 0;
-    while ctr < b[&idx].children.len() {
-        let c = b[&idx].children[ctr];
-        rec_change_children(b, c, new_root);
-        ctr += 1;
-    }
-}
 
 macro_rules! remove_from_parent {
     ($buf:expr, $idx:expr) => {{
@@ -125,34 +102,63 @@ macro_rules! remove_from_parent {
                     e.children.remove(pos);
                 });
             }
-            rec_change_root_parent($buf, p, p);
         }
         $buf.entry($idx).and_modify(|e| e.parent = None);
-        rec_change_children($buf, $idx, $idx);
-        $buf.entry($idx).and_modify(|e| e.thread_group = $idx);
         parent
     }};
 }
 
 macro_rules! make {
     (($p:expr)parent of($c:expr), $threads:expr) => {{
-        if $threads.find($c) != $threads.find($p) {
+        let old_group_hash = $threads.find_group($threads.thread_nodes[&$c].group);
+        let parent_group_hash = $threads.find_group($threads.thread_nodes[&$p].group);
+        if old_group_hash != parent_group_hash {
             let prev_parent = remove_from_parent!(&mut $threads.thread_nodes, $c);
             if !($threads.thread_nodes[&$p]).children.contains(&$c) {
                 /* Pruned nodes keep their children in case they show up in a later merge, so do not panic
                  * if children exists */
                 $threads.thread_nodes.entry($p).and_modify(|e| e.children.push($c));
             }
-            let child_len = $threads.thread_nodes[&$c].len;
-            let has_unseen = $threads.thread_nodes[&$c].has_unseen;
             $threads.thread_nodes.entry($c).and_modify(|e| {
                 e.parent = Some($p);
             });
-            $threads.thread_nodes.entry($p).and_modify(|e| {
-                e.len += child_len + 1;
-                e.has_unseen |= has_unseen;
+            let old_group = $threads.groups[&old_group_hash].clone();
+            $threads.thread_nodes.entry($c).and_modify(|e| {
+                e.group = parent_group_hash;
             });
-            $threads.union($c, $p);
+            $threads.thread_nodes.entry($p).and_modify(|e| {
+                e.group = parent_group_hash;
+            });
+            {
+                let parent_group = $threads.groups.entry(parent_group_hash).or_default();
+                match (parent_group, old_group) {
+                    (ThreadGroup::Group {
+                        ref mut date,
+                        ref mut len,
+                        ref mut unseen,
+                        ref mut snoozed,
+                        ..
+                    }, ThreadGroup::Group {
+                        date: old_date,
+                        len: old_len,
+                        unseen: old_unseen,
+                        snoozed: old_snoozed,
+                        ..
+                    }) => {
+                        *date = std::cmp::max(old_date, *date);
+                        *len += old_len;
+                        *unseen |= old_unseen;
+                        *snoozed |= old_snoozed;
+                    }
+                    _ => unreachable!(),
+                 }
+            }
+            {
+                let old_group = $threads.groups.entry(old_group_hash).or_default();
+                *old_group = ThreadGroup::Node {
+                    parent: RefCell::new(parent_group_hash),
+                };
+            }
         prev_parent
         } else { None }
         }};
@@ -263,118 +269,69 @@ impl FromStr for SortOrder {
     }
 }
 
-/* `ThreadsIterator` returns messages according to the sorted order. For example, for the following
- * threads:
- *
- *  ```
- *  A_
- *   |_ B
- *   |_C
- *  D
- *  E_
- *   |_F
- *   ```
- *
- *   the iterator returns them as `A, B, C, D, E, F`
- */
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum ThreadGroup {
+    Group {
+        root: ThreadHash,
+        date: UnixTimestamp,
+        len: usize,
+        unseen: usize,
 
-pub struct ThreadsIterator<'a> {
-    pos: usize,
-    stack: SmallVec<[usize; 16]>,
-    root_tree: Ref<'a, Vec<ThreadHash>>,
-    thread_nodes: &'a FnvHashMap<ThreadHash, ThreadNode>,
+        snoozed: bool,
+    },
+    Node {
+        parent: RefCell<ThreadGroupHash>,
+    },
 }
-impl<'a> Iterator for ThreadsIterator<'a> {
-    type Item = (usize, ThreadHash, bool);
-    fn next(&mut self) -> Option<(usize, ThreadHash, bool)> {
-        {
-            let mut tree = &(*self.root_tree);
-            for i in self.stack.iter() {
-                tree = &self.thread_nodes[&tree[*i]].children;
-            }
-            if self.pos == tree.len() {
-                if let Some(p) = self.stack.pop() {
-                    self.pos = p + 1;
-                } else {
-                    return None;
-                }
-            } else {
-                debug_assert!(self.pos < tree.len());
-                let ret = (
-                    self.stack.len(),
-                    tree[self.pos],
-                    !self.stack.is_empty() && (self.pos < (tree.len() - 1)),
-                );
-                if !self.thread_nodes[&tree[self.pos]].children.is_empty() {
-                    self.stack.push(self.pos);
-                    self.pos = 0;
-                    if self.thread_nodes[&ret.1].message.is_some() {
-                        return Some(ret);
-                    } else {
-                        return self.next();
-                    }
-                }
-                self.pos += 1;
-                if self.thread_nodes[&ret.1].message.is_some() {
-                    return Some(ret);
-                }
-            }
+
+impl Default for ThreadGroup {
+    fn default() -> Self {
+        ThreadGroup::Group {
+            root: ThreadHash::null(),
+            date: 0,
+            len: 0,
+            unseen: 0,
+            snoozed: false,
         }
-        self.next()
     }
 }
-/* `ThreadIterator` returns messages of a specific thread according to the sorted order. For example, for the following
- * thread:
- *
- *  ```
- *  A_
- *   |_ B
- *   |_C
- *   |_D
- *   ```
- *
- *   the iterator returns them as `A, B, C, D`
- */
 
-pub struct ThreadIterator<'a> {
-    init_pos: usize,
-    pos: usize,
-    stack: SmallVec<[usize; 16]>,
-    root_tree: Ref<'a, Vec<ThreadHash>>,
-    thread_nodes: &'a FnvHashMap<ThreadHash, ThreadNode>,
-}
-impl<'a> Iterator for ThreadIterator<'a> {
-    type Item = (usize, ThreadHash);
-    fn next(&mut self) -> Option<(usize, ThreadHash)> {
-        {
-            let mut tree = &(*self.root_tree);
-            for i in self.stack.iter() {
-                tree = &self.thread_nodes[&tree[*i]].children;
-            }
-            if self.pos == tree.len() || (self.stack.is_empty() && self.pos > self.init_pos) {
-                if self.stack.is_empty() {
-                    return None;
-                }
-                self.pos = self.stack.pop().unwrap() + 1;
-            } else {
-                debug_assert!(self.pos < tree.len());
-                let ret = (self.stack.len(), tree[self.pos]);
-                if !self.thread_nodes[&tree[self.pos]].children.is_empty() {
-                    self.stack.push(self.pos);
-                    self.pos = 0;
-                    if self.thread_nodes[&ret.1].message.is_some() {
-                        return Some(ret);
-                    } else {
-                        return self.next();
-                    }
-                }
-                self.pos += 1;
-                if self.thread_nodes[&ret.1].message.is_some() {
-                    return Some(ret);
+macro_rules! property {
+    ($name:ident: $t:ty, $e:expr) => {
+        pub fn $name(&self) -> $t {
+            match self {
+                ThreadGroup::Group { $name, .. } => (*$name).into(),
+                _ => {
+                    debug!(
+                        "ThreadGroup::{}() called on a ThreadGroup::Node: {:?}",
+                        stringify!($name),
+                        self
+                    );
+                    $e
                 }
             }
         }
-        self.next()
+    }
+}
+impl ThreadGroup {
+    property!(root: Option<ThreadHash>, None);
+    property!(len: usize, 0);
+    property!(unseen: usize, 0);
+    property!(snoozed: bool, false);
+    property!(date: UnixTimestamp, 0);
+
+    pub fn set_snoozed(&mut self, val: bool) {
+        match self {
+            ThreadGroup::Group {
+                ref mut snoozed, ..
+            } => *snoozed = val,
+            _ => {
+                debug!(
+                    "ThreadGroup::set_snoozed() called on a ThreadGroup::Node: {:?}",
+                    self
+                );
+            }
+        }
     }
 }
 
@@ -384,19 +341,12 @@ pub struct ThreadNode {
     parent: Option<ThreadHash>,
     children: Vec<ThreadHash>,
     date: UnixTimestamp,
-    indentation: usize,
     show_subject: bool,
     pruned: bool,
     is_root: bool,
+    pub group: ThreadGroupHash,
 
-    len: usize,
-    has_unseen: bool,
-
-    snoozed: bool,
-
-    /* Union/Find set fields */
-    thread_group: ThreadHash,
-    rank: i32,
+    unseen: bool,
 }
 
 impl Default for ThreadNode {
@@ -406,25 +356,19 @@ impl Default for ThreadNode {
             parent: None,
             children: Vec::new(),
             date: UnixTimestamp::default(),
-            indentation: 0,
             show_subject: true,
             pruned: false,
             is_root: false,
+            group: ThreadGroupHash::new(),
 
-            len: 0,
-            has_unseen: false,
-            snoozed: false,
-
-            thread_group: ThreadHash::default(),
-            rank: 0,
+            unseen: false,
         }
     }
 }
 
 impl ThreadNode {
-    fn new(thread_group: ThreadHash) -> Self {
+    fn new() -> Self {
         ThreadNode {
-            thread_group,
             ..Default::default()
         }
     }
@@ -432,16 +376,12 @@ impl ThreadNode {
         self.show_subject
     }
 
-    pub fn has_unseen(&self) -> bool {
-        self.has_unseen
+    pub fn unseen(&self) -> bool {
+        self.unseen
     }
 
-    pub fn set_has_unseen(&mut self, new_val: bool) {
-        self.has_unseen = new_val;
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
+    pub fn set_unseen(&mut self, new_val: bool) {
+        self.unseen = new_val;
     }
 
     pub fn date(&self) -> UnixTimestamp {
@@ -470,22 +410,6 @@ impl ThreadNode {
 
     pub fn children(&self) -> &[ThreadHash] {
         &self.children
-    }
-
-    pub fn indentation(&self) -> usize {
-        self.indentation
-    }
-
-    pub fn snoozed(&self) -> bool {
-        self.snoozed
-    }
-
-    pub fn thread_group(&self) -> ThreadHash {
-        self.thread_group
-    }
-
-    pub fn set_snoozed(&mut self, set: bool) {
-        self.snoozed = set;
     }
 
     fn insert_child_pos(
@@ -560,6 +484,7 @@ pub struct Threads {
     pub thread_dates: FnvHashMap<ThreadHash, UnixTimestamp>,
     root_set: RefCell<Vec<ThreadHash>>,
     tree_index: RefCell<Vec<ThreadHash>>,
+    pub groups: FnvHashMap<ThreadGroupHash, ThreadGroup>,
 
     message_ids: FnvHashMap<Vec<u8>, ThreadHash>,
     pub message_ids_set: FnvHashSet<Vec<u8>>,
@@ -578,115 +503,26 @@ impl PartialEq for ThreadNode {
     }
 }
 
-pub struct RootIterator<'a> {
-    pos: usize,
-    root_tree: Ref<'a, Vec<ThreadHash>>,
-    thread_nodes: &'a FnvHashMap<ThreadHash, ThreadNode>,
-}
-
-impl<'a> Iterator for RootIterator<'a> {
-    type Item = ThreadHash;
-    fn next(&mut self) -> Option<ThreadHash> {
-        {
-            if self.pos == self.root_tree.len() {
-                return None;
-            }
-            let mut ret = self.root_tree[self.pos];
-            self.pos += 1;
-            let thread_node = &self.thread_nodes[&ret];
-            if thread_node.message().is_none() {
-                ret = thread_node.children()[0];
-                while self.thread_nodes[&ret].message().is_none() {
-                    ret = self.thread_nodes[&ret].children()[0];
-                }
-            }
-            Some(ret)
-        }
-    }
-}
-
-pub fn find_root_hash(buf: &FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
-    if buf[&h].parent.is_none() {
-        return h;
-    }
-    let p = buf[&h].parent.unwrap();
-    if buf[&p].message.is_none() {
-        return h;
-    }
-    find_root_hash(buf, p)
-}
-
-pub fn find_thread_group(buf: &FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
-    if buf[&h].thread_group == h {
-        return h;
-    }
-    let p = buf[&h].thread_group;
-    find_thread_group(buf, p)
-}
-fn find(buf: &mut FnvHashMap<ThreadHash, ThreadNode>, h: ThreadHash) -> ThreadHash {
-    if buf[&h].thread_group == h {
-        return h;
-    }
-    let p = buf[&h].thread_group;
-    let new_group = find(buf, p);
-    buf.entry(h).and_modify(|e| e.thread_group = new_group);
-    new_group
-}
-
 impl Threads {
     pub fn is_snoozed(&self, h: ThreadHash) -> bool {
-        let root = find_root_hash(&self.thread_nodes, h);
-        self.thread_nodes[&root].snoozed()
+        let root = &self.find_group(self.thread_nodes[&h].group);
+        self.groups[&root].snoozed()
     }
-    pub fn find(&mut self, i: ThreadHash) -> ThreadHash {
-        find(&mut self.thread_nodes, i)
-    }
-    fn union(&mut self, x: ThreadHash, y: ThreadHash) -> ThreadHash {
-        let mut x_root = self.find(x);
-        let mut y_root = self.find(y);
 
-        // x and y are already in the same set
-        if x_root == y_root {
-            let max = std::cmp::max(
-                *self
-                    .thread_dates
-                    .entry(x_root)
-                    .or_insert(self.thread_nodes[&x_root].date),
-                *self
-                    .thread_dates
-                    .entry(y_root)
-                    .or_insert(self.thread_nodes[&y_root].date),
-            );
-            *self.thread_dates.entry(x_root).or_default() = max;
-            *self.thread_dates.entry(y_root).or_default() = max;
-            return x_root;
+    pub fn find_group(&self, h: ThreadGroupHash) -> ThreadGroupHash {
+        let p = match self.groups[&h] {
+            ThreadGroup::Group { .. } => return h,
+            ThreadGroup::Node { ref parent } => *parent.borrow(),
+        };
+
+        let parent_group = self.find_group(p);
+        match self.groups[&h] {
+            ThreadGroup::Node { ref parent } => {
+                *parent.borrow_mut() = parent_group;
+            }
+            _ => unreachable!(),
         }
-
-        if self.thread_nodes[&y_root].date < self.thread_nodes[&x_root].date {
-            mem::swap(&mut x_root, &mut y_root);
-        }
-
-        // x and y are not in same set, so we merge them
-        //
-        self.thread_nodes
-            .entry(y_root)
-            .and_modify(|e| e.thread_group = x_root);
-        //if self.thread_nodes[&x_root].rank == self.thread_nodes[&y_root].rank {
-        //    self.thread_nodes.entry(x_root).and_modify(|e| e.rank += 1);
-        //}
-        let max = std::cmp::max(
-            *self
-                .thread_dates
-                .entry(x_root)
-                .or_insert(self.thread_nodes[&x_root].date),
-            *self
-                .thread_dates
-                .entry(y_root)
-                .or_insert(self.thread_nodes[&y_root].date),
-        );
-        *self.thread_dates.entry(x_root).or_default() = max;
-        *self.thread_dates.entry(y_root).or_default() = max;
-        x_root
+        parent_group
     }
 
     pub fn new(length: usize) -> Threads {
@@ -744,6 +580,15 @@ impl Threads {
         }
     }
 
+    pub fn thread_group_iter(&self, index: ThreadGroupHash) -> ThreadGroupIterator {
+        ThreadGroupIterator {
+            group: self.groups[&index].root().unwrap(),
+            pos: 0,
+            stack: SmallVec::new(),
+            thread_nodes: &self.thread_nodes,
+        }
+    }
+
     pub fn update_envelope(
         &mut self,
         envelopes: &Envelopes,
@@ -765,25 +610,21 @@ impl Threads {
         };
 
         self.thread_nodes.get_mut(&thread_hash).unwrap().message = Some(new_hash);
-        self.thread_nodes.get_mut(&thread_hash).unwrap().has_unseen =
-            !envelopes.read().unwrap()[&new_hash].is_seen()
-                || self.thread_nodes[&thread_hash]
-                    .children
-                    .iter()
-                    .fold(false, |acc, x| acc || self.thread_nodes[x].has_unseen);
-
-        let mut thread_hash_iter = thread_hash;
-        while self.thread_nodes[&thread_hash_iter].parent.is_some() {
-            let parent_hash = self.thread_nodes[&thread_hash_iter].parent.unwrap();
-
-            self.thread_nodes.get_mut(&parent_hash).unwrap().has_unseen = self.thread_nodes
-                [&parent_hash]
-                .children
-                .iter()
-                .fold(false, |acc, x| acc || self.thread_nodes[x].has_unseen);
-            thread_hash_iter = parent_hash;
+        let was_unseen = self.thread_nodes[&thread_hash].unseen;
+        let is_unseen = !envelopes.read().unwrap()[&new_hash].is_seen();
+        if was_unseen != is_unseen {
+            let thread = self.find_group(self.thread_nodes[&thread_hash].group);
+            self.groups.entry(thread).and_modify(|e| {
+                if let ThreadGroup::Group { ref mut unseen, .. } = e {
+                    if was_unseen {
+                        *unseen -= 1;
+                    } else {
+                        *unseen += 1;
+                    }
+                }
+            });
         }
-
+        self.thread_nodes.get_mut(&thread_hash).unwrap().unseen = is_unseen;
         self.hash_set.remove(&old_hash);
         self.hash_set.insert(new_hash);
         Ok(())
@@ -906,16 +747,28 @@ impl Threads {
         {
             let mut node = self.thread_nodes.entry(new_id).or_default();
             node.message = Some(env_hash);
-            if node.thread_group == ThreadHash::default() {
-                node.thread_group = new_id;
-            }
             if node.parent.is_none() {
                 node.parent = reply_to_id;
             }
             node.date = envelopes_lck[&env_hash].date();
             *self.thread_dates.entry(new_id).or_default() = node.date;
-            node.has_unseen = !envelopes_lck[&env_hash].is_seen();
+            node.unseen = !envelopes_lck[&env_hash].is_seen();
         }
+
+        self.groups.insert(
+            self.thread_nodes[&new_id].group,
+            ThreadGroup::Group {
+                root: new_id,
+                date: envelopes_lck[&env_hash].date(),
+                len: 1,
+                unseen: if !envelopes_lck[&env_hash].is_seen() {
+                    1
+                } else {
+                    0
+                },
+                snoozed: false,
+            },
+        );
         self.message_ids
             .insert(envelopes_lck[&env_hash].message_id().raw().to_vec(), new_id);
         self.message_ids_set.insert(
@@ -928,9 +781,7 @@ impl Threads {
         self.missing_message_ids
             .remove(envelopes_lck[&env_hash].message_id().raw());
         self.hash_set.insert(env_hash);
-        let mut new_root = None;
         if let Some(reply_to_id) = reply_to_id {
-            //self.union(reply_to_id, new_id);
             make!((reply_to_id) parent of (new_id), self);
         } else {
             if let Some(r) = envelopes_lck[&env_hash]
@@ -942,45 +793,36 @@ impl Threads {
                     reply_to_id,
                     ThreadNode {
                         date: envelopes_lck[&env_hash].date(),
-                        thread_group: reply_to_id,
-                        ..ThreadNode::new(reply_to_id)
+                        ..ThreadNode::new()
+                    },
+                );
+
+                self.groups.insert(
+                    self.thread_nodes[&reply_to_id].group,
+                    ThreadGroup::Group {
+                        root: reply_to_id,
+                        date: envelopes_lck[&env_hash].date(),
+                        len: 0,
+                        unseen: 0,
+                        snoozed: false,
                     },
                 );
                 make!((reply_to_id) parent of (new_id), self);
                 self.missing_message_ids.insert(r.to_vec());
                 self.message_ids.insert(r.to_vec(), reply_to_id);
                 self.message_ids_set.insert(r.to_vec().to_vec());
-                new_root = Some(reply_to_id);
-            } else {
-                new_root = Some(new_id);
             }
         }
 
         if envelopes_lck[&env_hash].references.is_some() {
-            let sort = *self.sort.borrow();
-            let mut current_descendant = envelopes_lck[&env_hash].message_id().to_string();
-            //debug!("{} references are {}", &current_descendant, unsafe { std::str::from_utf8_unchecked( &envelopes_lck[&env_hash].references.as_ref().unwrap().raw,) });
-            //debug!( "{} in_reply_to is {:?}", &current_descendant, &envelopes_lck[&env_hash].in_reply_to_display());
             let mut current_descendant_id = new_id;
             let mut references = envelopes_lck[&env_hash].references();
-            if let Some(irt) = envelopes_lck[&env_hash].in_reply_to().as_ref() {
-                if references.first() == envelopes_lck[&env_hash].in_reply_to().as_ref() {
-                    references.reverse();
-                    /*
-                    references.remove(0);
-                    if !references.contains(irt) {
-                        references.push(irt);
-                    }
-                    */
-                }
+            if references.first() == envelopes_lck[&env_hash].in_reply_to().as_ref() {
+                references.reverse();
             }
 
-            //debug!( "{} references iter is {:?}", &current_descendant, references .iter() .map(|r| unsafe { std::str::from_utf8_unchecked(r.raw()) }) .collect::<Vec<&str>>());
-
             for reference in references.into_iter().rev() {
-                //debug!("parent of {} is {}", current_descendant, reference);
                 if let Some(&id) = self.message_ids.get(reference.raw()) {
-                    //self.union(id, current_descendant_id);
                     if self.thread_nodes[&id].date > self.thread_nodes[&current_descendant_id].date
                         || self.thread_nodes[&current_descendant_id].parent.is_some()
                     {
@@ -988,37 +830,6 @@ impl Threads {
                         continue;
                     }
                     make!((id) parent of (current_descendant_id), self);
-                    if self.thread_nodes[&id].message.is_some()
-                        && (self.thread_nodes[&new_id].parent.is_none()
-                            || self.thread_nodes
-                                [self.thread_nodes[&new_id].parent.as_ref().unwrap()]
-                            .message
-                            .is_none())
-                    {
-                        if self.thread_nodes[&current_descendant_id].is_root {
-                            let pos = ThreadNode::insert_child_pos(
-                                &self.tree_index.borrow(),
-                                current_descendant_id,
-                                sort,
-                                &mut self.thread_nodes,
-                                &self.thread_dates,
-                                &envelopes,
-                            );
-                            if let Ok(pos) = pos {
-                                self.tree_index.borrow_mut().remove(pos);
-                            }
-                            self.thread_nodes
-                                .entry(current_descendant_id)
-                                .and_modify(|n| {
-                                    n.is_root = false;
-                                });
-                        }
-                        if self.thread_nodes[&id].is_root {
-                            new_root = None;
-                        } else {
-                            new_root = Some(id);
-                        }
-                    }
                     current_descendant_id = id;
                 } else {
                     let id = ThreadHash::new();
@@ -1026,11 +837,19 @@ impl Threads {
                         id,
                         ThreadNode {
                             date: envelopes_lck[&env_hash].date(),
-                            thread_group: id,
-                            ..ThreadNode::new(id)
+                            ..ThreadNode::new()
                         },
                     );
-                    //self.union(id, current_descendant_id);
+                    self.groups.insert(
+                        self.thread_nodes[&id].group,
+                        ThreadGroup::Group {
+                            root: id,
+                            date: envelopes_lck[&env_hash].date(),
+                            len: 0,
+                            unseen: 0,
+                            snoozed: false,
+                        },
+                    );
                     make!((id) parent of (current_descendant_id), self);
                     self.missing_message_ids.insert(reference.raw().to_vec());
                     self.message_ids.insert(reference.raw().to_vec(), id);
@@ -1038,30 +857,9 @@ impl Threads {
                         .insert(reference.raw().to_vec().to_vec());
                     current_descendant_id = id;
                 }
-                current_descendant = reference.to_string();
             }
         }
         drop(envelopes_lck);
-        /*{
-            let mut new_tree = vec![];
-            for (k, t) in self.thread_nodes.iter() {
-                if t.message.is_some() && t.parent.is_none() {
-                    new_tree.push(*k);
-                }
-            }
-
-            self.vec_inner_sort_by(&mut new_tree, *self.sort.borrow(), envelopes);
-            let mut tree = self.tree_index.borrow_mut();
-            tree.clear();
-            *tree = new_tree;
-        }*/
-
-        if let Some(id) = new_root {
-            self.tree_insert_root(id, envelopes);
-        } else {
-            //self.inner_sort_by(*self.sort.borrow(), envelopes);
-        }
-
         self.update_show_subject(new_id, env_hash, envelopes);
         envelopes
             .write()
@@ -1087,98 +885,7 @@ impl Threads {
 
     /* Insert or update */
     pub fn insert_reply(&mut self, envelopes: &mut Envelopes, env_hash: EnvelopeHash) -> bool {
-        return self.insert_internal(envelopes, env_hash, true);
-
-        let mut envelopes_lck = envelopes.write().unwrap();
-        let reply_to_id: Option<ThreadHash> = envelopes_lck[&env_hash]
-            .in_reply_to()
-            .map(crate::email::StrBuild::raw)
-            .and_then(|r| self.message_ids.get(r).cloned());
-        if let Some(id) = self
-            .message_ids
-            .get(envelopes_lck[&env_hash].message_id().raw())
-            .cloned()
-        {
-            if self.thread_nodes[&id].message.is_some() {
-                return false;
-            }
-            self.thread_nodes.entry(id).and_modify(|n| {
-                n.message = Some(env_hash);
-                n.date = envelopes_lck[&env_hash].date();
-                n.pruned = false;
-                if n.parent.is_none() {
-                    if let Some(reply_to_id) = reply_to_id {
-                        n.parent = Some(reply_to_id);
-                    }
-                }
-            });
-            if let Some(reply_to_id) = reply_to_id {
-                if !self.thread_nodes[&reply_to_id].children.contains(&id) {
-                    make!((reply_to_id) parent of (id), self);
-                    self.union(id, reply_to_id);
-                }
-            }
-
-            self.message_ids
-                .insert(envelopes_lck[&env_hash].message_id().raw().to_vec(), id);
-            self.message_ids_set.insert(
-                envelopes_lck[&env_hash]
-                    .message_id()
-                    .raw()
-                    .to_vec()
-                    .to_vec(),
-            );
-            self.missing_message_ids
-                .remove(envelopes_lck[&env_hash].message_id().raw());
-            envelopes_lck.get_mut(&env_hash).unwrap().set_thread(id);
-            self.hash_set.insert(env_hash);
-            drop(envelopes_lck);
-            if self.thread_nodes[&id].parent.is_none() {
-                self.tree_insert_root(id, envelopes);
-            }
-            {
-                let mut tree_index = self.tree_index.borrow_mut();
-                for c in &self.thread_nodes[&id].children {
-                    if let Some(i) = tree_index.iter().position(|t| *t == *c) {
-                        tree_index.remove(i);
-                    }
-                }
-            }
-            self.update_show_subject(id, env_hash, envelopes);
-            true
-        } else if let Some(reply_to_id) = reply_to_id {
-            let new_id = ThreadHash::new();
-            self.thread_nodes.insert(
-                new_id,
-                ThreadNode {
-                    message: Some(env_hash),
-                    parent: Some(reply_to_id),
-                    date: envelopes_lck[&env_hash].date(),
-                    has_unseen: !envelopes_lck[&env_hash].is_seen(),
-                    ..ThreadNode::new(new_id)
-                },
-            );
-            self.message_ids
-                .insert(envelopes_lck[&env_hash].message_id().raw().to_vec(), new_id);
-            self.message_ids_set.insert(
-                envelopes_lck[&env_hash]
-                    .message_id()
-                    .raw()
-                    .to_vec()
-                    .to_vec(),
-            );
-            self.missing_message_ids
-                .remove(envelopes_lck[&env_hash].message_id().raw());
-            envelopes_lck.get_mut(&env_hash).unwrap().set_thread(new_id);
-            self.hash_set.insert(env_hash);
-            self.union(reply_to_id, new_id);
-            make!((reply_to_id) parent of (new_id), self);
-            drop(envelopes_lck);
-            self.update_show_subject(new_id, env_hash, envelopes);
-            true
-        } else {
-            false
-        }
+        self.insert_internal(envelopes, env_hash, true)
     }
 
     fn inner_subsort_by(&self, _subsort: (SortField, SortOrder), _envelopes: &Envelopes) {
@@ -1248,22 +955,106 @@ impl Threads {
         */
     }
 
-    pub fn vec_inner_sort_by(
+    pub fn group_inner_sort_by(
         &self,
-        vec: &mut Vec<ThreadHash>,
+        vec: &mut [ThreadGroupHash],
         sort: (SortField, SortOrder),
         envelopes: &Envelopes,
     ) {
         let envelopes = envelopes.read().unwrap();
         vec.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
-                let a = self.thread_dates[a];
-                let b = self.thread_dates[b];
+                let a = self.groups[&a].date();
+                let b = self.groups[&b].date();
                 b.cmp(&a)
             }
             (SortField::Date, SortOrder::Asc) => {
-                let a = self.thread_dates[a];
-                let b = self.thread_dates[b];
+                let a = self.groups[&a].date();
+                let b = self.groups[&b].date();
+                a.cmp(&b)
+            }
+            (SortField::Subject, SortOrder::Desc) => {
+                let a = &self.thread_nodes[&self.groups[&a].root().unwrap()].message();
+                let b = &self.thread_nodes[&self.groups[&b].root().unwrap()].message();
+
+                match (a, b) {
+                    (Some(_), Some(_)) => {}
+                    (Some(_), None) => {
+                        return Ordering::Greater;
+                    }
+                    (None, Some(_)) => {
+                        return Ordering::Less;
+                    }
+                    (None, None) => {
+                        return Ordering::Equal;
+                    }
+                }
+                let ma = &envelopes[&a.unwrap()];
+                let mb = &envelopes[&b.unwrap()];
+                #[cfg(feature = "unicode_algorithms")]
+                {
+                    ma.subject()
+                        .split_graphemes()
+                        .cmp(&mb.subject().split_graphemes())
+                }
+                #[cfg(not(feature = "unicode_algorithms"))]
+                {
+                    ma.subject().cmp(&mb.subject())
+                }
+            }
+            (SortField::Subject, SortOrder::Asc) => {
+                let a = &self.thread_nodes[&self.groups[&a].root().unwrap()].message();
+                let b = &self.thread_nodes[&self.groups[&b].root().unwrap()].message();
+
+                match (a, b) {
+                    (Some(_), Some(_)) => {}
+                    (Some(_), None) => {
+                        return Ordering::Less;
+                    }
+                    (None, Some(_)) => {
+                        return Ordering::Greater;
+                    }
+                    (None, None) => {
+                        return Ordering::Equal;
+                    }
+                }
+                let ma = &envelopes[&a.unwrap()];
+                let mb = &envelopes[&b.unwrap()];
+                #[cfg(feature = "unicode_algorithms")]
+                {
+                    mb.subject()
+                        .as_ref()
+                        .split_graphemes()
+                        .cmp(&ma.subject().split_graphemes())
+                }
+
+                #[cfg(not(feature = "unicode_algorithms"))]
+                {
+                    mb.subject().as_ref().cmp(&ma.subject())
+                }
+            }
+        });
+    }
+    pub fn node_inner_sort_by(
+        &self,
+        vec: &mut [ThreadHash],
+        sort: (SortField, SortOrder),
+        envelopes: &Envelopes,
+    ) {
+        let envelopes = envelopes.read().unwrap();
+        vec.sort_by(|a, b| match sort {
+            (SortField::Date, SortOrder::Desc) => {
+                let a_group = self.find_group(self.thread_nodes[&a].group);
+                let b_group = self.find_group(self.thread_nodes[&b].group);
+                let a = self.groups[&a_group].date();
+                let b = self.groups[&b_group].date();
+                b.cmp(&a)
+            }
+            (SortField::Date, SortOrder::Asc) => {
+                let a_group = self.find_group(self.thread_nodes[&a].group);
+                let b_group = self.find_group(self.thread_nodes[&b].group);
+                let a = self.groups[&a_group].date();
+                let b = self.groups[&b_group].date();
                 a.cmp(&b)
             }
             (SortField::Subject, SortOrder::Desc) => {
@@ -1333,13 +1124,17 @@ impl Threads {
         let envelopes = envelopes.read().unwrap();
         tree.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
-                let a = self.thread_dates[a];
-                let b = self.thread_dates[b];
+                let a_group = self.find_group(self.thread_nodes[&a].group);
+                let b_group = self.find_group(self.thread_nodes[&b].group);
+                let a = self.groups[&a_group].date();
+                let b = self.groups[&b_group].date();
                 b.cmp(&a)
             }
             (SortField::Date, SortOrder::Asc) => {
-                let a = self.thread_dates[a];
-                let b = self.thread_dates[b];
+                let a_group = self.find_group(self.thread_nodes[&a].group);
+                let b_group = self.find_group(self.thread_nodes[&b].group);
+                let a = self.groups[&a_group].date();
+                let b = self.groups[&b_group].date();
                 a.cmp(&b)
             }
             (SortField::Subject, SortOrder::Desc) => {
@@ -1442,160 +1237,19 @@ impl Threads {
         self.tree_index.borrow()[idx]
     }
 
+    pub fn roots(&self) -> SmallVec<[ThreadGroupHash; 1024]> {
+        //FIXME: refactor filter
+        self.groups
+            .iter()
+            .filter_map(|(h, g)| g.root().map(|_| *h))
+            .collect::<SmallVec<[ThreadGroupHash; 1024]>>()
+    }
+
     pub fn root_iter(&self) -> RootIterator {
         RootIterator {
             pos: 0,
             root_tree: self.tree_index.borrow(),
             thread_nodes: &self.thread_nodes,
-        }
-    }
-
-    /*
-    fn link_envelope(&mut self, envelope: &mut Envelope) {
-        let t_idx: ThreadHash = {
-            let m_id = envelope.message_id().raw();
-
-            /* t_idx: The index of this message's ThreadNode in thread_nodes
-             *
-             * If id_table contains an empty Container for this ID:
-             *  Store this message in the Container's message slot.
-             * Else:
-             *  Create a new Container object holding this message;
-             *  Index the Container by Message-ID in id_table.
-             */
-            if self.message_ids.get(m_id).is_some() {
-                let node_idx = self.message_ids[m_id];
-                /* the already existing ThreadNote should be empty, since we're
-                 * seeing this message for the first time. otherwise it's a
-                 * duplicate. */
-                if !self.missing_message_ids.contains(m_id) {
-                    return;
-                }
-                self.missing_message_ids.remove(m_id);
-                node_idx
-            } else {
-                /* Create a new ThreadNode object holding this message */
-                /* The new thread node's set is just itself */
-                let new_id = ThreadHash::new();
-                let node = ThreadNode {
-                    message: Some(envelope.hash()),
-                    date: envelope.date(),
-                    thread_group: new_id,
-                    ..Default::default()
-                };
-                self.thread_nodes.insert(new_id, node);
-
-                self.message_ids.insert(m_id.to_vec(), new_id);
-                self.message_ids_set.insert(m_id.to_vec());
-                new_id
-            }
-        };
-        self.thread_nodes.entry(t_idx).and_modify(|e| {
-            e.date = envelope.date();
-            e.message = Some(envelope.hash());
-            e.has_unseen |= !envelope.is_seen();
-        });
-        envelope.set_thread(t_idx);
-        self.hash_set.insert(envelope.hash());
-
-        /* For each element in the message's References field:
-         *
-         * Find a ThreadNode object for the given Message-ID:
-         * If there's one in message_ids use that;
-         * Otherwise, make (and index) one with a null Message
-         *
-         * Link the References field's ThreadNode together in the order implied
-         * by the References header.
-         */
-
-        /* The index of the reference we are currently examining, start from current message */
-        let mut ref_ptr = t_idx;
-
-        for &refn in envelope.references().iter().rev() {
-            let r_id = refn.raw();
-            let parent_id = if self.message_ids.contains_key(r_id) {
-                self.message_ids[r_id]
-            } else {
-                /* Create a new ThreadNode object holding this reference */
-                let new_id = ThreadHash::new();
-                self.thread_nodes.insert(
-                    new_id,
-                    ThreadNode {
-                        date: envelope.date(),
-                        thread_group: new_id,
-                        ..Default::default()
-                    },
-                );
-                self.message_ids.insert(r_id.to_vec(), new_id);
-                self.missing_message_ids.insert(r_id.to_vec());
-                self.message_ids_set.insert(r_id.to_vec());
-                new_id
-            };
-
-            /* If they are already linked, don't change the existing links.
-            if self.thread_nodes[&ref_ptr].has_parent()
-                && self.thread_nodes[&ref_ptr].parent.unwrap() != parent_id
-            {
-                ref_ptr = parent_id;
-                continue;
-            } */
-            if self.thread_nodes[&ref_ptr].parent.is_some() {
-                if self.thread_nodes[&parent_id].parent == Some(ref_ptr) {
-                    eprintln!("ALARM");
-                    remove_from_parent!(&mut self.thread_nodes, parent_id);
-                }
-                ref_ptr = parent_id;
-                continue;
-            }
-
-            /* Do not add a link if adding that link would introduce a loop: that is, before
-             * asserting A->B, search down the children of B to see if A is reachable, and also
-             * search down the children of A to see if B is reachable. If either is already
-             * reachable as a child of the other, don't add the link.
-             */
-            if self.find(ref_ptr) != self.find(parent_id) {
-                self.union(ref_ptr, parent_id);
-                make!((parent_id) parent of (ref_ptr), &mut self.thread_nodes);
-            }
-            ref_ptr = parent_id;
-        }
-    }*/
-
-    fn tree_insert_root(&mut self, new_id: ThreadHash, envelopes: &Envelopes) {
-        if !(self.thread_nodes[&new_id].parent.is_none()
-            || self.thread_nodes[self.thread_nodes[&new_id].parent.as_ref().unwrap()]
-                .message
-                .is_none())
-        {
-            return;
-        };
-        debug!("tree_insert_root {}", new_id);
-        /* Index of reply_to_id in self.trees */
-        let Threads {
-            ref mut tree_index,
-            ref thread_nodes,
-            ..
-        } = self;
-        let mut tree_index = tree_index.borrow_mut();
-        for c in &thread_nodes[&new_id].children {
-            if let Some(i) = tree_index.iter().position(|t| *t == *c) {
-                tree_index.remove(i);
-            }
-        }
-        self.thread_nodes.entry(new_id).and_modify(|n| {
-            n.is_root = true;
-        });
-
-        match ThreadNode::insert_child_pos(
-            &tree_index,
-            new_id,
-            *self.sort.borrow(),
-            &mut self.thread_nodes,
-            &self.thread_dates,
-            envelopes,
-        ) {
-            Err(pos) => tree_index.insert(pos, new_id),
-            Ok(pos) => tree_index[pos] = new_id,
         }
     }
 }
