@@ -598,7 +598,7 @@ impl CompactListing {
                 subject: SubjectString(format!("{} ({})", subject, thread.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
-                    if e.has_attachments() { "📎" } else { "" },
+                    if thread.has_attachments() { "📎" } else { "" },
                     if thread.snoozed() { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
@@ -610,7 +610,7 @@ impl CompactListing {
                 subject: SubjectString(subject),
                 flag: FlagString(format!(
                     "{}{}",
-                    if e.has_attachments() { "📎" } else { "" },
+                    if thread.has_attachments() { "📎" } else { "" },
                     if thread.snoozed() { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
@@ -922,13 +922,7 @@ impl CompactListing {
                 self.data_columns.columns[4][(x, idx)].set_ch(' ');
                 self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
             }
-            match (
-                thread.snoozed(),
-                context.accounts[self.cursor_pos.0]
-                    .collection
-                    .get_env(root_env_hash)
-                    .has_attachments(),
-            ) {
+            match (thread.snoozed(), thread.has_attachments()) {
                 (true, true) => {
                     self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
                     self.data_columns.columns[3][(2, idx)].set_fg(Color::Red);
@@ -994,7 +988,6 @@ impl CompactListing {
                 return;
             }
             let envelope: EnvelopeRef = account.collection.get_env(env_hash);
-            let has_attachments = envelope.has_attachments();
             let fg_color = if thread.unseen() > 0 {
                 Color::Byte(0)
             } else {
@@ -1119,7 +1112,7 @@ impl CompactListing {
                 columns[4][c].set_ch(' ');
                 columns[4][c].set_bg(bg_color);
             }
-            match (thread.snoozed(), has_attachments) {
+            match (thread.snoozed(), thread.has_attachments()) {
                 (true, true) => {
                     columns[3][(0, idx)].set_fg(Color::Byte(103));
                     columns[3][(2, idx)].set_fg(Color::Red);

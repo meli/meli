@@ -571,7 +571,7 @@ impl ConversationsListing {
                 subject: SubjectString(format!("{} ({})", subject, thread.len(),)),
                 flag: FlagString(format!(
                     "{}{}",
-                    if e.has_attachments() { "📎" } else { "" },
+                    if thread.has_attachments() { "📎" } else { "" },
                     if thread.snoozed() { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),
@@ -583,7 +583,7 @@ impl ConversationsListing {
                 subject: SubjectString(subject),
                 flag: FlagString(format!(
                     "{}{}",
-                    if e.has_attachments() { "📎" } else { "" },
+                    if thread.has_attachments() { "📎" } else { "" },
                     if thread.snoozed() { "💤" } else { "" }
                 )),
                 from: FromString(address_list!((from) as comma_sep_list)),

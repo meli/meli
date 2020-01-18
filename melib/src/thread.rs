@@ -139,17 +139,20 @@ macro_rules! make {
                         ref mut len,
                         ref mut unseen,
                         ref mut snoozed,
+                        ref mut attachments,
                         ..
                     }, ThreadGroup::Root(Thread {
                         date: old_date,
                         len: old_len,
                         unseen: old_unseen,
                         snoozed: old_snoozed,
+                        attachments: old_attachments,
                         ..
                     })) => {
                         *date = std::cmp::max(old_date, *date);
                         *len += old_len;
-                        *unseen |= old_unseen;
+                        *unseen += old_unseen;
+                        *attachments += old_attachments;
                         *snoozed |= old_snoozed;
                     }
                     _ => unreachable!(),
@@ -273,6 +276,7 @@ pub struct Thread {
     date: UnixTimestamp,
     len: usize,
     unseen: usize,
+    attachments: usize,
 
     snoozed: bool,
 }
@@ -320,6 +324,10 @@ impl Thread {
     property!(unseen: usize);
     property!(snoozed: bool);
     property!(date: UnixTimestamp);
+
+    pub fn has_attachments(&self) -> bool {
+        self.attachments > 0
+    }
 
     pub fn set_snoozed(&mut self, val: bool) {
         self.snoozed = val;
@@ -765,6 +773,11 @@ impl Threads {
                 } else {
                     0
                 },
+                attachments: if envelopes_lck[&env_hash].has_attachments() {
+                    1
+                } else {
+                    0
+                },
                 snoozed: false,
             }),
         );
@@ -803,6 +816,7 @@ impl Threads {
                         date: envelopes_lck[&env_hash].date(),
                         len: 0,
                         unseen: 0,
+                        attachments: 0,
                         snoozed: false,
                     }),
                 );
@@ -846,6 +860,7 @@ impl Threads {
                             date: envelopes_lck[&env_hash].date(),
                             len: 0,
                             unseen: 0,
+                            attachments: 0,
                             snoozed: false,
                         }),
                     );
