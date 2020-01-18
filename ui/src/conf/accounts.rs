@@ -599,7 +599,10 @@ impl Account {
                         self.collection.threads[&folder_hash]
                             .find_group(self.collection.threads[&folder_hash][&thread_hash].group)
                     };
-                    if self.collection.threads[&folder_hash].groups[&thread].snoozed() {
+                    if self.collection.threads[&folder_hash]
+                        .thread_ref(thread)
+                        .snoozed()
+                    {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
                     if is_seen || is_draft {

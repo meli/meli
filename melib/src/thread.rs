@@ -122,7 +122,9 @@ macro_rules! make {
             $threads.thread_nodes.entry($c).and_modify(|e| {
                 e.parent = Some($p);
             });
-            let old_group = $threads.groups[&old_group_hash].clone();
+            let old_group = std::mem::replace($threads.groups.entry(old_group_hash).or_default(), ThreadGroup::Node {
+                parent: RefCell::new(parent_group_hash),
+            });
             $threads.thread_nodes.entry($c).and_modify(|e| {
                 e.group = parent_group_hash;
             });
@@ -130,21 +132,21 @@ macro_rules! make {
                 e.group = parent_group_hash;
             });
             {
-                let parent_group = $threads.groups.entry(parent_group_hash).or_default();
+                let parent_group = $threads.thread_ref_mut(parent_group_hash);
                 match (parent_group, old_group) {
-                    (ThreadGroup::Group {
+                    (Thread {
                         ref mut date,
                         ref mut len,
                         ref mut unseen,
                         ref mut snoozed,
                         ..
-                    }, ThreadGroup::Group {
+                    }, ThreadGroup::Root(Thread {
                         date: old_date,
                         len: old_len,
                         unseen: old_unseen,
                         snoozed: old_snoozed,
                         ..
-                    }) => {
+                    })) => {
                         *date = std::cmp::max(old_date, *date);
                         *len += old_len;
                         *unseen |= old_unseen;
@@ -153,14 +155,10 @@ macro_rules! make {
                     _ => unreachable!(),
                  }
             }
-            {
-                let old_group = $threads.groups.entry(old_group_hash).or_default();
-                *old_group = ThreadGroup::Node {
-                    parent: RefCell::new(parent_group_hash),
-                };
-            }
-        prev_parent
-        } else { None }
+            prev_parent
+        } else {
+            None
+        }
         }};
 }
 
@@ -269,69 +267,62 @@ impl FromStr for SortOrder {
     }
 }
 
+#[derive(Default, Clone, Debug, Deserialize, Serialize)]
+pub struct Thread {
+    root: ThreadNodeHash,
+    date: UnixTimestamp,
+    len: usize,
+    unseen: usize,
+
+    snoozed: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum ThreadGroup {
-    Group {
-        root: ThreadNodeHash,
-        date: UnixTimestamp,
-        len: usize,
-        unseen: usize,
-
-        snoozed: bool,
-    },
-    Node {
-        parent: RefCell<ThreadHash>,
-    },
+    Root(Thread),
+    Node { parent: RefCell<ThreadHash> },
 }
 
 impl Default for ThreadGroup {
     fn default() -> Self {
-        ThreadGroup::Group {
-            root: ThreadNodeHash::null(),
-            date: 0,
-            len: 0,
-            unseen: 0,
-            snoozed: false,
+        ThreadGroup::Root(Thread::default())
+    }
+}
+
+impl ThreadGroup {
+    fn root(&self) -> Option<&Thread> {
+        if let ThreadGroup::Root(ref root) = self {
+            Some(root)
+        } else {
+            None
+        }
+    }
+    fn root_mut(&mut self) -> Option<&mut Thread> {
+        if let ThreadGroup::Root(ref mut root) = self {
+            Some(root)
+        } else {
+            None
         }
     }
 }
 
 macro_rules! property {
-    ($name:ident: $t:ty, $e:expr) => {
+    ($name:ident: $t:ty) => {
         pub fn $name(&self) -> $t {
-            match self {
-                ThreadGroup::Group { $name, .. } => (*$name).into(),
-                _ => {
-                    debug!(
-                        "ThreadGroup::{}() called on a ThreadGroup::Node: {:?}",
-                        stringify!($name),
-                        self
-                    );
-                    $e
-                }
-            }
+            (self.$name).into()
         }
     }
 }
-impl ThreadGroup {
-    property!(root: Option<ThreadNodeHash>, None);
-    property!(len: usize, 0);
-    property!(unseen: usize, 0);
-    property!(snoozed: bool, false);
-    property!(date: UnixTimestamp, 0);
+
+impl Thread {
+    property!(root: ThreadNodeHash);
+    property!(len: usize);
+    property!(unseen: usize);
+    property!(snoozed: bool);
+    property!(date: UnixTimestamp);
 
     pub fn set_snoozed(&mut self, val: bool) {
-        match self {
-            ThreadGroup::Group {
-                ref mut snoozed, ..
-            } => *snoozed = val,
-            _ => {
-                debug!(
-                    "ThreadGroup::set_snoozed() called on a ThreadGroup::Node: {:?}",
-                    self
-                );
-            }
-        }
+        self.snoozed = val;
     }
 }
 
@@ -504,13 +495,26 @@ impl PartialEq for ThreadNode {
 
 impl Threads {
     pub fn is_snoozed(&self, h: ThreadNodeHash) -> bool {
-        let root = &self.find_group(self.thread_nodes[&h].group);
-        self.groups[&root].snoozed()
+        self.thread_ref(self.thread_nodes[&h].group).snoozed()
+    }
+
+    pub fn thread_ref(&self, h: ThreadHash) -> &Thread {
+        match self.groups[&self.find_group(h)] {
+            ThreadGroup::Root(ref root) => root,
+            ThreadGroup::Node { .. } => unreachable!(),
+        }
+    }
+
+    pub fn thread_ref_mut(&mut self, h: ThreadHash) -> &mut Thread {
+        match self.groups.get_mut(&self.find_group(h)) {
+            Some(ThreadGroup::Root(ref mut root)) => root,
+            Some(ThreadGroup::Node { .. }) | None => unreachable!(),
+        }
     }
 
     pub fn find_group(&self, h: ThreadHash) -> ThreadHash {
         let p = match self.groups[&h] {
-            ThreadGroup::Group { .. } => return h,
+            ThreadGroup::Root(_) => return h,
             ThreadGroup::Node { ref parent } => *parent.borrow(),
         };
 
@@ -579,7 +583,7 @@ impl Threads {
 
     pub fn thread_group_iter(&self, index: ThreadHash) -> ThreadGroupIterator {
         ThreadGroupIterator {
-            group: self.groups[&index].root().unwrap(),
+            group: self.thread_ref(index).root(),
             pos: 0,
             stack: SmallVec::new(),
             thread_nodes: &self.thread_nodes,
@@ -610,16 +614,15 @@ impl Threads {
         let was_unseen = self.thread_nodes[&thread_hash].unseen;
         let is_unseen = !envelopes.read().unwrap()[&new_hash].is_seen();
         if was_unseen != is_unseen {
-            let thread = self.find_group(self.thread_nodes[&thread_hash].group);
-            self.groups.entry(thread).and_modify(|e| {
-                if let ThreadGroup::Group { ref mut unseen, .. } = e {
-                    if was_unseen {
-                        *unseen -= 1;
-                    } else {
-                        *unseen += 1;
-                    }
+            if let Thread { ref mut unseen, .. } =
+                self.thread_ref_mut(self.thread_nodes[&thread_hash].group)
+            {
+                if was_unseen {
+                    *unseen -= 1;
+                } else {
+                    *unseen += 1;
                 }
-            });
+            }
         }
         self.thread_nodes.get_mut(&thread_hash).unwrap().unseen = is_unseen;
         self.hash_set.remove(&old_hash);
@@ -753,7 +756,7 @@ impl Threads {
 
         self.groups.insert(
             self.thread_nodes[&new_id].group,
-            ThreadGroup::Group {
+            ThreadGroup::Root(Thread {
                 root: new_id,
                 date: envelopes_lck[&env_hash].date(),
                 len: 1,
@@ -763,7 +766,7 @@ impl Threads {
                     0
                 },
                 snoozed: false,
-            },
+            }),
         );
         self.message_ids
             .insert(envelopes_lck[&env_hash].message_id().raw().to_vec(), new_id);
@@ -795,13 +798,13 @@ impl Threads {
 
                 self.groups.insert(
                     self.thread_nodes[&reply_to_id].group,
-                    ThreadGroup::Group {
+                    ThreadGroup::Root(Thread {
                         root: reply_to_id,
                         date: envelopes_lck[&env_hash].date(),
                         len: 0,
                         unseen: 0,
                         snoozed: false,
-                    },
+                    }),
                 );
                 make!((reply_to_id) parent of (new_id), self);
                 self.missing_message_ids.insert(r.to_vec());
@@ -838,13 +841,13 @@ impl Threads {
                     );
                     self.groups.insert(
                         self.thread_nodes[&id].group,
-                        ThreadGroup::Group {
+                        ThreadGroup::Root(Thread {
                             root: id,
                             date: envelopes_lck[&env_hash].date(),
                             len: 0,
                             unseen: 0,
                             snoozed: false,
-                        },
+                        }),
                     );
                     make!((id) parent of (current_descendant_id), self);
                     self.missing_message_ids.insert(reference.raw().to_vec());
@@ -960,18 +963,18 @@ impl Threads {
         let envelopes = envelopes.read().unwrap();
         vec.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
-                let a = self.groups[&a].date();
-                let b = self.groups[&b].date();
+                let a = self.thread_ref(*a).date();
+                let b = self.thread_ref(*b).date();
                 b.cmp(&a)
             }
             (SortField::Date, SortOrder::Asc) => {
-                let a = self.groups[&a].date();
-                let b = self.groups[&b].date();
+                let a = self.thread_ref(*a).date();
+                let b = self.thread_ref(*b).date();
                 a.cmp(&b)
             }
             (SortField::Subject, SortOrder::Desc) => {
-                let a = &self.thread_nodes[&self.groups[&a].root().unwrap()].message();
-                let b = &self.thread_nodes[&self.groups[&b].root().unwrap()].message();
+                let a = &self.thread_nodes[&self.thread_ref(*a).root()].message();
+                let b = &self.thread_nodes[&self.thread_ref(*b).root()].message();
 
                 match (a, b) {
                     (Some(_), Some(_)) => {}
@@ -999,8 +1002,8 @@ impl Threads {
                 }
             }
             (SortField::Subject, SortOrder::Asc) => {
-                let a = &self.thread_nodes[&self.groups[&a].root().unwrap()].message();
-                let b = &self.thread_nodes[&self.groups[&b].root().unwrap()].message();
+                let a = &self.thread_nodes[&self.thread_ref(*a).root()].message();
+                let b = &self.thread_nodes[&self.thread_ref(*b).root()].message();
 
                 match (a, b) {
                     (Some(_), Some(_)) => {}
@@ -1040,17 +1043,13 @@ impl Threads {
         let envelopes = envelopes.read().unwrap();
         vec.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
-                let a_group = self.find_group(self.thread_nodes[&a].group);
-                let b_group = self.find_group(self.thread_nodes[&b].group);
-                let a = self.groups[&a_group].date();
-                let b = self.groups[&b_group].date();
+                let a = self.thread_ref(self.thread_nodes[&a].group).date();
+                let b = self.thread_ref(self.thread_nodes[&b].group).date();
                 b.cmp(&a)
             }
             (SortField::Date, SortOrder::Asc) => {
-                let a_group = self.find_group(self.thread_nodes[&a].group);
-                let b_group = self.find_group(self.thread_nodes[&b].group);
-                let a = self.groups[&a_group].date();
-                let b = self.groups[&b_group].date();
+                let a = self.thread_ref(self.thread_nodes[&a].group).date();
+                let b = self.thread_ref(self.thread_nodes[&b].group).date();
                 a.cmp(&b)
             }
             (SortField::Subject, SortOrder::Desc) => {
@@ -1120,17 +1119,13 @@ impl Threads {
         let envelopes = envelopes.read().unwrap();
         tree.sort_by(|a, b| match sort {
             (SortField::Date, SortOrder::Desc) => {
-                let a_group = self.find_group(self.thread_nodes[&a].group);
-                let b_group = self.find_group(self.thread_nodes[&b].group);
-                let a = self.groups[&a_group].date();
-                let b = self.groups[&b_group].date();
+                let a = self.thread_ref(self.thread_nodes[&a].group).date();
+                let b = self.thread_ref(self.thread_nodes[&b].group).date();
                 b.cmp(&a)
             }
             (SortField::Date, SortOrder::Asc) => {
-                let a_group = self.find_group(self.thread_nodes[&a].group);
-                let b_group = self.find_group(self.thread_nodes[&b].group);
-                let a = self.groups[&a_group].date();
-                let b = self.groups[&b_group].date();
+                let a = self.thread_ref(self.thread_nodes[&a].group).date();
+                let b = self.thread_ref(self.thread_nodes[&b].group).date();
                 a.cmp(&b)
             }
             (SortField::Subject, SortOrder::Desc) => {

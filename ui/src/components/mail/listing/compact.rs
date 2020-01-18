@@ -118,13 +118,14 @@ impl ListingTrait for CompactListing {
         if self.length == 0 {
             return;
         }
-        let thread = self.get_thread_under_cursor(idx, context);
+        let thread_hash = self.get_thread_under_cursor(idx, context);
 
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
+        let thread = threads.thread_ref(thread_hash);
 
-        let fg_color = if threads.groups[&thread].unseen() > 0 {
+        let fg_color = if thread.unseen() > 0 {
             Color::Byte(0)
         } else {
             Color::Default
@@ -132,9 +133,9 @@ impl ListingTrait for CompactListing {
         let bg_color = if context.settings.terminal.theme == "light" {
             if self.cursor_pos.2 == idx {
                 Color::Byte(244)
-            } else if self.selection[&thread] {
+            } else if self.selection[&thread_hash] {
                 Color::Byte(210)
-            } else if threads.groups[&thread].unseen() > 0 {
+            } else if thread.unseen() > 0 {
                 Color::Byte(251)
             } else if idx % 2 == 0 {
                 Color::Byte(252)
@@ -144,9 +145,9 @@ impl ListingTrait for CompactListing {
         } else {
             if self.cursor_pos.2 == idx {
                 Color::Byte(246)
-            } else if self.selection[&thread] {
+            } else if self.selection[&thread_hash] {
                 Color::Byte(210)
-            } else if threads.groups[&thread].unseen() > 0 {
+            } else if thread.unseen() > 0 {
                 Color::Byte(251)
             } else if idx % 2 == 0 {
                 Color::Byte(236)
@@ -549,7 +550,7 @@ impl CompactListing {
         threads: &Threads,
         hash: ThreadHash,
     ) -> EntryStrings {
-        let thread = &threads.groups[&hash];
+        let thread = threads.thread_ref(hash);
         let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .unwrap()
             .folder
@@ -714,7 +715,7 @@ impl CompactListing {
         for (idx, thread) in items.enumerate() {
             debug!(thread);
             self.length += 1;
-            let thread_node = &threads.thread_nodes()[&threads.groups[&thread].root().unwrap()];
+            let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
             let root_env_hash = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
                 while threads.thread_nodes()[&iter_ptr].message().is_none() {
@@ -811,13 +812,14 @@ impl CompactListing {
 
                 panic!();
             }
-            let fg_color = if threads.groups[&thread].unseen() > 0 {
+            let thread = threads.thread_ref(thread);
+            let fg_color = if thread.unseen() > 0 {
                 Color::Byte(0)
             } else {
                 Color::Default
             };
             let bg_color = if context.settings.terminal.theme == "light" {
-                if threads.groups[&thread].unseen() > 0 {
+                if thread.unseen() > 0 {
                     Color::Byte(251)
                 } else if idx % 2 == 0 {
                     Color::Byte(252)
@@ -825,7 +827,7 @@ impl CompactListing {
                     Color::Default
                 }
             } else {
-                if threads.groups[&thread].unseen() > 0 {
+                if thread.unseen() > 0 {
                     Color::Byte(251)
                 } else if idx % 2 == 0 {
                     Color::Byte(236)
@@ -921,7 +923,7 @@ impl CompactListing {
                 self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
             }
             match (
-                threads.groups[&thread].snoozed(),
+                thread.snoozed(),
                 context.accounts[self.cursor_pos.0]
                     .collection
                     .get_env(root_env_hash)
@@ -983,9 +985,9 @@ impl CompactListing {
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
-        if let Some(env_hash) =
-            threads.thread_nodes()[&threads.groups[&thread_hash].root().unwrap()].message()
-        {
+        let thread = threads.thread_ref(thread_hash);
+        // FIXME: Thread root doesn't nessessarily have message set
+        if let Some(env_hash) = threads.thread_nodes()[&thread.root()].message() {
             if !account.contains_key(env_hash) {
                 /* The envelope has been renamed or removed, so wait for the appropriate event to
                  * arrive */
@@ -993,14 +995,14 @@ impl CompactListing {
             }
             let envelope: EnvelopeRef = account.collection.get_env(env_hash);
             let has_attachments = envelope.has_attachments();
-            let fg_color = if threads.groups[&thread_hash].unseen() > 0 {
+            let fg_color = if thread.unseen() > 0 {
                 Color::Byte(0)
             } else {
                 Color::Default
             };
             let idx = self.order[&thread_hash];
             let bg_color = if context.settings.terminal.theme == "light" {
-                if threads.groups[&thread_hash].unseen() > 0 {
+                if thread.unseen() > 0 {
                     Color::Byte(251)
                 } else if idx % 2 == 0 {
                     Color::Byte(252)
@@ -1008,7 +1010,7 @@ impl CompactListing {
                     Color::Default
                 }
             } else {
-                if threads.groups[&thread_hash].unseen() > 0 {
+                if thread.unseen() > 0 {
                     Color::Byte(253)
                 } else if idx % 2 == 0 {
                     Color::Byte(236)
@@ -1117,7 +1119,7 @@ impl CompactListing {
                 columns[4][c].set_ch(' ');
                 columns[4][c].set_bg(bg_color);
             }
-            match (threads.groups[&thread_hash].snoozed(), has_attachments) {
+            match (thread.snoozed(), has_attachments) {
                 (true, true) => {
                     columns[3][(0, idx)].set_fg(Color::Byte(103));
                     columns[3][(2, idx)].set_fg(Color::Red);
@@ -1246,41 +1248,45 @@ impl Component for CompactListing {
                     let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
                     self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
                 }
-                UIEvent::Action(ref action) => match action {
-                    Action::Sort(field, order) if !self.unfocused => {
-                        debug!("Sort {:?} , {:?}", field, order);
-                        self.sort = (*field, *order);
-                        if !self.filtered_selection.is_empty() {
-                            // FIXME: perform sort
-                            self.dirty = true;
-                        } else {
-                            self.refresh_mailbox(context);
+                UIEvent::Action(ref action) => {
+                    match action {
+                        Action::Sort(field, order) if !self.unfocused => {
+                            debug!("Sort {:?} , {:?}", field, order);
+                            self.sort = (*field, *order);
+                            if !self.filtered_selection.is_empty() {
+                                // FIXME: perform sort
+                                self.dirty = true;
+                            } else {
+                                self.refresh_mailbox(context);
+                            }
+                            return true;
                         }
-                        return true;
-                    }
-                    Action::SubSort(field, order) if !self.unfocused => {
-                        debug!("SubSort {:?} , {:?}", field, order);
-                        self.subsort = (*field, *order);
-                        // FIXME: perform subsort.
-                        return true;
-                    }
-                    Action::ToggleThreadSnooze if !self.unfocused => {
-                        let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
-                        let account = &mut context.accounts[self.cursor_pos.0];
-                        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                        let threads = account.collection.threads.entry(folder_hash).or_default();
-                        let is_snoozed = threads.groups[&thread].snoozed();
-                        threads
-                            .groups
-                            .entry(thread)
-                            .and_modify(|entry| entry.set_snoozed(!is_snoozed));
-                        self.row_updates.push(thread);
-                        self.refresh_mailbox(context);
-                        return true;
-                    }
+                        Action::SubSort(field, order) if !self.unfocused => {
+                            debug!("SubSort {:?} , {:?}", field, order);
+                            self.subsort = (*field, *order);
+                            // FIXME: perform subsort.
+                            return true;
+                        }
+                        Action::ToggleThreadSnooze if !self.unfocused => {
+                            let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                            let account = &mut context.accounts[self.cursor_pos.0];
+                            let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
+                            account
+                                .collection
+                                .threads
+                                .entry(folder_hash)
+                                .and_modify(|threads| {
+                                    let is_snoozed = threads.thread_ref(thread).snoozed();
+                                    threads.thread_ref_mut(thread).set_snoozed(!is_snoozed);
+                                });
+                            self.row_updates.push(thread);
+                            self.refresh_mailbox(context);
+                            return true;
+                        }
 
-                    _ => {}
-                },
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         }

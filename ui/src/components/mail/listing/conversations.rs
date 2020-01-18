@@ -149,22 +149,23 @@ impl ListingTrait for ConversationsListing {
         if self.length == 0 {
             return;
         }
-        let thread = self.get_thread_under_cursor(idx, context);
+        let thread_hash = self.get_thread_under_cursor(idx, context);
 
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
+        let thread = threads.thread_ref(thread_hash);
 
-        let fg_color = if threads.groups[&thread].unseen() > 0 {
+        let fg_color = if thread.unseen() > 0 {
             Color::Byte(0)
         } else {
             Color::Default
         };
         let bg_color = if self.cursor_pos.2 == idx {
             Color::Byte(246)
-        } else if self.selection[&thread] {
+        } else if self.selection[&thread_hash] {
             Color::Byte(210)
-        } else if threads.groups[&thread].unseen() > 0 {
+        } else if thread.unseen() > 0 {
             Color::Byte(251)
         } else {
             Color::Default
@@ -186,7 +187,7 @@ impl ListingTrait for ConversationsListing {
         let (upper_left, bottom_right) = area;
         let width = self.content.size().0;
         let (x, y) = upper_left;
-        if self.cursor_pos.2 == idx || self.selection[&thread] {
+        if self.cursor_pos.2 == idx || self.selection[&thread_hash] {
             for x in x..=get_x(bottom_right) {
                 grid[(x, y)].set_fg(fg_color);
                 grid[(x, y)].set_bg(bg_color);
@@ -522,7 +523,7 @@ impl ConversationsListing {
         threads: &Threads,
         hash: ThreadHash,
     ) -> EntryStrings {
-        let thread = &threads.groups[&hash];
+        let thread = threads.thread_ref(hash);
         let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .unwrap()
             .folder
@@ -676,7 +677,7 @@ impl ConversationsListing {
             std::collections::HashSet::new();
         for (idx, thread) in items.enumerate() {
             self.length += 1;
-            let thread_node = &threads.thread_nodes()[&threads.groups[&thread].root().unwrap()];
+            let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
             let root_env_hash = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
                 while threads.thread_nodes()[&iter_ptr].message().is_none() {
@@ -750,12 +751,13 @@ impl ConversationsListing {
             if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
                 panic!();
             }
-            let fg_color = if threads.groups[&thread].unseen() > 0 {
+            let thread = threads.thread_ref(thread);
+            let fg_color = if thread.unseen() > 0 {
                 Color::Byte(0)
             } else {
                 Color::Default
             };
-            let bg_color = if threads.groups[&thread].unseen() > 0 {
+            let bg_color = if thread.unseen() > 0 {
                 Color::Byte(251)
             } else {
                 Color::Default
@@ -919,19 +921,18 @@ impl ConversationsListing {
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
+        let thread = threads.thread_ref(thread_hash);
         let idx: usize = self.order[&thread_hash];
         let width = self.content.size().0;
 
-        let env_hash = threads.thread_nodes()[&threads.groups[&thread_hash].root().unwrap()]
-            .message()
-            .unwrap();
+        let env_hash = threads.thread_nodes()[&thread.root()].message().unwrap();
 
-        let fg_color = if threads.groups[&thread_hash].unseen() > 0 {
+        let fg_color = if thread.unseen() > 0 {
             Color::Byte(0)
         } else {
             Color::Default
         };
-        let bg_color = if threads.groups[&thread_hash].unseen() > 0 {
+        let bg_color = if thread.unseen() > 0 {
             Color::Byte(251)
         } else {
             Color::Default
@@ -1262,12 +1263,14 @@ impl Component for ConversationsListing {
                         let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
                         let account = &mut context.accounts[self.cursor_pos.0];
                         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                        let threads = account.collection.threads.entry(folder_hash).or_default();
-                        let is_snoozed = threads.groups[&thread].snoozed();
-                        threads
-                            .groups
-                            .entry(thread)
-                            .and_modify(|entry| entry.set_snoozed(!is_snoozed));
+                        account
+                            .collection
+                            .threads
+                            .entry(folder_hash)
+                            .and_modify(|threads| {
+                                let is_snoozed = threads.thread_ref(thread).snoozed();
+                                threads.thread_ref_mut(thread).set_snoozed(!is_snoozed);
+                            });
                         self.row_updates.push(thread);
                         self.refresh_mailbox(context);
                         return true;
