@@ -323,8 +323,8 @@ impl ThreadListing {
         let mut iter = threads.threads_iter().peekable();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
-        while let Some((indentation, thread_hash, has_sibling)) = iter.next() {
-            let thread_node = &thread_nodes[&thread_hash];
+        while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
+            let thread_node = &thread_nodes[&thread_node_hash];
 
             if indentation == 0 {
                 thread_idx += 1;
@@ -350,7 +350,7 @@ impl ThreadListing {
                         &envelope,
                         idx,
                         indentation,
-                        thread_hash,
+                        thread_node_hash,
                         threads,
                         &indentations,
                         has_sibling,

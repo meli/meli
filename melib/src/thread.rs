@@ -747,9 +747,17 @@ impl Threads {
         {
             return false;
         }
+
+        let message_id = envelopes_lck[&env_hash].message_id().raw();
+        if self.message_ids.contains_key(message_id)
+            && !self.missing_message_ids.contains(message_id)
+        {
+            return false;
+        }
+
         let new_id = self
             .message_ids
-            .get(envelopes_lck[&env_hash].message_id().raw())
+            .get(message_id)
             .cloned()
             .unwrap_or_else(|| ThreadNodeHash::new());
         {

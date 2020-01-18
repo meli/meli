@@ -412,12 +412,12 @@ impl ListingTrait for ConversationsListing {
                     if !account.collection.contains_key(&env_hash) {
                         continue;
                     }
-                    let env_hash_thread_hash = account.collection.get_env(env_hash).thread();
-                    if !threads.thread_nodes.contains_key(&env_hash_thread_hash) {
+                    let env_thread_node_hash = account.collection.get_env(env_hash).thread();
+                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
                         continue;
                     }
                     let thread =
-                        threads.find_group(threads.thread_nodes[&env_hash_thread_hash].group);
+                        threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
                     if self.filtered_order.contains_key(&thread) {
                         continue;
                     }
@@ -922,10 +922,11 @@ impl ConversationsListing {
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
         let thread = threads.thread_ref(thread_hash);
+        let thread_node_hash = threads.thread_group_iter(thread_hash).next().unwrap().1;
         let idx: usize = self.order[&thread_hash];
         let width = self.content.size().0;
 
-        let env_hash = threads.thread_nodes()[&thread.root()].message().unwrap();
+        let env_hash = threads.thread_nodes()[&thread_node_hash].message().unwrap();
 
         let fg_color = if thread.unseen() > 0 {
             Color::Byte(0)
@@ -1206,12 +1207,12 @@ impl Component for ConversationsListing {
                     if !account.collection.contains_key(&new_hash) {
                         return false;
                     }
-                    let new_env_thread_hash = account.collection.get_env(*new_hash).thread();
-                    if !threads.thread_nodes.contains_key(&new_env_thread_hash) {
+                    let env_thread_node_hash = account.collection.get_env(*new_hash).thread();
+                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
                         return false;
                     }
                     let thread: ThreadHash =
-                        threads.find_group(threads.thread_nodes()[&new_env_thread_hash].group);
+                        threads.find_group(threads.thread_nodes()[&env_thread_node_hash].group);
                     if self.order.contains_key(&thread) {
                         self.row_updates.push(thread);
                     }

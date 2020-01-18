@@ -62,7 +62,7 @@ pub struct PlainListing {
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: FnvHashMap<EnvelopeHash, usize>,
     selection: FnvHashMap<EnvelopeHash, bool>,
-    thread_hashes: FnvHashMap<EnvelopeHash, ThreadNodeHash>,
+    thread_node_hashes: FnvHashMap<EnvelopeHash, ThreadNodeHash>,
     local_collection: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
     dirty: bool,
@@ -90,7 +90,7 @@ impl MailListingTrait for PlainListing {
             self.selection
                 .iter()
                 .filter(|(_, v)| **v)
-                .map(|(k, _)| self.thread_hashes[k])
+                .map(|(k, _)| self.thread_node_hashes[k])
                 .collect()
         } else {
             let mut ret = SmallVec::new();
@@ -481,7 +481,7 @@ impl PlainListing {
             subsort: (SortField::Date, SortOrder::Desc),
             all_envelopes: fnv::FnvHashSet::default(),
             local_collection: Vec::new(),
-            thread_hashes: FnvHashMap::default(),
+            thread_node_hashes: FnvHashMap::default(),
             order: FnvHashMap::default(),
             filter_term: String::new(),
             filtered_selection: Vec::new(),
@@ -606,7 +606,7 @@ impl PlainListing {
             .envelopes
             .read()
             .unwrap();
-        self.thread_hashes = context.accounts[self.cursor_pos.0][folder_hash]
+        self.thread_node_hashes = context.accounts[self.cursor_pos.0][folder_hash]
             .unwrap()
             .envelopes
             .iter()

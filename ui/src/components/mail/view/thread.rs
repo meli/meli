@@ -168,16 +168,17 @@ impl ThreadView {
 
         let thread_iter = threads.thread_group_iter(self.thread_group);
         self.entries.clear();
-        for (line, (ind, thread_hash)) in thread_iter.enumerate() {
-            let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_hash].message() {
+        for (line, (ind, thread_node_hash)) in thread_iter.enumerate() {
+            let entry = if let Some(msg_hash) = threads.thread_nodes()[&thread_node_hash].message()
+            {
                 let seen: bool = account.collection.get_env(msg_hash).is_seen();
-                self.make_entry((ind, thread_hash, line), msg_hash, seen)
+                self.make_entry((ind, thread_node_hash, line), msg_hash, seen)
             } else {
                 continue;
             };
             self.entries.push(entry);
             match expanded_hash {
-                Some(expanded_hash) if expanded_hash == thread_hash => {
+                Some(expanded_hash) if expanded_hash == thread_node_hash => {
                     self.new_expanded_pos = self.entries.len().saturating_sub(1);
                     self.expanded_pos = self.new_expanded_pos + 1;
                 }
