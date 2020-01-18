@@ -31,6 +31,7 @@ pub struct ThreadListing {
     /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
     cursor_pos: (usize, usize, usize),
     new_cursor_pos: (usize, usize, usize),
+    folder_hash: FolderHash,
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -238,6 +239,7 @@ impl ThreadListing {
         ThreadListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (0, 0, 0),
+            folder_hash: 0,
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
@@ -264,7 +266,7 @@ impl ThreadListing {
         }
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
-        let folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
+        self.folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
             .folders_order
             .get(self.cursor_pos.1)
         {
@@ -275,10 +277,11 @@ impl ThreadListing {
 
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].status(folder_hash) {
+        match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
             Ok(_) => {}
             Err(_) => {
-                let message: String = context.accounts[self.cursor_pos.0][folder_hash].to_string();
+                let message: String =
+                    context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
                 self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
                 self.length = 0;
                 write_string_to_grid(
@@ -619,22 +622,12 @@ impl Component for ThreadListing {
                 return true;
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
-                if context.accounts[self.new_cursor_pos.0]
-                    .folders_order
-                    .get(self.new_cursor_pos.1)
-                    .map(|&folder_hash| (*idxa, *idxf) == (self.new_cursor_pos.0, folder_hash))
-                    .unwrap_or(false) =>
+                if (*idxa, *idxf) == (self.new_cursor_pos.0, self.folder_hash) =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty(true);
             }
-            UIEvent::StartupCheck(ref f)
-                if context.accounts[self.new_cursor_pos.0]
-                    .folders_order
-                    .get(self.new_cursor_pos.1)
-                    .map(|&folder_hash| *f == folder_hash)
-                    .unwrap_or(false) =>
-            {
+            UIEvent::StartupCheck(ref f) if *f == self.folder_hash => {
                 self.refresh_mailbox(context);
                 self.set_dirty(true);
             }

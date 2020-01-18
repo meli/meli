@@ -51,6 +51,7 @@ pub struct CompactListing {
     /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
     cursor_pos: (usize, usize, usize),
     new_cursor_pos: (usize, usize, usize),
+    folder_hash: FolderHash,
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -121,8 +122,7 @@ impl ListingTrait for CompactListing {
         let thread_hash = self.get_thread_under_cursor(idx, context);
 
         let account = &context.accounts[self.cursor_pos.0];
-        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        let threads = &account.collection.threads[&folder_hash];
+        let threads = &account.collection.threads[&self.folder_hash];
         let thread = threads.thread_ref(thread_hash);
 
         let fg_color = if thread.unseen() > 0 {
@@ -432,19 +432,15 @@ impl ListingTrait for CompactListing {
         }
 
         let account = &context.accounts[self.cursor_pos.0];
-        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        match account.search(&self.filter_term, self.sort, folder_hash) {
+        match account.search(&self.filter_term, self.sort, self.folder_hash) {
             Ok(results) => {
-                let threads = &account.collection.threads[&folder_hash];
+                let threads = &account.collection.threads[&self.folder_hash];
                 for env_hash in results {
                     if !account.collection.contains_key(&env_hash) {
                         continue;
                     }
                     let env_thread_node_hash = account.collection.get_env(env_hash).thread();
-                    if !threads
-                        .thread_nodes
-                        .contains_key(&env_thread_node_hash)
-                    {
+                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
                         continue;
                     }
                     let thread =
@@ -526,6 +522,7 @@ impl CompactListing {
         CompactListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (0, 0, 0),
+            folder_hash: 0,
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (SortField::Date, SortOrder::Desc),
@@ -554,11 +551,7 @@ impl CompactListing {
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
-        let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .unwrap()
-            .folder
-            .hash();
-        let folder = &context.accounts[self.cursor_pos.0].folder_confs[&folder_hash];
+        let folder = &context.accounts[self.cursor_pos.0].folder_confs[&self.folder_hash];
         let mut tags = String::new();
         let mut colors: SmallVec<[_; 8]> = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
@@ -635,7 +628,7 @@ impl CompactListing {
         }
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
-        let folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
+        self.folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
             .folders_order
             .get(self.cursor_pos.1)
         {
@@ -648,10 +641,11 @@ impl CompactListing {
 
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].status(folder_hash) {
+        match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
             Ok(()) => {}
             Err(_) => {
-                let message: String = context.accounts[self.cursor_pos.0][folder_hash].to_string();
+                let message: String =
+                    context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
                 self.data_columns.columns[0] =
                     CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
                 self.length = 0;
@@ -668,7 +662,7 @@ impl CompactListing {
             }
         }
 
-        let threads = &context.accounts[self.cursor_pos.0].collection.threads[&folder_hash];
+        let threads = &context.accounts[self.cursor_pos.0].collection.threads[&self.folder_hash];
         self.all_threads.clear();
         let mut roots = threads.roots();
         threads.group_inner_sort_by(
@@ -961,8 +955,6 @@ impl CompactListing {
     }
 
     fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
-        //let account = &context.accounts[self.cursor_pos.0];
-        //let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         if self.filter_term.is_empty() {
             *self
                 .order
@@ -980,8 +972,7 @@ impl CompactListing {
 
     fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
         let account = &context.accounts[self.cursor_pos.0];
-        let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-        let threads = &account.collection.threads[&folder_hash];
+        let threads = &account.collection.threads[&self.folder_hash];
         let thread = threads.thread_ref(thread_hash);
         let thread_node_hash = threads.thread_group_iter(thread_hash).next().unwrap().1;
         if let Some(env_hash) = threads.thread_nodes()[&thread_node_hash].message() {
@@ -1266,11 +1257,10 @@ impl Component for CompactListing {
                         Action::ToggleThreadSnooze if !self.unfocused => {
                             let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
                             let account = &mut context.accounts[self.cursor_pos.0];
-                            let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
                             account
                                 .collection
                                 .threads
-                                .entry(folder_hash)
+                                .entry(self.folder_hash)
                                 .and_modify(|threads| {
                                     let is_snoozed = threads.thread_ref(thread).snoozed();
                                     threads.thread_ref_mut(thread).set_snoozed(!is_snoozed);
@@ -1288,29 +1278,18 @@ impl Component for CompactListing {
         }
         match *event {
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
-                if context.accounts[self.new_cursor_pos.0]
-                    .folders_order
-                    .get(self.new_cursor_pos.1)
-                    .map(|&folder_hash| (*idxa, *idxf) == (self.new_cursor_pos.0, folder_hash))
-                    .unwrap_or(false) =>
+                if (*idxa, *idxf) == (self.new_cursor_pos.0, self.folder_hash) =>
             {
                 self.refresh_mailbox(context);
                 self.set_dirty(true);
             }
-            UIEvent::StartupCheck(ref f)
-                if context.accounts[self.new_cursor_pos.0]
-                    .folders_order
-                    .get(self.new_cursor_pos.1)
-                    .map(|&folder_hash| *f == folder_hash)
-                    .unwrap_or(false) =>
-            {
+            UIEvent::StartupCheck(ref f) if *f == self.folder_hash => {
                 self.refresh_mailbox(context);
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
-                let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
-                let threads = &account.collection.threads[&folder_hash];
+                let threads = &account.collection.threads[&self.folder_hash];
                 if !account.collection.contains_key(&new_hash) {
                     return false;
                 }
