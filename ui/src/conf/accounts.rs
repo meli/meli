@@ -32,7 +32,7 @@ use melib::backends::{
 };
 use melib::error::{MeliError, Result};
 use melib::mailbox::*;
-use melib::thread::{SortField, SortOrder, ThreadHash, ThreadNode, Threads};
+use melib::thread::{SortField, SortOrder, ThreadNode, ThreadNodeHash, Threads};
 use melib::AddressBook;
 use smallvec::SmallVec;
 use text_processing::GlobMatch;
@@ -957,7 +957,7 @@ impl Account {
         }
     }
 
-    pub fn thread(&self, h: ThreadHash, f: FolderHash) -> &ThreadNode {
+    pub fn thread(&self, h: ThreadNodeHash, f: FolderHash) -> &ThreadNode {
         &self.collection.threads[&f].thread_nodes()[&h]
     }
 

@@ -37,7 +37,7 @@ pub struct ThreadListing {
     /// Cache current view.
     content: CellBuffer,
 
-    row_updates: SmallVec<[ThreadGroupHash; 8]>,
+    row_updates: SmallVec<[ThreadHash; 8]>,
     locations: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
     dirty: bool,
@@ -50,11 +50,11 @@ pub struct ThreadListing {
 }
 
 impl MailListingTrait for ThreadListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadGroupHash; 8]> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadGroupHash; 8]> {
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
         SmallVec::new()
     }
 }
@@ -319,7 +319,7 @@ impl ThreadListing {
         let mut thread_idx = 0; // needed for alternate thread colors
                                 /* Draw threaded view. */
         threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);
-        let thread_nodes: &FnvHashMap<ThreadHash, ThreadNode> = &threads.thread_nodes();
+        let thread_nodes: &FnvHashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
         let mut iter = threads.threads_iter().peekable();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
@@ -429,7 +429,7 @@ impl ThreadListing {
         envelope: &Envelope,
         idx: usize,
         indent: usize,
-        node_idx: ThreadHash,
+        node_idx: ThreadNodeHash,
         threads: &Threads,
         indentations: &[bool],
         has_sibling: bool,

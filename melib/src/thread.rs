@@ -86,14 +86,14 @@ macro_rules! uuid_hash_type {
     };
 }
 
+uuid_hash_type!(ThreadNodeHash);
 uuid_hash_type!(ThreadHash);
-uuid_hash_type!(ThreadGroupHash);
 
 /* Helper macros to avoid repeating ourselves */
 
 macro_rules! remove_from_parent {
     ($buf:expr, $idx:expr) => {{
-        let mut parent: Option<ThreadHash> = None;
+        let mut parent: Option<ThreadNodeHash> = None;
         let entry_parent = $buf.entry($idx).or_default().parent;
         if let Some(p) = entry_parent {
             parent = Some(p);
@@ -272,7 +272,7 @@ impl FromStr for SortOrder {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum ThreadGroup {
     Group {
-        root: ThreadHash,
+        root: ThreadNodeHash,
         date: UnixTimestamp,
         len: usize,
         unseen: usize,
@@ -280,14 +280,14 @@ pub enum ThreadGroup {
         snoozed: bool,
     },
     Node {
-        parent: RefCell<ThreadGroupHash>,
+        parent: RefCell<ThreadHash>,
     },
 }
 
 impl Default for ThreadGroup {
     fn default() -> Self {
         ThreadGroup::Group {
-            root: ThreadHash::null(),
+            root: ThreadNodeHash::null(),
             date: 0,
             len: 0,
             unseen: 0,
@@ -314,7 +314,7 @@ macro_rules! property {
     }
 }
 impl ThreadGroup {
-    property!(root: Option<ThreadHash>, None);
+    property!(root: Option<ThreadNodeHash>, None);
     property!(len: usize, 0);
     property!(unseen: usize, 0);
     property!(snoozed: bool, false);
@@ -338,13 +338,13 @@ impl ThreadGroup {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ThreadNode {
     message: Option<EnvelopeHash>,
-    parent: Option<ThreadHash>,
-    children: Vec<ThreadHash>,
+    parent: Option<ThreadNodeHash>,
+    children: Vec<ThreadNodeHash>,
     date: UnixTimestamp,
     show_subject: bool,
     pruned: bool,
     is_root: bool,
-    pub group: ThreadGroupHash,
+    pub group: ThreadHash,
 
     unseen: bool,
 }
@@ -359,7 +359,7 @@ impl Default for ThreadNode {
             show_subject: true,
             pruned: false,
             is_root: false,
-            group: ThreadGroupHash::new(),
+            group: ThreadHash::new(),
 
             unseen: false,
         }
@@ -400,7 +400,7 @@ impl ThreadNode {
         self.message.is_some()
     }
 
-    pub fn parent(&self) -> Option<ThreadHash> {
+    pub fn parent(&self) -> Option<ThreadNodeHash> {
         self.parent
     }
 
@@ -408,16 +408,16 @@ impl ThreadNode {
         self.parent.is_some()
     }
 
-    pub fn children(&self) -> &[ThreadHash] {
+    pub fn children(&self) -> &[ThreadNodeHash] {
         &self.children
     }
 
     fn insert_child_pos(
-        vec: &[ThreadHash],
-        child: ThreadHash,
+        vec: &[ThreadNodeHash],
+        child: ThreadNodeHash,
         sort: (SortField, SortOrder),
-        buf: &mut FnvHashMap<ThreadHash, ThreadNode>,
-        dates: &FnvHashMap<ThreadHash, UnixTimestamp>,
+        buf: &mut FnvHashMap<ThreadNodeHash, ThreadNode>,
+        dates: &FnvHashMap<ThreadNodeHash, UnixTimestamp>,
         envelopes: &Envelopes,
     ) -> std::result::Result<usize, usize> {
         let envelopes = envelopes.read().unwrap();
@@ -480,13 +480,12 @@ impl ThreadNode {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Threads {
-    pub thread_nodes: FnvHashMap<ThreadHash, ThreadNode>,
-    pub thread_dates: FnvHashMap<ThreadHash, UnixTimestamp>,
-    root_set: RefCell<Vec<ThreadHash>>,
-    tree_index: RefCell<Vec<ThreadHash>>,
-    pub groups: FnvHashMap<ThreadGroupHash, ThreadGroup>,
+    pub thread_nodes: FnvHashMap<ThreadNodeHash, ThreadNode>,
+    root_set: RefCell<Vec<ThreadNodeHash>>,
+    tree_index: RefCell<Vec<ThreadNodeHash>>,
+    pub groups: FnvHashMap<ThreadHash, ThreadGroup>,
 
-    message_ids: FnvHashMap<Vec<u8>, ThreadHash>,
+    message_ids: FnvHashMap<Vec<u8>, ThreadNodeHash>,
     pub message_ids_set: FnvHashSet<Vec<u8>>,
     pub missing_message_ids: FnvHashSet<Vec<u8>>,
     pub hash_set: FnvHashSet<EnvelopeHash>,
@@ -504,12 +503,12 @@ impl PartialEq for ThreadNode {
 }
 
 impl Threads {
-    pub fn is_snoozed(&self, h: ThreadHash) -> bool {
+    pub fn is_snoozed(&self, h: ThreadNodeHash) -> bool {
         let root = &self.find_group(self.thread_nodes[&h].group);
         self.groups[&root].snoozed()
     }
 
-    pub fn find_group(&self, h: ThreadGroupHash) -> ThreadGroupHash {
+    pub fn find_group(&self, h: ThreadHash) -> ThreadHash {
         let p = match self.groups[&h] {
             ThreadGroup::Group { .. } => return h,
             ThreadGroup::Node { ref parent } => *parent.borrow(),
@@ -529,14 +528,13 @@ impl Threads {
         /* To reconstruct thread information from the mails we need: */
 
         /* a vector to hold thread members */
-        let thread_nodes: FnvHashMap<ThreadHash, ThreadNode> = FnvHashMap::with_capacity_and_hasher(
-            (length as f64 * 1.2) as usize,
-            Default::default(),
-        );
-        let thread_dates: FnvHashMap<ThreadHash, UnixTimestamp> =
-            FnvHashMap::with_capacity_and_hasher(thread_nodes.len(), Default::default());
+        let thread_nodes: FnvHashMap<ThreadNodeHash, ThreadNode> =
+            FnvHashMap::with_capacity_and_hasher(
+                (length as f64 * 1.2) as usize,
+                Default::default(),
+            );
         /* A hash table of Message IDs */
-        let message_ids: FnvHashMap<Vec<u8>, ThreadHash> =
+        let message_ids: FnvHashMap<Vec<u8>, ThreadNodeHash> =
             FnvHashMap::with_capacity_and_hasher(length, Default::default());
         /* A hash set of Message IDs we haven't encountered yet as an Envelope */
         let missing_message_ids: FnvHashSet<Vec<u8>> =
@@ -549,7 +547,6 @@ impl Threads {
 
         Threads {
             thread_nodes,
-            thread_dates,
             message_ids,
             message_ids_set,
             missing_message_ids,
@@ -580,7 +577,7 @@ impl Threads {
         }
     }
 
-    pub fn thread_group_iter(&self, index: ThreadGroupHash) -> ThreadGroupIterator {
+    pub fn thread_group_iter(&self, index: ThreadHash) -> ThreadGroupIterator {
         ThreadGroupIterator {
             group: self.groups[&index].root().unwrap(),
             pos: 0,
@@ -634,7 +631,7 @@ impl Threads {
     pub fn remove(&mut self, envelope_hash: EnvelopeHash) {
         self.hash_set.remove(&envelope_hash);
 
-        let t_id: ThreadHash = if let Some((pos, n)) = self
+        let t_id: ThreadNodeHash = if let Some((pos, n)) = self
             .thread_nodes
             .iter_mut()
             .find(|(_, n)| n.message.map(|n| n == envelope_hash).unwrap_or(false))
@@ -675,7 +672,7 @@ impl Threads {
     /// Update show_subject details of ThreadNode
     pub fn update_show_subject(
         &mut self,
-        id: ThreadHash,
+        id: ThreadNodeHash,
         env_hash: EnvelopeHash,
         envelopes: &Envelopes,
     ) {
@@ -726,7 +723,7 @@ impl Threads {
         other_folder: bool,
     ) -> bool {
         let envelopes_lck = envelopes.read().unwrap();
-        let reply_to_id: Option<ThreadHash> = envelopes_lck[&env_hash]
+        let reply_to_id: Option<ThreadNodeHash> = envelopes_lck[&env_hash]
             .in_reply_to()
             .map(crate::email::StrBuild::raw)
             .and_then(|r| self.message_ids.get(r).cloned());
@@ -743,7 +740,7 @@ impl Threads {
             .message_ids
             .get(envelopes_lck[&env_hash].message_id().raw())
             .cloned()
-            .unwrap_or_else(|| ThreadHash::new());
+            .unwrap_or_else(|| ThreadNodeHash::new());
         {
             let mut node = self.thread_nodes.entry(new_id).or_default();
             node.message = Some(env_hash);
@@ -751,7 +748,6 @@ impl Threads {
                 node.parent = reply_to_id;
             }
             node.date = envelopes_lck[&env_hash].date();
-            *self.thread_dates.entry(new_id).or_default() = node.date;
             node.unseen = !envelopes_lck[&env_hash].is_seen();
         }
 
@@ -788,7 +784,7 @@ impl Threads {
                 .in_reply_to()
                 .map(crate::email::StrBuild::raw)
             {
-                let reply_to_id = ThreadHash::new();
+                let reply_to_id = ThreadNodeHash::new();
                 self.thread_nodes.insert(
                     reply_to_id,
                     ThreadNode {
@@ -832,7 +828,7 @@ impl Threads {
                     make!((id) parent of (current_descendant_id), self);
                     current_descendant_id = id;
                 } else {
-                    let id = ThreadHash::new();
+                    let id = ThreadNodeHash::new();
                     self.thread_nodes.insert(
                         id,
                         ThreadNode {
@@ -876,7 +872,7 @@ impl Threads {
                 .message_ids
                 .iter()
                 .map(|(a, &b)| (b, a.to_vec()))
-                .collect::<FnvHashMap<ThreadHash, Vec<u8>>>(),
+                .collect::<FnvHashMap<ThreadNodeHash, Vec<u8>>>(),
             &envelopes,
         );
         */
@@ -957,7 +953,7 @@ impl Threads {
 
     pub fn group_inner_sort_by(
         &self,
-        vec: &mut [ThreadGroupHash],
+        vec: &mut [ThreadHash],
         sort: (SortField, SortOrder),
         envelopes: &Envelopes,
     ) {
@@ -1037,7 +1033,7 @@ impl Threads {
     }
     pub fn node_inner_sort_by(
         &self,
-        vec: &mut [ThreadHash],
+        vec: &mut [ThreadNodeHash],
         sort: (SortField, SortOrder),
         envelopes: &Envelopes,
     ) {
@@ -1216,12 +1212,12 @@ impl Threads {
         }
     }
 
-    pub fn thread_to_mail(&self, i: ThreadHash) -> EnvelopeHash {
+    pub fn thread_to_mail(&self, i: ThreadNodeHash) -> EnvelopeHash {
         let thread = &self.thread_nodes[&i];
         thread.message().unwrap()
     }
 
-    pub fn thread_nodes(&self) -> &FnvHashMap<ThreadHash, ThreadNode> {
+    pub fn thread_nodes(&self) -> &FnvHashMap<ThreadNodeHash, ThreadNode> {
         &self.thread_nodes
     }
 
@@ -1233,16 +1229,16 @@ impl Threads {
         self.tree_index.borrow().len()
     }
 
-    pub fn root_set(&self, idx: usize) -> ThreadHash {
+    pub fn root_set(&self, idx: usize) -> ThreadNodeHash {
         self.tree_index.borrow()[idx]
     }
 
-    pub fn roots(&self) -> SmallVec<[ThreadGroupHash; 1024]> {
+    pub fn roots(&self) -> SmallVec<[ThreadHash; 1024]> {
         //FIXME: refactor filter
         self.groups
             .iter()
             .filter_map(|(h, g)| g.root().map(|_| *h))
-            .collect::<SmallVec<[ThreadGroupHash; 1024]>>()
+            .collect::<SmallVec<[ThreadHash; 1024]>>()
     }
 
     pub fn root_iter(&self) -> RootIterator {
@@ -1254,10 +1250,10 @@ impl Threads {
     }
 }
 
-impl Index<&ThreadHash> for Threads {
+impl Index<&ThreadNodeHash> for Threads {
     type Output = ThreadNode;
 
-    fn index(&self, index: &ThreadHash) -> &ThreadNode {
+    fn index(&self, index: &ThreadNodeHash) -> &ThreadNode {
         self.thread_nodes
             .get(index)
             .expect("thread index out of bounds")
@@ -1266,14 +1262,14 @@ impl Index<&ThreadHash> for Threads {
 
 /*
 fn print_threadnodes(
-    node_hash: ThreadHash,
-    nodes: &FnvHashMap<ThreadHash, ThreadNode>,
+    node_hash: ThreadNodeHash,
+    nodes: &FnvHashMap<ThreadNodeHash, ThreadNode>,
     envelopes: &Envelopes,
 ) {
     fn help(
         level: usize,
-        node_hash: ThreadHash,
-        nodes: &FnvHashMap<ThreadHash, ThreadNode>,
+        node_hash: ThreadNodeHash,
+        nodes: &FnvHashMap<ThreadNodeHash, ThreadNode>,
         envelopes: &Envelopes,
     ) {
         eprint!("{}ThreadNode {}\n{}\tmessage: {}\n{}\tparent: {}\n{}\tthread_group: {}\n{}\tchildren (len: {}):\n",
@@ -1321,9 +1317,9 @@ struct Graph {
 
 /*
 fn save_graph(
-    node_arr: &[ThreadHash],
-    nodes: &FnvHashMap<ThreadHash, ThreadNode>,
-    ids: &FnvHashMap<ThreadHash, Vec<u8>>,
+    node_arr: &[ThreadNodeHash],
+    nodes: &FnvHashMap<ThreadNodeHash, ThreadNode>,
+    ids: &FnvHashMap<ThreadNodeHash, Vec<u8>>,
     envelopes: &Envelopes,
 ) {
     let envelopes = envelopes.read().unwrap();
@@ -1331,7 +1327,7 @@ fn save_graph(
         nodes: vec![],
         links: vec![],
     };
-    let mut stack: SmallVec<[(ThreadHash, String); 16]> = SmallVec::new();
+    let mut stack: SmallVec<[(ThreadNodeHash, String); 16]> = SmallVec::new();
     for n in node_arr {
         stack.extend(
             nodes[n].children.iter().cloned().zip(

@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::{ThreadGroup, ThreadHash, ThreadNode};
+use super::{ThreadNode, ThreadNodeHash};
 use fnv::FnvHashMap;
 use smallvec::SmallVec;
 use std::cell::Ref;
@@ -42,12 +42,12 @@ use std::cell::Ref;
 pub struct ThreadsIterator<'a> {
     pub(super) pos: usize,
     pub(super) stack: SmallVec<[usize; 16]>,
-    pub(super) root_tree: Ref<'a, Vec<ThreadHash>>,
-    pub(super) thread_nodes: &'a FnvHashMap<ThreadHash, ThreadNode>,
+    pub(super) root_tree: Ref<'a, Vec<ThreadNodeHash>>,
+    pub(super) thread_nodes: &'a FnvHashMap<ThreadNodeHash, ThreadNode>,
 }
 impl<'a> Iterator for ThreadsIterator<'a> {
-    type Item = (usize, ThreadHash, bool);
-    fn next(&mut self) -> Option<(usize, ThreadHash, bool)> {
+    type Item = (usize, ThreadNodeHash, bool);
+    fn next(&mut self) -> Option<(usize, ThreadNodeHash, bool)> {
         {
             let mut tree = &(*self.root_tree);
             for i in self.stack.iter() {
@@ -101,12 +101,12 @@ pub struct ThreadIterator<'a> {
     pub(super) init_pos: usize,
     pub(super) pos: usize,
     pub(super) stack: SmallVec<[usize; 16]>,
-    pub(super) root_tree: Ref<'a, Vec<ThreadHash>>,
-    pub(super) thread_nodes: &'a FnvHashMap<ThreadHash, ThreadNode>,
+    pub(super) root_tree: Ref<'a, Vec<ThreadNodeHash>>,
+    pub(super) thread_nodes: &'a FnvHashMap<ThreadNodeHash, ThreadNode>,
 }
 impl<'a> Iterator for ThreadIterator<'a> {
-    type Item = (usize, ThreadHash);
-    fn next(&mut self) -> Option<(usize, ThreadHash)> {
+    type Item = (usize, ThreadNodeHash);
+    fn next(&mut self) -> Option<(usize, ThreadNodeHash)> {
         {
             let mut tree = &(*self.root_tree);
             for i in self.stack.iter() {
@@ -141,13 +141,13 @@ impl<'a> Iterator for ThreadIterator<'a> {
 
 pub struct RootIterator<'a> {
     pub pos: usize,
-    pub root_tree: Ref<'a, Vec<ThreadHash>>,
-    pub thread_nodes: &'a FnvHashMap<ThreadHash, ThreadNode>,
+    pub root_tree: Ref<'a, Vec<ThreadNodeHash>>,
+    pub thread_nodes: &'a FnvHashMap<ThreadNodeHash, ThreadNode>,
 }
 
 impl<'a> Iterator for RootIterator<'a> {
-    type Item = ThreadHash;
-    fn next(&mut self) -> Option<ThreadHash> {
+    type Item = ThreadNodeHash;
+    fn next(&mut self) -> Option<ThreadNodeHash> {
         {
             if self.pos == self.root_tree.len() {
                 return None;
@@ -167,15 +167,15 @@ impl<'a> Iterator for RootIterator<'a> {
 }
 
 pub struct ThreadGroupIterator<'a> {
-    pub(super) group: ThreadHash,
+    pub(super) group: ThreadNodeHash,
     pub(super) pos: usize,
     pub(super) stack: SmallVec<[usize; 16]>,
-    pub(super) thread_nodes: &'a FnvHashMap<ThreadHash, ThreadNode>,
+    pub(super) thread_nodes: &'a FnvHashMap<ThreadNodeHash, ThreadNode>,
 }
 
 impl<'a> Iterator for ThreadGroupIterator<'a> {
-    type Item = (usize, ThreadHash);
-    fn next(&mut self) -> Option<(usize, ThreadHash)> {
+    type Item = (usize, ThreadNodeHash);
+    fn next(&mut self) -> Option<(usize, ThreadNodeHash)> {
         {
             let mut tree = &[self.group][..];
             for i in self.stack.iter() {

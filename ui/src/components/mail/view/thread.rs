@@ -34,7 +34,7 @@ const INDENTATION_COLORS: &'static [u8] = &[
 
 #[derive(Debug, Clone)]
 struct ThreadEntry {
-    index: (usize, ThreadHash, usize),
+    index: (usize, ThreadNodeHash, usize),
     /// (indentation, thread_node index, line number in listing)
     indentation: usize,
     msg_hash: EnvelopeHash,
@@ -52,7 +52,7 @@ pub struct ThreadView {
     new_expanded_pos: usize,
     reversed: bool,
     coordinates: (usize, usize, usize),
-    thread_group: ThreadGroupHash,
+    thread_group: ThreadHash,
     mailview: MailView,
     show_mailview: bool,
     show_thread: bool,
@@ -76,8 +76,8 @@ impl ThreadView {
      */
     pub fn new(
         coordinates: (usize, usize, usize),
-        thread_group: ThreadGroupHash,
-        expanded_hash: Option<ThreadHash>,
+        thread_group: ThreadHash,
+        expanded_hash: Option<ThreadNodeHash>,
         context: &Context,
     ) -> Self {
         let mut view = ThreadView {
@@ -160,7 +160,7 @@ impl ThreadView {
         }
         self.set_dirty(true);
     }
-    fn initiate(&mut self, expanded_hash: Option<ThreadHash>, context: &Context) {
+    fn initiate(&mut self, expanded_hash: Option<ThreadNodeHash>, context: &Context) {
         /* stack to push thread messages in order in order to pop and print them later */
         let account = &context.accounts[self.coordinates.0];
         let mailbox = &account[self.coordinates.1].unwrap();
@@ -384,7 +384,7 @@ impl ThreadView {
 
     fn make_entry(
         &mut self,
-        i: (usize, ThreadHash, usize),
+        i: (usize, ThreadNodeHash, usize),
         msg_hash: EnvelopeHash,
         seen: bool,
     ) -> ThreadEntry {

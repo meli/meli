@@ -24,7 +24,7 @@
 use super::*;
 use melib::backends::Folder;
 use melib::backends::FolderHash;
-use melib::thread::ThreadHash;
+use melib::thread::ThreadNodeHash;
 
 pub mod listing;
 pub use crate::listing::*;

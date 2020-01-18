@@ -53,7 +53,7 @@ pub trait MailListingTrait: ListingTrait {
     fn perform_action(
         &mut self,
         context: &mut Context,
-        thread_hash: ThreadGroupHash,
+        thread_hash: ThreadHash,
         a: &ListingAction,
     ) {
         let account = &mut context.accounts[self.coordinates().0];
@@ -120,9 +120,9 @@ pub trait MailListingTrait: ListingTrait {
         }
     }
 
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadGroupHash; 8]>;
-    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadGroupHash; 8]>;
-    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadGroupHash>>) {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]>;
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]>;
+    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadHash>>) {
         unimplemented!()
     }
 }

@@ -41,7 +41,7 @@ pub mod signatures;
 use crate::backends::BackendOp;
 use crate::datetime::UnixTimestamp;
 use crate::error::{MeliError, Result};
-use crate::thread::ThreadHash;
+use crate::thread::ThreadNodeHash;
 
 use smallvec::SmallVec;
 use std::borrow::Cow;
@@ -127,7 +127,7 @@ pub struct Envelope {
     other_headers: FnvHashMap<String, String>,
 
     timestamp: UnixTimestamp,
-    thread: ThreadHash,
+    thread: ThreadNodeHash,
 
     hash: EnvelopeHash,
 
@@ -166,7 +166,7 @@ impl Envelope {
 
             timestamp: 0,
 
-            thread: ThreadHash::null(),
+            thread: ThreadNodeHash::null(),
 
             hash,
             has_attachments: false,
@@ -560,10 +560,10 @@ impl Envelope {
         &mut self.other_headers
     }
 
-    pub fn thread(&self) -> ThreadHash {
+    pub fn thread(&self) -> ThreadNodeHash {
         self.thread
     }
-    pub fn set_thread(&mut self, new_val: ThreadHash) {
+    pub fn set_thread(&mut self, new_val: ThreadNodeHash) {
         self.thread = new_val;
     }
     pub fn set_datetime(&mut self, new_val: UnixTimestamp) {

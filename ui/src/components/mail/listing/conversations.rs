@@ -85,33 +85,33 @@ pub struct ConversationsListing {
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
-    all_threads: fnv::FnvHashSet<ThreadGroupHash>,
-    order: FnvHashMap<ThreadGroupHash, usize>,
+    all_threads: fnv::FnvHashSet<ThreadHash>,
+    order: FnvHashMap<ThreadHash, usize>,
     /// Cache current view.
     content: CellBuffer,
 
     filter_term: String,
-    filtered_selection: Vec<ThreadGroupHash>,
-    filtered_order: FnvHashMap<ThreadGroupHash, usize>,
-    selection: FnvHashMap<ThreadGroupHash, bool>,
+    filtered_selection: Vec<ThreadHash>,
+    filtered_order: FnvHashMap<ThreadHash, usize>,
+    selection: FnvHashMap<ThreadHash, bool>,
     /// If we must redraw on next redraw event
     dirty: bool,
     force_draw: bool,
     /// If `self.view` exists or not.
     unfocused: bool,
     view: ThreadView,
-    row_updates: SmallVec<[ThreadGroupHash; 8]>,
+    row_updates: SmallVec<[ThreadHash; 8]>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
 }
 
 impl MailListingTrait for ConversationsListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadGroupHash; 8]> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadGroupHash; 8]> {
+    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
         let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
         let cursor_iter;
@@ -441,7 +441,7 @@ impl ListingTrait for ConversationsListing {
                 self.redraw_list(
                     context,
                     Box::new(self.filtered_selection.clone().into_iter())
-                        as Box<dyn Iterator<Item = ThreadGroupHash>>,
+                        as Box<dyn Iterator<Item = ThreadHash>>,
                 );
             }
             Err(e) => {
@@ -520,7 +520,7 @@ impl ConversationsListing {
         context: &Context,
         from: &Vec<Address>,
         threads: &Threads,
-        hash: ThreadGroupHash,
+        hash: ThreadHash,
     ) -> EntryStrings {
         let thread = &threads.groups[&hash];
         let folder_hash = &context.accounts[self.cursor_pos.0][self.cursor_pos.1]
@@ -648,7 +648,7 @@ impl ConversationsListing {
 
         self.redraw_list(
             context,
-            Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadGroupHash>>,
+            Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
         );
 
         if old_cursor_pos == self.new_cursor_pos {
@@ -660,7 +660,7 @@ impl ConversationsListing {
         }
     }
 
-    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadGroupHash>>) {
+    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadHash>>) {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = &account[self.cursor_pos.1].unwrap();
 
@@ -895,7 +895,7 @@ impl ConversationsListing {
         }
     }
 
-    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadGroupHash {
+    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
         //let account = &context.accounts[self.cursor_pos.0];
         //let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         //let threads = &account.collection.threads[&folder_hash];
@@ -915,7 +915,7 @@ impl ConversationsListing {
         }
     }
 
-    fn update_line(&mut self, context: &Context, thread_hash: ThreadGroupHash) {
+    fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
         let account = &context.accounts[self.cursor_pos.0];
         let folder_hash = account[self.cursor_pos.1].unwrap().folder.hash();
         let threads = &account.collection.threads[&folder_hash];
@@ -1209,7 +1209,7 @@ impl Component for ConversationsListing {
                     if !threads.thread_nodes.contains_key(&new_env_thread_hash) {
                         return false;
                     }
-                    let thread: ThreadGroupHash =
+                    let thread: ThreadHash =
                         threads.find_group(threads.thread_nodes()[&new_env_thread_hash].group);
                     if self.order.contains_key(&thread) {
                         self.row_updates.push(thread);

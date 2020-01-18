@@ -62,7 +62,7 @@ pub struct PlainListing {
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: FnvHashMap<EnvelopeHash, usize>,
     selection: FnvHashMap<EnvelopeHash, bool>,
-    thread_hashes: FnvHashMap<EnvelopeHash, ThreadHash>,
+    thread_hashes: FnvHashMap<EnvelopeHash, ThreadNodeHash>,
     local_collection: Vec<EnvelopeHash>,
     /// If we must redraw on next redraw event
     dirty: bool,
@@ -71,18 +71,18 @@ pub struct PlainListing {
     unfocused: bool,
     view: MailView,
     row_updates: SmallVec<[EnvelopeHash; 8]>,
-    _row_updates: SmallVec<[ThreadGroupHash; 8]>,
+    _row_updates: SmallVec<[ThreadHash; 8]>,
 
     movement: Option<PageMovement>,
     id: ComponentId,
 }
 
 impl MailListingTrait for PlainListing {
-    fn row_updates(&mut self) -> &mut SmallVec<[ThreadGroupHash; 8]> {
+    fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]> {
         &mut self._row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadGroupHash; 8]> {
+    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
         return SmallVec::new();
         /*
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
@@ -892,7 +892,7 @@ impl PlainListing {
         }
     }
 
-    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
+    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadNodeHash {
         let account = &context.accounts[self.cursor_pos.0];
         let env_hash = self.get_env_under_cursor(cursor, context);
         account.collection.get_env(env_hash).thread()
