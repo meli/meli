@@ -33,6 +33,8 @@ pub mod tags;
 pub mod shortcuts;
 mod listing;
 pub mod terminal;
+mod themes;
+pub use themes::*;
 
 pub mod accounts;
 pub use self::accounts::Account;
@@ -77,6 +79,7 @@ pub struct MailUIConf {
     pub identity: Option<String>,
     pub index_style: Option<IndexStyle>,
     pub tags: Option<TagsSettings>,
+    pub theme: Option<Theme>,
 }
 
 #[serde(default)]
@@ -330,9 +333,26 @@ impl FileSettings {
             }
         }
 
-        FileSettings::validate(config_path.to_str().unwrap())?;
-        let s = pp::pp(config_path.to_str().unwrap()).unwrap();
-        let s: FileSettings = toml::from_str(&s).unwrap();
+        let path = config_path
+            .to_str()
+            .expect("Configuration file path was not valid UTF-8");
+        FileSettings::validate(path)?;
+        let mut s: FileSettings = toml::from_str(&pp::pp(path)?).map_err(|err| err.to_string())?;
+        let Theme {
+            light: default_light,
+            dark: default_dark,
+        } = Theme::default();
+        for (k, v) in default_light.into_iter() {
+            if !s.terminal.themes.light.contains_key(&k) {
+                s.terminal.themes.light.insert(k, v);
+            }
+        }
+        for (k, v) in default_dark.into_iter() {
+            if !s.terminal.themes.dark.contains_key(&k) {
+                s.terminal.themes.dark.insert(k, v);
+            }
+        }
+
         Ok(s)
     }
 

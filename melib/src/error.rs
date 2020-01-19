@@ -173,3 +173,10 @@ impl From<&str> for MeliError {
         MeliError::new(kind.to_string())
     }
 }
+
+impl From<String> for MeliError {
+    #[inline]
+    fn from(kind: String) -> MeliError {
+        MeliError::new(kind)
+    }
+}

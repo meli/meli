@@ -20,6 +20,7 @@
  */
 
 use super::deserializers::non_empty_string;
+use super::Theme;
 
 /// Settings for terminal display
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -27,6 +28,7 @@ use super::deserializers::non_empty_string;
 pub struct TerminalSettings {
     /// light, dark
     pub theme: String,
+    pub themes: Theme,
     pub ascii_drawing: bool,
     #[serde(deserialize_with = "non_empty_string")]
     pub window_title: Option<String>,
@@ -36,6 +38,7 @@ impl Default for TerminalSettings {
     fn default() -> Self {
         TerminalSettings {
             theme: "dark".to_string(),
+            themes: Theme::default(),
             ascii_drawing: false,
             window_title: Some("meli".to_string()),
         }

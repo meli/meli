@@ -126,34 +126,24 @@ impl ListingTrait for CompactListing {
         let thread = threads.thread_ref(thread_hash);
 
         let fg_color = if thread.unseen() > 0 {
-            Color::Byte(0)
+            crate::conf::color(context, "mail.listing.compact.unseen_fg")
+        } else if self.cursor_pos.2 == idx {
+            crate::conf::color(context, "mail.listing.compact.highlighted_fg")
+        } else if idx % 2 == 0 {
+            crate::conf::color(context, "mail.listing.compact.even_fg")
         } else {
-            Color::Default
+            crate::conf::color(context, "mail.listing.compact.odd_fg")
         };
-        let bg_color = if context.settings.terminal.theme == "light" {
-            if self.cursor_pos.2 == idx {
-                Color::Byte(244)
-            } else if self.selection[&thread_hash] {
-                Color::Byte(210)
-            } else if thread.unseen() > 0 {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(252)
-            } else {
-                Color::Default
-            }
+        let bg_color = if self.cursor_pos.2 == idx {
+            crate::conf::color(context, "mail.listing.compact.highlighted_bg")
+        } else if self.selection[&thread_hash] {
+            crate::conf::color(context, "mail.listing.compact.selected_bg")
+        } else if thread.unseen() > 0 {
+            crate::conf::color(context, "mail.listing.compact.unseen_bg")
+        } else if idx % 2 == 0 {
+            crate::conf::color(context, "mail.listing.compact.even_bg")
         } else {
-            if self.cursor_pos.2 == idx {
-                Color::Byte(246)
-            } else if self.selection[&thread_hash] {
-                Color::Byte(210)
-            } else if thread.unseen() > 0 {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(236)
-            } else {
-                Color::Default
-            }
+            crate::conf::color(context, "mail.listing.compact.odd_bg")
         };
 
         let (upper_left, bottom_right) = area;
@@ -356,7 +346,10 @@ impl ListingTrait for CompactListing {
 
                 let c = &self.data_columns.columns[0][(0, r + top_idx)];
                 if self.selection[&thread_hash] {
-                    (c.fg(), Color::Byte(210))
+                    (
+                        c.fg(),
+                        crate::conf::color(context, "mail.listing.compact.selected_bg"),
+                    )
                 } else {
                     (c.fg(), c.bg())
                 }
@@ -810,27 +803,21 @@ impl CompactListing {
                 panic!();
             }
             let thread = threads.thread_ref(thread);
-            let fg_color = if thread.unseen() > 0 {
-                Color::Byte(0)
+            let (fg_color, bg_color) = if thread.unseen() > 0 {
+                (
+                    crate::conf::color(context, "mail.listing.compact.unseen_fg"),
+                    crate::conf::color(context, "mail.listing.compact.unseen_bg"),
+                )
+            } else if idx % 2 == 0 {
+                (
+                    crate::conf::color(context, "mail.listing.compact.even_fg"),
+                    crate::conf::color(context, "mail.listing.compact.even_bg"),
+                )
             } else {
-                Color::Default
-            };
-            let bg_color = if context.settings.terminal.theme == "light" {
-                if thread.unseen() > 0 {
-                    Color::Byte(251)
-                } else if idx % 2 == 0 {
-                    Color::Byte(252)
-                } else {
-                    Color::Default
-                }
-            } else {
-                if thread.unseen() > 0 {
-                    Color::Byte(251)
-                } else if idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                }
+                (
+                    crate::conf::color(context, "mail.listing.compact.odd_fg"),
+                    crate::conf::color(context, "mail.listing.compact.odd_bg"),
+                )
             };
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
@@ -921,14 +908,26 @@ impl CompactListing {
             }
             match (thread.snoozed(), thread.has_attachments()) {
                 (true, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
-                    self.data_columns.columns[3][(2, idx)].set_fg(Color::Red);
+                    self.data_columns.columns[3][(0, idx)].set_fg(crate::conf::color(
+                        context,
+                        "mail.listing.attachment_flag_fg",
+                    ));
+                    self.data_columns.columns[3][(2, idx)].set_fg(crate::conf::color(
+                        context,
+                        "mail.listing.thread_snooze_flag_fg",
+                    ));
                 }
                 (true, false) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Red);
+                    self.data_columns.columns[3][(0, idx)].set_fg(crate::conf::color(
+                        context,
+                        "mail.listing.thread_snooze_flag_fg",
+                    ));
                 }
                 (false, true) => {
-                    self.data_columns.columns[3][(0, idx)].set_fg(Color::Byte(103));
+                    self.data_columns.columns[3][(0, idx)].set_fg(crate::conf::color(
+                        context,
+                        "mail.listing.attachment_flag_fg",
+                    ));
                 }
                 (false, false) => {}
             }
@@ -981,30 +980,24 @@ impl CompactListing {
                  * arrive */
                 return;
             }
-            let envelope: EnvelopeRef = account.collection.get_env(env_hash);
-            let fg_color = if thread.unseen() > 0 {
-                Color::Byte(0)
-            } else {
-                Color::Default
-            };
             let idx = self.order[&thread_hash];
-            let bg_color = if context.settings.terminal.theme == "light" {
-                if thread.unseen() > 0 {
-                    Color::Byte(251)
-                } else if idx % 2 == 0 {
-                    Color::Byte(252)
-                } else {
-                    Color::Default
-                }
+            let (fg_color, bg_color) = if thread.unseen() > 0 {
+                (
+                    crate::conf::color(context, "mail.listing.compact.unseen_fg"),
+                    crate::conf::color(context, "mail.listing.compact.unseen_bg"),
+                )
+            } else if idx % 2 == 0 {
+                (
+                    crate::conf::color(context, "mail.listing.compact.even_fg"),
+                    crate::conf::color(context, "mail.listing.compact.even_bg"),
+                )
             } else {
-                if thread.unseen() > 0 {
-                    Color::Byte(253)
-                } else if idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                }
+                (
+                    crate::conf::color(context, "mail.listing.compact.odd_fg"),
+                    crate::conf::color(context, "mail.listing.compact.odd_bg"),
+                )
             };
+            let envelope: EnvelopeRef = account.collection.get_env(env_hash);
             let strings = self.make_entry_string(&envelope, context, threads, thread_hash);
             drop(envelope);
             let columns = &mut self.data_columns.columns;
@@ -1108,14 +1101,26 @@ impl CompactListing {
             }
             match (thread.snoozed(), thread.has_attachments()) {
                 (true, true) => {
-                    columns[3][(0, idx)].set_fg(Color::Byte(103));
-                    columns[3][(2, idx)].set_fg(Color::Red);
+                    columns[3][(0, idx)].set_fg(crate::conf::color(
+                        context,
+                        "mail.listing.attachment_flag_fg",
+                    ));
+                    columns[3][(2, idx)].set_fg(crate::conf::color(
+                        context,
+                        "mail.listing.thread_snooze_flag_fg",
+                    ));
                 }
                 (true, false) => {
-                    columns[3][(0, idx)].set_fg(Color::Red);
+                    columns[3][(0, idx)].set_fg(crate::conf::color(
+                        context,
+                        "mail.listing.thread_snooze_flag_fg",
+                    ));
                 }
                 (false, true) => {
-                    columns[3][(0, idx)].set_fg(Color::Byte(103));
+                    columns[3][(0, idx)].set_fg(crate::conf::color(
+                        context,
+                        "mail.listing.attachment_flag_fg",
+                    ));
                 }
                 (false, false) => {}
             }
