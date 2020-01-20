@@ -352,6 +352,7 @@ impl FileSettings {
                 s.terminal.themes.dark.insert(k, v);
             }
         }
+        s.terminal.themes.validate()?;
 
         Ok(s)
     }

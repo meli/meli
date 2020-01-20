@@ -22,6 +22,7 @@
 use super::*;
 use crate::types::segment_tree::SegmentTree;
 use smallvec::SmallVec;
+use std::ops::{Deref, DerefMut};
 
 mod conversations;
 pub use self::conversations::*;
@@ -41,6 +42,86 @@ pub struct DataColumns {
     pub widths: [usize; 12], // widths of columns calculated in first draw and after size changes
     pub segment_tree: [SegmentTree; 12],
 }
+
+#[derive(Debug, Default)]
+/// Save theme colors to avoid looking them up again and again from settings
+struct ColorCache {
+    unseen_fg: Color,
+    unseen_bg: Color,
+    highlighted_fg: Color,
+    highlighted_bg: Color,
+    even_fg: Color,
+    even_bg: Color,
+    odd_fg: Color,
+    odd_bg: Color,
+    selected_bg: Color,
+    attachment_flag_fg: Color,
+    thread_snooze_flag_fg: Color,
+
+    /* Conversations */
+    fg: Color,
+    bg: Color,
+    subject_fg: Color,
+    subject_bg: Color,
+    from_fg: Color,
+    from_bg: Color,
+    date_fg: Color,
+    date_bg: Color,
+    padding: Color,
+    unseen_padding: Color,
+}
+
+#[derive(Debug)]
+pub(super) struct EntryStrings {
+    pub(super) date: DateString,
+    pub(super) subject: SubjectString,
+    pub(super) flag: FlagString,
+    pub(super) from: FromString,
+    pub(super) tags: TagString,
+}
+
+#[macro_export]
+macro_rules! address_list {
+    (($name:expr) as comma_sep_list) => {{
+        let mut ret: String =
+            $name
+                .into_iter()
+                .fold(String::new(), |mut s: String, n: &Address| {
+                    s.extend(n.to_string().chars());
+                    s.push_str(", ");
+                    s
+                });
+        ret.pop();
+        ret.pop();
+        ret
+    }};
+}
+
+macro_rules! column_str {
+    (
+        struct $name:ident($($t:ty),+)) => {
+        #[derive(Debug)]
+        pub(super) struct $name($(pub $t),+);
+
+        impl Deref for $name {
+            type Target = String;
+            fn deref(&self) -> &String {
+                &self.0
+            }
+        }
+        impl DerefMut for $name {
+            fn deref_mut(&mut self) -> &mut String {
+                &mut self.0
+            }
+        }
+    };
+}
+
+column_str!(struct DateString(String));
+column_str!(struct FromString(String));
+column_str!(struct SubjectString(String));
+column_str!(struct FlagString(String));
+column_str!(struct TagString(String, SmallVec<[Color; 8]>));
 
 #[derive(Debug)]
 struct AccountMenuEntry {
@@ -976,14 +1057,48 @@ impl Listing {
             if idx == lines_len {
                 break;
             }
-            let (fg_color, bg_color) = if must_highlight_account {
+            let (
+                fg_color,
+                bg_color,
+                index_fg_color,
+                index_bg_color,
+                unread_count_fg,
+                unread_count_bg,
+            ) = if must_highlight_account {
                 if self.cursor_pos.1 == idx {
-                    (Color::Byte(233), Color::Byte(15))
+                    (
+                        crate::conf::color(context, "mail.sidebar_highlighted_fg"),
+                        crate::conf::color(context, "mail.sidebar_highlighted_bg"),
+                        crate::conf::color(context, "mail.sidebar_highlighted_index_fg"),
+                        crate::conf::color(context, "mail.sidebar_highlighted_index_bg"),
+                        crate::conf::color(context, "mail.sidebar_highlighted_unread_count_fg"),
+                        crate::conf::color(context, "mail.sidebar_highlighted_unread_count_bg"),
+                    )
                 } else {
-                    (Color::Byte(15), Color::Byte(233))
+                    (
+                        crate::conf::color(context, "mail.sidebar_highlighted_account_fg"),
+                        crate::conf::color(context, "mail.sidebar_highlighted_account_bg"),
+                        crate::conf::color(context, "mail.sidebar_highlighted_account_index_fg"),
+                        crate::conf::color(context, "mail.sidebar_highlighted_account_index_bg"),
+                        crate::conf::color(
+                            context,
+                            "mail.sidebar_highlighted_account_unread_count_fg",
+                        ),
+                        crate::conf::color(
+                            context,
+                            "mail.sidebar_highlighted_account_unread_count_bg",
+                        ),
+                    )
                 }
             } else {
-                (Color::Default, Color::Default)
+                (
+                    crate::conf::color(context, "mail.sidebar_fg"),
+                    crate::conf::color(context, "mail.sidebar_bg"),
+                    crate::conf::color(context, "mail.sidebar_index_fg"),
+                    crate::conf::color(context, "mail.sidebar_index_bg"),
+                    crate::conf::color(context, "mail.sidebar_unread_count_fg"),
+                    crate::conf::color(context, "mail.sidebar_unread_count_bg"),
+                )
             };
 
             let (depth, inc, folder_idx, count) = lines[idx];
@@ -1007,8 +1122,8 @@ impl Listing {
             let (x, _) = write_string_to_grid(
                 &format!("{:>width$}", inc, width = total_folder_no_digits),
                 grid,
-                Color::Byte(243),
-                bg_color,
+                index_fg_color,
+                index_bg_color,
                 Attr::Default,
                 (set_y(upper_left, y), bottom_right),
                 None,
@@ -1046,8 +1161,8 @@ impl Listing {
             let (x, _) = write_string_to_grid(
                 &count_string,
                 grid,
-                fg_color,
-                bg_color,
+                unread_count_fg,
+                unread_count_bg,
                 if count.unwrap_or(0) > 0 {
                     Attr::Bold
                 } else {

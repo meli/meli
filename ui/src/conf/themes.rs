@@ -21,6 +21,7 @@
 
 use crate::terminal::Color;
 use crate::Context;
+use melib::Result;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
@@ -54,20 +55,30 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "mail.sidebar_highlighted_unread_count_bg",
     "mail.sidebar_highlighted_index_fg",
     "mail.sidebar_highlighted_index_bg",
+    "mail.sidebar_highlighted_account_fg",
+    "mail.sidebar_highlighted_account_bg",
+    "mail.sidebar_highlighted_account_unread_count_fg",
+    "mail.sidebar_highlighted_account_unread_count_bg",
+    "mail.sidebar_highlighted_account_index_fg",
+    "mail.sidebar_highlighted_account_index_bg",
     "mail.listing.compact.even_fg",
     "mail.listing.compact.even_bg",
     "mail.listing.compact.odd_fg",
     "mail.listing.compact.odd_bg",
     "mail.listing.compact.unseen_fg",
-    "mail.listing.compact.unseen_fg",
+    "mail.listing.compact.unseen_bg",
     "mail.listing.compact.selected_fg",
     "mail.listing.compact.selected_bg",
+    "mail.listing.compact.highlighted_fg",
+    "mail.listing.compact.highlighted_bg",
     "mail.listing.plain.even_fg",
     "mail.listing.plain.even_bg",
     "mail.listing.plain.odd_fg",
     "mail.listing.plain.odd_bg",
     "mail.listing.plain.unseen_fg",
     "mail.listing.plain.unseen_bg",
+    "mail.listing.conversations.fg",
+    "mail.listing.conversations.bg",
     "mail.listing.conversations.subject_fg",
     "mail.listing.conversations.subject_bg",
     "mail.listing.conversations.from_fg",
@@ -78,6 +89,10 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "mail.listing.conversations.unseen_fg",
     "mail.listing.conversations.unseen_bg",
     "mail.listing.conversations.unseen_padding",
+    "mail.listing.conversations.highlighted_fg",
+    "mail.listing.conversations.highlighted_bg",
+    "mail.listing.conversations.selected_fg",
+    "mail.listing.conversations.selected_bg",
     "mail.view.headers_fg",
     "mail.view.headers_bg",
     "mail.view.body_fg",
@@ -96,7 +111,7 @@ pub struct Theme {
 }
 
 impl Theme {
-    pub fn validate(&self) -> Option<String> {
+    pub fn validate(&self) -> Result<()> {
         let hash_set: HashSet<&'static str> = DEFAULT_KEYS.into_iter().map(|k| *k).collect();
         let keys: Vec<&'_ str> = self
             .light
@@ -111,9 +126,9 @@ impl Theme {
             })
             .collect();
         if keys.is_empty() {
-            None
+            Ok(())
         } else {
-            Some(format!("Unrecognized theme keywords: {}", keys.join(", ")))
+            Err(format!("Unrecognized theme keywords: {}", keys.join(", ")).into())
         }
     }
 }
@@ -122,6 +137,29 @@ impl Default for Theme {
     fn default() -> Theme {
         let mut light = HashMap::default();
         let mut dark = HashMap::default();
+
+        macro_rules! add {
+            ($key:literal, light=$light:expr, dark=$dark:expr) => {
+                light.insert($key.into(), $light);
+                dark.insert($key.into(), $dark);
+            };
+            ($key:literal, dark=$dark:expr, light=$light:expr) => {
+                light.insert($key.into(), $light);
+                dark.insert($key.into(), $dark);
+            };
+            ($key:literal, light=$light:expr) => {
+                light.insert($key.into(), $light);
+                dark.insert($key.into(), Color::Default);
+            };
+            ($key:literal, dark=$dark:expr) => {
+                light.insert($key.into(), Color::Default);
+                dark.insert($key.into(), $dark);
+            };
+            ($key:literal) => {
+                light.insert($key.into(), Color::Default);
+                dark.insert($key.into(), Color::Default);
+            };
+        }
 
         light.insert("general.background".into(), Color::Default);
         light.insert("general.foreground".into(), Color::Default);
@@ -136,46 +174,134 @@ impl Default for Theme {
         "general.tab_unfocused_fg",
         "general.tab_unfocused_bg",
         "general.tab_bar_bg",
-        "mail.sidebar_fg",
-        "mail.sidebar_bg",
-        "mail.sidebar_unread_count_fg",
-        "mail.sidebar_unread_count_bg",
-        "mail.sidebar_index_fg",
-        "mail.sidebar_index_bg",
-        "mail.sidebar_highlighted_fg",
-        "mail.sidebar_highlighted_bg",
-        "mail.sidebar_highlighted_unread_count_fg",
-        "mail.sidebar_highlighted_unread_count_bg",
-        "mail.sidebar_highlighted_index_fg",
-        "mail.sidebar_highlighted_index_bg",
-            */
-        light.insert("mail.listing.compact.even_fg".into(), Color::Default);
-        light.insert("mail.listing.compact.even_bg".into(), Color::Byte(252));
-        light.insert("mail.listing.compact.odd_fg".into(), Color::Default);
-        light.insert("mail.listing.compact.odd_bg".into(), Color::Default);
-        light.insert("mail.listing.compact.unseen_fg".into(), Color::Byte(0));
-        light.insert("mail.listing.compact.unseen_bg".into(), Color::Byte(251));
-        light.insert("mail.listing.compact.selected_fg".into(), Color::Default);
-        light.insert("mail.listing.compact.selected_bg".into(), Color::Byte(210));
-        light.insert("mail.listing.compact.highlighted_fg".into(), Color::Default);
-        light.insert(
-            "mail.listing.compact.highlighted_bg".into(),
-            Color::Byte(244),
+        */
+
+        /* Mail Sidebar */
+
+        add!("mail.sidebar_fg");
+        add!("mail.sidebar_bg");
+        add!("mail.sidebar_unread_count_fg", dark = Color::Byte(243));
+        add!("mail.sidebar_unread_count_bg");
+        add!("mail.sidebar_index_fg", dark = Color::Byte(243));
+        add!("mail.sidebar_index_bg");
+        add!("mail.sidebar_highlighted_fg", dark = Color::Byte(233));
+        add!("mail.sidebar_highlighted_bg", dark = Color::Byte(15));
+        add!(
+            "mail.sidebar_highlighted_unread_count_fg",
+            dark = dark["mail.sidebar_highlighted_fg"]
+        );
+        add!(
+            "mail.sidebar_highlighted_unread_count_bg",
+            dark = dark["mail.sidebar_highlighted_bg"]
+        );
+        add!(
+            "mail.sidebar_highlighted_index_fg",
+            dark = dark["mail.sidebar_index_fg"]
+        );
+        add!(
+            "mail.sidebar_highlighted_index_bg",
+            dark = dark["mail.sidebar_highlighted_bg"]
+        );
+        add!(
+            "mail.sidebar_highlighted_account_fg",
+            dark = Color::Byte(15)
+        );
+        add!(
+            "mail.sidebar_highlighted_account_bg",
+            dark = Color::Byte(233)
+        );
+        add!(
+            "mail.sidebar_highlighted_account_unread_count_fg",
+            dark = dark["mail.sidebar_unread_count_fg"]
+        );
+        add!(
+            "mail.sidebar_highlighted_account_unread_count_bg",
+            dark = dark["mail.sidebar_highlighted_fg"]
+        );
+        add!(
+            "mail.sidebar_highlighted_account_index_fg",
+            dark = dark["mail.sidebar_index_fg"]
+        );
+        add!(
+            "mail.sidebar_highlighted_account_index_bg",
+            dark = dark["mail.sidebar_highlighted_bg"]
         );
 
-        dark.insert("mail.listing.compact.even_fg".into(), Color::Default);
-        dark.insert("mail.listing.compact.even_bg".into(), Color::Byte(236));
-        dark.insert("mail.listing.compact.odd_fg".into(), Color::Default);
-        dark.insert("mail.listing.compact.odd_bg".into(), Color::Default);
-        dark.insert("mail.listing.compact.unseen_fg".into(), Color::Byte(0));
-        dark.insert("mail.listing.compact.unseen_bg".into(), Color::Byte(251));
-        dark.insert("mail.listing.compact.selected_fg".into(), Color::Default);
-        dark.insert("mail.listing.compact.selected_bg".into(), Color::Byte(210));
-        dark.insert("mail.listing.compact.highlighted_fg".into(), Color::Default);
-        dark.insert(
-            "mail.listing.compact.highlighted_bg".into(),
-            Color::Byte(246),
+        /* CompactListing */
+        add!("mail.listing.compact.even_fg");
+        add!(
+            "mail.listing.compact.even_bg",
+            dark = Color::Byte(236),
+            light = Color::Byte(252)
         );
+        add!("mail.listing.compact.odd_fg");
+        add!("mail.listing.compact.odd_bg");
+        add!(
+            "mail.listing.compact.unseen_fg",
+            dark = Color::Byte(0),
+            light = Color::Byte(0)
+        );
+        add!(
+            "mail.listing.compact.unseen_bg",
+            dark = Color::Byte(251),
+            light = Color::Byte(251)
+        );
+        add!("mail.listing.compact.selected_fg");
+        add!(
+            "mail.listing.compact.selected_bg",
+            dark = Color::Byte(210),
+            light = Color::Byte(210)
+        );
+        add!("mail.listing.compact.highlighted_fg");
+        add!(
+            "mail.listing.compact.highlighted_bg",
+            dark = Color::Byte(246),
+            light = Color::Byte(244)
+        );
+
+        /* ConversationsListing */
+
+        add!("mail.listing.conversations.fg");
+        add!("mail.listing.conversations.bg");
+        add!("mail.listing.conversations.subject_fg");
+        add!("mail.listing.conversations.subject_bg");
+        add!("mail.listing.conversations.from_fg");
+        add!("mail.listing.conversations.from_bg");
+        add!("mail.listing.conversations.date_fg");
+        add!("mail.listing.conversations.date_bg");
+        add!(
+            "mail.listing.conversations.padding",
+            dark = Color::Byte(235),
+            light = Color::Byte(254)
+        );
+        add!(
+            "mail.listing.conversations.unseen_padding",
+            dark = Color::Byte(235),
+            light = Color::Byte(254)
+        );
+        add!(
+            "mail.listing.conversations.unseen_fg",
+            dark = Color::Byte(0),
+            light = Color::Byte(0)
+        );
+        add!(
+            "mail.listing.conversations.unseen_bg",
+            dark = Color::Byte(251),
+            light = Color::Byte(251)
+        );
+        add!("mail.listing.conversations.highlighted_fg");
+        add!(
+            "mail.listing.conversations.highlighted_bg",
+            dark = Color::Byte(246),
+            light = Color::Byte(246)
+        );
+        add!("mail.listing.conversations.selected_fg");
+        add!(
+            "mail.listing.conversations.selected_bg",
+            dark = Color::Byte(210),
+            light = Color::Byte(210)
+        );
+
         /*
         "mail.listing.plain.even_fg",
         "mail.listing.plain.even_bg",
@@ -189,9 +315,6 @@ impl Default for Theme {
         "mail.listing.conversations.from_bg",
         "mail.listing.conversations.date_fg",
         "mail.listing.conversations.date_bg",
-        "mail.listing.conversations.padding",
-        "mail.listing.conversations.unseen_fg",
-        "mail.listing.conversations.unseen_bg",
         "mail.listing.conversations.unseen_padding",
         "mail.view.headers_fg",
         "mail.view.headers_bg",

@@ -22,58 +22,6 @@
 use super::*;
 use crate::components::utilities::PageMovement;
 use std::iter::FromIterator;
-use std::ops::{Deref, DerefMut};
-
-#[derive(Debug)]
-pub(super) struct EntryStrings {
-    pub(super) date: DateString,
-    pub(super) subject: SubjectString,
-    pub(super) flag: FlagString,
-    pub(super) from: FromString,
-    pub(super) tags: TagString,
-}
-
-macro_rules! address_list {
-    (($name:expr) as comma_sep_list) => {{
-        let mut ret: String =
-            $name
-                .into_iter()
-                .fold(String::new(), |mut s: String, n: &Address| {
-                    s.extend(n.to_string().chars());
-                    s.push_str(", ");
-                    s
-                });
-        ret.pop();
-        ret.pop();
-        ret
-    }};
-}
-
-macro_rules! column_str {
-    (
-        struct $name:ident($($t:ty),+)) => {
-        #[derive(Debug)]
-        pub(super) struct $name($(pub $t),+);
-
-        impl Deref for $name {
-            type Target = String;
-            fn deref(&self) -> &String {
-                &self.0
-            }
-        }
-        impl DerefMut for $name {
-            fn deref_mut(&mut self) -> &mut String {
-                &mut self.0
-            }
-        }
-    };
-}
-
-column_str!(struct DateString(String));
-column_str!(struct FromString(String));
-column_str!(struct SubjectString(String));
-column_str!(struct FlagString(String));
-column_str!(struct TagString(String, SmallVec<[Color; 8]>));
 
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `ThreadView`.
@@ -102,6 +50,7 @@ pub struct ConversationsListing {
     unfocused: bool,
     view: ThreadView,
     row_updates: SmallVec<[ThreadHash; 8]>,
+    color_cache: ColorCache,
 
     movement: Option<PageMovement>,
     id: ComponentId,
@@ -157,18 +106,18 @@ impl ListingTrait for ConversationsListing {
         let thread = threads.thread_ref(thread_hash);
 
         let fg_color = if thread.unseen() > 0 {
-            Color::Byte(0)
+            self.color_cache.unseen_fg
         } else {
-            Color::Default
+            self.color_cache.fg
         };
         let bg_color = if self.cursor_pos.2 == idx {
-            Color::Byte(246)
+            self.color_cache.highlighted_bg
         } else if self.selection[&thread_hash] {
-            Color::Byte(210)
+            self.color_cache.selected_bg
         } else if thread.unseen() > 0 {
-            Color::Byte(251)
+            self.color_cache.unseen_bg
         } else {
-            Color::Default
+            self.color_cache.bg
         };
 
         copy_area(
@@ -178,11 +127,7 @@ impl ListingTrait for ConversationsListing {
             ((0, 3 * idx), pos_dec(self.content.size(), (1, 1))),
         );
 
-        let padding_fg = if context.settings.terminal.theme == "light" {
-            Color::Byte(254)
-        } else {
-            Color::Byte(235)
-        };
+        let padding_fg = self.color_cache.padding;
 
         let (upper_left, bottom_right) = area;
         let width = self.content.size().0;
@@ -347,11 +292,7 @@ impl ListingTrait for ConversationsListing {
 
         /* fill any remaining columns, if our view is wider than self.content */
         let width = self.content.size().0;
-        let padding_fg = if context.settings.terminal.theme == "light" {
-            Color::Byte(254)
-        } else {
-            Color::Byte(235)
-        };
+        let padding_fg = self.color_cache.padding;
 
         if width < width!(area) {
             let y_offset = get_y(upper_left);
@@ -510,7 +451,7 @@ impl ConversationsListing {
             force_draw: true,
             unfocused: false,
             view: ThreadView::default(),
-
+            color_cache: ColorCache::default(),
             movement: None,
             id: ComponentId::new_v4(),
         }
@@ -610,6 +551,38 @@ impl ConversationsListing {
             self.cursor_pos.1 = old_cursor_pos.1;
             self.dirty = false;
             return;
+        };
+
+        self.color_cache = ColorCache {
+            fg: crate::conf::color(context, "mail.listing.conversations.fg"),
+            bg: crate::conf::color(context, "mail.listing.conversations.bg"),
+            subject_fg: crate::conf::color(context, "mail.listing.conversations.subject_fg"),
+            subject_bg: crate::conf::color(context, "mail.listing.conversations.subject_bg"),
+            from_fg: crate::conf::color(context, "mail.listing.conversations.from_fg"),
+            from_bg: crate::conf::color(context, "mail.listing.conversations.from_bg"),
+            date_fg: crate::conf::color(context, "mail.listing.conversations.date_fg"),
+            date_bg: crate::conf::color(context, "mail.listing.conversations.date_bg"),
+            padding: crate::conf::color(context, "mail.listing.conversations.padding"),
+            unseen_fg: crate::conf::color(context, "mail.listing.conversations.unseen_fg"),
+            unseen_bg: crate::conf::color(context, "mail.listing.conversations.unseen_bg"),
+            unseen_padding: crate::conf::color(
+                context,
+                "mail.listing.conversations.unseen_padding",
+            ),
+            highlighted_fg: crate::conf::color(
+                context,
+                "mail.listing.conversations.highlighted_fg",
+            ),
+            highlighted_bg: crate::conf::color(
+                context,
+                "mail.listing.conversations.highlighted_bg",
+            ),
+            attachment_flag_fg: crate::conf::color(context, "mail.listing.attachment_flag_fg"),
+            thread_snooze_flag_fg: crate::conf::color(
+                context,
+                "mail.listing.thread_snooze_flag_fg",
+            ),
+            ..self.color_cache
         };
 
         // Get mailbox as a reference.
@@ -738,11 +711,7 @@ impl ConversationsListing {
         self.content =
             CellBuffer::new_with_context(width, 4 * rows.len(), Cell::with_char(' '), context);
 
-        let padding_fg = if context.settings.terminal.theme == "light" {
-            Color::Byte(254)
-        } else {
-            Color::Byte(235)
-        };
+        let padding_fg = self.color_cache.padding;
 
         for ((idx, (thread, root_env_hash)), strings) in rows {
             if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
@@ -750,14 +719,14 @@ impl ConversationsListing {
             }
             let thread = threads.thread_ref(thread);
             let fg_color = if thread.unseen() > 0 {
-                Color::Byte(0)
+                self.color_cache.unseen_fg
             } else {
-                Color::Default
+                self.color_cache.fg
             };
             let bg_color = if thread.unseen() > 0 {
-                Color::Byte(251)
+                self.color_cache.unseen_bg
             } else {
-                Color::Default
+                self.color_cache.bg
             };
             /* draw flags */
             let (x, _) = write_string_to_grid(
@@ -922,20 +891,16 @@ impl ConversationsListing {
         let env_hash = threads.thread_nodes()[&thread_node_hash].message().unwrap();
 
         let fg_color = if thread.unseen() > 0 {
-            Color::Byte(0)
+            self.color_cache.unseen_fg
         } else {
-            Color::Default
+            self.color_cache.fg
         };
         let bg_color = if thread.unseen() > 0 {
-            Color::Byte(251)
+            self.color_cache.unseen_bg
         } else {
-            Color::Default
+            self.color_cache.bg
         };
-        let padding_fg = if context.settings.terminal.theme == "light" {
-            Color::Byte(254)
-        } else {
-            Color::Byte(235)
-        };
+        let padding_fg = self.color_cache.padding;
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
