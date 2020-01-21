@@ -22,15 +22,30 @@
 use crate::terminal::Color;
 use crate::Context;
 use melib::Result;
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 #[inline(always)]
 pub fn color(context: &Context, key: &'static str) -> Color {
-    (match context.settings.terminal.theme.as_str() {
+    let theme = match context.settings.terminal.theme.as_str() {
         "light" => &context.settings.terminal.themes.light,
         "dark" | _ => &context.settings.terminal.themes.dark,
-    })[key]
+    };
+    unlink(theme, &Cow::from(key))
+}
+
+#[inline(always)]
+fn unlink<'k, 't: 'k>(
+    theme: &'t HashMap<Cow<'static, str>, ThemeValue>,
+    mut key: &'k Cow<'static, str>,
+) -> Color {
+    loop {
+        match &theme[key] {
+            ThemeValue::Link(ref new_key) => key = new_key,
+            ThemeValue::Value(val) => return *val,
+        }
+    }
 }
 
 const DEFAULT_KEYS: &'static [&'static str] = &[
@@ -102,12 +117,48 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "mail.listing.thread_snooze_flag_fg",
     "mail.listing.thread_snooze_flag_bg",
 ];
-#[derive(Debug, Clone, Serialize, Deserialize)]
+
+#[derive(Debug, Clone)]
+pub enum ThemeValue {
+    Value(Color),
+    Link(Cow<'static, str>),
+}
+
+impl From<Color> for ThemeValue {
+    fn from(from: Color) -> Self {
+        ThemeValue::Value(from)
+    }
+}
+
+impl Default for ThemeValue {
+    fn default() -> Self {
+        ThemeValue::Value(Color::Default)
+    }
+}
+
+impl<'de> Deserialize<'de> for ThemeValue {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if let Ok(s) = <String>::deserialize(deserializer) {
+            if let Ok(c) = Color::from_string_de::<'de, D>(s.clone()) {
+                Ok(ThemeValue::Value(c))
+            } else {
+                Ok(ThemeValue::Link(s.into()))
+            }
+        } else {
+            Err(de::Error::custom("invalid theme color value"))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Theme {
     #[serde(default)]
-    pub light: HashMap<Cow<'static, str>, Color>,
+    pub light: HashMap<Cow<'static, str>, ThemeValue>,
     #[serde(default)]
-    pub dark: HashMap<Cow<'static, str>, Color>,
+    pub dark: HashMap<Cow<'static, str>, ThemeValue>,
 }
 
 impl Theme {
@@ -139,33 +190,46 @@ impl Default for Theme {
         let mut dark = HashMap::default();
 
         macro_rules! add {
+            ($key:literal, light=$light:literal, dark=$dark:literal) => {
+                light.insert($key.into(), ThemeValue::Link($light.into()));
+                dark.insert($key.into(), ThemeValue::Link($dark.into()));
+            };
+            ($key:literal, dark=$dark:literal, light=$light:literal) => {
+                light.insert($key.into(), ThemeValue::Link($light.into()));
+                dark.insert($key.into(), ThemeValue::Link($dark.into()));
+            };
+            ($key:literal, light=$light:literal) => {
+                light.insert($key.into(), $ThemeValue::Link(light);)
+                dark.insert($key.into(), ThemeValue::Value(Color::Default));
+            };
+            ($key:literal, dark=$dark:literal) => {
+                light.insert($key.into(),ThemeValue::Value(Color::Default));
+                dark.insert($key.into(), ThemeValue::Link($dark.into()));
+            };
             ($key:literal, light=$light:expr, dark=$dark:expr) => {
-                light.insert($key.into(), $light);
-                dark.insert($key.into(), $dark);
+                light.insert($key.into(), ThemeValue::Value($light));
+                dark.insert($key.into(), ThemeValue::Value($dark));
             };
             ($key:literal, dark=$dark:expr, light=$light:expr) => {
-                light.insert($key.into(), $light);
-                dark.insert($key.into(), $dark);
+                light.insert($key.into(), ThemeValue::Value($light));
+                dark.insert($key.into(), ThemeValue::Value($dark));
             };
             ($key:literal, light=$light:expr) => {
-                light.insert($key.into(), $light);
-                dark.insert($key.into(), Color::Default);
+                light.insert($key.into(), $ThemeValue::Value(light);)
+                dark.insert($key.into(), ThemeValue::Value(Color::Default));
             };
             ($key:literal, dark=$dark:expr) => {
-                light.insert($key.into(), Color::Default);
-                dark.insert($key.into(), $dark);
+                light.insert($key.into(),ThemeValue::Value(Color::Default));
+                dark.insert($key.into(), ThemeValue::Value($dark));
             };
             ($key:literal) => {
-                light.insert($key.into(), Color::Default);
-                dark.insert($key.into(), Color::Default);
+                light.insert($key.into(), ThemeValue::Value(Color::Default));
+                dark.insert($key.into(), ThemeValue::Value(Color::Default));
             };
         }
 
-        light.insert("general.background".into(), Color::Default);
-        light.insert("general.foreground".into(), Color::Default);
-
-        dark.insert("general.background".into(), Color::Default);
-        dark.insert("general.foreground".into(), Color::Default);
+        add!("general.background");
+        add!("general.foreground");
         /*
         "general.status_bar_fg",
         "general.status_bar_bg",
@@ -188,19 +252,23 @@ impl Default for Theme {
         add!("mail.sidebar_highlighted_bg", dark = Color::Byte(15));
         add!(
             "mail.sidebar_highlighted_unread_count_fg",
-            dark = dark["mail.sidebar_highlighted_fg"]
+            light = "mail.sidebar_highlighted_fg",
+            dark = "mail.sidebar_highlighted_fg"
         );
         add!(
             "mail.sidebar_highlighted_unread_count_bg",
-            dark = dark["mail.sidebar_highlighted_bg"]
+            light = "mail.sidebar_highlighted_bg",
+            dark = "mail.sidebar_highlighted_bg"
         );
         add!(
             "mail.sidebar_highlighted_index_fg",
-            dark = dark["mail.sidebar_index_fg"]
+            light = "mail.sidebar_index_fg",
+            dark = "mail.sidebar_index_fg"
         );
         add!(
             "mail.sidebar_highlighted_index_bg",
-            dark = dark["mail.sidebar_highlighted_bg"]
+            light = "mail.sidebar_highlighted_bg",
+            dark = "mail.sidebar_highlighted_bg"
         );
         add!(
             "mail.sidebar_highlighted_account_fg",
@@ -212,19 +280,23 @@ impl Default for Theme {
         );
         add!(
             "mail.sidebar_highlighted_account_unread_count_fg",
-            dark = dark["mail.sidebar_unread_count_fg"]
+            light = "mail.sidebar_unread_count_fg",
+            dark = "mail.sidebar_unread_count_fg"
         );
         add!(
             "mail.sidebar_highlighted_account_unread_count_bg",
-            dark = dark["mail.sidebar_highlighted_fg"]
+            light = "mail.sidebar_highlighted_account_bg",
+            dark = "mail.sidebar_highlighted_account_bg"
         );
         add!(
             "mail.sidebar_highlighted_account_index_fg",
-            dark = dark["mail.sidebar_index_fg"]
+            light = "mail.sidebar_index_fg",
+            dark = "mail.sidebar_index_fg"
         );
         add!(
             "mail.sidebar_highlighted_account_index_bg",
-            dark = dark["mail.sidebar_highlighted_bg"]
+            light = "mail.sidebar_highlighted_account_bg",
+            dark = "mail.sidebar_highlighted_account_bg"
         );
 
         /* CompactListing */
@@ -351,5 +423,34 @@ impl Default for Theme {
         );
 
         Theme { light, dark }
+    }
+}
+
+impl Serialize for Theme {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut dark: HashMap<Cow<'static, str>, Color> = Default::default();
+        let mut light: HashMap<Cow<'static, str>, Color> = Default::default();
+
+        for k in self.dark.keys() {
+            dark.insert(k.clone(), unlink(&self.dark, k));
+        }
+
+        for k in self.light.keys() {
+            light.insert(k.clone(), unlink(&self.light, k));
+        }
+
+        #[derive(Serialize)]
+        struct ThemeSer {
+            light: HashMap<Cow<'static, str>, Color>,
+            dark: HashMap<Cow<'static, str>, Color>,
+        }
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("ThemeSer", 2)?;
+        s.serialize_field("light", &light)?;
+        s.serialize_field("dark", &dark)?;
+        s.end()
     }
 }
