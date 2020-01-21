@@ -897,6 +897,19 @@ impl Component for StatusBar {
                         None
                     }
                 }));
+                if let Some(p) = self
+                    .ex_buffer
+                    .as_str()
+                    .split_whitespace()
+                    .last()
+                    .map(std::path::Path::new)
+                {
+                    suggestions.extend(
+                        debug!(debug!(p).complete(true))
+                            .into_iter()
+                            .map(|m| format!("{}{}", self.ex_buffer.as_str(), m).into()),
+                    );
+                }
                 if suggestions.is_empty() && !self.auto_complete.suggestions().is_empty() {
                     self.auto_complete.set_suggestions(suggestions);
                     /* redraw self.container because we have got ridden of an autocomplete

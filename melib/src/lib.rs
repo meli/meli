@@ -150,10 +150,12 @@ pub use crate::addressbook::*;
 pub use shellexpand::ShellExpandTrait;
 pub mod shellexpand {
 
-    use std::path::*;
+    use smallvec::SmallVec;
+    use std::path::{Path, PathBuf};
 
     pub trait ShellExpandTrait {
         fn expand(&self) -> PathBuf;
+        fn complete(&self, force: bool) -> SmallVec<[String; 128]>;
     }
 
     impl ShellExpandTrait for Path {
@@ -188,5 +190,121 @@ pub mod shellexpand {
             }
             ret
         }
+
+        fn complete(&self, force: bool) -> SmallVec<[String; 128]> {
+            use libc::dirent64;
+            use nix::fcntl::OFlag;
+            use std::ffi::CString;
+            use std::ffi::OsStr;
+            use std::os::unix::ffi::OsStrExt;
+            use std::os::unix::io::AsRawFd;
+            const BUF_SIZE: ::libc::size_t = 8 << 10;
+
+            let (prefix, _match) = if self.as_os_str().as_bytes().ends_with(b"/.") {
+                (self.components().as_path(), OsStr::from_bytes(b"."))
+            } else {
+                if self.exists() && (!force || self.as_os_str().as_bytes().ends_with(b"/")) {
+                    // println!("{} {:?}", self.display(), self.components().last());
+                    return SmallVec::new();
+                } else {
+                    let last_component = self
+                        .components()
+                        .last()
+                        .map(|c| c.as_os_str())
+                        .unwrap_or(OsStr::from_bytes(b""));
+                    let prefix = if let Some(p) = self.parent() {
+                        p
+                    } else {
+                        return SmallVec::new();
+                    };
+                    (prefix, last_component)
+                }
+            };
+
+            let dir = match ::nix::dir::Dir::openat(
+                ::libc::AT_FDCWD,
+                prefix,
+                OFlag::O_DIRECTORY | OFlag::O_NOATIME | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
+                ::nix::sys::stat::Mode::S_IRUSR | ::nix::sys::stat::Mode::S_IXUSR,
+            )
+            .or_else(|_| {
+                ::nix::dir::Dir::openat(
+                    ::libc::AT_FDCWD,
+                    prefix,
+                    OFlag::O_DIRECTORY | OFlag::O_RDONLY | OFlag::O_CLOEXEC,
+                    ::nix::sys::stat::Mode::S_IRUSR | ::nix::sys::stat::Mode::S_IXUSR,
+                )
+            }) {
+                Ok(dir) => dir,
+                Err(err) => {
+                    debug!(prefix);
+                    debug!(err);
+                    return SmallVec::new();
+                }
+            };
+
+            let mut buf: Vec<u8> = Vec::with_capacity(BUF_SIZE);
+            let mut entries = SmallVec::new();
+            loop {
+                let n: i64 = unsafe {
+                    ::libc::syscall(
+                        ::libc::SYS_getdents64,
+                        dir.as_raw_fd(),
+                        buf.as_ptr(),
+                        BUF_SIZE - 256,
+                    )
+                };
+                if n < 0 {
+                    return SmallVec::new();
+                } else if n == 0 {
+                    break;
+                }
+
+                let n = n as usize;
+                unsafe {
+                    buf.set_len(n);
+                }
+                let mut pos = 0;
+                while pos < n {
+                    let dir = unsafe { std::mem::transmute::<&[u8], &[dirent64]>(&buf[pos..]) };
+                    let entry = unsafe { std::ffi::CStr::from_ptr(dir[0].d_name.as_ptr()) };
+                    if entry.to_bytes() != b"." && entry.to_bytes() != b".." {
+                        if entry.to_bytes().starts_with(_match.as_bytes()) {
+                            if dir[0].d_type == ::libc::DT_DIR && !entry.to_bytes().ends_with(b"/")
+                            {
+                                let mut s = unsafe {
+                                    String::from_utf8_unchecked(
+                                        entry.to_bytes()[_match.as_bytes().len()..].to_vec(),
+                                    )
+                                };
+                                s.push('/');
+                                entries.push(s);
+                            } else {
+                                entries.push(unsafe {
+                                    String::from_utf8_unchecked(
+                                        entry.to_bytes()[_match.as_bytes().len()..].to_vec(),
+                                    )
+                                });
+                            }
+                        }
+                    }
+                    pos += dir[0].d_reclen as usize;
+                }
+                // https://github.com/romkatv/gitstatus/blob/caf44f7aaf33d0f46e6749e50595323c277e0908/src/dir.cc
+                // "It's tempting to bail here if n + sizeof(linux_dirent64) + 512 <= n. After all, there
+                // was enough space for another entry but SYS_getdents64 didn't write it, so this must be
+                // the end of the directory listing, right? Unfortunately, no. SYS_getdents64 is finicky.
+                // It sometimes writes a partial list of entries even if the full list would fit."
+            }
+            return entries;
+        }
+    }
+
+    #[test]
+    fn test_shellexpandtrait() {
+        let path = &Path::new("~/.v");
+        //println!("ret = {:?}", path.expand().complete(false));
+        assert!(Path::new("~").expand().complete(false).is_empty());
+        assert!(!Path::new("~").expand().complete(true).is_empty());
     }
 }
