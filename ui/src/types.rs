@@ -253,6 +253,7 @@ pub struct RateLimit {
     pub active: bool,
 }
 
+//FIXME: tests.
 impl RateLimit {
     pub fn new(reqs: u64, millis: u64) -> Self {
         RateLimit {

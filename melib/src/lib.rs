@@ -194,7 +194,6 @@ pub mod shellexpand {
         fn complete(&self, force: bool) -> SmallVec<[String; 128]> {
             use libc::dirent64;
             use nix::fcntl::OFlag;
-            use std::ffi::CString;
             use std::ffi::OsStr;
             use std::os::unix::ffi::OsStrExt;
             use std::os::unix::io::AsRawFd;

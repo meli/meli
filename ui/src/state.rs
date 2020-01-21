@@ -767,7 +767,6 @@ impl State {
             }
         }
         if ctr != self.context.accounts.len() {
-            debug!("unparking");
             self.timer.thread().unpark();
         }
     }
