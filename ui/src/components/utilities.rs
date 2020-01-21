@@ -264,6 +264,12 @@ impl Component for VSplit {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct PagerColors {
+    pub fg: Color,
+    pub bg: Color,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum PageMovement {
     Up(usize),
@@ -289,6 +295,7 @@ pub struct Pager {
     minimum_width: usize,
     dirty: bool,
 
+    colors: PagerColors,
     initialised: bool,
     content: CellBuffer,
     movement: Option<PageMovement>,
@@ -321,9 +328,12 @@ impl Pager {
         let height = lines.len() + 2;
         let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
         let ascii_drawing = self.content.ascii_drawing;
-        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        let mut empty_cell = Cell::with_char(' ');
+        empty_cell.set_fg(self.colors.fg);
+        empty_cell.set_bg(self.colors.bg);
+        let mut content = CellBuffer::new(width, height, empty_cell);
         content.set_ascii_drawing(ascii_drawing);
-        Pager::print_string(&mut content, lines);
+        Pager::print_string(&mut content, lines, self.colors);
         self.text = text.to_string();
         self.content = content;
         self.height = height;
@@ -336,6 +346,7 @@ impl Pager {
         context: Option<&Context>,
         cursor_pos: Option<usize>,
         mut width: Option<usize>,
+        colors: PagerColors,
     ) -> Self {
         let pager_filter: Option<&String> = if let Some(context) = context {
             context.settings.pager.filter.as_ref()
@@ -396,12 +407,15 @@ impl Pager {
 
             let height = lines.len() + 1;
             let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
+            let mut empty_cell = Cell::with_char(' ');
+            empty_cell.set_fg(colors.fg);
+            empty_cell.set_bg(colors.bg);
             let mut content = if let Some(context) = context {
-                CellBuffer::new_with_context(width, height, Cell::with_char(' '), context)
+                CellBuffer::new_with_context(width, height, empty_cell, context)
             } else {
-                CellBuffer::new(width, height, Cell::with_char(' '))
+                CellBuffer::new(width, height, empty_cell)
             };
-            Pager::print_string(&mut content, lines);
+            Pager::print_string(&mut content, lines, colors);
             content
         };
         Pager {
@@ -413,10 +427,16 @@ impl Pager {
             dirty: true,
             content,
             id: ComponentId::new_v4(),
+            colors,
             ..Default::default()
         }
     }
-    pub fn from_str(text: &str, cursor_pos: Option<usize>, width: Option<usize>) -> Self {
+    pub fn from_str(
+        text: &str,
+        cursor_pos: Option<usize>,
+        width: Option<usize>,
+        colors: PagerColors,
+    ) -> Self {
         let lines: Vec<String> = if let Some(width) = width {
             text.split_lines(width)
         } else {
@@ -425,9 +445,12 @@ impl Pager {
 
         let height = lines.len() + 1;
         let width = width.unwrap_or_else(|| lines.iter().map(|l| l.len()).max().unwrap_or(0));
-        let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+        let mut empty_cell = Cell::with_char(' ');
+        empty_cell.set_fg(colors.fg);
+        empty_cell.set_bg(colors.bg);
+        let mut content = CellBuffer::new(width, height, empty_cell);
 
-        Pager::print_string(&mut content, lines);
+        Pager::print_string(&mut content, lines, colors);
         Pager {
             text: text.to_string(),
             cursor: (0, cursor_pos.unwrap_or(0)),
@@ -435,10 +458,12 @@ impl Pager {
             width,
             dirty: true,
             content,
+            colors,
             id: ComponentId::new_v4(),
             ..Default::default()
         }
     }
+
     pub fn from_buf(content: CellBuffer, cursor_pos: Option<usize>) -> Self {
         let (width, height) = content.size();
         Pager {
@@ -452,14 +477,15 @@ impl Pager {
             ..Default::default()
         }
     }
-    pub fn print_string(content: &mut CellBuffer, lines: Vec<String>) {
+    pub fn print_string(content: &mut CellBuffer, lines: Vec<String>, colors: PagerColors) {
         let width = content.size().0;
+        debug!(colors);
         for (i, l) in lines.iter().enumerate() {
             write_string_to_grid(
                 l,
                 content,
-                Color::Default,
-                Color::Default,
+                colors.fg,
+                colors.bg,
                 Attr::Default,
                 ((0, i), (width.saturating_sub(1), i)),
                 None,
@@ -499,9 +525,12 @@ impl Component for Pager {
                 .text
                 .split_lines_reflow(self.reflow, Some(width.saturating_sub(2)));
             let height = lines.len() + 2;
-            let mut content = CellBuffer::new(width, height, Cell::with_char(' '));
+            let mut empty_cell = Cell::with_char(' ');
+            empty_cell.set_fg(self.colors.fg);
+            empty_cell.set_bg(self.colors.bg);
+            let mut content = CellBuffer::new(width, height, empty_cell);
             content.set_ascii_drawing(self.content.ascii_drawing);
-            Pager::print_string(&mut content, lines);
+            Pager::print_string(&mut content, lines, self.colors);
             self.content = content;
             self.height = height;
             self.width = width;

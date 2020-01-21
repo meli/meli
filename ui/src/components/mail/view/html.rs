@@ -109,7 +109,11 @@ impl HtmlView {
                         s
                     });
         }
-        let pager = Pager::from_string(display_text, None, None, None);
+        let colors = PagerColors {
+            fg: crate::conf::color(context, "mail.view.body_fg"),
+            bg: crate::conf::color(context, "mail.view.body_bg"),
+        };
+        let pager = Pager::from_string(display_text, None, None, None, colors);
         HtmlView { pager, bytes, id }
     }
 }

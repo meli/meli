@@ -339,7 +339,17 @@ impl Component for EnvelopeView {
                     } else {
                         self.pager.as_ref().map(Pager::cursor_pos)
                     };
-                    self.pager = Some(Pager::from_string(text, Some(context), cursor_pos, None));
+                    let colors = PagerColors {
+                        fg: crate::conf::color(context, "mail.view.body_fg"),
+                        bg: crate::conf::color(context, "mail.view.body_bg"),
+                    };
+                    self.pager = Some(Pager::from_string(
+                        text,
+                        Some(context),
+                        cursor_pos,
+                        None,
+                        colors,
+                    ));
                 }
             };
             self.dirty = false;
@@ -411,11 +421,16 @@ impl Component for EnvelopeView {
                         match u.content_type() {
                             ContentType::MessageRfc822 => {
                                 self.mode = ViewMode::Subview;
+                                let colors = PagerColors {
+                                    fg: crate::conf::color(context, "mail.view.body_fg"),
+                                    bg: crate::conf::color(context, "mail.view.body_bg"),
+                                };
                                 self.subview = Some(Box::new(Pager::from_string(
                                     String::from_utf8_lossy(&decode_rec(u, None)).to_string(),
                                     Some(context),
                                     None,
                                     None,
+                                    colors,
                                 )));
                             }
 

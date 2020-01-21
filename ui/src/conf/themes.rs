@@ -316,19 +316,39 @@ impl Default for Theme {
         "mail.listing.conversations.date_fg",
         "mail.listing.conversations.date_bg",
         "mail.listing.conversations.unseen_padding",
-        "mail.view.headers_fg",
-        "mail.view.headers_bg",
-        "mail.view.body_fg",
-        "mail.view.body_bg",
         */
-        light.insert("mail.listing.attachment_flag_fg".into(), Color::Byte(103));
-        light.insert("mail.listing.attachment_flag_bg".into(), Color::Default);
-        light.insert("mail.listing.thread_snooze_flag_fg".into(), Color::Red);
-        light.insert("mail.listing.thread_snooze_flag_bg".into(), Color::Default);
-        dark.insert("mail.listing.attachment_flag_fg".into(), Color::Byte(103));
-        dark.insert("mail.listing.attachment_flag_bg".into(), Color::Default);
-        dark.insert("mail.listing.thread_snooze_flag_fg".into(), Color::Red);
-        dark.insert("mail.listing.thread_snooze_flag_bg".into(), Color::Default);
+        add!(
+            "mail.view.headers_fg",
+            dark = Color::Byte(33),
+            light = Color::Black
+        );
+        add!("mail.view.headers_bg");
+        add!("mail.view.body_fg");
+        add!("mail.view.body_bg");
+
+        add!(
+            "mail.listing.attachment_flag_fg",
+            light = Color::Byte(103),
+            dark = Color::Byte(103)
+        );
+
+        add!(
+            "mail.listing.attachment_flag_bg",
+            light = Color::Default,
+            dark = Color::Default
+        );
+
+        add!(
+            "mail.listing.thread_snooze_flag_fg",
+            light = Color::Red,
+            dark = Color::Red
+        );
+
+        add!(
+            "mail.listing.thread_snooze_flag_bg",
+            light = Color::Default,
+            dark = Color::Default
+        );
 
         Theme { light, dark }
     }
