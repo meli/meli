@@ -28,6 +28,7 @@ libc = {version = "0.2.59", features = ["extra_traits",]}
 reqwest = { version ="0.10.0-alpha.2", optional=true, features = ["json", "blocking" ]}
 serde_json = { version = "1.0", optional = true, features = ["raw_value",] }
 smallvec = { version = "1.1.0", features = ["serde", ] }
+nix = "0.16.1"
 
 [features]
 default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backend", "vcard"]

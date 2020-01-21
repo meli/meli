@@ -97,12 +97,17 @@ pub fn create_pty(
             }
             let parts = split_command!(command);
             let (cmd, _) = (parts[0], &parts[1..]);
+            let _parts = parts
+                .iter()
+                .map(|&a| CString::new(a).unwrap())
+                .collect::<Vec<CString>>();
             if let Err(e) = nix::unistd::execv(
                 &CString::new(cmd).unwrap(),
-                &parts
+                _parts
                     .iter()
-                    .map(|&a| CString::new(a).unwrap())
-                    .collect::<Vec<CString>>(),
+                    .map(|a| a.as_c_str())
+                    .collect::<Vec<&_>>()
+                    .as_slice(),
             ) {
                 log(format!("Could not execute `{}`: {}", command, e,), ERROR);
                 std::process::exit(-1);

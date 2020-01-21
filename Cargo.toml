@@ -13,7 +13,7 @@ xdg = "2.1.0"
 crossbeam = "0.7.2"
 signal-hook = "0.1.12"
 signal-hook-registry = "1.2.0"
-nix = "*"
+nix = "0.16.1"
 melib = { path = "melib", version = "*" }
 ui = { path = "ui", version = "*" }
 
