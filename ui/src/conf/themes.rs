@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::terminal::Color;
+use crate::terminal::{Attr, Color};
 use crate::Context;
 use melib::Result;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -27,7 +27,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 #[inline(always)]
-pub fn color(context: &Context, key: &'static str) -> Color {
+pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
     let theme = match context.settings.terminal.theme.as_str() {
         "light" => &context.settings.terminal.themes.light,
         "dark" | _ => &context.settings.terminal.themes.dark,
@@ -36,12 +36,77 @@ pub fn color(context: &Context, key: &'static str) -> Color {
 }
 
 #[inline(always)]
+pub fn fg_color(context: &Context, key: &'static str) -> Color {
+    let theme = match context.settings.terminal.theme.as_str() {
+        "light" => &context.settings.terminal.themes.light,
+        "dark" | _ => &context.settings.terminal.themes.dark,
+    };
+    unlink_fg(theme, &Cow::from(key))
+}
+
+#[inline(always)]
+pub fn bg_color(context: &Context, key: &'static str) -> Color {
+    let theme = match context.settings.terminal.theme.as_str() {
+        "light" => &context.settings.terminal.themes.light,
+        "dark" | _ => &context.settings.terminal.themes.dark,
+    };
+    unlink_bg(theme, &Cow::from(key))
+}
+
+#[inline(always)]
+pub fn attrs(context: &Context, key: &'static str) -> Attr {
+    let theme = match context.settings.terminal.theme.as_str() {
+        "light" => &context.settings.terminal.themes.light,
+        "dark" | _ => &context.settings.terminal.themes.dark,
+    };
+    unlink_attrs(theme, &Cow::from(key))
+}
+
+#[inline(always)]
 fn unlink<'k, 't: 'k>(
-    theme: &'t HashMap<Cow<'static, str>, ThemeValue>,
+    theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    key: &'k Cow<'static, str>,
+) -> ThemeAttribute {
+    ThemeAttribute {
+        fg: unlink_fg(theme, key),
+        bg: unlink_bg(theme, key),
+        attrs: unlink_attrs(theme, key),
+    }
+}
+
+#[inline(always)]
+fn unlink_fg<'k, 't: 'k>(
+    theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
     mut key: &'k Cow<'static, str>,
 ) -> Color {
     loop {
-        match &theme[key] {
+        match &theme[key].fg {
+            ThemeValue::Link(ref new_key) => key = new_key,
+            ThemeValue::Value(val) => return *val,
+        }
+    }
+}
+
+#[inline(always)]
+fn unlink_bg<'k, 't: 'k>(
+    theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    mut key: &'k Cow<'static, str>,
+) -> Color {
+    loop {
+        match &theme[key].bg {
+            ThemeValue::Link(ref new_key) => key = new_key,
+            ThemeValue::Value(val) => return *val,
+        }
+    }
+}
+
+#[inline(always)]
+fn unlink_attrs<'k, 't: 'k>(
+    theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    mut key: &'k Cow<'static, str>,
+) -> Attr {
+    loop {
+        match &theme[key].attrs {
             ThemeValue::Link(ref new_key) => key = new_key,
             ThemeValue::Value(val) => return *val,
         }
@@ -49,94 +114,116 @@ fn unlink<'k, 't: 'k>(
 }
 
 const DEFAULT_KEYS: &'static [&'static str] = &[
-    "general.background",
-    "general.foreground",
-    "general.status_bar_fg",
-    "general.status_bar_bg",
-    "general.tab_focused_fg",
-    "general.tab_focused_bg",
-    "general.tab_unfocused_fg",
-    "general.tab_unfocused_bg",
-    "general.tab_bar_bg",
-    "mail.sidebar_fg",
-    "mail.sidebar_bg",
-    "mail.sidebar_unread_count_fg",
-    "mail.sidebar_unread_count_bg",
-    "mail.sidebar_index_fg",
-    "mail.sidebar_index_bg",
-    "mail.sidebar_highlighted_fg",
-    "mail.sidebar_highlighted_bg",
-    "mail.sidebar_highlighted_unread_count_fg",
-    "mail.sidebar_highlighted_unread_count_bg",
-    "mail.sidebar_highlighted_index_fg",
-    "mail.sidebar_highlighted_index_bg",
-    "mail.sidebar_highlighted_account_fg",
-    "mail.sidebar_highlighted_account_bg",
-    "mail.sidebar_highlighted_account_unread_count_fg",
-    "mail.sidebar_highlighted_account_unread_count_bg",
-    "mail.sidebar_highlighted_account_index_fg",
-    "mail.sidebar_highlighted_account_index_bg",
-    "mail.listing.compact.even_fg",
-    "mail.listing.compact.even_bg",
-    "mail.listing.compact.odd_fg",
-    "mail.listing.compact.odd_bg",
-    "mail.listing.compact.unseen_fg",
-    "mail.listing.compact.unseen_bg",
-    "mail.listing.compact.selected_fg",
-    "mail.listing.compact.selected_bg",
-    "mail.listing.compact.highlighted_fg",
-    "mail.listing.compact.highlighted_bg",
-    "mail.listing.plain.even_fg",
-    "mail.listing.plain.even_bg",
-    "mail.listing.plain.odd_fg",
-    "mail.listing.plain.odd_bg",
-    "mail.listing.plain.unseen_fg",
-    "mail.listing.plain.unseen_bg",
-    "mail.listing.conversations.fg",
-    "mail.listing.conversations.bg",
-    "mail.listing.conversations.subject_fg",
-    "mail.listing.conversations.subject_bg",
-    "mail.listing.conversations.from_fg",
-    "mail.listing.conversations.from_bg",
-    "mail.listing.conversations.date_fg",
-    "mail.listing.conversations.date_bg",
+    "general",
+    "general.status_bar",
+    "general.tab_focused",
+    "general.tab_unfocused",
+    "general.tab_bar",
+    "mail.sidebar",
+    "mail.sidebar_unread_count",
+    "mail.sidebar_index",
+    "mail.sidebar_highlighted",
+    "mail.sidebar_highlighted_unread_count",
+    "mail.sidebar_highlighted_index",
+    "mail.sidebar_highlighted_account",
+    "mail.sidebar_highlighted_account_unread_count",
+    "mail.sidebar_highlighted_account_index",
+    "mail.listing.compact.even",
+    "mail.listing.compact.odd",
+    "mail.listing.compact.unseen",
+    "mail.listing.compact.selected",
+    "mail.listing.compact.highlighted",
+    "mail.listing.plain.even",
+    "mail.listing.plain.odd",
+    "mail.listing.plain.unseen",
+    "mail.listing.conversations",
+    "mail.listing.conversations.subject",
+    "mail.listing.conversations.from",
+    "mail.listing.conversations.date",
     "mail.listing.conversations.padding",
-    "mail.listing.conversations.unseen_fg",
-    "mail.listing.conversations.unseen_bg",
+    "mail.listing.conversations.unseen",
     "mail.listing.conversations.unseen_padding",
-    "mail.listing.conversations.highlighted_fg",
-    "mail.listing.conversations.highlighted_bg",
-    "mail.listing.conversations.selected_fg",
-    "mail.listing.conversations.selected_bg",
-    "mail.view.headers_fg",
-    "mail.view.headers_bg",
-    "mail.view.body_fg",
-    "mail.view.body_bg",
-    "mail.listing.attachment_flag_fg",
-    "mail.listing.attachment_flag_bg",
-    "mail.listing.thread_snooze_flag_fg",
-    "mail.listing.thread_snooze_flag_bg",
+    "mail.listing.conversations.highlighted",
+    "mail.listing.conversations.selected",
+    "mail.view.headers",
+    "mail.view.body",
+    "mail.listing.attachment_flag",
+    "mail.listing.thread_snooze_flag",
 ];
 
+#[derive(Debug, Clone, Default, Copy, Serialize, Deserialize)]
+pub struct ThemeAttribute {
+    pub fg: Color,
+    pub bg: Color,
+    pub attrs: Attr,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ThemeAttributeInner {
+    #[serde(default)]
+    fg: ThemeValue<Color>,
+    #[serde(default)]
+    bg: ThemeValue<Color>,
+    #[serde(default)]
+    attrs: ThemeValue<Attr>,
+}
+
 #[derive(Debug, Clone)]
-pub enum ThemeValue {
-    Value(Color),
+pub enum ThemeValue<T> {
+    Value(T),
     Link(Cow<'static, str>),
 }
 
-impl From<Color> for ThemeValue {
+impl<T> From<&'static str> for ThemeValue<T> {
+    fn from(from: &'static str) -> Self {
+        ThemeValue::Link(from.into())
+    }
+}
+
+impl From<Color> for ThemeValue<Color> {
     fn from(from: Color) -> Self {
         ThemeValue::Value(from)
     }
 }
 
-impl Default for ThemeValue {
+impl Default for ThemeValue<Color> {
     fn default() -> Self {
         ThemeValue::Value(Color::Default)
     }
 }
 
-impl<'de> Deserialize<'de> for ThemeValue {
+impl Default for ThemeValue<Attr> {
+    fn default() -> Self {
+        ThemeValue::Value(Attr::Default)
+    }
+}
+
+impl<'de> Deserialize<'de> for ThemeValue<Attr> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if let Ok(s) = <Attr>::deserialize(deserializer) {
+            Ok(ThemeValue::Value(s))
+        } else {
+            Err(de::Error::custom("invalid theme attribute value"))
+        }
+    }
+}
+
+impl<T: Serialize> Serialize for ThemeValue<T> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            ThemeValue::Value(s) => s.serialize(serializer),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ThemeValue<Color> {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -156,9 +243,9 @@ impl<'de> Deserialize<'de> for ThemeValue {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Theme {
     #[serde(default)]
-    pub light: HashMap<Cow<'static, str>, ThemeValue>,
+    pub light: HashMap<Cow<'static, str>, ThemeAttributeInner>,
     #[serde(default)]
-    pub dark: HashMap<Cow<'static, str>, ThemeValue>,
+    pub dark: HashMap<Cow<'static, str>, ThemeAttributeInner>,
 }
 
 impl Theme {
@@ -190,236 +277,217 @@ impl Default for Theme {
         let mut dark = HashMap::default();
 
         macro_rules! add {
-            ($key:literal, light=$light:literal, dark=$dark:literal) => {
-                light.insert($key.into(), ThemeValue::Link($light.into()));
-                dark.insert($key.into(), ThemeValue::Link($dark.into()));
-            };
-            ($key:literal, dark=$dark:literal, light=$light:literal) => {
-                light.insert($key.into(), ThemeValue::Link($light.into()));
-                dark.insert($key.into(), ThemeValue::Link($dark.into()));
-            };
-            ($key:literal, light=$light:literal) => {
-                light.insert($key.into(), $ThemeValue::Link(light);)
-                dark.insert($key.into(), ThemeValue::Value(Color::Default));
-            };
-            ($key:literal, dark=$dark:literal) => {
-                light.insert($key.into(),ThemeValue::Value(Color::Default));
-                dark.insert($key.into(), ThemeValue::Link($dark.into()));
-            };
-            ($key:literal, light=$light:expr, dark=$dark:expr) => {
-                light.insert($key.into(), ThemeValue::Value($light));
-                dark.insert($key.into(), ThemeValue::Value($dark));
-            };
-            ($key:literal, dark=$dark:expr, light=$light:expr) => {
-                light.insert($key.into(), ThemeValue::Value($light));
-                dark.insert($key.into(), ThemeValue::Value($dark));
-            };
-            ($key:literal, light=$light:expr) => {
-                light.insert($key.into(), $ThemeValue::Value(light);)
-                dark.insert($key.into(), ThemeValue::Value(Color::Default));
-            };
-            ($key:literal, dark=$dark:expr) => {
-                light.insert($key.into(),ThemeValue::Value(Color::Default));
-                dark.insert($key.into(), ThemeValue::Value($dark));
+            ($key:literal, $($theme:ident={ $($name:ident : $val:expr),*$(,)? }),*$(,)?) => {
+                $($theme.insert($key.into(), ThemeAttributeInner {
+                    $($name: $val.into()),*
+                        ,..ThemeAttributeInner::default() }));*
             };
             ($key:literal) => {
-                light.insert($key.into(), ThemeValue::Value(Color::Default));
-                dark.insert($key.into(), ThemeValue::Value(Color::Default));
+                light.insert($key.into(), ThemeAttributeInner::default());
+                dark.insert($key.into(), ThemeAttributeInner::default());
             };
         }
-
-        add!("general.background");
-        add!("general.foreground");
+        add!("general");
         /*
-        "general.status_bar_fg",
-        "general.status_bar_bg",
-        "general.tab_focused_fg",
-        "general.tab_focused_bg",
-        "general.tab_unfocused_fg",
-        "general.tab_unfocused_bg",
-        "general.tab_bar_bg",
+        "general.status_bar",
+        "general.tab_focused",
+        "general.tab_unfocused",
+        "general.tab_bar",
         */
 
         /* Mail Sidebar */
 
-        add!("mail.sidebar_fg");
-        add!("mail.sidebar_bg");
-        add!("mail.sidebar_unread_count_fg", dark = Color::Byte(243));
-        add!("mail.sidebar_unread_count_bg");
-        add!("mail.sidebar_index_fg", dark = Color::Byte(243));
-        add!("mail.sidebar_index_bg");
-        add!("mail.sidebar_highlighted_fg", dark = Color::Byte(233));
-        add!("mail.sidebar_highlighted_bg", dark = Color::Byte(15));
+        add!("mail.sidebar");
+        add!("mail.sidebar_unread_count", dark = { fg: Color::Byte(243) });
+        add!("mail.sidebar_index", dark = { fg: Color::Byte(243) });
+        add!("mail.sidebar_highlighted", dark = { fg: Color::Byte(233), bg: Color::Byte(15) });
         add!(
-            "mail.sidebar_highlighted_unread_count_fg",
-            light = "mail.sidebar_highlighted_fg",
-            dark = "mail.sidebar_highlighted_fg"
+            "mail.sidebar_highlighted_unread_count",
+            light = {
+                fg: "mail.sidebar_highlighted",
+                bg: "mail.sidebar_highlighted"
+            },
+            dark = {
+                fg: "mail.sidebar_highlighted",
+                bg: "mail.sidebar_highlighted"
+            }
         );
         add!(
-            "mail.sidebar_highlighted_unread_count_bg",
-            light = "mail.sidebar_highlighted_bg",
-            dark = "mail.sidebar_highlighted_bg"
+            "mail.sidebar_highlighted_index",
+            light = {
+                fg: "mail.sidebar_index",
+                bg: "mail.sidebar_highlighted",
+            },
+            dark = {
+                fg: "mail.sidebar_index",
+                bg: "mail.sidebar_highlighted",
+            },
         );
         add!(
-            "mail.sidebar_highlighted_index_fg",
-            light = "mail.sidebar_index_fg",
-            dark = "mail.sidebar_index_fg"
+            "mail.sidebar_highlighted_account",
+            dark = {
+                fg: Color::Byte(15),
+                bg: Color::Byte(233),
+            }
         );
         add!(
-            "mail.sidebar_highlighted_index_bg",
-            light = "mail.sidebar_highlighted_bg",
-            dark = "mail.sidebar_highlighted_bg"
+            "mail.sidebar_highlighted_account_unread_count",
+            light = {
+                fg: "mail.sidebar_unread_count",
+                bg: "mail.sidebar_highlighted_account",
+            },
+            dark = {
+                fg: "mail.sidebar_unread_count",
+                bg: "mail.sidebar_highlighted_account"
+            }
         );
         add!(
-            "mail.sidebar_highlighted_account_fg",
-            dark = Color::Byte(15)
-        );
-        add!(
-            "mail.sidebar_highlighted_account_bg",
-            dark = Color::Byte(233)
-        );
-        add!(
-            "mail.sidebar_highlighted_account_unread_count_fg",
-            light = "mail.sidebar_unread_count_fg",
-            dark = "mail.sidebar_unread_count_fg"
-        );
-        add!(
-            "mail.sidebar_highlighted_account_unread_count_bg",
-            light = "mail.sidebar_highlighted_account_bg",
-            dark = "mail.sidebar_highlighted_account_bg"
-        );
-        add!(
-            "mail.sidebar_highlighted_account_index_fg",
-            light = "mail.sidebar_index_fg",
-            dark = "mail.sidebar_index_fg"
-        );
-        add!(
-            "mail.sidebar_highlighted_account_index_bg",
-            light = "mail.sidebar_highlighted_account_bg",
-            dark = "mail.sidebar_highlighted_account_bg"
+            "mail.sidebar_highlighted_account_index",
+            light = {
+                fg: "mail.sidebar_index",
+                bg: "mail.sidebar_highlighted_account"
+            },
+            dark = {
+                fg: "mail.sidebar_index",
+                bg: "mail.sidebar_highlighted_account"
+            }
         );
 
         /* CompactListing */
-        add!("mail.listing.compact.even_fg");
-        add!(
-            "mail.listing.compact.even_bg",
-            dark = Color::Byte(236),
-            light = Color::Byte(252)
+        add!("mail.listing.compact.even",
+            dark = {
+                bg: Color::Byte(236)
+            },
+            light = {
+                bg: Color::Byte(252)
+            }
         );
-        add!("mail.listing.compact.odd_fg");
-        add!("mail.listing.compact.odd_bg");
+        add!("mail.listing.compact.odd");
         add!(
-            "mail.listing.compact.unseen_fg",
-            dark = Color::Byte(0),
-            light = Color::Byte(0)
+            "mail.listing.compact.unseen",
+            dark = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+
+            },
+            light = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+            }
+        );
+        add!("mail.listing.compact.selected",
+            dark = {
+                bg: Color::Byte(210)
+            },
+            light = {
+                bg: Color::Byte(210)
+            }
         );
         add!(
-            "mail.listing.compact.unseen_bg",
-            dark = Color::Byte(251),
-            light = Color::Byte(251)
-        );
-        add!("mail.listing.compact.selected_fg");
-        add!(
-            "mail.listing.compact.selected_bg",
-            dark = Color::Byte(210),
-            light = Color::Byte(210)
-        );
-        add!("mail.listing.compact.highlighted_fg");
-        add!(
-            "mail.listing.compact.highlighted_bg",
-            dark = Color::Byte(246),
-            light = Color::Byte(244)
+            "mail.listing.compact.highlighted",
+            dark = {
+                bg: Color::Byte(246)
+            },
+            light = {
+                bg: Color::Byte(244)
+            }
         );
 
         /* ConversationsListing */
 
-        add!("mail.listing.conversations.fg");
-        add!("mail.listing.conversations.bg");
-        add!("mail.listing.conversations.subject_fg");
-        add!("mail.listing.conversations.subject_bg");
-        add!("mail.listing.conversations.from_fg");
-        add!("mail.listing.conversations.from_bg");
-        add!("mail.listing.conversations.date_fg");
-        add!("mail.listing.conversations.date_bg");
+        add!("mail.listing.conversations");
+        add!("mail.listing.conversations.subject");
+        add!("mail.listing.conversations.from");
+        add!("mail.listing.conversations.date");
         add!(
             "mail.listing.conversations.padding",
-            dark = Color::Byte(235),
-            light = Color::Byte(254)
+            dark = {
+                fg: Color::Byte(235),
+                bg: Color::Byte(235),
+            },
+            light = {
+                fg: Color::Byte(254),
+                bg: Color::Byte(254),
+            }
         );
         add!(
             "mail.listing.conversations.unseen_padding",
-            dark = Color::Byte(235),
-            light = Color::Byte(254)
+            dark = {
+                fg: Color::Byte(235),
+                bg: Color::Byte(235),
+            },
+            light = {
+                fg: Color::Byte(254),
+                bg: Color::Byte(254),
+            }
         );
         add!(
-            "mail.listing.conversations.unseen_fg",
-            dark = Color::Byte(0),
-            light = Color::Byte(0)
+            "mail.listing.conversations.unseen",
+            dark = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+            },
+            light = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+            }
         );
         add!(
-            "mail.listing.conversations.unseen_bg",
-            dark = Color::Byte(251),
-            light = Color::Byte(251)
+            "mail.listing.conversations.highlighted",
+            dark = {
+                bg: Color::Byte(246),
+            },
+            light = {
+                bg: Color::Byte(246)
+            }
         );
-        add!("mail.listing.conversations.highlighted_fg");
-        add!(
-            "mail.listing.conversations.highlighted_bg",
-            dark = Color::Byte(246),
-            light = Color::Byte(246)
-        );
-        add!("mail.listing.conversations.selected_fg");
-        add!(
-            "mail.listing.conversations.selected_bg",
-            dark = Color::Byte(210),
-            light = Color::Byte(210)
+        add!("mail.listing.conversations.selected",
+            dark = {
+                bg: Color::Byte(210),
+            },
+            light = {
+                bg: Color::Byte(210)
+            }
         );
 
         /*
-        "mail.listing.plain.even_fg",
-        "mail.listing.plain.even_bg",
-        "mail.listing.plain.odd_fg",
-        "mail.listing.plain.odd_bg",
-        "mail.listing.plain.unseen_fg",
-        "mail.listing.plain.unseen_bg",
-        "mail.listing.conversations.subject_fg",
-        "mail.listing.conversations.subject_bg",
-        "mail.listing.conversations.from_fg",
-        "mail.listing.conversations.from_bg",
-        "mail.listing.conversations.date_fg",
-        "mail.listing.conversations.date_bg",
+        "mail.listing.plain.even",
+        "mail.listing.plain.odd",
+        "mail.listing.plain.unseen",
+        "mail.listing.conversations.subject",
+        "mail.listing.conversations.from",
+        "mail.listing.conversations.date",
         "mail.listing.conversations.unseen_padding",
         */
         add!(
-            "mail.view.headers_fg",
-            dark = Color::Byte(33),
-            light = Color::Black
+            "mail.view.headers",
+            dark = {
+                fg: Color::Byte(33),
+            },
+            light = {
+                fg: Color::Black,
+            }
         );
-        add!("mail.view.headers_bg");
-        add!("mail.view.body_fg");
-        add!("mail.view.body_bg");
+        add!("mail.view.body");
 
         add!(
-            "mail.listing.attachment_flag_fg",
-            light = Color::Byte(103),
-            dark = Color::Byte(103)
-        );
-
-        add!(
-            "mail.listing.attachment_flag_bg",
-            light = Color::Default,
-            dark = Color::Default
-        );
-
-        add!(
-            "mail.listing.thread_snooze_flag_fg",
-            light = Color::Red,
-            dark = Color::Red
+            "mail.listing.attachment_flag",
+            light = {
+                fg: Color::Byte(103),
+            },
+            dark = {
+                fg: Color::Byte(103)
+            }
         );
 
         add!(
-            "mail.listing.thread_snooze_flag_bg",
-            light = Color::Default,
-            dark = Color::Default
+            "mail.listing.thread_snooze_flag",
+            light = {
+                fg: Color::Red,
+            },
+            dark = {
+                fg: Color::Red,
+            }
         );
 
         Theme { light, dark }
@@ -431,21 +499,35 @@ impl Serialize for Theme {
     where
         S: Serializer,
     {
-        let mut dark: HashMap<Cow<'static, str>, Color> = Default::default();
-        let mut light: HashMap<Cow<'static, str>, Color> = Default::default();
+        let mut dark: HashMap<Cow<'static, str>, ThemeAttribute> = Default::default();
+        let mut light: HashMap<Cow<'static, str>, ThemeAttribute> = Default::default();
 
         for k in self.dark.keys() {
-            dark.insert(k.clone(), unlink(&self.dark, k));
+            dark.insert(
+                k.clone(),
+                ThemeAttribute {
+                    fg: unlink_fg(&self.light, k),
+                    bg: unlink_bg(&self.light, k),
+                    attrs: unlink_attrs(&self.light, k),
+                },
+            );
         }
 
         for k in self.light.keys() {
-            light.insert(k.clone(), unlink(&self.light, k));
+            light.insert(
+                k.clone(),
+                ThemeAttribute {
+                    fg: unlink_fg(&self.light, k),
+                    bg: unlink_bg(&self.light, k),
+                    attrs: unlink_attrs(&self.light, k),
+                },
+            );
         }
 
         #[derive(Serialize)]
         struct ThemeSer {
-            light: HashMap<Cow<'static, str>, Color>,
-            dark: HashMap<Cow<'static, str>, Color>,
+            light: HashMap<Cow<'static, str>, ThemeAttribute>,
+            dark: HashMap<Cow<'static, str>, ThemeAttribute>,
         }
         use serde::ser::SerializeStruct;
         let mut s = serializer.serialize_struct("ThemeSer", 2)?;

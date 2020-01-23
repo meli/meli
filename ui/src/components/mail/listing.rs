@@ -46,29 +46,21 @@ pub struct DataColumns {
 #[derive(Debug, Default)]
 /// Save theme colors to avoid looking them up again and again from settings
 struct ColorCache {
-    unseen_fg: Color,
-    unseen_bg: Color,
-    highlighted_fg: Color,
-    highlighted_bg: Color,
-    even_fg: Color,
-    even_bg: Color,
-    odd_fg: Color,
-    odd_bg: Color,
-    selected_bg: Color,
-    attachment_flag_fg: Color,
-    thread_snooze_flag_fg: Color,
+    unseen: ThemeAttribute,
+    highlighted: ThemeAttribute,
+    even: ThemeAttribute,
+    odd: ThemeAttribute,
+    selected: ThemeAttribute,
+    attachment_flag: ThemeAttribute,
+    thread_snooze_flag: ThemeAttribute,
 
     /* Conversations */
-    fg: Color,
-    bg: Color,
-    subject_fg: Color,
-    subject_bg: Color,
-    from_fg: Color,
-    from_bg: Color,
-    date_fg: Color,
-    date_bg: Color,
-    padding: Color,
-    unseen_padding: Color,
+    general: ThemeAttribute,
+    subject: ThemeAttribute,
+    from: ThemeAttribute,
+    date: ThemeAttribute,
+    padding: ThemeAttribute,
+    unseen_padding: ThemeAttribute,
 }
 
 #[derive(Debug)]
@@ -1067,37 +1059,39 @@ impl Listing {
             ) = if must_highlight_account {
                 if self.cursor_pos.1 == idx {
                     (
-                        crate::conf::color(context, "mail.sidebar_highlighted_fg"),
-                        crate::conf::color(context, "mail.sidebar_highlighted_bg"),
-                        crate::conf::color(context, "mail.sidebar_highlighted_index_fg"),
-                        crate::conf::color(context, "mail.sidebar_highlighted_index_bg"),
-                        crate::conf::color(context, "mail.sidebar_highlighted_unread_count_fg"),
-                        crate::conf::color(context, "mail.sidebar_highlighted_unread_count_bg"),
+                        crate::conf::value(context, "mail.sidebar_highlighted").fg,
+                        crate::conf::value(context, "mail.sidebar_highlighted").bg,
+                        crate::conf::value(context, "mail.sidebar_highlighted_index").fg,
+                        crate::conf::value(context, "mail.sidebar_highlighted_index").bg,
+                        crate::conf::value(context, "mail.sidebar_highlighted_unread_count").fg,
+                        crate::conf::value(context, "mail.sidebar_highlighted_unread_count").bg,
                     )
                 } else {
                     (
-                        crate::conf::color(context, "mail.sidebar_highlighted_account_fg"),
-                        crate::conf::color(context, "mail.sidebar_highlighted_account_bg"),
-                        crate::conf::color(context, "mail.sidebar_highlighted_account_index_fg"),
-                        crate::conf::color(context, "mail.sidebar_highlighted_account_index_bg"),
-                        crate::conf::color(
+                        crate::conf::value(context, "mail.sidebar_highlighted_account").fg,
+                        crate::conf::value(context, "mail.sidebar_highlighted_account").bg,
+                        crate::conf::value(context, "mail.sidebar_highlighted_account_index").fg,
+                        crate::conf::value(context, "mail.sidebar_highlighted_account_index").bg,
+                        crate::conf::value(
                             context,
-                            "mail.sidebar_highlighted_account_unread_count_fg",
-                        ),
-                        crate::conf::color(
+                            "mail.sidebar_highlighted_account_unread_count",
+                        )
+                        .fg,
+                        crate::conf::value(
                             context,
-                            "mail.sidebar_highlighted_account_unread_count_bg",
-                        ),
+                            "mail.sidebar_highlighted_account_unread_count",
+                        )
+                        .bg,
                     )
                 }
             } else {
                 (
-                    crate::conf::color(context, "mail.sidebar_fg"),
-                    crate::conf::color(context, "mail.sidebar_bg"),
-                    crate::conf::color(context, "mail.sidebar_index_fg"),
-                    crate::conf::color(context, "mail.sidebar_index_bg"),
-                    crate::conf::color(context, "mail.sidebar_unread_count_fg"),
-                    crate::conf::color(context, "mail.sidebar_unread_count_bg"),
+                    crate::conf::value(context, "mail.sidebar").fg,
+                    crate::conf::value(context, "mail.sidebar").bg,
+                    crate::conf::value(context, "mail.sidebar_index").fg,
+                    crate::conf::value(context, "mail.sidebar_index").bg,
+                    crate::conf::value(context, "mail.sidebar_unread_count").fg,
+                    crate::conf::value(context, "mail.sidebar_unread_count").bg,
                 )
             };
 

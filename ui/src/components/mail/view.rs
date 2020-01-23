@@ -371,8 +371,7 @@ impl Component for MailView {
             let account = &context.accounts[self.coordinates.0];
             let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
 
-            let headers_fg = crate::conf::color(context, "mail.view.headers_fg");
-            let headers_bg = crate::conf::color(context, "mail.view.headers_bg");
+            let headers = crate::conf::value(context, "mail.view.headers");
 
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area);
@@ -394,9 +393,9 @@ impl Component for MailView {
                                 let (_x, _y) = write_string_to_grid(
                                     &$string,
                                     grid,
-                                    headers_fg,
-                                    headers_bg,
-                                    Attr::Default,
+                                    headers.fg,
+                                    headers.bg,
+                                    headers.attrs,
                                     (set_y(upper_left, y), bottom_right),
                                     Some(get_x(upper_left)),
                                 );
@@ -446,9 +445,9 @@ impl Component for MailView {
                             let (_x, _) = write_string_to_grid(
                                 "List-ID: ",
                                 grid,
-                                headers_fg,
-                                headers_bg,
-                                Attr::Default,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
                                 (set_y(upper_left, y), bottom_right),
                                 None,
                             );
@@ -474,9 +473,9 @@ impl Component for MailView {
                             let (_x, _y) = write_string_to_grid(
                                 " Available actions: [ ",
                                 grid,
-                                headers_fg,
-                                headers_bg,
-                                Attr::Default,
+                                headers.fg,
+                                headers.bg,
+                                headers.attrs,
                                 ((x, y), bottom_right),
                                 Some(get_x(upper_left)),
                             );
@@ -527,8 +526,9 @@ impl Component for MailView {
                                 grid[(x - 2, y)].set_ch(' ');
                             }
                             if x > 0 {
-                                grid[(x - 1, y)].set_fg(headers_fg);
-                                grid[(x - 1, y)].set_bg(headers_bg);
+                                grid[(x - 1, y)].set_fg(headers.fg);
+                                grid[(x - 1, y)].set_bg(headers.bg);
+                                grid[(x - 1, y)].set_attrs(headers.attrs);
                                 grid[(x - 1, y)].set_ch(']');
                             }
                         }
@@ -646,10 +646,7 @@ impl Component for MailView {
                             .map(|v| String::from_utf8_lossy(v).into_owned())
                             .unwrap_or_else(|e| e.to_string())
                     };
-                    let colors = PagerColors {
-                        fg: crate::conf::color(context, "mail.view.body_fg"),
-                        bg: crate::conf::color(context, "mail.view.body_bg"),
-                    };
+                    let colors = crate::conf::value(context, "mail.view.body");
                     self.pager = Pager::from_string(text, Some(context), None, None, colors);
                 }
                 ViewMode::Ansi(ref buf) => {
@@ -676,10 +673,7 @@ impl Component for MailView {
                     } else {
                         self.pager.cursor_pos()
                     };
-                    let colors = PagerColors {
-                        fg: crate::conf::color(context, "mail.view.body_fg"),
-                        bg: crate::conf::color(context, "mail.view.body_bg"),
-                    };
+                    let colors = crate::conf::value(context, "mail.view.body");
                     self.pager =
                         Pager::from_string(text, Some(context), Some(cursor_pos), None, colors);
                     self.subview = None;

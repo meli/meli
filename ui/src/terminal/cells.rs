@@ -1385,6 +1385,53 @@ pub enum Attr {
     BoldReverseUnderline = 0b111,
 }
 
+impl Default for Attr {
+    fn default() -> Self {
+        Attr::Default
+    }
+}
+
+impl<'de> Deserialize<'de> for Attr {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if let Ok(s) = <String>::deserialize(deserializer) {
+            match s.as_str() {
+                "Default" => Ok(Attr::Default),
+                "Bold" => Ok(Attr::Bold),
+                "Underline" => Ok(Attr::Underline),
+                "BoldUnderline" => Ok(Attr::BoldUnderline),
+                "Reverse" => Ok(Attr::Reverse),
+                "BoldReverse" => Ok(Attr::BoldReverse),
+                "UnderlineReverse" => Ok(Attr::UnderlineReverse),
+                "BoldReverseUnderline" => Ok(Attr::BoldReverseUnderline),
+                _ => Err(de::Error::custom("invalid attr value")),
+            }
+        } else {
+            Err(de::Error::custom("invalid attr value"))
+        }
+    }
+}
+
+impl Serialize for Attr {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Attr::Default => serializer.serialize_str("Default"),
+            Attr::Bold => serializer.serialize_str("Bold"),
+            Attr::Underline => serializer.serialize_str("Underline"),
+            Attr::BoldUnderline => serializer.serialize_str("BoldUnderline"),
+            Attr::Reverse => serializer.serialize_str("Reverse"),
+            Attr::BoldReverse => serializer.serialize_str("BoldReverse"),
+            Attr::UnderlineReverse => serializer.serialize_str("UnderlineReverse"),
+            Attr::BoldReverseUnderline => serializer.serialize_str("BoldReverseUnderline"),
+        }
+    }
+}
+
 pub fn copy_area_with_break(
     grid_dest: &mut CellBuffer,
     grid_src: &CellBuffer,

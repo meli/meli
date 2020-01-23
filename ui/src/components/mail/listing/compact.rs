@@ -127,24 +127,24 @@ impl ListingTrait for CompactListing {
         let thread = threads.thread_ref(thread_hash);
 
         let fg_color = if thread.unseen() > 0 {
-            self.color_cache.unseen_fg
+            self.color_cache.unseen.fg
         } else if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted_fg
+            self.color_cache.highlighted.fg
         } else if idx % 2 == 0 {
-            self.color_cache.even_fg
+            self.color_cache.even.fg
         } else {
-            self.color_cache.odd_fg
+            self.color_cache.odd.fg
         };
         let bg_color = if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted_bg
+            self.color_cache.highlighted.bg
         } else if self.selection[&thread_hash] {
-            self.color_cache.selected_bg
+            self.color_cache.selected.bg
         } else if thread.unseen() > 0 {
-            self.color_cache.unseen_bg
+            self.color_cache.unseen.bg
         } else if idx % 2 == 0 {
-            self.color_cache.even_bg
+            self.color_cache.even.bg
         } else {
-            self.color_cache.odd_bg
+            self.color_cache.odd.bg
         };
 
         let (upper_left, bottom_right) = area;
@@ -348,7 +348,7 @@ impl ListingTrait for CompactListing {
 
                 let c = &self.data_columns.columns[0][(0, r + top_idx)];
                 if self.selection[&thread_hash] {
-                    (c.fg(), self.color_cache.selected_bg)
+                    (c.fg(), self.color_cache.selected.bg)
                 } else {
                     (c.fg(), c.bg())
                 }
@@ -632,20 +632,13 @@ impl CompactListing {
         };
 
         self.color_cache = ColorCache {
-            unseen_fg: crate::conf::color(context, "mail.listing.compact.unseen_fg"),
-            unseen_bg: crate::conf::color(context, "mail.listing.compact.unseen_bg"),
-            highlighted_fg: crate::conf::color(context, "mail.listing.compact.highlighted_fg"),
-            highlighted_bg: crate::conf::color(context, "mail.listing.compact.highlighted_bg"),
-            even_fg: crate::conf::color(context, "mail.listing.compact.even_fg"),
-            even_bg: crate::conf::color(context, "mail.listing.compact.even_bg"),
-            odd_fg: crate::conf::color(context, "mail.listing.compact.odd_fg"),
-            odd_bg: crate::conf::color(context, "mail.listing.compact.odd_bg"),
-            selected_bg: crate::conf::color(context, "mail.listing.compact.selected_bg"),
-            attachment_flag_fg: crate::conf::color(context, "mail.listing.attachment_flag_fg"),
-            thread_snooze_flag_fg: crate::conf::color(
-                context,
-                "mail.listing.thread_snooze_flag_fg",
-            ),
+            unseen: crate::conf::value(context, "mail.listing.compact.unseen"),
+            highlighted: crate::conf::value(context, "mail.listing.compact.highlighted"),
+            even: crate::conf::value(context, "mail.listing.compact.even"),
+            odd: crate::conf::value(context, "mail.listing.compact.odd"),
+            selected: crate::conf::value(context, "mail.listing.compact.selected"),
+            attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
+            thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             ..self.color_cache
         };
 
@@ -821,11 +814,11 @@ impl CompactListing {
             }
             let thread = threads.thread_ref(thread);
             let (fg_color, bg_color) = if thread.unseen() > 0 {
-                (self.color_cache.unseen_fg, self.color_cache.unseen_bg)
+                (self.color_cache.unseen.fg, self.color_cache.unseen.bg)
             } else if idx % 2 == 0 {
-                (self.color_cache.even_fg, self.color_cache.even_bg)
+                (self.color_cache.even.fg, self.color_cache.even.bg)
             } else {
-                (self.color_cache.odd_fg, self.color_cache.odd_bg)
+                (self.color_cache.odd.fg, self.color_cache.odd.bg)
             };
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
@@ -917,17 +910,17 @@ impl CompactListing {
             match (thread.snoozed(), thread.has_attachments()) {
                 (true, true) => {
                     self.data_columns.columns[3][(0, idx)]
-                        .set_fg(self.color_cache.attachment_flag_fg);
+                        .set_fg(self.color_cache.attachment_flag.fg);
                     self.data_columns.columns[3][(2, idx)]
-                        .set_fg(self.color_cache.thread_snooze_flag_fg);
+                        .set_fg(self.color_cache.thread_snooze_flag.fg);
                 }
                 (true, false) => {
                     self.data_columns.columns[3][(0, idx)]
-                        .set_fg(self.color_cache.thread_snooze_flag_fg);
+                        .set_fg(self.color_cache.thread_snooze_flag.fg);
                 }
                 (false, true) => {
                     self.data_columns.columns[3][(0, idx)]
-                        .set_fg(self.color_cache.attachment_flag_fg);
+                        .set_fg(self.color_cache.attachment_flag.fg);
                 }
                 (false, false) => {}
             }
@@ -982,11 +975,11 @@ impl CompactListing {
             }
             let idx = self.order[&thread_hash];
             let (fg_color, bg_color) = if thread.unseen() > 0 {
-                (self.color_cache.unseen_fg, self.color_cache.unseen_bg)
+                (self.color_cache.unseen.fg, self.color_cache.unseen.bg)
             } else if idx % 2 == 0 {
-                (self.color_cache.even_fg, self.color_cache.even_bg)
+                (self.color_cache.even.fg, self.color_cache.even.bg)
             } else {
-                (self.color_cache.odd_fg, self.color_cache.odd_bg)
+                (self.color_cache.odd.fg, self.color_cache.odd.bg)
             };
             let envelope: EnvelopeRef = account.collection.get_env(env_hash);
             let strings = self.make_entry_string(&envelope, context, threads, thread_hash);
@@ -1092,14 +1085,14 @@ impl CompactListing {
             }
             match (thread.snoozed(), thread.has_attachments()) {
                 (true, true) => {
-                    columns[3][(0, idx)].set_fg(self.color_cache.attachment_flag_fg);
-                    columns[3][(2, idx)].set_fg(self.color_cache.thread_snooze_flag_fg);
+                    columns[3][(0, idx)].set_fg(self.color_cache.attachment_flag.fg);
+                    columns[3][(2, idx)].set_fg(self.color_cache.thread_snooze_flag.fg);
                 }
                 (true, false) => {
-                    columns[3][(0, idx)].set_fg(self.color_cache.thread_snooze_flag_fg);
+                    columns[3][(0, idx)].set_fg(self.color_cache.thread_snooze_flag.fg);
                 }
                 (false, true) => {
-                    columns[3][(0, idx)].set_fg(self.color_cache.attachment_flag_fg);
+                    columns[3][(0, idx)].set_fg(self.color_cache.attachment_flag.fg);
                 }
                 (false, false) => {}
             }

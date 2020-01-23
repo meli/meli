@@ -106,18 +106,18 @@ impl ListingTrait for ConversationsListing {
         let thread = threads.thread_ref(thread_hash);
 
         let fg_color = if thread.unseen() > 0 {
-            self.color_cache.unseen_fg
+            self.color_cache.unseen.fg
         } else {
-            self.color_cache.fg
+            self.color_cache.general.fg
         };
         let bg_color = if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted_bg
+            self.color_cache.highlighted.bg
         } else if self.selection[&thread_hash] {
-            self.color_cache.selected_bg
+            self.color_cache.selected.bg
         } else if thread.unseen() > 0 {
-            self.color_cache.unseen_bg
+            self.color_cache.unseen.bg
         } else {
-            self.color_cache.bg
+            self.color_cache.general.bg
         };
 
         copy_area(
@@ -127,7 +127,7 @@ impl ListingTrait for ConversationsListing {
             ((0, 3 * idx), pos_dec(self.content.size(), (1, 1))),
         );
 
-        let padding_fg = self.color_cache.padding;
+        let padding_fg = self.color_cache.padding.fg;
 
         let (upper_left, bottom_right) = area;
         let width = self.content.size().0;
@@ -292,7 +292,7 @@ impl ListingTrait for ConversationsListing {
 
         /* fill any remaining columns, if our view is wider than self.content */
         let width = self.content.size().0;
-        let padding_fg = self.color_cache.padding;
+        let padding_fg = self.color_cache.padding.fg;
 
         if width < width!(area) {
             let y_offset = get_y(upper_left);
@@ -554,34 +554,19 @@ impl ConversationsListing {
         };
 
         self.color_cache = ColorCache {
-            fg: crate::conf::color(context, "mail.listing.conversations.fg"),
-            bg: crate::conf::color(context, "mail.listing.conversations.bg"),
-            subject_fg: crate::conf::color(context, "mail.listing.conversations.subject_fg"),
-            subject_bg: crate::conf::color(context, "mail.listing.conversations.subject_bg"),
-            from_fg: crate::conf::color(context, "mail.listing.conversations.from_fg"),
-            from_bg: crate::conf::color(context, "mail.listing.conversations.from_bg"),
-            date_fg: crate::conf::color(context, "mail.listing.conversations.date_fg"),
-            date_bg: crate::conf::color(context, "mail.listing.conversations.date_bg"),
-            padding: crate::conf::color(context, "mail.listing.conversations.padding"),
-            unseen_fg: crate::conf::color(context, "mail.listing.conversations.unseen_fg"),
-            unseen_bg: crate::conf::color(context, "mail.listing.conversations.unseen_bg"),
-            unseen_padding: crate::conf::color(
+            general: crate::conf::value(context, "mail.listing.conversations"),
+            subject: crate::conf::value(context, "mail.listing.conversations.subject"),
+            from: crate::conf::value(context, "mail.listing.conversations.from"),
+            date: crate::conf::value(context, "mail.listing.conversations.date"),
+            padding: crate::conf::value(context, "mail.listing.conversations.padding"),
+            unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
+            unseen_padding: crate::conf::value(
                 context,
                 "mail.listing.conversations.unseen_padding",
             ),
-            highlighted_fg: crate::conf::color(
-                context,
-                "mail.listing.conversations.highlighted_fg",
-            ),
-            highlighted_bg: crate::conf::color(
-                context,
-                "mail.listing.conversations.highlighted_bg",
-            ),
-            attachment_flag_fg: crate::conf::color(context, "mail.listing.attachment_flag_fg"),
-            thread_snooze_flag_fg: crate::conf::color(
-                context,
-                "mail.listing.thread_snooze_flag_fg",
-            ),
+            highlighted: crate::conf::value(context, "mail.listing.conversations.highlighted"),
+            attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
+            thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             ..self.color_cache
         };
 
@@ -711,7 +696,7 @@ impl ConversationsListing {
         self.content =
             CellBuffer::new_with_context(width, 4 * rows.len(), Cell::with_char(' '), context);
 
-        let padding_fg = self.color_cache.padding;
+        let padding_fg = self.color_cache.padding.fg;
 
         for ((idx, (thread, root_env_hash)), strings) in rows {
             if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
@@ -719,14 +704,14 @@ impl ConversationsListing {
             }
             let thread = threads.thread_ref(thread);
             let fg_color = if thread.unseen() > 0 {
-                self.color_cache.unseen_fg
+                self.color_cache.unseen.fg
             } else {
-                self.color_cache.fg
+                self.color_cache.general.fg
             };
             let bg_color = if thread.unseen() > 0 {
-                self.color_cache.unseen_bg
+                self.color_cache.unseen.bg
             } else {
-                self.color_cache.bg
+                self.color_cache.general.bg
             };
             /* draw flags */
             let (x, _) = write_string_to_grid(
@@ -891,16 +876,16 @@ impl ConversationsListing {
         let env_hash = threads.thread_nodes()[&thread_node_hash].message().unwrap();
 
         let fg_color = if thread.unseen() > 0 {
-            self.color_cache.unseen_fg
+            self.color_cache.unseen.fg
         } else {
-            self.color_cache.fg
+            self.color_cache.general.fg
         };
         let bg_color = if thread.unseen() > 0 {
-            self.color_cache.unseen_bg
+            self.color_cache.unseen.bg
         } else {
-            self.color_cache.bg
+            self.color_cache.general.bg
         };
-        let padding_fg = self.color_cache.padding;
+        let padding_fg = self.color_cache.padding.fg;
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();

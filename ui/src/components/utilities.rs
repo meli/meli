@@ -264,12 +264,6 @@ impl Component for VSplit {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct PagerColors {
-    pub fg: Color,
-    pub bg: Color,
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum PageMovement {
     Up(usize),
@@ -295,7 +289,7 @@ pub struct Pager {
     minimum_width: usize,
     dirty: bool,
 
-    colors: PagerColors,
+    colors: ThemeAttribute,
     initialised: bool,
     content: CellBuffer,
     movement: Option<PageMovement>,
@@ -346,7 +340,7 @@ impl Pager {
         context: Option<&Context>,
         cursor_pos: Option<usize>,
         mut width: Option<usize>,
-        colors: PagerColors,
+        colors: ThemeAttribute,
     ) -> Self {
         let pager_filter: Option<&String> = if let Some(context) = context {
             context.settings.pager.filter.as_ref()
@@ -435,7 +429,7 @@ impl Pager {
         text: &str,
         cursor_pos: Option<usize>,
         width: Option<usize>,
-        colors: PagerColors,
+        colors: ThemeAttribute,
     ) -> Self {
         let lines: Vec<String> = if let Some(width) = width {
             text.split_lines(width)
@@ -477,7 +471,7 @@ impl Pager {
             ..Default::default()
         }
     }
-    pub fn print_string(content: &mut CellBuffer, lines: Vec<String>, colors: PagerColors) {
+    pub fn print_string(content: &mut CellBuffer, lines: Vec<String>, colors: ThemeAttribute) {
         let width = content.size().0;
         debug!(colors);
         for (i, l) in lines.iter().enumerate() {
