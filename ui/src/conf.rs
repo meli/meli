@@ -289,14 +289,14 @@ pub struct Settings {
 
 impl FileSettings {
     pub fn new() -> Result<FileSettings> {
+        let xdg_dirs = xdg::BaseDirectories::with_prefix("meli");
         let config_path = match env::var("MELI_CONFIG") {
             Ok(path) => PathBuf::from(path),
-            Err(_) => {
-                let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
-                xdg_dirs
-                    .place_config_file("config")
-                    .expect("cannot create configuration directory")
-            }
+            Err(_) => xdg_dirs
+                .as_ref()
+                .unwrap()
+                .place_config_file("config")
+                .expect("cannot create configuration directory"),
         };
         if !config_path.exists() {
             println!(
@@ -341,10 +341,52 @@ impl FileSettings {
         let Theme {
             light: default_light,
             dark: default_dark,
+            ..
         } = Theme::default();
         for (k, v) in default_light.into_iter() {
             if !s.terminal.themes.light.contains_key(&k) {
                 s.terminal.themes.light.insert(k, v);
+            }
+        }
+        for theme in s.terminal.themes.other_themes.values_mut() {
+            for (k, v) in default_dark.clone().into_iter() {
+                if !theme.contains_key(&k) {
+                    theme.insert(k, v);
+                }
+            }
+        }
+        if let Ok(xdg_dirs) = xdg_dirs {
+            for theme_folder in xdg_dirs.find_config_files("themes") {
+                let read_dir = std::fs::read_dir(theme_folder)?;
+                for theme in read_dir {
+                    let theme = theme?;
+                    if theme.path().is_file() {
+                        use std::os::unix::ffi::OsStrExt;
+                        let theme_name = if let Some(n) = theme
+                            .path()
+                            .file_stem()
+                            .map(|f| String::from_utf8_lossy(f.as_bytes()).into_owned())
+                        {
+                            n
+                        } else {
+                            continue;
+                        };
+                        let mut t: HashMap<std::borrow::Cow<'static, str>, ThemeAttributeInner> =
+                            toml::from_str(&pp::pp(theme.path())?).map_err(|err| {
+                                format!(
+                                    "Could not parse theme in `{}`: {}",
+                                    theme.path().display(),
+                                    err.to_string()
+                                )
+                            })?;
+                        for (k, v) in default_dark.clone().into_iter() {
+                            if !t.contains_key(&k) {
+                                t.insert(k, v);
+                            }
+                        }
+                        s.terminal.themes.other_themes.insert(theme_name, t);
+                    }
+                }
             }
         }
         for (k, v) in default_dark.into_iter() {
@@ -359,7 +401,7 @@ impl FileSettings {
 
     pub fn validate(path: &str) -> Result<()> {
         let s = pp::pp(path)?;
-        let s: FileSettings = toml::from_str(&s).map_err(|e| {
+        let mut s: FileSettings = toml::from_str(&s).map_err(|e| {
             MeliError::new(format!(
                 "{}:\nConfig file contains errors: {}",
                 path,
@@ -377,6 +419,44 @@ impl FileSettings {
                 );
             }
         }
+
+        if let Ok(xdg_dirs) = xdg::BaseDirectories::with_prefix("meli") {
+            for theme_folder in xdg_dirs.find_config_files("themes") {
+                let read_dir = std::fs::read_dir(theme_folder)?;
+                for theme in read_dir {
+                    let theme = theme?;
+                    if theme.path().is_file() {
+                        use std::os::unix::ffi::OsStrExt;
+                        let theme_name = if let Some(n) = theme
+                            .path()
+                            .file_stem()
+                            .map(|f| String::from_utf8_lossy(f.as_bytes()).into_owned())
+                        {
+                            n
+                        } else {
+                            continue;
+                        };
+                        let t: HashMap<std::borrow::Cow<'static, str>, ThemeAttributeInner> =
+                            toml::from_str(&pp::pp(theme.path())?).map_err(|err| {
+                                format!(
+                                    "Could not parse theme in `{}`: {}",
+                                    theme.path().display(),
+                                    err.to_string()
+                                )
+                            })?;
+                        s.terminal.themes.other_themes.insert(theme_name, t);
+                    }
+                }
+            }
+        }
+        match s.terminal.theme.as_str() {
+            "dark" | "light" => {}
+            t if s.terminal.themes.other_themes.contains_key(t) => {}
+            t => {
+                return Err(MeliError::new(format!("Theme `{}` was not found.", t)));
+            }
+        }
+
         for (name, acc) in s.accounts {
             let FileAccount {
                 root_folder,
@@ -745,12 +825,11 @@ mod pp {
         }
     }
 
-    pub fn pp(path: &str) -> Result<String> {
-        let p = &Path::new(path);
-        let p_buf: PathBuf = if p.is_relative() {
-            p.canonicalize()?
+    pub fn pp<P: AsRef<Path>>(path: P) -> Result<String> {
+        let p_buf: PathBuf = if path.as_ref().is_relative() {
+            path.as_ref().canonicalize()?
         } else {
-            p.to_path_buf()
+            path.as_ref().to_path_buf()
         };
 
         let ret = pp_helper(&p_buf, 0);

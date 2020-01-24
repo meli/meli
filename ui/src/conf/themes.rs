@@ -251,7 +251,7 @@ impl<T: Serialize> Serialize for ThemeValue<T> {
     {
         match self {
             ThemeValue::Value(s) => s.serialize(serializer),
-            _ => unreachable!(),
+            ThemeValue::Link(s) => serializer.serialize_str(s.as_ref()),
         }
     }
 }
@@ -560,14 +560,15 @@ impl Serialize for Theme {
     {
         let mut dark: HashMap<Cow<'static, str>, ThemeAttribute> = Default::default();
         let mut light: HashMap<Cow<'static, str>, ThemeAttribute> = Default::default();
+        let mut other_themes: HashMap<String, _> = Default::default();
 
         for k in self.dark.keys() {
             dark.insert(
                 k.clone(),
                 ThemeAttribute {
-                    fg: unlink_fg(&self.light, k),
-                    bg: unlink_bg(&self.light, k),
-                    attrs: unlink_attrs(&self.light, k),
+                    fg: unlink_fg(&self.dark, k),
+                    bg: unlink_bg(&self.dark, k),
+                    attrs: unlink_attrs(&self.dark, k),
                 },
             );
         }
@@ -583,16 +584,25 @@ impl Serialize for Theme {
             );
         }
 
-        #[derive(Serialize)]
-        struct ThemeSer {
-            light: HashMap<Cow<'static, str>, ThemeAttribute>,
-            dark: HashMap<Cow<'static, str>, ThemeAttribute>,
+        for (name, t) in self.other_themes.iter() {
+            let mut new_map: HashMap<Cow<'static, str>, ThemeAttribute> = Default::default();
+
+            for k in t.keys() {
+                new_map.insert(
+                    k.clone(),
+                    ThemeAttribute {
+                        fg: unlink_fg(&t, k),
+                        bg: unlink_bg(&t, k),
+                        attrs: unlink_attrs(&t, k),
+                    },
+                );
+            }
+            other_themes.insert(name.to_string(), new_map);
         }
-        use serde::ser::SerializeStruct;
-        let mut s = serializer.serialize_struct("ThemeSer", 2)?;
-        s.serialize_field("light", &light)?;
-        s.serialize_field("dark", &dark)?;
-        s.end()
+
+        other_themes.insert("light".to_string(), light);
+        other_themes.insert("dark".to_string(), dark);
+        other_themes.serialize(serializer)
     }
 }
 

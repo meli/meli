@@ -1098,8 +1098,8 @@ impl Serialize for Color {
             Color::Green | Color::Byte(2) => serializer.serialize_str("Green"),
             Color::Byte(3) => serializer.serialize_str("Olive"),
             Color::Byte(4) => serializer.serialize_str("Navy"),
-            Color::Byte(5) => serializer.serialize_str("Purple"),
-            Color::Byte(6) => serializer.serialize_str("Teal"),
+            Color::Byte(5) | Color::Magenta => serializer.serialize_str("Purple"),
+            Color::Byte(6) | Color::Cyan => serializer.serialize_str("Teal"),
             Color::Byte(7) => serializer.serialize_str("Silver"),
             Color::Byte(8) => serializer.serialize_str("Grey"),
             Color::Red | Color::Byte(9) => serializer.serialize_str("Red"),
@@ -1349,7 +1349,10 @@ impl Serialize for Color {
             Color::Byte(253) => serializer.serialize_str("Grey85"),
             Color::Byte(254) => serializer.serialize_str("Grey89"),
             Color::Byte(255) => serializer.serialize_str("Grey93"),
-            _ => serializer.serialize_str("Black"), // FIXME
+            Color::Rgb(r, g, b) => {
+                serializer.serialize_str(&format!("#{:02x}{:02x}{:02x}", r, g, b))
+            }
+            Color::Default => serializer.serialize_str("Default"),
         }
     }
 }
