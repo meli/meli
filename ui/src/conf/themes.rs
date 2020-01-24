@@ -335,6 +335,7 @@ impl Default for Theme {
 
         macro_rules! add {
             ($key:literal, $($theme:ident={ $($name:ident : $val:expr),*$(,)? }),*$(,)?) => {
+                add!($key);
                 $($theme.insert($key.into(), ThemeAttributeInner {
                     $($name: $val.into()),*
                         ,..ThemeAttributeInner::default() }));*
@@ -345,12 +346,10 @@ impl Default for Theme {
             };
         }
         add!("general");
-        /*
-        "general.status_bar",
-        "general.tab_focused",
-        "general.tab_unfocused",
-        "general.tab_bar",
-        */
+        add!("general.status_bar");
+        add!("general.tab_focused");
+        add!("general.tab_unfocused");
+        add!("general.tab_bar");
 
         /* Mail Sidebar */
 
@@ -507,15 +506,14 @@ impl Default for Theme {
             }
         );
 
-        /*
-        "mail.listing.plain.even",
-        "mail.listing.plain.odd",
-        "mail.listing.plain.unseen",
-        "mail.listing.conversations.subject",
-        "mail.listing.conversations.from",
-        "mail.listing.conversations.date",
-        "mail.listing.conversations.unseen_padding",
-        */
+        add!("mail.listing.plain.even");
+        add!("mail.listing.plain.odd");
+        add!("mail.listing.plain.unseen");
+        add!("mail.listing.conversations.subject");
+        add!("mail.listing.conversations.from");
+        add!("mail.listing.conversations.date");
+        add!("mail.listing.conversations.unseen_padding");
+
         add!(
             "mail.view.headers",
             dark = {
@@ -598,6 +596,7 @@ impl Serialize for Theme {
     }
 }
 
+/* Check Theme linked values for cycles */
 fn is_cyclic(
     theme: &HashMap<Cow<'static, str>, ThemeAttributeInner>,
 ) -> std::result::Result<(), String> {
