@@ -325,6 +325,56 @@ impl Theme {
             Err(format!("Unrecognized theme keywords: {}", keys.join(", ")).into())
         }
     }
+
+    pub fn key_to_string(&self, key: &str, unlink: bool) -> String {
+        let theme = match key {
+            "light" => &self.light,
+            "dark" => &self.dark,
+            t => self.other_themes.get(t).unwrap_or(&self.dark),
+        };
+        let mut ret = String::new();
+        ret.extend(format!("[terminal.themes.{}]\n", key).chars());
+        if unlink {
+            for k in theme.keys() {
+                ret.extend(
+                    format!(
+                        "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}\n",
+                        k,
+                        toml::to_string(&unlink_fg(&theme, k)).unwrap(),
+                        toml::to_string(&unlink_bg(&theme, k)).unwrap(),
+                        toml::to_string(&unlink_attrs(&theme, k)).unwrap(),
+                    )
+                    .chars(),
+                );
+            }
+        } else {
+            for k in theme.keys() {
+                ret.extend(
+                    format!(
+                        "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}\n",
+                        k,
+                        toml::to_string(&theme[k].fg).unwrap(),
+                        toml::to_string(&theme[k].bg).unwrap(),
+                        toml::to_string(&theme[k].attrs).unwrap(),
+                    )
+                    .chars(),
+                );
+            }
+        }
+        ret
+    }
+    pub fn to_string(&self) -> String {
+        let mut ret = String::new();
+        ret.extend(self.key_to_string("dark", true).chars());
+
+        ret.push_str("\n\n");
+        ret.extend(self.key_to_string("light", true).chars());
+        for name in self.other_themes.keys() {
+            ret.push_str("\n\n");
+            ret.extend(self.key_to_string(name, true).chars());
+        }
+        ret
+    }
 }
 
 impl Default for Theme {

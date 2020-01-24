@@ -151,6 +151,18 @@ fn run_app() -> Result<()> {
             "--version" | "-v" => {
                 args.version = true;
             }
+            "--print-loaded-themes" => {
+                let s = ui::conf::FileSettings::new()?;
+                print!("{}", s.terminal.themes.to_string());
+                return Ok(());
+            }
+            "--print-default-theme" => {
+                print!(
+                    "{}",
+                    ui::conf::Theme::default().key_to_string("dark", false)
+                );
+                return Ok(());
+            }
             e => match prev {
                 None => error_and_exit!("error: value without command {}", e),
                 Some(CreateConfig) if args.create_config.is_none() => {
@@ -179,11 +191,13 @@ fn run_app() -> Result<()> {
         println!("");
         println!("\t--help, -h\t\tshow this message and exit");
         println!("\t--version, -v\t\tprint version and exit");
-        println!("\t--create-config[ PATH]\tCreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config");
+        println!("\t--create-config[ PATH]\tcreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config");
         println!(
-            "\t--test-config PATH\tTest a configuration file for syntax issues or missing options."
+            "\t--test-config PATH\ttest a configuration file for syntax issues or missing options."
         );
-        println!("\t--config PATH, -c PATH\tUse specified configuration file");
+        println!("\t--config PATH, -c PATH\tuse specified configuration file");
+        println!("\t--print-loaded-themes\tprint loaded themes in full to stdout and exit.");
+        println!("\t--print-default-theme\tprint default theme in full to stdout and exit.");
         return Ok(());
     }
 
