@@ -232,8 +232,12 @@ impl<'de> Deserialize<'de> for ThemeValue<Attr> {
     where
         D: Deserializer<'de>,
     {
-        if let Ok(s) = <Attr>::deserialize(deserializer) {
-            Ok(ThemeValue::Value(s))
+        if let Ok(s) = <String>::deserialize(deserializer) {
+            if let Ok(c) = Attr::from_string_de::<'de, D>(s.clone()) {
+                Ok(ThemeValue::Value(c))
+            } else {
+                Ok(ThemeValue::Link(s.into()))
+            }
         } else {
             Err(de::Error::custom("invalid theme attribute value"))
         }

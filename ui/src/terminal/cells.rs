@@ -1397,17 +1397,7 @@ impl<'de> Deserialize<'de> for Attr {
         D: Deserializer<'de>,
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
-            match s.as_str() {
-                "Default" => Ok(Attr::Default),
-                "Bold" => Ok(Attr::Bold),
-                "Underline" => Ok(Attr::Underline),
-                "BoldUnderline" => Ok(Attr::BoldUnderline),
-                "Reverse" => Ok(Attr::Reverse),
-                "BoldReverse" => Ok(Attr::BoldReverse),
-                "UnderlineReverse" => Ok(Attr::UnderlineReverse),
-                "BoldReverseUnderline" => Ok(Attr::BoldReverseUnderline),
-                _ => Err(de::Error::custom("invalid attr value")),
-            }
+            Attr::from_string_de::<'de, D>(s)
         } else {
             Err(de::Error::custom("invalid attr value"))
         }
@@ -1428,6 +1418,25 @@ impl Serialize for Attr {
             Attr::BoldReverse => serializer.serialize_str("BoldReverse"),
             Attr::UnderlineReverse => serializer.serialize_str("UnderlineReverse"),
             Attr::BoldReverseUnderline => serializer.serialize_str("BoldReverseUnderline"),
+        }
+    }
+}
+
+impl Attr {
+    pub fn from_string_de<'de, D>(s: String) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        match s.as_str() {
+            "Default" => Ok(Attr::Default),
+            "Bold" => Ok(Attr::Bold),
+            "Underline" => Ok(Attr::Underline),
+            "BoldUnderline" => Ok(Attr::BoldUnderline),
+            "Reverse" => Ok(Attr::Reverse),
+            "BoldReverse" => Ok(Attr::BoldReverse),
+            "UnderlineReverse" => Ok(Attr::UnderlineReverse),
+            "BoldReverseUnderline" => Ok(Attr::BoldReverseUnderline),
+            _ => Err(de::Error::custom("invalid attr value")),
         }
     }
 }
