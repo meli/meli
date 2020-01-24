@@ -31,7 +31,14 @@ use std::collections::{HashMap, HashSet};
 pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
     let theme = match context.settings.terminal.theme.as_str() {
         "light" => &context.settings.terminal.themes.light,
-        "dark" | _ => &context.settings.terminal.themes.dark,
+        "dark" => &context.settings.terminal.themes.dark,
+        t => context
+            .settings
+            .terminal
+            .themes
+            .other_themes
+            .get(t)
+            .unwrap_or(&context.settings.terminal.themes.dark),
     };
     unlink(theme, &Cow::from(key))
 }
@@ -40,7 +47,14 @@ pub fn value(context: &Context, key: &'static str) -> ThemeAttribute {
 pub fn fg_color(context: &Context, key: &'static str) -> Color {
     let theme = match context.settings.terminal.theme.as_str() {
         "light" => &context.settings.terminal.themes.light,
-        "dark" | _ => &context.settings.terminal.themes.dark,
+        "dark" => &context.settings.terminal.themes.dark,
+        t => context
+            .settings
+            .terminal
+            .themes
+            .other_themes
+            .get(t)
+            .unwrap_or(&context.settings.terminal.themes.dark),
     };
     unlink_fg(theme, &Cow::from(key))
 }
@@ -49,7 +63,14 @@ pub fn fg_color(context: &Context, key: &'static str) -> Color {
 pub fn bg_color(context: &Context, key: &'static str) -> Color {
     let theme = match context.settings.terminal.theme.as_str() {
         "light" => &context.settings.terminal.themes.light,
-        "dark" | _ => &context.settings.terminal.themes.dark,
+        "dark" => &context.settings.terminal.themes.dark,
+        t => context
+            .settings
+            .terminal
+            .themes
+            .other_themes
+            .get(t)
+            .unwrap_or(&context.settings.terminal.themes.dark),
     };
     unlink_bg(theme, &Cow::from(key))
 }
@@ -58,7 +79,14 @@ pub fn bg_color(context: &Context, key: &'static str) -> Color {
 pub fn attrs(context: &Context, key: &'static str) -> Attr {
     let theme = match context.settings.terminal.theme.as_str() {
         "light" => &context.settings.terminal.themes.light,
-        "dark" | _ => &context.settings.terminal.themes.dark,
+        "dark" => &context.settings.terminal.themes.dark,
+        t => context
+            .settings
+            .terminal
+            .themes
+            .other_themes
+            .get(t)
+            .unwrap_or(&context.settings.terminal.themes.dark),
     };
     unlink_attrs(theme, &Cow::from(key))
 }
@@ -247,6 +275,8 @@ pub struct Theme {
     pub light: HashMap<Cow<'static, str>, ThemeAttributeInner>,
     #[serde(default)]
     pub dark: HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    #[serde(flatten, default)]
+    pub other_themes: HashMap<String, HashMap<Cow<'static, str>, ThemeAttributeInner>>,
 }
 
 impl Theme {
@@ -263,11 +293,20 @@ impl Theme {
                 err
             )));
         }
+        for (k, t) in self.other_themes.iter() {
+            if let Err(err) = is_cyclic(t) {
+                return Err(MeliError::new(format!(
+                    "{} theme contains a cycle: {}",
+                    k, err
+                )));
+            }
+        }
         let hash_set: HashSet<&'static str> = DEFAULT_KEYS.into_iter().map(|k| *k).collect();
         let keys: Vec<&'_ str> = self
             .light
             .keys()
             .chain(self.dark.keys())
+            .chain(self.other_themes.values().flat_map(|v| v.keys()))
             .filter_map(|k| {
                 if !hash_set.contains(&k.as_ref()) {
                     Some(k.as_ref())
@@ -288,6 +327,7 @@ impl Default for Theme {
     fn default() -> Theme {
         let mut light = HashMap::default();
         let mut dark = HashMap::default();
+        let other_themes = HashMap::default();
 
         macro_rules! add {
             ($key:literal, $($theme:ident={ $($name:ident : $val:expr),*$(,)? }),*$(,)?) => {
@@ -503,7 +543,11 @@ impl Default for Theme {
             }
         );
 
-        Theme { light, dark }
+        Theme {
+            light,
+            dark,
+            other_themes,
+        }
     }
 }
 
