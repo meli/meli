@@ -21,8 +21,9 @@
 
 use crate::terminal::{Attr, Color};
 use crate::Context;
-use melib::Result;
+use melib::{MeliError, Result};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
@@ -250,6 +251,18 @@ pub struct Theme {
 
 impl Theme {
     pub fn validate(&self) -> Result<()> {
+        if let Err(err) = is_cyclic(&self.light) {
+            return Err(MeliError::new(format!(
+                "light theme contains a cycle: {}",
+                err
+            )));
+        }
+        if let Err(err) = is_cyclic(&self.dark) {
+            return Err(MeliError::new(format!(
+                "dark theme contains a cycle: {}",
+                err
+            )));
+        }
         let hash_set: HashSet<&'static str> = DEFAULT_KEYS.into_iter().map(|k| *k).collect();
         let keys: Vec<&'_ str> = self
             .light
@@ -535,4 +548,105 @@ impl Serialize for Theme {
         s.serialize_field("dark", &dark)?;
         s.end()
     }
+}
+
+fn is_cyclic(
+    theme: &HashMap<Cow<'static, str>, ThemeAttributeInner>,
+) -> std::result::Result<(), String> {
+    enum Course {
+        Fg,
+        Bg,
+        Attrs,
+    }
+    fn is_cyclic_util<'a>(
+        course: &Course,
+        k: &'a Cow<'static, str>,
+        visited: &mut HashMap<&'a Cow<'static, str>, bool>,
+        stack: &mut HashMap<&'a Cow<'static, str>, bool>,
+        path: &mut SmallVec<[&'a Cow<'static, str>; 16]>,
+        theme: &'a HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    ) -> bool {
+        if !visited[k] {
+            visited.entry(k).and_modify(|e| *e = true);
+            stack.entry(k).and_modify(|e| *e = true);
+
+            match course {
+                Course::Fg => match theme[k].fg {
+                    ThemeValue::Link(ref l) => {
+                        path.push(l);
+                        if !visited[l] && is_cyclic_util(course, l, visited, stack, path, theme) {
+                            return true;
+                        } else if stack[l] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    _ => {}
+                },
+                Course::Bg => match theme[k].bg {
+                    ThemeValue::Link(ref l) => {
+                        path.push(l);
+                        if !visited[l] && is_cyclic_util(course, l, visited, stack, path, theme) {
+                            return true;
+                        } else if stack[l] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    _ => {}
+                },
+                Course::Attrs => match theme[k].attrs {
+                    ThemeValue::Link(ref l) => {
+                        path.push(l);
+                        if !visited[l] && is_cyclic_util(course, l, visited, stack, path, theme) {
+                            return true;
+                        } else if stack[l] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    _ => {}
+                },
+            }
+        }
+        stack.entry(k).and_modify(|e| *e = false);
+        return false;
+    }
+
+    let mut path = SmallVec::new();
+    let mut visited = theme
+        .keys()
+        .map(|k| (k, false))
+        .collect::<HashMap<&Cow<'static, str>, bool>>();
+
+    let mut stack = theme
+        .keys()
+        .map(|k| (k, false))
+        .collect::<HashMap<&Cow<'static, str>, bool>>();
+    for k in theme.keys() {
+        for course in [Course::Fg, Course::Bg, Course::Attrs].into_iter() {
+            path.push(k);
+            if is_cyclic_util(course, k, &mut visited, &mut stack, &mut path, &theme) {
+                let path = path
+                    .into_iter()
+                    .map(|k| k.to_string())
+                    .collect::<Vec<String>>();
+                return Err(format!(
+                    "{} {}",
+                    match course {
+                        Course::Fg => "fg: ",
+                        Course::Bg => "bg: ",
+                        Course::Attrs => "attrs: ",
+                    },
+                    path.join(" -> ")
+                ));
+            }
+            for v in visited.values_mut() {
+                *v = false;
+            }
+            path.pop();
+        }
+    }
+
+    return Ok(());
 }
