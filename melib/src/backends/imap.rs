@@ -630,7 +630,10 @@ impl ImapType {
         conn.send_command(b"LIST \"\" \"*\"")?;
         conn.read_response(&mut res)?;
         debug!("out: {}", &res);
-        for l in res.lines().map(|l| l.trim()) {
+        let mut lines = res.lines();
+        /* Remove "M__ OK .." line */
+        lines.next_back();
+        for l in lines.map(|l| l.trim()) {
             if let Ok(mut folder) =
                 protocol_parser::list_folder_result(l.as_bytes()).to_full_result()
             {
@@ -666,7 +669,10 @@ impl ImapType {
         conn.send_command(b"LSUB \"\" \"*\"")?;
         conn.read_response(&mut res)?;
         debug!("out: {}", &res);
-        for l in res.lines().map(|l| l.trim()) {
+        let mut lines = res.lines();
+        /* Remove "M__ OK .." line */
+        lines.next_back();
+        for l in lines.map(|l| l.trim()) {
             if let Ok(subscription) =
                 protocol_parser::list_folder_result(l.as_bytes()).to_full_result()
             {

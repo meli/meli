@@ -350,7 +350,7 @@ pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> 
                 ret.uid = usize::from_str(unsafe { std::str::from_utf8_unchecked(uid) }).unwrap();
             } else {
                 return debug!(Err(MeliError::new(format!(
-                    "217Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
                     input
                 ))));
             }
@@ -361,7 +361,7 @@ pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> 
                 i += (input.len() - i - rest.len()) + 1;
             } else {
                 return debug!(Err(MeliError::new(format!(
-                    "228Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
                     input
                 ))));
             }
@@ -381,7 +381,7 @@ pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> 
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(MeliError::new(format!(
-                    "248Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
                     input
                 ))));
             }
@@ -392,7 +392,7 @@ pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> 
                 i += input.len() - i - rest.len();
             } else {
                 return debug!(Err(MeliError::new(format!(
-                    "264Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                    "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
                     &input[i..]
                 ))));
             }
@@ -408,9 +408,9 @@ pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> 
                     } else if input.as_bytes()[struct_ptr] == b')' {
                         if parenth_level == 0 {
                             return debug!(Err(MeliError::new(format!(
-                            "280Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
-                            &input[struct_ptr..]
-                        ))));
+                                "Unexpected input while parsing UID FETCH response. Got: `{:.40}`",
+                                &input[struct_ptr..]
+                            ))));
                         }
                         parenth_level -= 1;
                         if parenth_level == 0 {

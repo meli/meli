@@ -27,7 +27,6 @@ use std::io::Write;
 extern crate native_tls;
 use fnv::FnvHashSet;
 use native_tls::TlsConnector;
-use std::borrow::Cow;
 use std::iter::FromIterator;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
