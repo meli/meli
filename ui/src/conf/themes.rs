@@ -143,11 +143,12 @@ fn unlink_attrs<'k, 't: 'k>(
 }
 
 const DEFAULT_KEYS: &'static [&'static str] = &[
-    "general",
-    "general.status_bar",
-    "general.tab_focused",
-    "general.tab_unfocused",
-    "general.tab_bar",
+    "theme_default",
+    "status.bar",
+    "status.notification",
+    "tab.focused",
+    "tab.unfocused",
+    "tab.bar",
     "mail.sidebar",
     "mail.sidebar_unread_count",
     "mail.sidebar_index",
@@ -180,7 +181,7 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "mail.listing.thread_snooze_flag",
 ];
 
-#[derive(Debug, Clone, Default, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Default, Copy, Serialize, Deserialize)]
 pub struct ThemeAttribute {
     pub fg: Color,
     pub bg: Color,
@@ -395,11 +396,13 @@ impl Default for Theme {
                 dark.insert($key.into(), ThemeAttributeInner::default());
             };
         }
-        add!("general");
-        add!("general.status_bar");
-        add!("general.tab_focused");
-        add!("general.tab_unfocused");
-        add!("general.tab_bar");
+        add!("theme_default");
+        add!("status.bar", dark = { fg: Color::Byte(123), bg: Color::Byte(26) }, light = { fg: Color::Byte(123), bg: Color::Byte(26) });
+        add!("status.notification", dark = { fg: Color::Byte(219), bg: Color::Byte(88) }, light = { fg: Color::Byte(219), bg: Color::Byte(88) });
+
+        add!("tab.focused");
+        add!("tab.unfocused");
+        add!("tab.bar");
 
         /* Mail Sidebar */
 

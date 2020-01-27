@@ -108,7 +108,7 @@ impl ListingTrait for ConversationsListing {
         let fg_color = if thread.unseen() > 0 {
             self.color_cache.unseen.fg
         } else {
-            self.color_cache.general.fg
+            self.color_cache.theme_default.fg
         };
         let bg_color = if self.cursor_pos.2 == idx {
             self.color_cache.highlighted.bg
@@ -117,7 +117,7 @@ impl ListingTrait for ConversationsListing {
         } else if thread.unseen() > 0 {
             self.color_cache.unseen.bg
         } else {
-            self.color_cache.general.bg
+            self.color_cache.theme_default.bg
         };
 
         copy_area(
@@ -554,7 +554,7 @@ impl ConversationsListing {
         };
 
         self.color_cache = ColorCache {
-            general: crate::conf::value(context, "mail.listing.conversations"),
+            theme_default: crate::conf::value(context, "mail.listing.conversations"),
             subject: crate::conf::value(context, "mail.listing.conversations.subject"),
             from: crate::conf::value(context, "mail.listing.conversations.from"),
             date: crate::conf::value(context, "mail.listing.conversations.date"),
@@ -706,12 +706,12 @@ impl ConversationsListing {
             let fg_color = if thread.unseen() > 0 {
                 self.color_cache.unseen.fg
             } else {
-                self.color_cache.general.fg
+                self.color_cache.theme_default.fg
             };
             let bg_color = if thread.unseen() > 0 {
                 self.color_cache.unseen.bg
             } else {
-                self.color_cache.general.bg
+                self.color_cache.theme_default.bg
             };
             /* draw flags */
             let (x, _) = write_string_to_grid(
@@ -884,12 +884,12 @@ impl ConversationsListing {
         let fg_color = if thread.unseen() > 0 {
             self.color_cache.unseen.fg
         } else {
-            self.color_cache.general.fg
+            self.color_cache.theme_default.fg
         };
         let bg_color = if thread.unseen() > 0 {
             self.color_cache.unseen.bg
         } else {
-            self.color_cache.general.bg
+            self.color_cache.theme_default.bg
         };
         let padding_fg = self.color_cache.padding.fg;
         let mut from_address_list = Vec::new();

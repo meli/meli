@@ -764,16 +764,23 @@ impl StatusBar {
         }
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        clear_area(grid, area);
+        let attribute = crate::conf::value(context, "status.bar");
         let (x, y) = write_string_to_grid(
             &self.status,
             grid,
-            Color::Byte(123),
-            Color::Byte(26),
-            Attr::Default,
+            attribute.fg,
+            attribute.bg,
+            attribute.attrs,
             area,
             None,
         );
+        for c in grid.row_iter_from(x.., y) {
+            grid[c]
+                .set_ch(' ')
+                .set_fg(attribute.fg)
+                .set_bg(attribute.bg)
+                .set_attrs(attribute.attrs);
+        }
         let offset = self.status.find('|').unwrap_or_else(|| self.status.len());
         if y < get_y(bottom_right!(area)) + 1 {
             for x in get_x(upper_left!(area))
@@ -785,15 +792,16 @@ impl StatusBar {
                 grid[(x, y)].set_attrs(Attr::Bold);
             }
         }
+        let noto_colors = crate::conf::value(context, "status.notification");
         if self.cur_notification.is_some() {
             let (t, n) = self.cur_notification.as_ref().unwrap();
             if std::time::Instant::now().duration_since(*t) < std::time::Duration::new(5, 0) {
                 write_string_to_grid(
                     n,
                     grid,
-                    Color::Byte(219),
-                    Color::Byte(88),
-                    Attr::Default,
+                    noto_colors.fg,
+                    noto_colors.bg,
+                    noto_colors.attrs,
                     (
                         (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
                         bottom_right!(area),
@@ -809,9 +817,9 @@ impl StatusBar {
                 write_string_to_grid(
                     &n,
                     grid,
-                    Color::Byte(219),
-                    Color::Byte(88),
-                    Attr::Default,
+                    noto_colors.fg,
+                    noto_colors.bg,
+                    noto_colors.attrs,
                     (
                         (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
                         bottom_right!(area),
@@ -831,7 +839,6 @@ impl StatusBar {
             }
         }
 
-        change_colors(grid, area, Color::Byte(123), Color::Byte(26));
         context.dirty_areas.push_back(area);
     }
 

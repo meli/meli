@@ -46,6 +46,8 @@ pub struct DataColumns {
 #[derive(Debug, Default)]
 /// Save theme colors to avoid looking them up again and again from settings
 struct ColorCache {
+    theme_default: ThemeAttribute,
+
     unseen: ThemeAttribute,
     highlighted: ThemeAttribute,
     even: ThemeAttribute,
@@ -55,7 +57,6 @@ struct ColorCache {
     thread_snooze_flag: ThemeAttribute,
 
     /* Conversations */
-    general: ThemeAttribute,
     subject: ThemeAttribute,
     from: ThemeAttribute,
     date: ThemeAttribute,

@@ -366,6 +366,19 @@ impl CellBuffer {
             RowIterator { row, col: 0..0 }
         }
     }
+
+    /// row_iter() but with `RangeFrom`.
+    /// See `RowIterator` documentation.
+    pub fn row_iter_from(&self, bounds: std::ops::RangeFrom<usize>, row: usize) -> RowIterator {
+        if row < self.rows {
+            RowIterator {
+                row,
+                col: std::cmp::min(self.cols.saturating_sub(1), bounds.start)..self.cols,
+            }
+        } else {
+            RowIterator { row, col: 0..0 }
+        }
+    }
 }
 
 impl Deref for CellBuffer {
