@@ -738,19 +738,20 @@ impl Threads {
             .in_reply_to()
             .map(crate::email::StrBuild::raw)
             .and_then(|r| self.message_ids.get(r).cloned());
-        if other_folder
-            && reply_to_id.is_none()
-            && !envelopes_lck[&env_hash]
-                .references()
-                .iter()
-                .any(|r| self.message_ids.contains_key(r.raw()))
+        let message_id = envelopes_lck[&env_hash].message_id().raw();
+        if self.message_ids_set.contains(message_id)
+            && !self.missing_message_ids.contains(message_id)
         {
             return false;
         }
 
-        let message_id = envelopes_lck[&env_hash].message_id().raw();
-        if self.message_ids.contains_key(message_id)
-            && !self.missing_message_ids.contains(message_id)
+        if other_folder
+            && reply_to_id.is_none()
+            && !self.message_ids.contains_key(message_id)
+            && !envelopes_lck[&env_hash]
+                .references()
+                .iter()
+                .any(|r| self.message_ids.contains_key(r.raw()))
         {
             return false;
         }
@@ -770,69 +771,76 @@ impl Threads {
             node.unseen = !envelopes_lck[&env_hash].is_seen();
         }
 
-        self.groups.insert(
-            self.thread_nodes[&new_id].group,
-            ThreadGroup::Root(Thread {
-                root: new_id,
-                date: envelopes_lck[&env_hash].date(),
-                len: 1,
-                unseen: if !envelopes_lck[&env_hash].is_seen() {
-                    1
-                } else {
-                    0
-                },
-                attachments: if envelopes_lck[&env_hash].has_attachments() {
-                    1
-                } else {
-                    0
-                },
-                snoozed: false,
-            }),
-        );
-        self.message_ids
-            .insert(envelopes_lck[&env_hash].message_id().raw().to_vec(), new_id);
-        self.message_ids_set.insert(
-            envelopes_lck[&env_hash]
-                .message_id()
-                .raw()
-                .to_vec()
-                .to_vec(),
-        );
-        self.missing_message_ids
-            .remove(envelopes_lck[&env_hash].message_id().raw());
+        if !self.groups.contains_key(&self.thread_nodes[&new_id].group) {
+            self.groups.insert(
+                self.thread_nodes[&new_id].group,
+                ThreadGroup::Root(Thread {
+                    root: new_id,
+                    date: envelopes_lck[&env_hash].date(),
+                    len: 1,
+                    unseen: if !envelopes_lck[&env_hash].is_seen() {
+                        1
+                    } else {
+                        0
+                    },
+                    attachments: if envelopes_lck[&env_hash].has_attachments() {
+                        1
+                    } else {
+                        0
+                    },
+                    snoozed: false,
+                }),
+            );
+        } else {
+            let parent_group = self.thread_ref_mut(self.thread_nodes[&new_id].group);
+            parent_group.date = std::cmp::max(parent_group.date, envelopes_lck[&env_hash].date());
+            parent_group.len += 1;
+            parent_group.unseen += if !envelopes_lck[&env_hash].is_seen() {
+                1
+            } else {
+                0
+            };
+            parent_group.attachments += if envelopes_lck[&env_hash].has_attachments() {
+                1
+            } else {
+                0
+            };
+        }
+
+        self.message_ids.insert(message_id.to_vec(), new_id);
+        self.message_ids_set.insert(message_id.to_vec());
+        self.missing_message_ids.remove(message_id);
         self.hash_set.insert(env_hash);
         if let Some(reply_to_id) = reply_to_id {
             make!((reply_to_id) parent of (new_id), self);
-        } else {
-            if let Some(r) = envelopes_lck[&env_hash]
-                .in_reply_to()
-                .map(crate::email::StrBuild::raw)
-            {
-                let reply_to_id = ThreadNodeHash::new();
-                self.thread_nodes.insert(
-                    reply_to_id,
-                    ThreadNode {
-                        date: envelopes_lck[&env_hash].date(),
-                        ..ThreadNode::new()
-                    },
-                );
+        } else if let Some(r) = envelopes_lck[&env_hash]
+            .in_reply_to()
+            .map(crate::email::StrBuild::raw)
+        {
+            let reply_to_id = ThreadNodeHash::new();
+            self.thread_nodes.insert(
+                reply_to_id,
+                ThreadNode {
+                    date: envelopes_lck[&env_hash].date(),
+                    ..ThreadNode::new()
+                },
+            );
 
-                self.groups.insert(
-                    self.thread_nodes[&reply_to_id].group,
-                    ThreadGroup::Root(Thread {
-                        root: reply_to_id,
-                        date: envelopes_lck[&env_hash].date(),
-                        len: 0,
-                        unseen: 0,
-                        attachments: 0,
-                        snoozed: false,
-                    }),
-                );
-                make!((reply_to_id) parent of (new_id), self);
-                self.missing_message_ids.insert(r.to_vec());
-                self.message_ids.insert(r.to_vec(), reply_to_id);
-                self.message_ids_set.insert(r.to_vec().to_vec());
-            }
+            self.groups.insert(
+                self.thread_nodes[&reply_to_id].group,
+                ThreadGroup::Root(Thread {
+                    root: reply_to_id,
+                    date: envelopes_lck[&env_hash].date(),
+                    len: 0,
+                    unseen: 0,
+                    attachments: 0,
+                    snoozed: false,
+                }),
+            );
+            make!((reply_to_id) parent of (new_id), self);
+            self.message_ids.insert(r.to_vec(), reply_to_id);
+            self.message_ids_set.insert(r.to_vec());
+            self.missing_message_ids.insert(r.to_vec());
         }
 
         if envelopes_lck[&env_hash].references.is_some() {
@@ -875,8 +883,7 @@ impl Threads {
                     make!((id) parent of (current_descendant_id), self);
                     self.missing_message_ids.insert(reference.raw().to_vec());
                     self.message_ids.insert(reference.raw().to_vec(), id);
-                    self.message_ids_set
-                        .insert(reference.raw().to_vec().to_vec());
+                    self.message_ids_set.insert(reference.raw().to_vec());
                     current_descendant_id = id;
                 }
             }
