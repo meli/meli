@@ -307,11 +307,9 @@ impl Theme {
             }
         }
         let hash_set: HashSet<&'static str> = DEFAULT_KEYS.into_iter().map(|k| *k).collect();
-        let keys: Vec<&'_ str> = self
+        let keys = self
             .light
             .keys()
-            .chain(self.dark.keys())
-            .chain(self.other_themes.values().flat_map(|v| v.keys()))
             .filter_map(|k| {
                 if !hash_set.contains(&k.as_ref()) {
                     Some(k.as_ref())
@@ -319,12 +317,53 @@ impl Theme {
                     None
                 }
             })
-            .collect();
-        if keys.is_empty() {
-            Ok(())
-        } else {
-            Err(format!("Unrecognized theme keywords: {}", keys.join(", ")).into())
+            .collect::<SmallVec<[&'_ str; 128]>>();
+        if !keys.is_empty() {
+            return Err(format!(
+                "light theme contains unrecognized theme keywords: {}",
+                keys.join(", ")
+            )
+            .into());
         }
+        let keys = self
+            .dark
+            .keys()
+            .filter_map(|k| {
+                if !hash_set.contains(&k.as_ref()) {
+                    Some(k.as_ref())
+                } else {
+                    None
+                }
+            })
+            .collect::<SmallVec<[&'_ str; 128]>>();
+        if !keys.is_empty() {
+            return Err(format!(
+                "light theme contains unrecognized theme keywords: {}",
+                keys.join(", ")
+            )
+            .into());
+        }
+        for (name, t) in self.other_themes.iter() {
+            let keys = t
+                .keys()
+                .filter_map(|k| {
+                    if !hash_set.contains(&k.as_ref()) {
+                        Some(k.as_ref())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<SmallVec<[&'_ str; 128]>>();
+            if !keys.is_empty() {
+                return Err(format!(
+                    "`{}` theme contains unrecognized theme keywords: {}",
+                    name,
+                    keys.join(", ")
+                )
+                .into());
+            }
+        }
+        Ok(())
     }
 
     pub fn key_to_string(&self, key: &str, unlink: bool) -> String {
