@@ -740,7 +740,7 @@ impl Color {
             | b @ Color::Cyan
             | b @ Color::White
             | b @ Color::Default => AnsiValue(b.as_byte()),
-            Color::Byte(b) => AnsiValue(b as u8),
+            Color::Byte(b) => AnsiValue(b),
             Color::Rgb(_, _, _) => AnsiValue(0),
         }
     }

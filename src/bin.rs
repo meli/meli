@@ -290,7 +290,7 @@ fn run_app() -> Result<()> {
             crossbeam::select! {
                 recv(receiver) -> r => {
                     match r {
-                         Ok(ThreadEvent::Pulse) => {},
+                         Ok(ThreadEvent::Pulse) | Ok(ThreadEvent::UIEvent(UIEvent::Timer(_))) => {},
                         _ => {debug!(&r);}
                     }
                     match r.unwrap() {

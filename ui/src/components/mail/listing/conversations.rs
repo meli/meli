@@ -748,19 +748,21 @@ impl ConversationsListing {
                 );
                 self.content[(x, 3 * idx)].set_bg(color);
                 if _x < width {
-                    self.content[(_x, 3 * idx)].set_bg(color);
-                    self.content[(_x, 3 * idx)].set_keep_bg(true);
+                    self.content[(_x, 3 * idx)].set_bg(color).set_keep_bg(true);
                 }
                 for x in (x + 1).._x {
-                    self.content[(x, 3 * idx)].set_keep_fg(true);
-                    self.content[(x, 3 * idx)].set_keep_bg(true);
+                    self.content[(x, 3 * idx)]
+                        .set_keep_fg(true)
+                        .set_keep_bg(true);
                 }
                 self.content[(x, 3 * idx)].set_keep_bg(true);
                 x = _x + 1;
             }
             for x in x..width {
-                self.content[(x, 3 * idx)].set_ch(' ');
-                self.content[(x, 3 * idx)].set_bg(bg_color);
+                self.content[(x, 3 * idx)]
+                    .set_ch(' ')
+                    .set_fg(fg_color)
+                    .set_bg(bg_color);
             }
             /* Next line, draw date */
             let (x, _) = write_string_to_grid(
@@ -773,8 +775,10 @@ impl ConversationsListing {
                 None,
             );
             for x in x..(x + 4) {
-                self.content[(x, 3 * idx + 1)].set_ch('▁');
-                self.content[(x, 3 * idx + 1)].set_bg(bg_color);
+                self.content[(x, 3 * idx + 1)]
+                    .set_ch('▁')
+                    .set_fg(fg_color)
+                    .set_bg(bg_color);
             }
             /* draw from */
             let (x, _) = write_string_to_grid(
@@ -788,13 +792,16 @@ impl ConversationsListing {
             );
 
             for x in x..width {
-                self.content[(x, 3 * idx + 1)].set_ch('▁');
-                self.content[(x, 3 * idx + 1)].set_bg(bg_color);
+                self.content[(x, 3 * idx + 1)]
+                    .set_ch('▁')
+                    .set_fg(fg_color)
+                    .set_bg(bg_color);
             }
             for x in 0..width {
-                self.content[(x, 3 * idx + 2)].set_ch('▓');
-                self.content[(x, 3 * idx + 2)].set_fg(padding_fg);
-                self.content[(x, 3 * idx + 2)].set_bg(bg_color);
+                self.content[(x, 3 * idx + 2)]
+                    .set_ch('▓')
+                    .set_fg(padding_fg)
+                    .set_bg(bg_color);
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {
