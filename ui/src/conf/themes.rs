@@ -149,6 +149,10 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "tab.focused",
     "tab.unfocused",
     "tab.bar",
+    "widgets.form.label",
+    "widgets.form.field",
+    "widgets.form.highlighted",
+    "widgets.options.highlighted",
     "mail.sidebar",
     "mail.sidebar_unread_count",
     "mail.sidebar_index",
@@ -166,6 +170,8 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "mail.listing.plain.even",
     "mail.listing.plain.odd",
     "mail.listing.plain.unseen",
+    "mail.listing.plain.selected",
+    "mail.listing.plain.highlighted",
     "mail.listing.conversations",
     "mail.listing.conversations.subject",
     "mail.listing.conversations.from",
@@ -212,6 +218,12 @@ impl<T> From<&'static str> for ThemeValue<T> {
 
 impl From<Color> for ThemeValue<Color> {
     fn from(from: Color) -> Self {
+        ThemeValue::Value(from)
+    }
+}
+
+impl From<Attr> for ThemeValue<Attr> {
+    fn from(from: Attr) -> Self {
         ThemeValue::Value(from)
     }
 }
@@ -440,8 +452,16 @@ impl Default for Theme {
         add!("status.notification", dark = { fg: Color::Byte(219), bg: Color::Byte(88) }, light = { fg: Color::Byte(219), bg: Color::Byte(88) });
 
         add!("tab.focused");
-        add!("tab.unfocused");
+        add!("tab.unfocused", dark = { fg: Color::Byte(15), bg: Color::Byte(8), }, light = { fg: Color::Byte(15), bg: Color::Byte(8), });
         add!("tab.bar");
+        add!(
+            "widgets.form.label",
+            dark = { attrs: Attr::Bold },
+            light = { attrs: Attr::Bold }
+        );
+        add!("widgets.form.field");
+        add!("widgets.form.highlighted", light = { bg: Color::Byte(246) }, dark = { bg: Color::Byte(246) });
+        add!("widgets.options.highlighted", light = { bg: Color::Byte(8) }, dark = { bg: Color::Byte(8) });
 
         /* Mail Sidebar */
 
@@ -598,13 +618,45 @@ impl Default for Theme {
             }
         );
 
-        add!("mail.listing.plain.even");
+        /* PlainListing */
+        add!("mail.listing.plain.even",
+            dark = {
+                bg: Color::Byte(236)
+            },
+            light = {
+                bg: Color::Byte(252)
+            }
+        );
         add!("mail.listing.plain.odd");
-        add!("mail.listing.plain.unseen");
-        add!("mail.listing.conversations.subject");
-        add!("mail.listing.conversations.from");
-        add!("mail.listing.conversations.date");
-        add!("mail.listing.conversations.unseen_padding");
+        add!(
+            "mail.listing.plain.unseen",
+            dark = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+
+            },
+            light = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+            }
+        );
+        add!("mail.listing.plain.selected",
+            dark = {
+                bg: Color::Byte(210)
+            },
+            light = {
+                bg: Color::Byte(210)
+            }
+        );
+        add!(
+            "mail.listing.plain.highlighted",
+            dark = {
+                bg: Color::Byte(246)
+            },
+            light = {
+                bg: Color::Byte(244)
+            }
+        );
 
         add!(
             "mail.view.headers",

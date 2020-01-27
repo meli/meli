@@ -375,15 +375,16 @@ impl Component for FormWidget {
                 ),
             );
 
+            let label_attrs = crate::conf::value(context, "widgets.form.label");
             for (i, k) in self.layout.iter().enumerate() {
                 let v = self.fields.get_mut(k).unwrap();
                 /* Write field label */
                 write_string_to_grid(
                     k.as_str(),
                     grid,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Bold,
+                    label_attrs.fg,
+                    label_attrs.bg,
+                    label_attrs.attrs,
                     (
                         pos_inc(upper_left, (1, i)),
                         set_y(bottom_right, i + get_y(upper_left)),
@@ -403,15 +404,25 @@ impl Component for FormWidget {
                 /* Highlight if necessary */
                 if i == self.cursor {
                     if self.focus == FormFocus::Fields {
-                        change_colors(
-                            grid,
-                            (
-                                pos_inc(upper_left, (0, i)),
-                                set_y(bottom_right, i + get_y(upper_left)),
-                            ),
-                            Color::Default,
-                            Color::Byte(246),
-                        );
+                        let mut field_attrs =
+                            crate::conf::value(context, "widgets.form.highlighted");
+                        if std::env::var("NO_COLOR").is_ok()
+                            && (context.settings.terminal.use_color.is_false()
+                                || context.settings.terminal.use_color.is_internal())
+                        {
+                            field_attrs.attrs |= Attr::Reverse;
+                        }
+                        for row in grid.bounds_iter((
+                            pos_inc(upper_left, (0, i)),
+                            set_y(bottom_right, i + get_y(upper_left)),
+                        )) {
+                            for c in row {
+                                grid[c]
+                                    .set_fg(field_attrs.fg)
+                                    .set_bg(field_attrs.bg)
+                                    .set_attrs(field_attrs.attrs);
+                            }
+                        }
                     }
                     if self.focus == FormFocus::TextInput {
                         v.draw_cursor(

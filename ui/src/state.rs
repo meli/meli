@@ -179,6 +179,7 @@ pub struct State {
     draw_rate_limit: RateLimit,
     stdout: Option<StateStdout>,
     child: Option<ForkType>,
+    draw_horizontal_segment_fn: fn(&mut State, usize, usize, usize) -> (),
     pub mode: UIMode,
     components: Vec<Box<dyn Component>>,
     pub context: Context,
@@ -274,6 +275,14 @@ impl State {
             components: Vec::with_capacity(1),
             timer,
             draw_rate_limit: RateLimit::new(1, 3),
+            draw_horizontal_segment_fn: if env::var("NO_COLOR").is_ok()
+                && (settings.terminal.use_color.is_false()
+                    || settings.terminal.use_color.is_internal())
+            {
+                State::draw_horizontal_segment_no_color
+            } else {
+                State::draw_horizontal_segment
+            },
 
             context: Context {
                 accounts,
@@ -457,18 +466,18 @@ impl State {
                     continue;
                 }
                 if let Some((x_start, x_end)) = segment.take() {
-                    self.draw_horizontal_segment(x_start, x_end, y);
+                    (self.draw_horizontal_segment_fn)(self, x_start, x_end, y);
                 }
                 match segment {
                     ref mut s @ None => {
                         *s = Some((*x_start, *x_end));
                     }
                     ref mut s @ Some(_) if s.unwrap().1 < *x_start => {
-                        self.draw_horizontal_segment(s.unwrap().0, s.unwrap().1, y);
+                        (self.draw_horizontal_segment_fn)(self, s.unwrap().0, s.unwrap().1, y);
                         *s = Some((*x_start, *x_end));
                     }
                     ref mut s @ Some(_) if s.unwrap().1 < *x_end => {
-                        self.draw_horizontal_segment(s.unwrap().0, s.unwrap().1, y);
+                        (self.draw_horizontal_segment_fn)(self, s.unwrap().0, s.unwrap().1, y);
                         *s = Some((s.unwrap().1, *x_end));
                     }
                     Some((_, ref mut x)) => {
@@ -477,7 +486,7 @@ impl State {
                 }
             }
             if let Some((x_start, x_end)) = segment {
-                self.draw_horizontal_segment(x_start, x_end, y);
+                (self.draw_horizontal_segment_fn)(self, x_start, x_end, y);
             }
         }
         self.flush();
@@ -514,6 +523,33 @@ impl State {
             if c.fg() != current_fg {
                 c.fg().write_fg(stdout).unwrap();
                 current_fg = c.fg();
+            }
+            if !c.empty() {
+                write!(stdout, "{}", c.ch()).unwrap();
+            }
+        }
+    }
+
+    fn draw_horizontal_segment_no_color(&mut self, x_start: usize, x_end: usize, y: usize) {
+        write!(
+            self.stdout(),
+            "{}",
+            cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
+        )
+        .unwrap();
+        let mut current_attrs = Attr::Default;
+        let Self {
+            ref grid,
+            ref mut stdout,
+            ..
+        } = self;
+        let stdout = stdout.as_mut().unwrap();
+        write!(stdout, "\x1B[m").unwrap();
+        for x in x_start..=x_end {
+            let c = &grid[(x, y)];
+            if c.attrs() != current_attrs {
+                c.attrs().write(current_attrs, stdout).unwrap();
+                current_attrs = c.attrs();
             }
             if !c.empty() {
                 write!(stdout, "{}", c.ch()).unwrap();

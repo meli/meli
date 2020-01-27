@@ -366,19 +366,6 @@ impl CellBuffer {
             RowIterator { row, col: 0..0 }
         }
     }
-
-    /// row_iter() but with `RangeFrom`.
-    /// See `RowIterator` documentation.
-    pub fn row_iter_from(&self, bounds: std::ops::RangeFrom<usize>, row: usize) -> RowIterator {
-        if row < self.rows {
-            RowIterator {
-                row,
-                col: std::cmp::min(self.cols.saturating_sub(1), bounds.start)..self.cols,
-            }
-        } else {
-            RowIterator { row, col: 0..0 }
-        }
-    }
 }
 
 impl Deref for CellBuffer {
@@ -1407,11 +1394,46 @@ pub enum Attr {
     BoldReverseUnderline = 0b111,
 }
 
+impl core::ops::BitOr for Attr {
+    type Output = Attr;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        match self as u8 | rhs as u8 {
+            0b000 => Attr::Default,
+            0b001 => Attr::Bold,
+            0b100 => Attr::Underline,
+            0b011 => Attr::BoldUnderline,
+            0b010 => Attr::Reverse,
+            0b101 => Attr::BoldReverse,
+            0b110 => Attr::UnderlineReverse,
+            0b111 => Attr::BoldReverseUnderline,
+            _ => unsafe { std::hint::unreachable_unchecked() },
+        }
+    }
+}
+
 impl core::ops::BitAnd for Attr {
     type Output = bool;
 
     fn bitand(self, rhs: Self) -> Self::Output {
         self as u8 & rhs as u8 > 0
+    }
+}
+
+impl core::ops::BitOrAssign for Attr {
+    fn bitor_assign(&mut self, rhs: Attr) {
+        use Attr::*;
+        *self = match *self as u8 | rhs as u8 {
+            0b000 => Default,
+            0b001 => Bold,
+            0b100 => Underline,
+            0b011 => BoldUnderline,
+            0b010 => Reverse,
+            0b101 => BoldReverse,
+            0b110 => UnderlineReverse,
+            0b111 => BoldReverseUnderline,
+            _ => unsafe { std::hint::unreachable_unchecked() },
+        };
     }
 }
 

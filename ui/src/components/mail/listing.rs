@@ -1050,49 +1050,38 @@ impl Listing {
             if idx == lines_len {
                 break;
             }
-            let (
-                fg_color,
-                bg_color,
-                index_fg_color,
-                index_bg_color,
-                unread_count_fg,
-                unread_count_bg,
-            ) = if must_highlight_account {
+            let (att, index_att, unread_count_att) = if must_highlight_account {
                 if self.cursor_pos.1 == idx {
-                    (
-                        crate::conf::value(context, "mail.sidebar_highlighted").fg,
-                        crate::conf::value(context, "mail.sidebar_highlighted").bg,
-                        crate::conf::value(context, "mail.sidebar_highlighted_index").fg,
-                        crate::conf::value(context, "mail.sidebar_highlighted_index").bg,
-                        crate::conf::value(context, "mail.sidebar_highlighted_unread_count").fg,
-                        crate::conf::value(context, "mail.sidebar_highlighted_unread_count").bg,
-                    )
+                    let mut ret = (
+                        crate::conf::value(context, "mail.sidebar_highlighted"),
+                        crate::conf::value(context, "mail.sidebar_highlighted_index"),
+                        crate::conf::value(context, "mail.sidebar_highlighted_unread_count"),
+                    );
+
+                    if std::env::var("NO_COLOR").is_ok()
+                        && (context.settings.terminal.use_color.is_false()
+                            || context.settings.terminal.use_color.is_internal())
+                    {
+                        ret.0.attrs |= Attr::Reverse;
+                        ret.1.attrs |= Attr::Reverse;
+                        ret.2.attrs |= Attr::Reverse;
+                    }
+                    ret
                 } else {
                     (
-                        crate::conf::value(context, "mail.sidebar_highlighted_account").fg,
-                        crate::conf::value(context, "mail.sidebar_highlighted_account").bg,
-                        crate::conf::value(context, "mail.sidebar_highlighted_account_index").fg,
-                        crate::conf::value(context, "mail.sidebar_highlighted_account_index").bg,
+                        crate::conf::value(context, "mail.sidebar_highlighted_account"),
+                        crate::conf::value(context, "mail.sidebar_highlighted_account_index"),
                         crate::conf::value(
                             context,
                             "mail.sidebar_highlighted_account_unread_count",
-                        )
-                        .fg,
-                        crate::conf::value(
-                            context,
-                            "mail.sidebar_highlighted_account_unread_count",
-                        )
-                        .bg,
+                        ),
                     )
                 }
             } else {
                 (
-                    crate::conf::value(context, "mail.sidebar").fg,
-                    crate::conf::value(context, "mail.sidebar").bg,
-                    crate::conf::value(context, "mail.sidebar_index").fg,
-                    crate::conf::value(context, "mail.sidebar_index").bg,
-                    crate::conf::value(context, "mail.sidebar_unread_count").fg,
-                    crate::conf::value(context, "mail.sidebar_unread_count").bg,
+                    crate::conf::value(context, "mail.sidebar"),
+                    crate::conf::value(context, "mail.sidebar_index"),
+                    crate::conf::value(context, "mail.sidebar_unread_count"),
                 )
             };
 
@@ -1117,27 +1106,27 @@ impl Listing {
             let (x, _) = write_string_to_grid(
                 &format!("{:>width$}", inc, width = total_folder_no_digits),
                 grid,
-                index_fg_color,
-                index_bg_color,
-                Attr::Default,
+                index_att.fg,
+                index_att.bg,
+                index_att.attrs,
                 (set_y(upper_left, y), bottom_right),
                 None,
             );
             let (x, _) = write_string_to_grid(
                 &" ".repeat(depth + 1),
                 grid,
-                fg_color,
-                bg_color,
-                Attr::Default,
+                att.fg,
+                att.bg,
+                att.attrs,
                 ((x, y), bottom_right),
                 None,
             );
             let (x, _) = write_string_to_grid(
                 entries[&folder_idx].name(),
                 grid,
-                fg_color,
-                bg_color,
-                Attr::Default,
+                att.fg,
+                att.bg,
+                att.attrs,
                 ((x, y), bottom_right),
                 None,
             );
@@ -1156,13 +1145,14 @@ impl Listing {
             let (x, _) = write_string_to_grid(
                 &count_string,
                 grid,
-                unread_count_fg,
-                unread_count_bg,
-                if count.unwrap_or(0) > 0 {
-                    Attr::Bold
-                } else {
-                    Attr::Default
-                },
+                unread_count_att.fg,
+                unread_count_att.bg,
+                unread_count_att.attrs
+                    | if count.unwrap_or(0) > 0 {
+                        Attr::Bold
+                    } else {
+                        Attr::Default
+                    },
                 (
                     (
                         /* Hide part of folder name if need be to fit the message count */
@@ -1173,7 +1163,9 @@ impl Listing {
                 ),
                 None,
             );
-            change_colors(grid, ((x, y), set_y(bottom_right, y)), fg_color, bg_color);
+            for c in grid.row_iter(x..(get_x(bottom_right) + 1), y) {
+                grid[c].set_fg(att.fg).set_bg(att.bg).set_attrs(att.attrs);
+            }
             idx += 1;
         }
         if idx == 0 {

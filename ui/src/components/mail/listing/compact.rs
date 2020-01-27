@@ -146,14 +146,31 @@ impl ListingTrait for CompactListing {
         } else {
             self.color_cache.odd.bg
         };
+        let attrs = if self.cursor_pos.2 == idx {
+            self.color_cache.highlighted.attrs
+        } else if self.selection[&thread_hash] {
+            self.color_cache.selected.attrs
+        } else if thread.unseen() > 0 {
+            self.color_cache.unseen.attrs
+        } else if idx % 2 == 0 {
+            self.color_cache.even.attrs
+        } else {
+            self.color_cache.odd.attrs
+        };
 
         let (upper_left, bottom_right) = area;
-        change_colors(grid, area, fg_color, bg_color);
         let x = get_x(upper_left)
             + self.data_columns.widths[0]
             + self.data_columns.widths[1]
             + self.data_columns.widths[2]
             + 3 * 2;
+
+        for c in grid.row_iter(
+            get_x(upper_left)..(get_x(bottom_right) + 1),
+            get_y(upper_left),
+        ) {
+            grid[c].set_fg(fg_color).set_bg(bg_color).set_attrs(attrs);
+        }
 
         copy_area(
             grid,
@@ -165,7 +182,7 @@ impl ListingTrait for CompactListing {
             ),
         );
         for c in grid.row_iter(x..(self.data_columns.widths[3] + x), get_y(upper_left)) {
-            grid[c].set_bg(bg_color);
+            grid[c].set_bg(bg_color).set_attrs(attrs);
         }
         return;
     }
@@ -641,6 +658,12 @@ impl CompactListing {
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             ..self.color_cache
         };
+        if std::env::var("NO_COLOR").is_ok()
+            && (context.settings.terminal.use_color.is_false()
+                || context.settings.terminal.use_color.is_internal())
+        {
+            self.color_cache.highlighted.attrs |= Attr::Reverse;
+        }
 
         // Get mailbox as a reference.
         //

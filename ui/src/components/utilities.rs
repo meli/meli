@@ -764,7 +764,13 @@ impl StatusBar {
         }
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        let attribute = crate::conf::value(context, "status.bar");
+        let mut attribute = crate::conf::value(context, "status.bar");
+        if std::env::var("NO_COLOR").is_ok()
+            && (context.settings.terminal.use_color.is_false()
+                || context.settings.terminal.use_color.is_internal())
+        {
+            attribute.attrs |= Attr::Reverse;
+        }
         let (x, y) = write_string_to_grid(
             &self.status,
             grid,
@@ -774,7 +780,7 @@ impl StatusBar {
             area,
             None,
         );
-        for c in grid.row_iter_from(x.., y) {
+        for c in grid.row_iter(x..(get_x(bottom_right!(area)) + 1), y) {
             grid[c]
                 .set_ch(' ')
                 .set_fg(attribute.fg)
@@ -789,7 +795,7 @@ impl StatusBar {
                     get_x(bottom_right!(area)),
                 )
             {
-                grid[(x, y)].set_attrs(Attr::Bold);
+                grid[(x, y)].set_attrs(attribute.attrs | Attr::Bold);
             }
         }
         let noto_colors = crate::conf::value(context, "status.notification");
@@ -1369,21 +1375,29 @@ impl Tabbed {
             clear_area(grid, area);
             return;
         }
+        let mut tab_focused_attribute = crate::conf::value(context, "tab.focused");
+        let tab_unfocused_attribute = crate::conf::value(context, "tab.unfocused");
+        if std::env::var("NO_COLOR").is_ok()
+            && (context.settings.terminal.use_color.is_false()
+                || context.settings.terminal.use_color.is_internal())
+        {
+            tab_focused_attribute.attrs |= Attr::Reverse;
+        }
 
         let mut x = get_x(upper_left);
         let y: usize = get_y(upper_left);
         for (idx, c) in self.children.iter().enumerate() {
-            let (fg, bg) = if idx == self.cursor_pos {
-                (Color::Default, Color::Default)
+            let ThemeAttribute { fg, bg, attrs } = if idx == self.cursor_pos {
+                tab_focused_attribute
             } else {
-                (Color::Byte(15), Color::Byte(8))
+                tab_unfocused_attribute
             };
             let (x_, _y_) = write_string_to_grid(
                 &format!(" {} ", c),
                 grid,
                 fg,
                 bg,
-                Attr::Default,
+                attrs,
                 (set_x(upper_left, x), bottom_right!(area)),
                 None,
             );
@@ -1408,9 +1422,11 @@ impl Tabbed {
         }
 
         if self.cursor_pos == self.children.len() - 1 {
-            cslice[(y * cols) + x].set_ch('▍');
-            cslice[(y * cols) + x].set_fg(Color::Byte(8));
-            cslice[(y * cols) + x].set_bg(Color::Default);
+            cslice[(y * cols) + x]
+                .set_ch('▍')
+                .set_fg(tab_unfocused_attribute.bg)
+                .set_bg(tab_unfocused_attribute.fg)
+                .set_attrs(tab_unfocused_attribute.attrs);
         }
 
         context.dirty_areas.push_back(area);
@@ -1838,6 +1854,13 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         let (width, height) = self.content.size();
         let shortcuts = self.get_shortcuts(context);
+        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
+        if std::env::var("NO_COLOR").is_ok()
+            && (context.settings.terminal.use_color.is_false()
+                || context.settings.terminal.use_color.is_internal())
+        {
+            highlighted_attrs.attrs |= Attr::Reverse;
+        }
         match (event, self.cursor) {
             (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
                 /* User can only select one entry, so Enter key finalises the selection */
@@ -1893,34 +1916,34 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
             (UIEvent::Input(Key::Up), SelectorCursor::Entry(c)) if c > 0 => {
                 if self.single_only {
                     // Redraw selection
-                    change_colors(
-                        &mut self.content,
-                        ((2, c + 2), (width - 2, c + 2)),
-                        Color::Default,
-                        Color::Default,
-                    );
-                    change_colors(
-                        &mut self.content,
-                        ((2, c + 1), (width - 2, c + 1)),
-                        Color::Default,
-                        Color::Byte(8),
-                    );
+                    for c in self.content.row_iter(2..(width - 2), c + 2) {
+                        self.content[c]
+                            .set_fg(Color::Default)
+                            .set_bg(Color::Default)
+                            .set_attrs(Attr::Default);
+                    }
+                    for c in self.content.row_iter(2..(width - 2), c + 1) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
                     self.entries[c].1 = false;
                     self.entries[c - 1].1 = true;
                 } else {
                     // Redraw cursor
-                    change_colors(
-                        &mut self.content,
-                        ((2, c + 2), (4, c + 2)),
-                        Color::Default,
-                        Color::Default,
-                    );
-                    change_colors(
-                        &mut self.content,
-                        ((2, c + 1), (4, c + 1)),
-                        Color::Default,
-                        Color::Byte(8),
-                    );
+                    for c in self.content.row_iter(2..4, c + 2) {
+                        self.content[c]
+                            .set_fg(Color::Default)
+                            .set_bg(Color::Default)
+                            .set_attrs(Attr::Default);
+                    }
+                    for c in self.content.row_iter(2..4, c + 1) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
                 }
                 self.cursor = SelectorCursor::Entry(c - 1);
                 self.dirty = true;
@@ -1930,23 +1953,31 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
             | (UIEvent::Input(ref key), SelectorCursor::Cancel)
                 if shortcut!(key == shortcuts["general"]["scroll_up"]) =>
             {
-                change_colors(
-                    &mut self.content,
-                    (
-                        ((width - "OK    Cancel".len()) / 2, height - 3),
-                        (width - 1, height - 3),
-                    ),
-                    Color::Default,
-                    Color::Default,
-                );
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2)..(width - 1),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(Color::Default)
+                        .set_bg(Color::Default)
+                        .set_attrs(Attr::Default);
+                }
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
-                change_colors(
-                    &mut self.content,
-                    ((2, c + 2), (4, c + 2)),
-                    Color::Default,
-                    Color::Byte(8),
-                );
+                let mut highlighted_attrs =
+                    crate::conf::value(context, "widgets.options.highlighted");
+                if std::env::var("NO_COLOR").is_ok()
+                    && (context.settings.terminal.use_color.is_false()
+                        || context.settings.terminal.use_color.is_internal())
+                {
+                    highlighted_attrs.attrs |= Attr::Reverse;
+                }
+                for c in self.content.row_iter(2..4, c + 2) {
+                    self.content[c]
+                        .set_fg(highlighted_attrs.fg)
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                }
                 self.dirty = true;
                 return true;
             }
@@ -1956,34 +1987,34 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
             {
                 if self.single_only {
                     // Redraw selection
-                    change_colors(
-                        &mut self.content,
-                        ((2, c + 2), (width - 2, c + 2)),
-                        Color::Default,
-                        Color::Default,
-                    );
-                    change_colors(
-                        &mut self.content,
-                        ((2, c + 3), (width - 2, c + 3)),
-                        Color::Default,
-                        Color::Byte(8),
-                    );
+                    for c in self.content.row_iter(2..(width - 2), c + 2) {
+                        self.content[c]
+                            .set_fg(Color::Default)
+                            .set_bg(Color::Default)
+                            .set_attrs(Attr::Default);
+                    }
+                    for c in self.content.row_iter(2..(width - 2), c + 3) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
                     self.entries[c].1 = false;
                     self.entries[c + 1].1 = true;
                 } else {
                     // Redraw cursor
-                    change_colors(
-                        &mut self.content,
-                        ((2, c + 2), (4, c + 2)),
-                        Color::Default,
-                        Color::Default,
-                    );
-                    change_colors(
-                        &mut self.content,
-                        ((2, c + 3), (4, c + 3)),
-                        Color::Default,
-                        Color::Byte(8),
-                    );
+                    for c in self.content.row_iter(2..4, c + 2) {
+                        self.content[c]
+                            .set_fg(Color::Default)
+                            .set_bg(Color::Default)
+                            .set_attrs(Attr::Default);
+                    }
+                    for c in self.content.row_iter(2..4, c + 3) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
                 }
                 self.cursor = SelectorCursor::Entry(c + 1);
                 self.dirty = true;
@@ -1993,21 +2024,21 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 if !self.single_only && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                change_colors(
-                    &mut self.content,
-                    ((2, c + 2), (4, c + 2)),
-                    Color::Default,
-                    Color::Default,
-                );
-                change_colors(
-                    &mut self.content,
-                    (
-                        ((width - "OK    Cancel".len()) / 2, height - 3),
-                        ((width - "OK    Cancel".len()) / 2 + 1, height - 3),
-                    ),
-                    Color::Default,
-                    Color::Byte(8),
-                );
+                for c in self.content.row_iter(2..4, c + 2) {
+                    self.content[c]
+                        .set_fg(Color::Default)
+                        .set_bg(Color::Default)
+                        .set_attrs(Attr::Default);
+                }
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(highlighted_attrs.fg)
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                }
                 self.dirty = true;
                 return true;
             }
@@ -2015,24 +2046,25 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 if shortcut!(key == shortcuts["general"]["scroll_right"]) =>
             {
                 self.cursor = SelectorCursor::Cancel;
-                change_colors(
-                    &mut self.content,
-                    (
-                        ((width - "OK    Cancel".len()) / 2, height - 3),
-                        ((width - "OK    Cancel".len()) / 2 + 1, height - 3),
-                    ),
-                    Color::Default,
-                    Color::Default,
-                );
-                change_colors(
-                    &mut self.content,
-                    (
-                        ((width - "OK    Cancel".len()) / 2 + 6, height - 3),
-                        ((width - "OK    Cancel".len()) / 2 + 11, height - 3),
-                    ),
-                    Color::Default,
-                    Color::Byte(8),
-                );
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(Color::Default)
+                        .set_bg(Color::Default)
+                        .set_attrs(Attr::Default);
+                }
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2 + 6)
+                        ..((width - "OK    Cancel".len()) / 2 + 11),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(highlighted_attrs.fg)
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                }
                 self.dirty = true;
                 return true;
             }
@@ -2040,15 +2072,15 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 if shortcut!(key == shortcuts["general"]["scroll_left"]) =>
             {
                 self.cursor = SelectorCursor::Ok;
-                change_colors(
-                    &mut self.content,
-                    (
-                        ((width - "OK    Cancel".len()) / 2, height - 3),
-                        ((width - "OK    Cancel".len()) / 2 + 1, height - 3),
-                    ),
-                    Color::Default,
-                    Color::Byte(8),
-                );
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(highlighted_attrs.fg)
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                }
                 change_colors(
                     &mut self.content,
                     (
@@ -2213,6 +2245,13 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                 None,
             );
         }
+        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
+        if std::env::var("NO_COLOR").is_ok()
+            && (context.settings.terminal.use_color.is_false()
+                || context.settings.terminal.use_color.is_internal())
+        {
+            highlighted_attrs.attrs |= Attr::Reverse;
+        }
         if single_only {
             for (i, e) in entries.iter().enumerate() {
                 write_string_to_grid(
@@ -2220,11 +2259,15 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                     &mut content,
                     Color::Default,
                     if i == 0 {
-                        Color::Byte(8)
+                        highlighted_attrs.bg
                     } else {
                         Color::Default
                     },
-                    Attr::Default,
+                    if i == 0 {
+                        highlighted_attrs.attrs
+                    } else {
+                        Attr::Default
+                    },
                     ((2, i + 2), (width - 1, i + 2)),
                     None,
                 );
@@ -2241,9 +2284,15 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
                     None,
                 );
                 if i == 0 {
-                    content[(2, i + 2)].set_bg(Color::Byte(8));
-                    content[(3, i + 2)].set_bg(Color::Byte(8));
-                    content[(4, i + 2)].set_bg(Color::Byte(8));
+                    content[(2, i + 2)]
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                    content[(3, i + 2)]
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                    content[(4, i + 2)]
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
                 }
             }
             write_string_to_grid(

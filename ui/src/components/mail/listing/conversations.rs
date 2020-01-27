@@ -119,6 +119,15 @@ impl ListingTrait for ConversationsListing {
         } else {
             self.color_cache.theme_default.bg
         };
+        let attrs = if self.cursor_pos.2 == idx {
+            self.color_cache.highlighted.attrs
+        } else if self.selection[&thread_hash] {
+            self.color_cache.selected.attrs
+        } else if thread.unseen() > 0 {
+            self.color_cache.unseen.attrs
+        } else {
+            self.color_cache.theme_default.attrs
+        };
 
         copy_area(
             grid,
@@ -134,26 +143,38 @@ impl ListingTrait for ConversationsListing {
         let (x, y) = upper_left;
         if self.cursor_pos.2 == idx || self.selection[&thread_hash] {
             for x in x..=get_x(bottom_right) {
-                grid[(x, y)].set_fg(fg_color);
-                grid[(x, y)].set_bg(bg_color);
+                grid[(x, y)]
+                    .set_fg(fg_color)
+                    .set_bg(bg_color)
+                    .set_attrs(attrs);
 
-                grid[(x, y + 1)].set_fg(fg_color);
-                grid[(x, y + 1)].set_bg(bg_color);
+                grid[(x, y + 1)]
+                    .set_fg(fg_color)
+                    .set_bg(bg_color)
+                    .set_attrs(attrs);
 
-                grid[(x, y + 2)].set_fg(padding_fg);
-                grid[(x, y + 2)].set_bg(bg_color);
+                grid[(x, y + 2)]
+                    .set_fg(padding_fg)
+                    .set_bg(bg_color)
+                    .set_attrs(attrs);
             }
         } else if width < width!(area) {
             /* fill any remaining columns, if our view is wider than self.content */
             for x in (x + width)..=get_x(bottom_right) {
-                grid[(x, y)].set_fg(fg_color);
-                grid[(x, y)].set_bg(bg_color);
+                grid[(x, y)]
+                    .set_fg(fg_color)
+                    .set_bg(bg_color)
+                    .set_attrs(attrs);
 
-                grid[(x, y + 1)].set_fg(fg_color);
-                grid[(x, y + 1)].set_bg(bg_color);
+                grid[(x, y + 1)]
+                    .set_fg(fg_color)
+                    .set_bg(bg_color)
+                    .set_attrs(attrs);
 
-                grid[(x, y + 2)].set_fg(padding_fg);
-                grid[(x, y + 2)].set_bg(bg_color);
+                grid[(x, y + 2)]
+                    .set_fg(padding_fg)
+                    .set_bg(bg_color)
+                    .set_attrs(attrs);
             }
         }
         return;
@@ -570,6 +591,12 @@ impl ConversationsListing {
             ..self.color_cache
         };
 
+        if std::env::var("NO_COLOR").is_ok()
+            && (context.settings.terminal.use_color.is_false()
+                || context.settings.terminal.use_color.is_internal())
+        {
+            self.color_cache.highlighted.attrs |= Attr::Reverse;
+        }
         // Get mailbox as a reference.
         //
         match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
