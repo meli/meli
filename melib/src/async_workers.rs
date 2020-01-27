@@ -50,8 +50,6 @@ pub struct Work {
     priority: u64,
     pub is_static: bool,
     pub closure: Box<dyn FnOnce(WorkContext) -> () + Send + Sync>,
-    name: String,
-    status: String,
 }
 
 impl Ord for Work {
@@ -169,8 +167,6 @@ where
                 priority: self.priority,
                 is_static: self.is_static,
                 closure: work,
-                name: String::new(),
-                status: String::new(),
             }),
             tx: self.tx,
             rx: self.rx,

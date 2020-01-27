@@ -61,9 +61,9 @@ impl MailListingTrait for ConversationsListing {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
-        let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
+        let i = [self.get_thread_under_cursor(self.cursor_pos.2)];
         let cursor_iter;
         let sel_iter = if is_selection_empty {
             cursor_iter = None;
@@ -99,7 +99,7 @@ impl ListingTrait for ConversationsListing {
         if self.length == 0 {
             return;
         }
-        let thread_hash = self.get_thread_under_cursor(idx, context);
+        let thread_hash = self.get_thread_under_cursor(idx);
 
         let account = &context.accounts[self.cursor_pos.0];
         let threads = &account.collection.threads[&self.folder_hash];
@@ -610,7 +610,7 @@ impl ConversationsListing {
         if old_cursor_pos == self.new_cursor_pos {
             self.view.update(context);
         } else if self.unfocused {
-            let thread_group = self.get_thread_under_cursor(self.cursor_pos.2, context);
+            let thread_group = self.get_thread_under_cursor(self.cursor_pos.2);
 
             self.view = ThreadView::new(self.new_cursor_pos, thread_group, None, context);
         }
@@ -855,7 +855,7 @@ impl ConversationsListing {
         }
     }
 
-    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
+    fn get_thread_under_cursor(&self, cursor: usize) -> ThreadHash {
         if self.filter_term.is_empty() {
             *self
                 .order
@@ -866,7 +866,6 @@ impl ConversationsListing {
                     panic!();
                 })
                 .0
-        //threads.root_set(cursor)
         } else {
             self.filtered_selection[cursor]
         }
@@ -1120,7 +1119,7 @@ impl Component for ConversationsListing {
                             k == shortcuts[ConversationsListing::DESCRIPTION]["open_thread"]
                         ) =>
                 {
-                    let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                    let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                     self.view = ThreadView::new(self.cursor_pos, thread, None, context);
                     self.unfocused = true;
                     self.dirty = true;
@@ -1146,7 +1145,7 @@ impl Component for ConversationsListing {
                             key == shortcuts[ConversationsListing::DESCRIPTION]["select_entry"]
                         ) =>
                 {
-                    let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                    let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                     self.selection.entry(thread).and_modify(|e| *e = !*e);
                     return true;
                 }
@@ -1205,7 +1204,7 @@ impl Component for ConversationsListing {
                         return true;
                     }
                     Action::ToggleThreadSnooze if !self.unfocused => {
-                        let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                        let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                         let account = &mut context.accounts[self.cursor_pos.0];
                         account
                             .collection

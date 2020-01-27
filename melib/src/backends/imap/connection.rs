@@ -339,7 +339,7 @@ impl ImapConnection {
     }
 
     pub fn read_response(&mut self, ret: &mut String) -> Result<()> {
-        let res = self.try_send(|s| s.read_response(ret));
+        self.try_send(|s| s.read_response(ret))?;
         let r: Result<()> = ImapResponse::from(&ret).into();
         r
     }

@@ -457,11 +457,10 @@ impl Component for AccountStatus {
             ((1, line), (width - 1, height - 1)),
             None,
         );
-        for (i, f) in a
+        for f in a
             .ref_folders
             .values()
             .filter(|f| f.special_usage() != SpecialUsageMailbox::Normal)
-            .enumerate()
         {
             line += 1;
             write_string_to_grid(

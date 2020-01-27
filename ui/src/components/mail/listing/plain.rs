@@ -83,7 +83,7 @@ impl MailListingTrait for PlainListing {
         &mut self._row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
         return SmallVec::new();
         /*
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
@@ -888,12 +888,6 @@ impl PlainListing {
         } else {
             self.filtered_selection[cursor]
         }
-    }
-
-    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadNodeHash {
-        let account = &context.accounts[self.cursor_pos.0];
-        let env_hash = self.get_env_under_cursor(cursor, context);
-        account.collection.get_env(env_hash).thread()
     }
 
     fn format_date(envelope: &Envelope) -> String {

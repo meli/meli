@@ -82,9 +82,9 @@ impl MailListingTrait for CompactListing {
         &mut self.row_updates
     }
 
-    fn get_focused_items(&self, context: &Context) -> SmallVec<[ThreadHash; 8]> {
+    fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
-        let i = [self.get_thread_under_cursor(self.cursor_pos.2, context)];
+        let i = [self.get_thread_under_cursor(self.cursor_pos.2)];
         let cursor_iter;
         let sel_iter = if is_selection_empty {
             cursor_iter = None;
@@ -120,7 +120,7 @@ impl ListingTrait for CompactListing {
         if self.length == 0 {
             return;
         }
-        let thread_hash = self.get_thread_under_cursor(idx, context);
+        let thread_hash = self.get_thread_under_cursor(idx);
 
         let account = &context.accounts[self.cursor_pos.0];
         let threads = &account.collection.threads[&self.folder_hash];
@@ -344,7 +344,7 @@ impl ListingTrait for CompactListing {
 
         for r in 0..cmp::min(self.length - top_idx, rows) {
             let (fg_color, bg_color) = {
-                let thread_hash = self.get_thread_under_cursor(r + top_idx, context);
+                let thread_hash = self.get_thread_under_cursor(r + top_idx);
 
                 let c = &self.data_columns.columns[0][(0, r + top_idx)];
                 if self.selection[&thread_hash] {
@@ -682,7 +682,7 @@ impl CompactListing {
         if old_cursor_pos == self.new_cursor_pos {
             self.view.update(context);
         } else if self.unfocused {
-            let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+            let thread = self.get_thread_under_cursor(self.cursor_pos.2);
 
             self.view = ThreadView::new(self.new_cursor_pos, thread, None, context);
         }
@@ -946,7 +946,7 @@ impl CompactListing {
         }
     }
 
-    fn get_thread_under_cursor(&self, cursor: usize, context: &Context) -> ThreadHash {
+    fn get_thread_under_cursor(&self, cursor: usize) -> ThreadHash {
         if self.filter_term.is_empty() {
             *self
                 .order
@@ -1183,7 +1183,7 @@ impl Component for CompactListing {
                             k == shortcuts[CompactListing::DESCRIPTION]["open_thread"]
                         ) =>
                 {
-                    let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                    let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                     self.view = ThreadView::new(self.cursor_pos, thread, None, context);
                     self.unfocused = true;
                     self.dirty = true;
@@ -1209,7 +1209,7 @@ impl Component for CompactListing {
                             key == shortcuts[CompactListing::DESCRIPTION]["select_entry"]
                         ) =>
                 {
-                    let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                    let thread_hash = self.get_thread_under_cursor(self.cursor_pos.2);
                     self.selection.entry(thread_hash).and_modify(|e| *e = !*e);
                 }
                 UIEvent::Action(ref action) => {
@@ -1232,7 +1232,7 @@ impl Component for CompactListing {
                             return true;
                         }
                         Action::ToggleThreadSnooze if !self.unfocused => {
-                            let thread = self.get_thread_under_cursor(self.cursor_pos.2, context);
+                            let thread = self.get_thread_under_cursor(self.cursor_pos.2);
                             let account = &mut context.accounts[self.cursor_pos.0];
                             account
                                 .collection

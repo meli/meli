@@ -301,13 +301,6 @@ impl ThreadGroup {
             None
         }
     }
-    fn root_mut(&mut self) -> Option<&mut Thread> {
-        if let ThreadGroup::Root(ref mut root) = self {
-            Some(root)
-        } else {
-            None
-        }
-    }
 }
 
 macro_rules! property {
@@ -409,71 +402,6 @@ impl ThreadNode {
 
     pub fn children(&self) -> &[ThreadNodeHash] {
         &self.children
-    }
-
-    fn insert_child_pos(
-        vec: &[ThreadNodeHash],
-        child: ThreadNodeHash,
-        sort: (SortField, SortOrder),
-        buf: &mut FnvHashMap<ThreadNodeHash, ThreadNode>,
-        dates: &FnvHashMap<ThreadNodeHash, UnixTimestamp>,
-        envelopes: &Envelopes,
-    ) -> std::result::Result<usize, usize> {
-        let envelopes = envelopes.read().unwrap();
-        match sort {
-            (SortField::Date, SortOrder::Asc) => {
-                vec.binary_search_by(|probe| dates[probe].cmp(&dates[&child]))
-            }
-            (SortField::Date, SortOrder::Desc) => {
-                vec.binary_search_by(|probe| dates[probe].cmp(&dates[&child]).reverse())
-            }
-            (SortField::Subject, SortOrder::Asc) => vec.binary_search_by(|probe| {
-                match (
-                    buf.get(&probe).map(|n| n.message.as_ref()).unwrap_or(None),
-                    buf.get(&child).map(|n| n.message.as_ref()).unwrap_or(None),
-                ) {
-                    (Some(p), Some(c)) => {
-                        #[cfg(feature = "unicode_algorithms")]
-                        {
-                            envelopes[p]
-                                .subject()
-                                .split_graphemes()
-                                .cmp(&envelopes[c].subject().split_graphemes())
-                        }
-                        #[cfg(not(feature = "unicode_algorithms"))]
-                        {
-                            envelopes[p].subject().cmp(&envelopes[c].subject())
-                        }
-                    }
-                    (Some(_), None) => Ordering::Greater,
-                    (None, Some(_)) => Ordering::Less,
-                    (None, None) => Ordering::Equal,
-                }
-            }),
-            (SortField::Subject, SortOrder::Desc) => vec.binary_search_by(|probe| {
-                match (
-                    buf.get(&probe).map(|n| n.message.as_ref()).unwrap_or(None),
-                    buf.get(&child).map(|n| n.message.as_ref()).unwrap_or(None),
-                ) {
-                    (Some(p), Some(c)) => {
-                        #[cfg(feature = "unicode_algorithms")]
-                        {
-                            envelopes[c]
-                                .subject()
-                                .split_graphemes()
-                                .cmp(&envelopes[p].subject().split_graphemes())
-                        }
-                        #[cfg(not(feature = "unicode_algorithms"))]
-                        {
-                            envelopes[c].subject().cmp(&envelopes[p].subject())
-                        }
-                    }
-                    (Some(_), None) => Ordering::Less,
-                    (None, Some(_)) => Ordering::Greater,
-                    (None, None) => Ordering::Equal,
-                }
-            }),
-        }
     }
 }
 
@@ -622,14 +550,12 @@ impl Threads {
         let was_unseen = self.thread_nodes[&thread_hash].unseen;
         let is_unseen = !envelopes.read().unwrap()[&new_hash].is_seen();
         if was_unseen != is_unseen {
-            if let Thread { ref mut unseen, .. } =
-                self.thread_ref_mut(self.thread_nodes[&thread_hash].group)
-            {
-                if was_unseen {
-                    *unseen -= 1;
-                } else {
-                    *unseen += 1;
-                }
+            let Thread { ref mut unseen, .. } =
+                self.thread_ref_mut(self.thread_nodes[&thread_hash].group);
+            if was_unseen {
+                *unseen -= 1;
+            } else {
+                *unseen += 1;
             }
         }
         self.thread_nodes.get_mut(&thread_hash).unwrap().unseen = is_unseen;

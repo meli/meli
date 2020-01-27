@@ -834,6 +834,7 @@ impl StatusBar {
         change_colors(grid, area, Color::Byte(123), Color::Byte(26));
         context.dirty_areas.push_back(area);
     }
+
     fn draw_execute_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area);
         let (x, y) = write_string_to_grid(

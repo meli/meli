@@ -302,9 +302,6 @@ impl BackendOp for PluginOp {
             debug!(channel.expect_ack())?;
             let bytes: Result<PluginResult<String>> = channel.from_read();
             self.bytes = Some(bytes.map(Into::into).and_then(std::convert::identity)?);
-            if let Some(ref bytes) = self.bytes {
-                debug!(Envelope::from_bytes(bytes.as_bytes(), None));
-            }
             Ok(self.bytes.as_ref().map(String::as_bytes).unwrap())
         } else {
             Err(MeliError::new("busy"))
