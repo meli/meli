@@ -491,39 +491,32 @@ impl State {
             cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
         )
         .unwrap();
+        let mut current_fg = Color::Default;
+        let mut current_bg = Color::Default;
+        let mut current_attrs = Attr::Default;
+        let Self {
+            ref grid,
+            ref mut stdout,
+            ..
+        } = self;
+        let stdout = stdout.as_mut().unwrap();
+        write!(stdout, "\x1B[m").unwrap();
         for x in x_start..=x_end {
-            let c = self.grid[(x, y)];
-            if c.bg() != Color::Default {
-                c.bg().write_bg(self.stdout()).unwrap();
+            let c = &grid[(x, y)];
+            if c.attrs() != current_attrs {
+                c.attrs().write(current_attrs, stdout).unwrap();
+                current_attrs = c.attrs();
             }
-            if c.fg() != Color::Default {
-                c.fg().write_fg(self.stdout()).unwrap();
+            if c.bg() != current_bg {
+                c.bg().write_bg(stdout).unwrap();
+                current_bg = c.bg();
             }
-            if c.attrs() != Attr::Default {
-                write!(self.stdout(), "\x1B[{}m", c.attrs() as u8).unwrap();
+            if c.fg() != current_fg {
+                c.fg().write_fg(stdout).unwrap();
+                current_fg = c.fg();
             }
             if !c.empty() {
-                write!(self.stdout(), "{}", c.ch()).unwrap();
-            }
-
-            if c.bg() != Color::Default {
-                write!(
-                    self.stdout(),
-                    "{}",
-                    termion::color::Bg(termion::color::Reset)
-                )
-                .unwrap();
-            }
-            if c.fg() != Color::Default {
-                write!(
-                    self.stdout(),
-                    "{}",
-                    termion::color::Fg(termion::color::Reset)
-                )
-                .unwrap();
-            }
-            if c.attrs() != Attr::Default {
-                write!(self.stdout(), "\x1B[{}m", Attr::Default as u8).unwrap();
+                write!(stdout, "{}", c.ch()).unwrap();
             }
         }
     }

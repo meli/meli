@@ -601,20 +601,23 @@ impl Cell {
         self.empty
     }
 
-    pub fn set_empty(&mut self, new_val: bool) {
+    pub fn set_empty(&mut self, new_val: bool) -> &mut Cell {
         self.empty = new_val;
+        self
     }
 
     /// Sets `keep_fg` field. If true, the foreground color will not be altered if attempted so
     /// until the character content of the cell is changed.
-    pub fn set_keep_fg(&mut self, new_val: bool) {
+    pub fn set_keep_fg(&mut self, new_val: bool) -> &mut Cell {
         self.keep_fg = new_val;
+        self
     }
 
     /// Sets `keep_bg` field. If true, the background color will not be altered if attempted so
     /// until the character content of the cell is changed.
-    pub fn set_keep_bg(&mut self, new_val: bool) {
+    pub fn set_keep_bg(&mut self, new_val: bool) -> &mut Cell {
         self.keep_bg = new_val;
+        self
     }
 }
 
@@ -711,6 +714,7 @@ impl Color {
     pub fn write_fg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
         use std::io::Write;
         match self {
+            Color::Default => write!(stdout, "{}", termion::color::Fg(termion::color::Reset)),
             Color::Rgb(r, g, b) => write!(stdout, "{}", termion::color::Fg(TermionRgb(r, g, b))),
             _ => write!(stdout, "{}", termion::color::Fg(self.as_termion())),
         }
@@ -719,6 +723,7 @@ impl Color {
     pub fn write_bg(self, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
         use std::io::Write;
         match self {
+            Color::Default => write!(stdout, "{}", termion::color::Bg(termion::color::Reset)),
             Color::Rgb(r, g, b) => write!(stdout, "{}", termion::color::Bg(TermionRgb(r, g, b))),
             _ => write!(stdout, "{}", termion::color::Bg(self.as_termion())),
         }
@@ -1001,6 +1006,7 @@ impl Color {
             "Yellow4" => 100,
             "Yellow5" => 106,
             "Yellow6" => 148,
+            "Default" => return Ok(Color::Default),
             s if s.starts_with("#")
                 && s.len() == 7
                 && s[1..].as_bytes().iter().all(|&b| {
@@ -1388,6 +1394,14 @@ pub enum Attr {
     BoldReverseUnderline = 0b111,
 }
 
+impl core::ops::BitAnd for Attr {
+    type Output = bool;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        self as u8 & rhs as u8 > 0
+    }
+}
+
 impl Default for Attr {
     fn default() -> Self {
         Attr::Default
@@ -1441,6 +1455,24 @@ impl Attr {
             "BoldReverseUnderline" => Ok(Attr::BoldReverseUnderline),
             _ => Err(de::Error::custom("invalid attr value")),
         }
+    }
+    pub fn write(self, prev: Attr, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
+        use std::io::Write;
+        match (self & Attr::Bold, prev & Attr::Bold) {
+            (true, true) | (false, false) => Ok(()),
+            (false, true) => write!(stdout, "\x1B[22m"),
+            (true, false) => write!(stdout, "\x1B[1m"),
+        }
+        .and_then(|_| match (self & Attr::Underline, prev & Attr::Underline) {
+            (true, true) | (false, false) => Ok(()),
+            (false, true) => write!(stdout, "\x1B[24m"),
+            (true, false) => write!(stdout, "\x1B[4m"),
+        })
+        .and_then(|_| match (self & Attr::Reverse, prev & Attr::Reverse) {
+            (true, true) | (false, false) => Ok(()),
+            (false, true) => write!(stdout, "\x1B[27m"),
+            (true, false) => write!(stdout, "\x1B[7m"),
+        })
     }
 }
 
@@ -1542,26 +1574,27 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
 
 /// Change foreground and background colors in an `Area`
 pub fn change_colors(grid: &mut CellBuffer, area: Area, fg_color: Color, bg_color: Color) {
-    let bounds = grid.size();
-    let upper_left = upper_left!(area);
-    let bottom_right = bottom_right!(area);
-    let (x, y) = upper_left;
-    if y > (get_y(bottom_right))
-        || x > get_x(bottom_right)
-        || y >= get_y(bounds)
-        || x >= get_x(bounds)
-    {
-        debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
-        return;
+    if cfg!(feature = "debug-tracing") {
+        let bounds = grid.size();
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+        let (x, y) = upper_left;
+        if y > (get_y(bottom_right))
+            || x > get_x(bottom_right)
+            || y >= get_y(bounds)
+            || x >= get_x(bounds)
+        {
+            debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+            return;
+        }
+        if !is_valid_area!(area) {
+            debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
+            return;
+        }
     }
-    if !is_valid_area!(area) {
-        debug!("BUG: Invalid area in change_colors:\n area: {:?}", area);
-        return;
-    }
-    for y in get_y(upper_left!(area))..=get_y(bottom_right!(area)) {
-        for x in get_x(upper_left!(area))..=get_x(bottom_right!(area)) {
-            grid[(x, y)].set_fg(fg_color);
-            grid[(x, y)].set_bg(bg_color);
+    for row in grid.bounds_iter(area) {
+        for c in row {
+            grid[c].set_fg(fg_color).set_bg(bg_color);
         }
     }
 }
@@ -1648,9 +1681,10 @@ pub fn write_string_to_grid(
         } else {
             grid[(x, y)].set_ch(c);
         }
-        grid[(x, y)].set_attrs(attrs);
-        grid[(x, y)].set_fg(fg_color);
-        grid[(x, y)].set_bg(bg_color);
+        grid[(x, y)]
+            .set_fg(fg_color)
+            .set_bg(bg_color)
+            .set_attrs(attrs);
 
         match wcwidth(u32::from(c)) {
             Some(0) | None => {
@@ -1663,10 +1697,11 @@ pub fn write_string_to_grid(
                 x += 1;
                 inspect_bounds!(grid, area, x, y, line_break);
                 grid[(x, y)] = Cell::default();
-                grid[(x, y)].set_attrs(attrs);
-                grid[(x, y)].set_fg(fg_color);
-                grid[(x, y)].set_bg(bg_color);
-                grid[(x, y)].empty = true;
+                grid[(x, y)]
+                    .set_fg(fg_color)
+                    .set_bg(bg_color)
+                    .set_attrs(attrs)
+                    .set_empty(true);
             }
             _ => {}
         }
