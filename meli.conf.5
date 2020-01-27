@@ -24,7 +24,7 @@
 .Nm meli.conf
 .Nd configuration file for the Meli Mail User Agent
 .Sh SYNOPSIS
-.Pa $XDG_CONFIG_HOME/meli/config
+.Pa $XDG_CONFIG_HOME/meli/config.toml
 .Sh DESCRIPTION
 Configuration for meli is written in TOML. Few things to consider before writing TOML (quoting the spec):
 .Pp
@@ -607,7 +607,7 @@ example configuration:
 # valid inputs: #HHHHHH, #ABC -> #AABBCC, XTERM_NAME, 0-255 byte
 colors = { signed="#Ff6600", replied="DeepSkyBlue4", draft="#f00", replied="8" }
 [accounts.dummy]
-#...8<--
+\&...
   [accounts.dummy.folders]
   # per folder override:
   "INBOX" = {  tags.ignore_tags=["inbox", ] }
@@ -641,13 +641,35 @@ auto verify signed e-mail according to RFC3156
 (optional) if true, box drawing will be done with ascii characters.
 .\" default value
 .Pq Em false
+.It Ic use_color Ar boolean
+(optional) if false, no ANSI colors are used
+.\" default value
+.Pq Em true
 .It Ic window_title Ar String
 (optional) set window title in xterm compatible terminals (empty string means no window title is set)
 .\" default value
 .Pq Em "meli"
+.It Ic themes Ar hash table String[String[Attribute]]
+define UI themes. See
+.Xr meli-themes 5
+for details.
+.Bd -literal
+[terminal]
+theme = "themeB"
+
+[terminal.themes.themeA]
+"mail.view.body" = {fg = "HotPink3", bg = "LightSalmon1"}
+\&...
+[terminal.themes.themeB]
+"mail.view.body" = {fg = "CadetBlue", bg = "White"}
+\&...
+[terminal.themes.themeC]
+\&...
+.Ed
 .El
 .Sh SEE ALSO
-.Xr meli 1
+.Xr meli 1 ,
+.Xr meli-themes 5
 .Sh CONFORMING TO
 TOML Standard v.0.5.0 https://github.com/toml-lang/toml/blob/master/versions/en/toml-v0.5.0.md
 .Sh AUTHORS

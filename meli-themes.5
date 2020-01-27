@@ -1,0 +1,472 @@
+.\" meli - meli-themes.5
+.\"
+.\" Copyright 2017-2020 Manos Pitsidianakis
+.\"
+.\" This file is part of meli.
+.\"
+.\" meli is free software: you can redistribute it and/or modify
+.\" it under the terms of the GNU General Public License as published by
+.\" the Free Software Foundation, either version 3 of the License, or
+.\" (at your option) any later version.
+.\"
+.\" meli is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public License
+.\" along with meli. If not, see <http://www.gnu.org/licenses/>.
+.\"
+.Dd January 23, 2020
+.Dt MELI-THEMES 5
+.Os
+.Sh NAME
+.Nm meli-themes
+.Nd themes for the
+.Nm meli
+mail client
+.Sh SYNOPSIS
+.Nm meli
+comes with two themes,
+.Ic dark
+(the default) and
+.Ic light.
+The application theme is defined in the configuration as follows:
+.Bd
+[terminal]
+theme = "dark"
+.Ed
+Custom themes can be defined as lists of key-values in the configuration files:
+
+.Bl -compact
+.It
+.Pa $XDG_CONFIG_HOME/meli/config.toml
+.It
+.Pa $XDG_CONFIG_HOME/meli/themes/*.toml
+.El
+.Sh DESCRIPTION
+Themes for
+.Nm meli
+are described in the configuration language TOML.
+They are key-value tables defined in the TERMINAL section of the configuration file.
+Each key defines the semantic location of the theme attribute within the application.
+For example, "mail.listing.compact.* keys are settings for the `compact` mail listing style.
+A setting contains three fields: fg for foreground color, bg for background color, and attrs for attribute.
+Each field contains a value, and each value can be either a color/attribute, or a key name.
+In the latter case the setting's real value depends on the value of the key.
+This allows for defaults within a group of associated values.
+Cycles in a theme's links results in an error.
+.Pp
+Two themes are included by default, `light` and `dark`.
+Specific settings from already defined themes can be overwritten:
+.Bd -literal
+[terminal]
+theme = "dark"
+
+[terminal.themes.dark]
+"mail.sidebar_highlighted_account" = { bg = "#ff4529" }
+"mail.listing.attachment_flag" = { fg = "#ff4529" }
+"mail.view.headers" = { fg = "30" }
+"mail.view.body" = {fg = "HotPink3", bg = "LightSalmon1"}
+# Linked value keys can be whatever:
+"mail.listing.compact.unseen" = { bg = "mail.sidebar_highlighted_account" }
+
+# define new theme. Undefined settings will inherit from the default "dark" theme.
+[terminal.themes."hunter2"]
+"mail.view.headers" = { fg = "White", bg = "Black" }
+.Ed
+.Sh CUSTOM THEMES
+Custom themes can be included in your configuration files or be saved independently in your
+.Pa $XDG_CONFIG_HOME/meli/themes/
+directory as TOML files. To start creating a theme right away, you can begin by editing the default theme keys and values:
+.Bd -literal
+meli --print-default-theme > ~/.config/meli/themes/new_theme.toml
+.Ed
+
+.Pa new_theme.toml
+will now include all keys and values of the "dark" theme.
+
+.Fl -print-loaded-themes
+.Ed
+will print all loaded themes with the links resolved.
+.Sh VALID ATTRIBUTE VALUES
+Case-sensitive.
+.Bl -bullet -compact
+.It
+"Default"
+.It
+"Bold"
+.It
+"Underline"
+.It
+"BoldUnderline"
+.It
+"Reverse"
+.It
+"BoldReverse"
+.It
+"UnderlineReverse"
+.It
+"BoldReverseUnderline"
+.El
+.Sh VALID COLOR VALUES
+Color values are of type String with the following valid contents:
+.Bl -bullet -compact
+.It
+"Default" Terminal default.
+.It
+Hex triplet eg #FFFFFF for RGB colors
+(three letter shorthand also valid, eg #09c → #0099cc) (Case-insensitive)
+.It
+0-255 byte for 256 colors.
+.It
+.Xr xterm 1
+name but with some modifications (for a full table see COLOR NAMES addendum) (Case-sensitive)
+.El
+.Sh NO COLOR
+To completely disable ANSI colors, there are two options:
+.Bl -bullet -compact
+.It
+Set the
+.Ic use_color
+option (section 
+.Ic terminal Ns
+.Ns )
+to false, which is true by default.
+.It
+The
+.Ev NO_COLOR
+environmental variable, when present (regardless of its value), prevents the addition of ANSI color. When the configuration value
+.Ic use_color
+is explicitly set to true by the user,
+.Ev NO_COLOR
+is ignored.
+.El
+
+In this mode, cursor locations (i.e. currently selected entries/items) will use the "reverse video" ANSI attribute to inverse the terminal's default foreground/background colors.
+
+.Sh VALID KEYS
+.TS
+allbox tab(:);
+lb
+l.
+key name
+theme_default
+status.bar
+status.notification
+tab.focused
+tab.unfocused
+tab.bar
+widgets.form.label
+widgets.form.field
+widgets.form.highlighted
+widgets.options.highlighted
+mail.sidebar
+mail.sidebar_unread_count
+mail.sidebar_index
+mail.sidebar_highlighted
+mail.sidebar_highlighted_unread_count
+mail.sidebar_highlighted_index
+mail.sidebar_highlighted_account
+mail.sidebar_highlighted_account_unread_count
+mail.sidebar_highlighted_account_index
+mail.listing.compact.even
+mail.listing.compact.odd
+mail.listing.compact.unseen
+mail.listing.compact.selected
+mail.listing.compact.highlighted
+mail.listing.plain.even
+mail.listing.plain.odd
+mail.listing.plain.unseen
+mail.listing.plain.selected
+mail.listing.plain.highlighted
+mail.listing.conversations
+mail.listing.conversations.subject
+mail.listing.conversations.from
+mail.listing.conversations.date
+mail.listing.conversations.padding
+mail.listing.conversations.unseen
+mail.listing.conversations.unseen_padding
+mail.listing.conversations.highlighted
+mail.listing.conversations.selected
+mail.view.headers
+mail.view.body
+mail.listing.attachment_flag
+mail.listing.thread_snooze_flag
+.TE
+.Sh COLOR NAMES
+.TS
+allbox tab(:);
+lb|lb|l|lb|lb
+l  l|l|l  l.
+name ↓:byte:_:name:byte ↓
+Aqua:14:_:Black:0
+Aquamarine1:122:_:Maroon:1
+Aquamarine2:86:_:Green:2
+Aquamarine3:79:_:Olive:3
+Black:0:_:Navy:4
+Blue:12:_:Purple1:5
+Blue1:21:_:Teal:6
+Blue2:19:_:Silver:7
+Blue3:20:_:Grey:8
+BlueViolet:57:_:Red:9
+CadetBlue:72:_:Lime:10
+CadetBlue1:73:_:Yellow:11
+Chartreuse1:118:_:Blue:12
+Chartreuse2:112:_:Fuchsia:13
+Chartreuse3:82:_:Aqua:14
+Chartreuse4:70:_:White:15
+Chartreuse5:76:_:Grey0:16
+Chartreuse6:64:_:NavyBlue:17
+CornflowerBlue:69:_:DarkBlue:18
+Cornsilk1:230:_:Blue2:19
+Cyan1:51:_:Blue3:20
+Cyan2:50:_:Blue1:21
+Cyan3:43:_:DarkGreen:22
+DarkBlue:18:_:DeepSkyBlue5:23
+DarkCyan:36:_:DeepSkyBlue6:24
+DarkGoldenrod:136:_:DeepSkyBlue7:25
+DarkGreen:22:_:DodgerBlue3:26
+DarkKhaki:143:_:DodgerBlue2:27
+DarkMagenta:90:_:Green4:28
+DarkMagenta1:91:_:SpringGreen6:29
+DarkOliveGreen1:192:_:Turquoise4:30
+DarkOliveGreen2:155:_:DeepSkyBlue3:31
+DarkOliveGreen3:191:_:DeepSkyBlue4:32
+DarkOliveGreen4:107:_:DodgerBlue1:33
+DarkOliveGreen5:113:_:Green2:34
+DarkOliveGreen6:149:_:SpringGreen4:35
+DarkOrange:208:_:DarkCyan:36
+DarkOrange2:130:_:LightSeaGreen:37
+DarkOrange3:166:_:DeepSkyBlue2:38
+DarkRed:52:_:DeepSkyBlue1:39
+DarkRed2:88:_:Green3:40
+DarkSeaGreen:108:_:SpringGreen5:41
+DarkSeaGreen1:158:_:SpringGreen2:42
+DarkSeaGreen2:193:_:Cyan3:43
+DarkSeaGreen3:151:_:DarkTurquoise:44
+DarkSeaGreen4:157:_:Turquoise2:45
+DarkSeaGreen5:115:_:Green1:46
+DarkSeaGreen6:150:_:SpringGreen3:47
+DarkSeaGreen7:65:_:SpringGreen1:48
+DarkSeaGreen8:71:_:MediumSpringGreen:49
+DarkSlateGray1:123:_:Cyan2:50
+DarkSlateGray2:87:_:Cyan1:51
+DarkSlateGray3:116:_:DarkRed:52
+DarkTurquoise:44:_:DeepPink8:53
+DarkViolet:128:_:Purple4:54
+DarkViolet1:92:_:Purple5:55
+DeepPink1:199:_:Purple3:56
+DeepPink2:197:_:BlueViolet:57
+DeepPink3:198:_:Orange3:58
+DeepPink4:125:_:Grey37:59
+DeepPink6:162:_:MediumPurple6:60
+DeepPink7:89:_:SlateBlue2:61
+DeepPink8:53:_:SlateBlue3:62
+DeepPink9:161:_:RoyalBlue1:63
+DeepSkyBlue1:39:_:Chartreuse6:64
+DeepSkyBlue2:38:_:DarkSeaGreen7:65
+DeepSkyBlue3:31:_:PaleTurquoise4:66
+DeepSkyBlue4:32:_:SteelBlue:67
+DeepSkyBlue5:23:_:SteelBlue3:68
+DeepSkyBlue6:24:_:CornflowerBlue:69
+DeepSkyBlue7:25:_:Chartreuse4:70
+DodgerBlue1:33:_:DarkSeaGreen8:71
+DodgerBlue2:27:_:CadetBlue:72
+DodgerBlue3:26:_:CadetBlue1:73
+Fuchsia:13:_:SkyBlue3:74
+Gold1:220:_:SteelBlue1:75
+Gold2:142:_:Chartreuse5:76
+Gold3:178:_:PaleGreen4:77
+Green:2:_:SeaGreen4:78
+Green1:46:_:Aquamarine3:79
+Green2:34:_:MediumTurquoise:80
+Green3:40:_:SteelBlue2:81
+Green4:28:_:Chartreuse3:82
+GreenYellow:154:_:SeaGreen3:83
+Grey:8:_:SeaGreen1:84
+Grey0:16:_:SeaGreen2:85
+Grey100:231:_:Aquamarine2:86
+Grey11:234:_:DarkSlateGray2:87
+Grey15:235:_:DarkRed2:88
+Grey19:236:_:DeepPink7:89
+Grey23:237:_:DarkMagenta:90
+Grey27:238:_:DarkMagenta1:91
+Grey3:232:_:DarkViolet1:92
+Grey30:239:_:Purple2:93
+Grey35:240:_:Orange4:94
+Grey37:59:_:LightPink3:95
+Grey39:241:_:Plum4:96
+Grey42:242:_:MediumPurple4:97
+Grey46:243:_:MediumPurple5:98
+Grey50:244:_:SlateBlue1:99
+Grey53:102:_:Yellow4:100
+Grey54:245:_:Wheat4:101
+Grey58:246:_:Grey53:102
+Grey62:247:_:LightSlateGrey:103
+Grey63:139:_:MediumPurple:104
+Grey66:248:_:LightSlateBlue:105
+Grey69:145:_:Yellow5:106
+Grey7:233:_:DarkOliveGreen4:107
+Grey70:249:_:DarkSeaGreen:108
+Grey74:250:_:LightSkyBlue2:109
+Grey78:251:_:LightSkyBlue3:110
+Grey82:252:_:SkyBlue2:111
+Grey84:188:_:Chartreuse2:112
+Grey85:253:_:DarkOliveGreen5:113
+Grey89:254:_:PaleGreen3:114
+Grey93:255:_:DarkSeaGreen5:115
+Honeydew2:194:_:DarkSlateGray3:116
+HotPink:205:_:SkyBlue1:117
+HotPink1:206:_:Chartreuse1:118
+HotPink2:169:_:LightGreen:119
+HotPink3:132:_:LightGreen1:120
+HotPink4:168:_:PaleGreen1:121
+IndianRed:131:_:Aquamarine1:122
+IndianRed1:167:_:DarkSlateGray1:123
+IndianRed2:204:_:Red2:124
+IndianRed3:203:_:DeepPink4:125
+Khaki1:228:_:MediumVioletRed:126
+Khaki3:185:_:Magenta4:127
+LightCoral:210:_:DarkViolet:128
+LightCyan2:195:_:Purple:129
+LightCyan3:152:_:DarkOrange2:130
+LightGoldenrod1:227:_:IndianRed:131
+LightGoldenrod2:222:_:HotPink3:132
+LightGoldenrod3:179:_:MediumOrchid3:133
+LightGoldenrod4:221:_:MediumOrchid:134
+LightGoldenrod5:186:_:MediumPurple2:135
+LightGreen:119:_:DarkGoldenrod:136
+LightGreen1:120:_:LightSalmon2:137
+LightPink1:217:_:RosyBrown:138
+LightPink2:174:_:Grey63:139
+LightPink3:95:_:MediumPurple3:140
+LightSalmon1:216:_:MediumPurple1:141
+LightSalmon2:137:_:Gold2:142
+LightSalmon3:173:_:DarkKhaki:143
+LightSeaGreen:37:_:NavajoWhite3:144
+LightSkyBlue1:153:_:Grey69:145
+LightSkyBlue2:109:_:LightSteelBlue3:146
+LightSkyBlue3:110:_:LightSteelBlue:147
+LightSlateBlue:105:_:Yellow6:148
+LightSlateGrey:103:_:DarkOliveGreen6:149
+LightSteelBlue:147:_:DarkSeaGreen6:150
+LightSteelBlue1:189:_:DarkSeaGreen3:151
+LightSteelBlue3:146:_:LightCyan3:152
+LightYellow3:187:_:LightSkyBlue1:153
+Lime:10:_:GreenYellow:154
+Magenta1:201:_:DarkOliveGreen2:155
+Magenta2:165:_:PaleGreen2:156
+Magenta3:200:_:DarkSeaGreen4:157
+Magenta4:127:_:DarkSeaGreen1:158
+Magenta5:163:_:PaleTurquoise1:159
+Magenta6:164:_:Red3:160
+Maroon:1:_:DeepPink9:161
+MediumOrchid:134:_:DeepPink6:162
+MediumOrchid1:171:_:Magenta5:163
+MediumOrchid2:207:_:Magenta6:164
+MediumOrchid3:133:_:Magenta2:165
+MediumPurple:104:_:DarkOrange3:166
+MediumPurple1:141:_:IndianRed1:167
+MediumPurple2:135:_:HotPink4:168
+MediumPurple3:140:_:HotPink2:169
+MediumPurple4:97:_:Orchid:170
+MediumPurple5:98:_:MediumOrchid1:171
+MediumPurple6:60:_:Orange2:172
+MediumSpringGreen:49:_:LightSalmon3:173
+MediumTurquoise:80:_:LightPink2:174
+MediumVioletRed:126:_:Pink3:175
+MistyRose1:224:_:Plum3:176
+MistyRose3:181:_:Violet:177
+NavajoWhite1:223:_:Gold3:178
+NavajoWhite3:144:_:LightGoldenrod3:179
+Navy:4:_:Tan:180
+NavyBlue:17:_:MistyRose3:181
+Olive:3:_:Thistle3:182
+Orange1:214:_:Plum2:183
+Orange2:172:_:Yellow3:184
+Orange3:58:_:Khaki3:185
+Orange4:94:_:LightGoldenrod5:186
+OrangeRed1:202:_:LightYellow3:187
+Orchid:170:_:Grey84:188
+Orchid1:213:_:LightSteelBlue1:189
+Orchid2:212:_:Yellow2:190
+PaleGreen1:121:_:DarkOliveGreen3:191
+PaleGreen2:156:_:DarkOliveGreen1:192
+PaleGreen3:114:_:DarkSeaGreen2:193
+PaleGreen4:77:_:Honeydew2:194
+PaleTurquoise1:159:_:LightCyan2:195
+PaleTurquoise4:66:_:Red1:196
+PaleVioletRed1:211:_:DeepPink2:197
+Pink1:218:_:DeepPink3:198
+Pink3:175:_:DeepPink1:199
+Plum1:219:_:Magenta3:200
+Plum2:183:_:Magenta1:201
+Plum3:176:_:OrangeRed1:202
+Plum4:96:_:IndianRed3:203
+Purple:129:_:IndianRed2:204
+Purple1:5:_:HotPink:205
+Purple2:93:_:HotPink1:206
+Purple3:56:_:MediumOrchid2:207
+Purple4:54:_:DarkOrange:208
+Purple5:55:_:Salmon1:209
+Red:9:_:LightCoral:210
+Red1:196:_:PaleVioletRed1:211
+Red2:124:_:Orchid2:212
+Red3:160:_:Orchid1:213
+RosyBrown:138:_:Orange1:214
+RoyalBlue1:63:_:SandyBrown:215
+Salmon1:209:_:LightSalmon1:216
+SandyBrown:215:_:LightPink1:217
+SeaGreen1:84:_:Pink1:218
+SeaGreen2:85:_:Plum1:219
+SeaGreen3:83:_:Gold1:220
+SeaGreen4:78:_:LightGoldenrod4:221
+Silver:7:_:LightGoldenrod2:222
+SkyBlue1:117:_:NavajoWhite1:223
+SkyBlue2:111:_:MistyRose1:224
+SkyBlue3:74:_:Thistle1:225
+SlateBlue1:99:_:Yellow1:226
+SlateBlue2:61:_:LightGoldenrod1:227
+SlateBlue3:62:_:Khaki1:228
+SpringGreen1:48:_:Wheat1:229
+SpringGreen2:42:_:Cornsilk1:230
+SpringGreen3:47:_:Grey100:231
+SpringGreen4:35:_:Grey3:232
+SpringGreen5:41:_:Grey7:233
+SpringGreen6:29:_:Grey11:234
+SteelBlue:67:_:Grey15:235
+SteelBlue1:75:_:Grey19:236
+SteelBlue2:81:_:Grey23:237
+SteelBlue3:68:_:Grey27:238
+Tan:180:_:Grey30:239
+Teal:6:_:Grey35:240
+Thistle1:225:_:Grey39:241
+Thistle3:182:_:Grey42:242
+Turquoise2:45:_:Grey46:243
+Turquoise4:30:_:Grey50:244
+Violet:177:_:Grey54:245
+Wheat1:229:_:Grey58:246
+Wheat4:101:_:Grey62:247
+White:15:_:Grey66:248
+Yellow:11:_:Grey70:249
+Yellow1:226:_:Grey74:250
+Yellow2:190:_:Grey78:251
+Yellow3:184:_:Grey82:252
+Yellow4:100:_:Grey85:253
+Yellow5:106:_:Grey89:254
+Yellow6:148:_:Grey93:255
+.TE
+.Sh SEE ALSO
+.Xr meli 1 ,
+.Xr meli.conf 5
+.Sh CONFORMING TO
+TOML Standard v.0.5.0 https://github.com/toml-lang/toml/blob/master/versions/en/toml-v0.5.0.md
+.Sh AUTHORS
+Copyright 2017-2019
+.An Manos Pitsidianakis Aq epilys@nessuent.xyz
+Released under the GPL, version 3 or greater.
+This software carries no warranty of any kind.
+(See COPYING for full copyright and warranty notices.)
+.Pp
+.Aq https://meli.delivery

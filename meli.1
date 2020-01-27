@@ -30,6 +30,8 @@
 .Op Fl -create-config Op Ar path
 .Op Fl -test-config Op Ar path
 .Op Fl -config Ar path
+.Op Fl -print-default-theme
+.Op Fl -print-loaded-themes
 .Sh DESCRIPTION
 Experimental terminal mail client
 .Bl -tag -width flag -offset indent
@@ -41,11 +43,15 @@ Show version and exit.
 Create configuration file in
 .Pa path
 if given, or at
-.Pa $XDG_CONFIG_HOME/meli/config
+.Pa $XDG_CONFIG_HOME/meli/config.toml
 .It Fl -test-config Op Ar path
 Test a configuration file for syntax issues or missing options.
 .It Fl -config Ar path
 Start meli with given configuration file.
+.It Fl -print-default-theme
+Print default theme keys and values in TOML syntax, to be used as a blueprint.
+.It Fl -print-loaded-themes
+Print all loaded themes in TOML syntax.
 .El
 .Sh STARTING WITH meli
 When launched for the first time,
@@ -53,7 +59,7 @@ When launched for the first time,
 will search for its configuration directory,
 .Pa $XDG_CONFIG_HOME/meli/ Ns
 \&. If it doesn't exist, you will be asked if you want to create one along with a sample configuration. The sample configuration
-.Pa $XDG_CONFIG_HOME/meli/config
+.Pa $XDG_CONFIG_HOME/meli/config.toml
 includes comments with the basic settings required for setting up accounts allowing you to copy and edit right away. See
 .Xr meli.conf 5
 for the available configuration options.
@@ -423,7 +429,7 @@ and appropriates the following locations:
 .Bl -tag -width "$XDG_CONFIG_HOME/meli/plugins/*" -offset indent
 .It Pa $XDG_CONFIG_HOME/meli/
 User configuration directory.
-.It Pa $XDG_CONFIG_HOME/meli/config
+.It Pa $XDG_CONFIG_HOME/meli/config.toml
 User configuration file. See
 .Xr meli.conf 5
 for its syntax and values.
@@ -461,6 +467,7 @@ Mailcap entries are searched for in the following files, in this order:
 .El
 .Sh SEE ALSO
 .Xr meli.conf 5 ,
+.Xr meli-themes 5 ,
 .Xr xdg-open 1 ,
 .Xr mailcap 5
 .Sh CONFORMING TO
