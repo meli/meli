@@ -30,20 +30,21 @@ mail client
 comes with two themes,
 .Ic dark
 (the default) and
-.Ic light.
-The application theme is defined in the configuration as follows:
-.Bd
-[terminal]
-theme = "dark"
-.Ed
+.Ic light .
+.sp
 Custom themes can be defined as lists of key-values in the configuration files:
-
-.Bl -compact
+.Bl -bullet  -compact
 .It
 .Pa $XDG_CONFIG_HOME/meli/config.toml
 .It
 .Pa $XDG_CONFIG_HOME/meli/themes/*.toml
 .El
+.sp
+The application theme is defined in the configuration as follows:
+.Bd -literal
+[terminal]
+theme = "dark"
+.Ed
 .Sh DESCRIPTION
 Themes for
 .Nm meli
@@ -51,26 +52,32 @@ are described in the configuration language TOML.
 They are key-value tables defined in the TERMINAL section of the configuration file.
 Each key defines the semantic location of the theme attribute within the application.
 For example, "mail.listing.compact.* keys are settings for the `compact` mail listing style.
-A setting contains three fields: fg for foreground color, bg for background color, and attrs for attribute.
-Each field contains a value, and each value can be either a color/attribute, or a key name.
+A setting contains three fields: fg for foreground color, bg for background color, and attrs for text attribute.
+.sp
+.Dl \&"widget.key.label\&" = { fg = \&"Default\&", bg = \&"Default\&", attrs = \&"Default\&" }
+.sp
+Each field contains a value, and each value can either be a color/attribute, or a key name.
 In the latter case the setting's real value depends on the value of the key.
 This allows for defaults within a group of associated values.
-Cycles in a theme's links results in an error.
+Cyclic references in a theme results in an error:
+.sp
+.Dl spooky theme contains a cycle: fg:  mail.listing.compact.even -> mail.listing.compact.highlighted -> mail.listing.compact.odd -> mail.listing.compact.even
 .Pp
 Two themes are included by default, `light` and `dark`.
+.Sh EXAMPLES
 Specific settings from already defined themes can be overwritten:
 .Bd -literal
 [terminal]
 theme = "dark"
-
+.sp
 [terminal.themes.dark]
 "mail.sidebar_highlighted_account" = { bg = "#ff4529" }
 "mail.listing.attachment_flag" = { fg = "#ff4529" }
 "mail.view.headers" = { fg = "30" }
 "mail.view.body" = {fg = "HotPink3", bg = "LightSalmon1"}
-# Linked value keys can be whatever:
+# Linked value keys can be whatever key:
 "mail.listing.compact.unseen" = { bg = "mail.sidebar_highlighted_account" }
-
+.sp
 # define new theme. Undefined settings will inherit from the default "dark" theme.
 [terminal.themes."hunter2"]
 "mail.view.headers" = { fg = "White", bg = "Black" }
@@ -78,16 +85,16 @@ theme = "dark"
 .Sh CUSTOM THEMES
 Custom themes can be included in your configuration files or be saved independently in your
 .Pa $XDG_CONFIG_HOME/meli/themes/
-directory as TOML files. To start creating a theme right away, you can begin by editing the default theme keys and values:
-.Bd -literal
-meli --print-default-theme > ~/.config/meli/themes/new_theme.toml
-.Ed
-
+directory as TOML files.
+To start creating a theme right away, you can begin by editing the default theme keys and values:
+.sp
+.Dl meli --print-default-theme > ~/.config/meli/themes/new_theme.toml
+.sp
 .Pa new_theme.toml
 will now include all keys and values of the "dark" theme.
-
-.Fl -print-loaded-themes
-.Ed
+.sp
+.Dl meli --print-loaded-themes
+.sp
 will print all loaded themes with the links resolved.
 .Sh VALID ATTRIBUTE VALUES
 Case-sensitive.
@@ -113,7 +120,7 @@ Case-sensitive.
 Color values are of type String with the following valid contents:
 .Bl -bullet -compact
 .It
-"Default" Terminal default.
+"Default" is the terminal default. (Case-sensitive)
 .It
 Hex triplet eg #FFFFFF for RGB colors
 (three letter shorthand also valid, eg #09c → #0099cc) (Case-insensitive)
@@ -129,22 +136,21 @@ To completely disable ANSI colors, there are two options:
 .It
 Set the
 .Ic use_color
-option (section 
+option (section
 .Ic terminal Ns
-.Ns )
-to false, which is true by default.
+) to false, which is true by default.
 .It
 The
 .Ev NO_COLOR
-environmental variable, when present (regardless of its value), prevents the addition of ANSI color. When the configuration value
+environmental variable, when present (regardless of its value), prevents the addition of ANSI color.
+When the configuration value
 .Ic use_color
 is explicitly set to true by the user,
 .Ev NO_COLOR
 is ignored.
 .El
-
+.sp
 In this mode, cursor locations (i.e. currently selected entries/items) will use the "reverse video" ANSI attribute to inverse the terminal's default foreground/background colors.
-
 .Sh VALID KEYS
 .TS
 allbox tab(:);
@@ -462,6 +468,8 @@ Yellow6:148:_:Grey93:255
 .Xr meli.conf 5
 .Sh CONFORMING TO
 TOML Standard v.0.5.0 https://github.com/toml-lang/toml/blob/master/versions/en/toml-v0.5.0.md
+.sp
+https://no-color.org/
 .Sh AUTHORS
 Copyright 2017-2019
 .An Manos Pitsidianakis Aq epilys@nessuent.xyz

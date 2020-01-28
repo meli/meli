@@ -26,7 +26,8 @@
 .Sh SYNOPSIS
 .Pa $XDG_CONFIG_HOME/meli/config.toml
 .Sh DESCRIPTION
-Configuration for meli is written in TOML. Few things to consider before writing TOML (quoting the spec):
+Configuration for meli is written in TOML.
+Few things to consider before writing TOML (quoting the spec):
 .Pp
 .Bl -bullet -compact
 .It
@@ -40,23 +41,21 @@ Newline means LF (0x0A) or CRLF (0x0D 0x0A).
 .El
 .Pp
 Refer to TOML documentation for valid TOML syntax.
-
+.sp
 Thought not part of TOML syntax,
 .Nm
 can have nested configuration files by using the following include directive, which though starting with
 .Em \&#
 is not a comment:
-.Bd -literal
-#include "/path/to/file"
-.Ed
-
+.Dl #include \&"/path/to/file\&"
+.sp
 The accepted regular expression is
 .Li ^\es*include\es*\&\\&\e"(\e\e.|[^\e"])+\e"\es*$
 .Sh SECTIONS
 The top level sections of the config are accounts, shortcuts, notifications, pager, listing, composing, pgp, terminal.
-.Pp
-.Sy example configuration
-
+.Sh EXAMPLES
+example configuration
+.sp
 .Bd -literal
 # Setting up a Maildir account
 [accounts.account-name]
@@ -114,7 +113,8 @@ the backend-specific path of the root_folder, usually INBOX.
 .It Ic format Ar String Op maildir mbox imap notmuch jmap
 the format of the mail backend.
 .It Ic subscribed_folders Ar [String,]
-an array of folder paths to display in the UI. Paths are relative to the root folder (eg "INBOX/Sent", not "Sent").
+an array of folder paths to display in the UI.
+Paths are relative to the root folder (eg "INBOX/Sent", not "Sent").
 The glob wildcard
 .Em \&*
 can be used to match every folder name and path.
@@ -145,12 +145,15 @@ attempt to not make any changes to this account.
 (optional) command to execute when manually refreshing (shortcut listing.refresh)
 .Pq Em None
 .It Ic cache_type Ar String
-(optional) choose which cache backend to use. Available options are 'none' and 'sqlite3'
+(optional) choose which cache backend to use.
+Available options are 'none' and 'sqlite3'
 .Pq Em "sqlite3"
 .It Ic vcard_folder Ar String
-(optional) Folder that contains .vcf files. They are parsed and imported read-only.
+(optional) Folder that contains .vcf files.
+They are parsed and imported read-only.
 .It Ic folders Ar folder_config
-(optional) configuration for each folder. Its format is described below in
+(optional) configuration for each folder.
+Its format is described below in
 .Sx FOLDERS Ns
 \&.
 .El
@@ -158,11 +161,14 @@ attempt to not make any changes to this account.
 .Ic root_folder
 points to the directory which contains the
 .Pa .notmuch/
-subdirectory. notmuch folders are virtual, since they are defined by user-given notmuch queries. Thus you have to explicitly state the folders you want in the
+subdirectory.
+notmuch folders are virtual, since they are defined by user-given notmuch queries.
+Thus you have to explicitly state the folders you want in the
 .Ic folders
 field and set the
 .Ar query
-property to each of them. Example:
+property to each of them.
+Example:
 .Bd -literal
 [accounts.notmuch]
 format = "notmuch"
@@ -225,7 +231,8 @@ example:
 .\" default value
 .Pq Em false
 .It Ic usage Ar boolean
-(optional) special usage of this folder. valid values are:
+(optional) special usage of this folder.
+Valid values are:
 .Bl -bullet -compact
 .It
 .Ar Normal
@@ -246,11 +253,13 @@ example:
 .El
 otherwise usage is inferred from the folder title.
 .It Ic conf_override Ar boolean
-(optional) override global settings for this folder. available sections to override are
+(optional) override global settings for this folder.
+Available sections to override are
 .Em pager, notifications, shortcuts, composing
 and the account options
 .Em identity and index_style Ns
-\&. example:
+\&.
+Example:
 .Bd -literal
 [accounts."imap.domain.tld".folders."INBOX"]
   index_style = "plain"
@@ -263,7 +272,10 @@ and the account options
 .It Ic mailer_cmd Ar String
 command to pipe new mail to, exit code must be 0 for success.
 .It Ic editor_cmd Ar String
-command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
+command to launch editor.
+Can have arguments.
+Draft filename is given as the last argument.
+If it's missing, the environment variable $EDITOR is looked up.
 .It Ic embed Ar boolean
 (optional) embed editor within meli
 .\" default value
@@ -295,15 +307,16 @@ Shortcuts can take the following values:
 and
 .Qq Em char Ns
 , where char is a single character string.
-
-The headings before each list indicate the map key of the shortcut list. For example for the first list titled
+.sp
+The headings before each list indicate the map key of the shortcut list.
+For example for the first list titled
 .Em general
 the configuration is typed as follows:
 .Bd -literal
 [shortcuts.general]
 next_tab = 'T'
 .Ed
-
+.sp
 and for
 .Em compact-listing Ns
 :
@@ -311,23 +324,23 @@ and for
 [shortcuts.compact-listing]
 open_thread = "Enter"
 exit_thread = 'i'
-.Bd
-
+.Ed
+.sp
 .Pp
-.Sy Em general
+.Em general
 .Bl -tag -width 36n
 .It Ic next_tab
 Go to next tab.
 .\" default value
 .Pq Em T
 .It Ic go_to_tab
-Go to the 
+Go to the
 .Em n Ns
 th tab
 .Pq Em cannot be redefined
 .El
-
-.Sy Em listing
+.sp
+.Em listing
 .Bl -tag -width 36n
 .It Ic prev_page
 Go to previous page.
@@ -374,8 +387,8 @@ Toggle visibility of side menu in mail list.
 .\" default value
 .Pq Em `
 .El
-
-.Sy Em compact-listing
+.sp
+.Em compact-listing
 .Bl -tag -width 36n
 .It Ic exit_thread
 Exit thread view
@@ -390,8 +403,8 @@ Select thread entry.
 .\" default value
 .Pq Em v
 .El
-
-.Sy Em pager
+.sp
+.Em pager
 .Bl -tag -width 36n
 .It Ic scroll_up
 Scroll up pager.
@@ -410,8 +423,8 @@ Go to next pager pag
 .\" default value
 .Pq Em PageDown
 .El
-
-.Sy Em contact-list
+.sp
+.Em contact-list
 .Bl -tag -width 36n
 .It Ic create_contact
 Create new contact.
@@ -430,9 +443,9 @@ Toggle visibility of side menu in mail list.
 .\" default value
 .Pq Em `
 .El
-
-
-.Sy Em composing
+.sp
+.sp
+.Em composing
 .Bl -tag -width 36n
 .It Ic send_mail
 Deliver draft to mailer
@@ -443,8 +456,8 @@ Edit mail.
 .\" default value
 .Pq Em e
 .El
-
-.Sy Em envelope-view
+.sp
+.Em envelope-view
 .Pp
 To "select" an attachment, type its index (you will see the typed result in the command buffer on your bottom right of the status line) and then issue the corresponding command.
 .Bl -tag -width 36n
@@ -469,12 +482,13 @@ Return to envelope if viewing raw source or attachment.
 .\" default value
 .Pq Em r
 .It Ic open_attachment
-Opens selected attachment with 
+Opens selected attachment with
 .Cm xdg-open
 .\" default value
 .Pq Em a
 .It Ic open_mailcap
-Opens selected attachment according to its mailcap entry. See 
+Opens selected attachment according to its mailcap entry.
+See
 .Xr meli.1 FILES
 for the mailcap file locations.
 .\" default value
@@ -484,7 +498,8 @@ Go to url of given index
 .\" default value
 .Pq Em g
 .It Ic toggle_url_mode
-Toggles url open mode. When active, it prepends an index next to each url that you can select by typing and open by issuing 
+Toggles url open mode.
+When active, it prepends an index next to each url that you can select by typing and open by issuing
 .Ic go_to_url
 .\" default value
 .Pq Em u
@@ -493,8 +508,8 @@ Expand extra headers (References and others)
 .\" default value
 .Pq Em h
 .El
-
-.Sy Em thread-view
+.sp
+.Em thread-view
 .Bl -tag -width 36n
 .It Ic reverse_thread_order
 Reverse thread order.
@@ -521,12 +536,12 @@ Go to next page.
 .\" default value
 .Pq Em PageDown
 .El
-
-.Bl -tag -width 36n
+.sp
 .Sh NOTIFICATIONS
 .Bl -tag -width 36n
 .It Ic enable Ar boolean
-enable freedesktop-spec notifications. this is usually what you want
+enable freedesktop-spec notifications.
+this is usually what you want
 .\" default value
 .Pq Em true
 .It Ic script Ar String
@@ -549,7 +564,8 @@ enable freedesktop-spec notifications. this is usually what you want
 .Sh PAGER
 .Bl -tag -width 36n
 .It Ic pager_context Ar num
-(optional) number of context lines when going to next page. (Unimplemented)
+(optional) number of context lines when going to next page.
+(Unimplemented)
 .\" default value
 .Pq Em 0
 .It Ic headers_sticky Ar boolean
@@ -580,7 +596,8 @@ enable freedesktop-spec notifications. this is usually what you want
 .Sh LISTING
 .Bl -tag -width 36n
 .It Ic context_lines Ar num
-(optional) number of context lines when going to next page. (Unimplemented)
+(optional) number of context lines when going to next page.
+(Unimplemented)
 .\" default value
 .Pq Em 0
 .It Ic datetime_fmt Ar String
@@ -599,9 +616,9 @@ enable freedesktop-spec notifications. this is usually what you want
 .It Ic ignore_tags Ar Array String
 (optional) hide tags (not the tagged messages themselves)
 .El
-
+.sp
 example configuration:
-
+.sp
 .Bd -literal
 [tags]
 # valid inputs: #HHHHHH, #ABC -> #AABBCC, XTERM_NAME, 0-255 byte
@@ -650,7 +667,8 @@ auto verify signed e-mail according to RFC3156
 .\" default value
 .Pq Em "meli"
 .It Ic themes Ar hash table String[String[Attribute]]
-define UI themes. See
+define UI themes.
+See
 .Xr meli-themes 5
 for details.
 .Bd -literal
@@ -675,6 +693,8 @@ TOML Standard v.0.5.0 https://github.com/toml-lang/toml/blob/master/versions/en/
 .Sh AUTHORS
 Copyright 2017-2019
 .An Manos Pitsidianakis Aq epilys@nessuent.xyz
-Released under the GPL, version 3 or greater. This software carries no warranty of any kind. (See COPYING for full copyright and warranty notices.)
+Released under the GPL, version 3 or greater.
+This software carries no warranty of any kind.
+(See COPYING for full copyright and warranty notices.)
 .Pp
 .Aq https://meli.delivery

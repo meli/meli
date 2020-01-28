@@ -32,12 +32,10 @@
 .Op Fl -config Ar path
 .Op Fl -print-default-theme
 .Op Fl -print-loaded-themes
-.Sh DESCRIPTION
-Experimental terminal mail client
 .Bl -tag -width flag -offset indent
-.It Fl -help, h
+.It Fl -help | h
 Show help message and exit.
-.It Fl -version, v
+.It Fl -version | v
 Show version and exit.
 .It Fl -create-config Op Ar path
 Create configuration file in
@@ -53,34 +51,9 @@ Print default theme keys and values in TOML syntax, to be used as a blueprint.
 .It Fl -print-loaded-themes
 Print all loaded themes in TOML syntax.
 .El
-.Sh STARTING WITH meli
-When launched for the first time,
+.Sh DESCRIPTION
 .Nm
-will search for its configuration directory,
-.Pa $XDG_CONFIG_HOME/meli/ Ns
-\&. If it doesn't exist, you will be asked if you want to create one along with a sample configuration. The sample configuration
-.Pa $XDG_CONFIG_HOME/meli/config.toml
-includes comments with the basic settings required for setting up accounts allowing you to copy and edit right away. See
-.Xr meli.conf 5
-for the available configuration options.
-.Pp
-At any time, you may press
-.Cm \&?
-to show a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
-.Pp
-The main visual navigation tool is the left-side sidebar. The menu's visibility may be toggled with 
-.Cm ` 
-(shortcuts.listing: 
-.Ic toggle_menu_visibility Ns
-).
-.Pp
-The view into each folder has 4 modes: plain, threaded, conversations and compact. Plain views each mail indvidually, threaded shows their thread relationship visually, and conversations includes one entry per thread of emails (compact is one row per thread).
-.Pp
-If you're using a light color palette in your terminal, you may set
-.Em theme = "light"
-in the
-.Em terminal
-section of your configuration.
+is a terminal mail client aiming for extensive and user-frendly configurability.
 .Bd -literal
          ^^      .-=-=-=-.  ^^
      ^^        (`-=-=-=-=-`)         ^^
@@ -96,17 +69,54 @@ section of your configuration.
       ^^       (`-=-=-=-=-`)
                 `-=-=-=-=-`          ^^
 .Ed
+.Sh STARTING WITH meli
+When launched for the first time,
+.Nm
+will search for its configuration directory,
+.Pa $XDG_CONFIG_HOME/meli/ Ns
+\&.
+If it doesn't exist, you will be asked if you want to create one along with a sample configuration.
+The sample configuration
+.Pa $XDG_CONFIG_HOME/meli/config.toml
+includes comments with the basic settings required for setting up accounts allowing you to copy and edit right away.
+See
+.Xr meli.conf 5
+for the available configuration options.
+.Pp
+At any time, you may press
+.Cm \&?
+to show a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
+.Pp
+The main visual navigation tool is the left-side sidebar.
+The menu's visibility may be toggled with
+.Cm `
+(shortcuts.listing:
+.Ic toggle_menu_visibility Ns
+).
+.Pp
+The view into each folder has 4 modes: plain, threaded, conversations and compact.
+Plain views each mail indvidually, threaded shows their thread relationship visually, and conversations includes one entry per thread of emails (compact is one row per thread).
+.Pp
+If you're using a light color palette in your terminal, you may set
+.Em theme = "light"
+in the
+.Em terminal
+section of your configuration.
+See
+.Xr meli-themes 5
+for complete documentation on user themes.
 .Sh VIEWING MAIL
 Open attachments by typing their index in the attachments list and then
 .Cm a Ns
 \&.
-.Ns
 .Nm
 will attempt to open text inside its pager and other content via
 .Cm xdg-open Ns
-\&. Press
+\&.
+Press
 .Cm m
-instead to use the mailcap entry for the MIME type of the attachment, if any. See
+instead to use the mailcap entry for the MIME type of the attachment, if any.
+See
 .Sx FILES
 for the location of the mailcap files and
 .Xr mailcap 5
@@ -118,17 +128,20 @@ uses the SEARCH command,
 .Em notmuch
 uses libnotmuch and
 .Em Maildir/mbox
-have to do a slow linear search. Thus it is advised to use a cache on
+have to do a slow linear search.
+Thus it is advised to use a cache on
 .Em Maildir/mbox
 accounts.
 .Nm Ns
-, if built with sqlite3, includes the ability to perform full text search on the following fields: From, To, Cc, Bcc, In-Reply-To, References, Subject and Date. The message body (in plain text human readable form) and the flags can also be queried. To enable sqlite3 indexing for an account set
+, if built with sqlite3, includes the ability to perform full text search on the following fields: From, To, Cc, Bcc, In-Reply-To, References, Subject and Date.
+The message body (in plain text human readable form) and the flags can also be queried.
+To enable sqlite3 indexing for an account set
 .Em cache_type
 to
 .Em sqlite3
 in the configuration file and to create the sqlite3 index issue command
 .Cm index Ar ACCOUNT_NAME Ns \&.
-
+.sp
 To search in the message body type your keywords without any special formatting.
 To search in specific fields, prepend your search keyword with "field:" like so:
 .Pp
@@ -148,7 +161,8 @@ and
 alias:
 .Em \&!
 .Pc
-String keywords with spaces must be quoted. Quotes should always be escaped.
+String keywords with spaces must be quoted.
+Quotes should always be escaped.
 .sp
 .Sy Important Notice about IMAP/JMAP
 .sp
@@ -158,10 +172,13 @@ to
 .Em sqlite3 Ns
 \&.
 .Nm
-will relay your queries to the IMAP server. Expect a delay between query and response. Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable delay.
+will relay your queries to the IMAP server.
+Expect a delay between query and response.
+Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable delay.
 .Sh TAGS
 .Nm
-supports tagging in notmuch and IMAP/JMAP backends. Tags can be searched with the `tags:` or `flags:` prefix in a search query, and can be modified by
+supports tagging in notmuch and IMAP/JMAP backends.
+Tags can be searched with the `tags:` or `flags:` prefix in a search query, and can be modified by
 .Cm tag add TAG
 and
 .Cm tag remove TAG
@@ -175,49 +192,58 @@ for how to set tag colors and tag visiblity)
 .Sh COMPOSING
 To send mail, press
 .Cm m
-while viewing the appropriate account to open a new composing tab. To reply to a mail, press
+while viewing the appropriate account to open a new composing tab.
+To reply to a mail, press
 .Cm R Ns
-\&. You may edit some of the header fields from within the view, by selecting with the arrow keys and pressing
+\&.
+You may edit some of the header fields from within the view, by selecting with the arrow keys and pressing
 .Cm enter
 to enter
 .Ar INSERT
-mode. At any time you may press
+mode.
+At any time you may press
 .Cm e
 to launch your editor (see
 .Xr meli.conf 5 COMPOSING Ns
 , setting
 .Ic editor_cmd
-for how to select which editor to launch). Attachments may be handled with the
+for how to select which editor to launch).
+Attachments may be handled with the
 .Em add-attachment Ns
 ,
 .Em remove-attachment
-commands (see below). Finally, pressing
+commands (see below).
+Finally, pressing
 .Cm s
 will send your message by piping it into a binary of your choosing (see
 .Xr meli.conf 5 COMPOSING Ns
 , setting
 .Ic mailer_cmd Ns
-). To save your draft without sending it, issue command
+).
+To save your draft without sending it, issue command
 .Cm close
 and select 'save as draft'.
 .Pp
 With no Draft or Sent folder,
 .Nm
-tries first saving mail in your INBOX and then at any other folder. On complete failure to save your draft or sent message it will be saved in your
+tries first saving mail in your INBOX and then at any other folder.
+On complete failure to save your draft or sent message it will be saved in your
 .Em tmp
 directory instead and you will be notified of its location.
 .Pp
 To open a draft for editing later, select your draft in the mail listing and press
 .Cm e Ns
 \&.
-
+.sp
 Your editor can be used in
 .Nm Ns
 \&'s embed terminal emulator by setting
 .Ic embed
 to
 .Em true
-in your composing settings. When launched, your editor captures all input until it exits or stops. To stop your editor and return to
+in your composing settings.
+When launched, your editor captures all input until it exits or stops.
+To stop your editor and return to
 .Nm
 issue Ctrl-z and to resume editing press the
 .Ic edit_mail
@@ -227,7 +253,7 @@ command again (default
 .Sh CONTACTS
 .Nm
 supports two kinds of contact backends:
-
+.sp
 .Bl -enum -compact -offset indent
 .It
 an internal format that gets saved under
@@ -236,11 +262,13 @@ an internal format that gets saved under
 .It
 vCard files (v3, v4) through the
 .Ic vcard_folder
-option in the account section. The path defined as
+option in the account section.
+The path defined as
 .Ic vcard_folder
-can hold multiple vCards per file. They are loaded read only.
+can hold multiple vCards per file.
+They are loaded read only.
 .El
-
+.sp
 See
 .Xr meli.conf 5 ACCOUNTS
 for the complete account configuration values.
@@ -276,10 +304,12 @@ don't issue notifications for thread under cursor in thread listing
 .It Cm filter Ar STRING
 filter mailbox with
 .Ar STRING
-key. Escape exits filter results
+key.
+Escape exits filter results
 .It Cm set read, set unread
 .It Cm create-folder Ar ACCOUNT Ar FOLDER_PATH
-create folder with given path. be careful with backends and separator sensitivity (eg IMAP)
+create folder with given path.
+Be careful with backends and separator sensitivity (eg IMAP)
 .It Cm subscribe-folder Ar ACCOUNT Ar FOLDER_PATH
 subscribe to folder with given path
 .It Cm unsubscribe-folder Ar ACCOUNT Ar FOLDER_PATH
@@ -312,7 +342,8 @@ as an attachment
 .It Cm remove-attachment Ar INDEX
 remove attachment with given index
 .It Cm toggle sign
-toggle between signing and not signing this message. If the gpg invocation fails then the mail won't be sent.
+toggle between signing and not signing this message.
+If the gpg invocation fails then the mail won't be sent.
 .El
 .Pp
 generic commands:
@@ -397,7 +428,8 @@ attachment according to its mailcap entry.
 .El
 .Sh EXIT STATUS
 .Nm
-exits with 0 on a successful run. Other exit statuses are:
+exits with 0 on a successful run.
+Other exit statuses are:
 .Bl -tag -width 2n
 .It 1
 catchall for general errors
@@ -409,7 +441,8 @@ Specifies the editor to use
 .It Ev MELI_CONFIG
 Override the configuration file
 .It Ev NO_COLOR
-When present (regardless of its value), prevents the addition of ANSI color. The configuration value
+When present (regardless of its value), prevents the addition of ANSI color.
+The configuration value
 .Ic use_color
 overrides this.
 .El
@@ -430,7 +463,8 @@ and appropriates the following locations:
 .It Pa $XDG_CONFIG_HOME/meli/
 User configuration directory.
 .It Pa $XDG_CONFIG_HOME/meli/config.toml
-User configuration file. See
+User configuration file.
+See
 .Xr meli.conf 5
 for its syntax and values.
 .It Pa $XDG_CONFIG_HOME/meli/hooks/*
@@ -479,6 +513,8 @@ XDG Standard
 .Sh AUTHORS
 Copyright 2017-2019
 .An Manos Pitsidianakis Aq epilys@nessuent.xyz
-Released under the GPL, version 3 or greater. This software carries no warranty of any kind. (See COPYING for full copyright and warranty notices.)
+Released under the GPL, version 3 or greater.
+This software carries no warranty of any kind.
+(See COPYING for full copyright and warranty notices.)
 .Pp
 .Aq https://meli.delivery
