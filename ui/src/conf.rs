@@ -295,7 +295,7 @@ impl FileSettings {
             Err(_) => xdg_dirs
                 .as_ref()
                 .unwrap()
-                .place_config_file("config")
+                .place_config_file("config.toml")
                 .expect("cannot create configuration directory"),
         };
         if !config_path.exists() {

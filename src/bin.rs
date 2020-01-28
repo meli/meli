@@ -191,7 +191,7 @@ fn run_app() -> Result<()> {
         println!("");
         println!("\t--help, -h\t\tshow this message and exit");
         println!("\t--version, -v\t\tprint version and exit");
-        println!("\t--create-config[ PATH]\tcreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config");
+        println!("\t--create-config[ PATH]\tcreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config.toml");
         println!(
             "\t--test-config PATH\ttest a configuration file for syntax issues or missing options."
         );
@@ -222,7 +222,7 @@ fn run_app() -> Result<()> {
     if let Some(config_path) = args.create_config.as_mut() {
         let config_path: PathBuf = if config_path.is_empty() {
             let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
-            xdg_dirs.place_config_file("config").map_err(|e| {
+            xdg_dirs.place_config_file("config.toml").map_err(|e| {
                 MeliError::new(format!(
                     "Cannot create configuration directory in {}:\n{}",
                     xdg_dirs.get_config_home().display(),
