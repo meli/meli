@@ -2,11 +2,9 @@
 # descriptions and default values
 #
 # The syntax for including other configuration files is enclosed in `:
-#`# include "account_one"`
-#`# include "./account_two"`
-#`# include "/home/absolute/path/to/shortcuts/config.toml"`
-# That is, the # in the beginning is part of the include directive.
-#
+#`include("account_one")`
+#`include("./account_two")`
+#`include("/home/absolute/path/to/shortcuts/config.toml")`
 #
 #
 # Setting up a Maildir account

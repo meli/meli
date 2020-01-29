@@ -42,15 +42,12 @@ Newline means LF (0x0A) or CRLF (0x0D 0x0A).
 .Pp
 Refer to TOML documentation for valid TOML syntax.
 .sp
-Thought not part of TOML syntax,
+Though not part of TOML syntax,
 .Nm
-can have nested configuration files by using the following include directive, which though starting with
-.Em \&#
-is not a comment:
-.Dl #include \&"/path/to/file\&"
-.sp
-The accepted regular expression is
-.Li ^\es*include\es*\&\\&\e"(\e\e.|[^\e"])+\e"\es*$
+can have nested configuration files by using the following
+.Xr m4 1
+include macro:
+.Dl include(\&"/path/to/file\&")
 .Sh SECTIONS
 The top level sections of the config are accounts, shortcuts, notifications, pager, listing, composing, pgp, terminal.
 .Sh EXAMPLES

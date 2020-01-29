@@ -660,7 +660,6 @@ mod pp {
         move |input: &'a str| {
             enum State {
                 Start,
-                Directive,
                 Path,
             }
             use State::*;
@@ -670,23 +669,18 @@ mod pp {
             while i < input.len() {
                 match (&state, input.as_bytes()[i]) {
                     (Start, b'#') => {
-                        state = Directive;
-                    }
-                    (Start, b) if (b as char).is_whitespace() => { /* consume */ }
-                    (Start, _) => {
                         return Ok(("", None));
                     }
-                    (Directive, b) if (b as char).is_whitespace() => { /* consume */ }
-                    (Directive, _) if input.as_bytes()[i..].starts_with(b"include") => {
-                        i += "include".len();
+                    (Start, b) if (b as char).is_whitespace() => { /* consume */ }
+                    (Start, _) if input.as_bytes()[i..].starts_with(b"include(") => {
+                        i += "include(".len();
                         state = Path;
                         continue;
                     }
-                    (Directive, _) => {
+                    (Start, _) => {
                         return Ok(("", None));
                     }
-                    (Path, b) if (b as char).is_whitespace() => { /* consume */ }
-                    (Path, b'"') | (Path, b'\'') => {
+                    (Path, b'"') | (Path, b'\'') | (Path, b'`') => {
                         let mut end = i + 1;
                         while end < input.len() && input.as_bytes()[end] != input.as_bytes()[i] {
                             end += 1;
@@ -695,6 +689,11 @@ mod pp {
                             return Err(input);
                         }
                         let ret = &input[i + 1..end];
+                        end += 1;
+                        if end < input.len() && input.as_bytes()[end] != b')' {
+                            /* Nothing else allowed in line */
+                            return Err(input);
+                        }
                         end += 1;
                         while end < input.len() {
                             if !(input.as_bytes()[end] as char).is_whitespace() {
@@ -720,26 +719,17 @@ mod pp {
         let mut contents = String::new();
         let mut file = std::fs::File::open(path)?;
         file.read_to_string(&mut contents)?;
+        let mut ret = String::with_capacity(contents.len());
 
-        let mut includes = Vec::new();
         for (i, l) in contents.lines().enumerate() {
-            if let (_, Some(path)) = include_directive().parse(l).map_err(|l| {
+            if let (_, Some(sub_path)) = include_directive().parse(l).map_err(|l| {
                 MeliError::new(format!(
-                    "Malformed include directive in line {} of file {}: {}",
+                    "Malformed include directive in line {} of file {}: {}\nConfiguration uses the standard m4 macro include(`filename`).",
                     i,
                     path.display(),
                     l
                 ))
             })? {
-                includes.push(path);
-            }
-        }
-
-        if includes.is_empty() {
-            Ok(contents)
-        } else {
-            let mut ret = String::with_capacity(contents.len());
-            for sub_path in includes {
                 let p = &Path::new(sub_path);
                 debug!(p);
                 let p_buf = if p.is_relative() {
@@ -753,10 +743,13 @@ mod pp {
                 };
 
                 ret.extend(pp_helper(&p_buf, level + 1)?.chars());
+            } else {
+                ret.push_str(l);
+                ret.push('\n');
             }
-            ret.extend(contents.chars());
-            Ok(ret)
         }
+
+        Ok(ret)
     }
 
     pub fn pp<P: AsRef<Path>>(path: P) -> Result<String> {
