@@ -1375,8 +1375,9 @@ impl Tabbed {
             clear_area(grid, area);
             return;
         }
-        let mut tab_focused_attribute = crate::conf::value(context, "tab.focused");
+        let tab_bar_attribute = crate::conf::value(context, "tab.bar");
         let tab_unfocused_attribute = crate::conf::value(context, "tab.unfocused");
+        let mut tab_focused_attribute = crate::conf::value(context, "tab.focused");
         if std::env::var("NO_COLOR").is_ok()
             && (context.settings.terminal.use_color.is_false()
                 || context.settings.terminal.use_color.is_internal())
@@ -1408,17 +1409,21 @@ impl Tabbed {
             if y != _y_ {
                 break;
             }
+            grid[(x_, _y_)]
+                .set_fg(tab_bar_attribute.fg)
+                .set_bg(tab_bar_attribute.bg)
+                .set_attrs(tab_bar_attribute.attrs);
         }
         let (cols, _) = grid.size();
         let cslice: &mut [Cell] = grid;
-        //TODO: bounds check
         let cslice_len = cslice.len();
         for c in cslice[(y * cols) + x.saturating_sub(1)
             ..std::cmp::min((y * cols) + x.saturating_sub(1), cslice_len)]
             .iter_mut()
         {
-            c.set_bg(Color::Byte(7));
-            c.set_ch(' ');
+            c.set_ch(' ').set_bg(tab_unfocused_attribute.bg);
+            //.set_fg(tab_unfocused_attribute.bg)
+            //.set_bg(Color::Byte(7));
         }
 
         if self.cursor_pos == self.children.len() - 1 {
@@ -1427,6 +1432,12 @@ impl Tabbed {
                 .set_fg(tab_unfocused_attribute.bg)
                 .set_bg(tab_unfocused_attribute.fg)
                 .set_attrs(tab_unfocused_attribute.attrs);
+        }
+        for c in grid.row_iter(x..cols, get_y(upper_left)) {
+            grid[c]
+                .set_fg(tab_bar_attribute.fg)
+                .set_bg(tab_bar_attribute.bg)
+                .set_attrs(tab_bar_attribute.attrs);
         }
 
         context.dirty_areas.push_back(area);

@@ -295,6 +295,7 @@ pub struct Listing {
     cursor_pos: (usize, usize),
     startup_checks_rate: RateLimit,
     id: ComponentId,
+    theme_default: ThemeAttribute,
 
     show_divider: bool,
     menu_visibility: bool,
@@ -326,6 +327,7 @@ impl Component for Listing {
         if !is_valid_area!(area) {
             return;
         }
+        self.theme_default = crate::conf::value(context, "theme_default");
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         let total_cols = get_x(bottom_right) - get_x(upper_left);
@@ -339,14 +341,18 @@ impl Component for Listing {
         if self.dirty && mid != get_x(upper_left) {
             if self.show_divider {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
-                    grid[(mid, i)].set_ch(VERT_BOUNDARY);
-                    grid[(mid, i)].set_fg(Color::Default);
-                    grid[(mid, i)].set_bg(Color::Default);
+                    grid[(mid, i)]
+                        .set_ch(VERT_BOUNDARY)
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg)
+                        .set_attrs(self.theme_default.attrs);
                 }
             } else {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
-                    grid[(mid, i)].set_fg(Color::Default);
-                    grid[(mid, i)].set_bg(Color::Default);
+                    grid[(mid, i)]
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg)
+                        .set_attrs(self.theme_default.attrs);
                 }
             }
             context
@@ -896,6 +902,7 @@ impl Listing {
             dirty: true,
             cursor_pos: (0, 0),
             startup_checks_rate: RateLimit::new(2, 1000),
+            theme_default: ThemeAttribute::default(),
             id: ComponentId::new_v4(),
             show_divider: false,
             menu_visibility: true,
@@ -908,7 +915,15 @@ impl Listing {
         if !self.is_dirty() {
             return;
         }
-        clear_area(grid, area);
+        for row in grid.bounds_iter(area) {
+            for c in row {
+                grid[c]
+                    .set_ch(' ')
+                    .set_fg(self.theme_default.fg)
+                    .set_bg(self.theme_default.bg)
+                    .set_attrs(self.theme_default.attrs);
+            }
+        }
         /* visually divide menu and listing */
         area = (area.0, pos_dec(area.1, (1, 0)));
         let upper_left = upper_left!(area);
@@ -1023,8 +1038,8 @@ impl Listing {
         write_string_to_grid(
             &a.name,
             grid,
-            Color::Default,
-            Color::Default,
+            self.theme_default.fg,
+            self.theme_default.bg,
             Attr::Bold,
             area,
             None,
