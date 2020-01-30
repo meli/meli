@@ -615,7 +615,7 @@ impl MailBackend for MboxType {
     }
 
     fn save(&self, _bytes: &[u8], _folder: &str, _flags: Option<Flag>) -> Result<()> {
-        unimplemented!();
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn as_any(&self) -> &dyn::std::any::Any {
