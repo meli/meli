@@ -51,6 +51,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex, RwLock};
 
+type Offset = usize;
+type Length = usize;
+
 const F_OFD_SETLKW: libc::c_int = 38;
 
 // Open file description locking
@@ -287,9 +290,12 @@ pub fn mbox_parse(
     let mut index = index.lock().unwrap();
     let mut envelopes = Vec::with_capacity(32);
     while !input.is_empty() {
-        let next_offset: Option<usize> = input.find(b"\n\nFrom ");
-        if let Some(len) = next_offset {
-            match Envelope::from_bytes(&input[..len], None) {
+        let next_offset: Option<(usize, usize)> = input
+            .find(b"\n\nFrom ")
+            .and_then(|end| input.find(b"\n").and_then(|start| Some((start + 1, end))));
+
+        if let Some((start, len)) = next_offset {
+            match Envelope::from_bytes(&input[start..len], None) {
                 Ok(mut env) => {
                     let mut flags = Flag::empty();
                     if env.other_headers().contains_key("Status") {
@@ -324,7 +330,7 @@ pub fn mbox_parse(
                         }
                     }
                     env.set_flags(flags);
-                    index.insert(env.hash(), (offset + file_offset, len));
+                    index.insert(env.hash(), (offset + file_offset + start, len - start));
                     envelopes.push(env);
                 }
                 Err(_) => {
@@ -334,7 +340,8 @@ pub fn mbox_parse(
             offset += len + 2;
             input = &input[len + 2..];
         } else {
-            match Envelope::from_bytes(input, None) {
+            let start: Offset = input.find(b"\n").map(|v| v + 1).unwrap_or(0);
+            match Envelope::from_bytes(&input[start..], None) {
                 Ok(mut env) => {
                     let mut flags = Flag::empty();
                     if env.other_headers().contains_key("Status") {
@@ -369,7 +376,10 @@ pub fn mbox_parse(
                         }
                     }
                     env.set_flags(flags);
-                    index.insert(env.hash(), (offset + file_offset, input.len()));
+                    index.insert(
+                        env.hash(),
+                        (offset + file_offset + start, input.len() - start),
+                    );
                     envelopes.push(env);
                 }
                 Err(_) => {
@@ -382,8 +392,6 @@ pub fn mbox_parse(
     return IResult::Done(&[], envelopes);
 }
 
-type Offset = usize;
-type Length = usize;
 /// Mbox backend
 #[derive(Debug, Default)]
 pub struct MboxType {
