@@ -65,6 +65,10 @@ help:
 	@echo " - `${BOLD}`install-bin`${ANSI_RESET}` (installs binary to BINDIR)"
 	@echo " - `${BOLD}`install-doc`${ANSI_RESET}` (installs manpages to MANDIR)"
 	@echo " - `${BOLD}`help`${ANSI_RESET}` (prints this information)"
+
+	@echo " - `${BOLD}`dist`${ANSI_RESET}` (creates release tarball named meli-${VERSION}.tar.gz)"
+	@echo " - `${BOLD}`deb-dist`${ANSI_RESET}` (builds debian package)"
+	@echo " - `${BOLD}`distclean`${ANSI_RESET}` (cleans distribution build artifacts)"
 	@echo "\nENVIRONMENT variables of interest:"
 	@echo "* PREFIX = ${PREFIX}"
 	@echo "* MELI_FEATURES = ${MELI_FEATURES}"
@@ -140,3 +144,8 @@ endif
 dist:
 	@git archive --format=tar.gz --prefix=meli-${VERSION}/ HEAD >meli-${VERSION}.tar.gz
 	@echo meli-${VERSION}.tar.gz
+
+.PHONY: deb-dist
+deb-dist:
+	@dpkg-buildpackage -b -rfakeroot -us -uc
+	@echo `${BOLD}``${GREEN}`Generated`${ANSI_RESET}`  ../meli_${VERSION}-1_amd64.deb

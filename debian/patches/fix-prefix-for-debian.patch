@@ -1,0 +1,14 @@
+Description: Fix PREFIX env var in Makefile for use in Debian
+Author: Manos Pitsidianakis <epilys@nessuent.xyz>
+Last-Update: 2020-01-30
+--- a/Makefile
++++ b/Makefile
+@@ -18,7 +18,7 @@
+ # along with meli. If not, see <http://www.gnu.org/licenses/>.
+ 
+ # Options
+-PREFIX ?= /usr/local
++PREFIX ?= /usr
+ BINDIR ?= ${PREFIX}/bin
+ MANDIR ?= ${PREFIX}/share/man
+ 

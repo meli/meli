@@ -1,0 +1,6 @@
+meli (0.4.1-1) UNRELEASED; urgency=low
+
+  * Initial release. Closes: #nnnn
+    <nnnn is the bug number of your ITP>
+
+ -- Manos Pitsidianakis <epilys@nessuent.xyz>  Wed, 29 Jan 2020 22:24:08 +0200
