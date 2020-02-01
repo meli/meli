@@ -77,7 +77,7 @@ impl Component for Indexer {
         let index_entity_width = (30 * total_cols) / 100;
         let mid = get_x(bottom_right) - index_entity_width;
         for i in get_y(upper_left)..=get_y(bottom_right) {
-            set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
+            set_and_join_box(grid, (mid, i), BoxBoundary::Vertical);
         }
 
         let left_menu_area = (upper_left, (set_x(bottom_right, mid - 1)));

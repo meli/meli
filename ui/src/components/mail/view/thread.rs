@@ -245,11 +245,11 @@ impl ThreadView {
                             set_and_join_box(
                                 &mut content,
                                 (e.index.0 * 4 + ctr, 2 * y - 1),
-                                HORZ_BOUNDARY,
+                                BoxBoundary::Horizontal,
                             );
                             ctr += 1;
                         }
-                        set_and_join_box(&mut content, index, HORZ_BOUNDARY);
+                        set_and_join_box(&mut content, index, BoxBoundary::Horizontal);
                     }
                 }
                 write_string_to_grid(
@@ -288,13 +288,17 @@ impl ThreadView {
                     let bg_color = Color::Default;
                     change_colors(&mut content, area, fg_color, bg_color);
                 }
-                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), VERT_BOUNDARY);
-                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y + 1), VERT_BOUNDARY);
+                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
+                set_and_join_box(
+                    &mut content,
+                    (e.index.0 * 4, 2 * y + 1),
+                    BoxBoundary::Vertical,
+                );
                 for i in ((e.index.0 * 4) + 1)..width - 1 {
-                    set_and_join_box(&mut content, (i, 2 * y + 1), HORZ_BOUNDARY);
+                    set_and_join_box(&mut content, (i, 2 * y + 1), BoxBoundary::Horizontal);
                 }
-                set_and_join_box(&mut content, (width - 1, 2 * y), VERT_BOUNDARY);
-                set_and_join_box(&mut content, (width - 1, 2 * y + 1), VERT_BOUNDARY);
+                set_and_join_box(&mut content, (width - 1, 2 * y), BoxBoundary::Vertical);
+                set_and_join_box(&mut content, (width - 1, 2 * y + 1), BoxBoundary::Vertical);
             }
         } else {
             for (y, e) in self.entries.iter().enumerate() {
@@ -323,11 +327,11 @@ impl ThreadView {
                             set_and_join_box(
                                 &mut content,
                                 (e.index.0 * 4 + ctr, 2 * y - 1),
-                                HORZ_BOUNDARY,
+                                BoxBoundary::Horizontal,
                             );
                             ctr += 1;
                         }
-                        set_and_join_box(&mut content, index, HORZ_BOUNDARY);
+                        set_and_join_box(&mut content, index, BoxBoundary::Horizontal);
                     }
                 }
                 write_string_to_grid(
@@ -366,17 +370,21 @@ impl ThreadView {
                     let bg_color = Color::Default;
                     change_colors(&mut content, area, fg_color, bg_color);
                 }
-                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), VERT_BOUNDARY);
-                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y + 1), VERT_BOUNDARY);
+                set_and_join_box(&mut content, (e.index.0 * 4, 2 * y), BoxBoundary::Vertical);
+                set_and_join_box(
+                    &mut content,
+                    (e.index.0 * 4, 2 * y + 1),
+                    BoxBoundary::Vertical,
+                );
                 for i in ((e.index.0 * 4) + 1)..width - 1 {
-                    set_and_join_box(&mut content, (i, 2 * y + 1), HORZ_BOUNDARY);
+                    set_and_join_box(&mut content, (i, 2 * y + 1), BoxBoundary::Horizontal);
                 }
-                set_and_join_box(&mut content, (width - 1, 2 * y), VERT_BOUNDARY);
-                set_and_join_box(&mut content, (width - 1, 2 * y + 1), VERT_BOUNDARY);
+                set_and_join_box(&mut content, (width - 1, 2 * y), BoxBoundary::Vertical);
+                set_and_join_box(&mut content, (width - 1, 2 * y + 1), BoxBoundary::Vertical);
             }
 
             for y in 0..height - 1 {
-                set_and_join_box(&mut content, (width - 1, y), VERT_BOUNDARY);
+                set_and_join_box(&mut content, (width - 1, y), BoxBoundary::Vertical);
             }
         }
         self.content = content;
@@ -682,7 +690,7 @@ impl ThreadView {
             return;
         }
         for x in get_x(upper_left)..=get_x(bottom_right) {
-            set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
+            set_and_join_box(grid, (x, y - 1), BoxBoundary::Horizontal);
             grid[(x, y - 1)].set_fg(Color::Byte(33));
             grid[(x, y - 1)].set_bg(Color::Default);
         }
@@ -768,7 +776,7 @@ impl ThreadView {
         };
 
         for x in get_x(upper_left)..=get_x(bottom_right) {
-            set_and_join_box(grid, (x, y - 1), HORZ_BOUNDARY);
+            set_and_join_box(grid, (x, y - 1), BoxBoundary::Horizontal);
             grid[(x, y - 1)].set_fg(Color::Default);
             grid[(x, y - 1)].set_bg(Color::Default);
         }
@@ -832,7 +840,7 @@ impl ThreadView {
                 let area = (set_y(upper_left, mid), set_y(bottom_right, mid));
                 context.dirty_areas.push_back(area);
                 for x in get_x(upper_left)..=get_x(bottom_right) {
-                    set_and_join_box(grid, (x, mid), HORZ_BOUNDARY);
+                    set_and_join_box(grid, (x, mid), BoxBoundary::Horizontal);
                     grid[(x, mid)].set_fg(Color::Default);
                     grid[(x, mid)].set_bg(Color::Default);
                 }

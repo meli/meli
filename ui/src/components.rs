@@ -107,22 +107,6 @@ pub trait Component: Display + Debug + Send {
     }
 }
 
-/*
-pub(crate) fn is_box_char(ch: char) -> bool {
-    match ch {
-        HORZ_BOUNDARY | VERT_BOUNDARY => true,
-        _ => false,
-    }
-}
-
- * pub(crate) fn is_box_char(ch: char) -> bool {
- *  match ch {
- *      '└' | '─' | '┘' | '┴' | '┌' | '│' | '├' | '┐' | '┬' | '┤' | '┼' | '╷' | '╵' | '╴' | '╶' => true,
- *      _ => false,
- *  }
- * }
- */
-
 fn bin_to_ch(b: u32) -> char {
     match b {
         0b0001 => '╶',
@@ -140,7 +124,7 @@ fn bin_to_ch(b: u32) -> char {
         0b1101 => '┬',
         0b1110 => '┤',
         0b1111 => '┼',
-        x => unreachable!(format!("unreachable bin_to_ch(x), x = {:b}", x)),
+        _ => unsafe { std::hint::unreachable_unchecked() },
     }
 }
 
@@ -363,7 +347,12 @@ fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
     bin_set
 }
 
-pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: char) {
+pub enum BoxBoundary {
+    Horizontal,
+    Vertical,
+}
+
+pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: BoxBoundary) {
     /* Connected sides:
      *
      *        1
@@ -376,9 +365,8 @@ pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: char) {
 
     if grid.ascii_drawing {
         grid[idx].set_ch(match ch {
-            '│' => '|',
-            '─' => '-',
-            _ => unreachable!(),
+            BoxBoundary::Vertical => '|',
+            BoxBoundary::Horizontal => '-',
         });
 
         grid[idx].set_fg(Color::Byte(240));
@@ -386,9 +374,8 @@ pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: char) {
     }
 
     let bin_set = match ch {
-        '│' => set_and_join_vert(grid, idx),
-        '─' => set_and_join_horz(grid, idx),
-        _ => unreachable!(),
+        BoxBoundary::Vertical => set_and_join_vert(grid, idx),
+        BoxBoundary::Horizontal => set_and_join_horz(grid, idx),
     };
 
     grid[idx].set_ch(bin_to_ch(bin_set));
@@ -414,9 +401,17 @@ pub fn create_box(grid: &mut CellBuffer, area: Area) {
             grid[(get_x(bottom_right), y)].set_ch(VERT_BOUNDARY);
             grid[(get_x(bottom_right), y)].set_fg(Color::Byte(240));
         }
-        set_and_join_box(grid, upper_left, HORZ_BOUNDARY);
-        set_and_join_box(grid, set_x(upper_left, get_x(bottom_right)), HORZ_BOUNDARY);
-        set_and_join_box(grid, set_y(upper_left, get_y(bottom_right)), VERT_BOUNDARY);
-        set_and_join_box(grid, bottom_right, VERT_BOUNDARY);
+        set_and_join_box(grid, upper_left, BoxBoundary::Horizontal);
+        set_and_join_box(
+            grid,
+            set_x(upper_left, get_x(bottom_right)),
+            BoxBoundary::Horizontal,
+        );
+        set_and_join_box(
+            grid,
+            set_y(upper_left, get_y(bottom_right)),
+            BoxBoundary::Vertical,
+        );
+        set_and_join_box(grid, bottom_right, BoxBoundary::Vertical);
     }
 }

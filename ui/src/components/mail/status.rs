@@ -252,7 +252,7 @@ impl StatusPanel {
 
         for (i, a) in context.accounts.iter().enumerate() {
             for x in 2..(120 - 1) {
-                set_and_join_box(&mut self.content, (x, 12 + i * 10), HORZ_BOUNDARY);
+                set_and_join_box(&mut self.content, (x, 12 + i * 10), BoxBoundary::Horizontal);
             }
             //create_box(&mut self.content, ((2, 5 + i * 10), (120 - 1, 15 + i * 10)));
             let (x, y) = write_string_to_grid(
