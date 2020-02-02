@@ -25,9 +25,9 @@
 
 #[macro_use]
 extern crate melib;
-pub extern crate mime_apps;
 extern crate notify_rust;
 extern crate text_processing;
+pub extern crate xdg_utils;
 #[macro_use]
 extern crate serde_derive;
 extern crate linkify;

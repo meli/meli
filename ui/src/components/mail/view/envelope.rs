@@ -23,7 +23,7 @@ use super::*;
 use linkify::{Link, LinkFinder};
 use std::process::{Command, Stdio};
 
-use mime_apps::query_default_app;
+use xdg_utils::query_default_app;
 
 #[derive(PartialEq, Debug)]
 enum ViewMode {

@@ -818,11 +818,6 @@ version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "mime_apps"
-version = "0.2.0"
-source = "git+https://git.meli.delivery/meli/mime_apps#fdd4f43a843eb729ef0d1f58a52b0e74bab7b9d6"
-
-[[package]]
 name = "mime_guess"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1854,7 +1849,6 @@ dependencies = [
  "libc 0.2.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "linkify 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "melib 0.4.1",
- "mime_apps 0.2.0 (git+https://git.meli.delivery/meli/mime_apps)",
  "nix 0.16.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "nom 3.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "notify 4.0.12 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1873,6 +1867,7 @@ dependencies = [
  "unicode-segmentation 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "xdg 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xdg-utils 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2128,6 +2123,11 @@ name = "xdg"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
+[[package]]
+name = "xdg-utils"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
 [metadata]
 "checksum anyhow 1.0.25 (registry+https://github.com/rust-lang/crates.io-index)" = "9267dff192e68f3399525901e709a48c1d3982c9c072fa32f2127a0cb0babf14"
 "checksum arc-swap 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "854ede29f7a0ce90519fb2439d030320c6201119b87dab0ee96044603e1130b9"
@@ -2225,7 +2225,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum memmap 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "46f3c7359028b31999287dae4e5047ddfe90a23b7dca2282ce759b491080c99b"
 "checksum memoffset 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "ce6075db033bbbb7ee5a0bbd3a3186bbae616f57fb001c485c7ff77955f8177f"
 "checksum mime 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)" = "dd1d63acd1b78403cc0c325605908475dd9b9a3acbf65ed8bcab97e27014afcf"
-"checksum mime_apps 0.2.0 (git+https://git.meli.delivery/meli/mime_apps)" = "<none>"
 "checksum mime_guess 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "1a0ed03949aef72dbdf3116a383d7b38b4768e6f960528cd6a6044aa9ed68599"
 "checksum mio 0.6.19 (registry+https://github.com/rust-lang/crates.io-index)" = "83f51996a3ed004ef184e16818edc51fadffe8e7ca68be67f9dee67d84d0ff23"
 "checksum mio-extras 2.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "46e73a04c2fa6250b8d802134d56d554a9ec2922bf977777c805ea5def61ce40"
@@ -2363,3 +2362,4 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum winreg 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "b2986deb581c4fe11b621998a5e53361efe6b48a151178d0cd9eeffa4dc6acc9"
 "checksum ws2_32-sys 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "d59cefebd0c892fa2dd6de581e937301d8552cb44489cdff035c6187cb63fa5e"
 "checksum xdg 2.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d089681aa106a86fade1b0128fb5daf07d5867a509ab036d99988dec80429a57"
+"checksum xdg-utils 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4b4aa07a8b3ab25251dbe6448f6af84ec842d1965a038cf422f97f2a6b76ae3e"

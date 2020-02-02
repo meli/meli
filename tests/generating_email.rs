@@ -1,8 +1,8 @@
 use melib;
-use ui::mime_apps;
+use ui::xdg_utils;
 
 use melib::email::Draft;
-use mime_apps::query_mime_info;
+use xdg_utils::query_mime_info;
 
 #[test]
 fn build_draft() {

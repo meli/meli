@@ -24,10 +24,10 @@ use melib::list_management;
 
 use crate::terminal::embed::EmbedGrid;
 use melib::Draft;
-use mime_apps::query_mime_info;
 use nix::sys::wait::WaitStatus;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
+use xdg_utils::query_mime_info;
 
 #[derive(Debug, PartialEq)]
 enum Cursor {

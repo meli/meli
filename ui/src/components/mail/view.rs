@@ -36,7 +36,7 @@ mod envelope;
 pub use self::envelope::*;
 
 use linkify::{Link, LinkFinder};
-use mime_apps::query_default_app;
+use xdg_utils::query_default_app;
 
 #[derive(PartialEq, Debug, Clone)]
 enum ViewMode {
