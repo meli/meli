@@ -19,8 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::types::LineBreakClass;
-use crate::types::LineBreakClass::*;
+use super::types::LineBreakClass;
+use super::types::LineBreakClass::*;
 
 pub const LINE_BREAK_RULES: &'static [(u32, u32, LineBreakClass)] = &[
     (0x0, 0x8, CM),

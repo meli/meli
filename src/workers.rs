@@ -28,10 +28,10 @@ use crossbeam::{
 };
 use fnv::FnvHashMap;
 use melib::async_workers::{Work, WorkContext};
+use melib::text_processing::Truncate;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-use text_processing::Truncate;
 
 const MAX_WORKER: usize = 4;
 

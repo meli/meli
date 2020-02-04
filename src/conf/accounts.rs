@@ -32,10 +32,10 @@ use melib::backends::{
 };
 use melib::error::{MeliError, Result};
 use melib::mailbox::*;
+use melib::text_processing::GlobMatch;
 use melib::thread::{SortField, SortOrder, ThreadNode, ThreadNodeHash, Threads};
 use melib::AddressBook;
 use smallvec::SmallVec;
-use text_processing::GlobMatch;
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use crate::{StatusEvent, ThreadEvent};

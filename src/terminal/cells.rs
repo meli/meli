@@ -26,7 +26,7 @@
 
 use super::position::*;
 use crate::state::Context;
-use text_processing::wcwidth;
+use melib::text_processing::wcwidth;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::From;

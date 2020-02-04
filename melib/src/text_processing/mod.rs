@@ -1,5 +1,5 @@
 /*
- * meli - text_processing crate.
+ * meli - text_processing mod.
  *
  * Copyright 2017-2020 Manos Pitsidianakis
  *

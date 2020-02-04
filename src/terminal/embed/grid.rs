@@ -22,9 +22,9 @@
 use super::*;
 use crate::terminal::cells::*;
 use melib::error::{MeliError, Result};
+use melib::text_processing::wcwidth;
 use nix::sys::wait::WaitStatus;
 use nix::sys::wait::{waitpid, WaitPidFlag};
-use text_processing::wcwidth;
 /**
  * `EmbedGrid` manages the terminal grid state of the embed process.
  *

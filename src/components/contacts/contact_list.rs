@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use super::*;
+use crate::melib::text_processing::TextProcessing;
 
 use melib::CardId;
 use std::cmp;

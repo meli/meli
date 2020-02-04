@@ -26,12 +26,12 @@ use crate::state::Context;
 use crate::types::{create_temp_file, ForkType, UIEvent};
 use fnv::FnvHashMap;
 use melib::attachments::decode;
+use melib::text_processing::GlobMatch;
 use melib::{email::Attachment, MeliError, Result};
 use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use text_processing::GlobMatch;
 
 pub struct MailcapEntry {
     command: String,

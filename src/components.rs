@@ -26,6 +26,7 @@
  */
 
 use super::*;
+use crate::melib::text_processing::{TextProcessing, Truncate};
 
 pub mod mail;
 pub use crate::mail::*;

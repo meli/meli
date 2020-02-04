@@ -29,8 +29,8 @@
 
 */
 
-use crate::types::Reflow;
-use crate::wcwidth::{wcwidth, CodePointsIter};
+use super::types::Reflow;
+use super::wcwidth::{wcwidth, CodePointsIter};
 extern crate unicode_segmentation;
 use self::unicode_segmentation::UnicodeSegmentation;
 
@@ -71,11 +71,11 @@ pub trait TextProcessing: UnicodeSegmentation + CodePointsIter {
 
 impl TextProcessing for str {
     fn split_lines(&self, width: usize) -> Vec<String> {
-        crate::line_break::linear(self, width)
+        super::line_break::linear(self, width)
     }
 
     fn split_lines_reflow(&self, reflow: Reflow, width: Option<usize>) -> Vec<String> {
-        crate::line_break::split_lines_reflow(self, reflow, width)
+        super::line_break::split_lines_reflow(self, reflow, width)
     }
 }
 

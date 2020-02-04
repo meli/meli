@@ -40,7 +40,7 @@ mod iterators;
 pub use iterators::*;
 
 #[cfg(feature = "unicode_algorithms")]
-use text_processing::grapheme_clusters::*;
+use crate::text_processing::grapheme_clusters::*;
 use uuid::Uuid;
 
 use fnv::{FnvHashMap, FnvHashSet};

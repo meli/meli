@@ -31,8 +31,6 @@ use std::alloc::System;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 extern crate notify_rust;
-extern crate text_processing;
-use text_processing::*;
 extern crate xdg_utils;
 #[macro_use]
 extern crate serde_derive;

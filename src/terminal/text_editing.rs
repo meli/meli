@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use text_processing::TextProcessing;
+use melib::text_processing::TextProcessing;
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UText {

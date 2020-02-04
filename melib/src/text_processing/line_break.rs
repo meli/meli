@@ -21,10 +21,10 @@
 
 extern crate unicode_segmentation;
 use self::unicode_segmentation::UnicodeSegmentation;
-use crate::grapheme_clusters::TextProcessing;
-use crate::tables::LINE_BREAK_RULES;
-use crate::types::LineBreakClass;
-use crate::types::Reflow;
+use super::grapheme_clusters::TextProcessing;
+use super::tables::LINE_BREAK_RULES;
+use super::types::LineBreakClass;
+use super::types::Reflow;
 use core::cmp::Ordering;
 use core::iter::Peekable;
 use core::str::FromStr;
@@ -118,8 +118,8 @@ macro_rules! next_grapheme_class {
 /// Returns positions where breaks can happen
 /// Examples:
 /// ```
-/// use text_processing::{self, LineBreakCandidate::{self, *}};
-/// use text_processing::line_break::LineBreakCandidateIter;
+/// use melib::text_processing::{self, LineBreakCandidate::{self, *}};
+/// use melib::text_processing::line_break::LineBreakCandidateIter;
 ///
 /// assert!(LineBreakCandidateIter::new("").collect::<Vec<(usize, LineBreakCandidate)>>().is_empty());
 /// assert_eq!(&[(7, BreakAllowed), (12, MandatoryBreak)],
@@ -749,8 +749,8 @@ mod tests {
 pub use alg::linear;
 
 mod alg {
-    use super::*;
-    use crate::grapheme_clusters::TextProcessing;
+    use super::super::grapheme_clusters::TextProcessing;
+    use super::super::*;
     fn cost(i: usize, j: usize, width: usize, minima: &Vec<usize>, offsets: &Vec<usize>) -> usize {
         let w = offsets[j] + j - offsets[i] - i - 1;
         if w > width {

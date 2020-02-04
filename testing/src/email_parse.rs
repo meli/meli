@@ -10,14 +10,14 @@ use melib::*;
 /// ```
 
 fn main() -> Result<()> {
-    if args.len() == 1 {
+    if std::env::args().len() == 1 {
         eprintln!("Usage: ./emailparse /path/to/email [/path/to/email2 /path/to/email3 ..]");
         std::process::exit(1);
     }
 
     for i in std::env::args().skip(1) {
         println!("Path is {}", i);
-        let filename = std::path::PathBuf::from(i);
+        let filename = std::path::PathBuf::from(&i);
 
         if filename.exists() && filename.is_file() {
             let buffer = std::fs::read_to_string(&filename)

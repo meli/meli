@@ -167,7 +167,7 @@ impl From<FileAccount> for AccountConf {
         let mut folder_confs = x.folders.clone();
         for s in &x.subscribed_folders {
             if !folder_confs.contains_key(s) {
-                use text_processing::GlobMatch;
+                use melib::text_processing::GlobMatch;
                 if s.is_glob() {
                     continue;
                 }

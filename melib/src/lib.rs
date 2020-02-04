@@ -102,7 +102,7 @@ pub mod dbg {
 }
 
 #[cfg(feature = "unicode_algorithms")]
-extern crate text_processing;
+pub mod text_processing;
 
 pub mod datetime;
 pub use datetime::UnixTimestamp;
