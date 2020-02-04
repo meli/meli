@@ -132,6 +132,10 @@ mod tests {
 
     #[test]
     fn test_escape_str() {
+        if std::env::var("DISPLAY").is_err() {
+            return;
+        }
+
         let title: &str = "& > Title τίτλος";
         let body: &str = "& > Body σώμα";
         notify_rust::Notification::new()
