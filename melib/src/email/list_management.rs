@@ -1,5 +1,5 @@
 /*
- * meli - ui crate.
+ * meli
  *
  * Copyright 2017-2019 Manos Pitsidianakis
  *

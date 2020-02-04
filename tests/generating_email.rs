@@ -1,6 +1,4 @@
 use melib;
-use ui::xdg_utils;
-
 use melib::email::Draft;
 use xdg_utils::query_mime_info;
 

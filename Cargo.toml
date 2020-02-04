@@ -14,21 +14,44 @@ crossbeam = "0.7.2"
 signal-hook = "0.1.12"
 signal-hook-registry = "1.2.0"
 nix = "0.16.1"
-melib = { path = "melib", version = "*" }
-ui = { path = "ui", version = "*" }
+melib = { path = "melib", version = "0.4.1" }
+
+serde = "1.0.71"
+serde_derive = "1.0.71"
+serde_json = "1.0"
+toml = "0.5.3"
+fnv = "1.0.3" # >:c
+linkify = "0.3.1" # >:c
+xdg-utils = "0.3.0"
+nom = "3.2.0"
+notify = "4.0.1" # >:c
+notify-rust = "^3" # >:c
+termion = "1.5.1"
+bincode = "1.2.0"
+uuid = { version = "0.7.4", features = ["serde", "v4"] }
+unicode-segmentation = "1.2.1" # >:c
+text_processing = { path = "text_processing", version = "0.4.1" }
+libc = {version = "0.2.59", features = ["extra_traits",]}
+rusqlite = {version = "0.20.0", optional =true }
+rmp = "^0.8"
+rmpv = { version = "^0.4.2", features=["with-serde",] }
+rmp-serde = "^0.14.0"
+smallvec = { version = "1.1.0", features = ["serde", ] }
+
 
 [profile.release]
 lto = true
 debug = false
 
 [workspace]
-members = ["melib", "ui", "debug_printer", "testing", "text_processing"]
+members = ["melib", "testing", "text_processing"]
 
 [features]
-default = []
-notmuch = ["melib/notmuch_backend", "ui/notmuch"]
+default = ["sqlite3"]
+notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
+sqlite3 = ["rusqlite"]
 
 # Print tracing logs as meli runs in stderr
 # enable for debug tracing logs: build with --features=debug-tracing
-debug-tracing = ["melib/debug-tracing", "ui/debug-tracing"]
+debug-tracing = ["melib/debug-tracing", ]

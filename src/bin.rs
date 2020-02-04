@@ -21,24 +21,74 @@
 
 //!
 //!  This crate contains the frontend stuff of the application. The application entry way on
-//!  `src/bin.rs` creates an event loop and passes input to the `ui` module.
+//!  `src/bin.rs` creates an event loop and passes input to a thread.
 //!
 //! The mail handling stuff is done in the `melib` crate which includes all backend needs. The
 //! split is done to theoretically be able to create different frontends with the same innards.
 //!
 
 use std::alloc::System;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+extern crate notify_rust;
+extern crate text_processing;
+use text_processing::*;
+extern crate xdg_utils;
+#[macro_use]
+extern crate serde_derive;
+extern crate linkify;
+extern crate uuid;
+
+extern crate fnv;
+extern crate termion;
+
+#[macro_use]
+extern crate nom;
+
+extern crate serde_json;
+extern crate smallvec;
 
 #[global_allocator]
 static GLOBAL: System = System;
 
-// Re export to put crates in the documentation's start page.
-pub use melib;
-pub use ui;
-
+#[macro_use]
+extern crate melib;
 use melib::*;
-use ui::*;
+
+mod unix;
+use unix::*;
+
+#[macro_use]
+pub mod types;
+use crate::types::*;
+
+#[macro_use]
+pub mod terminal;
+use crate::terminal::*;
+
+#[macro_use]
+pub mod execute;
+use crate::execute::*;
+
+pub mod state;
+use crate::state::*;
+
+pub mod components;
+use crate::components::*;
+
+#[macro_use]
+pub mod conf;
+use crate::conf::*;
+
+pub mod workers;
+use crate::workers::*;
+
+#[cfg(feature = "sqlite3")]
+pub mod sqlite3;
+
+pub mod cache;
+pub mod mailcap;
+pub mod plugins;
 
 use nix;
 use std::os::raw::c_int;
@@ -152,15 +202,12 @@ fn run_app() -> Result<()> {
                 args.version = true;
             }
             "--print-loaded-themes" => {
-                let s = ui::conf::FileSettings::new()?;
+                let s = conf::FileSettings::new()?;
                 print!("{}", s.terminal.themes.to_string());
                 return Ok(());
             }
             "--print-default-theme" => {
-                print!(
-                    "{}",
-                    ui::conf::Theme::default().key_to_string("dark", false)
-                );
+                print!("{}", conf::Theme::default().key_to_string("dark", false));
                 return Ok(());
             }
             e => match prev {
@@ -215,7 +262,7 @@ fn run_app() -> Result<()> {
     };
 
     if let Some(config_path) = args.test_config.as_ref() {
-        ui::conf::FileSettings::validate(config_path)?;
+        conf::FileSettings::validate(config_path)?;
         return Ok(());
     }
 
@@ -235,7 +282,7 @@ fn run_app() -> Result<()> {
         if config_path.exists() {
             return Err(MeliError::new(format!("File `{}` already exists.\nMaybe you meant to specify another path with --create-config=PATH", config_path.display())));
         }
-        ui::conf::create_config_file(&config_path)?;
+        conf::create_config_file(&config_path)?;
         return Ok(());
     }
 
@@ -268,19 +315,17 @@ fn run_app() -> Result<()> {
     let status_bar = Box::new(StatusBar::new(window));
     state.register_component(status_bar);
 
-    let xdg_notifications = Box::new(ui::components::notifications::XDGNotifications::new());
+    let xdg_notifications = Box::new(components::notifications::XDGNotifications::new());
     state.register_component(xdg_notifications);
-    state.register_component(Box::new(
-        ui::components::notifications::NotificationFilter {},
-    ));
+    state.register_component(Box::new(components::notifications::NotificationFilter {}));
 
-    /* Keep track of the input mode. See ui::UIMode for details */
+    /* Keep track of the input mode. See UIMode for details */
     'main: loop {
         state.render();
 
         'inner: loop {
             /* Check if any components have sent reply events to State. */
-            let events: ui::smallvec::SmallVec<[UIEvent; 8]> = state.context.replies();
+            let events: smallvec::SmallVec<[UIEvent; 8]> = state.context.replies();
             for e in events {
                 state.rcv_event(e);
             }

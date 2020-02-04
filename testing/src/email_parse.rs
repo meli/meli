@@ -1,23 +1,32 @@
 extern crate melib;
+use melib::Result;
 use melib::*;
 
-use melib::Result;
+/// Parses e-mail from files and prints the debug information of the parsed `Envelope`
+///
+/// # Example invocation
+/// ```sh
+/// ./emailparse /path/to/email [/path/to/email2 /path/to/email3 ..]"
+/// ```
 
 fn main() -> Result<()> {
+    if args.len() == 1 {
+        eprintln!("Usage: ./emailparse /path/to/email [/path/to/email2 /path/to/email3 ..]");
+        std::process::exit(1);
+    }
+
     for i in std::env::args().skip(1) {
-        println!("i is {}", i);
+        println!("Path is {}", i);
         let filename = std::path::PathBuf::from(i);
 
-        if filename.is_file() {
-            let buffer = std::fs::read_to_string(&filename).expect(&format!(
-                "Something went wrong reading the file {}",
-                filename.display()
-            ));
+        if filename.exists() && filename.is_file() {
+            let buffer = std::fs::read_to_string(&filename)
+                .expect(&format!("Something went wrong reading the file {}", i,));
             let env = Envelope::from_bytes(&buffer.as_bytes(), None).expect("Couldn't parse email");
-            eprintln!("Env is {:#?}", env);
-            eprintln!("{:?}", env.body_bytes(buffer.as_bytes()));
+            println!("Env is {:#?}", env);
+            println!("{:?}", env.body_bytes(buffer.as_bytes()));
         } else {
-            println!("it's not a file");
+            println!("{} is not a valid file.", i);
         }
     }
     Ok(())
