@@ -1,8 +1,16 @@
 [package]
 name = "meli"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 edition = "2018"
+
+license = "GPL-3.0-or-later"
+readme = "README"
+description = "terminal mail client"
+homepage = "https://meli.delivery"
+repository = "https://git.meli.delivery/meli/meli.git"
+keywords = ["mail", "mua", "maildir", "terminal", "imap"]
+categories = ["command-line-utilities", "email"]
 
 [[bin]]
 name = "meli"

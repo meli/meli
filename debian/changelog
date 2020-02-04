@@ -1,6 +1,10 @@
-meli (0.4.1-1) UNRELEASED; urgency=low
+meli (0.5.0-1) buster; urgency=low
 
-  * Initial release. Closes: #nnnn
-    <nnnn is the bug number of your ITP>
+  * Update to 0.5.0
+
+ -- Manos Pitsidianakis <epilys@nessuent.xyz>  Wed, 29 Jan 2020 22:24:08 +0200
+meli (0.4.1-1) buster; urgency=low
+
+  * Initial release.
 
  -- Manos Pitsidianakis <epilys@nessuent.xyz>  Wed, 29 Jan 2020 22:24:08 +0200
