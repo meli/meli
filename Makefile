@@ -34,12 +34,12 @@ MANPATHS := `manpath 2> /dev/null`
 VERSION ?= `sed -n "s/^version\s*=\s*\"\(.*\)\"/\1/p" Cargo.toml`
 
 # Output parameters
-BOLD ?= `tput bold`
-UNDERLINE ?= `tput smul`
-ANSI_RESET ?= `tput sgr0`
+BOLD ?= `[ -z $${TERM} ] && echo "" || tput bold`
+UNDERLINE ?= `[ -z $${TERM} ] && echo "" || tput smul`
+ANSI_RESET ?= `[ -z $${TERM} ] && echo "" || tput sgr0`
 CARGO_COLOR ?= `[ -z $${NO_COLOR+x} ] && echo "" || echo "--color=never "`
-RED ?= `[ -z $${NO_COLOR+x} ] && tput setaf 1 || echo ""`
-GREEN ?= `[ -z $${NO_COLOR+x} ] && tput setaf 2 || echo ""`
+RED ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 1) || echo ""`
+GREEN ?= `[ -z $${NO_COLOR+x} ] && ([ -z $${TERM} ] && echo "" || tput setaf 2) || echo ""`
 
 .POSIX:
 .SUFFIXES:
