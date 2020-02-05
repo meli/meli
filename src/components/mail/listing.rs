@@ -200,6 +200,9 @@ pub trait MailListingTrait: ListingTrait {
     fn redraw_list(&mut self, _context: &Context, _items: Box<dyn Iterator<Item = ThreadHash>>) {
         unimplemented!()
     }
+
+    /// Use `force` when there have been changes in the mailbox or account lists in `context`
+    fn refresh_mailbox(&mut self, context: &mut Context, force: bool);
 }
 
 pub trait ListingTrait: Component {
@@ -446,6 +449,20 @@ impl Component for Listing {
                             .process_event(&mut UIEvent::StartupCheck(*folder_hash), context);
                     }
                 }
+            }
+            UIEvent::MailboxDelete((account_index, _folder_hash))
+            | UIEvent::MailboxCreate((account_index, _folder_hash)) => {
+                if self.cursor_pos.0 == *account_index {
+                    self.cursor_pos.1 = std::cmp::min(
+                        context.accounts[*account_index].len() - 1,
+                        self.cursor_pos.1,
+                    );
+                    self.component
+                        .set_coordinates((self.cursor_pos.0, self.cursor_pos.1));
+                    self.component.refresh_mailbox(context, true);
+                    self.set_dirty(true);
+                }
+                return true;
             }
             _ => {}
         }

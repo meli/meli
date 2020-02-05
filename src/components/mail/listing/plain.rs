@@ -101,6 +101,100 @@ impl MailListingTrait for PlainListing {
         }
         */
     }
+
+    /// Fill the `self.data_columns` `CellBuffers` with the contents of the account folder the user has
+    /// chosen.
+    fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
+        self.dirty = true;
+        let old_cursor_pos = self.cursor_pos;
+        if !(self.cursor_pos.0 == self.new_cursor_pos.0
+            && self.cursor_pos.1 == self.new_cursor_pos.1)
+        {
+            self.cursor_pos.2 = 0;
+            self.new_cursor_pos.2 = 0;
+        }
+        self.cursor_pos.1 = self.new_cursor_pos.1;
+        self.cursor_pos.0 = self.new_cursor_pos.0;
+        self.folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
+            .folders_order
+            .get(self.cursor_pos.1)
+        {
+            *h
+        } else {
+            self.cursor_pos.1 = old_cursor_pos.1;
+            self.dirty = false;
+            return;
+        };
+
+        self.color_cache = ColorCache {
+            unseen: crate::conf::value(context, "mail.listing.plain.unseen"),
+            highlighted: crate::conf::value(context, "mail.listing.plain.highlighted"),
+            even: crate::conf::value(context, "mail.listing.plain.even"),
+            odd: crate::conf::value(context, "mail.listing.plain.odd"),
+            selected: crate::conf::value(context, "mail.listing.plain.selected"),
+            attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
+            thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
+            ..self.color_cache
+        };
+        if std::env::var("NO_COLOR").is_ok()
+            && (context.settings.terminal.use_color.is_false()
+                || context.settings.terminal.use_color.is_internal())
+        {
+            self.color_cache.highlighted.attrs |= Attr::Reverse;
+        }
+
+        // Get mailbox as a reference.
+        //
+        match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
+            Ok(()) => {}
+            Err(_) => {
+                let message: String =
+                    context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
+                self.data_columns.columns[0] =
+                    CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
+                self.length = 0;
+                write_string_to_grid(
+                    message.as_str(),
+                    &mut self.data_columns.columns[0],
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((0, 0), (MAX_COLS - 1, 0)),
+                    None,
+                );
+                return;
+            }
+        }
+        self.local_collection = context.accounts[self.cursor_pos.0][self.folder_hash]
+            .unwrap()
+            .envelopes
+            .iter()
+            .cloned()
+            .collect();
+        let env_lck = context.accounts[self.cursor_pos.0]
+            .collection
+            .envelopes
+            .read()
+            .unwrap();
+        self.thread_node_hashes = context.accounts[self.cursor_pos.0][self.folder_hash]
+            .unwrap()
+            .envelopes
+            .iter()
+            .map(|h| (*h, env_lck[h].thread()))
+            .collect();
+        drop(env_lck);
+        self.redraw_list(context);
+
+        if self.length > 0 {
+            let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
+            let temp = (self.new_cursor_pos.0, self.new_cursor_pos.1, env_hash);
+            if !force && old_cursor_pos == self.new_cursor_pos {
+                self.view.update(temp);
+            } else if self.unfocused {
+                self.view = MailView::new(temp, None, None);
+            }
+        }
+    }
 }
 
 impl ListingTrait for PlainListing {
@@ -111,6 +205,7 @@ impl ListingTrait for PlainListing {
     fn set_coordinates(&mut self, coordinates: (usize, usize)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
+        self.view = MailView::default();
         self.filtered_selection.clear();
         self.filtered_order.clear();
         self.filter_term.clear();
@@ -189,7 +284,7 @@ impl ListingTrait for PlainListing {
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
         {
-            self.refresh_mailbox(context);
+            self.refresh_mailbox(context, false);
         }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -560,100 +655,6 @@ impl PlainListing {
             flag: FlagString(format!("{}", if e.has_attachments() { "📎" } else { "" },)),
             from: FromString(address_list!((e.from()) as comma_sep_list)),
             tags: TagString(tags, colors),
-        }
-    }
-
-    /// Fill the `self.data_columns` `CellBuffers` with the contents of the account folder the user has
-    /// chosen.
-    fn refresh_mailbox(&mut self, context: &mut Context) {
-        self.dirty = true;
-        let old_cursor_pos = self.cursor_pos;
-        if !(self.cursor_pos.0 == self.new_cursor_pos.0
-            && self.cursor_pos.1 == self.new_cursor_pos.1)
-        {
-            self.cursor_pos.2 = 0;
-            self.new_cursor_pos.2 = 0;
-        }
-        self.cursor_pos.1 = self.new_cursor_pos.1;
-        self.cursor_pos.0 = self.new_cursor_pos.0;
-        self.folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
-            .folders_order
-            .get(self.cursor_pos.1)
-        {
-            *h
-        } else {
-            self.cursor_pos.1 = old_cursor_pos.1;
-            self.dirty = false;
-            return;
-        };
-
-        self.color_cache = ColorCache {
-            unseen: crate::conf::value(context, "mail.listing.plain.unseen"),
-            highlighted: crate::conf::value(context, "mail.listing.plain.highlighted"),
-            even: crate::conf::value(context, "mail.listing.plain.even"),
-            odd: crate::conf::value(context, "mail.listing.plain.odd"),
-            selected: crate::conf::value(context, "mail.listing.plain.selected"),
-            attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
-            thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
-            ..self.color_cache
-        };
-        if std::env::var("NO_COLOR").is_ok()
-            && (context.settings.terminal.use_color.is_false()
-                || context.settings.terminal.use_color.is_internal())
-        {
-            self.color_cache.highlighted.attrs |= Attr::Reverse;
-        }
-
-        // Get mailbox as a reference.
-        //
-        match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
-            Ok(()) => {}
-            Err(_) => {
-                let message: String =
-                    context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
-                self.data_columns.columns[0] =
-                    CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
-                self.length = 0;
-                write_string_to_grid(
-                    message.as_str(),
-                    &mut self.data_columns.columns[0],
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
-                    ((0, 0), (MAX_COLS - 1, 0)),
-                    None,
-                );
-                return;
-            }
-        }
-        self.local_collection = context.accounts[self.cursor_pos.0][self.folder_hash]
-            .unwrap()
-            .envelopes
-            .iter()
-            .cloned()
-            .collect();
-        let env_lck = context.accounts[self.cursor_pos.0]
-            .collection
-            .envelopes
-            .read()
-            .unwrap();
-        self.thread_node_hashes = context.accounts[self.cursor_pos.0][self.folder_hash]
-            .unwrap()
-            .envelopes
-            .iter()
-            .map(|h| (*h, env_lck[h].thread()))
-            .collect();
-        drop(env_lck);
-        self.redraw_list(context);
-
-        if self.length > 0 {
-            let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
-            let temp = (self.new_cursor_pos.0, self.new_cursor_pos.1, env_hash);
-            if old_cursor_pos == self.new_cursor_pos {
-                self.view.update(temp);
-            } else if self.unfocused {
-                self.view = MailView::new(temp, None, None);
-            }
         }
     }
 
@@ -1084,7 +1085,7 @@ impl Component for PlainListing {
                         //    let threads = &account.collection.threads[&self.folder_hash];
                         //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
                         //} else {
-                        //    self.refresh_mailbox(context);
+                        //    self.refresh_mailbox(contex, falset);
                         //}
                         return true;
                     }
@@ -1134,11 +1135,11 @@ impl Component for PlainListing {
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if (*idxa, *idxf) == (self.new_cursor_pos.0, self.folder_hash) =>
             {
-                self.refresh_mailbox(context);
+                self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
             UIEvent::StartupCheck(ref f) if *f == self.folder_hash => {
-                self.refresh_mailbox(context);
+                self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
@@ -1179,7 +1180,7 @@ impl Component for PlainListing {
             UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.set_dirty(true);
-                self.refresh_mailbox(context);
+                self.refresh_mailbox(context, false);
                 return true;
             }
             UIEvent::Action(ref action) => match action {
@@ -1193,7 +1194,7 @@ impl Component for PlainListing {
                     }
                     self.filtered_selection.clear();
                     self.new_cursor_pos.1 = *idx;
-                    self.refresh_mailbox(context);
+                    self.refresh_mailbox(context, false);
                     return true;
                 }
                 Action::Listing(Filter(ref filter_term)) if !self.unfocused => {

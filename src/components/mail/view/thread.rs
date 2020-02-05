@@ -166,6 +166,10 @@ impl ThreadView {
         let mailbox = &account[self.coordinates.1].unwrap();
         let threads = &account.collection.threads[&mailbox.folder.hash()];
 
+        if !threads.groups.contains_key(&self.thread_group) {
+            return;
+        }
+
         let thread_iter = threads.thread_group_iter(self.thread_group);
         self.entries.clear();
         for (line, (ind, thread_node_hash)) in thread_iter.enumerate() {

@@ -58,6 +58,145 @@ impl MailListingTrait for ThreadListing {
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
         SmallVec::new()
     }
+
+    /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
+    /// chosen.
+    fn refresh_mailbox(&mut self, context: &mut Context, _force: bool) {
+        self.dirty = true;
+        if !(self.cursor_pos.0 == self.new_cursor_pos.0
+            && self.cursor_pos.1 == self.new_cursor_pos.1)
+        {
+            self.cursor_pos.2 = 0;
+            self.new_cursor_pos.2 = 0;
+        }
+        self.cursor_pos.1 = self.new_cursor_pos.1;
+        self.cursor_pos.0 = self.new_cursor_pos.0;
+        self.folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
+            .folders_order
+            .get(self.cursor_pos.1)
+        {
+            *h
+        } else {
+            return;
+        };
+
+        // Get mailbox as a reference.
+        //
+        match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
+            Ok(_) => {}
+            Err(_) => {
+                let message: String =
+                    context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
+                self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+                self.length = 0;
+                write_string_to_grid(
+                    message.as_str(),
+                    &mut self.content,
+                    Color::Default,
+                    Color::Default,
+                    Attr::Default,
+                    ((0, 0), (MAX_COLS - 1, 0)),
+                    None,
+                );
+                return;
+            }
+        }
+        let account = &context.accounts[self.cursor_pos.0];
+        let mailbox = account[self.cursor_pos.1].unwrap();
+
+        let threads = &account.collection.threads[&mailbox.folder.hash()];
+        self.length = threads.len();
+        self.locations.clear();
+        if self.length == 0 {
+            let message = format!("Folder `{}` is empty.", mailbox.folder.name());
+            self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+            write_string_to_grid(
+                &message,
+                &mut self.content,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                ((0, 0), (message.len() - 1, 0)),
+                None,
+            );
+            return;
+        }
+        self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
+
+        let mut indentations: Vec<bool> = Vec::with_capacity(6);
+        let mut thread_idx = 0; // needed for alternate thread colors
+                                /* Draw threaded view. */
+        threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);
+        let thread_nodes: &FnvHashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
+        let mut iter = threads.threads_iter().peekable();
+        /* This is just a desugared for loop so that we can use .peek() */
+        let mut idx = 0;
+        while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
+            let thread_node = &thread_nodes[&thread_node_hash];
+
+            if indentation == 0 {
+                thread_idx += 1;
+            }
+            if thread_node.has_message() {
+                let envelope: EnvelopeRef =
+                    account.collection.get_env(thread_node.message().unwrap());
+                self.locations.push(envelope.hash());
+                let fg_color = if !envelope.is_seen() {
+                    Color::Byte(0)
+                } else {
+                    Color::Default
+                };
+                let bg_color = if !envelope.is_seen() {
+                    Color::Byte(251)
+                } else if thread_idx % 2 == 0 {
+                    Color::Byte(236)
+                } else {
+                    Color::Default
+                };
+                let (x, _) = write_string_to_grid(
+                    &ThreadListing::make_thread_entry(
+                        &envelope,
+                        idx,
+                        indentation,
+                        thread_node_hash,
+                        threads,
+                        &indentations,
+                        has_sibling,
+                    ),
+                    &mut self.content,
+                    fg_color,
+                    bg_color,
+                    Attr::Default,
+                    ((0, idx), (MAX_COLS - 1, idx)),
+                    None,
+                );
+
+                for x in x..MAX_COLS {
+                    self.content[(x, idx)].set_ch(' ');
+                    self.content[(x, idx)].set_bg(bg_color);
+                }
+                idx += 1;
+            } else {
+                continue;
+            }
+
+            match iter.peek() {
+                Some((x, _, _)) if *x > indentation => {
+                    if has_sibling {
+                        indentations.push(true);
+                    } else {
+                        indentations.push(false);
+                    }
+                }
+                Some((x, _, _)) if *x < indentation => {
+                    for _ in 0..(indentation - *x) {
+                        indentations.pop();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
 }
 
 impl ListingTrait for ThreadListing {
@@ -67,6 +206,7 @@ impl ListingTrait for ThreadListing {
     fn set_coordinates(&mut self, coordinates: (usize, usize)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
+        self.view = None;
         self.locations.clear();
         self.row_updates.clear();
         self.initialised = false;
@@ -74,7 +214,7 @@ impl ListingTrait for ThreadListing {
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
         {
-            self.refresh_mailbox(context);
+            self.refresh_mailbox(context, false);
         }
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -252,144 +392,6 @@ impl ThreadListing {
             initialised: false,
             movement: None,
             id: ComponentId::new_v4(),
-        }
-    }
-    /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
-    /// chosen.
-    fn refresh_mailbox(&mut self, context: &mut Context) {
-        self.dirty = true;
-        if !(self.cursor_pos.0 == self.new_cursor_pos.0
-            && self.cursor_pos.1 == self.new_cursor_pos.1)
-        {
-            self.cursor_pos.2 = 0;
-            self.new_cursor_pos.2 = 0;
-        }
-        self.cursor_pos.1 = self.new_cursor_pos.1;
-        self.cursor_pos.0 = self.new_cursor_pos.0;
-        self.folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
-            .folders_order
-            .get(self.cursor_pos.1)
-        {
-            *h
-        } else {
-            return;
-        };
-
-        // Get mailbox as a reference.
-        //
-        match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
-            Ok(_) => {}
-            Err(_) => {
-                let message: String =
-                    context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
-                self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
-                self.length = 0;
-                write_string_to_grid(
-                    message.as_str(),
-                    &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
-                    ((0, 0), (MAX_COLS - 1, 0)),
-                    None,
-                );
-                return;
-            }
-        }
-        let account = &context.accounts[self.cursor_pos.0];
-        let mailbox = account[self.cursor_pos.1].unwrap();
-
-        let threads = &account.collection.threads[&mailbox.folder.hash()];
-        self.length = threads.len();
-        self.locations.clear();
-        if self.length == 0 {
-            let message = format!("Folder `{}` is empty.", mailbox.folder.name());
-            self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
-            write_string_to_grid(
-                &message,
-                &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
-                ((0, 0), (message.len() - 1, 0)),
-                None,
-            );
-            return;
-        }
-        self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
-
-        let mut indentations: Vec<bool> = Vec::with_capacity(6);
-        let mut thread_idx = 0; // needed for alternate thread colors
-                                /* Draw threaded view. */
-        threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);
-        let thread_nodes: &FnvHashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
-        let mut iter = threads.threads_iter().peekable();
-        /* This is just a desugared for loop so that we can use .peek() */
-        let mut idx = 0;
-        while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
-            let thread_node = &thread_nodes[&thread_node_hash];
-
-            if indentation == 0 {
-                thread_idx += 1;
-            }
-            if thread_node.has_message() {
-                let envelope: EnvelopeRef =
-                    account.collection.get_env(thread_node.message().unwrap());
-                self.locations.push(envelope.hash());
-                let fg_color = if !envelope.is_seen() {
-                    Color::Byte(0)
-                } else {
-                    Color::Default
-                };
-                let bg_color = if !envelope.is_seen() {
-                    Color::Byte(251)
-                } else if thread_idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                };
-                let (x, _) = write_string_to_grid(
-                    &ThreadListing::make_thread_entry(
-                        &envelope,
-                        idx,
-                        indentation,
-                        thread_node_hash,
-                        threads,
-                        &indentations,
-                        has_sibling,
-                    ),
-                    &mut self.content,
-                    fg_color,
-                    bg_color,
-                    Attr::Default,
-                    ((0, idx), (MAX_COLS - 1, idx)),
-                    None,
-                );
-
-                for x in x..MAX_COLS {
-                    self.content[(x, idx)].set_ch(' ');
-                    self.content[(x, idx)].set_bg(bg_color);
-                }
-                idx += 1;
-            } else {
-                continue;
-            }
-
-            match iter.peek() {
-                Some((x, _, _)) if *x > indentation => {
-                    if has_sibling {
-                        indentations.push(true);
-                    } else {
-                        indentations.push(false);
-                    }
-                }
-                Some((x, _, _)) if *x < indentation => {
-                    for _ in 0..(indentation - *x) {
-                        indentations.pop();
-                    }
-                }
-                _ => {}
-            }
         }
     }
 
@@ -624,11 +626,11 @@ impl Component for ThreadListing {
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
                 if (*idxa, *idxf) == (self.new_cursor_pos.0, self.folder_hash) =>
             {
-                self.refresh_mailbox(context);
+                self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
             UIEvent::StartupCheck(ref f) if *f == self.folder_hash => {
-                self.refresh_mailbox(context);
+                self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
@@ -641,21 +643,21 @@ impl Component for ThreadListing {
                 Action::ViewMailbox(idx_m) => {
                     self.new_cursor_pos.1 = *idx_m;
                     self.dirty = true;
-                    self.refresh_mailbox(context);
+                    self.refresh_mailbox(context, false);
                     return true;
                 }
                 Action::SubSort(field, order) => {
                     debug!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);
                     self.dirty = true;
-                    self.refresh_mailbox(context);
+                    self.refresh_mailbox(context, false);
                     return true;
                 }
                 Action::Sort(field, order) => {
                     debug!("Sort {:?} , {:?}", field, order);
                     self.sort = (*field, *order);
                     self.dirty = true;
-                    self.refresh_mailbox(context);
+                    self.refresh_mailbox(context, false);
                     return true;
                 }
                 _ => {}
