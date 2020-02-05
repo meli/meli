@@ -197,14 +197,14 @@ define_commands!([
                               alt_complete!(
                                   do_parse!(
                                   ws!(tag!("pipe"))
-                                  >> bin: map_res!(is_not!(" "), std::str::from_utf8)
+                                  >> bin: quoted_argument
                                   >> is_a!(" ")
                                   >> args: separated_list!(is_a!(" "), quoted_argument)
                                   >> ({
                                       View(Pipe(bin.to_string(), args.into_iter().map(String::from).collect::<Vec<String>>()))
                                   })) | do_parse!(
                                           ws!(tag!("pipe"))
-                                          >> bin: ws!(map_res!(is_not!(" "), std::str::from_utf8))
+                                          >> bin: ws!(quoted_argument)
                                           >> ({
                                               View(Pipe(bin.to_string(), Vec::new()))
                                           })
@@ -218,7 +218,7 @@ define_commands!([
                       named!( add_attachment<Action>,
                               do_parse!(
                                   ws!(tag!("add-attachment"))
-                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
+                                  >> path: quoted_argument
                                   >> (Compose(AddAttachment(path.to_string())))
                               )
                       );
@@ -230,7 +230,7 @@ define_commands!([
                       named!( remove_attachment<Action>,
                               do_parse!(
                                   ws!(tag!("remove-attachment"))
-                                  >> idx: map_res!(map_res!(call!(not_line_ending), std::str::from_utf8), usize::from_str)
+                                  >> idx: map_res!(quoted_argument, usize::from_str)
                                   >> (Compose(RemoveAttachment(idx)))
                               )
                       );
@@ -348,7 +348,7 @@ define_commands!([
                       named!( save_attachment<Action>,
                               do_parse!(
                                   ws!(tag!("save-attachment"))
-                                  >> idx: map_res!(map_res!(is_not!(" "), std::str::from_utf8), usize::from_str)
+                                  >> idx: map_res!(quoted_argument, usize::from_str)
                                   >> path: ws!(quoted_argument)
                                   >> (View(SaveAttachment(idx, path.to_string())))
                               )
@@ -365,11 +365,11 @@ define_commands!([
                                      alt_complete!(
                                          do_parse!(
                                          ws!(tag!("add"))
-                                         >> tag: ws!(map_res!(call!(not_line_ending), std::str::from_utf8))
+                                         >> tag: ws!(quoted_argument)
                                          >> (Listing(Tag(Add(tag.to_string())))))
                                          | do_parse!(
                                          ws!(tag!("remove"))
-                                         >> tag: ws!(map_res!(call!(not_line_ending), std::str::from_utf8))
+                                         >> tag: ws!(quoted_argument)
                                          >> (Listing(Tag(Remove(tag.to_string())))))
 
                                      )
