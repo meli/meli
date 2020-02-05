@@ -34,6 +34,7 @@ use crate::conf::AccountSettings;
 use crate::email::parser::BytesExt;
 use crate::email::*;
 use crate::error::{MeliError, Result};
+use crate::get_path_hash;
 use crate::shellexpand::ShellExpandTrait;
 use fnv::FnvHashMap;
 use libc;
@@ -41,9 +42,7 @@ use memmap::{Mmap, Protection};
 use nom::{IResult, Needed};
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
-use std::collections::hash_map::DefaultHasher;
 use std::fs::File;
-use std::hash::{Hash, Hasher};
 use std::io::BufReader;
 use std::io::Read;
 use std::os::unix::io::AsRawFd;
@@ -72,14 +71,6 @@ fn get_rw_lock_blocking(f: &File) {
     let ret_val = unsafe { libc::fcntl(fd, F_OFD_SETLKW, ptr as *mut libc::c_void) };
     debug!(&ret_val);
     assert!(-1 != ret_val);
-}
-
-macro_rules! get_path_hash {
-    ($path:expr) => {{
-        let mut hasher = DefaultHasher::new();
-        $path.hash(&mut hasher);
-        hasher.finish()
-    }};
 }
 
 #[derive(Debug)]

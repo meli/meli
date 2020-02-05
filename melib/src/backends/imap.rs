@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use crate::get_path_hash;
 use smallvec::SmallVec;
 #[macro_use]
 mod protocol_parser;
@@ -158,12 +159,12 @@ impl MailBackend for ImapType {
             let uid_store = self.uid_store.clone();
             let tag_index = self.tag_index.clone();
             let can_create_flags = self.can_create_flags.clone();
-            let folder_path = folder.path().to_string();
             let folder_hash = folder.hash();
-            let (permissions, folder_exists, no_select, unseen) = {
+            let (permissions, folder_path, folder_exists, no_select, unseen) = {
                 let f = &self.folders.read().unwrap()[&folder_hash];
                 (
                     f.permissions.clone(),
+                    f.imap_path().to_string(),
                     f.exists.clone(),
                     f.no_select,
                     f.unseen.clone(),
@@ -374,7 +375,7 @@ impl MailBackend for ImapType {
         Box::new(ImapOp::new(
             uid,
             self.folders.read().unwrap()[&folder_hash]
-                .path()
+                .imap_path()
                 .to_string(),
             self.connection.clone(),
             self.uid_store.clone(),
@@ -400,7 +401,7 @@ impl MailBackend for ImapType {
             }
 
             f_result
-                .map(|v| v.path().to_string())
+                .map(|v| v.imap_path().to_string())
                 .ok_or(MeliError::new(format!(
                     "Folder with name {} not found.",
                     folder
@@ -425,70 +426,6 @@ impl MailBackend for ImapType {
         Ok(())
     }
 
-    /*
-    fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
-        use FolderOperation::*;
-
-        match (
-            &op,
-            self.folders
-                .read()
-                .unwrap()
-                .values()
-                .any(|f| f.path == path),
-        ) {
-            (Create, true) => {
-                return Err(MeliError::new(format!(
-                    "Folder named `{}` in account `{}` already exists.",
-                    path, self.account_name,
-                )));
-            }
-            (op, false) if *op != Create => {
-                return Err(MeliError::new(format!(
-                    "No folder named `{}` in account `{}`",
-                    path, self.account_name,
-                )));
-            }
-            _ => {}
-        }
-
-        let mut response = String::with_capacity(8 * 1024);
-        match op {
-            Create => {
-                let mut conn = self.connection.lock()?;
-                conn.send_command(format!("CREATE \"{}\"", path,).as_bytes())?;
-                conn.read_response(&mut response)?;
-                conn.send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())?;
-                conn.read_response(&mut response)?;
-            }
-            Rename(dest) => {
-                let mut conn = self.connection.lock()?;
-                conn.send_command(format!("RENAME \"{}\" \"{}\"", path, dest).as_bytes())?;
-                conn.read_response(&mut response)?;
-            }
-            Delete => {
-                let mut conn = self.connection.lock()?;
-                conn.send_command(format!("DELETE \"{}\"", path,).as_bytes())?;
-                conn.read_response(&mut response)?;
-            }
-            Subscribe => {
-                let mut conn = self.connection.lock()?;
-                conn.send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())?;
-                conn.read_response(&mut response)?;
-            }
-            Unsubscribe => {
-                let mut conn = self.connection.lock()?;
-                conn.send_command(format!("UNSUBSCRIBE \"{}\"", path,).as_bytes())?;
-                conn.read_response(&mut response)?;
-            }
-            SetPermissions(_new_val) => {
-                unimplemented!();
-            }
-        }
-        Ok(())
-    }
-    */
-
     fn as_any(&self) -> &dyn::std::any::Any {
         self
     }
@@ -505,36 +442,191 @@ impl MailBackend for ImapType {
         }
     }
 
-    fn create_folder(&mut self, path: String) -> Result<Folder> {
-        let mut response = String::with_capacity(8 * 1024);
-        if self
-            .folders
-            .read()
-            .unwrap()
-            .values()
-            .any(|f| f.path == path)
-        {
+    fn create_folder(&mut self, mut path: String) -> Result<Folder> {
+        /* Must transform path to something the IMAP server will accept
+         *
+         * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
+         * must use this delimeter to indicate children of this mailbox.
+         *
+         * A new root mailbox should have the default delimeter, which can be found out by issuing
+         * an empty LIST command as described in RFC3501:
+         * C: A101 LIST "" ""
+         * S: * LIST (\Noselect) "/" ""
+         *
+         * The default delimiter for us is '/' just like UNIX paths. I apologise if this
+         * decision is unpleasant for you.
+         */
+
+        let mut folders = self.folders.write().unwrap();
+        for root_folder in folders.values().filter(|f| f.parent.is_none()) {
+            if path.starts_with(&root_folder.name) {
+                debug!("path starts with {:?}", &root_folder);
+                path = path.replace(
+                    '/',
+                    (root_folder.separator as char).encode_utf8(&mut [0; 4]),
+                );
+                break;
+            }
+        }
+
+        if folders.values().any(|f| f.path == path) {
             return Err(MeliError::new(format!(
                 "Folder named `{}` in account `{}` already exists.",
                 path, self.account_name,
             )));
         }
-        let mut conn_lck = self.connection.lock()?;
-        conn_lck.send_command(debug!(format!("CREATE \"{}\"", path,)).as_bytes())?;
-        conn_lck.read_response(&mut response)?;
-        conn_lck.send_command(debug!(format!("SUBSCRIBE \"{}\"", path,)).as_bytes())?;
-        conn_lck.read_response(&mut response)?;
-        drop(conn_lck);
-        self.folders.write().unwrap().clear();
-        self.folders().and_then(|f| {
-            debug!(f)
-                .into_iter()
-                .find(|(_, f)| f.path() == path)
-                .map(|f| f.1)
-                .ok_or(MeliError::new(
-                    "Internal error: could not find folder after creating it?",
+
+        let mut response = String::with_capacity(8 * 1024);
+        {
+            let mut conn_lck = self.connection.lock()?;
+
+            conn_lck.send_command(format!("CREATE \"{}\"", path,).as_bytes())?;
+            conn_lck.read_response(&mut response)?;
+            conn_lck.send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())?;
+            conn_lck.read_response(&mut response)?;
+        }
+        let ret: Result<()> = ImapResponse::from(&response).into();
+        ret?;
+        folders.clear();
+        drop(folders);
+        self.folders().map_err(|err| format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
+        let new_hash = get_path_hash!(path.as_str());
+        Ok(BackendFolder::clone(
+            &self.folders.read().unwrap()[&new_hash],
+        ))
+    }
+
+    fn delete_folder(&mut self, folder_hash: FolderHash) -> Result<()> {
+        let mut folders = self.folders.write().unwrap();
+        let permissions = folders[&folder_hash].permissions();
+        if !permissions.delete_mailbox {
+            return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", folders[&folder_hash].name(), permissions)));
+        }
+        let mut response = String::with_capacity(8 * 1024);
+        {
+            let mut conn_lck = self.connection.lock()?;
+            if folders[&folder_hash].is_subscribed() {
+                conn_lck.send_command(
+                    format!("UNSUBSCRIBE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                )?;
+                conn_lck.read_response(&mut response)?;
+            }
+
+            if !folders[&folder_hash].no_select {
+                /* make sure mailbox is not selected before it gets deleted, otherwise
+                 * connection gets dropped by server */
+                if conn_lck
+                    .capabilities
+                    .iter()
+                    .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
+                {
+                    conn_lck.send_command(
+                        format!("UNSELECT \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                    )?;
+                    conn_lck.read_response(&mut response)?;
+                } else {
+                    conn_lck.send_command(
+                        format!("SELECT \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                    )?;
+                    conn_lck.read_response(&mut response)?;
+                    conn_lck.send_command(
+                        format!("EXAMINE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                    )?;
+                    conn_lck.read_response(&mut response)?;
+                }
+            }
+            conn_lck.send_command(
+                debug!(format!("DELETE \"{}\"", folders[&folder_hash].imap_path())).as_bytes(),
+            )?;
+            conn_lck.read_response(&mut response)?;
+        }
+        let ret: Result<()> = ImapResponse::from(&response).into();
+        if ret.is_ok() {
+            folders.clear();
+            drop(folders);
+            self.folders().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
+        }
+        ret
+    }
+
+    fn set_folder_subscription(&mut self, folder_hash: FolderHash, new_val: bool) -> Result<()> {
+        let mut folders = self.folders.write().unwrap();
+        if folders[&folder_hash].is_subscribed() == new_val {
+            return Ok(());
+        }
+
+        let mut response = String::with_capacity(8 * 1024);
+        {
+            let mut conn_lck = self.connection.lock()?;
+            if new_val {
+                conn_lck.send_command(
+                    format!("SUBSCRIBE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                )?;
+            } else {
+                conn_lck.send_command(
+                    format!("UNSUBSCRIBE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                )?;
+            }
+            conn_lck.read_response(&mut response)?;
+        }
+
+        let ret: Result<()> = ImapResponse::from(&response).into();
+        if ret.is_ok() {
+            folders.entry(folder_hash).and_modify(|entry| {
+                let _ = entry.set_is_subscribed(new_val);
+            });
+        }
+        ret
+    }
+
+    fn rename_folder(&mut self, folder_hash: FolderHash, mut new_path: String) -> Result<Folder> {
+        let mut folders = self.folders.write().unwrap();
+        let permissions = folders[&folder_hash].permissions();
+        if !permissions.delete_mailbox {
+            return Err(MeliError::new(format!("You do not have permission to rename folder `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", folders[&folder_hash].name(), permissions)));
+        }
+        let mut response = String::with_capacity(8 * 1024);
+        if folders[&folder_hash].separator != b'/' {
+            new_path = new_path.replace(
+                '/',
+                (folders[&folder_hash].separator as char).encode_utf8(&mut [0; 4]),
+            );
+        }
+        {
+            let mut conn_lck = self.connection.lock()?;
+            conn_lck.send_command(
+                debug!(format!(
+                    "RENAME \"{}\" \"{}\"",
+                    folders[&folder_hash].imap_path(),
+                    new_path
                 ))
-        })
+                .as_bytes(),
+            )?;
+            conn_lck.read_response(&mut response)?;
+        }
+        let new_hash = get_path_hash!(new_path.as_str());
+        let ret: Result<()> = ImapResponse::from(&response).into();
+        ret?;
+        folders.clear();
+        drop(folders);
+        self.folders().map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
+        Ok(BackendFolder::clone(
+            &self.folders.read().unwrap()[&new_hash],
+        ))
+    }
+
+    fn set_folder_permissions(
+        &mut self,
+        folder_hash: FolderHash,
+        _val: crate::backends::FolderPermissions,
+    ) -> Result<()> {
+        let folders = self.folders.write().unwrap();
+        let permissions = folders[&folder_hash].permissions();
+        if !permissions.change_permissions {
+            return Err(MeliError::new(format!("You do not have permission to change permissions for folder `{}`. Set permissions for this mailbox are {}", folders[&folder_hash].name(), permissions)));
+        }
+
+        Err(MeliError::new("Unimplemented."))
     }
 }
 
@@ -707,7 +799,9 @@ impl ImapType {
         let folders_lck = self.folders.read()?;
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock()?;
-        conn.send_command(format!("EXAMINE \"{}\"", folders_lck[&folder_hash].path()).as_bytes())?;
+        conn.send_command(
+            format!("EXAMINE \"{}\"", folders_lck[&folder_hash].imap_path()).as_bytes(),
+        )?;
         conn.read_response(&mut response)?;
         conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query).as_bytes())?;
         conn.read_response(&mut response)?;

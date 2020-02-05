@@ -149,7 +149,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         folder_hash,
         work_context,
         thread_id,
-        conn.send_command(format!("SELECT \"{}\"", folder.path()).as_bytes())
+        conn.send_command(format!("SELECT \"{}\"", folder.imap_path()).as_bytes())
         conn.read_response(&mut response)
     );
     debug!("select response {}", &response);
@@ -531,7 +531,7 @@ fn examine_updates(
         folder_hash,
         work_context,
         thread_id,
-        conn.send_command(format!("EXAMINE \"{}\"", folder.path()).as_bytes())
+        conn.send_command(format!("EXAMINE \"{}\"", folder.imap_path()).as_bytes())
         conn.read_response(&mut response)
     );
     match protocol_parser::select_response(&response) {

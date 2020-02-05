@@ -24,7 +24,7 @@
  */
 
 use crate::components::Component;
-use melib::backends::{FolderHash, FolderOperation};
+use melib::backends::FolderHash;
 pub use melib::thread::{SortField, SortOrder};
 use melib::{Draft, EnvelopeHash};
 
@@ -87,6 +87,17 @@ pub enum AccountAction {
 }
 
 #[derive(Debug)]
+pub enum FolderOperation {
+    Create(NewFolderPath),
+    Delete(FolderPath),
+    Subscribe(FolderPath),
+    Unsubscribe(FolderPath),
+    Rename(FolderPath, NewFolderPath),
+    // Placeholder
+    SetPermissions(FolderPath),
+}
+
+#[derive(Debug)]
 pub enum Action {
     Listing(ListingAction),
     ViewMailbox(usize),
@@ -99,9 +110,10 @@ pub enum Action {
     SetEnv(String, String),
     PrintEnv(String),
     Compose(ComposeAction),
-    Folder(AccountName, FolderPath, FolderOperation),
+    Folder(AccountName, FolderOperation),
     AccountAction(AccountName, AccountAction),
 }
 
 type AccountName = String;
 type FolderPath = String;
+type NewFolderPath = String;

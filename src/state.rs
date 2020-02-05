@@ -612,24 +612,27 @@ impl State {
                         ),
                     ));
                 }
-                Folder(account_name, path, op) => {
+                Folder(account_name, op) => {
                     if let Some(account) = self
                         .context
                         .accounts
                         .iter_mut()
                         .find(|a| a.name() == account_name)
                     {
-                        if let Err(e) = account.folder_operation(&path, op) {
-                            self.context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(e.to_string()),
-                            ));
-                        } else {
-                            self.context.replies.push_back(UIEvent::StatusEvent(
-                                StatusEvent::DisplayMessage(format!(
-                                    "{} succesfully created in `{}`",
-                                    path, account_name
-                                )),
-                            ));
+                        match account.folder_operation(op) {
+                            Err(err) => {
+                                self.context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(err.to_string()),
+                                ));
+                            }
+                            Ok(msg) => {
+                                self.context.replies.push_back(UIEvent::StatusEvent(
+                                    StatusEvent::DisplayMessage(format!(
+                                        "`{}`: {}",
+                                        account_name, msg
+                                    )),
+                                ));
+                            }
                         }
                     } else {
                         self.context.replies.push_back(UIEvent::StatusEvent(

@@ -27,8 +27,8 @@ use super::{AccountConf, FileFolderConf};
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
-    BackendOp, Backends, Folder, FolderHash, FolderOperation, MailBackend, NotifyFn, ReadOnlyOp,
-    RefreshEvent, RefreshEventConsumer, RefreshEventKind, SpecialUsageMailbox,
+    BackendOp, Backends, Folder, FolderHash, MailBackend, NotifyFn, ReadOnlyOp, RefreshEvent,
+    RefreshEventConsumer, RefreshEventKind, SpecialUsageMailbox,
 };
 use melib::error::{MeliError, Result};
 use melib::mailbox::*;
@@ -964,67 +964,112 @@ impl Account {
         &self.collection.threads[&f].thread_nodes()[&h]
     }
 
-    pub fn folder_operation(&mut self, path: &str, op: FolderOperation) -> Result<()> {
+    pub fn folder_operation(
+        &mut self,
+        op: crate::execute::actions::FolderOperation,
+    ) -> Result<String> {
+        use crate::execute::actions::FolderOperation;
+        if self.settings.account.read_only() {
+            return Err(MeliError::new("Account is read-only."));
+        }
         match op {
-            FolderOperation::Create => {
-                if self.settings.account.read_only() {
-                    Err(MeliError::new("Account is read-only."))
+            FolderOperation::Create(path) => {
+                let mut folder = self
+                    .backend
+                    .write()
+                    .unwrap()
+                    .create_folder(path.to_string())?;
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::MailboxCreate((
+                        self.index,
+                        folder.hash(),
+                    ))))
+                    .unwrap();
+                let mut new = FileFolderConf::default();
+                new.folder_conf.subscribe = super::ToggleFlag::InternalVal(true);
+                new.folder_conf.usage = if folder.special_usage() != SpecialUsageMailbox::Normal {
+                    Some(folder.special_usage())
                 } else {
-                    let mut folder = self
-                        .backend
-                        .write()
-                        .unwrap()
-                        .create_folder(path.to_string())?;
-                    let mut new = FileFolderConf::default();
-                    new.folder_conf.subscribe = super::ToggleFlag::InternalVal(true);
-                    new.folder_conf.usage = if folder.special_usage() != SpecialUsageMailbox::Normal
-                    {
-                        Some(folder.special_usage())
-                    } else {
-                        let tmp = SpecialUsageMailbox::detect_usage(folder.name());
-                        if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
-                            let _ = folder.set_special_usage(tmp.unwrap());
-                        }
-                        tmp
-                    };
+                    let tmp = SpecialUsageMailbox::detect_usage(folder.name());
+                    if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
+                        let _ = folder.set_special_usage(tmp.unwrap());
+                    }
+                    tmp
+                };
 
-                    self.folder_confs.insert(folder.hash(), new);
-                    self.folder_names
-                        .insert(folder.hash(), folder.path().to_string());
-                    self.folders.insert(
-                        folder.hash(),
-                        MailboxEntry::Parsing(
-                            Mailbox::new(folder.clone(), &FnvHashMap::default()),
-                            0,
-                            0,
-                        ),
-                    );
-                    self.workers.insert(
-                        folder.hash(),
-                        Account::new_worker(
-                            folder.clone(),
-                            &mut self.backend,
-                            &self.work_context,
-                            self.notify_fn.clone(),
-                        ),
-                    );
-                    self.collection
-                        .threads
-                        .insert(folder.hash(), Threads::default());
-                    self.ref_folders.insert(folder.hash(), folder);
-                    build_folders_order(
-                        &self.folder_confs,
-                        &mut self.tree,
-                        &self.ref_folders,
-                        &mut self.folders_order,
-                    );
-                    Ok(())
-                }
+                self.folder_confs.insert(folder.hash(), new);
+                self.folder_names
+                    .insert(folder.hash(), folder.path().to_string());
+                self.folders.insert(
+                    folder.hash(),
+                    MailboxEntry::Parsing(
+                        Mailbox::new(folder.clone(), &FnvHashMap::default()),
+                        0,
+                        0,
+                    ),
+                );
+                self.workers.insert(
+                    folder.hash(),
+                    Account::new_worker(
+                        folder.clone(),
+                        &mut self.backend,
+                        &self.work_context,
+                        self.notify_fn.clone(),
+                    ),
+                );
+                self.collection
+                    .threads
+                    .insert(folder.hash(), Threads::default());
+                self.ref_folders = self.backend.read().unwrap().folders()?;
+                build_folders_order(
+                    &self.folder_confs,
+                    &mut self.tree,
+                    &self.ref_folders,
+                    &mut self.folders_order,
+                );
+                Ok(format!("`{}` successfully created.", &path))
             }
-            FolderOperation::Delete => Err(MeliError::new("Not implemented.")),
-            FolderOperation::Subscribe => Err(MeliError::new("Not implemented.")),
-            FolderOperation::Unsubscribe => Err(MeliError::new("Not implemented.")),
-            FolderOperation::Rename(_) => Err(MeliError::new("Not implemented.")),
+            FolderOperation::Delete(path) => {
+                if self.ref_folders.len() == 1 {
+                    return Err(MeliError::new("Cannot delete only mailbox."));
+                }
+                let folder_hash = if let Some((folder_hash, _)) =
+                    self.ref_folders.iter().find(|(_, f)| f.path() == path)
+                {
+                    *folder_hash
+                } else {
+                    return Err(MeliError::new("Mailbox with that path not found."));
+                };
+                self.backend.write().unwrap().delete_folder(folder_hash)?;
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::MailboxDelete((
+                        self.index,
+                        folder_hash,
+                    ))))
+                    .unwrap();
+                self.folders.remove(&folder_hash);
+                self.ref_folders = self.backend.read().unwrap().folders()?;
+                self.folder_confs.remove(&folder_hash);
+                if let Some(pos) = self.folders_order.iter().position(|&h| h == folder_hash) {
+                    self.folders_order.remove(pos);
+                }
+                self.folder_names.remove(&folder_hash);
+                if let Some(pos) = self.tree.iter().position(|n| n.hash == folder_hash) {
+                    self.tree.remove(pos);
+                }
+                if self.sent_folder == Some(folder_hash) {
+                    self.sent_folder = None;
+                }
+                self.collection.threads.remove(&folder_hash);
+                self.workers.remove(&folder_hash); // FIXME Kill worker as well
+
+                // FIXME remove from settings as well
+
+                Ok(format!("'`{}` has been deleted.", &path))
+            }
+            FolderOperation::Subscribe(_) => Err(MeliError::new("Not implemented.")),
+            FolderOperation::Unsubscribe(_) => Err(MeliError::new("Not implemented.")),
+            FolderOperation::Rename(_, _) => Err(MeliError::new("Not implemented.")),
             FolderOperation::SetPermissions(_) => Err(MeliError::new("Not implemented.")),
         }
     }

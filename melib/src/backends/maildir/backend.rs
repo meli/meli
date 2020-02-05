@@ -34,12 +34,7 @@ extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::time::Duration;
 
-use std::sync::mpsc::channel;
-//use std::sync::mpsc::sync_channel;
-//use std::sync::mpsc::SyncSender;
-//use std::time::Duration;
 use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
-use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
 use std::fs;
 use std::hash::{Hash, Hasher};
@@ -48,6 +43,7 @@ use std::ops::{Deref, DerefMut};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 use std::result;
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -132,7 +128,6 @@ macro_rules! path_is_new {
     };
 }
 
-#[macro_export]
 macro_rules! get_path_hash {
     ($path:expr) => {{
         let mut path = $path.clone();
@@ -145,9 +140,7 @@ macro_rules! get_path_hash {
             path.pop();
         };
 
-        let mut hasher = DefaultHasher::new();
-        path.hash(&mut hasher);
-        hasher.finish()
+        crate::get_path_hash!(path)
     }};
 }
 
@@ -641,6 +634,64 @@ impl MailBackend for MaildirType {
 
     fn as_any(&self) -> &dyn::std::any::Any {
         self
+    }
+
+    fn create_folder(&mut self, new_path: String) -> Result<Folder> {
+        let mut path = self.path.clone();
+        path.push(&new_path);
+        if !path.starts_with(&self.path) {
+            return Err(MeliError::new(format!("Path given (`{}`) is absolute. Please provide a path relative to the account's root folder.", &new_path)));
+        }
+
+        std::fs::create_dir(&path)?;
+        /* create_dir does not create intermediate directories (like `mkdir -p`), so the parent must be a valid
+         * folder at this point. */
+
+        let parent = path.parent().and_then(|p| {
+            self.folders
+                .iter()
+                .find(|(_, f)| f.fs_path == p)
+                .map(|item| *item.0)
+        });
+
+        let folder_hash = get_path_hash!(&path);
+        let new_folder = MaildirFolder {
+            hash: folder_hash,
+            path: PathBuf::from(&new_path),
+            name: new_path,
+            fs_path: path,
+            parent,
+            children: vec![],
+            usage: Default::default(),
+            is_subscribed: true,
+            permissions: Default::default(),
+            unseen: Default::default(),
+            total: Default::default(),
+        };
+
+        let ret = BackendFolder::clone(debug!(&new_folder));
+        self.folders.insert(folder_hash, new_folder);
+        Ok(ret)
+    }
+
+    fn delete_folder(&mut self, _folder_hash: FolderHash) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn set_folder_subscription(&mut self, _folder_hash: FolderHash, _val: bool) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn rename_folder(&mut self, _folder_hash: FolderHash, _new_path: String) -> Result<Folder> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn set_folder_permissions(
+        &mut self,
+        _folder_hash: FolderHash,
+        _val: crate::backends::FolderPermissions,
+    ) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
     }
 }
 

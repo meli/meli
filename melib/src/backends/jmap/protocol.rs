@@ -63,16 +63,6 @@ pub trait Method<OBJ: Object>: Serialize {
     const NAME: &'static str;
 }
 
-macro_rules! get_path_hash {
-    ($path:expr) => {{
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        $path.hash(&mut hasher);
-        hasher.finish()
-    }};
-}
-
 static USING: &'static [&'static str] = &["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"];
 
 #[derive(Serialize)]

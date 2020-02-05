@@ -21,9 +21,8 @@
 
 use super::*;
 use crate::email::parser::BytesExt;
+use crate::get_path_hash;
 use nom::{digit, is_digit, rest, IResult};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
 #[derive(Debug)]
@@ -65,54 +64,55 @@ pub enum ResponseCode {
     Uidvalidity(UID),
     /// Followed by a decimal number, indicates the number of the first message without the \Seen flag set.
     Unseen(usize),
+
+    None,
 }
 
 impl ResponseCode {
-    fn from(val: &str) -> Option<ResponseCode> {
+    fn from(val: &str) -> ResponseCode {
+        use ResponseCode::*;
         if !val.starts_with("[") {
             return None;
         }
 
         let val = &val[1..];
-        use ResponseCode::*;
         if val.starts_with("BADCHARSET") {
-            Some(Badcharset)
+            Badcharset
         } else if val.starts_with("READONLY") {
-            Some(ReadOnly)
+            ReadOnly
         } else if val.starts_with("READWRITE") {
-            Some(ReadWrite)
+            ReadWrite
         } else if val.starts_with("TRYCREATE") {
-            Some(Trycreate)
+            Trycreate
         } else if val.starts_with("UIDNEXT") {
             //FIXME
-            Some(Uidnext(0))
+            Uidnext(0)
         } else if val.starts_with("UIDVALIDITY") {
             //FIXME
-            Some(Uidvalidity(0))
+            Uidvalidity(0)
         } else if val.starts_with("UNSEEN") {
             //FIXME
-            Some(Unseen(0))
+            Unseen(0)
         } else {
             let msg = &val[val.as_bytes().find(b"] ").unwrap() + 1..].trim();
-            Some(Alert(msg.to_string()))
+            Alert(msg.to_string())
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
 pub enum ImapResponse {
-    Ok(Option<ResponseCode>),
-    No(Option<ResponseCode>),
-    Bad(Option<ResponseCode>),
-    Preauth(Option<ResponseCode>),
-    Bye(Option<ResponseCode>),
+    Ok(ResponseCode),
+    No(ResponseCode),
+    Bad(ResponseCode),
+    Preauth(ResponseCode),
+    Bye(ResponseCode),
 }
 
 impl<T: AsRef<str>> From<T> for ImapResponse {
     fn from(val: T) -> ImapResponse {
         let val: &str = val.as_ref().split_rn().last().unwrap_or(val.as_ref());
         debug!(&val);
-        assert!(val.starts_with("M"));
         let mut val = val[val.as_bytes().find(b" ").unwrap() + 1..].trim();
         // M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n
         if val.ends_with(" secs).") {
@@ -139,8 +139,9 @@ impl Into<Result<()>> for ImapResponse {
     fn into(self) -> Result<()> {
         match self {
             Self::Ok(_) | Self::Preauth(_) | Self::Bye(_) => Ok(()),
-            Self::No(Some(ResponseCode::Alert(msg)))
-            | Self::Bad(Some(ResponseCode::Alert(msg))) => Err(MeliError::new(msg)),
+            Self::No(ResponseCode::Alert(msg)) | Self::Bad(ResponseCode::Alert(msg)) => {
+                Err(MeliError::new(msg))
+            }
             Self::No(_) => Err(MeliError::new("IMAP NO Response.")),
             Self::Bad(_) => Err(MeliError::new("IMAP BAD Response.")),
         }
@@ -149,7 +150,7 @@ impl Into<Result<()>> for ImapResponse {
 
 #[test]
 fn test_imap_response() {
-    assert_eq!(ImapResponse::from("M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n"), ImapResponse::No(Some(ResponseCode::Alert("Invalid mailbox name: Name must not have '/' characters".to_string()))));
+    assert_eq!(ImapResponse::from("M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n"), ImapResponse::No(ResponseCode::Alert("Invalid mailbox name: Name must not have '/' characters".to_string())));
 }
 
 impl<'a> Iterator for ImapLineIterator<'a> {
@@ -206,13 +207,7 @@ macro_rules! dbg_dmp (
       dbg_dmp!($i, call!($f));
   );
 );
-macro_rules! get_path_hash {
-    ($path:expr) => {{
-        let mut hasher = DefaultHasher::new();
-        $path.hash(&mut hasher);
-        hasher.finish()
-    }};
-}
+
 /*
 * LIST (\HasNoChildren) "." INBOX.Sent
 * LIST (\HasChildren) "." INBOX
@@ -243,14 +238,20 @@ named!(
                         let _ = f.set_special_usage(SpecialUsageMailbox::Drafts);
                     }
                 }
-                f.hash = get_path_hash!(path);
-                f.path = String::from_utf8_lossy(path).into();
-                f.name = if let Some(pos) = path.iter().rposition(|&c| c == separator) {
-                    f.parent = Some(get_path_hash!(&path[..pos]));
-                    String::from_utf8_lossy(&path[pos + 1..]).into()
+                f.imap_path = String::from_utf8_lossy(path).into();
+                f.hash = get_path_hash!(&f.imap_path);
+                f.path = if separator == b'/' {
+                    f.imap_path.clone()
                 } else {
-                    f.path.clone()
+                    f.imap_path.replace(separator as char, "/")
                 };
+                f.name = if let Some(pos) = f.imap_path.as_bytes().iter().rposition(|&c| c == separator) {
+                    f.parent = Some(get_path_hash!(&f.imap_path[..pos]));
+                    f.imap_path[pos + 1..].to_string()
+                } else {
+                    f.imap_path.clone()
+                };
+                f.separator = separator;
 
                 debug!(f)
             })

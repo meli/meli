@@ -340,8 +340,14 @@ impl ImapConnection {
 
     pub fn read_response(&mut self, ret: &mut String) -> Result<()> {
         self.try_send(|s| s.read_response(ret))?;
-        let r: Result<()> = ImapResponse::from(&ret).into();
-        r
+        let r: ImapResponse = ImapResponse::from(&ret);
+        if let ImapResponse::Bye(ref response_code) = r {
+            self.stream = Err(MeliError::new(format!(
+                "Offline: received BYE: {:?}",
+                response_code
+            )));
+        }
+        r.into()
     }
 
     pub fn read_lines(&mut self, ret: &mut String, termination_string: String) -> Result<()> {

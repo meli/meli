@@ -111,6 +111,8 @@ pub enum UIEvent {
     Action(Action),
     StatusEvent(StatusEvent),
     MailboxUpdate((usize, FolderHash)), // (account_idx, mailbox_idx)
+    MailboxDelete((usize, FolderHash)),
+    MailboxCreate((usize, FolderHash)),
     ComponentKill(Uuid),
     WorkerProgress(FolderHash),
     StartupCheck(FolderHash),

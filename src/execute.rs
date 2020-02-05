@@ -21,11 +21,11 @@
 
 /*! A parser module for user commands passed through the Execute mode.
 */
-use melib::backends::FolderOperation;
 pub use melib::thread::{SortField, SortOrder};
 use nom::{digit, not_line_ending, IResult};
 use std;
 pub mod actions;
+use actions::FolderOperation;
 pub mod history;
 pub use crate::actions::AccountAction::{self, *};
 pub use crate::actions::Action::{self, *};
@@ -78,7 +78,7 @@ define_commands!([
                                          map!(ws!(tag!("seen")), |_| Listing(SetSeen))
                                          | map!(ws!(tag!("unseen")), |_| Listing(SetUnseen))
                                      )
-                                 ) | map!(ws!(tag!("delete")), |_| Listing(Delete))
+                                 ) | map!(preceded!(tag!("delete"), eof!()), |_| Listing(Delete))
                              )
                      ); )
                  },
@@ -255,8 +255,8 @@ define_commands!([
                                   ws!(tag!("create-folder"))
                                   >> account: quoted_argument
                                   >> is_a!(" ")
-                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
-                                  >> (Folder(account.to_string(), path.to_string(), FolderOperation::Create))
+                                  >> path: quoted_argument
+                                  >> (Folder(account.to_string(), FolderOperation::Create(path.to_string())))
                               )
                       );
                   )
@@ -269,8 +269,8 @@ define_commands!([
                                   ws!(tag!("subscribe-folder"))
                                   >> account: quoted_argument
                                   >> is_a!(" ")
-                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
-                                  >> (Folder(account.to_string(), path.to_string(), FolderOperation::Subscribe))
+                                  >> path: quoted_argument
+                                  >> (Folder(account.to_string(), FolderOperation::Subscribe(path.to_string())))
                               )
                       );
                   )
@@ -283,8 +283,8 @@ define_commands!([
                                   ws!(tag!("unsubscribe-folder"))
                                   >> account: quoted_argument
                                   >> is_a!(" ")
-                                  >> path: map_res!(call!(not_line_ending), std::str::from_utf8)
-                                  >> (Folder(account.to_string(), path.to_string(), FolderOperation::Unsubscribe))
+                                  >> path: quoted_argument
+                                  >> (Folder(account.to_string(), FolderOperation::Unsubscribe(path.to_string())))
                               )
                       );
                   )
@@ -299,8 +299,8 @@ define_commands!([
                                   >> is_a!(" ")
                                   >> src: quoted_argument
                                   >> is_a!(" ")
-                                  >> dest: map_res!(call!(not_line_ending), std::str::from_utf8)
-                                  >> (Folder(account.to_string(), src.to_string(), FolderOperation::Rename(dest.to_string())))
+                                  >> dest: quoted_argument
+                                  >> (Folder(account.to_string(), FolderOperation::Rename(src.to_string(), dest.to_string())))
                               )
                       );
                   )
@@ -314,7 +314,7 @@ define_commands!([
                                   >> account: quoted_argument
                                   >> is_a!(" ")
                                   >> path: quoted_argument
-                                  >> (Folder(account.to_string(), path.to_string(), FolderOperation::Delete))
+                                  >> (Folder(account.to_string(), FolderOperation::Delete(path.to_string())))
                               )
                       );
                   )

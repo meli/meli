@@ -64,6 +64,17 @@ use std::sync::{Arc, RwLock};
 use fnv::FnvHashMap;
 use std;
 
+#[macro_export]
+macro_rules! get_path_hash {
+    ($path:expr) => {{
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        $path.hash(&mut hasher);
+        hasher.finish()
+    }};
+}
+
 pub type BackendCreator = Box<
     dyn Fn(
         &AccountSettings,
@@ -232,18 +243,6 @@ impl NotifyFn {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub enum FolderOperation {
-    Create,
-    Delete,
-    Subscribe,
-    Unsubscribe,
-    Rename(NewFolderName),
-    SetPermissions(FolderPermissions),
-}
-
-type NewFolderName = String;
-
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online(&self) -> Result<()>;
     fn connect(&mut self) {}
@@ -264,9 +263,6 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp>;
 
     fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()>;
-    fn create_folder(&mut self, _path: String) -> Result<Folder> {
-        unimplemented!()
-    }
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         None
     }
@@ -274,6 +270,30 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         unimplemented!()
+    }
+
+    fn create_folder(&mut self, _path: String) -> Result<Folder> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn delete_folder(&mut self, _folder_hash: FolderHash) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn set_folder_subscription(&mut self, _folder_hash: FolderHash, _val: bool) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn rename_folder(&mut self, _folder_hash: FolderHash, _new_path: String) -> Result<Folder> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn set_folder_permissions(
+        &mut self,
+        _folder_hash: FolderHash,
+        _val: FolderPermissions,
+    ) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
     }
 }
 
@@ -319,8 +339,6 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn description(&self) -> String;
     fn as_bytes(&mut self) -> Result<&[u8]>;
-    //fn delete(&self) -> ();
-    //fn copy(&self
     fn fetch_flags(&self) -> Flag;
     fn set_flag(&mut self, envelope: &mut Envelope, flag: Flag, value: bool) -> Result<()>;
     fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()>;
@@ -534,5 +552,11 @@ impl Default for FolderPermissions {
             delete_mailbox: false,
             change_permissions: false,
         }
+    }
+}
+
+impl std::fmt::Display for FolderPermissions {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(fmt, "{:#?}", self)
     }
 }

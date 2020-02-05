@@ -25,10 +25,12 @@ use std::sync::{Arc, Mutex, RwLock};
 #[derive(Debug, Default, Clone)]
 pub struct ImapFolder {
     pub(super) hash: FolderHash,
+    pub(super) imap_path: String,
     pub(super) path: String,
     pub(super) name: String,
     pub(super) parent: Option<FolderHash>,
     pub(super) children: Vec<FolderHash>,
+    pub separator: u8,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
     pub no_select: bool,
     pub is_subscribed: bool,
@@ -36,6 +38,12 @@ pub struct ImapFolder {
     pub permissions: Arc<Mutex<FolderPermissions>>,
     pub exists: Arc<Mutex<usize>>,
     pub unseen: Arc<Mutex<usize>>,
+}
+
+impl ImapFolder {
+    pub fn imap_path(&self) -> &str {
+        &self.imap_path
+    }
 }
 
 impl BackendFolder for ImapFolder {
@@ -79,7 +87,6 @@ impl BackendFolder for ImapFolder {
     }
     fn set_is_subscribed(&mut self, new_val: bool) -> Result<()> {
         self.is_subscribed = new_val;
-        // FIXME: imap subscribe
         Ok(())
     }
 
