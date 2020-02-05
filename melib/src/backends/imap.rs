@@ -639,13 +639,7 @@ impl ImapType {
         let server_username = get_conf_val!(s["server_username"])?;
         let server_password = get_conf_val!(s["server_password"])?;
         let server_port = get_conf_val!(s["server_port"], 143)?;
-        let use_starttls = get_conf_val!(s["use_starttls"], {
-            if server_port == 993 {
-                false
-            } else {
-                true
-            }
-        })?;
+        let use_starttls = get_conf_val!(s["use_starttls"], !(server_port == 993))?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         let server_conf = ImapServerConf {

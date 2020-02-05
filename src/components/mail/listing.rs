@@ -420,6 +420,7 @@ impl Component for Listing {
         }
         self.dirty = false;
     }
+
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event {
             UIEvent::StartupCheck(ref f) => {

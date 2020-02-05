@@ -160,8 +160,8 @@ impl ThreadView {
         }
         self.set_dirty(true);
     }
+
     fn initiate(&mut self, expanded_hash: Option<ThreadNodeHash>, context: &Context) {
-        /* stack to push thread messages in order in order to pop and print them later */
         let account = &context.accounts[self.coordinates.0];
         let mailbox = &account[self.coordinates.1].unwrap();
         let threads = &account.collection.threads[&mailbox.folder.hash()];
