@@ -837,7 +837,7 @@ fn is_cyclic(
         .map(|k| (k, false))
         .collect::<HashMap<&Cow<'static, str>, bool>>();
     for k in theme.keys() {
-        for course in [Course::Fg, Course::Bg, Course::Attrs].into_iter() {
+        for course in [Course::Fg, Course::Bg, Course::Attrs].iter() {
             path.push(k);
             if is_cyclic_util(course, k, &mut visited, &mut stack, &mut path, &theme) {
                 let path = path
