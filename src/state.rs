@@ -34,6 +34,7 @@ use melib::backends::{FolderHash, NotifyFn};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use fnv::FnvHashMap;
+use smallvec::SmallVec;
 use std::env;
 use std::io::Write;
 use std::result;
@@ -185,6 +186,17 @@ pub struct State {
     components: Vec<Box<dyn Component>>,
     pub context: Context,
     timer: thread::JoinHandle<()>,
+
+    display_messages: SmallVec<[DisplayMessage; 8]>,
+    display_messages_expiration_start: Option<UnixTimestamp>,
+    display_messages_active: bool,
+    display_messages_pos: usize,
+}
+
+#[derive(Debug)]
+struct DisplayMessage {
+    timestamp: UnixTimestamp,
+    msg: String,
 }
 
 impl Drop for State {
@@ -285,6 +297,10 @@ impl State {
             } else {
                 State::draw_horizontal_segment
             },
+            display_messages: SmallVec::new(),
+            display_messages_expiration_start: None,
+            display_messages_pos: 0,
+            display_messages_active: false,
 
             context: Context {
                 accounts,
@@ -457,9 +473,22 @@ impl State {
         }
         let mut areas: smallvec::SmallVec<[Area; 8]> =
             self.context.dirty_areas.drain(0..).collect();
-        if areas.is_empty() {
-            return;
+        if self.display_messages_active {
+            let now = melib::datetime::now();
+            if self
+                .display_messages_expiration_start
+                .map(|t| t + 5 < now)
+                .unwrap_or(false)
+            {
+                self.display_messages_active = false;
+                self.display_messages_expiration_start = None;
+                areas.push((
+                    (0, 0),
+                    (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
+                ));
+            }
         }
+
         /* Sort by x_start, ie upper_left corner's x coordinate */
         areas.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
         /* draw each dirty area */
@@ -798,6 +827,12 @@ impl State {
 
     /// The application's main loop sends `UIEvents` to state via this method.
     pub fn rcv_event(&mut self, mut event: UIEvent) {
+        if let UIEvent::Input(_) = event {
+            if self.display_messages_expiration_start.is_none() {
+                self.display_messages_expiration_start = Some(melib::datetime::now());
+            }
+        }
+
         match event {
             // Command type is handled only by State.
             UIEvent::Command(cmd) => {
@@ -844,6 +879,29 @@ impl State {
                 self.draw_rate_limit.reset();
                 self.redraw();
                 return;
+            }
+            UIEvent::Input(Key::Alt('<')) => {
+                self.display_messages_expiration_start = Some(melib::datetime::now());
+                self.display_messages_active = true;
+                self.display_messages_pos = self.display_messages_pos.saturating_sub(1);
+                return;
+            }
+            UIEvent::Input(Key::Alt('>')) => {
+                self.display_messages_expiration_start = Some(melib::datetime::now());
+                self.display_messages_active = true;
+                self.display_messages_pos = std::cmp::min(
+                    self.display_messages.len().saturating_sub(1),
+                    self.display_messages_pos + 1,
+                );
+                return;
+            }
+            UIEvent::StatusEvent(StatusEvent::DisplayMessage(ref msg)) => {
+                self.display_messages.push(DisplayMessage {
+                    timestamp: melib::datetime::now(),
+                    msg: msg.clone(),
+                });
+                self.display_messages_active = true;
+                self.display_messages_pos = self.display_messages.len() - 1;
             }
             _ => {}
         }
