@@ -57,12 +57,8 @@ pub fn pos_dec(p: Pos, dec: (usize, usize)) -> Pos {
 /// An `Area` consists of two points: the upper left and bottom right corners.
 ///
 /// Example:
-/// ```
-/// # #[macro_use] extern crate ui; fn main() {
-/// use ui::*;
-///
+/// ```no_run
 /// let new_area = ((0, 0), (1, 1));
-/// # }
 /// ```
 pub type Area = (Pos, Pos);
 
@@ -70,12 +66,8 @@ pub type Area = (Pos, Pos);
 ///
 /// Example:
 /// ```
-/// # #[macro_use] extern crate ui; fn main() {
-/// use ui::*;
-///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(height!(new_area), 1);
-/// # }
 /// ```
 #[macro_export]
 macro_rules! height {
@@ -88,12 +80,8 @@ macro_rules! height {
 ///
 /// Example:
 /// ```
-/// # #[macro_use] extern crate ui; fn main() {
-/// use ui::*;
-///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(width!(new_area), 1);
-/// # }
 /// ```
 #[macro_export]
 macro_rules! width {
@@ -106,12 +94,8 @@ macro_rules! width {
 ///
 /// Example:
 /// ```
-/// # #[macro_use] extern crate ui; fn main() {
-/// use ui::*;
-///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(upper_left!(new_area), (0, 0));
-/// # }
 /// ```
 #[macro_export]
 macro_rules! upper_left {
@@ -124,12 +108,8 @@ macro_rules! upper_left {
 ///
 /// Example:
 /// ```
-/// # #[macro_use] extern crate ui; fn main() {
-/// use ui::*;
-///
 /// let new_area = ((0, 0), (1, 1));
 /// assert_eq!(bottom_right!(new_area), (1, 1));
-/// # }
 /// ```
 #[macro_export]
 macro_rules! bottom_right {
@@ -142,15 +122,12 @@ macro_rules! bottom_right {
 ///
 /// Example:
 /// ```
-/// # #[macro_use] extern crate ui; fn main() {
-/// use ui::*;
-///
 /// let valid_area = ((0, 0), (1, 1));
 /// assert!(is_valid_area!(valid_area));
 ///
 /// let invalid_area = ((2, 2), (1, 1));
 /// assert!(!is_valid_area!(invalid_area));
-/// # }
+/// ```
 ///
 #[macro_export]
 macro_rules! is_valid_area {

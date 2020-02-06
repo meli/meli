@@ -71,10 +71,16 @@ pub trait TextProcessing: UnicodeSegmentation + CodePointsIter {
 
 impl TextProcessing for str {
     fn split_lines(&self, width: usize) -> Vec<String> {
+        if width == 0 {
+            return vec![];
+        }
         super::line_break::linear(self, width)
     }
 
     fn split_lines_reflow(&self, reflow: Reflow, width: Option<usize>) -> Vec<String> {
+        if width == Some(0) {
+            return vec![];
+        }
         super::line_break::split_lines_reflow(self, reflow, width)
     }
 }

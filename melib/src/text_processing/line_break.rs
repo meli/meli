@@ -1023,6 +1023,9 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
                                 ret.push(format!("⤷{}", &line[prev_line_offset..end_offset]));
                             }
                         }
+                        if prev_line_offset == end_offset && prev == new_off {
+                            break;
+                        }
                         prev_line_offset = end_offset;
                         prev = new_off;
                     }

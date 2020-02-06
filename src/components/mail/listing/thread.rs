@@ -225,6 +225,9 @@ impl ListingTrait for ThreadListing {
             return;
         }
         let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+        if rows == 0 {
+            return;
+        }
         if let Some(mvm) = self.movement.take() {
             match mvm {
                 PageMovement::Up(amount) => {
