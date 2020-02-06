@@ -137,3 +137,47 @@ macro_rules! is_valid_area {
         !(get_y(upper_left) > get_y(bottom_right) || get_x(upper_left) > get_x(bottom_right))
     }};
 }
+
+/// Place box given by `(width, height)` in center of `area`
+pub fn center_area(area: Area, (width, height): (usize, usize)) -> Area {
+    let mid_x = { std::cmp::max(width!(area) / 2, width / 2) - width / 2 };
+    let mid_y = { std::cmp::max(height!(area) / 2, height / 2) - height / 2 };
+
+    let (upper_x, upper_y) = upper_left!(area);
+    let (max_x, max_y) = bottom_right!(area);
+    (
+        (
+            std::cmp::min(max_x, upper_x + mid_x),
+            std::cmp::min(max_y, upper_y + mid_y),
+        ),
+        (
+            std::cmp::min(max_x, upper_x + mid_x + width),
+            std::cmp::min(max_y, upper_y + mid_y + height),
+        ),
+    )
+}
+
+/// Place box given by `(width, height)` in corner of `area`
+pub fn place_in_area(area: Area, (width, height): (usize, usize), upper: bool, left: bool) -> Area {
+    let (upper_x, upper_y) = upper_left!(area);
+    let (max_x, max_y) = bottom_right!(area);
+    let x = if upper {
+        upper_x + 2
+    } else {
+        max_x.saturating_sub(2).saturating_sub(width)
+    };
+
+    let y = if left {
+        upper_y + 2
+    } else {
+        max_y.saturating_sub(2).saturating_sub(height)
+    };
+
+    (
+        (std::cmp::min(x, max_x), std::cmp::min(y, max_y)),
+        (
+            std::cmp::min(x + width, max_x),
+            std::cmp::min(y + height, max_y),
+        ),
+    )
+}

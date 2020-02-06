@@ -1758,24 +1758,6 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area) {
     }
 }
 
-pub fn center_area(area: Area, (width, height): (usize, usize)) -> Area {
-    let mid_x = { std::cmp::max(width!(area) / 2, width / 2) - width / 2 };
-    let mid_y = { std::cmp::max(height!(area) / 2, height / 2) - height / 2 };
-
-    let (upper_x, upper_y) = upper_left!(area);
-    let (max_x, max_y) = bottom_right!(area);
-    (
-        (
-            std::cmp::min(max_x, upper_x + mid_x),
-            std::cmp::min(max_y, upper_y + mid_y),
-        ),
-        (
-            std::cmp::min(max_x, upper_x + mid_x + width),
-            std::cmp::min(max_y, upper_y + mid_y + height),
-        ),
-    )
-}
-
 pub mod ansi {
     //! Create a `CellBuffer` from a string slice containing ANSI escape codes.
     use super::{Cell, CellBuffer, Color};
@@ -2063,5 +2045,376 @@ impl RowIterator {
             self.col.start = new_val;
             self
         }
+    }
+}
+
+pub use boundaries::create_box;
+pub mod boundaries {
+    use super::*;
+    /// The upper and lower boundary char.
+    pub(crate) const HORZ_BOUNDARY: char = '─';
+    /// The left and right boundary char.
+    pub(crate) const VERT_BOUNDARY: char = '│';
+
+    /// The top-left corner
+    pub(crate) const _TOP_LEFT_CORNER: char = '┌';
+    /// The top-right corner
+    pub(crate) const _TOP_RIGHT_CORNER: char = '┐';
+    /// The bottom-left corner
+    pub(crate) const _BOTTOM_LEFT_CORNER: char = '└';
+    /// The bottom-right corner
+    pub(crate) const _BOTTOM_RIGHT_CORNER: char = '┘';
+
+    pub(crate) const LIGHT_VERTICAL_AND_RIGHT: char = '├';
+
+    pub(crate) const _LIGHT_VERTICAL_AND_LEFT: char = '┤';
+
+    pub(crate) const LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
+
+    pub(crate) const LIGHT_UP_AND_HORIZONTAL: char = '┴';
+
+    pub(crate) const _DOUBLE_DOWN_AND_RIGHT: char = '╔';
+    pub(crate) const _DOUBLE_DOWN_AND_LEFT: char = '╗';
+    pub(crate) const _DOUBLE_UP_AND_LEFT: char = '╝';
+    pub(crate) const _DOUBLE_UP_AND_RIGHT: char = '╚';
+
+    fn bin_to_ch(b: u32) -> char {
+        match b {
+            0b0001 => '╶',
+            0b0010 => '╵',
+            0b0011 => '└',
+            0b0100 => '╴',
+            0b0101 => '─',
+            0b0110 => '┘',
+            0b0111 => '┴',
+            0b1000 => '╷',
+            0b1001 => '┌',
+            0b1010 => '│',
+            0b1011 => '├',
+            0b1100 => '┐',
+            0b1101 => '┬',
+            0b1110 => '┤',
+            0b1111 => '┼',
+            _ => unsafe { std::hint::unreachable_unchecked() },
+        }
+    }
+
+    fn ch_to_bin(ch: char) -> Option<u32> {
+        match ch {
+            '└' => Some(0b0011),
+            '─' => Some(0b0101),
+            '┘' => Some(0b0110),
+            '┴' => Some(0b0111),
+            '┌' => Some(0b1001),
+
+            '│' => Some(0b1010),
+
+            '├' => Some(0b1011),
+            '┐' => Some(0b1100),
+            '┬' => Some(0b1101),
+
+            '┤' => Some(0b1110),
+
+            '┼' => Some(0b1111),
+            '╷' => Some(0b1000),
+
+            '╵' => Some(0b0010),
+            '╴' => Some(0b0100),
+            '╶' => Some(0b0001),
+            _ => None,
+        }
+    }
+
+    #[allow(clippy::never_loop)]
+    fn set_and_join_vert(grid: &mut CellBuffer, idx: Pos) -> u32 {
+        let (x, y) = idx;
+        let mut bin_set = 0b1010;
+        /* Check left side
+         *
+         *        1
+         *   -> 2 │ 0
+         *        3
+         */
+        loop {
+            if x > 0 {
+                if let Some(cell) = grid.get_mut(x - 1, y) {
+                    if let Some(adj) = ch_to_bin(cell.ch()) {
+                        if (adj & 0b0001) > 0 {
+                            bin_set |= 0b0100;
+                            break;
+                        } else if adj == 0b0100 {
+                            cell.set_ch(bin_to_ch(0b0101));
+                            cell.set_fg(Color::Byte(240));
+                            bin_set |= 0b0100;
+                            break;
+                        }
+                    }
+                }
+            }
+            bin_set &= 0b1011;
+            break;
+        }
+
+        /* Check right side
+         *
+         *        1
+         *      2 │ 0 <-
+         *        3
+         */
+        loop {
+            if let Some(cell) = grid.get_mut(x + 1, y) {
+                if let Some(adj) = ch_to_bin(cell.ch()) {
+                    if (adj & 0b0100) > 0 {
+                        bin_set |= 0b0001;
+                        break;
+                    }
+                }
+            }
+            bin_set &= 0b1110;
+            break;
+        }
+
+        /* Set upper side
+         *
+         *        1 <-
+         *      2 │ 0
+         *        3
+         */
+        loop {
+            if y > 0 {
+                if let Some(cell) = grid.get_mut(x, y - 1) {
+                    if let Some(adj) = ch_to_bin(cell.ch()) {
+                        cell.set_ch(bin_to_ch(adj | 0b1000));
+                        cell.set_fg(Color::Byte(240));
+                    } else {
+                        bin_set &= 0b1101;
+                    }
+                }
+            }
+            break;
+        }
+
+        /* Set bottom side
+         *
+         *        1
+         *      2 │ 0
+         *        3 <-
+         */
+        loop {
+            if let Some(cell) = grid.get_mut(x, y + 1) {
+                if let Some(adj) = ch_to_bin(cell.ch()) {
+                    cell.set_ch(bin_to_ch(adj | 0b0010));
+                    cell.set_fg(Color::Byte(240));
+                } else {
+                    bin_set &= 0b0111;
+                }
+            }
+            break;
+        }
+
+        if bin_set == 0 {
+            bin_set = 0b1010;
+        }
+
+        bin_set
+    }
+
+    #[allow(clippy::never_loop)]
+    fn set_and_join_horz(grid: &mut CellBuffer, idx: Pos) -> u32 {
+        let (x, y) = idx;
+        let mut bin_set = 0b0101;
+        /* Check upper side
+         *
+         *        1 <-
+         *      2 ─ 0
+         *        3
+         */
+        loop {
+            if y > 0 {
+                if let Some(cell) = grid.get_mut(x, y - 1) {
+                    if let Some(adj) = ch_to_bin(cell.ch()) {
+                        if (adj & 0b1000) > 0 {
+                            bin_set |= 0b0010;
+                            break;
+                        } else if adj == 0b0010 {
+                            bin_set |= 0b0010;
+                            cell.set_ch(bin_to_ch(0b1010));
+                            cell.set_fg(Color::Byte(240));
+                            break;
+                        }
+                    }
+                }
+            }
+            bin_set &= 0b1101;
+            break;
+        }
+
+        /* Check bottom side
+         *
+         *        1
+         *      2 ─ 0
+         *        3 <-
+         */
+        loop {
+            if let Some(cell) = grid.get_mut(x, y + 1) {
+                if let Some(adj) = ch_to_bin(cell.ch()) {
+                    if (adj & 0b0010) > 0 {
+                        bin_set |= 0b1000;
+                        break;
+                    } else if adj == 0b1000 {
+                        bin_set |= 0b1000;
+                        cell.set_ch(bin_to_ch(0b1010));
+                        cell.set_fg(Color::Byte(240));
+                        break;
+                    }
+                }
+            }
+            bin_set &= 0b0111;
+            break;
+        }
+
+        /* Set left side
+         *
+         *        1
+         *   -> 2 ─ 0
+         *        3
+         */
+        loop {
+            if x > 0 {
+                if let Some(cell) = grid.get_mut(x - 1, y) {
+                    if let Some(adj) = ch_to_bin(cell.ch()) {
+                        cell.set_ch(bin_to_ch(adj | 0b0001));
+                        cell.set_fg(Color::Byte(240));
+                    } else {
+                        bin_set &= 0b1011;
+                    }
+                }
+            }
+            break;
+        }
+
+        /* Set right side
+         *
+         *        1
+         *      2 ─ 0 <-
+         *        3
+         */
+        loop {
+            if let Some(cell) = grid.get_mut(x + 1, y) {
+                if let Some(adj) = ch_to_bin(cell.ch()) {
+                    cell.set_ch(bin_to_ch(adj | 0b0100));
+                    cell.set_fg(Color::Byte(240));
+                } else {
+                    bin_set &= 0b1110;
+                }
+            }
+            break;
+        }
+
+        if bin_set == 0 {
+            bin_set = 0b0101;
+        }
+
+        bin_set
+    }
+
+    pub(crate) enum BoxBoundary {
+        Horizontal,
+        Vertical,
+    }
+
+    pub(crate) fn set_and_join_box(grid: &mut CellBuffer, idx: Pos, ch: BoxBoundary) {
+        /* Connected sides:
+         *
+         *        1
+         *      2 c 0
+         *        3
+         *
+         *     #3210
+         *    0b____
+         */
+
+        if grid.ascii_drawing {
+            grid[idx].set_ch(match ch {
+                BoxBoundary::Vertical => '|',
+                BoxBoundary::Horizontal => '-',
+            });
+
+            grid[idx].set_fg(Color::Byte(240));
+            return;
+        }
+
+        let bin_set = match ch {
+            BoxBoundary::Vertical => set_and_join_vert(grid, idx),
+            BoxBoundary::Horizontal => set_and_join_horz(grid, idx),
+        };
+
+        grid[idx].set_ch(bin_to_ch(bin_set));
+        grid[idx].set_fg(Color::Byte(240));
+    }
+
+    /// Puts boundaries in `area`.
+    /// Returns the inner area of the created box.
+    pub fn create_box(grid: &mut CellBuffer, area: Area) -> Area {
+        if !is_valid_area!(area) {
+            return ((0, 0), (0, 0));
+        }
+        let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
+
+        if !grid.ascii_drawing {
+            for x in get_x(upper_left)..get_x(bottom_right) {
+                grid[(x, get_y(upper_left))]
+                    .set_ch(HORZ_BOUNDARY)
+                    .set_fg(Color::Byte(240));
+                grid[(x, get_y(bottom_right))]
+                    .set_ch(HORZ_BOUNDARY)
+                    .set_fg(Color::Byte(240));
+            }
+
+            for y in get_y(upper_left)..get_y(bottom_right) {
+                grid[(get_x(upper_left), y)]
+                    .set_ch(VERT_BOUNDARY)
+                    .set_fg(Color::Byte(240));
+                grid[(get_x(bottom_right), y)]
+                    .set_ch(VERT_BOUNDARY)
+                    .set_fg(Color::Byte(240));
+            }
+            set_and_join_box(grid, upper_left, BoxBoundary::Horizontal);
+            set_and_join_box(
+                grid,
+                set_x(upper_left, get_x(bottom_right)),
+                BoxBoundary::Horizontal,
+            );
+            set_and_join_box(
+                grid,
+                set_y(upper_left, get_y(bottom_right)),
+                BoxBoundary::Vertical,
+            );
+            set_and_join_box(grid, bottom_right, BoxBoundary::Vertical);
+        }
+
+        (
+            (
+                std::cmp::min(
+                    get_x(upper_left) + 2,
+                    std::cmp::min(get_x(upper_left) + 1, get_x(bottom_right)),
+                ),
+                std::cmp::min(
+                    get_y(upper_left) + 2,
+                    std::cmp::min(get_y(upper_left) + 1, get_y(bottom_right)),
+                ),
+            ),
+            (
+                std::cmp::max(
+                    get_x(bottom_right).saturating_sub(2),
+                    std::cmp::max(get_x(bottom_right).saturating_sub(1), get_x(upper_left)),
+                ),
+                std::cmp::max(
+                    get_y(bottom_right).saturating_sub(2),
+                    std::cmp::max(get_y(bottom_right).saturating_sub(1), get_y(upper_left)),
+                ),
+            ),
+        )
     }
 }
