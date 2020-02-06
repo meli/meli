@@ -723,8 +723,6 @@ impl Component for Pager {
 pub struct StatusBar {
     container: Box<dyn Component>,
     status: String,
-    notifications: VecDeque<String>,
-    cur_notification: Option<(std::time::Instant, String)>,
     ex_buffer: Field,
     ex_buffer_cmd_history_pos: Option<usize>,
     display_buffer: String,
@@ -749,8 +747,6 @@ impl StatusBar {
         StatusBar {
             container,
             status: String::with_capacity(256),
-            notifications: VecDeque::new(),
-            cur_notification: None,
             ex_buffer: Field::Text(UText::new(String::with_capacity(256)), None),
             ex_buffer_cmd_history_pos: None,
             display_buffer: String::with_capacity(8),
@@ -796,43 +792,6 @@ impl StatusBar {
                 )
             {
                 grid[(x, y)].set_attrs(attribute.attrs | Attr::Bold);
-            }
-        }
-        let noto_colors = crate::conf::value(context, "status.notification");
-        if self.cur_notification.is_some() {
-            let (t, n) = self.cur_notification.as_ref().unwrap();
-            if std::time::Instant::now().duration_since(*t) < std::time::Duration::new(5, 0) {
-                write_string_to_grid(
-                    n,
-                    grid,
-                    noto_colors.fg,
-                    noto_colors.bg,
-                    noto_colors.attrs,
-                    (
-                        (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
-                        bottom_right!(area),
-                    ),
-                    None,
-                );
-            } else {
-                self.cur_notification = None;
-            }
-        }
-        if self.cur_notification.is_none() {
-            if let Some(n) = self.notifications.pop_front() {
-                write_string_to_grid(
-                    &n,
-                    grid,
-                    noto_colors.fg,
-                    noto_colors.bg,
-                    noto_colors.attrs,
-                    (
-                        (std::cmp::max(x, width!(area).saturating_sub(n.len())), y),
-                        bottom_right!(area),
-                    ),
-                    None,
-                );
-                self.cur_notification = Some((std::time::Instant::now(), n));
             }
         }
 
@@ -1229,10 +1188,6 @@ impl Component for StatusBar {
             UIEvent::Resize => {
                 self.dirty = true;
             }
-            UIEvent::StatusEvent(StatusEvent::DisplayMessage(s)) => {
-                self.notifications.push_back(s.clone());
-                self.dirty = true;
-            }
             UIEvent::StatusEvent(StatusEvent::BufClear) => {
                 self.display_buffer.clear();
                 self.dirty = true;
@@ -1370,6 +1325,7 @@ impl Tabbed {
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
+        let bottom_right = bottom_right!(area);
 
         if self.children.is_empty() {
             clear_area(grid, area);
@@ -1407,6 +1363,10 @@ impl Tabbed {
                 x += 2;
             }
             if y != _y_ {
+                break;
+            }
+            if x > get_x(bottom_right) {
+                x = get_x(bottom_right);
                 break;
             }
             grid[(x_, _y_)]
