@@ -176,10 +176,11 @@ pub struct State {
     rows: usize,
 
     grid: CellBuffer,
+    overlay_grid: CellBuffer,
     draw_rate_limit: RateLimit,
     stdout: Option<StateStdout>,
     child: Option<ForkType>,
-    draw_horizontal_segment_fn: fn(&mut State, usize, usize, usize) -> (),
+    draw_horizontal_segment_fn: fn(&mut CellBuffer, &mut StateStdout, usize, usize, usize) -> (),
     pub mode: UIMode,
     components: Vec<Box<dyn Component>>,
     pub context: Context,
@@ -269,6 +270,7 @@ impl State {
             cols,
             rows,
             grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
+            overlay_grid: CellBuffer::new(cols, rows, Cell::with_char(' ')),
             stdout: None,
             child: None,
             mode: UIMode::Normal,
@@ -309,6 +311,7 @@ impl State {
             .set_value(std::time::Duration::from_millis(3));
         if s.context.settings.terminal.ascii_drawing {
             s.grid.set_ascii_drawing(true);
+            s.overlay_grid.set_ascii_drawing(true);
         }
 
         s.switch_to_alternate_screen();
@@ -434,6 +437,8 @@ impl State {
         self.cols = termcols.unwrap_or(72) as usize;
         self.rows = termrows.unwrap_or(120) as usize;
         self.grid.resize(self.cols, self.rows, Cell::with_char(' '));
+        self.overlay_grid
+            .resize(self.cols, self.rows, Cell::with_char(' '));
 
         self.rcv_event(UIEvent::Resize);
 
@@ -466,18 +471,36 @@ impl State {
                     continue;
                 }
                 if let Some((x_start, x_end)) = segment.take() {
-                    (self.draw_horizontal_segment_fn)(self, x_start, x_end, y);
+                    (self.draw_horizontal_segment_fn)(
+                        &mut self.grid,
+                        self.stdout.as_mut().unwrap(),
+                        x_start,
+                        x_end,
+                        y,
+                    );
                 }
                 match segment {
                     ref mut s @ None => {
                         *s = Some((*x_start, *x_end));
                     }
                     ref mut s @ Some(_) if s.unwrap().1 < *x_start => {
-                        (self.draw_horizontal_segment_fn)(self, s.unwrap().0, s.unwrap().1, y);
+                        (self.draw_horizontal_segment_fn)(
+                            &mut self.grid,
+                            self.stdout.as_mut().unwrap(),
+                            s.unwrap().0,
+                            s.unwrap().1,
+                            y,
+                        );
                         *s = Some((*x_start, *x_end));
                     }
                     ref mut s @ Some(_) if s.unwrap().1 < *x_end => {
-                        (self.draw_horizontal_segment_fn)(self, s.unwrap().0, s.unwrap().1, y);
+                        (self.draw_horizontal_segment_fn)(
+                            &mut self.grid,
+                            self.stdout.as_mut().unwrap(),
+                            s.unwrap().0,
+                            s.unwrap().1,
+                            y,
+                        );
                         *s = Some((s.unwrap().1, *x_end));
                     }
                     Some((_, ref mut x)) => {
@@ -486,16 +509,111 @@ impl State {
                 }
             }
             if let Some((x_start, x_end)) = segment {
-                (self.draw_horizontal_segment_fn)(self, x_start, x_end, y);
+                (self.draw_horizontal_segment_fn)(
+                    &mut self.grid,
+                    self.stdout.as_mut().unwrap(),
+                    x_start,
+                    x_end,
+                    y,
+                );
+            }
+        }
+
+        if self.display_messages_active {
+            if let Some(DisplayMessage {
+                ref timestamp,
+                ref msg,
+                ..
+            }) = self.display_messages.get(self.display_messages_pos)
+            {
+                let noto_colors = crate::conf::value(&self.context, "status.notification");
+                use crate::melib::text_processing::{Reflow, TextProcessing};
+
+                let msg_lines = msg.split_lines_reflow(Reflow::All, Some(self.cols / 3));
+                let width = msg_lines
+                    .iter()
+                    .map(|line| line.grapheme_len() + 4)
+                    .max()
+                    .unwrap_or(0);
+
+                let displ_area = place_in_area(
+                    (
+                        (0, 0),
+                        (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
+                    ),
+                    (width, std::cmp::min(self.rows, msg_lines.len() + 4)),
+                    false,
+                    false,
+                );
+                for row in self.overlay_grid.bounds_iter(displ_area) {
+                    for c in row {
+                        self.overlay_grid[c]
+                            .set_ch(' ')
+                            .set_fg(noto_colors.fg)
+                            .set_bg(noto_colors.bg)
+                            .set_attrs(noto_colors.attrs);
+                    }
+                }
+                let ((x, mut y), box_displ_area_bottom_right) =
+                    create_box(&mut self.overlay_grid, displ_area);
+                for line in msg_lines
+                    .into_iter()
+                    .chain(Some(String::new()))
+                    .chain(Some(melib::datetime::timestamp_to_string(*timestamp, None)))
+                {
+                    write_string_to_grid(
+                        &line,
+                        &mut self.overlay_grid,
+                        noto_colors.fg,
+                        noto_colors.bg,
+                        noto_colors.attrs,
+                        ((x, y), box_displ_area_bottom_right),
+                        Some(x),
+                    );
+                    y += 1;
+                }
+
+                if self.display_messages.len() > 1 {
+                    write_string_to_grid(
+                        if self.display_messages_pos == 0 {
+                            "Next: >"
+                        } else if self.display_messages_pos + 1 == self.display_messages.len() {
+                            "Prev: <"
+                        } else {
+                            "Prev: <, Next: >"
+                        },
+                        &mut self.overlay_grid,
+                        noto_colors.fg,
+                        noto_colors.bg,
+                        noto_colors.attrs,
+                        ((x, y), box_displ_area_bottom_right),
+                        Some(x),
+                    );
+                }
+                for y in get_y(upper_left!(displ_area))..=get_y(bottom_right!(displ_area)) {
+                    (self.draw_horizontal_segment_fn)(
+                        &mut self.overlay_grid,
+                        self.stdout.as_mut().unwrap(),
+                        get_x(upper_left!(displ_area)),
+                        get_x(bottom_right!(displ_area)),
+                        y,
+                    );
+                }
             }
         }
         self.flush();
     }
 
     /// Draw only a specific `area` on the screen.
-    fn draw_horizontal_segment(&mut self, x_start: usize, x_end: usize, y: usize) {
+    fn draw_horizontal_segment(
+        grid: &mut CellBuffer,
+        stdout: &mut StateStdout,
+        x_start: usize,
+        x_end: usize,
+        y: usize,
+    ) {
         write!(
-            self.stdout(),
+            stdout,
             "{}",
             cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
         )
@@ -503,12 +621,6 @@ impl State {
         let mut current_fg = Color::Default;
         let mut current_bg = Color::Default;
         let mut current_attrs = Attr::Default;
-        let Self {
-            ref grid,
-            ref mut stdout,
-            ..
-        } = self;
-        let stdout = stdout.as_mut().unwrap();
         write!(stdout, "\x1B[m").unwrap();
         for x in x_start..=x_end {
             let c = &grid[(x, y)];
@@ -530,20 +642,20 @@ impl State {
         }
     }
 
-    fn draw_horizontal_segment_no_color(&mut self, x_start: usize, x_end: usize, y: usize) {
+    fn draw_horizontal_segment_no_color(
+        grid: &mut CellBuffer,
+        stdout: &mut StateStdout,
+        x_start: usize,
+        x_end: usize,
+        y: usize,
+    ) {
         write!(
-            self.stdout(),
+            stdout,
             "{}",
             cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
         )
         .unwrap();
         let mut current_attrs = Attr::Default;
-        let Self {
-            ref grid,
-            ref mut stdout,
-            ..
-        } = self;
-        let stdout = stdout.as_mut().unwrap();
         write!(stdout, "\x1B[m").unwrap();
         for x in x_start..=x_end {
             let c = &grid[(x, y)];
