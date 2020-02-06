@@ -249,8 +249,7 @@ impl MailView {
                             } else {
                                 s.push(' ');
                             }
-                            s.push('\\');
-                            s.push(' ');
+                            s.push_str("\\_ ");
                         } else {
                             if has_sibling {
                                 s.push('|');
