@@ -205,7 +205,7 @@ pub struct ThemeAttribute {
 }
 
 /// Holds {fore,back}ground color and terminal attribute values.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThemeAttributeInner {
     #[serde(default)]
     fg: ThemeValue<Color>,
@@ -213,6 +213,16 @@ pub struct ThemeAttributeInner {
     bg: ThemeValue<Color>,
     #[serde(default)]
     attrs: ThemeValue<Attr>,
+}
+
+impl Default for ThemeAttributeInner {
+    fn default() -> Self {
+        Self {
+            fg: "theme_default".into(),
+            bg: "theme_default".into(),
+            attrs: "theme_default".into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -459,7 +469,7 @@ impl Default for Theme {
                 dark.insert($key.into(), ThemeAttributeInner::default());
             };
         }
-        add!("theme_default");
+        add!("theme_default", dark = { fg: Color::Default, bg: Color::Default, attrs: Attr::Default }, light = { fg: Color::Default, bg: Color::Default, attrs: Attr::Default });
         add!("status.bar", dark = { fg: Color::Byte(123), bg: Color::Byte(26) }, light = { fg: Color::Byte(123), bg: Color::Byte(26) });
         add!("status.notification", dark = { fg: Color::Byte(219), bg: Color::Byte(88) }, light = { fg: Color::Byte(219), bg: Color::Byte(88) });
 
