@@ -1052,7 +1052,7 @@ mod tests {
     use crate::make_address;
 
     #[test]
-    fn test_subject() {
+    fn test_phrase() {
         let words = b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
      =?iso-8859-7?B?INb18+nq3l0gzd3hIMHt4erv3+358+c6IMzF0c/TIMHQz9TFy8XTzMHU?=
       =?iso-8859-7?B?2c0gwiDUzC4gysHNLiDFzsXUwdPH0yAyMDE3LTE4OiDTx8zFydnTxw==?=";
@@ -1145,7 +1145,10 @@ mod tests {
         debug!("{:?}", date(__s));
         assert_eq!(date(s).unwrap(), date(_s).unwrap());
         assert_eq!(date(_s).unwrap(), date(__s).unwrap());
+        let val = b"Fri, 23 Dec 0001 21:20:36 -0800 (PST)";
+        assert_eq!(date(val).unwrap(), 0);
     }
+
     #[test]
     fn test_attachments() {
         //FIXME: add file

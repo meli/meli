@@ -74,7 +74,7 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>) -> Strin
     s.to_string_lossy().to_string()
 }
 
-fn tm_to_secs(tm: ::libc::tm) -> UnixTimestamp {
+fn tm_to_secs(tm: ::libc::tm) -> std::result::Result<i64, ()> {
     let mut is_leap = false;
     let mut year = tm.tm_year;
     let mut month = tm.tm_mon;
@@ -87,19 +87,19 @@ fn tm_to_secs(tm: ::libc::tm) -> UnixTimestamp {
         }
         year += adj;
     }
-    let mut t = year_to_secs(year as u64, &mut is_leap);
-    t += month_to_secs(month as usize, is_leap);
-    t += 86400 * (tm.tm_mday as u64 - 1);
-    t += 3600 * (tm.tm_hour as u64);
-    t += 60 * (tm.tm_min as u64);
-    t += tm.tm_sec as u64;
-    t
+    let mut t = year_to_secs(year.into(), &mut is_leap)?;
+    t += month_to_secs(month.try_into().unwrap_or(0), is_leap);
+    t += 86400 * (tm.tm_mday - 1) as i64;
+    t += 3600 * (tm.tm_hour) as i64;
+    t += 60 * (tm.tm_min) as i64;
+    t += tm.tm_sec as i64;
+    Ok(t)
 }
 
-fn year_to_secs(year: u64, is_leap: &mut bool) -> u64 {
-    if year < 100 {
+fn year_to_secs(year: i64, is_leap: &mut bool) -> std::result::Result<i64, ()> {
+    if year < -100 {
         /* Sorry time travelers. */
-        return 0;
+        return Err(());
     }
 
     if year - 2 <= 136 {
@@ -111,7 +111,9 @@ fn year_to_secs(year: u64, is_leap: &mut bool) -> u64 {
         } else {
             *is_leap = false;
         }
-        return 31536000 * (y - 70) + 86400 * leaps;
+        return Ok((31536000 * (y - 70) + 86400 * leaps)
+            .try_into()
+            .unwrap_or(0));
     }
 
     let cycles = (year - 100) / 400;
@@ -154,11 +156,14 @@ fn year_to_secs(year: u64, is_leap: &mut bool) -> u64 {
 
     leaps += 97 * cycles + 24 * centuries - if *is_leap { 1 } else { 0 };
 
-    return (year - 100) * 31536000 + leaps * 86400 + 946684800 + 86400;
+    return Ok(match (year - 100).overflowing_mul(31536000) {
+        (_, true) => return Err(()),
+        (res, false) => res + leaps * 86400 + 946684800 + 86400,
+    });
 }
 
-fn month_to_secs(month: usize, is_leap: bool) -> u64 {
-    const SECS_THROUGH_MONTH: [u64; 12] = [
+fn month_to_secs(month: usize, is_leap: bool) -> i64 {
+    const SECS_THROUGH_MONTH: [i64; 12] = [
         0,
         31 * 86400,
         59 * 86400,
@@ -172,7 +177,7 @@ fn month_to_secs(month: usize, is_leap: bool) -> u64 {
         304 * 86400,
         334 * 86400,
     ];
-    let mut t = SECS_THROUGH_MONTH[month as usize];
+    let mut t = SECS_THROUGH_MONTH[month];
     if is_leap && month >= 2 {
         t += 86400;
     }
@@ -226,7 +231,9 @@ where
                     0
                 }
             };
-            return (tm_to_secs(new_tm) as i64 - tm_gmtoff) as u64;
+            return tm_to_secs(new_tm)
+                .map(|res| (res - tm_gmtoff) as u64)
+                .unwrap_or(0);
         }
     }
     return 0;
