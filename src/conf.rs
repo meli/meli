@@ -602,6 +602,7 @@ mod pp {
     use melib::{
         error::{MeliError, Result},
         parsec::*,
+        ShellExpandTrait,
     };
     use std::io::Read;
     use std::path::{Path, PathBuf};
@@ -682,19 +683,16 @@ mod pp {
                     l
                 ))
             })? {
-                let p = &Path::new(sub_path);
-                debug!(p);
-                let p_buf = if p.is_relative() {
+                let mut p = Path::new(sub_path).expand();
+                 if p.is_relative() {
                     /* We checked that path is ok above so we can do unwrap here */
                     debug!(path);
                     let prefix = path.parent().unwrap();
                     debug!(prefix);
-                    prefix.join(p)
-                } else {
-                    p.to_path_buf()
-                };
+                    p = prefix.join(p)
+                }
 
-                ret.extend(pp_helper(&p_buf, level + 1)?.chars());
+                ret.extend(pp_helper(&p, level + 1)?.chars());
             } else {
                 ret.push_str(l);
                 ret.push('\n');
@@ -708,9 +706,9 @@ mod pp {
     /// in the filesystem.
     pub fn pp<P: AsRef<Path>>(path: P) -> Result<String> {
         let p_buf: PathBuf = if path.as_ref().is_relative() {
-            path.as_ref().canonicalize()?
+            path.as_ref().expand().canonicalize()?
         } else {
-            path.as_ref().to_path_buf()
+            path.as_ref().expand()
         };
 
         let mut ret = pp_helper(&p_buf, 0)?;
