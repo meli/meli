@@ -500,7 +500,7 @@ impl ThreadView {
 
         if self.dirty || (page_no != prev_page_no) {
             if page_no != prev_page_no {
-                clear_area(grid, area);
+                clear_area(grid, area, crate::conf::value(context, "theme_default"));
             }
             let visibles: Vec<&usize> = self
                 .visible_entries
@@ -567,6 +567,7 @@ impl ThreadView {
                         upper_left!(area),
                         set_x(bottom_right, get_x(upper_left!(area)) + 1),
                     ),
+                    context,
                     self.cursor_pos,
                     rows,
                     visibles.len(),
@@ -620,6 +621,7 @@ impl ThreadView {
                             upper_left!(area),
                             set_x(bottom_right, get_x(upper_left!(area)) + 1),
                         ),
+                        context,
                         self.cursor_pos,
                         rows,
                         visibles.len(),
@@ -684,7 +686,11 @@ impl ThreadView {
             context
                 .dirty_areas
                 .push_back(((mid, y + 1), set_x(bottom_right, mid)));
-            clear_area(grid, ((mid, y + 1), set_x(bottom_right, mid)));
+            clear_area(
+                grid,
+                ((mid, y + 1), set_x(bottom_right, mid)),
+                crate::conf::value(context, "theme_default"),
+            );
             y + 2
         } else {
             get_y(upper_left) + 2
@@ -711,7 +717,11 @@ impl ThreadView {
                     .draw(grid, (upper_left, bottom_right), context);
             }
             (false, true) => {
-                clear_area(grid, ((mid + 1, get_y(upper_left) + y - 1), bottom_right));
+                clear_area(
+                    grid,
+                    ((mid + 1, get_y(upper_left) + y - 1), bottom_right),
+                    crate::conf::value(context, "theme_default"),
+                );
                 self.draw_list(grid, (set_y(upper_left, y), bottom_right), context);
             }
             (_, false) => {
@@ -728,7 +738,7 @@ impl ThreadView {
         let bottom_entity_rows = (pager_ratio * total_rows) / 100;
 
         if bottom_entity_rows > total_rows {
-            clear_area(grid, area);
+            clear_area(grid, area, crate::conf::value(context, "theme_default"));
             context.dirty_areas.push_back(area);
             return;
         }
@@ -793,7 +803,11 @@ impl ThreadView {
         /* if this is the first ever draw, there is nothing on the grid to update so populate it
          * first */
         if !self.initiated {
-            clear_area(grid, (set_y(upper_left, y), bottom_right));
+            clear_area(
+                grid,
+                (set_y(upper_left, y), bottom_right),
+                crate::conf::value(context, "theme_default"),
+            );
             let (width, height) = self.content.size();
 
             match (self.show_mailview, self.show_thread) {

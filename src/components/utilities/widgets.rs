@@ -388,15 +388,16 @@ impl Component for FormWidget {
         let bottom_right = bottom_right!(area);
 
         if self.dirty {
+            let label_attrs = crate::conf::value(context, "widgets.form.label");
             clear_area(
                 grid,
                 (
                     upper_left,
                     set_y(bottom_right, get_y(upper_left) + self.layout.len()),
                 ),
+                label_attrs,
             );
 
-            let label_attrs = crate::conf::value(context, "widgets.form.label");
             for (i, k) in self.layout.iter().enumerate() {
                 let v = self.fields.get_mut(k).unwrap();
                 /* Write field label */
@@ -472,6 +473,7 @@ impl Component for FormWidget {
                     pos_inc(upper_left, (0, length)),
                     set_y(bottom_right, length + 2 + get_y(upper_left)),
                 ),
+                label_attrs,
             );
             if !self.hide_buttons {
                 self.buttons.draw(
@@ -489,6 +491,7 @@ impl Component for FormWidget {
                     set_y(upper_left, length + 4 + get_y(upper_left)),
                     bottom_right,
                 ),
+                label_attrs,
             );
             self.dirty = false;
         }
@@ -642,9 +645,9 @@ impl<T> Component for ButtonWidget<T>
 where
     T: std::fmt::Debug + Default + Send,
 {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, _context: &mut Context) {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            clear_area(grid, area);
+            clear_area(grid, area, crate::conf::value(context, "theme_default"));
             let upper_left = upper_left!(area);
 
             let mut len = 0;
@@ -927,6 +930,7 @@ impl ScrollBar {
         self,
         grid: &mut CellBuffer,
         area: Area,
+        context: &Context,
         pos: usize,
         visible_rows: usize,
         length: usize,
@@ -941,7 +945,7 @@ impl ScrollBar {
         if self.show_arrows {
             height -= height;
         }
-        clear_area(grid, area);
+        clear_area(grid, area, crate::conf::value(context, "theme_default"));
 
         let visible_ratio: f32 = (std::cmp::min(visible_rows, length) as f32) / (length as f32);
         let scrollbar_height = std::cmp::max((visible_ratio * (height as f32)) as usize, 1);

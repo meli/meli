@@ -48,6 +48,7 @@ pub struct ContactList {
     length: usize,
     data_columns: DataColumns,
     initialized: bool,
+    theme_default: ThemeAttribute,
 
     id_positions: Vec<CardId>,
 
@@ -89,6 +90,7 @@ impl ContactList {
             id_positions: Vec::new(),
             mode: ViewMode::List,
             data_columns: DataColumns::default(),
+            theme_default: crate::conf::value(context, "theme_default"),
             initialized: false,
             dirty: true,
             movement: None,
@@ -156,9 +158,9 @@ impl ContactList {
             write_string_to_grid(
                 c.name(),
                 &mut self.data_columns.columns[0],
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((0, idx), (min_width.0, idx)),
                 None,
             );
@@ -166,9 +168,9 @@ impl ContactList {
             write_string_to_grid(
                 c.email(),
                 &mut self.data_columns.columns[1],
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((0, idx), (min_width.1, idx)),
                 None,
             );
@@ -176,9 +178,9 @@ impl ContactList {
             write_string_to_grid(
                 c.url(),
                 &mut self.data_columns.columns[2],
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((0, idx), (min_width.2, idx)),
                 None,
             );
@@ -190,9 +192,9 @@ impl ContactList {
                     "local"
                 },
                 &mut self.data_columns.columns[3],
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((0, idx), (min_width.3, idx)),
                 None,
             );
@@ -209,9 +211,9 @@ impl ContactList {
             write_string_to_grid(
                 &message,
                 &mut self.data_columns.columns[0],
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((0, 0), (MAX_COLS - 1, 0)),
                 None,
             );
@@ -221,11 +223,11 @@ impl ContactList {
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize) {
         /* Reset previously highlighted line */
-        let fg_color = Color::Default;
+        let fg_color = self.theme_default.fg;
         let bg_color = if idx == self.new_cursor_pos {
             Color::Byte(246)
         } else {
-            Color::Default
+            self.theme_default.bg
         };
         change_colors(grid, area, fg_color, bg_color);
     }
@@ -234,7 +236,7 @@ impl ContactList {
         if !self.is_dirty() {
             return;
         }
-        clear_area(grid, area);
+        clear_area(grid, area, self.theme_default);
         /* visually divide menu and listing */
         area = (area.0, pos_dec(area.1, (1, 0)));
         let upper_left = upper_left!(area);
@@ -271,7 +273,7 @@ impl ContactList {
                 (Color::Byte(15), Color::Byte(233))
             }
         } else {
-            (Color::Default, Color::Default)
+            (self.theme_default.fg, self.theme_default.bg)
         };
 
         let s = format!(" [{}]", context.accounts[a.index].address_book.len());
@@ -348,7 +350,7 @@ impl ContactList {
         let bottom_right = bottom_right!(area);
 
         if self.length == 0 {
-            clear_area(grid, area);
+            clear_area(grid, area, self.theme_default);
             copy_area(
                 grid,
                 &self.data_columns.columns[0],
@@ -441,7 +443,7 @@ impl ContactList {
                 width.saturating_sub(self.data_columns.widths[0] + self.data_columns.widths[1] + 4);
             self.data_columns.widths[2] = remainder / 6;
         }
-        clear_area(grid, area);
+        clear_area(grid, area, self.theme_default);
         /* Page_no has changed, so draw new page */
         let mut x = get_x(upper_left);
         for i in 0..self.data_columns.columns.len() {
@@ -511,6 +513,7 @@ impl ContactList {
                     pos_inc(upper_left, (0, self.length - top_idx + 2)),
                     bottom_right,
                 ),
+                self.theme_default,
             );
         }
         self.highlight_line(
@@ -552,14 +555,16 @@ impl Component for ContactList {
         if self.dirty && mid != get_x(upper_left) {
             if self.show_divider {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
-                    grid[(mid, i)].set_ch(VERT_BOUNDARY);
-                    grid[(mid, i)].set_fg(Color::Default);
-                    grid[(mid, i)].set_bg(Color::Default);
+                    grid[(mid, i)]
+                        .set_ch(VERT_BOUNDARY)
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg);
                 }
             } else {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
-                    grid[(mid, i)].set_fg(Color::Default);
-                    grid[(mid, i)].set_bg(Color::Default);
+                    grid[(mid, i)]
+                        .set_fg(self.theme_default.fg)
+                        .set_bg(self.theme_default.bg);
                 }
             }
             context

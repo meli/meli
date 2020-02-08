@@ -191,7 +191,7 @@ impl MailListingTrait for PlainListing {
             if !force && old_cursor_pos == self.new_cursor_pos {
                 self.view.update(temp);
             } else if self.unfocused {
-                self.view = MailView::new(temp, None, None);
+                self.view = MailView::new(temp, None, None, context);
             }
         }
     }
@@ -289,7 +289,7 @@ impl ListingTrait for PlainListing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
-            clear_area(grid, area);
+            clear_area(grid, area, self.color_cache.theme_default);
             copy_area(
                 grid,
                 &self.data_columns.columns[0],
@@ -405,7 +405,7 @@ impl ListingTrait for PlainListing {
                 self.data_columns.widths[2] = min_col_width;
             }
         }
-        clear_area(grid, area);
+        clear_area(grid, area, self.color_cache.theme_default);
         /* Page_no has changed, so draw new page */
         let mut x = get_x(upper_left);
         let mut flag_x = 0;
@@ -493,6 +493,7 @@ impl ListingTrait for PlainListing {
                     pos_inc(upper_left, (0, self.length - top_idx)),
                     bottom_right,
                 ),
+                self.color_cache.theme_default,
             );
         }
         context.dirty_areas.push_back(area);
@@ -995,7 +996,11 @@ impl Component for PlainListing {
                     area,
                     Some(get_x(upper_left)),
                 );
-                clear_area(grid, ((x, y), set_y(bottom_right, y)));
+                clear_area(
+                    grid,
+                    ((x, y), set_y(bottom_right, y)),
+                    self.color_cache.theme_default,
+                );
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 1)));
@@ -1031,7 +1036,7 @@ impl Component for PlainListing {
             }
         } else {
             if self.length == 0 && self.dirty {
-                clear_area(grid, area);
+                clear_area(grid, area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
                 return;
             }
@@ -1054,7 +1059,7 @@ impl Component for PlainListing {
                 {
                     let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
                     let temp = (self.cursor_pos.0, self.cursor_pos.1, env_hash);
-                    self.view = MailView::new(temp, None, None);
+                    self.view = MailView::new(temp, None, None, context);
                     self.unfocused = true;
                     self.dirty = true;
                     return true;

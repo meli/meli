@@ -151,6 +151,7 @@ impl Component for ContactManager {
             clear_area(
                 grid,
                 (upper_left, set_y(bottom_right, get_y(upper_left) + 1)),
+                Default::default(),
             );
             copy_area_with_break(grid, &self.content, area, ((0, 0), (width - 1, 0)));
             self.dirty = false;

@@ -1595,10 +1595,13 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
         src_x = get_x(upper_left!(src));
         src_y += 1;
         if src_y > get_y(bottom_right!(src)) {
-            clear_area(
-                grid_dest,
-                ((get_x(upper_left!(dest)), y + 1), bottom_right!(dest)),
-            );
+            for row in
+                grid_dest.bounds_iter(((get_x(upper_left!(dest)), y + 1), bottom_right!(dest)))
+            {
+                for c in row {
+                    grid_dest[c].set_ch(' ');
+                }
+            }
             ret.1 = y;
             break;
         }
@@ -1747,13 +1750,17 @@ pub fn write_string_to_grid(
 }
 
 /// Completely clear an `Area` with an empty char and the terminal's default colors.
-pub fn clear_area(grid: &mut CellBuffer, area: Area) {
+pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: crate::conf::ThemeAttribute) {
     if !is_valid_area!(area) {
         return;
     }
     for row in grid.bounds_iter(area) {
         for c in row {
             grid[c] = Cell::default();
+            grid[c]
+                .set_fg(attributes.fg)
+                .set_bg(attributes.bg)
+                .set_attrs(attributes.attrs);
         }
     }
 }
@@ -2364,21 +2371,13 @@ pub mod boundaries {
 
         if !grid.ascii_drawing {
             for x in get_x(upper_left)..get_x(bottom_right) {
-                grid[(x, get_y(upper_left))]
-                    .set_ch(HORZ_BOUNDARY)
-                    .set_fg(Color::Byte(240));
-                grid[(x, get_y(bottom_right))]
-                    .set_ch(HORZ_BOUNDARY)
-                    .set_fg(Color::Byte(240));
+                grid[(x, get_y(upper_left))].set_ch(HORZ_BOUNDARY);
+                grid[(x, get_y(bottom_right))].set_ch(HORZ_BOUNDARY);
             }
 
             for y in get_y(upper_left)..get_y(bottom_right) {
-                grid[(get_x(upper_left), y)]
-                    .set_ch(VERT_BOUNDARY)
-                    .set_fg(Color::Byte(240));
-                grid[(get_x(bottom_right), y)]
-                    .set_ch(VERT_BOUNDARY)
-                    .set_fg(Color::Byte(240));
+                grid[(get_x(upper_left), y)].set_ch(VERT_BOUNDARY);
+                grid[(get_x(bottom_right), y)].set_ch(VERT_BOUNDARY);
             }
             set_and_join_box(grid, upper_left, BoxBoundary::Horizontal);
             set_and_join_box(

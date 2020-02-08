@@ -258,7 +258,8 @@ impl Composer {
 
     fn draw_attachments(&self, grid: &mut CellBuffer, area: Area, context: &Context) {
         let attachments_no = self.draft.attachments().len();
-        clear_area(grid, area);
+        let theme_default = crate::conf::value(context, "theme_default");
+        clear_area(grid, area, theme_default);
         if self.sign_mail.is_true() {
             write_string_to_grid(
                 &format!(
@@ -272,9 +273,9 @@ impl Composer {
                         .unwrap_or("default key")
                 ),
                 grid,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
                 None,
             );
@@ -282,9 +283,9 @@ impl Composer {
             write_string_to_grid(
                 "☐ don't sign",
                 grid,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 1)), bottom_right!(area)),
                 None,
             );
@@ -293,9 +294,9 @@ impl Composer {
             write_string_to_grid(
                 "no attachments",
                 grid,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
                 None,
             );
@@ -303,9 +304,9 @@ impl Composer {
             write_string_to_grid(
                 &format!("{} attachments ", attachments_no),
                 grid,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                theme_default.fg,
+                theme_default.bg,
+                theme_default.attrs,
                 (pos_inc(upper_left!(area), (0, 2)), bottom_right!(area)),
                 None,
             );
@@ -320,9 +321,9 @@ impl Composer {
                             a.raw.len()
                         ),
                         grid,
-                        Color::Default,
-                        Color::Default,
-                        Attr::Default,
+                        theme_default.fg,
+                        theme_default.bg,
+                        theme_default.attrs,
                         (pos_inc(upper_left!(area), (0, 3 + i)), bottom_right!(area)),
                         None,
                     );
@@ -330,9 +331,9 @@ impl Composer {
                     write_string_to_grid(
                         &format!("[{}] {} {} bytes", i, a.content_type(), a.raw.len()),
                         grid,
-                        Color::Default,
-                        Color::Default,
-                        Attr::Default,
+                        theme_default.fg,
+                        theme_default.bg,
+                        theme_default.attrs,
                         (pos_inc(upper_left!(area), (0, 3 + i)), bottom_right!(area)),
                         None,
                     );
@@ -371,6 +372,7 @@ impl Component for Composer {
             self.initialized = true;
         }
         let header_height = self.form.len();
+        let theme_default = crate::conf::value(context, "theme_default");
 
         let mid = if width > 80 {
             let width = width - 80;
@@ -379,11 +381,13 @@ impl Component for Composer {
             if self.dirty {
                 for i in get_y(upper_left)..=get_y(bottom_right) {
                     //set_and_join_box(grid, (mid, i), VERT_BOUNDARY);
-                    grid[(mid, i)].set_fg(Color::Default);
-                    grid[(mid, i)].set_bg(Color::Default);
+                    grid[(mid, i)]
+                        .set_fg(theme_default.fg)
+                        .set_bg(theme_default.bg);
                     //set_and_join_box(grid, (mid + 80, i), VERT_BOUNDARY);
-                    grid[(mid + 80, i)].set_fg(Color::Default);
-                    grid[(mid + 80, i)].set_bg(Color::Default);
+                    grid[(mid + 80, i)]
+                        .set_fg(theme_default.fg)
+                        .set_bg(theme_default.bg);
                 }
             }
             mid
@@ -425,7 +429,7 @@ impl Component for Composer {
             ),
             None,
         );
-        clear_area(grid, ((x, y), (set_y(bottom_right, y))));
+        clear_area(grid, ((x, y), (set_y(bottom_right, y))), theme_default);
         change_colors(
             grid,
             (
@@ -442,6 +446,7 @@ impl Component for Composer {
                     pos_dec(upper_left, (0, 1)),
                     set_x(bottom_right, get_x(upper_left) + mid),
                 ),
+                theme_default,
             );
             clear_area(
                 grid,
@@ -452,6 +457,7 @@ impl Component for Composer {
                     ),
                     bottom_right,
                 ),
+                theme_default,
             );
         }
 
@@ -462,7 +468,7 @@ impl Component for Composer {
             match embed_pty {
                 EmbedStatus::Running(_, _) => {
                     let mut guard = embed_pty.lock().unwrap();
-                    clear_area(grid, embed_area);
+                    clear_area(grid, embed_area, theme_default);
                     copy_area(
                         grid,
                         &guard.grid,
@@ -475,13 +481,13 @@ impl Component for Composer {
                     return;
                 }
                 EmbedStatus::Stopped(_, _) => {
-                    clear_area(grid, body_area);
+                    clear_area(grid, body_area, theme_default);
                     write_string_to_grid(
                         "process has stopped, press 'e' to re-activate",
                         grid,
-                        Color::Default,
-                        Color::Default,
-                        Attr::Default,
+                        theme_default.fg,
+                        theme_default.bg,
+                        theme_default.attrs,
                         body_area,
                         None,
                     );
@@ -501,7 +507,7 @@ impl Component for Composer {
                     set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
                     bottom_right!(body_area),
                 ),
-                Color::Default,
+                theme_default.fg,
                 Color::Byte(237),
             );
         } else {
@@ -511,8 +517,8 @@ impl Component for Composer {
                     set_y(upper_left!(body_area), get_y(bottom_right!(body_area))),
                     bottom_right!(body_area),
                 ),
-                Color::Default,
-                Color::Default,
+                theme_default.fg,
+                theme_default.bg,
             );
         }
 

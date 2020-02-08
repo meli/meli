@@ -89,6 +89,7 @@ pub struct MailView {
     headers_no: usize,
     headers_cursor: usize,
     force_draw_headers: bool,
+    theme_default: ThemeAttribute,
 
     cmd_buf: String,
     id: ComponentId,
@@ -119,6 +120,7 @@ impl MailView {
         coordinates: (usize, usize, EnvelopeHash),
         pager: Option<Pager>,
         subview: Option<Box<dyn Component>>,
+        context: &Context,
     ) -> Self {
         MailView {
             coordinates,
@@ -131,6 +133,8 @@ impl MailView {
             headers_no: 5,
             headers_cursor: 0,
             force_draw_headers: false,
+
+            theme_default: crate::conf::value(context, "mail.view.body"),
 
             cmd_buf: String::with_capacity(4),
             id: ComponentId::new_v4(),
@@ -373,7 +377,7 @@ impl Component for MailView {
             let headers = crate::conf::value(context, "mail.view.headers");
 
             if self.mode == ViewMode::Raw {
-                clear_area(grid, area);
+                clear_area(grid, area, self.theme_default);
                 context.dirty_areas.push_back(area);
                 get_y(upper_left)
             } else {
@@ -398,7 +402,7 @@ impl Component for MailView {
                                     (set_y(upper_left, y), bottom_right),
                                     Some(get_x(upper_left)),
                                 );
-                            clear_area(grid, ((_x, _y), (get_x(bottom_right), _y)));
+                            clear_area(grid, ((_x, _y), (get_x(bottom_right), _y)), headers);
                             y = _y + 1;
                         } else {
                             skip_header_ctr -= 1;
@@ -440,7 +444,11 @@ impl Component for MailView {
                     let mut x = get_x(upper_left);
                     if let Some(id) = id {
                         if sticky || skip_header_ctr == 0 {
-                            clear_area(grid, (set_y(upper_left, y), set_y(bottom_right, y)));
+                            clear_area(
+                                grid,
+                                (set_y(upper_left, y), set_y(bottom_right, y)),
+                                headers,
+                            );
                             let (_x, _) = write_string_to_grid(
                                 "List-ID: ",
                                 grid,
@@ -541,7 +549,11 @@ impl Component for MailView {
                 }
 
                 self.force_draw_headers = false;
-                clear_area(grid, (set_y(upper_left, y), set_y(bottom_right, y)));
+                clear_area(
+                    grid,
+                    (set_y(upper_left, y), set_y(bottom_right, y)),
+                    headers,
+                );
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 3)));
@@ -575,7 +587,11 @@ impl Component for MailView {
                     Ok(body) => body,
                     Err(e) => {
                         self.dirty = false;
-                        clear_area(grid, (set_y(upper_left, y), bottom_right));
+                        clear_area(
+                            grid,
+                            (set_y(upper_left, y), bottom_right),
+                            self.theme_default,
+                        );
                         context
                             .dirty_areas
                             .push_back((set_y(upper_left, y), bottom_right));

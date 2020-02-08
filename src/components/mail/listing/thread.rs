@@ -37,6 +37,7 @@ pub struct ThreadListing {
     subsort: (SortField, SortOrder),
     /// Cache current view.
     content: CellBuffer,
+    color_cache: ColorCache,
 
     row_updates: SmallVec<[ThreadHash; 8]>,
     locations: Vec<EnvelopeHash>,
@@ -219,7 +220,7 @@ impl ListingTrait for ThreadListing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
-            clear_area(grid, area);
+            clear_area(grid, area, self.color_cache.theme_default);
             copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, 0)));
             context.dirty_areas.push_back(area);
             return;
@@ -387,6 +388,7 @@ impl ThreadListing {
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
             content,
+            color_cache: ColorCache::default(),
             row_updates: SmallVec::new(),
             locations: Vec::new(),
             dirty: true,
@@ -510,7 +512,7 @@ impl Component for ThreadListing {
             let upper_left = upper_left!(area);
             let bottom_right = bottom_right!(area);
             if self.length == 0 && self.dirty {
-                clear_area(grid, area);
+                clear_area(grid, area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
             }
 
@@ -520,7 +522,7 @@ impl Component for ThreadListing {
             let bottom_entity_rows = (pager_ratio * total_rows) / 100;
 
             if bottom_entity_rows > total_rows {
-                clear_area(grid, area);
+                clear_area(grid, area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
                 return;
             }
@@ -596,7 +598,7 @@ impl Component for ThreadListing {
             if let Some(ref mut v) = self.view {
                 v.update(coordinates);
             } else {
-                self.view = Some(MailView::new(coordinates, None, None));
+                self.view = Some(MailView::new(coordinates, None, None, context));
             }
 
             self.view.as_mut().unwrap().draw(

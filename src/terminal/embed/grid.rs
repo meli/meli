@@ -483,6 +483,7 @@ impl EmbedGrid {
                             terminal_size.1.saturating_sub(1),
                         ),
                     ),
+                    Default::default(),
                 );
                 debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
@@ -565,7 +566,11 @@ impl EmbedGrid {
                     }
                 }
                 debug!("{}", EscCode::from((&(*state), byte)));
-                clear_area(grid, ((0, 0), pos_dec(*terminal_size, (1, 1))));
+                clear_area(
+                    grid,
+                    ((0, 0), pos_dec(*terminal_size, (1, 1))),
+                    Default::default(),
+                );
                 *state = State::Normal;
             }
             (b'J', State::Csi1(ref buf)) if buf == b"0" => {
@@ -586,6 +591,7 @@ impl EmbedGrid {
                             terminal_size.1.saturating_sub(1),
                         ),
                     ),
+                    Default::default(),
                 );
                 debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
@@ -602,6 +608,7 @@ impl EmbedGrid {
                             cursor.1.saturating_sub(1) + scroll_region.top,
                         ),
                     ),
+                    Default::default(),
                 );
                 debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
@@ -609,7 +616,11 @@ impl EmbedGrid {
             (b'J', State::Csi1(ref buf)) if buf == b"2" => {
                 /* Erase in Display (ED), VT100.*/
                 /* Erase All */
-                clear_area(grid, ((0, 0), pos_dec(*terminal_size, (1, 1))));
+                clear_area(
+                    grid,
+                    ((0, 0), pos_dec(*terminal_size, (1, 1))),
+                    Default::default(),
+                );
                 debug!("{}", EscCode::from((&(*state), byte)));
                 *state = State::Normal;
             }

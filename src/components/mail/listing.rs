@@ -366,13 +366,13 @@ impl Component for Listing {
 
         if right_component_width == total_cols {
             if let Err(err) = context.is_online(self.cursor_pos.0) {
-                clear_area(grid, area);
+                clear_area(grid, area, self.theme_default);
                 let (x, _) = write_string_to_grid(
                     "offline: ",
                     grid,
                     Color::Byte(243),
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     (set_x(upper_left, mid + 1), bottom_right),
                     None,
                 );
@@ -380,8 +380,8 @@ impl Component for Listing {
                     &err.to_string(),
                     grid,
                     Color::Red,
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     (set_x(upper_left, x + 1), bottom_right),
                     None,
                 );
@@ -395,13 +395,17 @@ impl Component for Listing {
         } else {
             self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
             if let Err(err) = context.is_online(self.cursor_pos.0) {
-                clear_area(grid, (set_x(upper_left, mid + 1), bottom_right));
+                clear_area(
+                    grid,
+                    (set_x(upper_left, mid + 1), bottom_right),
+                    self.theme_default,
+                );
                 let (x, _) = write_string_to_grid(
                     "offline: ",
                     grid,
                     Color::Byte(243),
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     (set_x(upper_left, mid + 1), bottom_right),
                     None,
                 );
@@ -409,8 +413,8 @@ impl Component for Listing {
                     &err.to_string(),
                     grid,
                     Color::Red,
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     (set_x(upper_left, x + 1), bottom_right),
                     None,
                 );
@@ -1069,8 +1073,8 @@ impl Listing {
                 "offline",
                 grid,
                 Color::Byte(243),
-                Color::Default,
-                Attr::Default,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 (pos_inc(upper_left, (0, 1)), bottom_right),
                 None,
             );

@@ -179,7 +179,7 @@ impl Component for VSplit {
             (false, true) => total_cols,
             (true, false) => 0,
             (false, false) => {
-                clear_area(grid, area);
+                clear_area(grid, area, crate::conf::value(context, "theme_default"));
                 return;
             }
         };
@@ -575,7 +575,7 @@ impl Component for Pager {
             return;
         }
 
-        clear_area(grid, area);
+        clear_area(grid, area, crate::conf::value(context, "theme_default"));
         let (width, height) = self.content.size();
         let (cols, rows) = (width!(area), height!(area));
         self.cursor = (
@@ -808,7 +808,7 @@ impl StatusBar {
     }
 
     fn draw_execute_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
-        clear_area(grid, area);
+        clear_area(grid, area, crate::conf::value(context, "theme_default"));
         let (x, y) = write_string_to_grid(
             self.ex_buffer.as_str(),
             grid,
@@ -938,6 +938,7 @@ impl Component for StatusBar {
                             ),
                             set_y(bottom_right, get_y(bottom_right) - height),
                         ),
+                        context,
                         self.auto_complete.cursor(),
                         hist_height,
                         self.auto_complete.suggestions().len(),
@@ -984,7 +985,11 @@ impl Component for StatusBar {
                 } else {
                     self.auto_complete.cursor()
                 };
-                clear_area(grid, hist_area);
+                clear_area(
+                    grid,
+                    hist_area,
+                    crate::conf::value(context, "theme_default"),
+                );
                 if hist_height > 0 {
                     change_colors(
                         grid,
@@ -1327,11 +1332,11 @@ impl Tabbed {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
+        let tab_bar_attribute = crate::conf::value(context, "tab.bar");
         if self.children.is_empty() {
-            clear_area(grid, area);
+            clear_area(grid, area, tab_bar_attribute);
             return;
         }
-        let tab_bar_attribute = crate::conf::value(context, "tab.bar");
         let tab_unfocused_attribute = crate::conf::value(context, "tab.unfocused");
         let mut tab_focused_attribute = crate::conf::value(context, "tab.focused");
         if std::env::var("NO_COLOR").is_ok()
@@ -1423,6 +1428,7 @@ impl Component for Tabbed {
                     upper_left!(area),
                     set_x(upper_left!(area), get_x(bottom_right!(area))),
                 ),
+                crate::conf::value(context, "tab.bar"),
             );
             context.dirty_areas.push_back((
                 upper_left!(area),
@@ -1464,7 +1470,7 @@ impl Component for Tabbed {
                 ),
             );
             context.dirty_areas.push_back(area);
-            clear_area(grid, area);
+            clear_area(grid, area, crate::conf::value(context, "theme_default"));
             create_box(grid, area);
             let area = (
                 pos_inc(upper_left!(area), (3, 2)),
@@ -2327,14 +2333,13 @@ impl fmt::Display for RawBuffer {
 impl Component for RawBuffer {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            clear_area(grid, area);
             let (width, height) = self.buf.size();
             let (cols, rows) = (width!(area), height!(area));
             self.cursor = (
                 std::cmp::min(width.saturating_sub(cols), self.cursor.0),
                 std::cmp::min(height.saturating_sub(rows), self.cursor.1),
             );
-            clear_area(grid, area);
+            clear_area(grid, area, crate::conf::value(context, "theme_default"));
             copy_area(
                 grid,
                 &self.buf,

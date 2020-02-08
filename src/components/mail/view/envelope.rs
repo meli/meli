@@ -232,7 +232,7 @@ impl Component for EnvelopeView {
             let envelope: &Envelope = &self.wrapper;
 
             if self.mode == ViewMode::Raw {
-                clear_area(grid, area);
+                clear_area(grid, area, crate::conf::value(context, "theme_default"));
                 context.dirty_areas.push_back(area);
                 get_y(upper_left) - 1
             } else {
@@ -306,7 +306,11 @@ impl Component for EnvelopeView {
                     grid[(x, y)].set_bg(Color::Default);
                     grid[(x, y)].set_fg(Color::Default);
                 }
-                clear_area(grid, (set_y(upper_left, y + 1), set_y(bottom_right, y + 2)));
+                clear_area(
+                    grid,
+                    (set_y(upper_left, y + 1), set_y(bottom_right, y + 2)),
+                    crate::conf::value(context, "theme_default"),
+                );
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 1)));
