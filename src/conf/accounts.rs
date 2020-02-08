@@ -254,8 +254,9 @@ impl Account {
         let backend = map.get(settings.account().format())(
             settings.account(),
             Box::new(move |path: &str| {
-                (s.folder_confs.contains_key(path)
-                    && s.folder_confs[path].folder_conf().subscribe.is_true())
+                s.account.subscribed_folders.is_empty()
+                    || (s.folder_confs.contains_key(path)
+                        && s.folder_confs[path].folder_conf().subscribe.is_true())
                     || s.account
                         .subscribed_folders
                         .iter()
@@ -328,22 +329,6 @@ impl Account {
 
         let mut sent_folder = None;
         for f in ref_folders.values_mut() {
-            if !((self.settings.folder_confs.contains_key(f.path())
-                && self.settings.folder_confs[f.path()]
-                    .folder_conf()
-                    .subscribe
-                    .is_true())
-                || self
-                    .settings
-                    .account
-                    .subscribed_folders
-                    .iter()
-                    .any(|m| f.path().matches_glob(m)))
-            {
-                /* Skip unsubscribed folder */
-                continue;
-            }
-
             if let Some(conf) = self.settings.folder_confs.get_mut(f.path()) {
                 conf.folder_conf.usage = if f.special_usage() != SpecialUsageMailbox::Normal {
                     Some(f.special_usage())
@@ -368,7 +353,6 @@ impl Account {
                 folder_confs.insert(f.hash(), conf.clone());
             } else {
                 let mut new = FileFolderConf::default();
-                new.folder_conf.subscribe = super::ToggleFlag::InternalVal(true);
                 new.folder_conf.usage = if f.special_usage() != SpecialUsageMailbox::Normal {
                     Some(f.special_usage())
                 } else {
@@ -387,8 +371,10 @@ impl Account {
         let mut tree: Vec<FolderNode> = Vec::new();
         let mut collection: Collection = Collection::new(Default::default());
         for (h, f) in ref_folders.iter() {
-            if !folder_confs.contains_key(&h) {
+            if !f.is_subscribed() {
                 /* Skip unsubscribed folder */
+                folders.insert(*h, MailboxEntry::None);
+                workers.insert(*h, None);
                 continue;
             }
             folders.insert(

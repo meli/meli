@@ -51,7 +51,6 @@ use self::notifications::NotificationsSettings;
 use self::terminal::TerminalSettings;
 use crate::pager::PagerSettings;
 use crate::plugins::Plugin;
-use melib::backends::SpecialUsageMailbox;
 use melib::conf::{AccountSettings, FolderConf, ToggleFlag};
 use melib::error::*;
 
@@ -115,6 +114,7 @@ pub struct FileAccount {
 
     #[serde(default = "false_val")]
     read_only: bool,
+    #[serde(default)]
     subscribed_folders: Vec<String>,
     #[serde(default)]
     folders: HashMap<String, FileFolderConf>,
@@ -141,7 +141,7 @@ impl From<FileAccount> for AccountConf {
             .map(|(k, v)| (k.clone(), v.folder_conf.clone()))
             .collect();
 
-        let mut acc = AccountSettings {
+        let acc = AccountSettings {
             name: String::new(),
             root_folder,
             format,
@@ -154,60 +154,7 @@ impl From<FileAccount> for AccountConf {
             extra: x.extra.clone(),
         };
 
-        let root_path = PathBuf::from(acc.root_folder.as_str());
-        let root_tmp = root_path
-            .components()
-            .last()
-            .and_then(|c| c.as_os_str().to_str())
-            .unwrap_or("")
-            .to_string();
-        if !acc.subscribed_folders.contains(&root_tmp) {
-            acc.subscribed_folders.push(root_tmp);
-        }
-        let mut folder_confs = x.folders.clone();
-        for s in &x.subscribed_folders {
-            if !folder_confs.contains_key(s) {
-                use melib::text_processing::GlobMatch;
-                if s.is_glob() {
-                    continue;
-                }
-                folder_confs.insert(
-                    s.to_string(),
-                    FileFolderConf {
-                        folder_conf: FolderConf {
-                            subscribe: ToggleFlag::True,
-                            ..FolderConf::default()
-                        },
-                        ..FileFolderConf::default()
-                    },
-                );
-            } else {
-                if !folder_confs[s].folder_conf().subscribe.is_unset() {
-                    continue;
-                }
-                folder_confs.get_mut(s).unwrap().folder_conf.subscribe = ToggleFlag::True;
-            }
-
-            if folder_confs[s].folder_conf().usage.is_none() {
-                let name = s
-                    .split(if s.contains('/') { '/' } else { '.' })
-                    .last()
-                    .unwrap_or("");
-                folder_confs.get_mut(s).unwrap().folder_conf.usage =
-                    SpecialUsageMailbox::detect_usage(name);
-            }
-
-            if folder_confs[s].folder_conf().ignore.is_unset() {
-                use SpecialUsageMailbox::*;
-                if [Junk, Sent, Trash]
-                    .contains(&folder_confs[s].folder_conf().usage.as_ref().unwrap())
-                {
-                    folder_confs.get_mut(s).unwrap().folder_conf.ignore =
-                        ToggleFlag::InternalVal(true);
-                }
-            }
-        }
-
+        let folder_confs = x.folders.clone();
         AccountConf {
             account: acc,
             conf: x,
