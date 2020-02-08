@@ -929,7 +929,7 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
             /* We have the start of an encoded word but not the end, so parse it as ascii */
             ascii_e = input[ascii_s..]
                 .find(b" ")
-                .unwrap_or_else(|| input[ascii_s..].len());
+                .unwrap_or_else(|| ascii_s + input[ascii_s..].len());
             ptr = ascii_e;
         }
 
