@@ -718,7 +718,7 @@ impl MaildirType {
                 )));
             }
             let mut children = Vec::new();
-            for mut f in fs::read_dir(p).unwrap() {
+            for mut f in fs::read_dir(&p).unwrap() {
                 'entries: for f in f.iter_mut() {
                     {
                         let path = f.path();
@@ -787,10 +787,10 @@ impl MaildirType {
                 .count();
             folders.get_mut(&root_hash).map(|f| f.children = children);
         }
-        folders.retain(|_, f| is_subscribed(f.path()));
-        let keys = folders.keys().cloned().collect::<FnvHashSet<FolderHash>>();
         for f in folders.values_mut() {
-            f.children.retain(|c| keys.contains(c));
+            if is_subscribed(f.path()) {
+                f.is_subscribed = true;
+            }
         }
 
         let mut hash_indexes =

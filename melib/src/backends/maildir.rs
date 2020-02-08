@@ -192,42 +192,20 @@ impl MaildirFolder {
         children: Vec<FolderHash>,
         settings: &AccountSettings,
     ) -> Result<Self> {
-        macro_rules! strip_slash {
-            ($v:expr) => {
-                if $v.ends_with("/") {
-                    &$v[..$v.len() - 1]
-                } else {
-                    $v
-                }
-            };
-        }
         let pathbuf = PathBuf::from(&path);
         let mut h = DefaultHasher::new();
         pathbuf.hash(&mut h);
 
         /* Check if folder path (Eg `INBOX/Lists/luddites`) is included in the subscribed
          * mailboxes in user configuration */
-        let fname = if let Ok(fname) = pathbuf.strip_prefix(
-            PathBuf::from(&settings.root_folder)
-                .expand()
-                .parent()
-                .unwrap_or_else(|| &Path::new("/")),
-        ) {
-            if fname.components().count() != 0
-                && !settings
-                    .subscribed_folders
-                    .iter()
-                    .any(|x| x == strip_slash!(fname.to_str().unwrap()))
-            {
-                return Err(MeliError::new(format!(
-                    "Folder with name `{}` is not included in configured subscribed mailboxes",
-                    fname.display()
-                )));
-            }
-            Some(fname)
-        } else {
-            None
-        };
+        let fname = pathbuf
+            .strip_prefix(
+                PathBuf::from(&settings.root_folder)
+                    .expand()
+                    .parent()
+                    .unwrap_or_else(|| &Path::new("/")),
+            )
+            .ok();
 
         let read_only = if let Ok(metadata) = std::fs::metadata(&pathbuf) {
             metadata.permissions().readonly()
@@ -243,7 +221,7 @@ impl MaildirFolder {
             parent,
             children,
             usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
-            is_subscribed: true,
+            is_subscribed: false,
             permissions: FolderPermissions {
                 create_messages: !read_only,
                 remove_messages: !read_only,
