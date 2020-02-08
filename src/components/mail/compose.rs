@@ -141,12 +141,15 @@ impl fmt::Display for Composer {
 
 impl Composer {
     const DESCRIPTION: &'static str = "composing";
-    pub fn new(account_cursor: usize) -> Self {
-        Composer {
+    pub fn new(account_cursor: usize, context: &Context) -> Self {
+        let mut ret = Composer {
             account_cursor,
             id: ComponentId::new_v4(),
             ..Default::default()
-        }
+        };
+        ret.pager
+            .set_colors(crate::conf::value(context, "theme_default"));
+        ret
     }
 
     pub fn edit(account_pos: usize, h: EnvelopeHash, context: &Context) -> Result<Self> {
@@ -167,6 +170,8 @@ impl Composer {
     ) -> Self {
         let account = &context.accounts[coordinates.0];
         let mut ret = Composer::default();
+        ret.pager
+            .set_colors(crate::conf::value(context, "theme_default"));
         let parent_message = account.collection.get_env(msg);
         /* If message is from a mailing list and we detect a List-Post header, ask user if they
          * want to reply to the mailing list or the submitter of the message */

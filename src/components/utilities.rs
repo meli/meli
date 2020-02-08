@@ -305,8 +305,14 @@ impl fmt::Display for Pager {
 
 impl Pager {
     pub const DESCRIPTION: &'static str = "pager";
-    pub fn set_reflow(&mut self, new_val: Reflow) {
+    pub fn set_colors(&mut self, new_val: ThemeAttribute) -> &mut Self {
+        self.colors = new_val;
+        self
+    }
+
+    pub fn set_reflow(&mut self, new_val: Reflow) -> &mut Self {
         self.reflow = new_val;
+        self
     }
 
     pub fn reflow(&self) -> Reflow {
@@ -699,6 +705,7 @@ impl Component for Pager {
     fn is_dirty(&self) -> bool {
         self.dirty
     }
+
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;
     }
@@ -713,6 +720,7 @@ impl Component for Pager {
     fn id(&self) -> ComponentId {
         self.id
     }
+
     fn set_id(&mut self, id: ComponentId) {
         self.id = id;
     }
@@ -1645,7 +1653,7 @@ impl Component for Tabbed {
                 return true;
             }
             UIEvent::Action(Tab(NewDraft(account_idx, ref draft))) => {
-                let mut composer = Composer::new(account_idx);
+                let mut composer = Composer::new(account_idx, context);
                 if let Some(draft) = draft {
                     composer.set_draft(draft.clone());
                 }

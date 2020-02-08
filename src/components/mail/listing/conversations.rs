@@ -133,17 +133,24 @@ impl MailListingTrait for ConversationsListing {
         match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
             Ok(()) => {}
             Err(_) => {
+                let default_cell = {
+                    let mut ret = Cell::with_char(' ');
+                    ret.set_fg(self.color_cache.theme_default.fg)
+                        .set_bg(self.color_cache.theme_default.bg)
+                        .set_attrs(self.color_cache.theme_default.attrs);
+                    ret
+                };
                 let message: String =
                     context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
                 self.content =
-                    CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
+                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
                 write_string_to_grid(
                     message.as_str(),
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
                     ((0, 0), (message.len() - 1, 0)),
                     None,
                 );
@@ -421,12 +428,14 @@ impl ListingTrait for ConversationsListing {
                 let bg_color = grid[(get_x(upper_left) + width - 1, y_offset + 3 * y)].bg();
                 for x in (get_x(upper_left) + width)..=get_x(bottom_right) {
                     grid[(x, y_offset + 3 * y)].set_bg(bg_color);
-                    grid[(x, y_offset + 3 * y + 1)].set_ch('▁');
-                    grid[(x, y_offset + 3 * y + 2)].set_fg(Color::Default);
-                    grid[(x, y_offset + 3 * y + 1)].set_bg(bg_color);
-                    grid[(x, y_offset + 3 * y + 2)].set_ch('▓');
-                    grid[(x, y_offset + 3 * y + 2)].set_fg(padding_fg);
-                    grid[(x, y_offset + 3 * y + 2)].set_bg(bg_color);
+                    grid[(x, y_offset + 3 * y + 1)]
+                        .set_ch('▁')
+                        .set_fg(self.color_cache.theme_default.fg)
+                        .set_bg(bg_color);
+                    grid[(x, y_offset + 3 * y + 2)]
+                        .set_ch('▓')
+                        .set_fg(padding_fg)
+                        .set_bg(bg_color);
                 }
             }
             if pad > 0 {
@@ -437,10 +446,10 @@ impl ListingTrait for ConversationsListing {
                     grid[(x, y_offset + y + 1)].set_ch('▁');
                     grid[(x, y_offset + y + 1)].set_bg(bg_color);
                     if pad == 2 {
-                        grid[(x, y_offset + y + 2)].set_fg(Color::Default);
-                        grid[(x, y_offset + y + 2)].set_ch('▓');
-                        grid[(x, y_offset + y + 2)].set_fg(padding_fg);
-                        grid[(x, y_offset + y + 2)].set_bg(bg_color);
+                        grid[(x, y_offset + y + 2)]
+                            .set_ch('▓')
+                            .set_fg(padding_fg)
+                            .set_bg(bg_color);
                     }
                 }
             }
@@ -497,8 +506,14 @@ impl ListingTrait for ConversationsListing {
                     self.new_cursor_pos.2 =
                         std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
                 } else {
-                    self.content =
-                        CellBuffer::new_with_context(0, 0, Cell::with_char(' '), context);
+                    let default_cell = {
+                        let mut ret = Cell::with_char(' ');
+                        ret.set_fg(self.color_cache.theme_default.fg)
+                            .set_bg(self.color_cache.theme_default.bg)
+                            .set_attrs(self.color_cache.theme_default.attrs);
+                        ret
+                    };
+                    self.content = CellBuffer::new_with_context(0, 0, default_cell, context);
                 }
                 self.redraw_list(
                     context,
@@ -517,14 +532,21 @@ impl ListingTrait for ConversationsListing {
                     format!("Failed to search for term {}: {}", self.filter_term, e),
                     ERROR,
                 );
+                let default_cell = {
+                    let mut ret = Cell::with_char(' ');
+                    ret.set_fg(self.color_cache.theme_default.fg)
+                        .set_bg(self.color_cache.theme_default.bg)
+                        .set_attrs(self.color_cache.theme_default.attrs);
+                    ret
+                };
                 self.content =
-                    CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
+                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 write_string_to_grid(
                     &message,
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
                     ((0, 0), (message.len() - 1, 0)),
                     None,
                 );
@@ -839,16 +861,22 @@ impl ConversationsListing {
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {
+            let default_cell = {
+                let mut ret = Cell::with_char(' ');
+                ret.set_fg(self.color_cache.theme_default.fg)
+                    .set_bg(self.color_cache.theme_default.bg)
+                    .set_attrs(self.color_cache.theme_default.attrs);
+                ret
+            };
             let mailbox = &account[self.cursor_pos.1];
             let message = mailbox.to_string();
-            self.content =
-                CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
+            self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(
                 &message,
                 &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.color_cache.theme_default.fg,
+                self.color_cache.theme_default.bg,
+                self.color_cache.theme_default.attrs,
                 ((0, 0), (message.len() - 1, 0)),
                 None,
             );
@@ -1077,9 +1105,9 @@ impl Component for ConversationsListing {
                         self.filter_term
                     ),
                     grid,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
                     area,
                     Some(get_x(upper_left)),
                 );

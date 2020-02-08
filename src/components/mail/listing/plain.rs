@@ -148,17 +148,24 @@ impl MailListingTrait for PlainListing {
         match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
             Ok(()) => {}
             Err(_) => {
+                let default_cell = {
+                    let mut ret = Cell::with_char(' ');
+                    ret.set_fg(self.color_cache.theme_default.fg)
+                        .set_bg(self.color_cache.theme_default.bg)
+                        .set_attrs(self.color_cache.theme_default.attrs);
+                    ret
+                };
                 let message: String =
                     context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
                 self.data_columns.columns[0] =
-                    CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
+                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
                 write_string_to_grid(
                     message.as_str(),
                     &mut self.data_columns.columns[0],
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
                     ((0, 0), (MAX_COLS - 1, 0)),
                     None,
                 );
@@ -535,8 +542,15 @@ impl ListingTrait for PlainListing {
                     self.new_cursor_pos.2 =
                         std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
                 } else {
+                    let default_cell = {
+                        let mut ret = Cell::with_char(' ');
+                        ret.set_fg(self.color_cache.theme_default.fg)
+                            .set_bg(self.color_cache.theme_default.bg)
+                            .set_attrs(self.color_cache.theme_default.attrs);
+                        ret
+                    };
                     self.data_columns.columns[0] =
-                        CellBuffer::new_with_context(0, 0, Cell::with_char(' '), context);
+                        CellBuffer::new_with_context(0, 0, default_cell, context);
                 }
                 self.redraw_list(context);
             }
@@ -551,14 +565,21 @@ impl ListingTrait for PlainListing {
                     format!("Failed to search for term {}: {}", &self.filter_term, e),
                     ERROR,
                 );
+                let default_cell = {
+                    let mut ret = Cell::with_char(' ');
+                    ret.set_fg(self.color_cache.theme_default.fg)
+                        .set_bg(self.color_cache.theme_default.bg)
+                        .set_attrs(self.color_cache.theme_default.attrs);
+                    ret
+                };
                 self.data_columns.columns[0] =
-                    CellBuffer::new_with_context(message.len(), 1, Cell::with_char(' '), context);
+                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 write_string_to_grid(
                     &message,
                     &mut self.data_columns.columns[0],
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
                     ((0, 0), (message.len() - 1, 0)),
                     None,
                 );
@@ -740,21 +761,28 @@ impl PlainListing {
 
         min_width.0 = self.length.saturating_sub(1).to_string().len();
 
+        let default_cell = {
+            let mut ret = Cell::with_char(' ');
+            ret.set_fg(self.color_cache.theme_default.fg)
+                .set_bg(self.color_cache.theme_default.bg)
+                .set_attrs(self.color_cache.theme_default.attrs);
+            ret
+        };
         /* index column */
         self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, rows.len(), Cell::with_char(' '), context);
+            CellBuffer::new_with_context(min_width.0, rows.len(), default_cell, context);
         /* date column */
         self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, rows.len(), Cell::with_char(' '), context);
+            CellBuffer::new_with_context(min_width.1, rows.len(), default_cell, context);
         /* from column */
         self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, rows.len(), Cell::with_char(' '), context);
+            CellBuffer::new_with_context(min_width.2, rows.len(), default_cell, context);
         /* flags column */
         self.data_columns.columns[3] =
-            CellBuffer::new_with_context(min_width.3, rows.len(), Cell::with_char(' '), context);
+            CellBuffer::new_with_context(min_width.3, rows.len(), default_cell, context);
         /* subject column */
         self.data_columns.columns[4] =
-            CellBuffer::new_with_context(min_width.4, rows.len(), Cell::with_char(' '), context);
+            CellBuffer::new_with_context(min_width.4, rows.len(), default_cell, context);
 
         let iter = if self.filter_term.is_empty() {
             Box::new(self.local_collection.iter().cloned())
@@ -779,82 +807,67 @@ impl PlainListing {
             }
 
             let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0].collection.get_env(i);
-            let fg_color = if !envelope.is_seen() {
-                Color::Byte(0)
+            let row_attr = if !envelope.is_seen() {
+                self.color_cache.unseen
+            } else if idx % 2 == 0 {
+                self.color_cache.even
             } else {
-                Color::Default
-            };
-            let bg_color = if context.settings.terminal.theme == "light" {
-                if !envelope.is_seen() {
-                    Color::Byte(251)
-                } else if idx % 2 == 0 {
-                    Color::Byte(252)
-                } else {
-                    Color::Default
-                }
-            } else {
-                if !envelope.is_seen() {
-                    Color::Byte(253)
-                } else if idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                }
+                self.color_cache.odd
             };
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
                 &mut columns[0],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.0, idx)),
                 None,
             );
             for c in columns[0].row_iter(x..min_width.0, idx) {
-                columns[0][c].set_bg(bg_color);
+                columns[0][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
             let (x, _) = write_string_to_grid(
                 &strings.date,
                 &mut columns[1],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.1, idx)),
                 None,
             );
             for c in columns[1].row_iter(x..min_width.1, idx) {
-                columns[1][c].set_bg(bg_color);
+                columns[1][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
             let (x, _) = write_string_to_grid(
                 &strings.from,
                 &mut columns[2],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.2, idx)),
                 None,
             );
             for c in columns[2].row_iter(x..min_width.2, idx) {
-                columns[2][c].set_bg(bg_color);
+                columns[2][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
             let (x, _) = write_string_to_grid(
                 &strings.flag,
                 &mut columns[3],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.3, idx)),
                 None,
             );
             for c in columns[3].row_iter(x..min_width.3, idx) {
-                columns[3][c].set_bg(bg_color);
+                columns[3][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
             let (x, _) = write_string_to_grid(
                 &strings.subject,
                 &mut columns[4],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.4, idx)),
                 None,
             );
@@ -874,12 +887,10 @@ impl PlainListing {
                         columns[4][c].set_bg(color);
                     }
                     for c in columns[4].row_iter(_x..(_x + 1), idx) {
-                        columns[4][c].set_bg(color);
-                        columns[4][c].set_keep_bg(true);
+                        columns[4][c].set_bg(color).set_keep_bg(true);
                     }
                     for c in columns[4].row_iter((x + 1)..(_x + 1), idx) {
-                        columns[4][c].set_keep_fg(true);
-                        columns[4][c].set_keep_bg(true);
+                        columns[4][c].set_keep_fg(true).set_keep_bg(true);
                     }
                     for c in columns[4].row_iter(x..(x + 1), idx) {
                         columns[4][c].set_keep_bg(true);
@@ -889,7 +900,7 @@ impl PlainListing {
                 x
             };
             for c in columns[4].row_iter(x..min_width.4, idx) {
-                columns[4][c].set_bg(bg_color);
+                columns[4][c].set_bg(row_attr.bg).set_attrs(row_attr.attrs);
             }
             if context.accounts[self.cursor_pos.0]
                 .collection
@@ -902,18 +913,14 @@ impl PlainListing {
         if self.length == 0 && self.filter_term.is_empty() {
             let mailbox = &account[self.cursor_pos.1];
             let message = mailbox.to_string();
-            self.data_columns.columns[0] = CellBuffer::new_with_context(
-                message.len(),
-                self.length + 1,
-                Cell::with_char(' '),
-                context,
-            );
+            self.data_columns.columns[0] =
+                CellBuffer::new_with_context(message.len(), self.length + 1, default_cell, context);
             write_string_to_grid(
                 &message,
                 &mut self.data_columns.columns[0],
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.color_cache.theme_default.fg,
+                self.color_cache.theme_default.bg,
+                self.color_cache.theme_default.attrs,
                 ((0, 0), (MAX_COLS - 1, 0)),
                 None,
             );

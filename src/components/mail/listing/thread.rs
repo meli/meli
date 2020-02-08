@@ -81,21 +81,46 @@ impl MailListingTrait for ThreadListing {
             return;
         };
 
+        self.color_cache = ColorCache {
+            unseen: crate::conf::value(context, "mail.listing.plain.unseen"),
+            highlighted: crate::conf::value(context, "mail.listing.plain.highlighted"),
+            even: crate::conf::value(context, "mail.listing.plain.even"),
+            odd: crate::conf::value(context, "mail.listing.plain.odd"),
+            selected: crate::conf::value(context, "mail.listing.plain.selected"),
+            attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
+            thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
+            ..self.color_cache
+        };
+        if std::env::var("NO_COLOR").is_ok()
+            && (context.settings.terminal.use_color.is_false()
+                || context.settings.terminal.use_color.is_internal())
+        {
+            self.color_cache.highlighted.attrs |= Attr::Reverse;
+        }
+
         // Get mailbox as a reference.
         //
         match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
             Ok(_) => {}
             Err(_) => {
+                let default_cell = {
+                    let mut ret = Cell::with_char(' ');
+                    ret.set_fg(self.color_cache.theme_default.fg)
+                        .set_bg(self.color_cache.theme_default.bg)
+                        .set_attrs(self.color_cache.theme_default.attrs);
+                    ret
+                };
                 let message: String =
-                    context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
-                self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+                    context.accounts[self.cursor_pos.0][self.cursor_pos.1].to_string();
+                self.content =
+                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
                 write_string_to_grid(
                     message.as_str(),
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
                     ((0, 0), (MAX_COLS - 1, 0)),
                     None,
                 );
@@ -108,21 +133,29 @@ impl MailListingTrait for ThreadListing {
         let threads = &account.collection.threads[&mailbox.folder.hash()];
         self.length = threads.len();
         self.locations.clear();
+        let default_cell = {
+            let mut ret = Cell::with_char(' ');
+            ret.set_fg(self.color_cache.theme_default.fg)
+                .set_bg(self.color_cache.theme_default.bg)
+                .set_attrs(self.color_cache.theme_default.attrs);
+            ret
+        };
         if self.length == 0 {
             let message = format!("Folder `{}` is empty.", mailbox.folder.name());
-            self.content = CellBuffer::new(message.len(), 1, Cell::with_char(' '));
+            self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(
                 &message,
                 &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.color_cache.theme_default.fg,
+                self.color_cache.theme_default.bg,
+                self.color_cache.theme_default.attrs,
                 ((0, 0), (message.len() - 1, 0)),
                 None,
             );
             return;
         }
-        self.content = CellBuffer::new(MAX_COLS, self.length + 1, Cell::with_char(' '));
+        self.content =
+            CellBuffer::new_with_context(MAX_COLS, self.length + 1, default_cell, context);
 
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let mut thread_idx = 0; // needed for alternate thread colors
@@ -387,7 +420,7 @@ impl ThreadListing {
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
-            content,
+            content: CellBuffer::new(0, 0, Cell::with_char(' ')),
             color_cache: ColorCache::default(),
             row_updates: SmallVec::new(),
             locations: Vec::new(),

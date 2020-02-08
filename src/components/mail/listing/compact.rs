@@ -611,9 +611,9 @@ impl ListingTrait for CompactListing {
                 write_string_to_grid(
                     &message,
                     &mut self.data_columns.columns[0],
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
                     ((0, 0), (message.len() - 1, 0)),
                     None,
                 );
@@ -763,7 +763,6 @@ impl CompactListing {
         );
 
         for (idx, thread) in items.enumerate() {
-            debug!(thread);
             self.length += 1;
             let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
             let root_env_hash = thread_node.message().unwrap_or_else(|| {
@@ -870,67 +869,75 @@ impl CompactListing {
                 panic!();
             }
             let thread = threads.thread_ref(thread);
-            let (fg_color, bg_color) = if thread.unseen() > 0 {
-                (self.color_cache.unseen.fg, self.color_cache.unseen.bg)
+            let row_attr = if thread.unseen() > 0 {
+                self.color_cache.unseen
             } else if idx % 2 == 0 {
-                (self.color_cache.even.fg, self.color_cache.even.bg)
+                self.color_cache.even
             } else {
-                (self.color_cache.odd.fg, self.color_cache.odd.bg)
+                self.color_cache.odd
             };
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
                 &mut self.data_columns.columns[0],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.0, idx)),
                 None,
             );
             for x in x..min_width.0 {
-                self.data_columns.columns[0][(x, idx)].set_bg(bg_color);
+                self.data_columns.columns[0][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
             }
             let (x, _) = write_string_to_grid(
                 &strings.date,
                 &mut self.data_columns.columns[1],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.1, idx)),
                 None,
             );
             for x in x..min_width.1 {
-                self.data_columns.columns[1][(x, idx)].set_bg(bg_color);
+                self.data_columns.columns[1][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
             }
             let (x, _) = write_string_to_grid(
                 &strings.from,
                 &mut self.data_columns.columns[2],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.2, idx)),
                 None,
             );
             for x in x..min_width.2 {
-                self.data_columns.columns[2][(x, idx)].set_bg(bg_color);
+                self.data_columns.columns[2][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
             }
             let (x, _) = write_string_to_grid(
                 &strings.flag,
                 &mut self.data_columns.columns[3],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.3, idx)),
                 None,
             );
             for x in x..min_width.3 {
-                self.data_columns.columns[3][(x, idx)].set_bg(bg_color);
+                self.data_columns.columns[3][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
             }
             let (x, _) = write_string_to_grid(
                 &strings.subject,
                 &mut self.data_columns.columns[4],
-                fg_color,
-                bg_color,
-                Attr::Default,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.4, idx)),
                 None,
             );
@@ -961,8 +968,10 @@ impl CompactListing {
                 x
             };
             for x in x..min_width.4 {
-                self.data_columns.columns[4][(x, idx)].set_ch(' ');
-                self.data_columns.columns[4][(x, idx)].set_bg(bg_color);
+                self.data_columns.columns[4][(x, idx)]
+                    .set_ch(' ')
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
             }
             match (thread.snoozed(), thread.has_attachments()) {
                 (true, true) => {
@@ -1169,9 +1178,9 @@ impl Component for CompactListing {
                         self.filter_term
                     ),
                     grid,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
                     area,
                     Some(get_x(upper_left)),
                 );

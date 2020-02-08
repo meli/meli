@@ -133,13 +133,14 @@ impl Field {
 }
 
 impl Component for Field {
-    fn draw(&mut self, grid: &mut CellBuffer, area: Area, _context: &mut Context) {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let theme_attr = crate::conf::value(context, "widgets.form.field");
         write_string_to_grid(
             self.as_str(),
             grid,
-            Color::Default,
-            Color::Default,
-            Attr::Default,
+            theme_attr.fg,
+            theme_attr.bg,
+            theme_attr.attrs,
             area,
             None,
         );
@@ -388,15 +389,16 @@ impl Component for FormWidget {
         let bottom_right = bottom_right!(area);
 
         if self.dirty {
-            let label_attrs = crate::conf::value(context, "widgets.form.label");
+            let theme_default = crate::conf::value(context, "theme_default");
             clear_area(
                 grid,
                 (
                     upper_left,
                     set_y(bottom_right, get_y(upper_left) + self.layout.len()),
                 ),
-                label_attrs,
+                theme_default,
             );
+            let label_attrs = crate::conf::value(context, "widgets.form.label");
 
             for (i, k) in self.layout.iter().enumerate() {
                 let v = self.fields.get_mut(k).unwrap();
@@ -473,7 +475,7 @@ impl Component for FormWidget {
                     pos_inc(upper_left, (0, length)),
                     set_y(bottom_right, length + 2 + get_y(upper_left)),
                 ),
-                label_attrs,
+                theme_default,
             );
             if !self.hide_buttons {
                 self.buttons.draw(
@@ -491,7 +493,7 @@ impl Component for FormWidget {
                     set_y(upper_left, length + 4 + get_y(upper_left)),
                     bottom_right,
                 ),
-                label_attrs,
+                theme_default,
             );
             self.dirty = false;
         }
