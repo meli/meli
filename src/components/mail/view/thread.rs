@@ -51,7 +51,7 @@ pub struct ThreadView {
     expanded_pos: usize,
     new_expanded_pos: usize,
     reversed: bool,
-    coordinates: (usize, usize, usize),
+    coordinates: (usize, FolderHash, usize),
     thread_group: ThreadHash,
     mailview: MailView,
     show_mailview: bool,
@@ -75,7 +75,7 @@ impl ThreadView {
      * context: current context
      */
     pub fn new(
-        coordinates: (usize, usize, usize),
+        coordinates: (usize, FolderHash, usize),
         thread_group: ThreadHash,
         expanded_hash: Option<ThreadNodeHash>,
         context: &Context,

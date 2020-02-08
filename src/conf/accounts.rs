@@ -62,6 +62,7 @@ pub enum MailboxEntry {
     Failed(MeliError),
     /// first argument is done work, and second is total work
     Parsing(Mailbox, usize, usize),
+    None,
 }
 
 impl Default for MailboxEntry {
@@ -78,6 +79,7 @@ impl std::fmt::Display for MailboxEntry {
             match self {
                 MailboxEntry::Available(ref m) => m.name().to_string(),
                 MailboxEntry::Failed(ref e) => e.to_string(),
+                MailboxEntry::None => "Not subscribed, is this a bug?".to_string(),
                 MailboxEntry::Parsing(_, done, total) => {
                     format!("Parsing messages. [{}/{}]", done, total)
                 }
@@ -109,6 +111,7 @@ impl MailboxEntry {
                 "Mailbox is not available: {}",
                 e.to_string()
             ))),
+            MailboxEntry::None => Err(MeliError::new("Mailbox is not subscribed.")),
         }
     }
 
@@ -120,6 +123,7 @@ impl MailboxEntry {
                 "Mailbox is not available: {}",
                 e.to_string()
             ))),
+            MailboxEntry::None => Err(MeliError::new("Mailbox is not subscribed.")),
         }
     }
 
@@ -234,10 +238,11 @@ impl<'a> Iterator for MailboxIterator<'a> {
     }
 }
 
-#[derive(Serialize, Debug, Default)]
-struct FolderNode {
-    hash: FolderHash,
-    kids: Vec<FolderNode>,
+#[derive(Serialize, Debug, Clone, Default)]
+pub struct FolderNode {
+    pub hash: FolderHash,
+    pub depth: usize,
+    pub children: Vec<FolderNode>,
 }
 
 impl Account {
@@ -393,7 +398,7 @@ impl Account {
             collection.threads.insert(*h, Threads::default());
         }
 
-        build_folders_order(&folder_confs, &mut tree, &ref_folders, &mut folders_order);
+        build_folders_order(&mut tree, &ref_folders, &mut folders_order);
         self.folders = folders;
         self.ref_folders = ref_folders;
         self.folder_confs = folder_confs;
@@ -717,50 +722,25 @@ impl Account {
     pub fn is_empty(&self) -> bool {
         self.folders.is_empty()
     }
-    pub fn list_folders(&self) -> Vec<Folder> {
-        let mut folders = self.ref_folders.clone();
-        let folder_confs = &self.folder_confs;
-        //debug!("folder renames: {:?}", folder_renames);
-        for f in folders.values_mut() {
-            if let Some(r) = folder_confs.get(&f.hash()) {
-                if let Some(rename) = r.folder_conf().alias() {
-                    f.change_name(rename);
-                }
+
+    pub fn ref_folders(&self) -> &FnvHashMap<FolderHash, Folder> {
+        &self.ref_folders
+    }
+
+    pub fn list_folders(&self) -> Vec<FolderNode> {
+        let mut ret = Vec::with_capacity(self.folders.len());
+        fn rec(node: &FolderNode, ret: &mut Vec<FolderNode>) {
+            ret.push(node.clone());
+            for c in node.children.iter() {
+                rec(c, ret);
             }
         }
-        /*
-        if let Some(pos) = folders
-            .iter()
-            .position(|f| f.name().eq_ignore_ascii_case("INBOX"))
-        {
-            folders.swap(pos, 0);
+        for node in &self.tree {
+            rec(node, &mut ret);
         }
-        */
-        let order: FnvHashMap<FolderHash, usize> = self
-            .folders_order
-            .iter()
-            .enumerate()
-            .map(|(i, &fh)| (fh, i))
-            .collect();
-        let mut folders: Vec<Folder> = folders
-            .drain()
-            .map(|(_, f)| f)
-            .filter(|f| {
-                self.folders.contains_key(&f.hash())
-                    || self
-                        .settings
-                        .account
-                        .subscribed_folders
-                        .iter()
-                        .any(|m| f.path().matches_glob(m))
-            })
-            .collect();
-        if order.is_empty() {
-            return Vec::new();
-        }
-        folders.sort_unstable_by(|a, b| order[&a.hash()].partial_cmp(&order[&b.hash()]).unwrap());
-        folders
+        ret
     }
+
     pub fn folders_order(&self) -> &Vec<FolderHash> {
         &self.folders_order
     }
@@ -786,7 +766,7 @@ impl Account {
             .map(|e| (e.hash(), e))
             .collect::<FnvHashMap<EnvelopeHash, Envelope>>();
         match self.folders.entry(folder_hash).or_default() {
-            MailboxEntry::Failed(_) => {}
+            MailboxEntry::Failed(_) | MailboxEntry::None => {}
             MailboxEntry::Parsing(ref mut m, _, _) | MailboxEntry::Available(ref mut m) => {
                 m.merge(&envelopes);
                 if let Some(updated_folders) =
@@ -807,6 +787,9 @@ impl Account {
     }
 
     pub fn status(&mut self, folder_hash: FolderHash) -> result::Result<(), usize> {
+        if folder_hash == 0 {
+            return Err(0);
+        }
         loop {
             match self.workers.get_mut(&folder_hash).unwrap() {
                 None => {
@@ -1007,12 +990,7 @@ impl Account {
                     .threads
                     .insert(folder.hash(), Threads::default());
                 self.ref_folders = self.backend.read().unwrap().folders()?;
-                build_folders_order(
-                    &self.folder_confs,
-                    &mut self.tree,
-                    &self.ref_folders,
-                    &mut self.folders_order,
-                );
+                build_folders_order(&mut self.tree, &self.ref_folders, &mut self.folders_order);
                 Ok(format!("`{}` successfully created.", &path))
             }
             FolderOperation::Delete(path) => {
@@ -1190,7 +1168,6 @@ impl IndexMut<usize> for Account {
 }
 
 fn build_folders_order(
-    folder_confs: &FnvHashMap<FolderHash, FileFolderConf>,
     tree: &mut Vec<FolderNode>,
     ref_folders: &FnvHashMap<FolderHash, Folder>,
     folders_order: &mut Vec<FolderHash>,
@@ -1199,23 +1176,24 @@ fn build_folders_order(
     tree.clear();
     folders_order.clear();
     for (h, f) in ref_folders.iter() {
-        if !folder_confs.contains_key(&h) {
-            continue;
-        }
-
         if f.parent().is_none() {
-            fn rec(h: FolderHash, ref_folders: &FnvHashMap<FolderHash, Folder>) -> FolderNode {
+            fn rec(
+                h: FolderHash,
+                ref_folders: &FnvHashMap<FolderHash, Folder>,
+                depth: usize,
+            ) -> FolderNode {
                 let mut node = FolderNode {
                     hash: h,
-                    kids: Vec::new(),
+                    children: Vec::new(),
+                    depth,
                 };
                 for &c in ref_folders[&h].children() {
-                    node.kids.push(rec(c, ref_folders));
+                    node.children.push(rec(c, ref_folders, depth + 1));
                 }
                 node
             };
 
-            tree.push(rec(*h, &ref_folders));
+            tree.push(rec(*h, &ref_folders, 0));
             for &c in f.children() {
                 stack.push(c);
             }
@@ -1239,10 +1217,10 @@ fn build_folders_order(
         }
     });
 
-    let mut stack: SmallVec<[Option<&FolderNode>; 8]> = SmallVec::new();
+    let mut stack: SmallVec<[Option<&FolderNode>; 16]> = SmallVec::new();
     for n in tree.iter_mut() {
         folders_order.push(n.hash);
-        n.kids.sort_unstable_by(|a, b| {
+        n.children.sort_unstable_by(|a, b| {
             if ref_folders[&b.hash].path().eq_ignore_ascii_case("INBOX") {
                 std::cmp::Ordering::Greater
             } else if ref_folders[&a.hash].path().eq_ignore_ascii_case("INBOX") {
@@ -1253,10 +1231,10 @@ fn build_folders_order(
                     .cmp(&ref_folders[&b.hash].path())
             }
         });
-        stack.extend(n.kids.iter().rev().map(Some));
+        stack.extend(n.children.iter().rev().map(Some));
         while let Some(Some(next)) = stack.pop() {
             folders_order.push(next.hash);
-            stack.extend(next.kids.iter().rev().map(Some));
+            stack.extend(next.children.iter().rev().map(Some));
         }
     }
 }

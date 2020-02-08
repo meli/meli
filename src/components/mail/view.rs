@@ -80,7 +80,7 @@ impl ViewMode {
 /// menus
 #[derive(Debug, Default)]
 pub struct MailView {
-    coordinates: (usize, usize, EnvelopeHash),
+    coordinates: (usize, FolderHash, EnvelopeHash),
     pager: Pager,
     subview: Option<Box<dyn Component>>,
     dirty: bool,
@@ -117,7 +117,7 @@ impl fmt::Display for MailView {
 impl MailView {
     const DESCRIPTION: &'static str = "view mail";
     pub fn new(
-        coordinates: (usize, usize, EnvelopeHash),
+        coordinates: (usize, FolderHash, EnvelopeHash),
         pager: Option<Pager>,
         subview: Option<Box<dyn Component>>,
         context: &Context,
@@ -331,7 +331,7 @@ impl MailView {
         }
     }
 
-    pub fn update(&mut self, new_coordinates: (usize, usize, EnvelopeHash)) {
+    pub fn update(&mut self, new_coordinates: (usize, FolderHash, EnvelopeHash)) {
         self.coordinates = new_coordinates;
         self.mode = ViewMode::Normal;
         self.set_dirty(true);
@@ -791,10 +791,8 @@ impl Component for MailView {
             UIEvent::Input(ref key)
                 if shortcut!(key == shortcuts[MailView::DESCRIPTION]["reply"]) =>
             {
-                let account = &context.accounts[self.coordinates.0];
-                let folder_hash = account[self.coordinates.1].unwrap().folder.hash();
                 context.replies.push_back(UIEvent::Action(Tab(Reply(
-                    (self.coordinates.0, folder_hash),
+                    (self.coordinates.0, self.coordinates.1),
                     self.coordinates.2,
                 ))));
                 return true;

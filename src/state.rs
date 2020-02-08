@@ -142,15 +142,20 @@ impl Context {
         let Context {
             ref mut accounts,
             ref mut mailbox_hashes,
+            ref mut replies,
             ..
         } = self;
         let was_online = accounts[account_pos].is_online;
         let ret = accounts[account_pos].is_online();
         if ret.is_ok() {
             if !was_online {
-                for folder in accounts[account_pos].list_folders() {
-                    debug!("hash & folder: {:?} {}", folder.hash(), folder.name());
-                    mailbox_hashes.insert(folder.hash(), account_pos);
+                for folder_node in accounts[account_pos].list_folders() {
+                    debug!(
+                        "hash & folder: {:?} {}",
+                        folder_node.hash,
+                        accounts[account_pos].ref_folders()[&folder_node.hash].name()
+                    );
+                    mailbox_hashes.insert(folder_node.hash, account_pos);
                 }
                 /* Account::watch() needs
                  * - work_controller to pass `work_context` to the watcher threads and then add them
@@ -160,6 +165,8 @@ impl Context {
                  * - replies to report any failures to the user
                  */
                 accounts[account_pos].watch();
+
+                replies.push_back(UIEvent::AccountStatusChange(account_pos));
             }
         }
         ret

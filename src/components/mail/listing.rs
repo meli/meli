@@ -36,6 +36,9 @@ pub use self::thread::*;
 mod plain;
 pub use self::plain::*;
 
+mod offline;
+pub use self::offline::*;
+
 #[derive(Debug, Default, Clone)]
 pub struct DataColumns {
     pub columns: [CellBuffer; 12],
@@ -122,6 +125,7 @@ struct AccountMenuEntry {
     name: String,
     // Index in the config account vector.
     index: usize,
+    entries: SmallVec<[(usize, FolderHash); 16]>,
 }
 
 pub trait MailListingTrait: ListingTrait {
@@ -206,8 +210,8 @@ pub trait MailListingTrait: ListingTrait {
 }
 
 pub trait ListingTrait: Component {
-    fn coordinates(&self) -> (usize, usize);
-    fn set_coordinates(&mut self, _: (usize, usize));
+    fn coordinates(&self) -> (usize, FolderHash);
+    fn set_coordinates(&mut self, _: (usize, FolderHash));
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
     fn filter(&mut self, _filter_term: &str, _context: &Context) {}
@@ -220,6 +224,7 @@ pub enum ListingComponent {
     Threaded(ThreadListing),
     Compact(CompactListing),
     Conversations(ConversationsListing),
+    Offline(OfflineListing),
 }
 use crate::ListingComponent::*;
 
@@ -232,6 +237,7 @@ impl core::ops::Deref for ListingComponent {
             Plain(ref l) => l,
             Threaded(ref l) => l,
             Conversations(ref l) => l,
+            Offline(ref l) => l,
         }
     }
 }
@@ -243,6 +249,7 @@ impl core::ops::DerefMut for ListingComponent {
             Plain(l) => l,
             Threaded(l) => l,
             Conversations(l) => l,
+            Offline(l) => l,
         }
     }
 }
@@ -254,37 +261,25 @@ impl ListingComponent {
                 if let Plain(_) = self {
                     return;
                 }
-                let mut new_l = PlainListing::default();
-                let coors = self.coordinates();
-                new_l.set_coordinates((coors.0, coors.1));
-                *self = Plain(new_l);
+                *self = Plain(PlainListing::new(self.coordinates()));
             }
             IndexStyle::Threaded => {
                 if let Threaded(_) = self {
                     return;
                 }
-                let mut new_l = ThreadListing::default();
-                let coors = self.coordinates();
-                new_l.set_coordinates((coors.0, coors.1));
-                *self = Threaded(new_l);
+                *self = Threaded(ThreadListing::new(self.coordinates()));
             }
             IndexStyle::Compact => {
                 if let Compact(_) = self {
                     return;
                 }
-                let mut new_l = CompactListing::default();
-                let coors = self.coordinates();
-                new_l.set_coordinates((coors.0, coors.1));
-                *self = Compact(new_l);
+                *self = Compact(CompactListing::new(self.coordinates()));
             }
             IndexStyle::Conversations => {
                 if let Conversations(_) = self {
                     return;
                 }
-                let mut new_l = ConversationsListing::default();
-                let coors = self.coordinates();
-                new_l.set_coordinates((coors.0, coors.1));
-                *self = Conversations(new_l);
+                *self = Conversations(ConversationsListing::new(self.coordinates()));
             }
         }
     }
@@ -315,6 +310,7 @@ impl fmt::Display for Listing {
             Plain(ref l) => write!(f, "{}", l),
             Threaded(ref l) => write!(f, "{}", l),
             Conversations(ref l) => write!(f, "{}", l),
+            Offline(ref l) => write!(f, "{}", l),
         }
     }
 }
@@ -331,7 +327,6 @@ impl Component for Listing {
         if !is_valid_area!(area) {
             return;
         }
-        self.theme_default = crate::conf::value(context, "theme_default");
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
         let total_cols = get_x(bottom_right) - get_x(upper_left);
@@ -431,12 +426,7 @@ impl Component for Listing {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         match event {
             UIEvent::StartupCheck(ref f) => {
-                if context.accounts[self.component.coordinates().0]
-                    .folders_order
-                    .get(self.component.coordinates().1)
-                    .map(|&folder_hash| *f == folder_hash)
-                    .unwrap_or(false)
-                {
+                if self.component.coordinates().1 == *f {
                     if !self.startup_checks_rate.tick() {
                         return false;
                     }
@@ -445,27 +435,52 @@ impl Component for Listing {
             UIEvent::Timer(n) if *n == self.startup_checks_rate.id() => {
                 if self.startup_checks_rate.active {
                     self.startup_checks_rate.reset();
-                    if let Some(folder_hash) = context.accounts[self.component.coordinates().0]
-                        .folders_order
-                        .get(self.component.coordinates().1)
-                    {
-                        return self
-                            .process_event(&mut UIEvent::StartupCheck(*folder_hash), context);
-                    }
+                    return self.process_event(
+                        &mut UIEvent::StartupCheck(self.component.coordinates().1),
+                        context,
+                    );
                 }
+            }
+            UIEvent::AccountStatusChange(account_index) => {
+                if self.cursor_pos.0 == *account_index {
+                    self.change_account(context);
+                } else {
+                    self.accounts[*account_index].entries = context.accounts[*account_index]
+                        .list_folders()
+                        .into_iter()
+                        .filter(|folder_node| {
+                            context.accounts[*account_index].ref_folders()[&folder_node.hash]
+                                .is_subscribed()
+                        })
+                        .map(|f| (f.depth, f.hash))
+                        .collect::<_>();
+                    self.set_dirty(true);
+                }
+                return true;
             }
             UIEvent::MailboxDelete((account_index, _folder_hash))
             | UIEvent::MailboxCreate((account_index, _folder_hash)) => {
+                self.accounts[*account_index].entries = context.accounts[*account_index]
+                    .list_folders()
+                    .into_iter()
+                    .filter(|folder_node| {
+                        context.accounts[*account_index].ref_folders()[&folder_node.hash]
+                            .is_subscribed()
+                    })
+                    .map(|f| (f.depth, f.hash))
+                    .collect::<_>();
                 if self.cursor_pos.0 == *account_index {
                     self.cursor_pos.1 = std::cmp::min(
-                        context.accounts[*account_index].len() - 1,
+                        self.accounts[self.cursor_pos.0].entries.len() - 1,
                         self.cursor_pos.1,
                     );
-                    self.component
-                        .set_coordinates((self.cursor_pos.0, self.cursor_pos.1));
+                    self.component.set_coordinates((
+                        self.cursor_pos.0,
+                        self.accounts[self.cursor_pos.0].entries[self.cursor_pos.1].1,
+                    ));
                     self.component.refresh_mailbox(context, true);
-                    self.set_dirty(true);
                 }
+                self.set_dirty(true);
                 return true;
             }
             _ => {}
@@ -496,15 +511,15 @@ impl Component for Listing {
                         .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                     return true;
                 };
-                let folder_length = context.accounts[self.cursor_pos.0].len();
                 match k {
-                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_folder"])
-                        && folder_length > 0 =>
-                    {
-                        if self.cursor_pos.1 + amount < folder_length {
+                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_folder"]) => {
+                        if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+                            .entries
+                            .get(self.cursor_pos.1 + amount)
+                        {
                             self.cursor_pos.1 += amount;
                             self.component
-                                .set_coordinates((self.cursor_pos.0, self.cursor_pos.1));
+                                .set_coordinates((self.cursor_pos.0, *folder_hash));
                             self.set_dirty(true);
                         } else {
                             return true;
@@ -512,25 +527,32 @@ impl Component for Listing {
                     }
                     k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_folder"]) => {
                         if self.cursor_pos.1 >= amount {
-                            self.cursor_pos.1 -= amount;
-                            self.component
-                                .set_coordinates((self.cursor_pos.0, self.cursor_pos.1));
-                            self.set_dirty(true);
+                            if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+                                .entries
+                                .get(self.cursor_pos.1 - amount)
+                            {
+                                self.cursor_pos.1 -= amount;
+                                self.component
+                                    .set_coordinates((self.cursor_pos.0, *folder_hash));
+                                self.set_dirty(true);
+                            } else {
+                                return true;
+                            }
                         } else {
                             return true;
                         }
                     }
-                    _ => return false,
+                    _ => {}
                 }
-                /* Account might have no folders yet if it's offline */
-                if let Some(&folder_hash) = context.accounts[self.cursor_pos.0]
-                    .folders_order
+                if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+                    .entries
                     .get(self.cursor_pos.1)
                 {
+                    /* Account might have no folders yet if it's offline */
                     /* Check if per-folder configuration overrides general configuration */
                     if let Some(index_style) =
                         context.accounts.get(self.cursor_pos.0).and_then(|account| {
-                            account.folder_confs(folder_hash).conf_override.index_style
+                            account.folder_confs(*folder_hash).conf_override.index_style
                         })
                     {
                         self.component.set_style(index_style);
@@ -572,8 +594,6 @@ impl Component for Listing {
                     k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"]) => {
                         if self.cursor_pos.0 + amount < self.accounts.len() {
                             self.cursor_pos = (self.cursor_pos.0 + amount, 0);
-                            self.component.set_coordinates((self.cursor_pos.0, 0));
-                            self.set_dirty(true);
                         } else {
                             return true;
                         }
@@ -581,40 +601,14 @@ impl Component for Listing {
                     k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) => {
                         if self.cursor_pos.0 >= amount {
                             self.cursor_pos = (self.cursor_pos.0 - amount, 0);
-                            self.component.set_coordinates((self.cursor_pos.0, 0));
-                            self.set_dirty(true);
                         } else {
                             return true;
                         }
                     }
                     _ => return false,
                 }
+                self.change_account(context);
 
-                /* Account might have no folders yet if it's offline */
-                if let Some(&folder_hash) = context.accounts[self.cursor_pos.0]
-                    .folders_order
-                    .get(self.cursor_pos.1)
-                {
-                    /* Check if per-folder configuration overrides general configuration */
-                    if let Some(index_style) =
-                        context.accounts.get(self.cursor_pos.0).and_then(|account| {
-                            account.folder_confs(folder_hash).conf_override.index_style
-                        })
-                    {
-                        self.component.set_style(index_style);
-                    } else if let Some(index_style) = context
-                        .accounts
-                        .get(self.cursor_pos.0)
-                        .and_then(|account| Some(account.settings.conf.index_style()))
-                    {
-                        self.component.set_style(index_style);
-                    }
-                }
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context),
-                    )));
                 return true;
             }
             UIEvent::Action(ref action) => match action {
@@ -876,57 +870,55 @@ impl Component for Listing {
     }
 }
 
-impl From<IndexStyle> for ListingComponent {
-    fn from(index_style: IndexStyle) -> Self {
+impl From<(IndexStyle, (usize, FolderHash))> for ListingComponent {
+    fn from((index_style, coordinates): (IndexStyle, (usize, FolderHash))) -> Self {
         match index_style {
-            IndexStyle::Plain => Plain(Default::default()),
-            IndexStyle::Threaded => Threaded(Default::default()),
-            IndexStyle::Compact => Compact(Default::default()),
-            IndexStyle::Conversations => Conversations(Default::default()),
+            IndexStyle::Plain => Plain(PlainListing::new(coordinates)),
+            IndexStyle::Threaded => Threaded(ThreadListing::new(coordinates)),
+            IndexStyle::Compact => Compact(CompactListing::new(coordinates)),
+            IndexStyle::Conversations => Conversations(ConversationsListing::new(coordinates)),
         }
     }
 }
 
 impl Listing {
     const DESCRIPTION: &'static str = "listing";
-    pub fn new(accounts: &[Account]) -> Self {
-        let account_entries = accounts
+    pub fn new(context: &mut Context) -> Self {
+        let account_entries: Vec<AccountMenuEntry> = context
+            .accounts
             .iter()
             .enumerate()
-            .map(|(i, a)| AccountMenuEntry {
-                name: a.name().to_string(),
-                index: i,
+            .map(|(i, a)| {
+                let entries: SmallVec<[(usize, FolderHash); 16]> = a
+                    .list_folders()
+                    .into_iter()
+                    .filter(|folder_node| a.ref_folders()[&folder_node.hash].is_subscribed())
+                    .map(|f| (f.depth, f.hash))
+                    .collect::<_>();
+
+                AccountMenuEntry {
+                    name: a.name().to_string(),
+                    index: i,
+                    entries,
+                }
             })
             .collect();
-        /* Check if per-folder configuration overrides general configuration */
-        let component = if let Some(index_style) = accounts.get(0).and_then(|account| {
-            account.folders_order.get(0).and_then(|folder_hash| {
-                account.folder_confs(*folder_hash).conf_override.index_style
-            })
-        }) {
-            ListingComponent::from(index_style)
-        } else if let Some(index_style) = accounts
-            .get(0)
-            .and_then(|account| Some(account.settings.conf.index_style()))
-        {
-            ListingComponent::from(index_style)
-        } else {
-            Conversations(Default::default())
-        };
-        Listing {
-            component,
+        let mut ret = Listing {
+            component: Offline(OfflineListing::new((0, 0))),
             accounts: account_entries,
             visible: true,
             dirty: true,
             cursor_pos: (0, 0),
             startup_checks_rate: RateLimit::new(2, 1000),
-            theme_default: ThemeAttribute::default(),
+            theme_default: conf::value(context, "theme_default"),
             id: ComponentId::new_v4(),
             show_divider: false,
             menu_visibility: true,
             ratio: 90,
             cmd_buf: String::with_capacity(4),
-        }
+        };
+        ret.change_account(context);
+        ret
     }
 
     fn draw_menu(&mut self, grid: &mut CellBuffer, mut area: Area, context: &mut Context) {
@@ -969,86 +961,31 @@ impl Listing {
             debug!("BUG: invalid area in print_account");
         }
         // Each entry and its index in the account
-        let entries: FnvHashMap<FolderHash, Folder> = context.accounts[a.index]
-            .list_folders()
-            .into_iter()
-            .map(|f| (f.hash(), f))
-            .collect();
-        let folders_order: FnvHashMap<FolderHash, usize> = context.accounts[a.index]
-            .folders_order()
-            .iter()
-            .enumerate()
-            .map(|(i, &fh)| (fh, i))
-            .collect();
+        let folders: FnvHashMap<FolderHash, Folder> =
+            context.accounts[a.index].ref_folders().clone();
 
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
         let must_highlight_account: bool = self.cursor_pos.0 == a.index;
 
-        let mut inc = 0;
-        let mut depth = 0;
         let mut lines: Vec<(usize, usize, FolderHash, Option<usize>)> = Vec::new();
 
-        /* Gather the folder tree structure in `lines` recursively */
-        fn print(
-            folder_idx: FolderHash,
-            depth: &mut usize,
-            inc: &mut usize,
-            entries: &FnvHashMap<FolderHash, Folder>,
-            folders_order: &FnvHashMap<FolderHash, usize>,
-            lines: &mut Vec<(usize, usize, FolderHash, Option<usize>)>,
-            index: usize, //account index
-            context: &mut Context,
-        ) {
-            match context.accounts[index].status(entries[&folder_idx].hash()) {
-                Ok(_) => {
-                    lines.push((
-                        *depth,
-                        *inc,
-                        folder_idx,
-                        entries[&folder_idx].count().ok().map(|(v, _)| v),
-                    ));
+        for (i, &(depth, folder_hash)) in a.entries.iter().enumerate() {
+            if folders[&folder_hash].is_subscribed() {
+                match context.accounts[a.index].status(folder_hash) {
+                    Ok(_) => {
+                        lines.push((
+                            depth,
+                            i,
+                            folder_hash,
+                            folders[&folder_hash].count().ok().map(|(v, _)| v),
+                        ));
+                    }
+                    Err(_) => {
+                        lines.push((depth, i, folder_hash, None));
+                    }
                 }
-                Err(_) => {
-                    lines.push((*depth, *inc, folder_idx, None));
-                }
-            }
-            *inc += 1;
-            let mut children: Vec<FolderHash> = entries[&folder_idx].children().to_vec();
-            children
-                .sort_unstable_by(|a, b| folders_order[a].partial_cmp(&folders_order[b]).unwrap());
-            *depth += 1;
-            for child in children {
-                print(
-                    child,
-                    depth,
-                    inc,
-                    entries,
-                    folders_order,
-                    lines,
-                    index,
-                    context,
-                );
-            }
-            *depth -= 1;
-        }
-        let mut keys = entries.keys().cloned().collect::<Vec<FolderHash>>();
-        keys.sort_unstable_by(|a, b| folders_order[a].partial_cmp(&folders_order[b]).unwrap());
-
-        /* Start with roots */
-        for f in keys {
-            if entries[&f].parent().is_none() {
-                print(
-                    f,
-                    &mut depth,
-                    &mut inc,
-                    &entries,
-                    &folders_order,
-                    &mut lines,
-                    a.index,
-                    context,
-                );
             }
         }
 
@@ -1155,7 +1092,7 @@ impl Listing {
                 None,
             );
             let (x, _) = write_string_to_grid(
-                entries[&folder_idx].name(),
+                folders[&folder_idx].name(),
                 grid,
                 att.fg,
                 att.bg,
@@ -1206,5 +1143,47 @@ impl Listing {
         } else {
             idx - 1
         }
+    }
+
+    fn change_account(&mut self, context: &mut Context) {
+        self.accounts[self.cursor_pos.0].entries = context.accounts[self.cursor_pos.0]
+            .list_folders()
+            .into_iter()
+            .filter(|folder_node| {
+                context.accounts[self.cursor_pos.0].ref_folders()[&folder_node.hash].is_subscribed()
+            })
+            .map(|f| (f.depth, f.hash))
+            .collect::<_>();
+        /* Account might have no folders yet if it's offline */
+        if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+            .entries
+            .get(self.cursor_pos.1)
+        {
+            self.component
+                .set_coordinates((self.cursor_pos.0, *folder_hash));
+            /* Check if per-folder configuration overrides general configuration */
+            if let Some(index_style) = context
+                .accounts
+                .get(self.cursor_pos.0)
+                .and_then(|account| account.folder_confs(*folder_hash).conf_override.index_style)
+            {
+                self.component.set_style(index_style);
+            } else if let Some(index_style) = context
+                .accounts
+                .get(self.cursor_pos.0)
+                .and_then(|account| Some(account.settings.conf.index_style()))
+            {
+                self.component.set_style(index_style);
+            }
+        } else {
+            /* Set to dummy */
+            self.component = Offline(OfflineListing::new((self.cursor_pos.0, 0)));
+        }
+        self.set_dirty(true);
+        context
+            .replies
+            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(debug!(
+                self.get_status(context)
+            ))));
     }
 }

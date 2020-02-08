@@ -113,6 +113,7 @@ pub enum UIEvent {
     MailboxUpdate((usize, FolderHash)), // (account_idx, mailbox_idx)
     MailboxDelete((usize, FolderHash)),
     MailboxCreate((usize, FolderHash)),
+    AccountStatusChange(usize),
     ComponentKill(Uuid),
     WorkerProgress(FolderHash),
     StartupCheck(FolderHash),

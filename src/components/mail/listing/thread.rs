@@ -29,9 +29,8 @@ const MAX_COLS: usize = 500;
 #[derive(Debug)]
 pub struct ThreadListing {
     /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
-    cursor_pos: (usize, usize, usize),
-    new_cursor_pos: (usize, usize, usize),
-    folder_hash: FolderHash,
+    cursor_pos: (usize, FolderHash, usize),
+    new_cursor_pos: (usize, FolderHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -72,14 +71,6 @@ impl MailListingTrait for ThreadListing {
         }
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
-        self.folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
-            .folders_order
-            .get(self.cursor_pos.1)
-        {
-            *h
-        } else {
-            return;
-        };
 
         self.color_cache = ColorCache {
             unseen: crate::conf::value(context, "mail.listing.plain.unseen"),
@@ -100,7 +91,7 @@ impl MailListingTrait for ThreadListing {
 
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
+        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
             Ok(_) => {}
             Err(_) => {
                 let default_cell = {
@@ -234,10 +225,10 @@ impl MailListingTrait for ThreadListing {
 }
 
 impl ListingTrait for ThreadListing {
-    fn coordinates(&self) -> (usize, usize) {
+    fn coordinates(&self) -> (usize, FolderHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
-    fn set_coordinates(&mut self, coordinates: (usize, usize)) {
+    fn set_coordinates(&mut self, coordinates: (usize, FolderHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.view = None;
@@ -398,12 +389,6 @@ impl ListingTrait for ThreadListing {
     }
 }
 
-impl Default for ThreadListing {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl fmt::Display for ThreadListing {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "mail")
@@ -411,12 +396,10 @@ impl fmt::Display for ThreadListing {
 }
 
 impl ThreadListing {
-    pub fn new() -> Self {
-        let content = CellBuffer::new(0, 0, Cell::with_char(' '));
+    pub fn new(coordinates: (usize, FolderHash)) -> Self {
         ThreadListing {
             cursor_pos: (0, 1, 0),
-            new_cursor_pos: (0, 0, 0),
-            folder_hash: 0,
+            new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
@@ -662,12 +645,12 @@ impl Component for ThreadListing {
                 return true;
             }
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
-                if (*idxa, *idxf) == (self.new_cursor_pos.0, self.folder_hash) =>
+                if (*idxa, *idxf) == (self.new_cursor_pos.0, self.cursor_pos.1) =>
             {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
-            UIEvent::StartupCheck(ref f) if *f == self.folder_hash => {
+            UIEvent::StartupCheck(ref f) if *f == self.cursor_pos.1 => {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }

@@ -48,9 +48,8 @@ macro_rules! address_list {
 #[derive(Debug)]
 pub struct PlainListing {
     /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
-    cursor_pos: (usize, usize, usize),
-    new_cursor_pos: (usize, usize, usize),
-    folder_hash: FolderHash,
+    cursor_pos: (usize, FolderHash, usize),
+    new_cursor_pos: (usize, FolderHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -115,16 +114,6 @@ impl MailListingTrait for PlainListing {
         }
         self.cursor_pos.1 = self.new_cursor_pos.1;
         self.cursor_pos.0 = self.new_cursor_pos.0;
-        self.folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
-            .folders_order
-            .get(self.cursor_pos.1)
-        {
-            *h
-        } else {
-            self.cursor_pos.1 = old_cursor_pos.1;
-            self.dirty = false;
-            return;
-        };
 
         self.color_cache = ColorCache {
             unseen: crate::conf::value(context, "mail.listing.plain.unseen"),
@@ -145,7 +134,7 @@ impl MailListingTrait for PlainListing {
 
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].status(self.folder_hash) {
+        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
             Ok(()) => {}
             Err(_) => {
                 let default_cell = {
@@ -156,7 +145,7 @@ impl MailListingTrait for PlainListing {
                     ret
                 };
                 let message: String =
-                    context.accounts[self.cursor_pos.0][self.folder_hash].to_string();
+                    context.accounts[self.cursor_pos.0][self.cursor_pos.1].to_string();
                 self.data_columns.columns[0] =
                     CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
@@ -172,7 +161,7 @@ impl MailListingTrait for PlainListing {
                 return;
             }
         }
-        self.local_collection = context.accounts[self.cursor_pos.0][self.folder_hash]
+        self.local_collection = context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .unwrap()
             .envelopes
             .iter()
@@ -183,7 +172,7 @@ impl MailListingTrait for PlainListing {
             .envelopes
             .read()
             .unwrap();
-        self.thread_node_hashes = context.accounts[self.cursor_pos.0][self.folder_hash]
+        self.thread_node_hashes = context.accounts[self.cursor_pos.0][self.cursor_pos.1]
             .unwrap()
             .envelopes
             .iter()
@@ -205,11 +194,11 @@ impl MailListingTrait for PlainListing {
 }
 
 impl ListingTrait for PlainListing {
-    fn coordinates(&self) -> (usize, usize) {
+    fn coordinates(&self) -> (usize, FolderHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
 
-    fn set_coordinates(&mut self, coordinates: (usize, usize)) {
+    fn set_coordinates(&mut self, coordinates: (usize, FolderHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.view = MailView::default();
@@ -523,7 +512,7 @@ impl ListingTrait for PlainListing {
         }
 
         let account = &context.accounts[self.cursor_pos.0];
-        match account.search(&self.filter_term, self.sort, self.folder_hash) {
+        match account.search(&self.filter_term, self.sort, self.cursor_pos.1) {
             Ok(results) => {
                 for env_hash in results {
                     if !account.collection.contains_key(&env_hash) {
@@ -599,19 +588,12 @@ impl fmt::Display for PlainListing {
     }
 }
 
-impl Default for PlainListing {
-    fn default() -> Self {
-        PlainListing::new()
-    }
-}
-
 impl PlainListing {
     const DESCRIPTION: &'static str = "plain listing";
-    fn new() -> Self {
+    pub fn new(coordinates: (usize, FolderHash)) -> Self {
         PlainListing {
             cursor_pos: (0, 1, 0),
-            new_cursor_pos: (0, 0, 0),
-            folder_hash: 0,
+            new_cursor_pos: (coordinates.0, coordinates.1, 0),
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (SortField::Date, SortOrder::Desc),
@@ -637,7 +619,7 @@ impl PlainListing {
         }
     }
     fn make_entry_string(&self, e: EnvelopeRef, context: &Context) -> EntryStrings {
-        let folder = &context.accounts[self.cursor_pos.0].folder_confs[&self.folder_hash];
+        let folder = &context.accounts[self.cursor_pos.0].folder_confs[&self.cursor_pos.1];
         let mut tags = String::new();
         let mut colors = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
@@ -1097,7 +1079,7 @@ impl Component for PlainListing {
                         debug!("SubSort {:?} , {:?}", field, order);
                         self.subsort = (*field, *order);
                         //if !self.filtered_selection.is_empty() {
-                        //    let threads = &account.collection.threads[&self.folder_hash];
+                        //    let threads = &account.collection.threads[&self.cursor_pos.1];
                         //    threads.vec_inner_sort_by(&mut self.filtered_selection, self.sort, &account.collection);
                         //} else {
                         //    self.refresh_mailbox(contex, falset);
@@ -1148,19 +1130,19 @@ impl Component for PlainListing {
         }
         match *event {
             UIEvent::MailboxUpdate((ref idxa, ref idxf))
-                if (*idxa, *idxf) == (self.new_cursor_pos.0, self.folder_hash) =>
+                if (*idxa, *idxf) == (self.new_cursor_pos.0, self.cursor_pos.1) =>
             {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
-            UIEvent::StartupCheck(ref f) if *f == self.folder_hash => {
+            UIEvent::StartupCheck(ref f) if *f == self.cursor_pos.1 => {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
                 if !account.collection.contains_key(new_hash)
-                    || !account[self.folder_hash]
+                    || !account[self.cursor_pos.1]
                         .unwrap()
                         .envelopes
                         .contains(new_hash)

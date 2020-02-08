@@ -484,7 +484,8 @@ impl Component for AccountStatus {
             None,
         );
         line += 2;
-        for f in a.list_folders() {
+        for folder_node in a.list_folders() {
+            let f: &Folder = &a.ref_folders()[&folder_node.hash];
             if f.is_subscribed() {
                 write_string_to_grid(
                     f.path(),

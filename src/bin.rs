@@ -305,7 +305,7 @@ fn run_app() -> Result<()> {
     let mut state = State::new(sender, receiver.clone())?;
 
     let window = Box::new(Tabbed::new(vec![
-        Box::new(listing::Listing::new(&state.context.accounts)),
+        Box::new(listing::Listing::new(&mut state.context)),
         Box::new(ContactList::new(&state.context)),
         Box::new(StatusPanel::new()),
     ]));
