@@ -75,7 +75,7 @@ pub trait Component: Display + Debug + Send {
         Default::default()
     }
 
-    fn get_status(&self, _context: &Context) -> Option<String> {
-        None
+    fn get_status(&self, _context: &Context) -> String {
+        String::new()
     }
 }

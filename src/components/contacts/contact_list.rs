@@ -670,7 +670,7 @@ impl Component for ContactList {
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                                self.get_status(context).unwrap(),
+                                self.get_status(context),
                             )));
                     }
 
@@ -707,7 +707,7 @@ impl Component for ContactList {
                         context
                             .replies
                             .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                                self.get_status(context).unwrap(),
+                                self.get_status(context),
                             )));
                     }
                     return true;
@@ -894,10 +894,10 @@ impl Component for ContactList {
             .unwrap_or(true)
     }
 
-    fn get_status(&self, context: &Context) -> Option<String> {
-        Some(format!(
+    fn get_status(&self, context: &Context) -> String {
+        format!(
             "{} entries",
             context.accounts[self.account_pos].address_book.len()
-        ))
+        )
     }
 }

@@ -545,7 +545,7 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context).unwrap(),
+                        self.get_status(context),
                     )));
                 return true;
             }
@@ -613,7 +613,7 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context).unwrap(),
+                        self.get_status(context),
                     )));
                 return true;
             }
@@ -798,7 +798,7 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context).unwrap(),
+                        self.get_status(context),
                     )));
             }
             UIEvent::MailboxUpdate(_) => {
@@ -806,7 +806,7 @@ impl Component for Listing {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context).unwrap(),
+                        self.get_status(context),
                     )));
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) => {
@@ -852,32 +852,27 @@ impl Component for Listing {
         self.component.set_id(id);
     }
 
-    fn get_status(&self, context: &Context) -> Option<String> {
-        Some({
-            let folder_hash = if let Some(h) = context.accounts[self.cursor_pos.0]
-                .folders_order
-                .get(self.cursor_pos.1)
-            {
-                *h
-            } else {
-                return Some(String::new());
-            };
-            if !context.accounts[self.cursor_pos.0].folders[&folder_hash].is_available() {
-                return Some(String::new());
-            }
-            let account = &context.accounts[self.cursor_pos.0];
-            let m = if account[self.cursor_pos.1].is_available() {
-                account[self.cursor_pos.1].unwrap()
-            } else {
-                return Some(String::new());
-            };
+    fn get_status(&self, context: &Context) -> String {
+        let folder_hash = if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+            .entries
+            .get(self.cursor_pos.1)
+        {
+            *folder_hash
+        } else {
+            return String::new();
+        };
+
+        let account = &context.accounts[self.cursor_pos.0];
+        if let Ok(m) = account[folder_hash].as_result() {
             format!(
                 "Mailbox: {}, Messages: {}, New: {}",
                 m.folder.name(),
                 m.envelopes.len(),
                 m.folder.count().ok().map(|(v, _)| v).unwrap_or(0),
             )
-        })
+        } else {
+            account[folder_hash].to_string()
+        }
     }
 }
 

@@ -1619,9 +1619,7 @@ impl Component for Tabbed {
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                            self.children[self.cursor_pos]
-                                .get_status(context)
-                                .unwrap_or_default(),
+                            self.children[self.cursor_pos].get_status(context),
                         )));
                     self.set_dirty(true);
                 }
@@ -1632,9 +1630,7 @@ impl Component for Tabbed {
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.children[self.cursor_pos]
-                            .get_status(context)
-                            .unwrap_or_default(),
+                        self.children[self.cursor_pos].get_status(context),
                     )));
                 self.set_dirty(true);
                 return true;
