@@ -301,8 +301,6 @@ pub mod shellexpand {
 
     #[test]
     fn test_shellexpandtrait() {
-        let path = &Path::new("~/.v");
-        //println!("ret = {:?}", path.expand().complete(false));
         assert!(Path::new("~").expand().complete(false).is_empty());
         assert!(!Path::new("~").expand().complete(true).is_empty());
     }

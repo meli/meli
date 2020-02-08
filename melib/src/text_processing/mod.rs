@@ -56,36 +56,60 @@ pub trait GlobMatch {
 }
 
 impl GlobMatch for str {
-    fn matches_glob(&self, s: &str) -> bool {
-        let parts = s.split("*");
+    fn matches_glob(&self, _pattern: &str) -> bool {
+        macro_rules! strip_slash {
+            ($v:expr) => {
+                if $v.ends_with("/") {
+                    &$v[..$v.len() - 1]
+                } else {
+                    $v
+                }
+            };
+        }
+        let pattern: Vec<&str> = strip_slash!(_pattern).split_graphemes();
+        let s: Vec<&str> = strip_slash!(self).split_graphemes();
 
-        let mut ptr = 0;
-        let mut part_no = 0;
+        // Taken from https://research.swtch.com/glob
 
-        for p in parts {
-            if p.is_empty() {
-                /* asterisk is at beginning and/or end of glob */
-                /* eg "*".split("*") gives ["", ""] */
-                part_no += 1;
-                continue;
-            }
-
-            if ptr >= self.len() {
-                return false;
-            }
-            if part_no > 0 {
-                while !&self[ptr..].starts_with(p) {
-                    ptr += 1;
-                    if ptr >= self.len() {
-                        return false;
+        let mut px = 0;
+        let mut sx = 0;
+        let mut next_px = 0;
+        let mut next_sx = 0;
+        while px < pattern.len() || sx < s.len() {
+            if px < pattern.len() {
+                match pattern[px] {
+                    "?" => {
+                        if sx < s.len() {
+                            px += 1;
+                            sx += 1;
+                            continue;
+                        }
+                    }
+                    "*" => {
+                        // Try to match at sx.
+                        // If that doesn't work out,
+                        // restart at sx+1 next.
+                        next_px = px;
+                        next_sx = sx + 1;
+                        px += 1;
+                        continue;
+                    }
+                    p => {
+                        if sx < s.len() && s[sx] == p {
+                            px += 1;
+                            sx += 1;
+                            continue;
+                        }
                     }
                 }
             }
-            if !&self[ptr..].starts_with(p) {
-                return false;
+            // Mismatch. Maybe restart.
+            if 0 < next_sx && next_sx <= s.len() {
+                px = next_px;
+                sx = next_sx;
+                continue;
             }
-            ptr += p.len();
-            part_no += 1;
+            return false;
         }
         true
     }
@@ -98,8 +122,18 @@ impl GlobMatch for str {
 #[test]
 fn test_globmatch() {
     assert!("INBOX".matches_glob("INBOX"));
+    assert!("INBOX/".matches_glob("INBOX"));
+    assert!("INBOX".matches_glob("INBO?"));
+
     assert!("INBOX/Sent".matches_glob("INBOX/*"));
+    assert!(!"INBOX/Sent".matches_glob("INBOX"));
     assert!(!"INBOX/Sent".matches_glob("*/Drafts"));
     assert!("INBOX/Sent".matches_glob("*/Sent"));
+
     assert!("INBOX/Archives/2047".matches_glob("*"));
+    assert!("INBOX/Archives/2047".matches_glob("INBOX/*/2047"));
+    assert!("INBOX/Archives/2047".matches_glob("INBOX/Archives/2*047"));
+    assert!("INBOX/Archives/2047".matches_glob("INBOX/Archives/204?"));
+
+    assert!(!"INBOX/Lists/".matches_glob("INBOX/Lists/*"));
 }
