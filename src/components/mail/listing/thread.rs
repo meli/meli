@@ -661,12 +661,6 @@ impl Component for ThreadListing {
                 self.dirty = true;
             }
             UIEvent::Action(ref action) => match action {
-                Action::ViewMailbox(idx_m) => {
-                    self.new_cursor_pos.1 = *idx_m;
-                    self.dirty = true;
-                    self.refresh_mailbox(context, false);
-                    return true;
-                }
                 Action::SubSort(field, order) => {
                     debug!("SubSort {:?} , {:?}", field, order);
                     self.subsort = (*field, *order);

@@ -1290,19 +1290,6 @@ impl Component for ConversationsListing {
                 self.dirty = true;
             }
             UIEvent::Action(ref action) => match action {
-                Action::ViewMailbox(idx) => {
-                    if context.accounts[self.cursor_pos.0]
-                        .folders_order
-                        .get(*idx)
-                        .is_none()
-                    {
-                        return true;
-                    }
-                    self.set_coordinates((self.new_cursor_pos.0, *idx));
-                    self.refresh_mailbox(context, false);
-                    return true;
-                }
-
                 Action::Listing(Filter(ref filter_term)) if !self.unfocused => {
                     self.filter(filter_term, context);
                     self.dirty = true;

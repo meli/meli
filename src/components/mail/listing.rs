@@ -639,6 +639,19 @@ impl Component for Listing {
                     self.component.set_dirty(true);
                     return true;
                 }
+                Action::ViewMailbox(idx) => {
+                    if let Some((_, folder_hash)) =
+                        self.accounts[self.cursor_pos.0].entries.get(*idx)
+                    {
+                        self.cursor_pos.1 = *idx;
+                        self.component
+                            .set_coordinates((self.cursor_pos.0, *folder_hash));
+                        self.set_dirty(true);
+                    } else {
+                        return true;
+                    }
+                    return true;
+                }
                 _ => {}
             },
             UIEvent::ChangeMode(UIMode::Normal) => {
