@@ -43,27 +43,11 @@ pub struct ContactManager {
     form: FormWidget,
     account_pos: usize,
     content: CellBuffer,
+    theme_default: ThemeAttribute,
     dirty: bool,
     has_changes: bool,
 
     initialized: bool,
-}
-
-impl Default for ContactManager {
-    fn default() -> Self {
-        ContactManager {
-            id: Uuid::nil(),
-            parent_id: Uuid::nil(),
-            card: Card::new(),
-            mode: ViewMode::Edit,
-            form: FormWidget::default(),
-            account_pos: 0,
-            content: CellBuffer::new(100, 1, Cell::with_char(' ')),
-            dirty: true,
-            has_changes: false,
-            initialized: false,
-        }
-    }
 }
 
 impl fmt::Display for ContactManager {
@@ -73,6 +57,30 @@ impl fmt::Display for ContactManager {
 }
 
 impl ContactManager {
+    fn new(context: &Context) -> Self {
+        let theme_default: ThemeAttribute = crate::conf::value(context, "theme_default");
+        let default_cell = {
+            let mut ret = Cell::with_char(' ');
+            ret.set_fg(theme_default.fg)
+                .set_bg(theme_default.bg)
+                .set_attrs(theme_default.attrs);
+            ret
+        };
+        ContactManager {
+            id: Uuid::nil(),
+            parent_id: Uuid::nil(),
+            card: Card::new(),
+            mode: ViewMode::Edit,
+            form: FormWidget::default(),
+            account_pos: 0,
+            content: CellBuffer::new(100, 1, default_cell),
+            theme_default,
+            dirty: true,
+            has_changes: false,
+            initialized: false,
+        }
+    }
+
     fn initialize(&mut self) {
         let (width, _) = self.content.size();
 
@@ -80,8 +88,8 @@ impl ContactManager {
             "Last edited: ",
             &mut self.content,
             Color::Byte(250),
-            Color::Default,
-            Attr::Default,
+            self.theme_default.bg,
+            self.theme_default.attrs,
             ((0, 0), (width - 1, 0)),
             None,
         );
@@ -89,8 +97,8 @@ impl ContactManager {
             &self.card.last_edited(),
             &mut self.content,
             Color::Byte(250),
-            Color::Default,
-            Attr::Default,
+            self.theme_default.bg,
+            self.theme_default.attrs,
             ((x, 0), (width - 1, 0)),
             None,
         );
@@ -103,8 +111,8 @@ impl ContactManager {
                 "This contact's origin is external and cannot be edited within meli.",
                 &mut self.content,
                 Color::Byte(250),
-                Color::Default,
-                Attr::Default,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((x, y), (width - 1, y)),
                 None,
             );
@@ -151,7 +159,7 @@ impl Component for ContactManager {
             clear_area(
                 grid,
                 (upper_left, set_y(bottom_right, get_y(upper_left) + 1)),
-                Default::default(),
+                self.theme_default,
             );
             copy_area_with_break(grid, &self.content, area, ((0, 0), (width - 1, 0)));
             self.dirty = false;

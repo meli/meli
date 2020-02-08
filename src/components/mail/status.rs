@@ -29,6 +29,7 @@ pub struct StatusPanel {
     status: Option<AccountStatus>,
     content: CellBuffer,
     dirty: bool,
+    theme_default: ThemeAttribute,
     id: ComponentId,
 }
 
@@ -50,8 +51,8 @@ impl Component for StatusPanel {
             let (_, y) = write_string_to_grid(
                 "Worker threads",
                 &mut self.content,
-                Color::Default,
-                Color::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
                 Attr::Bold,
                 ((1, 1), (width - 1, height - 1)),
                 Some(1),
@@ -73,9 +74,9 @@ impl Component for StatusPanel {
                         max_name = max_name
                     ),
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     ((1, y), (width - 1, height - 1)),
                     Some(1),
                 );
@@ -88,8 +89,8 @@ impl Component for StatusPanel {
             write_string_to_grid(
                 "Static threads",
                 &mut self.content,
-                Color::Default,
-                Color::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
                 Attr::Bold,
                 ((1, y + 1), (width - 1, height - 1)),
                 Some(1),
@@ -113,9 +114,9 @@ impl Component for StatusPanel {
                         max_name = max_name
                     ),
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     ((1, y), (width - 1, height - 1)),
                     Some(1),
                 );
@@ -131,7 +132,7 @@ impl Component for StatusPanel {
             std::cmp::min(width.saturating_sub(cols), self.cursor.0),
             std::cmp::min(height.saturating_sub(rows), self.cursor.1),
         );
-        clear_area(grid, area, Default::default());
+        clear_area(grid, area, self.theme_default);
         copy_area(
             grid,
             &self.content,
@@ -170,7 +171,7 @@ impl Component for StatusPanel {
                 return true;
             }
             UIEvent::Input(Key::Char('\n')) if self.status.is_none() => {
-                self.status = Some(AccountStatus::new(self.account_cursor));
+                self.status = Some(AccountStatus::new(self.account_cursor, self.theme_default));
                 return true;
             }
             UIEvent::Input(Key::Esc) if self.status.is_some() => {
@@ -224,8 +225,15 @@ impl Component for StatusPanel {
 }
 
 impl StatusPanel {
-    pub fn new() -> StatusPanel {
-        let mut content = CellBuffer::new(120, 40, Cell::default());
+    pub fn new(theme_default: ThemeAttribute) -> StatusPanel {
+        let default_cell = {
+            let mut ret = Cell::with_char(' ');
+            ret.set_fg(theme_default.fg)
+                .set_bg(theme_default.bg)
+                .set_attrs(theme_default.attrs);
+            ret
+        };
+        let mut content = CellBuffer::new(120, 40, default_cell);
         content.set_growable(true);
 
         StatusPanel {
@@ -234,18 +242,26 @@ impl StatusPanel {
             content,
             status: None,
             dirty: true,
+            theme_default,
             id: ComponentId::new_v4(),
         }
     }
     fn draw_accounts(&mut self, context: &Context) {
+        let default_cell = {
+            let mut ret = Cell::with_char(' ');
+            ret.set_fg(self.theme_default.fg)
+                .set_bg(self.theme_default.bg)
+                .set_attrs(self.theme_default.attrs);
+            ret
+        };
         self.content
-            .resize(120, 40 + context.accounts.len() * 20, Cell::default());
+            .resize(120, 40 + context.accounts.len() * 20, default_cell);
         write_string_to_grid(
             "Accounts",
             &mut self.content,
-            Color::Default,
-            Color::Default,
-            Attr::Default,
+            self.theme_default.fg,
+            self.theme_default.bg,
+            self.theme_default.attrs,
             ((2, 10), (120 - 1, 10)),
             Some(2),
         );
@@ -258,8 +274,8 @@ impl StatusPanel {
             let (x, y) = write_string_to_grid(
                 a.name(),
                 &mut self.content,
-                Color::Default,
-                Color::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
                 Attr::Bold,
                 ((3, 12 + i * 10), (120 - 2, 12 + i * 10)),
                 Some(3),
@@ -268,17 +284,17 @@ impl StatusPanel {
                 " ▒██▒ ",
                 &mut self.content,
                 Color::Byte(32),
-                Color::Default,
-                Attr::Default,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((x, y), (120 - 2, 12 + i * 10)),
                 None,
             );
             write_string_to_grid(
                 &a.runtime_settings.account().identity,
                 &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((4, y + 2), (120 - 2, y + 2)),
                 None,
             );
@@ -298,9 +314,9 @@ impl StatusPanel {
             let (mut column_width, _) = write_string_to_grid(
                 &format!("Messages total {}, unseen {}", count.1, count.0),
                 &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((5, y + 3), (120 - 2, y + 3)),
                 None,
             );
@@ -309,9 +325,9 @@ impl StatusPanel {
                 write_string_to_grid(
                     &format!("Contacts total {}", a.address_book.len()),
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     ((5, y + 4), (120 - 2, y + 4)),
                     None,
                 )
@@ -322,9 +338,9 @@ impl StatusPanel {
                 write_string_to_grid(
                     &format!("Backend {}", a.settings.account().format()),
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     ((5, y + 5), (120 - 2, y + 5)),
                     None,
                 )
@@ -334,9 +350,9 @@ impl StatusPanel {
             write_string_to_grid(
                 "Special Mailboxes:",
                 &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                Attr::Bold,
                 ((5 + column_width, y + 2), (120 - 2, y + 2)),
                 None,
             );
@@ -349,9 +365,9 @@ impl StatusPanel {
                 write_string_to_grid(
                     &format!("{}: {}", f.path(), f.special_usage()),
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     ((5 + column_width, y + 3 + i), (120 - 2, y + 2)),
                     None,
                 );
@@ -372,9 +388,9 @@ impl Component for AccountStatus {
         let (_x, _y) = write_string_to_grid(
             "(Press Esc to return)",
             &mut self.content,
-            Color::Default,
-            Color::Default,
-            Attr::Default,
+            self.theme_default.fg,
+            self.theme_default.bg,
+            Attr::Bold,
             ((1, 0), (width - 1, height - 1)),
             None,
         );
@@ -383,8 +399,8 @@ impl Component for AccountStatus {
         let (_x, _y) = write_string_to_grid(
             "Tag support: ",
             &mut self.content,
-            Color::Default,
-            Color::Default,
+            self.theme_default.fg,
+            self.theme_default.bg,
             Attr::Bold,
             ((1, line), (width - 1, height - 1)),
             None,
@@ -396,9 +412,9 @@ impl Component for AccountStatus {
                 "no"
             },
             &mut self.content,
-            Color::Default,
-            Color::Default,
-            Attr::Default,
+            self.theme_default.fg,
+            self.theme_default.bg,
+            self.theme_default.attrs,
             ((_x, _y), (width - 1, height - 1)),
             None,
         );
@@ -406,8 +422,8 @@ impl Component for AccountStatus {
         let (_x, _y) = write_string_to_grid(
             "Cache backend: ",
             &mut self.content,
-            Color::Default,
-            Color::Default,
+            self.theme_default.fg,
+            self.theme_default.bg,
             Attr::Bold,
             ((1, line), (width - 1, height - 1)),
             None,
@@ -440,9 +456,9 @@ impl Component for AccountStatus {
                 }
             },
             &mut self.content,
-            Color::Default,
-            Color::Default,
-            Attr::Default,
+            self.theme_default.fg,
+            self.theme_default.bg,
+            self.theme_default.attrs,
             ((_x, _y), (width - 1, height - 1)),
             None,
         );
@@ -451,8 +467,8 @@ impl Component for AccountStatus {
         write_string_to_grid(
             "Special Mailboxes:",
             &mut self.content,
-            Color::Default,
-            Color::Default,
+            self.theme_default.fg,
+            self.theme_default.bg,
             Attr::Bold,
             ((1, line), (width - 1, height - 1)),
             None,
@@ -466,9 +482,9 @@ impl Component for AccountStatus {
             write_string_to_grid(
                 &format!("{}: {}", f.path(), f.special_usage()),
                 &mut self.content,
-                Color::Default,
-                Color::Default,
-                Attr::Default,
+                self.theme_default.fg,
+                self.theme_default.bg,
+                self.theme_default.attrs,
                 ((1, line), (width - 1, height - 1)),
                 None,
             );
@@ -477,8 +493,8 @@ impl Component for AccountStatus {
         write_string_to_grid(
             "Subscribed folders:",
             &mut self.content,
-            Color::Default,
-            Color::Default,
+            self.theme_default.fg,
+            self.theme_default.bg,
             Attr::Bold,
             ((1, line), (width - 1, height - 1)),
             None,
@@ -490,9 +506,9 @@ impl Component for AccountStatus {
                 write_string_to_grid(
                     f.path(),
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     ((1, line), (width - 1, height - 1)),
                     None,
                 );
@@ -507,8 +523,8 @@ impl Component for AccountStatus {
                 write_string_to_grid(
                     "Server Capabilities:",
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
                     Attr::Bold,
                     ((1, line), (width - 1, height - 1)),
                     None,
@@ -521,9 +537,9 @@ impl Component for AccountStatus {
                 write_string_to_grid(
                     "meli support:",
                     &mut self.content,
-                    Color::Default,
-                    Color::Default,
-                    Attr::Default,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
                     ((max_name_width + 6, line), (width - 1, height - 1)),
                     None,
                 );
@@ -534,9 +550,9 @@ impl Component for AccountStatus {
                     write_string_to_grid(
                         &cap,
                         &mut self.content,
-                        Color::Default,
-                        Color::Default,
-                        Attr::Default,
+                        self.theme_default.fg,
+                        self.theme_default.bg,
+                        self.theme_default.attrs,
                         ((1, line + i), (width - 1, height - 1)),
                         None,
                     );
@@ -550,8 +566,8 @@ impl Component for AccountStatus {
                             "supported",
                             &mut self.content,
                             Color::Green,
-                            Color::Default,
-                            Attr::Default,
+                            self.theme_default.bg,
+                            self.theme_default.attrs,
                             ((max_name_width + 6, line + i), (width - 1, height - 1)),
                             None,
                         );
@@ -560,8 +576,8 @@ impl Component for AccountStatus {
                             "not supported",
                             &mut self.content,
                             Color::Red,
-                            Color::Default,
-                            Attr::Default,
+                            self.theme_default.bg,
+                            self.theme_default.attrs,
                             ((max_name_width + 6, line + i), (width - 1, height - 1)),
                             None,
                         );
@@ -578,7 +594,7 @@ impl Component for AccountStatus {
             std::cmp::min(width.saturating_sub(cols), self.cursor.0),
             std::cmp::min(height.saturating_sub(rows), self.cursor.1),
         );
-        clear_area(grid, area, Default::default());
+        clear_area(grid, area, self.theme_default);
         copy_area(
             grid,
             &self.content,
@@ -641,8 +657,15 @@ impl Component for AccountStatus {
 }
 
 impl AccountStatus {
-    pub fn new(account_pos: usize) -> AccountStatus {
-        let mut content = CellBuffer::new(120, 5, Cell::default());
+    pub fn new(account_pos: usize, theme_default: ThemeAttribute) -> AccountStatus {
+        let default_cell = {
+            let mut ret = Cell::with_char(' ');
+            ret.set_fg(theme_default.fg)
+                .set_bg(theme_default.bg)
+                .set_attrs(theme_default.attrs);
+            ret
+        };
+        let mut content = CellBuffer::new(120, 5, default_cell);
         content.set_growable(true);
 
         AccountStatus {
@@ -650,6 +673,7 @@ impl AccountStatus {
             account_pos,
             content,
             dirty: true,
+            theme_default,
             id: ComponentId::new_v4(),
         }
     }
@@ -661,6 +685,7 @@ struct AccountStatus {
     account_pos: usize,
     content: CellBuffer,
     dirty: bool,
+    theme_default: ThemeAttribute,
     id: ComponentId,
 }
 

@@ -158,6 +158,7 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "tab.focused",
     "tab.unfocused",
     "tab.bar",
+    "widgets.list.header",
     "widgets.form.label",
     "widgets.form.field",
     "widgets.form.highlighted",
@@ -476,6 +477,11 @@ impl Default for Theme {
         add!("tab.focused");
         add!("tab.unfocused", dark = { fg: Color::Byte(15), bg: Color::Byte(8), }, light = { fg: Color::Byte(15), bg: Color::Byte(8), });
         add!("tab.bar");
+        add!(
+            "widgets.list.header",
+            dark = { fg: Color::Black, bg: Color::White, attrs: Attr::Bold },
+            light = {fg: Color::White, bg: Color::Black, attrs: Attr::Bold }
+        );
         add!(
             "widgets.form.label",
             dark = { attrs: Attr::Bold },

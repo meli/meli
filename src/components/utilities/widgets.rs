@@ -649,7 +649,8 @@ where
 {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {
-            clear_area(grid, area, crate::conf::value(context, "theme_default"));
+            let theme_default = crate::conf::value(context, "theme_default");
+            clear_area(grid, area, theme_default);
             let upper_left = upper_left!(area);
 
             let mut len = 0;
@@ -658,11 +659,11 @@ where
                 write_string_to_grid(
                     k.as_str(),
                     grid,
-                    Color::Default,
+                    theme_default.fg,
                     if i == self.cursor && self.focus {
                         Color::Byte(246)
                     } else {
-                        Color::Default
+                        theme_default.bg
                     },
                     Attr::Bold,
                     (

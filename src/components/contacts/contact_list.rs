@@ -131,22 +131,25 @@ impl ContactList {
             min_width.2 = cmp::max(min_width.2, c.url().split_graphemes().len());
         }
 
+        let default_cell = {
+            let mut ret = Cell::with_char(' ');
+            ret.set_fg(self.theme_default.fg)
+                .set_bg(self.theme_default.bg)
+                .set_attrs(self.theme_default.attrs);
+            ret
+        };
         /* name column */
         self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, self.length, Cell::with_char(' '), context);
+            CellBuffer::new_with_context(min_width.0, self.length, default_cell, context);
         /* email column */
         self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, self.length, Cell::with_char(' '), context);
+            CellBuffer::new_with_context(min_width.1, self.length, default_cell, context);
         /* url column */
         self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, self.length, Cell::with_char(' '), context);
+            CellBuffer::new_with_context(min_width.2, self.length, default_cell, context);
         /* source column */
-        self.data_columns.columns[3] = CellBuffer::new_with_context(
-            "external".len(),
-            self.length,
-            Cell::with_char(' '),
-            context,
-        );
+        self.data_columns.columns[3] =
+            CellBuffer::new_with_context("external".len(), self.length, default_cell, context);
 
         let account = &context.accounts[self.account_pos];
         let book = &account.address_book;
@@ -201,13 +204,16 @@ impl ContactList {
         }
 
         if self.length == 0 {
+            let default_cell = {
+                let mut ret = Cell::with_char(' ');
+                ret.set_fg(self.theme_default.fg)
+                    .set_bg(self.theme_default.bg)
+                    .set_attrs(self.theme_default.attrs);
+                ret
+            };
             let message = "Address book is empty.".to_string();
-            self.data_columns.columns[0] = CellBuffer::new_with_context(
-                message.len(),
-                self.length,
-                Cell::with_char(' '),
-                context,
-            );
+            self.data_columns.columns[0] =
+                CellBuffer::new_with_context(message.len(), self.length, default_cell, context);
             write_string_to_grid(
                 &message,
                 &mut self.data_columns.columns[0],
@@ -445,6 +451,8 @@ impl ContactList {
         }
         clear_area(grid, area, self.theme_default);
         /* Page_no has changed, so draw new page */
+
+        let header_attrs = crate::conf::value(context, "widgets.list.header");
         let mut x = get_x(upper_left);
         for i in 0..self.data_columns.columns.len() {
             if self.data_columns.widths[i] == 0 {
@@ -460,9 +468,9 @@ impl ContactList {
                     _ => "",
                 },
                 grid,
-                Color::Black,
-                Color::White,
-                Attr::Bold,
+                header_attrs.fg,
+                header_attrs.bg,
+                header_attrs.attrs,
                 (
                     set_x(upper_left!(area), x),
                     (
@@ -502,8 +510,8 @@ impl ContactList {
                 upper_left!(area),
                 set_y(bottom_right, get_y(upper_left!(area))),
             ),
-            Color::Black,
-            Color::White,
+            header_attrs.fg,
+            header_attrs.bg,
         );
 
         if top_idx + rows > self.length {
@@ -595,7 +603,7 @@ impl Component for ContactList {
                 UIEvent::Input(ref key)
                     if shortcut!(key == shortcuts[Self::DESCRIPTION]["create_contact"]) =>
                 {
-                    let mut manager = ContactManager::default();
+                    let mut manager = ContactManager::new(context);
                     manager.set_parent_id(self.id);
                     manager.account_pos = self.account_pos;
 
@@ -612,7 +620,7 @@ impl Component for ContactList {
                     let account = &mut context.accounts[self.account_pos];
                     let book = &mut account.address_book;
                     let card = book[&self.id_positions[self.cursor_pos]].clone();
-                    let mut manager = ContactManager::default();
+                    let mut manager = ContactManager::new(context);
                     manager.set_parent_id(self.id);
                     manager.card = card;
                     manager.account_pos = self.account_pos;

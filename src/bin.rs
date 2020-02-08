@@ -307,7 +307,10 @@ fn run_app() -> Result<()> {
     let window = Box::new(Tabbed::new(vec![
         Box::new(listing::Listing::new(&mut state.context)),
         Box::new(ContactList::new(&state.context)),
-        Box::new(StatusPanel::new()),
+        Box::new(StatusPanel::new(crate::conf::value(
+            &state.context,
+            "theme_default",
+        ))),
     ]));
 
     let status_bar = Box::new(StatusBar::new(window));
