@@ -560,7 +560,7 @@ impl Component for MailView {
                 if !context.settings.pager.headers_sticky {
                     let height_p = self.pager.size().1;
 
-                    let height = height!(area) - y - 1;
+                    let height = height!(area).saturating_sub(y).saturating_sub(1);
                     if self.pager.cursor_pos() >= self.headers_no {
                         get_y(upper_left)
                     } else if height_p > height && self.headers_cursor < self.headers_no + 1 {
