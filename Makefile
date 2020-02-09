@@ -113,7 +113,7 @@ install-doc:
 			SECTION=`echo $${MANPAGE} | rev | cut -d "." -f 1`; \
 			MANPAGEPATH=${DESTDIR}${MANDIR}/man$${SECTION}/$${MANPAGE}.gz; \
 			echo "  * installing $${MANPAGE} → ${GREEN}$${MANPAGEPATH}${ANSI_RESET}"; \
-			gzip < $${MANPAGE} > $${MANPAGEPATH} \
+			gzip -n < $${MANPAGE} > $${MANPAGEPATH} \
     ; done ; \
 	(case ":${MANPATHS}:" in \
   *:${DESTDIR}${MANDIR}:*) echo -n "";; \
