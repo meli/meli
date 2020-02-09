@@ -30,16 +30,15 @@ fn main() {
         use std::process::Command;
         let out_dir = env::var("OUT_DIR").unwrap();
         let mut out_dir_path = Path::new(&out_dir).to_path_buf();
+        out_dir_path.push("meli.txt");
 
-        // Note that there are a number of downsides to this approach, the comments
-        // below detail how to improve the portability of these commands.
         let output = Command::new("mandoc")
             .args(MANDOC_OPTS)
             .arg("meli.1")
             .output()
+            .or_else(|_| Command::new("man").arg("-l").arg("meli.1").output())
             .unwrap();
 
-        out_dir_path.push("meli.txt");
         let mut file = File::create(&out_dir_path).unwrap();
         file.write_all(&output.stdout).unwrap();
         out_dir_path.pop();
@@ -49,6 +48,7 @@ fn main() {
             .args(MANDOC_OPTS)
             .arg("meli.conf.5")
             .output()
+            .or_else(|_| Command::new("man").arg("-l").arg("meli.conf.5").output())
             .unwrap();
         let mut file = File::create(&out_dir_path).unwrap();
         file.write_all(&output.stdout).unwrap();
@@ -59,6 +59,7 @@ fn main() {
             .args(MANDOC_OPTS)
             .arg("meli-themes.5")
             .output()
+            .or_else(|_| Command::new("man").arg("-l").arg("meli-themes.5").output())
             .unwrap();
         let mut file = File::create(&out_dir_path).unwrap();
         file.write_all(&output.stdout).unwrap();
