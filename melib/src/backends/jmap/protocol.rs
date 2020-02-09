@@ -138,7 +138,7 @@ pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<FolderHash, Jma
                 unread_emails,
                 unread_threads,
             } = r;
-            let hash = get_path_hash!(&name);
+            let hash = crate::get_path_hash!(&name);
             (
                 hash,
                 JmapFolder {
