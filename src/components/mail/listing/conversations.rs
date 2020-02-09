@@ -100,6 +100,7 @@ impl MailListingTrait for ConversationsListing {
             from: crate::conf::value(context, "mail.listing.conversations.from"),
             date: crate::conf::value(context, "mail.listing.conversations.date"),
             padding: crate::conf::value(context, "mail.listing.conversations.padding"),
+            selected: crate::conf::value(context, "mail.listing.compact.selected"),
             unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
             unseen_padding: crate::conf::value(
                 context,
@@ -196,6 +197,10 @@ impl ListingTrait for ConversationsListing {
 
         let fg_color = if thread.unseen() > 0 {
             self.color_cache.unseen.fg
+        } else if self.cursor_pos.2 == idx {
+            self.color_cache.highlighted.fg
+        } else if self.selection[&thread_hash] {
+            self.color_cache.selected.fg
         } else {
             self.color_cache.theme_default.fg
         };
@@ -1294,6 +1299,16 @@ impl Component for ConversationsListing {
                 }
                 _ => {}
             },
+            UIEvent::Input(Key::Esc)
+                if !self.unfocused
+                    && self.selection.values().cloned().any(std::convert::identity) =>
+            {
+                for v in self.selection.values_mut() {
+                    *v = false;
+                }
+                self.dirty = true;
+                return true;
+            }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Char(''))
                 if !self.unfocused && !&self.filter_term.is_empty() =>
             {

@@ -522,9 +522,6 @@ impl ListingTrait for CompactListing {
         self.filtered_order.clear();
         self.filter_term = filter_term.to_string();
         self.row_updates.clear();
-        for v in self.selection.values_mut() {
-            *v = false;
-        }
 
         let account = &context.accounts[self.cursor_pos.0];
         match account.search(&self.filter_term, self.sort, self.cursor_pos.1) {
@@ -1342,6 +1339,16 @@ impl Component for CompactListing {
             }
             UIEvent::Resize => {
                 self.dirty = true;
+            }
+            UIEvent::Input(Key::Esc)
+                if !self.unfocused
+                    && self.selection.values().cloned().any(std::convert::identity) =>
+            {
+                for v in self.selection.values_mut() {
+                    *v = false;
+                }
+                self.dirty = true;
+                return true;
             }
             UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));

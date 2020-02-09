@@ -1171,6 +1171,16 @@ impl Component for PlainListing {
             UIEvent::Resize => {
                 self.dirty = true;
             }
+            UIEvent::Input(Key::Esc)
+                if !self.unfocused
+                    && self.selection.values().cloned().any(std::convert::identity) =>
+            {
+                for v in self.selection.values_mut() {
+                    *v = false;
+                }
+                self.dirty = true;
+                return true;
+            }
             UIEvent::Input(Key::Esc) if !self.unfocused && !self.filter_term.is_empty() => {
                 self.set_coordinates((self.new_cursor_pos.0, self.new_cursor_pos.1));
                 self.set_dirty(true);

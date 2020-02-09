@@ -527,6 +527,7 @@ impl Component for ThreadListing {
             if self.length == 0 && self.dirty {
                 clear_area(grid, area, self.color_cache.theme_default);
                 context.dirty_areas.push_back(area);
+                return;
             }
 
             /* Render the mail body in a pager, basically copy what HSplit does */
