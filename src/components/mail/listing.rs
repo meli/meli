@@ -1041,10 +1041,7 @@ impl Listing {
                         crate::conf::value(context, "mail.sidebar_highlighted_unread_count"),
                     );
 
-                    if std::env::var("NO_COLOR").is_ok()
-                        && (context.settings.terminal.use_color.is_false()
-                            || context.settings.terminal.use_color.is_internal())
-                    {
+                    if !context.settings.terminal.use_color() {
                         ret.0.attrs |= Attr::Reverse;
                         ret.1.attrs |= Attr::Reverse;
                         ret.2.attrs |= Attr::Reverse;

@@ -430,10 +430,7 @@ impl Component for FormWidget {
                     if self.focus == FormFocus::Fields {
                         let mut field_attrs =
                             crate::conf::value(context, "widgets.form.highlighted");
-                        if std::env::var("NO_COLOR").is_ok()
-                            && (context.settings.terminal.use_color.is_false()
-                                || context.settings.terminal.use_color.is_internal())
-                        {
+                        if !context.settings.terminal.use_color() {
                             field_attrs.attrs |= Attr::Reverse;
                         }
                         for row in grid.bounds_iter((

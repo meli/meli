@@ -296,13 +296,10 @@ impl State {
             components: Vec::with_capacity(1),
             timer,
             draw_rate_limit: RateLimit::new(1, 3),
-            draw_horizontal_segment_fn: if env::var("NO_COLOR").is_ok()
-                && (settings.terminal.use_color.is_false()
-                    || settings.terminal.use_color.is_internal())
-            {
-                State::draw_horizontal_segment_no_color
-            } else {
+            draw_horizontal_segment_fn: if settings.terminal.use_color() {
                 State::draw_horizontal_segment
+            } else {
+                State::draw_horizontal_segment_no_color
             },
             display_messages: SmallVec::new(),
             display_messages_expiration_start: None,

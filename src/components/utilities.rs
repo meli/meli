@@ -769,10 +769,7 @@ impl StatusBar {
     }
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let mut attribute = crate::conf::value(context, "status.bar");
-        if std::env::var("NO_COLOR").is_ok()
-            && (context.settings.terminal.use_color.is_false()
-                || context.settings.terminal.use_color.is_internal())
-        {
+        if !context.settings.terminal.use_color() {
             attribute.attrs |= Attr::Reverse;
         }
         let (x, y) = write_string_to_grid(
@@ -1347,10 +1344,7 @@ impl Tabbed {
         }
         let tab_unfocused_attribute = crate::conf::value(context, "tab.unfocused");
         let mut tab_focused_attribute = crate::conf::value(context, "tab.focused");
-        if std::env::var("NO_COLOR").is_ok()
-            && (context.settings.terminal.use_color.is_false()
-                || context.settings.terminal.use_color.is_internal())
-        {
+        if !context.settings.terminal.use_color() {
             tab_focused_attribute.attrs |= Attr::Reverse;
         }
 
@@ -1836,10 +1830,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
         let (width, height) = self.content.size();
         let shortcuts = self.get_shortcuts(context);
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
-        if std::env::var("NO_COLOR").is_ok()
-            && (context.settings.terminal.use_color.is_false()
-                || context.settings.terminal.use_color.is_internal())
-        {
+        if !context.settings.terminal.use_color() {
             highlighted_attrs.attrs |= Attr::Reverse;
         }
         match (event, self.cursor) {
@@ -1947,10 +1938,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
                 self.cursor = SelectorCursor::Entry(c);
                 let mut highlighted_attrs =
                     crate::conf::value(context, "widgets.options.highlighted");
-                if std::env::var("NO_COLOR").is_ok()
-                    && (context.settings.terminal.use_color.is_false()
-                        || context.settings.terminal.use_color.is_internal())
-                {
+                if !context.settings.terminal.use_color() {
                     highlighted_attrs.attrs |= Attr::Reverse;
                 }
                 for c in self.content.row_iter(2..4, c + 2) {
@@ -2227,10 +2215,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             );
         }
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
-        if std::env::var("NO_COLOR").is_ok()
-            && (context.settings.terminal.use_color.is_false()
-                || context.settings.terminal.use_color.is_internal())
-        {
+        if !context.settings.terminal.use_color() {
             highlighted_attrs.attrs |= Attr::Reverse;
         }
         if single_only {

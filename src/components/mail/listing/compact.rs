@@ -125,10 +125,7 @@ impl MailListingTrait for CompactListing {
             theme_default: crate::conf::value(context, "theme_default"),
             ..self.color_cache
         };
-        if std::env::var("NO_COLOR").is_ok()
-            && (context.settings.terminal.use_color.is_false()
-                || context.settings.terminal.use_color.is_internal())
-        {
+        if !context.settings.terminal.use_color() {
             self.color_cache.highlighted.attrs |= Attr::Reverse;
         }
 
