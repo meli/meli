@@ -2,13 +2,14 @@ Source: meli
 Section: mail
 Priority: optional
 Maintainer: Manos Pitsidianakis <epilys@nessuent.xyz>
-Build-Depends: debhelper (>=11~)
+Build-Depends: debhelper (>=11~), mandoc (>=1.14.4-1)
 Standards-Version: 4.1.4
 Homepage: https://meli.delivery
 
 Package: meli
 Architecture: any
 Multi-Arch: foreign
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}, xdg-utils (>=1.1.3-1)
+Recommends: libnotmuch5 (>=0.28.4-1)
 Description: auto-generated package by debmake
  terminal mail client

@@ -28,7 +28,7 @@ CARGO_BIN ?= cargo
 
 # Installation parameters
 MANPAGES ?= meli.1 meli.conf.5 meli-themes.5
-FEATURES ?= --features="$(MELI_FEATURES)"
+FEATURES ?= --features "${MELI_FEATURES}"
 
 MANPATHS := `manpath 2> /dev/null`
 VERSION ?= `sed -n "s/^version\s*=\s*\"\(.*\)\"/\1/p" Cargo.toml`
