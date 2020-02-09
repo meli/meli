@@ -1,6 +1,6 @@
 [package]
 name = "meli"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Manos Pitsidianakis <el13635@mail.ntua.gr>"]
 edition = "2018"
 
