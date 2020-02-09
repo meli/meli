@@ -134,8 +134,14 @@ macro_rules! error_and_exit {
     }}
 }
 
-#[derive(Debug)]
+enum ManPages {
+    Main = 0,
+    Conf = 1,
+    Themes = 2,
+}
+
 struct CommandLineArguments {
+    print_manpage: Option<ManPages>,
     create_config: Option<String>,
     test_config: Option<String>,
     config: Option<String>,
@@ -155,6 +161,7 @@ fn main() {
 
 fn run_app() -> Result<()> {
     enum CommandLineFlags {
+        PrintManPage,
         CreateConfig,
         TestConfig,
         Config,
@@ -162,6 +169,7 @@ fn run_app() -> Result<()> {
     use CommandLineFlags::*;
     let mut prev: Option<CommandLineFlags> = None;
     let mut args = CommandLineArguments {
+        print_manpage: None,
         create_config: None,
         test_config: None,
         config: None,
@@ -176,12 +184,18 @@ fn run_app() -> Result<()> {
                 Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
                 Some(Config) => error_and_exit!("invalid value for flag `--config`"),
                 Some(TestConfig) => error_and_exit!("invalid value for flag `--test-config`"),
+                Some(PrintManPage) => {
+                    error_and_exit!("invalid value for flag `--print-documentation`")
+                }
             },
             "--create-config" => match prev {
                 None => prev = Some(CreateConfig),
                 Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
                 Some(TestConfig) => error_and_exit!("invalid value for flag `--test-config`"),
                 Some(Config) => error_and_exit!("invalid value for flag `--config`"),
+                Some(PrintManPage) => {
+                    error_and_exit!("invalid value for flag `--print-documentation`")
+                }
             },
             "--config" | "-c" => match prev {
                 None => prev = Some(Config),
@@ -192,6 +206,9 @@ fn run_app() -> Result<()> {
                 Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
                 Some(Config) => error_and_exit!("invalid value for flag `--config`"),
                 Some(TestConfig) => error_and_exit!("invalid value for flag `--test-config`"),
+                Some(PrintManPage) => {
+                    error_and_exit!("invalid value for flag `--print-documentation`")
+                }
             },
             "--help" | "-h" => {
                 args.help = true;
@@ -208,6 +225,13 @@ fn run_app() -> Result<()> {
                 print!("{}", conf::Theme::default().key_to_string("dark", false));
                 return Ok(());
             }
+            "--print-documentation" => {
+                if args.print_manpage.is_some() {
+                    error_and_exit!("Multiple invocations of --print-documentation");
+                }
+                prev = Some(PrintManPage);
+                args.print_manpage = Some(ManPages::Main);
+            }
             e => match prev {
                 None => error_and_exit!("error: value without command {}", e),
                 Some(CreateConfig) if args.create_config.is_none() => {
@@ -222,6 +246,18 @@ fn run_app() -> Result<()> {
                     args.test_config = Some(i);
                     prev = None;
                 }
+                Some(PrintManPage) => {
+                    match e {
+                        "meli" | "main" => { /* This is the default */ }
+                        "meli.conf" | "conf" | "config" | "configuration" => {
+                            args.print_manpage = Some(ManPages::Conf);
+                        }
+                        "meli-themes" | "themes" | "theming" | "theme" => {
+                            args.print_manpage = Some(ManPages::Themes);
+                        }
+                        _ => error_and_exit!("Invalid documentation page: {}", e),
+                    }
+                }
                 Some(TestConfig) => error_and_exit!("Duplicate value for flag `--test-config`"),
                 Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
                 Some(Config) => error_and_exit!("Duplicate value for flag `--config`"),
@@ -230,10 +266,11 @@ fn run_app() -> Result<()> {
     }
 
     if args.help {
-        println!("usage:\tmeli [--create-config[ PATH]] [--config[ PATH]|-c[ PATH]]");
+        println!("usage:\tmeli [--config PATH|-c PATH]");
         println!("\tmeli --help");
         println!("\tmeli --version");
         println!("");
+        println!("Other options:");
         println!("\t--help, -h\t\tshow this message and exit");
         println!("\t--version, -v\t\tprint version and exit");
         println!("\t--create-config[ PATH]\tcreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config.toml");
@@ -243,6 +280,10 @@ fn run_app() -> Result<()> {
         println!("\t--config PATH, -c PATH\tuse specified configuration file");
         println!("\t--print-loaded-themes\tprint loaded themes in full to stdout and exit.");
         println!("\t--print-default-theme\tprint default theme in full to stdout and exit.");
+        #[cfg(feature = "cli-docs")]
+        {
+            println!("\t--print-documentation [meli conf themes]\n\t\t\t\tprint documentation page and exit (Piping to a pager is recommended.).");
+        }
         return Ok(());
     }
 
@@ -257,14 +298,13 @@ fn run_app() -> Result<()> {
         Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
         Some(Config) => error_and_exit!("error: flag without value: `--config`"),
         Some(TestConfig) => error_and_exit!("error: flag without value: `--test-config`"),
+        Some(PrintManPage) => {}
     };
 
     if let Some(config_path) = args.test_config.as_ref() {
         conf::FileSettings::validate(config_path)?;
         return Ok(());
-    }
-
-    if let Some(config_path) = args.create_config.as_mut() {
+    } else if let Some(config_path) = args.create_config.as_mut() {
         let config_path: PathBuf = if config_path.is_empty() {
             let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
             xdg_dirs.place_config_file("config.toml").map_err(|e| {
@@ -282,6 +322,21 @@ fn run_app() -> Result<()> {
         }
         conf::create_config_file(&config_path)?;
         return Ok(());
+    } else if let Some(_page) = args.print_manpage {
+        #[cfg(feature = "cli-docs")]
+        {
+            const MANPAGES: [&'static str; 3] = [
+                include_str!(concat!(env!("OUT_DIR"), "/meli.txt")),
+                include_str!(concat!(env!("OUT_DIR"), "/meli.conf.txt")),
+                include_str!(concat!(env!("OUT_DIR"), "/meli-themes.txt")),
+            ];
+            println!("{}", MANPAGES[_page as usize]);
+            return Ok(());
+        }
+        #[cfg(not(feature = "cli-docs"))]
+        {
+            error_and_exit!("error: this version of meli was not build with embedded documentation. You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery");
+        }
     }
 
     if let Some(config_location) = args.config.as_ref() {

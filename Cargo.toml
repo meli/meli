@@ -58,6 +58,7 @@ default = ["sqlite3"]
 notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
 sqlite3 = ["rusqlite"]
+cli-docs = []
 
 # Print tracing logs as meli runs in stderr
 # enable for debug tracing logs: build with --features=debug-tracing
