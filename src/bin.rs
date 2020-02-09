@@ -301,6 +301,18 @@ fn run_app() -> Result<()> {
         Some(PrintManPage) => {}
     };
 
+    if (args.print_manpage.is_some()
+        ^ args.test_config.is_some()
+        ^ args.create_config.is_some()
+        ^ args.config.is_some())
+        && !(args.print_manpage.is_some()
+            || args.test_config.is_some()
+            || args.create_config.is_some()
+            || args.config.is_some())
+    {
+        error_and_exit!("error: illegal command-line flag combination");
+    }
+
     if let Some(config_path) = args.test_config.as_ref() {
         conf::FileSettings::validate(config_path)?;
         return Ok(());
