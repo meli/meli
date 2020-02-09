@@ -1153,20 +1153,6 @@ impl IndexMut<FolderHash> for Account {
     }
 }
 
-impl Index<usize> for Account {
-    type Output = MailboxEntry;
-    fn index(&self, index: usize) -> &MailboxEntry {
-        &self.folders[&self.folders_order[index]]
-    }
-}
-
-/// Will panic if mailbox hasn't loaded, ask `status()` first.
-impl IndexMut<usize> for Account {
-    fn index_mut(&mut self, index: usize) -> &mut MailboxEntry {
-        self.folders.get_mut(&self.folders_order[index]).unwrap()
-    }
-}
-
 fn build_folders_order(
     tree: &mut Vec<FolderNode>,
     ref_folders: &FnvHashMap<FolderHash, Folder>,
