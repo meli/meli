@@ -29,7 +29,7 @@ notify = { version = "4.0.1", optional = true }
 notify-rust = { version = "^3", optional = true }
 termion = "1.5.1"
 xdg = "2.1.0"
-native-tls = { version ="0.2", optional=true }
+native-tls = { version ="0.2.3", optional=true }
 serde = { version = "1.0.71", features = ["rc", ] }
 serde_derive = "1.0.71"
 bincode = "1.2.0"
