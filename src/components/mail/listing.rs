@@ -816,7 +816,7 @@ impl Component for Listing {
                         self.get_status(context),
                     )));
             }
-            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) => {
+            UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) if !self.cmd_buf.is_empty() => {
                 self.cmd_buf.clear();
                 context
                     .replies
