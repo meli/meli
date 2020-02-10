@@ -128,7 +128,7 @@ impl MailListingTrait for ConversationsListing {
                     ret
                 };
                 let message: String =
-                    context.accounts[self.cursor_pos.0][self.cursor_pos.1].to_string();
+                    context.accounts[self.cursor_pos.0][&self.cursor_pos.1].status();
                 self.content =
                     CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
@@ -592,7 +592,7 @@ impl ConversationsListing {
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
-        let folder = &context.accounts[self.cursor_pos.0].folder_confs[&self.cursor_pos.1];
+        let folder = &context.accounts[self.cursor_pos.0][&self.cursor_pos.1].conf;
         let mut tags = String::new();
         let mut colors = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
@@ -658,9 +658,8 @@ impl ConversationsListing {
 
     fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadHash>>) {
         let account = &context.accounts[self.cursor_pos.0];
-        let mailbox = &account[self.cursor_pos.1].unwrap();
 
-        let threads = &account.collection.threads[&mailbox.folder.hash()];
+        let threads = &account.collection.threads[&self.cursor_pos.1];
         self.order.clear();
         self.selection.clear();
         self.length = 0;
@@ -684,7 +683,7 @@ impl ConversationsListing {
                 debug!("key = {}", root_env_hash);
                 debug!(
                     "name = {} {}",
-                    mailbox.name(),
+                    account[&self.cursor_pos.1].name(),
                     context.accounts[self.cursor_pos.0].name()
                 );
                 debug!("{:#?}", context.accounts);
@@ -852,8 +851,7 @@ impl ConversationsListing {
                     .set_attrs(self.color_cache.theme_default.attrs);
                 ret
             };
-            let mailbox = &account[self.cursor_pos.1];
-            let message = mailbox.to_string();
+            let message = format!("{} is empty", account[&self.cursor_pos.1].name());
             self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(
                 &message,

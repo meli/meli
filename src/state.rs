@@ -153,7 +153,7 @@ impl Context {
                     debug!(
                         "hash & folder: {:?} {}",
                         folder_node.hash,
-                        accounts[account_pos].ref_folders()[&folder_node.hash].name()
+                        accounts[account_pos][&folder_node.hash].name()
                     );
                     mailbox_hashes.insert(folder_node.hash, account_pos);
                 }

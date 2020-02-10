@@ -30,11 +30,12 @@ use melib::backends::{
     BackendOp, Backends, Folder, FolderHash, MailBackend, NotifyFn, ReadOnlyOp, RefreshEvent,
     RefreshEventConsumer, RefreshEventKind, SpecialUsageMailbox,
 };
+use melib::email::*;
 use melib::error::{MeliError, Result};
-use melib::mailbox::*;
 use melib::text_processing::GlobMatch;
 use melib::thread::{SortField, SortOrder, ThreadNode, ThreadNodeHash, Threads};
 use melib::AddressBook;
+use melib::Collection;
 use smallvec::SmallVec;
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
@@ -50,97 +51,61 @@ use std::sync::{Arc, RwLock};
 
 pub type Worker = Option<Async<Result<Vec<Envelope>>>>;
 
-macro_rules! mailbox {
-    ($idx:expr, $folders:expr) => {
-        $folders.get_mut(&$idx).unwrap().unwrap_mut()
-    };
-}
-
 #[derive(Serialize, Debug)]
-pub enum MailboxEntry {
-    Available(Mailbox),
+pub enum MailboxStatus {
+    Available,
     Failed(MeliError),
     /// first argument is done work, and second is total work
-    Parsing(Mailbox, usize, usize),
+    Parsing(usize, usize),
     None,
 }
 
-impl Default for MailboxEntry {
+impl Default for MailboxStatus {
     fn default() -> Self {
-        MailboxEntry::Parsing(Mailbox::default(), 0, 0)
+        MailboxStatus::Parsing(0, 0)
     }
 }
 
-impl std::fmt::Display for MailboxEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                MailboxEntry::Available(ref m) => m.name().to_string(),
-                MailboxEntry::Failed(ref e) => e.to_string(),
-                MailboxEntry::None => "Not subscribed, is this a bug?".to_string(),
-                MailboxEntry::Parsing(_, done, total) => {
-                    format!("Parsing messages. [{}/{}]", done, total)
-                }
-            }
-        )
-    }
-}
-impl MailboxEntry {
+impl MailboxStatus {
     pub fn is_available(&self) -> bool {
-        if let MailboxEntry::Available(_) = self {
+        if let MailboxStatus::Available = self {
             true
         } else {
             false
         }
     }
     pub fn is_parsing(&self) -> bool {
-        if let MailboxEntry::Parsing(_, _, _) = self {
+        if let MailboxStatus::Parsing(_, _) = self {
             true
         } else {
             false
         }
     }
+}
 
-    pub fn as_result(&self) -> Result<&Mailbox> {
-        match self {
-            MailboxEntry::Available(ref m) => Ok(m),
-            MailboxEntry::Parsing(ref m, _, _) => Ok(m),
-            MailboxEntry::Failed(ref e) => Err(MeliError::new(format!(
-                "Mailbox is not available: {}",
-                e.to_string()
-            ))),
-            MailboxEntry::None => Err(MeliError::new("Mailbox is not subscribed.")),
+#[derive(Debug)]
+pub struct FolderEntry {
+    pub status: MailboxStatus,
+    pub name: String,
+    pub ref_folder: Folder,
+    pub conf: FileFolderConf,
+    pub worker: Worker,
+}
+
+impl FolderEntry {
+    pub fn status(&self) -> String {
+        match self.status {
+            MailboxStatus::Available => self.name().to_string(),
+            MailboxStatus::Failed(ref e) => e.to_string(),
+            MailboxStatus::None => "Not subscribed, is this a bug?".to_string(),
+            MailboxStatus::Parsing(done, total) => {
+                format!("Parsing messages. [{}/{}]", done, total)
+            }
         }
     }
 
-    pub fn as_mut_result(&mut self) -> Result<&mut Mailbox> {
-        match self {
-            MailboxEntry::Available(ref mut m) => Ok(m),
-            MailboxEntry::Parsing(ref mut m, _, _) => Ok(m),
-            MailboxEntry::Failed(ref e) => Err(MeliError::new(format!(
-                "Mailbox is not available: {}",
-                e.to_string()
-            ))),
-            MailboxEntry::None => Err(MeliError::new("Mailbox is not subscribed.")),
-        }
-    }
-
-    pub fn unwrap_mut(&mut self) -> &mut Mailbox {
-        match self {
-            MailboxEntry::Available(ref mut m) => m,
-            MailboxEntry::Parsing(ref mut m, _, _) => m,
-            e => panic!(format!("mailbox is not available! {:#}", e)),
-        }
-    }
-
-    pub fn unwrap(&self) -> &Mailbox {
-        match self {
-            MailboxEntry::Available(ref m) => m,
-            MailboxEntry::Parsing(ref m, _, _) => m,
-            e => panic!(format!("mailbox is not available! {:#}", e)),
-        }
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -149,20 +114,13 @@ pub struct Account {
     pub index: usize,
     name: String,
     pub is_online: bool,
-    pub(crate) folders: FnvHashMap<FolderHash, MailboxEntry>,
-    pub(crate) ref_folders: FnvHashMap<FolderHash, Folder>,
-    pub(crate) folder_confs: FnvHashMap<FolderHash, FileFolderConf>,
+    pub(crate) folder_entries: FnvHashMap<FolderHash, FolderEntry>,
     pub(crate) folders_order: Vec<FolderHash>,
-    pub(crate) folder_names: FnvHashMap<FolderHash, String>,
     tree: Vec<FolderNode>,
     sent_folder: Option<FolderHash>,
     pub(crate) collection: Collection,
-
     pub(crate) address_book: AddressBook,
-
-    pub(crate) workers: FnvHashMap<FolderHash, Worker>,
     pub(crate) work_context: WorkContext,
-
     pub(crate) settings: AccountConf,
     pub(crate) runtime_settings: AccountConf,
     pub(crate) backend: Arc<RwLock<Box<dyn MailBackend>>>,
@@ -210,31 +168,11 @@ impl Drop for Account {
                 permissions.set_mode(0o600); // Read/write for owner only.
                 f.set_permissions(permissions).unwrap();
                 let writer = io::BufWriter::new(f);
-                if let Err(err) = bincode::serialize_into(writer, &self.folders) {
+                if let Err(err) = bincode::serialize_into(writer, &self.collection) {
                     eprintln!("{}", err);
                 };
             };
         }
-    }
-}
-
-pub struct MailboxIterator<'a> {
-    folders_order: &'a [FolderHash],
-    folders: &'a FnvHashMap<FolderHash, MailboxEntry>,
-    pos: usize,
-}
-
-impl<'a> Iterator for MailboxIterator<'a> {
-    type Item = &'a MailboxEntry;
-
-    fn next(&mut self) -> Option<&'a MailboxEntry> {
-        if self.pos == self.folders.len() {
-            return None;
-        }
-        let fh = &self.folders_order[self.pos];
-
-        self.pos += 1;
-        Some(&self.folders[&fh])
     }
 }
 
@@ -295,16 +233,12 @@ impl Account {
             index,
             name,
             is_online: false,
-            folders: Default::default(),
-            ref_folders: Default::default(),
-            folder_confs: Default::default(),
+            folder_entries: Default::default(),
             folders_order: Default::default(),
-            folder_names: Default::default(),
             tree: Default::default(),
             address_book,
             sent_folder: Default::default(),
             collection: Default::default(),
-            workers: Default::default(),
             work_context,
             runtime_settings: settings.clone(),
             settings,
@@ -325,12 +259,9 @@ impl Account {
                     return;
                 }
             };
-        let mut folders: FnvHashMap<FolderHash, MailboxEntry> =
+        let mut folder_entries: FnvHashMap<FolderHash, FolderEntry> =
             FnvHashMap::with_capacity_and_hasher(ref_folders.len(), Default::default());
         let mut folders_order: Vec<FolderHash> = Vec::with_capacity(ref_folders.len());
-        let mut workers: FnvHashMap<FolderHash, Worker> = FnvHashMap::default();
-        let mut folder_names = FnvHashMap::default();
-        let mut folder_confs = FnvHashMap::default();
 
         let mut sent_folder = None;
         for f in ref_folders.values_mut() {
@@ -355,7 +286,16 @@ impl Account {
                     }
                     _ => {}
                 }
-                folder_confs.insert(f.hash(), conf.clone());
+                folder_entries.insert(
+                    f.hash(),
+                    FolderEntry {
+                        ref_folder: f.clone(),
+                        name: f.path().to_string(),
+                        status: MailboxStatus::None,
+                        conf: conf.clone(),
+                        worker: None,
+                    },
+                );
             } else {
                 let mut new = FileFolderConf::default();
                 new.folder_conf.usage = if f.special_usage() != SpecialUsageMailbox::Normal {
@@ -368,9 +308,17 @@ impl Account {
                     tmp
                 };
 
-                folder_confs.insert(f.hash(), new);
+                folder_entries.insert(
+                    f.hash(),
+                    FolderEntry {
+                        ref_folder: f.clone(),
+                        name: f.path().to_string(),
+                        status: MailboxStatus::None,
+                        conf: new,
+                        worker: None,
+                    },
+                );
             }
-            folder_names.insert(f.hash(), f.path().to_string());
         }
 
         let mut tree: Vec<FolderNode> = Vec::new();
@@ -378,36 +326,27 @@ impl Account {
         for (h, f) in ref_folders.iter() {
             if !f.is_subscribed() {
                 /* Skip unsubscribed folder */
-                folders.insert(*h, MailboxEntry::None);
-                workers.insert(*h, None);
                 continue;
             }
-            folders.insert(
-                *h,
-                MailboxEntry::Parsing(Mailbox::new(f.clone(), &FnvHashMap::default()), 0, 0),
-            );
-            workers.insert(
-                *h,
-                Account::new_worker(
+            folder_entries.entry(*h).and_modify(|entry| {
+                entry.status = MailboxStatus::Parsing(0, 0);
+                entry.worker = Account::new_worker(
                     f.clone(),
                     &mut self.backend,
                     &self.work_context,
                     self.notify_fn.clone(),
-                ),
-            );
+                );
+            });
+            collection.mailboxes.insert(*h, Default::default());
             collection.threads.insert(*h, Threads::default());
         }
 
-        build_folders_order(&mut tree, &ref_folders, &mut folders_order);
-        self.folders = folders;
-        self.ref_folders = ref_folders;
-        self.folder_confs = folder_confs;
+        build_folders_order(&mut tree, &folder_entries, &mut folders_order);
         self.folders_order = folders_order;
-        self.folder_names = folder_names;
+        self.folder_entries = folder_entries;
         self.tree = tree;
         self.sent_folder = sent_folder;
         self.collection = collection;
-        self.workers = workers;
     }
 
     fn new_worker(
@@ -483,7 +422,7 @@ impl Account {
         Some(w)
     }
     pub fn reload(&mut self, event: RefreshEvent, folder_hash: FolderHash) -> Option<UIEvent> {
-        if !self.folders[&folder_hash].is_available() {
+        if !self.folder_entries[&folder_hash].status.is_available() {
             self.event_queue.push_back((folder_hash, event));
             return None;
         }
@@ -493,7 +432,6 @@ impl Account {
             //let mailbox: &mut Mailbox = self.folders[idx].as_mut().unwrap().as_mut().unwrap();
             match kind {
                 RefreshEventKind::Update(old_hash, envelope) => {
-                    mailbox!(&folder_hash, self.folders).rename(old_hash, envelope.hash());
                     #[cfg(feature = "sqlite3")]
                     {
                         if let Err(err) = crate::sqlite3::remove(old_hash).and_then(|_| {
@@ -514,7 +452,6 @@ impl Account {
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
                     debug!("rename {} to {}", old_hash, new_hash);
-                    mailbox!(&folder_hash, self.folders).rename(old_hash, new_hash);
                     self.collection.rename(old_hash, new_hash, folder_hash);
                     #[cfg(feature = "sqlite3")]
                     {
@@ -538,13 +475,10 @@ impl Account {
                 RefreshEventKind::Create(envelope) => {
                     let env_hash = envelope.hash();
                     if self.collection.contains_key(&env_hash)
-                        && mailbox!(&folder_hash, self.folders)
-                            .envelopes
-                            .contains(&env_hash)
+                        && self.collection[&folder_hash].contains(&env_hash)
                     {
                         return None;
                     }
-                    mailbox!(&folder_hash, self.folders).insert(env_hash);
                     let (is_seen, is_draft) =
                         { (envelope.is_seen(), envelope.flags().contains(Flag::DRAFT)) };
                     let (subject, from) = {
@@ -578,10 +512,12 @@ impl Account {
                         self.collection.insert_reply(env_hash);
                     }
 
-                    let ref_folders: FnvHashMap<FolderHash, Folder> =
-                        self.backend.read().unwrap().folders().unwrap();
-                    let folder_conf = &self.folder_confs[&folder_hash];
-                    if folder_conf.folder_conf().ignore.is_true() {
+                    if self.folder_entries[&folder_hash]
+                        .conf
+                        .folder_conf
+                        .ignore
+                        .is_true()
+                    {
                         return Some(UIEvent::MailboxUpdate((self.index, folder_hash)));
                     }
 
@@ -606,13 +542,12 @@ impl Account {
                             "{}\n{} {}",
                             subject,
                             self.name,
-                            ref_folders[&folder_hash].name(),
+                            self.folder_entries[&folder_hash].name()
                         ),
                         Some(crate::types::NotificationType::NewMail),
                     ));
                 }
                 RefreshEventKind::Remove(envelope_hash) => {
-                    mailbox!(&folder_hash, self.folders).remove(envelope_hash);
                     #[cfg(feature = "sqlite3")]
                     {
                         let envelopes = self.collection.envelopes.read();
@@ -633,15 +568,15 @@ impl Account {
                     return Some(EnvelopeRemove(envelope_hash));
                 }
                 RefreshEventKind::Rescan => {
-                    let ref_folders: FnvHashMap<FolderHash, Folder> =
-                        self.backend.read().unwrap().folders().unwrap();
                     let handle = Account::new_worker(
-                        ref_folders[&folder_hash].clone(),
+                        self.folder_entries[&folder_hash].ref_folder.clone(),
                         &mut self.backend,
                         &self.work_context,
                         self.notify_fn.clone(),
                     );
-                    self.workers.insert(folder_hash, handle);
+                    self.folder_entries.entry(folder_hash).and_modify(|entry| {
+                        entry.worker = handle;
+                    });
                 }
                 RefreshEventKind::Failure(e) => {
                     debug!("RefreshEvent Failure: {}", e.to_string());
@@ -717,18 +652,14 @@ impl Account {
     }
 
     pub fn len(&self) -> usize {
-        self.folders.len()
+        self.tree.len()
     }
     pub fn is_empty(&self) -> bool {
-        self.folders.is_empty()
-    }
-
-    pub fn ref_folders(&self) -> &FnvHashMap<FolderHash, Folder> {
-        &self.ref_folders
+        self.tree.is_empty()
     }
 
     pub fn list_folders(&self) -> Vec<FolderNode> {
-        let mut ret = Vec::with_capacity(self.folders.len());
+        let mut ret = Vec::with_capacity(self.folder_entries.len());
         fn rec(node: &FolderNode, ret: &mut Vec<FolderNode>) {
             ret.push(node.clone());
             for c in node.children.iter() {
@@ -747,14 +678,12 @@ impl Account {
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn workers(&mut self) -> &mut FnvHashMap<FolderHash, Worker> {
-        &mut self.workers
-    }
 
     fn load_mailbox(&mut self, folder_hash: FolderHash, payload: Result<Vec<Envelope>>) {
         if payload.is_err() {
-            self.folders
-                .insert(folder_hash, MailboxEntry::Failed(payload.unwrap_err()));
+            self.folder_entries.entry(folder_hash).and_modify(|entry| {
+                entry.status = MailboxStatus::Failed(payload.unwrap_err());
+            });
             self.sender
                 .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(folder_hash)))
                 .unwrap();
@@ -765,20 +694,14 @@ impl Account {
             .into_iter()
             .map(|e| (e.hash(), e))
             .collect::<FnvHashMap<EnvelopeHash, Envelope>>();
-        match self.folders.entry(folder_hash).or_default() {
-            MailboxEntry::Failed(_) | MailboxEntry::None => {}
-            MailboxEntry::Parsing(ref mut m, _, _) | MailboxEntry::Available(ref mut m) => {
-                m.merge(&envelopes);
-                if let Some(updated_folders) =
-                    self.collection
-                        .merge(envelopes, folder_hash, self.sent_folder)
-                {
-                    for f in updated_folders {
-                        self.sender
-                            .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
-                            .unwrap();
-                    }
-                }
+        if let Some(updated_folders) =
+            self.collection
+                .merge(envelopes, folder_hash, self.sent_folder)
+        {
+            for f in updated_folders {
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
+                    .unwrap();
             }
         }
         self.sender
@@ -791,11 +714,17 @@ impl Account {
             return Err(0);
         }
         loop {
-            match self.workers.get_mut(&folder_hash).unwrap() {
+            match self
+                .folder_entries
+                .get_mut(&folder_hash)
+                .unwrap()
+                .worker
+                .as_mut()
+            {
                 None => {
-                    return if self.folders[&folder_hash].is_available()
-                        || (self.folders[&folder_hash].is_parsing()
-                            && self.collection.threads.contains_key(&folder_hash))
+                    return if self.folder_entries[&folder_hash].status.is_available()
+                        || (self.folder_entries[&folder_hash].status.is_parsing()
+                            && self.collection.mailboxes.contains_key(&folder_hash))
                     {
                         Ok(())
                     } else {
@@ -812,13 +741,9 @@ impl Account {
                     }
                     Ok(AsyncStatus::Finished) => {
                         debug!("got finished in status for {}", folder_hash);
-                        self.folders.entry(folder_hash).and_modify(|f| {
-                            let m = if let MailboxEntry::Parsing(m, _, _) = f {
-                                std::mem::replace(m, Mailbox::default())
-                            } else {
-                                return;
-                            };
-                            *f = MailboxEntry::Available(m);
+                        self.folder_entries.entry(folder_hash).and_modify(|entry| {
+                            entry.status = MailboxStatus::Available;
+                            entry.worker = None;
                         });
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
@@ -826,13 +751,14 @@ impl Account {
                                 folder_hash,
                             ))))
                             .unwrap();
-
-                        self.workers.insert(folder_hash, None);
                     }
                     Ok(AsyncStatus::ProgressReport(n)) => {
-                        self.folders.entry(folder_hash).and_modify(|f| {
-                            if let MailboxEntry::Parsing(_, ref mut d, _) = f {
-                                *d += n;
+                        self.folder_entries.entry(folder_hash).and_modify(|entry| {
+                            match entry.status {
+                                MailboxStatus::Parsing(ref mut d, _) => {
+                                    *d += n;
+                                }
+                                _ => {}
                             }
                         });
                         //return Err(n);
@@ -843,9 +769,9 @@ impl Account {
                 },
             };
         }
-        if self.folders[&folder_hash].is_available()
-            || (self.folders[&folder_hash].is_parsing()
-                && self.collection.threads.contains_key(&folder_hash))
+        if self.folder_entries[&folder_hash].status.is_available()
+            || (self.folder_entries[&folder_hash].status.is_parsing()
+                && self.collection.mailboxes.contains_key(&folder_hash))
         {
             Ok(())
         } else {
@@ -909,13 +835,6 @@ impl Account {
         }
         self.backend.write().unwrap().save(bytes, folder, flags)
     }
-    pub fn iter_mailboxes(&self) -> MailboxIterator {
-        MailboxIterator {
-            folders_order: &self.folders_order,
-            folders: &self.folders,
-            pos: 0,
-        }
-    }
 
     pub fn contains_key(&self, h: EnvelopeHash) -> bool {
         self.collection.contains_key(&h)
@@ -966,39 +885,40 @@ impl Account {
                     tmp
                 };
 
-                self.folder_confs.insert(folder.hash(), new);
-                self.folder_names
-                    .insert(folder.hash(), folder.path().to_string());
-                self.folders.insert(
-                    folder.hash(),
-                    MailboxEntry::Parsing(
-                        Mailbox::new(folder.clone(), &FnvHashMap::default()),
-                        0,
-                        0,
-                    ),
-                );
-                self.workers.insert(
-                    folder.hash(),
-                    Account::new_worker(
-                        folder.clone(),
-                        &mut self.backend,
-                        &self.work_context,
-                        self.notify_fn.clone(),
-                    ),
+                let folder_hash = folder.hash();
+                self.folder_entries.insert(
+                    folder_hash,
+                    FolderEntry {
+                        name: folder.path().to_string(),
+                        status: MailboxStatus::Parsing(0, 0),
+                        conf: new,
+                        worker: Account::new_worker(
+                            folder.clone(),
+                            &mut self.backend,
+                            &self.work_context,
+                            self.notify_fn.clone(),
+                        ),
+                        ref_folder: folder,
+                    },
                 );
                 self.collection
                     .threads
-                    .insert(folder.hash(), Threads::default());
-                self.ref_folders = self.backend.read().unwrap().folders()?;
-                build_folders_order(&mut self.tree, &self.ref_folders, &mut self.folders_order);
+                    .insert(folder_hash, Threads::default());
+                build_folders_order(
+                    &mut self.tree,
+                    &self.folder_entries,
+                    &mut self.folders_order,
+                );
                 Ok(format!("`{}` successfully created.", &path))
             }
             FolderOperation::Delete(path) => {
-                if self.ref_folders.len() == 1 {
+                if self.folder_entries.len() == 1 {
                     return Err(MeliError::new("Cannot delete only mailbox."));
                 }
-                let folder_hash = if let Some((folder_hash, _)) =
-                    self.ref_folders.iter().find(|(_, f)| f.path() == path)
+                let folder_hash = if let Some((folder_hash, _)) = self
+                    .folder_entries
+                    .iter()
+                    .find(|(_, f)| f.ref_folder.path() == path)
                 {
                     *folder_hash
                 } else {
@@ -1011,13 +931,9 @@ impl Account {
                         folder_hash,
                     ))))
                     .unwrap();
-                self.folders.remove(&folder_hash);
-                self.ref_folders = self.backend.read().unwrap().folders()?;
-                self.folder_confs.remove(&folder_hash);
                 if let Some(pos) = self.folders_order.iter().position(|&h| h == folder_hash) {
                     self.folders_order.remove(pos);
                 }
-                self.folder_names.remove(&folder_hash);
                 if let Some(pos) = self.tree.iter().position(|n| n.hash == folder_hash) {
                     self.tree.remove(pos);
                 }
@@ -1025,7 +941,9 @@ impl Account {
                     self.sent_folder = None;
                 }
                 self.collection.threads.remove(&folder_hash);
-                self.workers.remove(&folder_hash); // FIXME Kill worker as well
+                self.collection.mailboxes.remove(&folder_hash);
+                self.folder_entries.remove(&folder_hash);
+                // FIXME Kill worker as well
 
                 // FIXME remove from settings as well
 
@@ -1038,29 +956,13 @@ impl Account {
         }
     }
 
-    pub fn folder_confs(&self, folder_hash: FolderHash) -> &FileFolderConf {
-        &self.folder_confs[&folder_hash]
-    }
-
-    pub fn sent_folder(&self) -> &str {
-        let sent_folder = self
-            .folder_confs
-            .iter()
-            .find(|(_, f)| f.folder_conf().usage == Some(SpecialUsageMailbox::Sent));
-        if let Some(sent_folder) = sent_folder.as_ref() {
-            &self.folder_names[&sent_folder.0]
-        } else {
-            ""
-        }
-    }
-
     pub fn special_use_folder(&self, special_use: SpecialUsageMailbox) -> Option<&str> {
         let ret = self
-            .folder_confs
+            .folder_entries
             .iter()
-            .find(|(_, f)| f.folder_conf().usage == Some(special_use));
+            .find(|(_, f)| f.conf.folder_conf().usage == Some(special_use));
         if let Some(ret) = ret.as_ref() {
-            Some(&self.folder_names[&ret.0])
+            Some(ret.1.name())
         } else {
             None
         }
@@ -1117,7 +1019,7 @@ impl Account {
             let mut ret = SmallVec::new();
             let envelopes = self.collection.envelopes.read().unwrap();
 
-            for &env_hash in &self.folders[&folder_hash].as_result()?.envelopes {
+            for &env_hash in &self.collection[&folder_hash].iter() {
                 let envelope = &envelopes[&env_hash];
                 if envelope.subject().contains(&search_term) {
                     ret.push(env_hash);
@@ -1140,32 +1042,32 @@ impl Account {
     }
 }
 
-impl Index<FolderHash> for Account {
-    type Output = MailboxEntry;
-    fn index(&self, index: FolderHash) -> &MailboxEntry {
-        &self.folders[&index]
+impl Index<&FolderHash> for Account {
+    type Output = FolderEntry;
+    fn index(&self, index: &FolderHash) -> &FolderEntry {
+        &self.folder_entries[index]
     }
 }
 
-impl IndexMut<FolderHash> for Account {
-    fn index_mut(&mut self, index: FolderHash) -> &mut MailboxEntry {
-        self.folders.get_mut(&index).unwrap()
+impl IndexMut<&FolderHash> for Account {
+    fn index_mut(&mut self, index: &FolderHash) -> &mut FolderEntry {
+        self.folder_entries.get_mut(index).unwrap()
     }
 }
 
 fn build_folders_order(
     tree: &mut Vec<FolderNode>,
-    ref_folders: &FnvHashMap<FolderHash, Folder>,
+    folder_entries: &FnvHashMap<FolderHash, FolderEntry>,
     folders_order: &mut Vec<FolderHash>,
 ) {
     let mut stack: SmallVec<[FolderHash; 8]> = SmallVec::new();
     tree.clear();
     folders_order.clear();
-    for (h, f) in ref_folders.iter() {
-        if f.parent().is_none() {
+    for (h, f) in folder_entries.iter() {
+        if f.ref_folder.parent().is_none() {
             fn rec(
                 h: FolderHash,
-                ref_folders: &FnvHashMap<FolderHash, Folder>,
+                folder_entries: &FnvHashMap<FolderHash, FolderEntry>,
                 depth: usize,
             ) -> FolderNode {
                 let mut node = FolderNode {
@@ -1173,18 +1075,18 @@ fn build_folders_order(
                     children: Vec::new(),
                     depth,
                 };
-                for &c in ref_folders[&h].children() {
-                    node.children.push(rec(c, ref_folders, depth + 1));
+                for &c in folder_entries[&h].ref_folder.children() {
+                    node.children.push(rec(c, folder_entries, depth + 1));
                 }
                 node
             };
 
-            tree.push(rec(*h, &ref_folders, 0));
-            for &c in f.children() {
+            tree.push(rec(*h, &folder_entries, 0));
+            for &c in f.ref_folder.children() {
                 stack.push(c);
             }
             while let Some(next) = stack.pop() {
-                for c in ref_folders[&next].children() {
+                for c in folder_entries[&next].ref_folder.children() {
                     stack.push(*c);
                 }
             }
@@ -1192,14 +1094,23 @@ fn build_folders_order(
     }
 
     tree.sort_unstable_by(|a, b| {
-        if ref_folders[&b.hash].path().eq_ignore_ascii_case("INBOX") {
+        if folder_entries[&b.hash]
+            .ref_folder
+            .path()
+            .eq_ignore_ascii_case("INBOX")
+        {
             std::cmp::Ordering::Greater
-        } else if ref_folders[&a.hash].path().eq_ignore_ascii_case("INBOX") {
+        } else if folder_entries[&a.hash]
+            .ref_folder
+            .path()
+            .eq_ignore_ascii_case("INBOX")
+        {
             std::cmp::Ordering::Less
         } else {
-            ref_folders[&a.hash]
+            folder_entries[&a.hash]
+                .ref_folder
                 .path()
-                .cmp(&ref_folders[&b.hash].path())
+                .cmp(&folder_entries[&b.hash].ref_folder.path())
         }
     });
 
@@ -1207,14 +1118,23 @@ fn build_folders_order(
     for n in tree.iter_mut() {
         folders_order.push(n.hash);
         n.children.sort_unstable_by(|a, b| {
-            if ref_folders[&b.hash].path().eq_ignore_ascii_case("INBOX") {
+            if folder_entries[&b.hash]
+                .ref_folder
+                .path()
+                .eq_ignore_ascii_case("INBOX")
+            {
                 std::cmp::Ordering::Greater
-            } else if ref_folders[&a.hash].path().eq_ignore_ascii_case("INBOX") {
+            } else if folder_entries[&a.hash]
+                .ref_folder
+                .path()
+                .eq_ignore_ascii_case("INBOX")
+            {
                 std::cmp::Ordering::Less
             } else {
-                ref_folders[&a.hash]
+                folder_entries[&a.hash]
+                    .ref_folder
                     .path()
-                    .cmp(&ref_folders[&b.hash].path())
+                    .cmp(&folder_entries[&b.hash].ref_folder.path())
             }
         });
         stack.extend(n.children.iter().rev().map(Some));

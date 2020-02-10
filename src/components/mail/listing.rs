@@ -137,7 +137,7 @@ pub trait MailListingTrait: ListingTrait {
     ) {
         let account = &mut context.accounts[self.coordinates().0];
         let mut envs_to_set: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
-        let folder_hash = account[self.coordinates().1].unwrap().folder.hash();
+        let folder_hash = self.coordinates().1;
         for (_, h) in account.collection.threads[&folder_hash].thread_group_iter(thread_hash) {
             envs_to_set.push(
                 account.collection.threads[&folder_hash].thread_nodes()[&h]
@@ -449,7 +449,8 @@ impl Component for Listing {
                         .list_folders()
                         .into_iter()
                         .filter(|folder_node| {
-                            context.accounts[*account_index].ref_folders()[&folder_node.hash]
+                            context.accounts[*account_index][&folder_node.hash]
+                                .ref_folder
                                 .is_subscribed()
                         })
                         .map(|f| (f.depth, f.hash))
@@ -464,7 +465,8 @@ impl Component for Listing {
                     .list_folders()
                     .into_iter()
                     .filter(|folder_node| {
-                        context.accounts[*account_index].ref_folders()[&folder_node.hash]
+                        context.accounts[*account_index][&folder_node.hash]
+                            .ref_folder
                             .is_subscribed()
                     })
                     .map(|f| (f.depth, f.hash))
@@ -550,10 +552,10 @@ impl Component for Listing {
                 {
                     /* Account might have no folders yet if it's offline */
                     /* Check if per-folder configuration overrides general configuration */
-                    if let Some(index_style) =
-                        context.accounts.get(self.cursor_pos.0).and_then(|account| {
-                            account.folder_confs(*folder_hash).conf_override.index_style
-                        })
+                    if let Some(index_style) = context
+                        .accounts
+                        .get(self.cursor_pos.0)
+                        .and_then(|account| account[folder_hash].conf.conf_override.index_style)
                     {
                         self.component.set_style(index_style);
                     } else if let Some(index_style) = context
@@ -870,15 +872,20 @@ impl Component for Listing {
         };
 
         let account = &context.accounts[self.cursor_pos.0];
-        if let Ok(m) = account[folder_hash].as_result() {
-            format!(
+        use crate::conf::accounts::MailboxStatus;
+        match account[&folder_hash].status {
+            MailboxStatus::Available | MailboxStatus::Parsing(_, _) => format!(
                 "Mailbox: {}, Messages: {}, New: {}",
-                m.folder.name(),
-                m.envelopes.len(),
-                m.folder.count().ok().map(|(v, _)| v).unwrap_or(0),
-            )
-        } else {
-            account[folder_hash].to_string()
+                account[&folder_hash].ref_folder.name(),
+                account.collection[&folder_hash].len(),
+                account[&folder_hash]
+                    .ref_folder
+                    .count()
+                    .ok()
+                    .map(|(v, _)| v)
+                    .unwrap_or(0),
+            ),
+            MailboxStatus::Failed(_) | MailboxStatus::None => account[&folder_hash].status(),
         }
     }
 }
@@ -905,7 +912,7 @@ impl Listing {
                 let entries: SmallVec<[(usize, FolderHash); 16]> = a
                     .list_folders()
                     .into_iter()
-                    .filter(|folder_node| a.ref_folders()[&folder_node.hash].is_subscribed())
+                    .filter(|folder_node| a[&folder_node.hash].ref_folder.is_subscribed())
                     .map(|f| (f.depth, f.hash))
                     .collect::<_>();
 
@@ -974,8 +981,11 @@ impl Listing {
             debug!("BUG: invalid area in print_account");
         }
         // Each entry and its index in the account
-        let folders: FnvHashMap<FolderHash, Folder> =
-            context.accounts[a.index].ref_folders().clone();
+        let folders: FnvHashMap<FolderHash, Folder> = context.accounts[a.index]
+            .folder_entries
+            .iter()
+            .map(|(&hash, entry)| (hash, entry.ref_folder.clone()))
+            .collect();
 
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
@@ -1160,7 +1170,9 @@ impl Listing {
             .list_folders()
             .into_iter()
             .filter(|folder_node| {
-                context.accounts[self.cursor_pos.0].ref_folders()[&folder_node.hash].is_subscribed()
+                context.accounts[self.cursor_pos.0][&folder_node.hash]
+                    .ref_folder
+                    .is_subscribed()
             })
             .map(|f| (f.depth, f.hash))
             .collect::<_>();
@@ -1175,7 +1187,7 @@ impl Listing {
             if let Some(index_style) = context
                 .accounts
                 .get(self.cursor_pos.0)
-                .and_then(|account| account.folder_confs(*folder_hash).conf_override.index_style)
+                .and_then(|account| account[folder_hash].conf.conf_override.index_style)
             {
                 self.component.set_style(index_style);
             } else if let Some(index_style) = context

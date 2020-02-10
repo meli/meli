@@ -69,7 +69,7 @@ pub struct ThreadView {
 impl ThreadView {
     const DESCRIPTION: &'static str = "thread view";
     /*
-     * coordinates: (account index, mailbox index, root set thread_node index)
+     * coordinates: (account index, folder_hash, root set thread_node index)
      * expanded_hash: optional position of expanded entry when we render the threadview. Default
      *  expanded message is the last one.
      * context: current context
@@ -163,8 +163,7 @@ impl ThreadView {
 
     fn initiate(&mut self, expanded_hash: Option<ThreadNodeHash>, context: &Context) {
         let account = &context.accounts[self.coordinates.0];
-        let mailbox = &account[self.coordinates.1].unwrap();
-        let threads = &account.collection.threads[&mailbox.folder.hash()];
+        let threads = &account.collection.threads[&self.coordinates.1];
 
         if !threads.groups.contains_key(&self.thread_group) {
             return;
@@ -649,8 +648,7 @@ impl ThreadView {
         /* First draw the thread subject on the first row */
         let y = if self.dirty {
             let account = &context.accounts[self.coordinates.0];
-            let mailbox = &account[self.coordinates.1].unwrap();
-            let threads = &account.collection.threads[&mailbox.folder.hash()];
+            let threads = &account.collection.threads[&self.coordinates.1];
             let thread_root = threads
                 .thread_group_iter(self.thread_group)
                 .next()
@@ -752,8 +750,7 @@ impl ThreadView {
         /* First draw the thread subject on the first row */
         let y = {
             let account = &context.accounts[self.coordinates.0];
-            let mailbox = &account[self.coordinates.1].unwrap();
-            let threads = &account.collection.threads[&mailbox.folder.hash()];
+            let threads = &account.collection.threads[&self.coordinates.1];
             let thread_root = threads
                 .thread_group_iter(self.thread_group)
                 .next()

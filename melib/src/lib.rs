@@ -119,7 +119,6 @@ mod collection;
 pub mod conf;
 pub mod email;
 pub mod error;
-pub mod mailbox;
 pub mod thread;
 pub use crate::email::*;
 pub use crate::thread::*;
@@ -138,11 +137,10 @@ extern crate bitflags;
 extern crate fnv;
 extern crate uuid;
 
-pub use crate::conf::*;
-pub use crate::mailbox::*;
-
 pub use crate::backends::{Backends, RefreshEvent, RefreshEventConsumer, SpecialUsageMailbox};
-pub use crate::email::{Envelope, Flag};
+pub use crate::collection::*;
+pub use crate::conf::*;
+pub use crate::email::{Envelope, EnvelopeHash, Flag};
 pub use crate::error::{MeliError, Result};
 
 pub use crate::addressbook::*;

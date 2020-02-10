@@ -21,12 +21,13 @@
 
 use super::*;
 use crate::backends::FolderHash;
+use core::ops::{Index, IndexMut};
 use smallvec::SmallVec;
 use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use fnv::FnvHashMap;
+use fnv::{FnvHashMap, FnvHashSet};
 
 pub struct EnvelopeRef<'g> {
     guard: RwLockReadGuard<'g, FnvHashMap<EnvelopeHash, Envelope>>,
@@ -68,6 +69,7 @@ pub struct Collection {
     subject_index: Option<BTreeMap<String, EnvelopeHash>>,
     pub threads: FnvHashMap<FolderHash, Threads>,
     sent_folder: Option<FolderHash>,
+    pub mailboxes: FnvHashMap<FolderHash, FnvHashSet<EnvelopeHash>>,
 }
 
 impl Drop for Collection {
@@ -101,6 +103,7 @@ impl Collection {
          * /cur, or it was deleted).
          */
         let threads = FnvHashMap::with_capacity_and_hasher(16, Default::default());
+        let mailboxes = FnvHashMap::with_capacity_and_hasher(16, Default::default());
 
         Collection {
             envelopes: Arc::new(RwLock::new(envelopes)),
@@ -108,6 +111,7 @@ impl Collection {
             message_ids,
             subject_index,
             threads,
+            mailboxes,
             sent_folder: None,
         }
     }
@@ -123,6 +127,9 @@ impl Collection {
     pub fn remove(&mut self, envelope_hash: EnvelopeHash, folder_hash: FolderHash) {
         debug!("DEBUG: Removing {}", envelope_hash);
         self.envelopes.write().unwrap().remove(&envelope_hash);
+        self.mailboxes.entry(folder_hash).and_modify(|m| {
+            m.remove(&envelope_hash);
+        });
         self.threads
             .entry(folder_hash)
             .or_default()
@@ -144,11 +151,15 @@ impl Collection {
         if !self.envelopes.write().unwrap().contains_key(&old_hash) {
             return;
         }
-        let mut env = self.envelopes.write().unwrap().remove(&old_hash).unwrap();
-        env.set_hash(new_hash);
+        let mut envelope = self.envelopes.write().unwrap().remove(&old_hash).unwrap();
+        self.mailboxes.entry(folder_hash).and_modify(|m| {
+            m.remove(&old_hash);
+            m.insert(new_hash);
+        });
+        envelope.set_hash(new_hash);
         self.message_ids
-            .insert(env.message_id().raw().to_vec(), new_hash);
-        self.envelopes.write().unwrap().insert(new_hash, env);
+            .insert(envelope.message_id().raw().to_vec(), new_hash);
+        self.envelopes.write().unwrap().insert(new_hash, envelope);
         {
             if self
                 .threads
@@ -175,7 +186,7 @@ impl Collection {
         }
     }
 
-    /// Merge new Mailbox to collection and update threads.
+    /// Merge new mailbox to collection and update threads.
     /// Returns a list of already existing folders whose threads were updated
     pub fn merge(
         &mut self,
@@ -191,16 +202,21 @@ impl Collection {
         let &mut Collection {
             ref mut threads,
             ref mut envelopes,
+            ref mut mailboxes,
             ref sent_folder,
             ..
         } = self;
 
         if !threads.contains_key(&folder_hash) {
             threads.insert(folder_hash, Threads::new(new_envelopes.len()));
+            mailboxes.insert(folder_hash, new_envelopes.keys().cloned().collect());
             for (h, e) in new_envelopes {
                 envelopes.write().unwrap().insert(h, e);
             }
         } else {
+            mailboxes.entry(folder_hash).and_modify(|m| {
+                m.extend(new_envelopes.keys().cloned());
+            });
             threads.entry(folder_hash).and_modify(|t| {
                 let mut ordered_hash_set =
                     new_envelopes.keys().cloned().collect::<Vec<EnvelopeHash>>();
@@ -291,6 +307,10 @@ impl Collection {
         let old_env = self.envelopes.write().unwrap().remove(&old_hash).unwrap();
         envelope.set_thread(old_env.thread());
         let new_hash = envelope.hash();
+        self.mailboxes.entry(folder_hash).and_modify(|m| {
+            m.remove(&old_hash);
+            m.insert(new_hash);
+        });
         self.message_ids
             .insert(envelope.message_id().raw().to_vec(), new_hash);
         self.envelopes.write().unwrap().insert(new_hash, envelope);
@@ -328,6 +348,9 @@ impl Collection {
 
     pub fn insert(&mut self, envelope: Envelope, folder_hash: FolderHash) {
         let hash = envelope.hash();
+        self.mailboxes.entry(folder_hash).and_modify(|m| {
+            m.insert(hash);
+        });
         self.message_ids
             .insert(envelope.message_id().raw().to_vec(), hash);
         self.envelopes.write().unwrap().insert(hash, envelope);
@@ -363,5 +386,18 @@ impl Collection {
 
     pub fn contains_key(&self, env_hash: &EnvelopeHash) -> bool {
         self.envelopes.read().unwrap().contains_key(env_hash)
+    }
+}
+
+impl Index<&FolderHash> for Collection {
+    type Output = FnvHashSet<EnvelopeHash>;
+    fn index(&self, index: &FolderHash) -> &FnvHashSet<EnvelopeHash> {
+        &self.mailboxes[index]
+    }
+}
+
+impl IndexMut<&FolderHash> for Collection {
+    fn index_mut(&mut self, index: &FolderHash) -> &mut FnvHashSet<EnvelopeHash> {
+        self.mailboxes.get_mut(index).unwrap()
     }
 }

@@ -99,7 +99,7 @@ impl MailListingTrait for ThreadListing {
                     ret
                 };
                 let message: String =
-                    context.accounts[self.cursor_pos.0][self.cursor_pos.1].to_string();
+                    context.accounts[self.cursor_pos.0][&self.cursor_pos.1].status();
                 self.content =
                     CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
@@ -116,9 +116,7 @@ impl MailListingTrait for ThreadListing {
             }
         }
         let account = &context.accounts[self.cursor_pos.0];
-        let mailbox = account[self.cursor_pos.1].unwrap();
-
-        let threads = &account.collection.threads[&mailbox.folder.hash()];
+        let threads = &account.collection.threads[&self.cursor_pos.1];
         self.length = threads.len();
         self.locations.clear();
         let default_cell = {
@@ -129,7 +127,7 @@ impl MailListingTrait for ThreadListing {
             ret
         };
         if self.length == 0 {
-            let message = format!("Folder `{}` is empty.", mailbox.folder.name());
+            let message = format!("Folder `{}` is empty.", account[&self.cursor_pos.1].name());
             self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(
                 &message,
@@ -348,12 +346,7 @@ impl ListingTrait for ThreadListing {
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        let mailbox = if context.accounts[self.cursor_pos.0][self.cursor_pos.1].is_available() {
-            context.accounts[self.cursor_pos.0][self.cursor_pos.1].unwrap()
-        } else {
-            return;
-        };
-        if mailbox.is_empty() || mailbox.len() <= idx {
+        if context.accounts[self.cursor_pos.0].collection[&self.cursor_pos.1].is_empty() {
             return;
         }
 
@@ -414,12 +407,7 @@ impl ThreadListing {
     }
 
     fn highlight_line_self(&mut self, idx: usize, context: &Context) {
-        let mailbox = if context.accounts[self.cursor_pos.0][self.cursor_pos.1].is_available() {
-            context.accounts[self.cursor_pos.0][self.cursor_pos.1].unwrap()
-        } else {
-            return;
-        };
-        if mailbox.is_empty() {
+        if context.accounts[self.cursor_pos.0].collection[&self.cursor_pos.1].is_empty() {
             return;
         }
         if self.locations[idx] != 0 {

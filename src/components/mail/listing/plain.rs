@@ -142,7 +142,7 @@ impl MailListingTrait for PlainListing {
                     ret
                 };
                 let message: String =
-                    context.accounts[self.cursor_pos.0][self.cursor_pos.1].to_string();
+                    context.accounts[self.cursor_pos.0][&self.cursor_pos.1].status();
                 self.data_columns.columns[0] =
                     CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
@@ -158,9 +158,7 @@ impl MailListingTrait for PlainListing {
                 return;
             }
         }
-        self.local_collection = context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .unwrap()
-            .envelopes
+        self.local_collection = context.accounts[self.cursor_pos.0].collection[&self.cursor_pos.1]
             .iter()
             .cloned()
             .collect();
@@ -169,9 +167,8 @@ impl MailListingTrait for PlainListing {
             .envelopes
             .read()
             .unwrap();
-        self.thread_node_hashes = context.accounts[self.cursor_pos.0][self.cursor_pos.1]
-            .unwrap()
-            .envelopes
+        self.thread_node_hashes = context.accounts[self.cursor_pos.0].collection
+            [&self.cursor_pos.1]
             .iter()
             .map(|h| (*h, env_lck[h].thread()))
             .collect();
@@ -616,7 +613,7 @@ impl PlainListing {
         }
     }
     fn make_entry_string(&self, e: EnvelopeRef, context: &Context) -> EntryStrings {
-        let folder = &context.accounts[self.cursor_pos.0].folder_confs[&self.cursor_pos.1];
+        let folder = &context.accounts[self.cursor_pos.0][&self.cursor_pos.1].conf;
         let mut tags = String::new();
         let mut colors = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
@@ -664,7 +661,7 @@ impl PlainListing {
 
     fn redraw_list(&mut self, context: &Context) {
         let account = &context.accounts[self.cursor_pos.0];
-        let mailbox = &account[self.cursor_pos.1].unwrap();
+        let mailbox = &account[&self.cursor_pos.1];
 
         self.order.clear();
         self.selection.clear();
@@ -890,8 +887,7 @@ impl PlainListing {
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {
-            let mailbox = &account[self.cursor_pos.1];
-            let message = mailbox.to_string();
+            let message = format!("{} is empty", account[&self.cursor_pos.1].name());
             self.data_columns.columns[0] =
                 CellBuffer::new_with_context(message.len(), self.length + 1, default_cell, context);
             write_string_to_grid(
@@ -1139,10 +1135,7 @@ impl Component for PlainListing {
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
                 if !account.collection.contains_key(new_hash)
-                    || !account[self.cursor_pos.1]
-                        .unwrap()
-                        .envelopes
-                        .contains(new_hash)
+                    || !account.collection[&self.cursor_pos.1].contains(new_hash)
                 {
                     return false;
                 }
