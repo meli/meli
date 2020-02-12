@@ -307,6 +307,9 @@ impl Account {
                     }
                     tmp
                 };
+                if new.folder_conf.usage == Some(SpecialUsageMailbox::Sent) {
+                    sent_folder = Some(f.hash());
+                }
 
                 folder_entries.insert(
                     f.hash(),
