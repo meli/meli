@@ -1473,14 +1473,7 @@ impl Component for Tabbed {
             );
             context.dirty_areas.push_back(area);
             clear_area(grid, area, crate::conf::value(context, "theme_default"));
-            create_box(grid, area);
-            let area = (
-                pos_inc(upper_left!(area), (3, 2)),
-                (
-                    get_x(bottom_right!(area)).saturating_sub(3),
-                    get_y(bottom_right!(area)).saturating_sub(1),
-                ),
-            );
+            let area = create_box(grid, area);
             let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
             let our_map = self.get_shortcuts(context);
             children_maps.extend(our_map.into_iter());
@@ -1514,7 +1507,7 @@ impl Component for Tabbed {
                 self.dirty = false;
                 return;
             }
-            let mut max_length = 5;
+            let mut max_length = 6;
             let mut max_width = "Use Up, Down, Left, Right to scroll.".len() + 3;
 
             let mut shortcuts = children_maps.iter().collect::<Vec<_>>();
@@ -1525,7 +1518,11 @@ impl Component for Tabbed {
                     max_width,
                     std::cmp::max(
                         desc.len(),
-                        shortcuts.keys().map(|k| k.len() + 5).max().unwrap_or(0),
+                        shortcuts
+                            .values()
+                            .map(|v| v.to_string().len() + 5)
+                            .max()
+                            .unwrap_or(0),
                     ),
                 );
             }
@@ -1538,10 +1535,28 @@ impl Component for Tabbed {
             }
             /* trim cursor if it's bigger than the help screen */
             self.help_screen_cursor = (
-                std::cmp::min(width.saturating_sub(cols), self.help_screen_cursor.0),
-                std::cmp::min(height.saturating_sub(rows), self.help_screen_cursor.1),
+                std::cmp::min((width - 1).saturating_sub(cols), self.help_screen_cursor.0),
+                std::cmp::min((height - 1).saturating_sub(rows), self.help_screen_cursor.1),
             );
 
+            let (x, y) = write_string_to_grid(
+                "shortcut maps",
+                &mut self.help_content,
+                Color::Default,
+                Color::Default,
+                Attr::Bold,
+                ((2, 0), (max_width.saturating_sub(2), max_length - 1)),
+                None,
+            );
+            write_string_to_grid(
+                "Press ? to close",
+                &mut self.help_content,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                ((x + 1, y), (max_width.saturating_sub(2), max_length - 1)),
+                None,
+            );
             /* In this case we will be scrolling, so show the user how to do it */
             if height.wrapping_div(rows) > 0 || width.wrapping_div(cols) > 0 {
                 write_string_to_grid(
@@ -1550,11 +1565,11 @@ impl Component for Tabbed {
                     Color::Default,
                     Color::Default,
                     Attr::Default,
-                    ((2, 0), (max_width.saturating_sub(2), max_length - 1)),
+                    ((2, 1), (max_width.saturating_sub(2), max_length - 1)),
                     None,
                 );
             }
-            let mut idx = 0;
+            let mut idx = 1;
             for (desc, shortcuts) in shortcuts.iter() {
                 write_string_to_grid(
                     desc,
@@ -1571,16 +1586,16 @@ impl Component for Tabbed {
                 for (k, v) in shortcuts {
                     debug!(&(k, v));
                     let (x, y) = write_string_to_grid(
-                        &k,
+                        &format!("{:1$}", v, max_width),
                         &mut self.help_content,
-                        Color::Byte(29),
                         Color::Default,
-                        Attr::Default,
+                        Color::Default,
+                        Attr::Bold,
                         ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
                         None,
                     );
                     write_string_to_grid(
-                        &format!("{}", v),
+                        &k,
                         &mut self.help_content,
                         Color::Default,
                         Color::Default,
