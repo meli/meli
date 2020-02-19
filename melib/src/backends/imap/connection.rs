@@ -398,13 +398,10 @@ impl ImapConnection {
         } else {
             *self.online.lock().unwrap() = (Instant::now(), Ok(()));
         }
-        let (capabilities, mut stream) = new_stream?;
-        let ret = action(&mut stream);
-        if ret.is_ok() {
-            self.stream = Ok(stream);
-            self.capabilities = capabilities;
-        }
-        ret
+        let (capabilities, stream) = new_stream?;
+        self.stream = Ok(stream);
+        self.capabilities = capabilities;
+        Err(MeliError::new("Connection timed out"))
     }
 }
 
@@ -476,7 +473,7 @@ impl Iterator for ImapBlockingConnection {
                 return None;
             }
             match conn.stream.as_mut().unwrap().stream.read(buf) {
-                Ok(0) => continue,
+                Ok(0) => return None,
                 Ok(b) => {
                     result.extend_from_slice(&buf[0..b]);
                     debug!(unsafe { std::str::from_utf8_unchecked(result) });
