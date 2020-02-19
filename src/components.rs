@@ -48,7 +48,7 @@ use uuid::Uuid;
 
 use super::{Key, StatusEvent, UIEvent};
 
-type ComponentId = Uuid;
+pub type ComponentId = Uuid;
 
 pub type ShortcutMap = FnvHashMap<&'static str, Key>;
 pub type ShortcutMaps = FnvHashMap<&'static str, ShortcutMap>;
@@ -56,7 +56,7 @@ pub type ShortcutMaps = FnvHashMap<&'static str, ShortcutMap>;
 /// Types implementing this Trait can draw on the terminal and receive events.
 /// If a type wants to skip drawing if it has not changed anything, it can hold some flag in its
 /// fields (eg self.dirty = false) and act upon that in their `draw` implementation.
-pub trait Component: Display + Debug + Send {
+pub trait Component: Display + Debug + Send + Sync {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool;
     fn is_dirty(&self) -> bool;

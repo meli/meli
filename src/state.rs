@@ -293,7 +293,8 @@ impl State {
             stdout: None,
             child: None,
             mode: UIMode::Normal,
-            components: Vec::with_capacity(1),
+            components: Vec::with_capacity(8),
+            ui_dialogs: Vec::new(),
             timer,
             draw_rate_limit: RateLimit::new(1, 3),
             draw_horizontal_segment_fn: if settings.terminal.use_color() {

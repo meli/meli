@@ -29,7 +29,7 @@ pub use self::contact_list::*;
 #[derive(Debug)]
 enum ViewMode {
     ReadOnly,
-    Discard(Selector<char>),
+    Discard(UIDialog<char>),
     Edit,
     //New,
 }
@@ -299,8 +299,9 @@ impl Component for ContactManager {
             return true;
         }
 
+        let parent_id = self.parent_id;
         /* Play it safe and ask user for confirmation */
-        self.mode = ViewMode::Discard(Selector::new(
+        self.mode = ViewMode::Discard(UIDialog::new(
             "this contact has unsaved changes",
             vec![
                 ('x', "quit without saving".to_string()),
@@ -308,6 +309,12 @@ impl Component for ContactManager {
                 ('n', "cancel".to_string()),
             ],
             true,
+            std::sync::Arc::new(move |results: &[char]| match results[0] {
+                'x' => Some(UIEvent::Action(Tab(Kill(parent_id)))),
+                'n' => None,
+                'y' => None,
+                _ => None,
+            }),
             context,
         ));
         self.set_dirty(true);

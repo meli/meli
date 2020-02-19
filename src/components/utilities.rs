@@ -1814,8 +1814,8 @@ enum SelectorCursor {
 /// options. After passing input events to this component, check Selector::is_done to see if the
 /// user has finalised their choices. Collect the choices by consuming the Selector with
 /// Selector::collect()
-#[derive(Debug, PartialEq, Clone)]
-pub struct Selector<T: PartialEq + Debug + Clone + Sync + Send> {
+#[derive(Clone)]
+pub struct Selector<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Clone + Send> {
     /// allow only one selection
     single_only: bool,
     entries: Vec<(T, bool)>,
@@ -1825,17 +1825,44 @@ pub struct Selector<T: PartialEq + Debug + Clone + Sync + Send> {
 
     /// If true, user has finished their selection
     done: bool,
+    done_fn: F,
     dirty: bool,
     id: ComponentId,
 }
 
-impl<T: PartialEq + Debug + Clone + Sync + Send> fmt::Display for Selector<T> {
+pub type UIConfirmationDialog =
+    Selector<bool, std::sync::Arc<dyn Fn(bool) -> Option<UIEvent> + 'static + Sync + Send>>;
+
+pub type UIDialog<T> =
+    Selector<T, std::sync::Arc<dyn Fn(&[T]) -> Option<UIEvent> + 'static + Sync + Send>>;
+
+impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> fmt::Debug
+    for Selector<T, F>
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt("Selector", f)
     }
 }
 
-impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
+impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> fmt::Display
+    for Selector<T, F>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Display::fmt("Selector", f)
+    }
+}
+
+impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> PartialEq
+    for Selector<T, F>
+{
+    fn eq(&self, other: &Selector<T, F>) -> bool {
+        self.entries == other.entries
+    }
+}
+
+impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> Component
+    for Selector<T, F>
+{
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let (width, height) = self.content.size();
         copy_area_with_break(grid, &self.content, area, ((0, 0), (width, height)));
@@ -2111,13 +2138,14 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Component for Selector<T> {
     }
 }
 
-impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
+impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> Selector<T, F> {
     pub fn new(
         title: &str,
         entries: Vec<(T, String)>,
         single_only: bool,
+        done_fn: F,
         context: &Context,
-    ) -> Selector<T> {
+    ) -> Selector<T, F> {
         let width = std::cmp::max(
             "OK    Cancel".len(),
             std::cmp::max(
@@ -2302,6 +2330,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             content,
             cursor: SelectorCursor::Entry(0),
             done: false,
+            done_fn,
             dirty: true,
             id: ComponentId::new_v4(),
         }
@@ -2317,6 +2346,53 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> Selector<T> {
             .filter(|v| v.1)
             .map(|(id, _)| id)
             .collect()
+    }
+}
+
+impl<T: PartialEq + Debug + Clone + Sync + Send> UIDialog<T> {
+    pub fn done(self) -> Option<UIEvent> {
+        let Self {
+            done,
+            done_fn,
+            entries,
+            ..
+        } = self;
+        if done {
+            (done_fn)(
+                entries
+                    .iter()
+                    .filter(|v| v.1)
+                    .map(|(id, _)| id)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            )
+        } else {
+            None
+        }
+    }
+}
+
+impl UIConfirmationDialog {
+    pub fn done(self) -> Option<UIEvent> {
+        let Self {
+            done,
+            done_fn,
+            entries,
+            ..
+        } = self;
+        if done {
+            (done_fn)(
+                entries
+                    .iter()
+                    .filter(|v| v.1)
+                    .map(|(id, _)| id)
+                    .cloned()
+                    .any(core::convert::identity),
+            )
+        } else {
+            None
+        }
     }
 }
 

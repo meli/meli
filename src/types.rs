@@ -121,6 +121,10 @@ pub enum UIEvent {
     EnvelopeUpdate(EnvelopeHash),
     EnvelopeRename(EnvelopeHash, EnvelopeHash), // old_hash, new_hash
     EnvelopeRemove(EnvelopeHash),
+    Contacts(ContactEvent),
+    Compose(ComposeEvent),
+    FinishedUIDialog(crate::components::ComponentId, UIMessage),
+    GlobalUIDialog(Box<dyn crate::components::Component>),
     Timer(u8),
 }
 
@@ -311,3 +315,15 @@ impl RateLimit {
         self.timer.si_value
     }
 }
+
+#[derive(Debug)]
+pub enum ContactEvent {
+    CreateContacts(Vec<melib::Card>),
+}
+
+#[derive(Debug)]
+pub enum ComposeEvent {
+    SetReceipients(Vec<melib::Address>),
+}
+
+pub type UIMessage = Box<dyn 'static + std::any::Any + Send + Sync>;

@@ -111,11 +111,11 @@ impl Default for Composer {
 
 #[derive(Debug)]
 enum ViewMode {
-    Discard(Uuid, Selector<char>),
+    Discard(Uuid, UIDialog<char>),
     Edit,
     Embed,
-    SelectRecipients(Selector<Address>),
-    Send(Selector<bool>),
+    SelectRecipients(UIDialog<Address>),
+    Send(UIDialog<bool>),
 }
 
 impl ViewMode {
@@ -183,7 +183,8 @@ impl Composer {
                         .map(|m| m.address)
                     {
                         let list_address_string = list_address.to_string();
-                        ret.mode = ViewMode::SelectRecipients(Selector::new(
+                        let id = ret.id;
+                        ret.mode = ViewMode::SelectRecipients(UIDialog::new(
                             "select recipients",
                             vec![
                                 (
@@ -193,6 +194,18 @@ impl Composer {
                                 (list_address, list_address_string),
                             ],
                             false,
+                            std::sync::Arc::new(move |results: &[Address]| {
+                                Some(UIEvent::FinishedUIDialog(
+                                    id,
+                                    Box::new(
+                                        results
+                                            .into_iter()
+                                            .map(|a| a.to_string())
+                                            .collect::<Vec<String>>()
+                                            .join(", "),
+                                    ),
+                                ))
+                            }),
                             context,
                         ));
                     }
@@ -698,11 +711,15 @@ impl Component for Composer {
                     && self.mode.is_edit() =>
             {
                 self.update_draft();
-                self.mode = ViewMode::Send(Selector::new(
+                let id = self.id;
+                self.mode = ViewMode::Send(UIDialog::new(
                     "send mail?",
                     vec![(true, "yes".to_string()), (false, "no".to_string())],
                     /* only one choice */
                     true,
+                    std::sync::Arc::new(move |results: &[bool]| {
+                        Some(UIEvent::FinishedUIDialog(id, Box::new(results[0])))
+                    }),
                     context,
                 ));
                 return true;
@@ -1005,7 +1022,7 @@ impl Component for Composer {
 
         self.mode = ViewMode::Discard(
             uuid,
-            Selector::new(
+            UIDialog::new(
                 "this draft has unsaved changes",
                 vec![
                     ('x', "quit without saving".to_string()),
@@ -1013,6 +1030,9 @@ impl Component for Composer {
                     ('n', "cancel".to_string()),
                 ],
                 true,
+                std::sync::Arc::new(move |results: &[char]| {
+                    Some(UIEvent::FinishedUIDialog(uuid, Box::new(results[0])))
+                }),
                 context,
             ),
         );
@@ -1043,10 +1063,11 @@ impl Component for Composer {
             return true;
         }
 
+        let id = self.id;
         /* Play it safe and ask user for confirmation */
         self.mode = ViewMode::Discard(
-            self.id,
-            Selector::new(
+            id,
+            UIDialog::new(
                 "this draft has unsaved changes",
                 vec![
                     ('x', "quit without saving".to_string()),
@@ -1054,6 +1075,9 @@ impl Component for Composer {
                     ('n', "cancel".to_string()),
                 ],
                 true,
+                std::sync::Arc::new(move |results: &[char]| {
+                    Some(UIEvent::FinishedUIDialog(id, Box::new(results[0])))
+                }),
                 context,
             ),
         );

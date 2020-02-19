@@ -114,6 +114,26 @@ pub enum Action {
     AccountAction(AccountName, AccountAction),
 }
 
+impl Action {
+    pub fn needs_confirmation(&self) -> bool {
+        match self {
+            Action::Listing(_) => false,
+            Action::ViewMailbox(_) => false,
+            Action::Sort(_, _) => false,
+            Action::SubSort(_, _) => false,
+            Action::Tab(_) => false,
+            Action::ToggleThreadSnooze => false,
+            Action::MailingListAction(_) => true,
+            Action::View(_) => false,
+            Action::SetEnv(_, _) => false,
+            Action::PrintEnv(_) => false,
+            Action::Compose(_) => false,
+            Action::Folder(_, _) => true,
+            Action::AccountAction(_, _) => false,
+        }
+    }
+}
+
 type AccountName = String;
 type FolderPath = String;
 type NewFolderPath = String;

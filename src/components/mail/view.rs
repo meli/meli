@@ -46,7 +46,7 @@ enum ViewMode {
     Raw,
     Ansi(RawBuffer),
     Subview,
-    ContactSelector(Selector<Card>),
+    ContactSelector(UIDialog<Card>),
 }
 
 impl Default for ViewMode {
@@ -736,14 +736,12 @@ impl Component for MailView {
                         if let ViewMode::ContactSelector(s) =
                             std::mem::replace(&mut self.mode, ViewMode::Normal)
                         {
-                            let account = &mut context.accounts[self.coordinates.0];
-                            {
-                                for card in s.collect() {
-                                    account.address_book.add_card(card);
-                                }
+                            if let Some(event) = s.done() {
+                                context.replies.push_back(event);
                             }
+                        } else {
+                            unsafe { std::hint::unreachable_unchecked() }
                         }
-                        self.set_dirty(true);
                     }
                     return true;
                 }
@@ -823,14 +821,34 @@ impl Component for MailView {
                     entries.push((new_card, format!("{}", addr)));
                 }
                 drop(envelope);
+                let id = self.id;
                 self.mode = ViewMode::ContactSelector(Selector::new(
                     "select contacts to add",
                     entries,
                     false,
+                    std::sync::Arc::new(move |results: &[Card]| {
+                        Some(UIEvent::FinishedUIDialog(
+                            id,
+                            Box::new(results.into_iter().cloned().collect::<Vec<Card>>()),
+                        ))
+                    }),
                     context,
                 ));
                 self.dirty = true;
                 return true;
+            }
+            UIEvent::FinishedUIDialog(ref id, ref results)
+                if self.mode.is_contact_selector() && self.id == *id =>
+            {
+                if let Some(results) = results.downcast_ref::<Vec<Card>>() {
+                    let account = &mut context.accounts[self.coordinates.0];
+                    {
+                        for card in results.iter() {
+                            account.address_book.add_card(card.clone());
+                        }
+                    }
+                }
+                self.mode = ViewMode::Normal;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
                 if self.mode.is_contact_selector() =>
