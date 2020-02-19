@@ -194,6 +194,7 @@ pub struct State {
     pub context: Context,
     timer: thread::JoinHandle<()>,
 
+    ui_dialogs: Vec<Box<dyn Component>>,
     display_messages: SmallVec<[DisplayMessage; 8]>,
     display_messages_expiration_start: Option<UnixTimestamp>,
     display_messages_active: bool,
@@ -493,6 +494,33 @@ impl State {
                 ));
             }
         }
+        if !self.ui_dialogs.is_empty() {
+            let area = center_area(
+                (
+                    (0, 0),
+                    (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
+                ),
+                (
+                    if self.cols / 3 > 30 {
+                        self.cols / 3
+                    } else {
+                        self.cols
+                    },
+                    if self.rows / 5 > 10 {
+                        self.rows / 5
+                    } else {
+                        self.rows
+                    },
+                ),
+            );
+            areas.push(area);
+            let area = create_box(&mut self.overlay_grid, area);
+            self.ui_dialogs.get_mut(0).unwrap().draw(
+                &mut self.overlay_grid,
+                area,
+                &mut self.context,
+            );
+        }
 
         /* Sort by x_start, ie upper_left corner's x coordinate */
         areas.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
@@ -743,90 +771,77 @@ impl State {
     }
 
     /// Convert user commands to actions/method calls.
-    fn parse_command(&mut self, cmd: &str) {
-        let result = parse_command(&cmd.as_bytes()).to_full_result();
-
-        if let Ok(v) = result {
-            match v {
-                SetEnv(key, val) => {
-                    env::set_var(key.as_str(), val.as_str());
-                }
-                PrintEnv(key) => {
+    fn exec_command(&mut self, cmd: Action) {
+        match cmd {
+            SetEnv(key, val) => {
+                env::set_var(key.as_str(), val.as_str());
+            }
+            PrintEnv(key) => {
+                self.context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                        env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
+                    )));
+            }
+            Folder(account_name, op) => {
+                if let Some(account) = self
+                    .context
+                    .accounts
+                    .iter_mut()
+                    .find(|a| a.name() == account_name)
+                {
+                    match account.folder_operation(op) {
+                        Err(err) => {
+                            self.context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(err.to_string()),
+                            ));
+                        }
+                        Ok(msg) => {
+                            self.context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(format!("`{}`: {}", account_name, msg)),
+                            ));
+                        }
+                    }
+                } else {
                     self.context.replies.push_back(UIEvent::StatusEvent(
-                        StatusEvent::DisplayMessage(
-                            env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
-                        ),
+                        StatusEvent::DisplayMessage(format!(
+                            "Account with name `{}` not found.",
+                            account_name
+                        )),
                     ));
                 }
-                Folder(account_name, op) => {
-                    if let Some(account) = self
-                        .context
-                        .accounts
-                        .iter_mut()
-                        .find(|a| a.name() == account_name)
-                    {
-                        match account.folder_operation(op) {
-                            Err(err) => {
-                                self.context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(err.to_string()),
-                                ));
-                            }
-                            Ok(msg) => {
-                                self.context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(format!(
-                                        "`{}`: {}",
-                                        account_name, msg
-                                    )),
-                                ));
-                            }
-                        }
-                    } else {
-                        self.context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(format!(
-                                "Account with name `{}` not found.",
-                                account_name
-                            )),
-                        ));
-                    }
-                }
-                AccountAction(ref account_name, ReIndex) => {
-                    #[cfg(feature = "sqlite3")]
-                    match crate::sqlite3::index(&mut self.context, account_name) {
-                        Ok(()) => {
-                            self.context.replies.push_back(UIEvent::Notification(
-                                None,
-                                "Message index rebuild started.".to_string(),
-                                Some(NotificationType::INFO),
-                            ));
-                        }
-                        Err(e) => {
-                            self.context.replies.push_back(UIEvent::Notification(
-                                None,
-                                format!("Message index rebuild failed: {}.", e),
-                                Some(NotificationType::ERROR),
-                            ));
-                        }
-                    }
-                    #[cfg(not(feature = "sqlite3"))]
-                    {
+            }
+            AccountAction(ref account_name, ReIndex) => {
+                #[cfg(feature = "sqlite3")]
+                match crate::sqlite3::index(&mut self.context, account_name) {
+                    Ok(()) => {
                         self.context.replies.push_back(UIEvent::Notification(
                             None,
-                            "Message index rebuild failed: meli is not built with sqlite3 support."
-                                .to_string(),
+                            "Message index rebuild started.".to_string(),
+                            Some(NotificationType::INFO),
+                        ));
+                    }
+                    Err(e) => {
+                        self.context.replies.push_back(UIEvent::Notification(
+                            None,
+                            format!("Message index rebuild failed: {}.", e),
                             Some(NotificationType::ERROR),
                         ));
                     }
                 }
-                v => {
-                    self.rcv_event(UIEvent::Action(v));
+                #[cfg(not(feature = "sqlite3"))]
+                {
+                    self.context.replies.push_back(UIEvent::Notification(
+                        None,
+                        "Message index rebuild failed: meli is not built with sqlite3 support."
+                            .to_string(),
+                        Some(NotificationType::ERROR),
+                    ));
                 }
             }
-        } else {
-            self.context
-                .replies
-                .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                    "invalid command".to_string(),
-                )));
+            v => {
+                self.rcv_event(UIEvent::Action(v));
+            }
         }
     }
 
@@ -841,7 +856,33 @@ impl State {
         match event {
             // Command type is handled only by State.
             UIEvent::Command(cmd) => {
-                self.parse_command(&cmd);
+                if let Ok(action) = parse_command(&cmd.as_bytes()).to_full_result() {
+                    if action.needs_confirmation() {
+                        let action = std::sync::Arc::new(action);
+                        self.ui_dialogs.push(Box::new(UIConfirmationDialog::new(
+                            "You sure?",
+                            vec![(true, "yes".to_string()), (false, "no".to_string())],
+                            true,
+                            std::sync::Arc::new(move |result: bool| {
+                                if result {
+                                    Some(UIEvent::FinishedUIDialog(
+                                        ComponentId::nil(),
+                                        Box::new(action.clone()),
+                                    ))
+                                } else {
+                                    None
+                                }
+                            }),
+                            &mut self.context,
+                        )));
+                    } else {
+                        self.exec_command(action);
+                    }
+                } else {
+                    self.context.replies.push_back(UIEvent::StatusEvent(
+                        StatusEvent::DisplayMessage("invalid command".to_string()),
+                    ));
+                }
                 return;
             }
             UIEvent::Fork(ForkType::Finished) => {
@@ -907,6 +948,18 @@ impl State {
                 });
                 self.display_messages_active = true;
                 self.display_messages_pos = self.display_messages.len() - 1;
+            }
+            UIEvent::FinishedUIDialog(ref id, ref mut results)
+                if self.ui_dialogs.get(0).map(|c| c.id()) == Some(*id) =>
+            {
+                if let Some(ref mut action) = results.downcast_mut::<Action>() {
+                    self.exec_command(std::mem::replace(action, Action::ToggleThreadSnooze));
+                    return;
+                }
+            }
+            UIEvent::GlobalUIDialog(dialog) => {
+                self.ui_dialogs.push(dialog);
+                return;
             }
             _ => {}
         }
