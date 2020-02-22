@@ -354,16 +354,12 @@ impl Collection {
         self.message_ids
             .insert(envelope.message_id().raw().to_vec(), hash);
         self.envelopes.write().unwrap().insert(hash, envelope);
-        if !self
-            .threads
+        self.threads
             .entry(folder_hash)
             .or_default()
-            .insert_reply(&mut self.envelopes, hash)
-        {
-            self.threads
-                .entry(folder_hash)
-                .or_default()
-                .insert(&mut self.envelopes, hash);
+            .insert(&mut self.envelopes, hash);
+        if self.sent_folder.map(|f| f == folder_hash).unwrap_or(false) {
+            self.insert_reply(hash);
         }
     }
 

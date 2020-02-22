@@ -636,7 +636,10 @@ impl MailBackend for MaildirType {
         self
     }
 
-    fn create_folder(&mut self, new_path: String) -> Result<Folder> {
+    fn create_folder(
+        &mut self,
+        new_path: String,
+    ) -> Result<(FolderHash, FnvHashMap<FolderHash, Folder>)> {
         let mut path = self.path.clone();
         path.push(&new_path);
         if !path.starts_with(&self.path) {
@@ -655,6 +658,11 @@ impl MailBackend for MaildirType {
         });
 
         let folder_hash = get_path_hash!(&path);
+        if let Some(parent) = parent {
+            self.folders
+                .entry(parent)
+                .and_modify(|entry| entry.children.push(folder_hash));
+        }
         let new_folder = MaildirFolder {
             hash: folder_hash,
             path: PathBuf::from(&new_path),
@@ -669,12 +677,14 @@ impl MailBackend for MaildirType {
             total: Default::default(),
         };
 
-        let ret = BackendFolder::clone(debug!(&new_folder));
         self.folders.insert(folder_hash, new_folder);
-        Ok(ret)
+        Ok((folder_hash, self.folders()?))
     }
 
-    fn delete_folder(&mut self, _folder_hash: FolderHash) -> Result<()> {
+    fn delete_folder(
+        &mut self,
+        _folder_hash: FolderHash,
+    ) -> Result<FnvHashMap<FolderHash, Folder>> {
         Err(MeliError::new("Unimplemented."))
     }
 

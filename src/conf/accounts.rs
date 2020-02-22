@@ -865,7 +865,7 @@ impl Account {
         }
         match op {
             FolderOperation::Create(path) => {
-                let mut folder = self
+                let (folder_hash, mut folders) = self
                     .backend
                     .write()
                     .unwrap()
@@ -873,40 +873,51 @@ impl Account {
                 self.sender
                     .send(ThreadEvent::UIEvent(UIEvent::MailboxCreate((
                         self.index,
-                        folder.hash(),
+                        folder_hash,
                     ))))
                     .unwrap();
                 let mut new = FileFolderConf::default();
                 new.folder_conf.subscribe = super::ToggleFlag::InternalVal(true);
-                new.folder_conf.usage = if folder.special_usage() != SpecialUsageMailbox::Normal {
-                    Some(folder.special_usage())
-                } else {
-                    let tmp = SpecialUsageMailbox::detect_usage(folder.name());
-                    if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
-                        let _ = folder.set_special_usage(tmp.unwrap());
-                    }
-                    tmp
-                };
+                new.folder_conf.usage =
+                    if folders[&folder_hash].special_usage() != SpecialUsageMailbox::Normal {
+                        Some(folders[&folder_hash].special_usage())
+                    } else {
+                        let tmp = SpecialUsageMailbox::detect_usage(folders[&folder_hash].name());
+                        if tmp != Some(SpecialUsageMailbox::Normal) && tmp != None {
+                            folders.entry(folder_hash).and_modify(|entry| {
+                                let _ = entry.set_special_usage(tmp.unwrap());
+                            });
+                        }
+                        tmp
+                    };
+                /* if new folder has parent, we need to update its children field */
+                if let Some(parent_hash) = folders[&folder_hash].parent() {
+                    self.folder_entries.entry(parent_hash).and_modify(|parent| {
+                        parent.ref_folder = folders.remove(&parent_hash).unwrap();
+                    });
+                }
 
-                let folder_hash = folder.hash();
                 self.folder_entries.insert(
                     folder_hash,
                     FolderEntry {
-                        name: folder.path().to_string(),
+                        name: folders[&folder_hash].path().to_string(),
                         status: MailboxStatus::Parsing(0, 0),
                         conf: new,
                         worker: Account::new_worker(
-                            folder.clone(),
+                            folders[&folder_hash].clone(),
                             &mut self.backend,
                             &self.work_context,
                             self.notify_fn.clone(),
                         ),
-                        ref_folder: folder,
+                        ref_folder: folders.remove(&folder_hash).unwrap(),
                     },
                 );
                 self.collection
                     .threads
                     .insert(folder_hash, Threads::default());
+                self.collection
+                    .mailboxes
+                    .insert(folder_hash, Default::default());
                 build_folders_order(
                     &mut self.tree,
                     &self.folder_entries,
@@ -927,7 +938,7 @@ impl Account {
                 } else {
                     return Err(MeliError::new("Mailbox with that path not found."));
                 };
-                self.backend.write().unwrap().delete_folder(folder_hash)?;
+                let mut folders = self.backend.write().unwrap().delete_folder(folder_hash)?;
                 self.sender
                     .send(ThreadEvent::UIEvent(UIEvent::MailboxDelete((
                         self.index,
@@ -944,8 +955,24 @@ impl Account {
                     self.sent_folder = None;
                 }
                 self.collection.threads.remove(&folder_hash);
+                /* if deleted folder had parent, we need to update its children field */
+                if let Some(parent_hash) = self
+                    .folder_entries
+                    .remove(&folder_hash)
+                    .unwrap()
+                    .ref_folder
+                    .parent()
+                {
+                    self.folder_entries.entry(parent_hash).and_modify(|parent| {
+                        parent.ref_folder = folders.remove(&parent_hash).unwrap();
+                    });
+                }
                 self.collection.mailboxes.remove(&folder_hash);
-                self.folder_entries.remove(&folder_hash);
+                build_folders_order(
+                    &mut self.tree,
+                    &self.folder_entries,
+                    &mut self.folders_order,
+                );
                 // FIXME Kill worker as well
 
                 // FIXME remove from settings as well
@@ -1063,7 +1090,6 @@ fn build_folders_order(
     folder_entries: &FnvHashMap<FolderHash, FolderEntry>,
     folders_order: &mut Vec<FolderHash>,
 ) {
-    let mut stack: SmallVec<[FolderHash; 8]> = SmallVec::new();
     tree.clear();
     folders_order.clear();
     for (h, f) in folder_entries.iter() {
@@ -1079,20 +1105,14 @@ fn build_folders_order(
                     depth,
                 };
                 for &c in folder_entries[&h].ref_folder.children() {
-                    node.children.push(rec(c, folder_entries, depth + 1));
+                    if folder_entries.contains_key(&c) {
+                        node.children.push(rec(c, folder_entries, depth + 1));
+                    }
                 }
                 node
             };
 
             tree.push(rec(*h, &folder_entries, 0));
-            for &c in f.ref_folder.children() {
-                stack.push(c);
-            }
-            while let Some(next) = stack.pop() {
-                for c in folder_entries[&next].ref_folder.children() {
-                    stack.push(*c);
-                }
-            }
         }
     }
 

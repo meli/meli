@@ -442,7 +442,10 @@ impl MailBackend for ImapType {
         }
     }
 
-    fn create_folder(&mut self, mut path: String) -> Result<Folder> {
+    fn create_folder(
+        &mut self,
+        mut path: String,
+    ) -> Result<(FolderHash, FnvHashMap<FolderHash, Folder>)> {
         /* Must transform path to something the IMAP server will accept
          *
          * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
@@ -487,16 +490,13 @@ impl MailBackend for ImapType {
         }
         let ret: Result<()> = ImapResponse::from(&response).into();
         ret?;
+        let new_hash = get_path_hash!(path.as_str());
         folders.clear();
         drop(folders);
-        self.folders().map_err(|err| format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
-        let new_hash = get_path_hash!(path.as_str());
-        Ok(BackendFolder::clone(
-            &self.folders.read().unwrap()[&new_hash],
-        ))
+        Ok((new_hash, self.folders().map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?))
     }
 
-    fn delete_folder(&mut self, folder_hash: FolderHash) -> Result<()> {
+    fn delete_folder(&mut self, folder_hash: FolderHash) -> Result<FnvHashMap<FolderHash, Folder>> {
         let mut folders = self.folders.write().unwrap();
         let permissions = folders[&folder_hash].permissions();
         if !permissions.delete_mailbox {
@@ -541,12 +541,10 @@ impl MailBackend for ImapType {
             conn_lck.read_response(&mut response)?;
         }
         let ret: Result<()> = ImapResponse::from(&response).into();
-        if ret.is_ok() {
-            folders.clear();
-            drop(folders);
-            self.folders().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
-        }
-        ret
+        ret?;
+        folders.clear();
+        drop(folders);
+        self.folders().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
     }
 
     fn set_folder_subscription(&mut self, folder_hash: FolderHash, new_val: bool) -> Result<()> {

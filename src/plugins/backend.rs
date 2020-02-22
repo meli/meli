@@ -213,7 +213,10 @@ impl MailBackend for PluginBackend {
     fn save(&self, _bytes: &[u8], _folder: &str, _flags: Option<Flag>) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn create_folder(&mut self, _name: String) -> Result<Folder> {
+    fn create_folder(
+        &mut self,
+        _name: String,
+    ) -> Result<(FolderHash, FnvHashMap<FolderHash, Folder>)> {
         Err(MeliError::new("Unimplemented."))
     }
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {

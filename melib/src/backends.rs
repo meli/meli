@@ -272,11 +272,17 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         unimplemented!()
     }
 
-    fn create_folder(&mut self, _path: String) -> Result<Folder> {
+    fn create_folder(
+        &mut self,
+        _path: String,
+    ) -> Result<(FolderHash, FnvHashMap<FolderHash, Folder>)> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn delete_folder(&mut self, _folder_hash: FolderHash) -> Result<()> {
+    fn delete_folder(
+        &mut self,
+        _folder_hash: FolderHash,
+    ) -> Result<FnvHashMap<FolderHash, Folder>> {
         Err(MeliError::new("Unimplemented."))
     }
 
