@@ -115,7 +115,7 @@ enum ViewMode {
     Edit,
     Embed,
     SelectRecipients(UIDialog<Address>),
-    Send(UIDialog<bool>),
+    Send(UIConfirmationDialog),
 }
 
 impl ViewMode {
@@ -183,7 +183,6 @@ impl Composer {
                         .map(|m| m.address)
                     {
                         let list_address_string = list_address.to_string();
-                        let id = ret.id;
                         ret.mode = ViewMode::SelectRecipients(UIDialog::new(
                             "select recipients",
                             vec![
@@ -194,7 +193,7 @@ impl Composer {
                                 (list_address, list_address_string),
                             ],
                             false,
-                            std::sync::Arc::new(move |results: &[Address]| {
+                            Some(Box::new(move |id: ComponentId, results: &[Address]| {
                                 Some(UIEvent::FinishedUIDialog(
                                     id,
                                     Box::new(
@@ -205,7 +204,7 @@ impl Composer {
                                             .join(", "),
                                     ),
                                 ))
-                            }),
+                            })),
                             context,
                         ));
                     }
@@ -558,99 +557,96 @@ impl Component for Composer {
         context.dirty_areas.push_back(area);
     }
 
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
-        match (&mut self.mode, &event) {
+        match (&mut self.mode, &mut event) {
             (ViewMode::Edit, _) => {
                 if self.pager.process_event(event, context) {
                     return true;
                 }
             }
+            (ViewMode::Send(ref selector), UIEvent::FinishedUIDialog(id, result))
+                if selector.id() == *id =>
+            {
+                if let Some(true) = result.downcast_ref::<bool>() {
+                    self.update_draft();
+                    if send_draft(
+                        self.sign_mail,
+                        context,
+                        self.account_cursor,
+                        self.draft.clone(),
+                        SpecialUsageMailbox::Sent,
+                        Flag::SEEN,
+                    ) {
+                        context
+                            .replies
+                            .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                    } else {
+                        save_draft(
+                            self.draft.clone().finalise().unwrap().as_bytes(),
+                            context,
+                            SpecialUsageMailbox::Drafts,
+                            Flag::SEEN | Flag::DRAFT,
+                            self.account_cursor,
+                        );
+                    }
+                }
+                self.mode = ViewMode::Edit;
+                return true;
+            }
             (ViewMode::Send(ref mut selector), _) => {
                 if selector.process_event(event, context) {
-                    if selector.is_done() {
-                        let s = match std::mem::replace(&mut self.mode, ViewMode::Edit) {
-                            ViewMode::Send(s) => s,
-                            _ => unreachable!(),
-                        };
-                        let result: bool = s.collect().get(0).map(|b| *b).unwrap_or(false);
-                        if result {
-                            self.update_draft();
-                            if send_draft(
-                                self.sign_mail,
-                                context,
-                                self.account_cursor,
-                                self.draft.clone(),
-                                SpecialUsageMailbox::Sent,
-                                Flag::SEEN,
-                            ) {
-                                context
-                                    .replies
-                                    .push_back(UIEvent::Action(Tab(Kill(self.id))));
-                            } else {
-                                save_draft(
-                                    self.draft.clone().finalise().unwrap().as_bytes(),
-                                    context,
-                                    SpecialUsageMailbox::Drafts,
-                                    Flag::SEEN | Flag::DRAFT,
-                                    self.account_cursor,
-                                );
-                            }
-                        }
-                    }
                     return true;
                 }
+            }
+            (
+                ViewMode::SelectRecipients(ref selector),
+                UIEvent::FinishedUIDialog(id, ref mut result),
+            ) if selector.id() == *id => {
+                if let Some(to_val) = result.downcast_mut::<String>() {
+                    self.draft
+                        .headers_mut()
+                        .insert("To".to_string(), std::mem::replace(to_val, String::new()));
+                    self.update_form();
+                }
+                self.mode = ViewMode::Edit;
+                return true;
             }
             (ViewMode::SelectRecipients(ref mut selector), _) => {
                 if selector.process_event(event, context) {
-                    if selector.is_done() {
-                        let s = match std::mem::replace(&mut self.mode, ViewMode::Edit) {
-                            ViewMode::SelectRecipients(s) => s,
-                            _ => unreachable!(),
-                        };
-                        let new_recipients = s.collect();
-                        self.draft.headers_mut().insert(
-                            "To".to_string(),
-                            new_recipients
-                                .into_iter()
-                                .map(|a| a.to_string())
-                                .collect::<Vec<String>>()
-                                .join(", "),
-                        );
-                        self.update_form();
-                    }
                     return true;
                 }
             }
+            (ViewMode::Discard(u, ref selector), UIEvent::FinishedUIDialog(id, ref mut result))
+                if selector.id() == *id =>
+            {
+                if let Some(key) = result.downcast_mut::<char>() {
+                    match key {
+                        'x' => {
+                            context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
+                            return true;
+                        }
+                        'n' => {}
+                        'y' => {
+                            save_draft(
+                                self.draft.clone().finalise().unwrap().as_bytes(),
+                                context,
+                                SpecialUsageMailbox::Drafts,
+                                Flag::SEEN | Flag::DRAFT,
+                                self.account_cursor,
+                            );
+                            context.replies.push_back(UIEvent::Action(Tab(Kill(*u))));
+                            return true;
+                        }
+                        _ => {}
+                    }
+                }
+                self.set_dirty(true);
+                self.mode = ViewMode::Edit;
+                return true;
+            }
             (ViewMode::Discard(_, ref mut selector), _) => {
                 if selector.process_event(event, context) {
-                    if selector.is_done() {
-                        let (u, s) = match std::mem::replace(&mut self.mode, ViewMode::Edit) {
-                            ViewMode::Discard(u, s) => (u, s),
-                            _ => unreachable!(),
-                        };
-                        let key = s.collect()[0] as char;
-                        match key {
-                            'x' => {
-                                context.replies.push_back(UIEvent::Action(Tab(Kill(u))));
-                                return true;
-                            }
-                            'n' => {}
-                            'y' => {
-                                save_draft(
-                                    self.draft.clone().finalise().unwrap().as_bytes(),
-                                    context,
-                                    SpecialUsageMailbox::Drafts,
-                                    Flag::SEEN | Flag::DRAFT,
-                                    self.account_cursor,
-                                );
-                                context.replies.push_back(UIEvent::Action(Tab(Kill(u))));
-                                return true;
-                            }
-                            _ => {}
-                        }
-                        self.set_dirty(true);
-                    }
                     return true;
                 }
             }
@@ -711,15 +707,14 @@ impl Component for Composer {
                     && self.mode.is_edit() =>
             {
                 self.update_draft();
-                let id = self.id;
-                self.mode = ViewMode::Send(UIDialog::new(
+                self.mode = ViewMode::Send(UIConfirmationDialog::new(
                     "send mail?",
                     vec![(true, "yes".to_string()), (false, "no".to_string())],
                     /* only one choice */
                     true,
-                    std::sync::Arc::new(move |results: &[bool]| {
-                        Some(UIEvent::FinishedUIDialog(id, Box::new(results[0])))
-                    }),
+                    Some(Box::new(move |id: ComponentId, result: bool| {
+                        Some(UIEvent::FinishedUIDialog(id, Box::new(result)))
+                    })),
                     context,
                 ));
                 return true;
@@ -1030,9 +1025,12 @@ impl Component for Composer {
                     ('n', "cancel".to_string()),
                 ],
                 true,
-                std::sync::Arc::new(move |results: &[char]| {
-                    Some(UIEvent::FinishedUIDialog(uuid, Box::new(results[0])))
-                }),
+                Some(Box::new(move |id: ComponentId, results: &[char]| {
+                    Some(UIEvent::FinishedUIDialog(
+                        id,
+                        Box::new(results.get(0).map(|c| *c).unwrap_or('n')),
+                    ))
+                })),
                 context,
             ),
         );
@@ -1075,9 +1073,12 @@ impl Component for Composer {
                     ('n', "cancel".to_string()),
                 ],
                 true,
-                std::sync::Arc::new(move |results: &[char]| {
-                    Some(UIEvent::FinishedUIDialog(id, Box::new(results[0])))
-                }),
+                Some(Box::new(move |id: ComponentId, results: &[char]| {
+                    Some(UIEvent::FinishedUIDialog(
+                        id,
+                        Box::new(results.get(0).map(|c| *c).unwrap_or('n')),
+                    ))
+                })),
                 context,
             ),
         );

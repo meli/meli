@@ -190,11 +190,11 @@ pub struct State {
     child: Option<ForkType>,
     draw_horizontal_segment_fn: fn(&mut CellBuffer, &mut StateStdout, usize, usize, usize) -> (),
     pub mode: UIMode,
+    overlay: Vec<Box<dyn Component>>,
     components: Vec<Box<dyn Component>>,
     pub context: Context,
     timer: thread::JoinHandle<()>,
 
-    ui_dialogs: Vec<Box<dyn Component>>,
     display_messages: SmallVec<[DisplayMessage; 8]>,
     display_messages_expiration_start: Option<UnixTimestamp>,
     display_messages_active: bool,
@@ -248,28 +248,34 @@ impl State {
         let rows = termsize.1 as usize;
 
         let work_controller = WorkController::new(sender.clone());
-        let mut accounts: Vec<Account> = settings
-            .accounts
-            .iter()
-            .enumerate()
-            .map(|(index, (n, a_s))| {
-                let sender = sender.clone();
-                Account::new(
-                    index,
-                    n.to_string(),
-                    a_s.clone(),
-                    &backends,
-                    work_controller.get_context(),
-                    sender.clone(),
-                    NotifyFn::new(Box::new(move |f: FolderHash| {
-                        sender
-                            .send(ThreadEvent::UIEvent(UIEvent::WorkerProgress(f)))
-                            .unwrap();
-                    })),
-                )
-            })
-            .collect::<Result<Vec<Account>>>()?;
-        accounts.sort_by(|a, b| a.name().cmp(&b.name()));
+        let accounts: Vec<Account> = {
+            let mut file_accs = settings
+                .accounts
+                .iter()
+                .collect::<Vec<(&String, &AccountConf)>>();
+            file_accs.sort_by(|a, b| a.0.cmp(&b.0));
+
+            file_accs
+                .into_iter()
+                .enumerate()
+                .map(|(index, (n, a_s))| {
+                    let sender = sender.clone();
+                    Account::new(
+                        index,
+                        n.to_string(),
+                        a_s.clone(),
+                        &backends,
+                        work_controller.get_context(),
+                        sender.clone(),
+                        NotifyFn::new(Box::new(move |f: FolderHash| {
+                            sender
+                                .send(ThreadEvent::UIEvent(UIEvent::WorkerProgress(f)))
+                                .unwrap();
+                        })),
+                    )
+                })
+                .collect::<Result<Vec<Account>>>()?
+        };
 
         let timer = {
             let sender = sender.clone();
@@ -295,7 +301,7 @@ impl State {
             child: None,
             mode: UIMode::Normal,
             components: Vec::with_capacity(8),
-            ui_dialogs: Vec::new(),
+            overlay: Vec::new(),
             timer,
             draw_rate_limit: RateLimit::new(1, 3),
             draw_horizontal_segment_fn: if settings.terminal.use_color() {
@@ -494,33 +500,6 @@ impl State {
                 ));
             }
         }
-        if !self.ui_dialogs.is_empty() {
-            let area = center_area(
-                (
-                    (0, 0),
-                    (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
-                ),
-                (
-                    if self.cols / 3 > 30 {
-                        self.cols / 3
-                    } else {
-                        self.cols
-                    },
-                    if self.rows / 5 > 10 {
-                        self.rows / 5
-                    } else {
-                        self.rows
-                    },
-                ),
-            );
-            areas.push(area);
-            let area = create_box(&mut self.overlay_grid, area);
-            self.ui_dialogs.get_mut(0).unwrap().draw(
-                &mut self.overlay_grid,
-                area,
-                &mut self.context,
-            );
-        }
 
         /* Sort by x_start, ie upper_left corner's x coordinate */
         areas.sort_by(|a, b| (a.0).0.partial_cmp(&(b.0).0).unwrap());
@@ -661,6 +640,40 @@ impl State {
                         y,
                     );
                 }
+            }
+        }
+        if !self.overlay.is_empty() {
+            let area = center_area(
+                (
+                    (0, 0),
+                    (self.cols.saturating_sub(1), self.rows.saturating_sub(1)),
+                ),
+                (
+                    if self.cols / 3 > 30 {
+                        self.cols / 3
+                    } else {
+                        self.cols
+                    },
+                    if self.rows / 5 > 10 {
+                        self.rows / 5
+                    } else {
+                        self.rows
+                    },
+                ),
+            );
+            copy_area(&mut self.overlay_grid, &mut self.grid, area, area);
+            self.overlay
+                .get_mut(0)
+                .unwrap()
+                .draw(&mut self.overlay_grid, area, &mut self.context);
+            for y in get_y(upper_left!(area))..=get_y(bottom_right!(area)) {
+                (self.draw_horizontal_segment_fn)(
+                    &mut self.overlay_grid,
+                    self.stdout.as_mut().unwrap(),
+                    get_x(upper_left!(area)),
+                    get_x(bottom_right!(area)),
+                    y,
+                );
             }
         }
         self.flush();
@@ -858,21 +871,16 @@ impl State {
             UIEvent::Command(cmd) => {
                 if let Ok(action) = parse_command(&cmd.as_bytes()).to_full_result() {
                     if action.needs_confirmation() {
-                        let action = std::sync::Arc::new(action);
-                        self.ui_dialogs.push(Box::new(UIConfirmationDialog::new(
+                        self.overlay.push(Box::new(UIConfirmationDialog::new(
                             "You sure?",
                             vec![(true, "yes".to_string()), (false, "no".to_string())],
                             true,
-                            std::sync::Arc::new(move |result: bool| {
-                                if result {
-                                    Some(UIEvent::FinishedUIDialog(
-                                        ComponentId::nil(),
-                                        Box::new(action.clone()),
-                                    ))
-                                } else {
-                                    None
-                                }
-                            }),
+                            Some(Box::new(move |id: ComponentId, result: bool| {
+                                Some(UIEvent::FinishedUIDialog(
+                                    id,
+                                    Box::new(if result { Some(action) } else { None }),
+                                ))
+                            })),
                             &mut self.context,
                         )));
                     } else {
@@ -950,22 +958,34 @@ impl State {
                 self.display_messages_pos = self.display_messages.len() - 1;
             }
             UIEvent::FinishedUIDialog(ref id, ref mut results)
-                if self.ui_dialogs.get(0).map(|c| c.id()) == Some(*id) =>
+                if self.overlay.iter().any(|c| c.id() == *id) =>
             {
-                if let Some(ref mut action) = results.downcast_mut::<Action>() {
+                if let Some(Some(ref mut action)) = results.downcast_mut::<Option<Action>>() {
                     self.exec_command(std::mem::replace(action, Action::ToggleThreadSnooze));
+
+                    let pos = self.overlay.iter().position(|c| c.id() == *id).unwrap();
+                    self.overlay.remove(pos);
                     return;
                 }
             }
             UIEvent::GlobalUIDialog(dialog) => {
-                self.ui_dialogs.push(dialog);
+                self.overlay.push(dialog);
                 return;
             }
             _ => {}
         }
+        let Self {
+            ref mut components,
+            ref mut context,
+            ref mut overlay,
+            ..
+        } = self;
+
         /* inform each component */
-        for i in 0..self.components.len() {
-            self.components[i].process_event(&mut event, &mut self.context);
+        for c in overlay.iter_mut().chain(components.iter_mut()) {
+            if c.process_event(&mut event, context) {
+                break;
+            }
         }
 
         if !self.context.replies.is_empty() {

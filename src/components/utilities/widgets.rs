@@ -588,7 +588,7 @@ impl Component for FormWidget {
 #[derive(Debug, Default)]
 pub struct ButtonWidget<T>
 where
-    T: std::fmt::Debug + Default + Send + Sync,
+    T: 'static + std::fmt::Debug + Default + Send + Sync,
 {
     buttons: FnvHashMap<String, T>,
     layout: Vec<String>,
@@ -603,7 +603,7 @@ where
 
 impl<T> fmt::Display for ButtonWidget<T>
 where
-    T: std::fmt::Debug + Default + Send + Sync,
+    T: 'static + std::fmt::Debug + Default + Send + Sync,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         Display::fmt("", f)
@@ -612,7 +612,7 @@ where
 
 impl<T> ButtonWidget<T>
 where
-    T: std::fmt::Debug + Default + Send + Sync,
+    T: 'static + std::fmt::Debug + Default + Send + Sync,
 {
     pub fn new(init_val: (String, T)) -> ButtonWidget<T> {
         ButtonWidget {
@@ -642,7 +642,7 @@ where
 
 impl<T> Component for ButtonWidget<T>
 where
-    T: std::fmt::Debug + Default + Send + Sync,
+    T: 'static + std::fmt::Debug + Default + Send + Sync,
 {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.dirty {

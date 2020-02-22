@@ -1814,8 +1814,8 @@ enum SelectorCursor {
 /// options. After passing input events to this component, check Selector::is_done to see if the
 /// user has finalised their choices. Collect the choices by consuming the Selector with
 /// Selector::collect()
-#[derive(Clone)]
-pub struct Selector<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Clone + Send> {
+pub struct Selector<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send>
+{
     /// allow only one selection
     single_only: bool,
     entries: Vec<(T, bool)>,
@@ -1830,13 +1830,17 @@ pub struct Selector<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Syn
     id: ComponentId,
 }
 
-pub type UIConfirmationDialog =
-    Selector<bool, std::sync::Arc<dyn Fn(bool) -> Option<UIEvent> + 'static + Sync + Send>>;
+pub type UIConfirmationDialog = Selector<
+    bool,
+    Option<Box<dyn FnOnce(ComponentId, bool) -> Option<UIEvent> + 'static + Sync + Send>>,
+>;
 
-pub type UIDialog<T> =
-    Selector<T, std::sync::Arc<dyn Fn(&[T]) -> Option<UIEvent> + 'static + Sync + Send>>;
+pub type UIDialog<T> = Selector<
+    T,
+    Option<Box<dyn FnOnce(ComponentId, &[T]) -> Option<UIEvent> + 'static + Sync + Send>>,
+>;
 
-impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> fmt::Debug
+impl<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> fmt::Debug
     for Selector<T, F>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -1844,7 +1848,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Sen
     }
 }
 
-impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> fmt::Display
+impl<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> fmt::Display
     for Selector<T, F>
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -1852,7 +1856,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Sen
     }
 }
 
-impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> PartialEq
+impl<T: 'static + PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> PartialEq
     for Selector<T, F>
 {
     fn eq(&self, other: &Selector<T, F>) -> bool {
@@ -1860,9 +1864,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Sen
     }
 }
 
-impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> Component
-    for Selector<T, F>
-{
+impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialog<T> {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let (width, height) = self.content.size();
         copy_area_with_break(grid, &self.content, area, ((0, 0), (width, height)));
@@ -1879,6 +1881,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Sen
             (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
                 /* User can only select one entry, so Enter key finalises the selection */
                 self.done = true;
+                if let Some(event) = self.done() {
+                    context.replies.push_back(event);
+                }
                 return true;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Entry(c)) if !self.single_only => {
@@ -1911,6 +1916,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Sen
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Ok) if !self.single_only => {
                 self.done = true;
+                if let Some(event) = self.done() {
+                    context.replies.push_back(event);
+                }
                 return true;
             }
             (UIEvent::Input(Key::Esc), _) => {
@@ -1918,6 +1926,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Sen
                     e.1 = false;
                 }
                 self.done = true;
+                if let Some(event) = self.done() {
+                    context.replies.push_back(event);
+                }
                 return true;
             }
             (UIEvent::Input(Key::Char('\n')), SelectorCursor::Cancel) if !self.single_only => {
@@ -1925,6 +1936,9 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Sen
                     e.1 = false;
                 }
                 self.done = true;
+                if let Some(event) = self.done() {
+                    context.replies.push_back(event);
+                }
                 return true;
             }
             (UIEvent::Input(Key::Up), SelectorCursor::Entry(c)) if c > 0 => {
@@ -2138,7 +2152,295 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Sen
     }
 }
 
-impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Send> Selector<T, F> {
+impl Component for UIConfirmationDialog {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let (width, height) = self.content.size();
+        copy_area_with_break(grid, &self.content, area, ((0, 0), (width, height)));
+        context.dirty_areas.push_back(area);
+    }
+    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+        let (width, height) = self.content.size();
+        let shortcuts = self.get_shortcuts(context);
+        let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
+        if !context.settings.terminal.use_color() {
+            highlighted_attrs.attrs |= Attr::Reverse;
+        }
+        match (event, self.cursor) {
+            (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
+                /* User can only select one entry, so Enter key finalises the selection */
+                self.done = true;
+                if let Some(event) = self.done() {
+                    context.replies.push_back(event);
+                }
+                return true;
+            }
+            (UIEvent::Input(Key::Char('\n')), SelectorCursor::Entry(c)) if !self.single_only => {
+                /* User can select multiple entries, so Enter key toggles the entry under the
+                 * cursor */
+                self.entries[c].1 = !self.entries[c].1;
+                if self.entries[c].1 {
+                    write_string_to_grid(
+                        "x",
+                        &mut self.content,
+                        Color::Default,
+                        Color::Default,
+                        Attr::Default,
+                        ((3, c + 2), (width - 2, c + 2)),
+                        None,
+                    );
+                } else {
+                    write_string_to_grid(
+                        " ",
+                        &mut self.content,
+                        Color::Default,
+                        Color::Default,
+                        Attr::Default,
+                        ((3, c + 2), (width - 2, c + 2)),
+                        None,
+                    );
+                }
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(Key::Char('\n')), SelectorCursor::Ok) if !self.single_only => {
+                self.done = true;
+                if let Some(event) = self.done() {
+                    context.replies.push_back(event);
+                }
+                return true;
+            }
+            (UIEvent::Input(Key::Esc), _) => {
+                for e in self.entries.iter_mut() {
+                    e.1 = false;
+                }
+                self.done = true;
+                if let Some(event) = self.done() {
+                    context.replies.push_back(event);
+                }
+                return true;
+            }
+            (UIEvent::Input(Key::Char('\n')), SelectorCursor::Cancel) if !self.single_only => {
+                for e in self.entries.iter_mut() {
+                    e.1 = false;
+                }
+                self.done = true;
+                if let Some(event) = self.done() {
+                    context.replies.push_back(event);
+                }
+                return true;
+            }
+            (UIEvent::Input(Key::Up), SelectorCursor::Entry(c)) if c > 0 => {
+                if self.single_only {
+                    // Redraw selection
+                    for c in self.content.row_iter(2..(width - 2), c + 2) {
+                        self.content[c]
+                            .set_fg(Color::Default)
+                            .set_bg(Color::Default)
+                            .set_attrs(Attr::Default);
+                    }
+                    for c in self.content.row_iter(2..(width - 2), c + 1) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
+                    self.entries[c].1 = false;
+                    self.entries[c - 1].1 = true;
+                } else {
+                    // Redraw cursor
+                    for c in self.content.row_iter(2..4, c + 2) {
+                        self.content[c]
+                            .set_fg(Color::Default)
+                            .set_bg(Color::Default)
+                            .set_attrs(Attr::Default);
+                    }
+                    for c in self.content.row_iter(2..4, c + 1) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
+                }
+                self.cursor = SelectorCursor::Entry(c - 1);
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(ref key), SelectorCursor::Ok)
+            | (UIEvent::Input(ref key), SelectorCursor::Cancel)
+                if shortcut!(key == shortcuts["general"]["scroll_up"]) =>
+            {
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2)..(width - 1),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(Color::Default)
+                        .set_bg(Color::Default)
+                        .set_attrs(Attr::Default);
+                }
+                let c = self.entries.len().saturating_sub(1);
+                self.cursor = SelectorCursor::Entry(c);
+                let mut highlighted_attrs =
+                    crate::conf::value(context, "widgets.options.highlighted");
+                if !context.settings.terminal.use_color() {
+                    highlighted_attrs.attrs |= Attr::Reverse;
+                }
+                for c in self.content.row_iter(2..4, c + 2) {
+                    self.content[c]
+                        .set_fg(highlighted_attrs.fg)
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                }
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(ref key), SelectorCursor::Entry(c))
+                if c < self.entries.len().saturating_sub(1)
+                    && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+            {
+                if self.single_only {
+                    // Redraw selection
+                    for c in self.content.row_iter(2..(width - 2), c + 2) {
+                        self.content[c]
+                            .set_fg(Color::Default)
+                            .set_bg(Color::Default)
+                            .set_attrs(Attr::Default);
+                    }
+                    for c in self.content.row_iter(2..(width - 2), c + 3) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
+                    self.entries[c].1 = false;
+                    self.entries[c + 1].1 = true;
+                } else {
+                    // Redraw cursor
+                    for c in self.content.row_iter(2..4, c + 2) {
+                        self.content[c]
+                            .set_fg(Color::Default)
+                            .set_bg(Color::Default)
+                            .set_attrs(Attr::Default);
+                    }
+                    for c in self.content.row_iter(2..4, c + 3) {
+                        self.content[c]
+                            .set_fg(highlighted_attrs.fg)
+                            .set_bg(highlighted_attrs.bg)
+                            .set_attrs(highlighted_attrs.attrs);
+                    }
+                }
+                self.cursor = SelectorCursor::Entry(c + 1);
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(ref key), SelectorCursor::Entry(c))
+                if !self.single_only && shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+            {
+                self.cursor = SelectorCursor::Ok;
+                for c in self.content.row_iter(2..4, c + 2) {
+                    self.content[c]
+                        .set_fg(Color::Default)
+                        .set_bg(Color::Default)
+                        .set_attrs(Attr::Default);
+                }
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(highlighted_attrs.fg)
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                }
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(ref key), SelectorCursor::Ok)
+                if shortcut!(key == shortcuts["general"]["scroll_right"]) =>
+            {
+                self.cursor = SelectorCursor::Cancel;
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(Color::Default)
+                        .set_bg(Color::Default)
+                        .set_attrs(Attr::Default);
+                }
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2 + 6)
+                        ..((width - "OK    Cancel".len()) / 2 + 11),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(highlighted_attrs.fg)
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                }
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(ref key), SelectorCursor::Cancel)
+                if shortcut!(key == shortcuts["general"]["scroll_left"]) =>
+            {
+                self.cursor = SelectorCursor::Ok;
+                for c in self.content.row_iter(
+                    ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
+                    height - 3,
+                ) {
+                    self.content[c]
+                        .set_fg(highlighted_attrs.fg)
+                        .set_bg(highlighted_attrs.bg)
+                        .set_attrs(highlighted_attrs.attrs);
+                }
+                change_colors(
+                    &mut self.content,
+                    (
+                        ((width - "OK    Cancel".len()) / 2 + 6, height - 3),
+                        ((width - "OK    Cancel".len()) / 2 + 11, height - 3),
+                    ),
+                    Color::Default,
+                    Color::Default,
+                );
+                self.dirty = true;
+                return true;
+            }
+            (UIEvent::Input(ref key), _)
+                if shortcut!(key == shortcuts["general"]["scroll_left"])
+                    || shortcut!(key == shortcuts["general"]["scroll_right"])
+                    || shortcut!(key == shortcuts["general"]["scroll_up"])
+                    || shortcut!(key == shortcuts["general"]["scroll_down"]) =>
+            {
+                return true
+            }
+            _ => {}
+        }
+
+        false
+    }
+    fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
+        let mut map = ShortcutMaps::default();
+        map.insert("general", context.settings.shortcuts.general.key_values());
+        map
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = value;
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
+}
+
+impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selector<T, F> {
     pub fn new(
         title: &str,
         entries: Vec<(T, String)>,
@@ -2349,16 +2651,17 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Clone + Sync + Sen
     }
 }
 
-impl<T: PartialEq + Debug + Clone + Sync + Send> UIDialog<T> {
-    pub fn done(self) -> Option<UIEvent> {
+impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> UIDialog<T> {
+    fn done(&mut self) -> Option<UIEvent> {
         let Self {
-            done,
-            done_fn,
-            entries,
+            ref mut done_fn,
+            ref mut entries,
+            ref id,
             ..
         } = self;
-        if done {
-            (done_fn)(
+        done_fn.take().and_then(|done_fn| {
+            debug!(done_fn(
+                *id,
                 entries
                     .iter()
                     .filter(|v| v.1)
@@ -2366,23 +2669,22 @@ impl<T: PartialEq + Debug + Clone + Sync + Send> UIDialog<T> {
                     .cloned()
                     .collect::<Vec<_>>()
                     .as_slice(),
-            )
-        } else {
-            None
-        }
+            ))
+        })
     }
 }
 
 impl UIConfirmationDialog {
-    pub fn done(self) -> Option<UIEvent> {
+    fn done(&mut self) -> Option<UIEvent> {
         let Self {
-            done,
-            done_fn,
-            entries,
+            ref mut done_fn,
+            ref mut entries,
+            ref id,
             ..
         } = self;
-        if done {
-            (done_fn)(
+        done_fn.take().and_then(|done_fn| {
+            done_fn(
+                *id,
                 entries
                     .iter()
                     .filter(|v| v.1)
@@ -2390,9 +2692,7 @@ impl UIConfirmationDialog {
                     .cloned()
                     .any(core::convert::identity),
             )
-        } else {
-            None
-        }
+        })
     }
 }
 

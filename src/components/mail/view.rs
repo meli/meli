@@ -38,7 +38,7 @@ pub use self::envelope::*;
 use linkify::{Link, LinkFinder};
 use xdg_utils::query_default_app;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug)]
 enum ViewMode {
     Normal,
     Url,
@@ -101,7 +101,7 @@ impl Clone for MailView {
             subview: None,
             cmd_buf: String::with_capacity(4),
             pager: self.pager.clone(),
-            mode: self.mode.clone(),
+            mode: ViewMode::Normal,
             ..*self
         }
     }
@@ -715,34 +715,37 @@ impl Component for MailView {
         self.dirty = false;
     }
 
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
-        match self.mode {
-            ViewMode::Ansi(ref mut buf) => {
+        match (&mut self.mode, &mut event) {
+            (ViewMode::Ansi(ref mut buf), _) => {
                 if buf.process_event(event, context) {
                     return true;
                 }
             }
-            ViewMode::Subview => {
+            (ViewMode::Subview, _) => {
                 if let Some(s) = self.subview.as_mut() {
                     if s.process_event(event, context) {
                         return true;
                     }
                 }
             }
-            ViewMode::ContactSelector(ref mut s) => {
-                if s.process_event(event, context) {
-                    if s.is_done() {
-                        if let ViewMode::ContactSelector(s) =
-                            std::mem::replace(&mut self.mode, ViewMode::Normal)
-                        {
-                            if let Some(event) = s.done() {
-                                context.replies.push_back(event);
-                            }
-                        } else {
-                            unsafe { std::hint::unreachable_unchecked() }
+            (ViewMode::ContactSelector(ref s), UIEvent::FinishedUIDialog(id, results))
+                if *id == s.id() =>
+            {
+                if let Some(results) = results.downcast_ref::<Vec<Card>>() {
+                    let account = &mut context.accounts[self.coordinates.0];
+                    {
+                        for card in results.iter() {
+                            account.address_book.add_card(card.clone());
                         }
                     }
+                }
+                self.mode = ViewMode::Normal;
+                return true;
+            }
+            (ViewMode::ContactSelector(ref mut s), _) => {
+                if s.process_event(event, context) {
                     return true;
                 }
                 if self.pager.process_event(event, context) {
@@ -821,34 +824,17 @@ impl Component for MailView {
                     entries.push((new_card, format!("{}", addr)));
                 }
                 drop(envelope);
-                let id = self.id;
                 self.mode = ViewMode::ContactSelector(Selector::new(
                     "select contacts to add",
                     entries,
                     false,
-                    std::sync::Arc::new(move |results: &[Card]| {
-                        Some(UIEvent::FinishedUIDialog(
-                            id,
-                            Box::new(results.into_iter().cloned().collect::<Vec<Card>>()),
-                        ))
-                    }),
+                    Some(Box::new(move |id: ComponentId, results: &[Card]| {
+                        Some(UIEvent::FinishedUIDialog(id, Box::new(results.to_vec())))
+                    })),
                     context,
                 ));
                 self.dirty = true;
                 return true;
-            }
-            UIEvent::FinishedUIDialog(ref id, ref results)
-                if self.mode.is_contact_selector() && self.id == *id =>
-            {
-                if let Some(results) = results.downcast_ref::<Vec<Card>>() {
-                    let account = &mut context.accounts[self.coordinates.0];
-                    {
-                        for card in results.iter() {
-                            account.address_book.add_card(card.clone());
-                        }
-                    }
-                }
-                self.mode = ViewMode::Normal;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
                 if self.mode.is_contact_selector() =>

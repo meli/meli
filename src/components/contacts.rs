@@ -185,24 +185,6 @@ impl Component for ContactManager {
         match self.mode {
             ViewMode::Discard(ref mut selector) => {
                 if selector.process_event(event, context) {
-                    if selector.is_done() {
-                        let s = match std::mem::replace(&mut self.mode, ViewMode::Edit) {
-                            ViewMode::Discard(s) => s,
-                            _ => unreachable!(),
-                        };
-                        let key = s.collect()[0] as char;
-                        match key {
-                            'x' => {
-                                context
-                                    .replies
-                                    .push_back(UIEvent::Action(Tab(Kill(self.parent_id))));
-                                return true;
-                            }
-                            'n' => {}
-                            'y' => {}
-                            _ => {}
-                        }
-                    }
                     self.set_dirty(true);
                     return true;
                 }
@@ -309,12 +291,12 @@ impl Component for ContactManager {
                 ('n', "cancel".to_string()),
             ],
             true,
-            std::sync::Arc::new(move |results: &[char]| match results[0] {
+            Some(Box::new(move |_, results: &[char]| match results[0] {
                 'x' => Some(UIEvent::Action(Tab(Kill(parent_id)))),
                 'n' => None,
                 'y' => None,
                 _ => None,
-            }),
+            })),
             context,
         ));
         self.set_dirty(true);
