@@ -23,9 +23,7 @@ use super::*;
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::FolderHash;
-use melib::backends::{
-    Backend, BackendOp, Backends, Folder, MailBackend, RefreshEvent, RefreshEventConsumer,
-};
+use melib::backends::{Backend, BackendOp, Backends, Folder, MailBackend, RefreshEventConsumer};
 use melib::conf::AccountSettings;
 use melib::email::{Envelope, EnvelopeHash, Flag};
 use melib::error::{MeliError, Result};
@@ -184,7 +182,7 @@ impl MailBackend for PluginBackend {
         &mut self,
         _folder_hash: FolderHash,
         _sender: RefreshEventConsumer,
-    ) -> Result<Async<Result<Vec<RefreshEvent>>>> {
+    ) -> Result<Async<()>> {
         Err(MeliError::new("Unimplemented."))
     }
     fn watch(

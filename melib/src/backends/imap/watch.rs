@@ -516,7 +516,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     Err(MeliError::new(format!("IDLE connection dropped: {}", err)))
 }
 
-fn examine_updates(
+pub fn examine_updates(
     folder: &ImapFolder,
     sender: &RefreshEventConsumer,
     conn: &mut ImapConnection,

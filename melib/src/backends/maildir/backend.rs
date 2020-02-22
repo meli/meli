@@ -196,7 +196,7 @@ impl MailBackend for MaildirType {
         &mut self,
         folder_hash: FolderHash,
         sender: RefreshEventConsumer,
-    ) -> Result<Async<Result<Vec<RefreshEvent>>>> {
+    ) -> Result<Async<()>> {
         let w = AsyncBuilder::new();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
 
@@ -207,8 +207,6 @@ impl MailBackend for MaildirType {
             let root_path = self.path.to_path_buf();
             let map = self.hash_indexes.clone();
             let folder_index = self.folder_index.clone();
-            let cache_dir = cache_dir.clone();
-            let sender = Arc::new(sender);
 
             Box::new(move |work_context: crate::async_workers::WorkContext| {
                 work_context

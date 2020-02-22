@@ -290,13 +290,49 @@ impl MailBackend for ImapType {
 
     fn refresh(
         &mut self,
-        _folder_hash: FolderHash,
-        _sender: RefreshEventConsumer,
-    ) -> Result<Async<Result<Vec<RefreshEvent>>>> {
-        let mut res = String::with_capacity(8 * 1024);
-        self.connection.lock()?.send_command(b"NOOP")?;
-        self.connection.lock()?.read_response(&mut res)?;
-        Err(MeliError::new("Unimplemented."))
+        folder_hash: FolderHash,
+        sender: RefreshEventConsumer,
+    ) -> Result<Async<()>> {
+        self.connection.lock().unwrap().connect()?;
+        let inbox = self
+            .folders
+            .read()
+            .unwrap()
+            .get(&folder_hash)
+            .map(std::clone::Clone::clone)
+            .unwrap();
+        let tag_index = self.tag_index.clone();
+        let main_conn = self.connection.clone();
+        let uid_store = self.uid_store.clone();
+        let account_name = self.account_name.clone();
+        let w = AsyncBuilder::new();
+        let closure = move |work_context: WorkContext| {
+            let thread = std::thread::current();
+            let mut conn = main_conn.lock().unwrap();
+            work_context
+                .set_name
+                .send((
+                    thread.id(),
+                    format!("refreshing {} imap connection", account_name.as_str(),),
+                ))
+                .unwrap();
+
+            work_context
+                .set_status
+                .send((thread.id(), "refresh".to_string()))
+                .unwrap();
+            watch::examine_updates(
+                &inbox,
+                &sender,
+                &mut conn,
+                &uid_store,
+                &work_context,
+                &tag_index,
+            )
+            .ok()
+            .take();
+        };
+        Ok(w.build(Box::new(closure)))
     }
 
     fn watch(
