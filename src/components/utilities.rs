@@ -814,7 +814,7 @@ impl StatusBar {
 
     fn draw_execute_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
-        let (x, y) = write_string_to_grid(
+        let (_, y) = write_string_to_grid(
             self.ex_buffer.as_str(),
             grid,
             Color::Byte(219),
@@ -823,7 +823,12 @@ impl StatusBar {
             area,
             None,
         );
-        grid[(x, y)].set_attrs(Attr::Underline);
+        if let Some(ref mut cell) = grid.get_mut(
+            pos_inc(upper_left!(area), (self.ex_buffer.cursor(), 0)).0,
+            y,
+        ) {
+            cell.set_attrs(Attr::Underline);
+        }
         change_colors(grid, area, Color::Byte(219), Color::Byte(88));
         context.dirty_areas.push_back(area);
     }
@@ -1152,6 +1157,26 @@ impl Component for StatusBar {
             }
             UIEvent::ExInput(Key::Down) => {
                 self.auto_complete.inc_cursor();
+                self.dirty = true;
+            }
+            UIEvent::ExInput(Key::Left) => {
+                if let Field::Text(ref mut utext, _) = self.ex_buffer {
+                    utext.cursor_dec();
+                } else {
+                    unsafe {
+                        std::hint::unreachable_unchecked();
+                    }
+                }
+                self.dirty = true;
+            }
+            UIEvent::ExInput(Key::Right) => {
+                if let Field::Text(ref mut utext, _) = self.ex_buffer {
+                    utext.cursor_inc();
+                } else {
+                    unsafe {
+                        std::hint::unreachable_unchecked();
+                    }
+                }
                 self.dirty = true;
             }
             UIEvent::ExInput(Key::Ctrl('p')) => {

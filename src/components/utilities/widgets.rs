@@ -74,6 +74,14 @@ impl Field {
             }
         }
     }
+
+    pub fn cursor(&self) -> usize {
+        match self {
+            Text(ref s, _) => s.grapheme_pos(),
+            Choice(_, ref cursor) => *cursor,
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.as_str().is_empty()
     }
