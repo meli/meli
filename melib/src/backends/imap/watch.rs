@@ -67,6 +67,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+    conn.connect()?;
     let mut response = String::with_capacity(8 * 1024);
     let thread_id: std::thread::ThreadId = std::thread::current().id();
     loop {
@@ -119,6 +120,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+    conn.connect()?;
     let thread_id: std::thread::ThreadId = std::thread::current().id();
     let folder: ImapFolder = match folders
         .read()

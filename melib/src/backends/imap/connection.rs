@@ -338,6 +338,31 @@ impl ImapConnection {
         }
     }
 
+    pub fn connect(&mut self) -> Result<()> {
+        if let (instant, ref mut status @ Ok(())) = *self.online.lock().unwrap() {
+            if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
+                *status = Err(MeliError::new("Connection timed out"));
+                self.stream = Err(MeliError::new("Connection timed out"));
+            }
+        }
+        if self.stream.is_ok() {
+            return Ok(());
+        }
+        let new_stream = ImapStream::new_connection(&self.server_conf);
+        if new_stream.is_err() {
+            *self.online.lock().unwrap() = (
+                Instant::now(),
+                Err(new_stream.as_ref().unwrap_err().clone()),
+            );
+        } else {
+            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+        }
+        let (capabilities, stream) = new_stream?;
+        self.stream = Ok(stream);
+        self.capabilities = capabilities;
+        Ok(())
+    }
+
     pub fn read_response(&mut self, ret: &mut String) -> Result<()> {
         self.try_send(|s| s.read_response(ret))?;
         let r: ImapResponse = ImapResponse::from(&ret);

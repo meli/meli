@@ -147,7 +147,7 @@ impl MailBackend for ImapType {
             if Instant::now().duration_since(self.online.lock().unwrap().0)
                 >= std::time::Duration::new(2, 0)
             {
-                let _ = self.folders();
+                let _ = self.connection.lock().unwrap().connect();
             }
         }
     }
@@ -505,13 +505,6 @@ impl MailBackend for ImapType {
         let mut response = String::with_capacity(8 * 1024);
         {
             let mut conn_lck = self.connection.lock()?;
-            if folders[&folder_hash].is_subscribed() {
-                conn_lck.send_command(
-                    format!("UNSUBSCRIBE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
-                )?;
-                conn_lck.read_response(&mut response)?;
-            }
-
             if !folders[&folder_hash].no_select {
                 /* make sure mailbox is not selected before it gets deleted, otherwise
                  * connection gets dropped by server */
@@ -535,6 +528,13 @@ impl MailBackend for ImapType {
                     conn_lck.read_response(&mut response)?;
                 }
             }
+            if folders[&folder_hash].is_subscribed() {
+                conn_lck.send_command(
+                    format!("UNSUBSCRIBE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                )?;
+                conn_lck.read_response(&mut response)?;
+            }
+
             conn_lck.send_command(
                 debug!(format!("DELETE \"{}\"", folders[&folder_hash].imap_path())).as_bytes(),
             )?;
@@ -675,6 +675,7 @@ impl ImapType {
 
     pub fn shell(&mut self) {
         let mut conn = ImapConnection::new_connection(&self.server_conf, self.online.clone());
+        conn.connect().unwrap();
         let mut res = String::with_capacity(8 * 1024);
         conn.send_command(b"NOOP").unwrap();
         conn.read_response(&mut res).unwrap();
