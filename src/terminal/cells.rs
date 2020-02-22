@@ -2371,13 +2371,21 @@ pub mod boundaries {
 
         if !grid.ascii_drawing {
             for x in get_x(upper_left)..get_x(bottom_right) {
-                grid[(x, get_y(upper_left))].set_ch(HORZ_BOUNDARY);
-                grid[(x, get_y(bottom_right))].set_ch(HORZ_BOUNDARY);
+                grid[(x, get_y(upper_left))]
+                    .set_ch(HORZ_BOUNDARY)
+                    .set_fg(Color::Byte(240));
+                grid[(x, get_y(bottom_right))]
+                    .set_ch(HORZ_BOUNDARY)
+                    .set_fg(Color::Byte(240));
             }
 
             for y in get_y(upper_left)..get_y(bottom_right) {
-                grid[(get_x(upper_left), y)].set_ch(VERT_BOUNDARY);
-                grid[(get_x(bottom_right), y)].set_ch(VERT_BOUNDARY);
+                grid[(get_x(upper_left), y)]
+                    .set_ch(VERT_BOUNDARY)
+                    .set_fg(Color::Byte(240));
+                grid[(get_x(bottom_right), y)]
+                    .set_ch(VERT_BOUNDARY)
+                    .set_fg(Color::Byte(240));
             }
             set_and_join_box(grid, upper_left, BoxBoundary::Horizontal);
             set_and_join_box(
