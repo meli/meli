@@ -22,7 +22,6 @@
 use super::{ThreadNode, ThreadNodeHash};
 use fnv::FnvHashMap;
 use smallvec::SmallVec;
-use std::cell::Ref;
 
 /* `ThreadsIterator` returns messages according to the sorted order. For example, for the following
  * threads:
@@ -39,13 +38,13 @@ use std::cell::Ref;
  *   the iterator returns them as `A, B, C, D, E, F`
  */
 
-pub struct ThreadsIterator<'a> {
+pub struct ThreadsGroupIterator<'a> {
+    pub(super) root_tree: SmallVec<[ThreadNodeHash; 1024]>,
     pub(super) pos: usize,
     pub(super) stack: SmallVec<[usize; 16]>,
-    pub(super) root_tree: Ref<'a, Vec<ThreadNodeHash>>,
     pub(super) thread_nodes: &'a FnvHashMap<ThreadNodeHash, ThreadNode>,
 }
-impl<'a> Iterator for ThreadsIterator<'a> {
+impl<'a> Iterator for ThreadsGroupIterator<'a> {
     type Item = (usize, ThreadNodeHash, bool);
     fn next(&mut self) -> Option<(usize, ThreadNodeHash, bool)> {
         {
@@ -96,75 +95,6 @@ impl<'a> Iterator for ThreadsIterator<'a> {
  *
  *   the iterator returns them as `A, B, C, D`
  */
-
-pub struct ThreadIterator<'a> {
-    pub(super) init_pos: usize,
-    pub(super) pos: usize,
-    pub(super) stack: SmallVec<[usize; 16]>,
-    pub(super) root_tree: Ref<'a, Vec<ThreadNodeHash>>,
-    pub(super) thread_nodes: &'a FnvHashMap<ThreadNodeHash, ThreadNode>,
-}
-impl<'a> Iterator for ThreadIterator<'a> {
-    type Item = (usize, ThreadNodeHash);
-    fn next(&mut self) -> Option<(usize, ThreadNodeHash)> {
-        {
-            let mut tree = &(*self.root_tree);
-            for i in self.stack.iter() {
-                tree = &self.thread_nodes[&tree[*i]].children;
-            }
-            if self.pos == tree.len() || (self.stack.is_empty() && self.pos > self.init_pos) {
-                if self.stack.is_empty() {
-                    return None;
-                }
-                self.pos = self.stack.pop().unwrap() + 1;
-            } else {
-                debug_assert!(self.pos < tree.len());
-                let ret = (self.stack.len(), tree[self.pos]);
-                if !self.thread_nodes[&tree[self.pos]].children.is_empty() {
-                    self.stack.push(self.pos);
-                    self.pos = 0;
-                    if self.thread_nodes[&ret.1].message.is_some() {
-                        return Some(ret);
-                    } else {
-                        return self.next();
-                    }
-                }
-                self.pos += 1;
-                if self.thread_nodes[&ret.1].message.is_some() {
-                    return Some(ret);
-                }
-            }
-        }
-        self.next()
-    }
-}
-
-pub struct RootIterator<'a> {
-    pub pos: usize,
-    pub root_tree: Ref<'a, Vec<ThreadNodeHash>>,
-    pub thread_nodes: &'a FnvHashMap<ThreadNodeHash, ThreadNode>,
-}
-
-impl<'a> Iterator for RootIterator<'a> {
-    type Item = ThreadNodeHash;
-    fn next(&mut self) -> Option<ThreadNodeHash> {
-        {
-            if self.pos == self.root_tree.len() {
-                return None;
-            }
-            let mut ret = self.root_tree[self.pos];
-            self.pos += 1;
-            let thread_node = &self.thread_nodes[&ret];
-            if thread_node.message().is_none() {
-                ret = thread_node.children()[0];
-                while self.thread_nodes[&ret].message().is_none() {
-                    ret = self.thread_nodes[&ret].children()[0];
-                }
-            }
-            Some(ret)
-        }
-    }
-}
 
 pub struct ThreadGroupIterator<'a> {
     pub(super) group: ThreadNodeHash,

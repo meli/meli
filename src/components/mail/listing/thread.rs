@@ -39,7 +39,7 @@ pub struct ThreadListing {
     color_cache: ColorCache,
 
     row_updates: SmallVec<[ThreadHash; 8]>,
-    locations: Vec<EnvelopeHash>,
+    order: FnvHashMap<EnvelopeHash, usize>,
     /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.view` is focused or not.
@@ -117,8 +117,8 @@ impl MailListingTrait for ThreadListing {
         }
         let account = &context.accounts[self.cursor_pos.0];
         let threads = &account.collection.threads[&self.cursor_pos.1];
-        self.length = threads.len();
-        self.locations.clear();
+        self.length = 0;
+        self.order.clear();
         let default_cell = {
             let mut ret = Cell::with_char(' ');
             ret.set_fg(self.color_cache.theme_default.fg)
@@ -126,7 +126,7 @@ impl MailListingTrait for ThreadListing {
                 .set_attrs(self.color_cache.theme_default.attrs);
             ret
         };
-        if self.length == 0 {
+        if threads.len() == 0 {
             let message = format!("Folder `{}` is empty.", account[&self.cursor_pos.1].name());
             self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(
@@ -141,14 +141,19 @@ impl MailListingTrait for ThreadListing {
             return;
         }
         self.content =
-            CellBuffer::new_with_context(MAX_COLS, self.length + 1, default_cell, context);
+            CellBuffer::new_with_context(MAX_COLS, threads.len() + 1, default_cell, context);
 
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let mut thread_idx = 0; // needed for alternate thread colors
                                 /* Draw threaded view. */
-        threads.sort_by(self.sort, self.subsort, &account.collection.envelopes);
+        let mut roots = threads.roots();
+        threads.group_inner_sort_by(&mut roots, self.sort, &account.collection.envelopes);
+        let roots = roots
+            .into_iter()
+            .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
+            .collect::<_>();
+        let mut iter = threads.threads_group_iter(roots).peekable();
         let thread_nodes: &FnvHashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
-        let mut iter = threads.threads_iter().peekable();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
         while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
@@ -160,7 +165,7 @@ impl MailListingTrait for ThreadListing {
             if thread_node.has_message() {
                 let envelope: EnvelopeRef =
                     account.collection.get_env(thread_node.message().unwrap());
-                self.locations.push(envelope.hash());
+                self.order.insert(envelope.hash(), idx);
                 let fg_color = if !envelope.is_seen() {
                     Color::Byte(0)
                 } else {
@@ -216,6 +221,7 @@ impl MailListingTrait for ThreadListing {
                 _ => {}
             }
         }
+        self.length = self.order.len();
     }
 }
 
@@ -227,7 +233,7 @@ impl ListingTrait for ThreadListing {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.view = None;
-        self.locations.clear();
+        self.order.clear();
         self.row_updates.clear();
         self.initialised = false;
     }
@@ -240,7 +246,12 @@ impl ListingTrait for ThreadListing {
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
             clear_area(grid, area, self.color_cache.theme_default);
-            copy_area(grid, &self.content, area, ((0, 0), (MAX_COLS - 1, 0)));
+            copy_area(
+                grid,
+                &self.content,
+                area,
+                ((0, 0), pos_dec(self.content.size(), (1, 1))),
+            );
             context.dirty_areas.push_back(area);
             return;
         }
@@ -346,31 +357,30 @@ impl ListingTrait for ThreadListing {
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
-        if context.accounts[self.cursor_pos.0].collection[&self.cursor_pos.1].is_empty() {
+        if self.length == 0 {
             return;
         }
 
-        if self.locations[idx] != 0 {
-            let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
-                .collection
-                .get_env(self.locations[idx]);
+        let env_hash = self.get_env_under_cursor(idx, context);
+        let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
+            .collection
+            .get_env(env_hash);
 
-            let fg_color = if !envelope.is_seen() {
-                Color::Byte(0)
-            } else {
-                Color::Default
-            };
-            let bg_color = if self.cursor_pos.2 == idx {
-                Color::Byte(246)
-            } else if !envelope.is_seen() {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(236)
-            } else {
-                Color::Default
-            };
-            change_colors(grid, area, fg_color, bg_color);
-        }
+        let fg_color = if !envelope.is_seen() {
+            Color::Byte(0)
+        } else {
+            Color::Default
+        };
+        let bg_color = if self.cursor_pos.2 == idx {
+            Color::Byte(246)
+        } else if !envelope.is_seen() {
+            Color::Byte(251)
+        } else if idx % 2 == 0 {
+            Color::Byte(236)
+        } else {
+            Color::Default
+        };
+        change_colors(grid, area, fg_color, bg_color);
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
@@ -396,7 +406,7 @@ impl ThreadListing {
             content: CellBuffer::new(0, 0, Cell::with_char(' ')),
             color_cache: ColorCache::default(),
             row_updates: SmallVec::new(),
-            locations: Vec::new(),
+            order: FnvHashMap::default(),
             dirty: true,
             unfocused: false,
             view: None,
@@ -407,33 +417,33 @@ impl ThreadListing {
     }
 
     fn highlight_line_self(&mut self, idx: usize, context: &Context) {
-        if context.accounts[self.cursor_pos.0].collection[&self.cursor_pos.1].is_empty() {
+        if self.length == 0 {
             return;
         }
-        if self.locations[idx] != 0 {
-            let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
-                .collection
-                .get_env(self.locations[idx]);
 
-            let fg_color = if !envelope.is_seen() {
-                Color::Byte(0)
-            } else {
-                Color::Default
-            };
-            let bg_color = if !envelope.is_seen() {
-                Color::Byte(251)
-            } else if idx % 2 == 0 {
-                Color::Byte(236)
-            } else {
-                Color::Default
-            };
-            change_colors(
-                &mut self.content,
-                ((0, idx), (MAX_COLS - 1, idx)),
-                fg_color,
-                bg_color,
-            );
-        }
+        let env_hash = self.get_env_under_cursor(idx, context);
+        let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
+            .collection
+            .get_env(env_hash);
+
+        let fg_color = if !envelope.is_seen() {
+            Color::Byte(0)
+        } else {
+            Color::Default
+        };
+        let bg_color = if !envelope.is_seen() {
+            Color::Byte(251)
+        } else if idx % 2 == 0 {
+            Color::Byte(236)
+        } else {
+            Color::Default
+        };
+        change_colors(
+            &mut self.content,
+            ((0, idx), (MAX_COLS - 1, idx)),
+            fg_color,
+            bg_color,
+        );
     }
 
     fn make_thread_entry(
@@ -483,6 +493,19 @@ impl ThreadListing {
         }
         s
     }
+
+    fn get_env_under_cursor(&self, cursor: usize, _context: &Context) -> EnvelopeHash {
+        *self
+            .order
+            .iter()
+            .find(|(_, &r)| r == cursor)
+            .unwrap_or_else(|| {
+                debug!("self.order empty ? cursor={} {:#?}", cursor, &self.order);
+                panic!();
+            })
+            .0
+    }
+
     fn format_date(envelope: &Envelope) -> String {
         let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
         let now: std::time::Duration = std::time::SystemTime::now()
@@ -531,13 +554,6 @@ impl Component for ThreadListing {
 
             let idx = self.cursor_pos.2;
 
-            let has_message: bool = self.locations[self.new_cursor_pos.2] > 0;
-            if !has_message {
-                self.dirty = false;
-                /* Draw the entire list */
-                return self.draw_list(grid, area, context);
-            }
-
             /* Mark message as read */
             let must_highlight = {
                 if self.length == 0 {
@@ -546,7 +562,7 @@ impl Component for ThreadListing {
                     let account = &context.accounts[self.cursor_pos.0];
                     let envelope: EnvelopeRef = account
                         .collection
-                        .get_env(self.locations[self.cursor_pos.2]);
+                        .get_env(self.get_env_under_cursor(idx, context));
                     envelope.is_seen()
                 }
             };
@@ -594,7 +610,7 @@ impl Component for ThreadListing {
             let coordinates = (
                 self.cursor_pos.0,
                 self.cursor_pos.1,
-                self.locations[self.cursor_pos.2],
+                self.get_env_under_cursor(self.cursor_pos.2, context),
             );
 
             if let Some(ref mut v) = self.view {

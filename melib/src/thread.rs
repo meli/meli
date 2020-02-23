@@ -272,13 +272,13 @@ impl FromStr for SortOrder {
 
 #[derive(Default, Clone, Debug, Deserialize, Serialize)]
 pub struct Thread {
-    root: ThreadNodeHash,
-    date: UnixTimestamp,
-    len: usize,
-    unseen: usize,
-    attachments: usize,
+    pub root: ThreadNodeHash,
+    pub date: UnixTimestamp,
+    pub len: usize,
+    pub unseen: usize,
+    pub attachments: usize,
 
-    snoozed: bool,
+    pub snoozed: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -294,7 +294,7 @@ impl Default for ThreadGroup {
 }
 
 impl ThreadGroup {
-    fn root(&self) -> Option<&Thread> {
+    pub fn root(&self) -> Option<&Thread> {
         if let ThreadGroup::Root(ref root) = self {
             Some(root)
         } else {
@@ -498,21 +498,14 @@ impl Threads {
         }
     }
 
-    pub fn threads_iter(&self) -> ThreadsIterator {
-        ThreadsIterator {
+    pub fn threads_group_iter(
+        &self,
+        root_tree: SmallVec<[ThreadNodeHash; 1024]>,
+    ) -> ThreadsGroupIterator {
+        ThreadsGroupIterator {
+            root_tree,
             pos: 0,
             stack: SmallVec::new(),
-            root_tree: self.tree_index.borrow(),
-            thread_nodes: &self.thread_nodes,
-        }
-    }
-
-    pub fn thread_iter(&self, index: usize) -> ThreadIterator {
-        ThreadIterator {
-            init_pos: index,
-            pos: index,
-            stack: SmallVec::new(),
-            root_tree: self.tree_index.borrow(),
             thread_nodes: &self.thread_nodes,
         }
     }
@@ -1190,14 +1183,6 @@ impl Threads {
             .iter()
             .filter_map(|(h, g)| g.root().map(|_| *h))
             .collect::<SmallVec<[ThreadHash; 1024]>>()
-    }
-
-    pub fn root_iter(&self) -> RootIterator {
-        RootIterator {
-            pos: 0,
-            root_tree: self.tree_index.borrow(),
-            thread_nodes: &self.thread_nodes,
-        }
     }
 }
 
