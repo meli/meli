@@ -38,12 +38,18 @@ pub use self::envelope::*;
 use linkify::{Link, LinkFinder};
 use xdg_utils::query_default_app;
 
+#[derive(PartialEq, Copy, Clone, Debug)]
+enum Source {
+    Decoded,
+    Raw,
+}
+
 #[derive(PartialEq, Debug)]
 enum ViewMode {
     Normal,
     Url,
     Attachment(usize),
-    Raw,
+    Source(Source),
     Ansi(RawBuffer),
     Subview,
     ContactSelector(UIDialog<Card>),
@@ -228,7 +234,10 @@ impl MailView {
         ))
         .into_owned();
         match self.mode {
-            ViewMode::Normal | ViewMode::Subview | ViewMode::ContactSelector(_) => {
+            ViewMode::Normal
+            | ViewMode::Subview
+            | ViewMode::ContactSelector(_)
+            | ViewMode::Source(Source::Decoded) => {
                 let mut t = body_text.to_string();
                 t.push('\n');
                 if body.count_attachments() > 1 {
@@ -294,7 +303,7 @@ impl MailView {
                 }
                 t
             }
-            ViewMode::Raw => String::from_utf8_lossy(body.body()).into_owned(),
+            ViewMode::Source(Source::Raw) => String::from_utf8_lossy(body.body()).into_owned(),
             ViewMode::Url => {
                 let mut t = body_text.to_string();
                 for (lidx, l) in finder.links(&body.text()).enumerate() {
@@ -376,7 +385,7 @@ impl Component for MailView {
 
             let headers = crate::conf::value(context, "mail.view.headers");
 
-            if self.mode == ViewMode::Raw {
+            if let ViewMode::Source(_) = self.mode {
                 clear_area(grid, area, self.theme_default);
                 context.dirty_areas.push_back(area);
                 get_y(upper_left)
@@ -652,14 +661,50 @@ impl Component for MailView {
                     self.mode = ViewMode::Subview;
                 }
                 ViewMode::Subview | ViewMode::ContactSelector(_) => {}
-                ViewMode::Raw => {
+                ViewMode::Source(source) => {
                     let text = {
-                        let account = &mut context.accounts[self.coordinates.0];
+                        let account = &context.accounts[self.coordinates.0];
                         let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
                         let mut op = account.operation(envelope.hash());
-                        op.as_bytes()
-                            .map(|v| String::from_utf8_lossy(v).into_owned())
-                            .unwrap_or_else(|e| e.to_string())
+                        if source == Source::Raw {
+                            op.as_bytes()
+                                .map(|v| String::from_utf8_lossy(v).into_owned())
+                                .unwrap_or_else(|e| e.to_string())
+                        } else {
+                            /* Decode each header value */
+                            let mut ret = op
+                                .as_bytes()
+                                .and_then(|b| {
+                                    melib::email::parser::headers(b)
+                                        .to_full_result()
+                                        .map_err(|err| err.into())
+                                })
+                                .and_then(|headers| {
+                                    Ok(headers
+                                        .into_iter()
+                                        .map(|(h, v)| {
+                                            melib::email::parser::phrase(v)
+                                                .to_full_result()
+                                                .map(|v| {
+                                                    let mut h = h.to_vec();
+                                                    h.push(b':');
+                                                    h.push(b' ');
+                                                    h.extend(v.into_iter());
+                                                    h
+                                                })
+                                                .map_err(|err| err.into())
+                                        })
+                                        .collect::<Result<Vec<Vec<u8>>>>()?
+                                        .join(&b"\n"[..]))
+                                })
+                                .map(|v| String::from_utf8_lossy(&v).into_owned())
+                                .unwrap_or_else(|e| e.to_string());
+                            drop(envelope);
+                            drop(account);
+                            ret.push_str("\n\n");
+                            ret.extend(self.attachment_to_text(&body, context).chars());
+                            ret
+                        }
                     };
                     let colors = crate::conf::value(context, "mail.view.body");
                     self.pager = Pager::from_string(text, Some(context), None, None, colors);
@@ -860,10 +905,16 @@ impl Component for MailView {
                 return true;
             }
             UIEvent::Input(ref key)
-                if (self.mode == ViewMode::Normal || self.mode == ViewMode::Subview)
+                if (self.mode == ViewMode::Normal
+                    || self.mode == ViewMode::Subview
+                    || self.mode == ViewMode::Source(Source::Decoded)
+                    || self.mode == ViewMode::Source(Source::Raw))
                     && shortcut!(key == shortcuts[MailView::DESCRIPTION]["view_raw_source"]) =>
             {
-                self.mode = ViewMode::Raw;
+                self.mode = match self.mode {
+                    ViewMode::Source(Source::Decoded) => ViewMode::Source(Source::Raw),
+                    _ => ViewMode::Source(Source::Decoded),
+                };
                 self.set_dirty(true);
                 return true;
             }
@@ -872,7 +923,8 @@ impl Component for MailView {
                     || self.mode.is_ansi()
                     || self.mode == ViewMode::Subview
                     || self.mode == ViewMode::Url
-                    || self.mode == ViewMode::Raw)
+                    || self.mode == ViewMode::Source(Source::Decoded)
+                    || self.mode == ViewMode::Source(Source::Raw))
                     && shortcut!(
                         key == shortcuts[MailView::DESCRIPTION]["return_to_normal_view"]
                     ) =>
@@ -1448,7 +1500,8 @@ impl Component for MailView {
         if !(self.mode.is_attachment()
             || self.mode.is_ansi()
             || self.mode == ViewMode::Subview
-            || self.mode == ViewMode::Raw
+            || self.mode == ViewMode::Source(Source::Decoded)
+            || self.mode == ViewMode::Source(Source::Raw)
             || self.mode == ViewMode::Url)
         {
             our_map.remove("return_to_normal_view");

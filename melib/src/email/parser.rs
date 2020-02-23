@@ -913,10 +913,10 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
             ptr += 1;
         }
 
-        ascii_e = ptr;
         while ptr < input.len() && (is_whitespace!(input[ptr])) {
             ptr += 1;
         }
+        ascii_e = ptr;
         if ptr >= input.len() {
             acc.extend(
                 ascii_token(&input[ascii_s..ascii_e])

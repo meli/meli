@@ -176,7 +176,7 @@ shortcut_key_values! { "envelope-view",
         return_to_normal_view |> "Return to envelope if viewing raw source or attachment." |> Key::Char('r'),
         toggle_expand_headers |> "Expand extra headers (References and others)." |> Key::Char('h'),
         toggle_url_mode |> "Toggles url open mode." |> Key::Char('u'),
-        view_raw_source |> "View raw envelope source in a pager." |> Key::Alt('r')
+        view_raw_source |> "View envelope source in a pager. (toggles between raw and decoded source)" |> Key::Alt('r')
     }
 }
 
