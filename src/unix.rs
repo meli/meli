@@ -114,6 +114,7 @@ pub mod timer {
             }
         }
 
+        /// Sets value and arms timer
         pub fn set_value(&mut self, value: Duration) {
             let spec = itimerspec {
                 it_interval: timespec {
@@ -143,6 +144,7 @@ pub mod timer {
             self.value = value;
         }
 
+        /// Sets interval and arms timer
         pub fn set_interval(&mut self, interval: Duration) {
             let spec = itimerspec {
                 it_interval: timespec {
@@ -170,36 +172,6 @@ pub mod timer {
                 }
             }
             self.interval = interval;
-        }
-
-        /// Arm by changing interval and value.
-        pub fn arm(&mut self, value: Duration) {
-            let spec = itimerspec {
-                it_interval: timespec {
-                    tv_sec: self.interval.as_secs().try_into().unwrap_or(0),
-                    tv_nsec: self.interval.subsec_nanos().try_into().unwrap_or(0),
-                },
-                it_value: timespec {
-                    tv_sec: value.as_secs().try_into().unwrap_or(0),
-                    tv_nsec: value.subsec_nanos().try_into().unwrap_or(0),
-                },
-            };
-            let ret =
-                unsafe { timer_settime(self.timer_id, 0, &spec as *const _, std::ptr::null_mut()) };
-            if ret != 0 {
-                match ret {
-                    libc::EFAULT => {
-                        panic!(
-                            "EFAULT: new_value, old_value, or curr_value is not a valid pointer."
-                        );
-                    }
-                    libc::EINVAL => {
-                        panic!("EINVAL: timerid is invalid.");
-                    }
-                    _ => {}
-                }
-            }
-            self.value = value;
         }
 
         pub fn new_with_signal(
