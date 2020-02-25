@@ -90,6 +90,7 @@ pub struct MailView {
     pager: Pager,
     subview: Option<Box<dyn Component>>,
     dirty: bool,
+    initialised: bool,
     mode: ViewMode,
     expand_headers: bool,
     headers_no: usize,
@@ -133,6 +134,7 @@ impl MailView {
             pager: pager.unwrap_or_default(),
             subview,
             dirty: true,
+            initialised: false,
             mode: ViewMode::Normal,
             expand_headers: false,
 
@@ -343,6 +345,7 @@ impl MailView {
     pub fn update(&mut self, new_coordinates: (usize, FolderHash, EnvelopeHash)) {
         self.coordinates = new_coordinates;
         self.mode = ViewMode::Normal;
+        self.initialised = false;
         self.set_dirty(true);
     }
 }
@@ -587,7 +590,8 @@ impl Component for MailView {
             }
         };
 
-        if self.dirty {
+        if !self.initialised {
+            self.initialised = true;
             let body = {
                 let account = &mut context.accounts[self.coordinates.0];
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
@@ -595,7 +599,6 @@ impl Component for MailView {
                 match envelope.body(op) {
                     Ok(body) => body,
                     Err(e) => {
-                        self.dirty = false;
                         clear_area(
                             grid,
                             (set_y(upper_left, y), bottom_right),
@@ -626,10 +629,12 @@ impl Component for MailView {
                     let attachment = &body.attachments()[aidx];
                     self.subview = Some(Box::new(HtmlView::new(&attachment, context)));
                     self.mode = ViewMode::Subview;
+                    self.initialised = false;
                 }
                 ViewMode::Normal if body.is_html() => {
                     self.subview = Some(Box::new(HtmlView::new(&body, context)));
                     self.mode = ViewMode::Subview;
+                    self.initialised = false;
                 }
                 ViewMode::Normal
                     if context
@@ -659,6 +664,7 @@ impl Component for MailView {
                         context,
                     )));
                     self.mode = ViewMode::Subview;
+                    self.initialised = false;
                 }
                 ViewMode::Subview | ViewMode::ContactSelector(_) => {}
                 ViewMode::Source(source) => {
@@ -787,6 +793,7 @@ impl Component for MailView {
                     }
                 }
                 self.mode = ViewMode::Normal;
+                self.initialised = false;
                 return true;
             }
             (ViewMode::ContactSelector(ref mut s), _) => {
@@ -879,6 +886,7 @@ impl Component for MailView {
                     context,
                 ));
                 self.dirty = true;
+                self.initialised = false;
                 return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt(''))
@@ -886,6 +894,7 @@ impl Component for MailView {
             {
                 self.mode = ViewMode::Normal;
                 self.set_dirty(true);
+                self.initialised = false;
                 return true;
             }
             UIEvent::Input(Key::Esc) | UIEvent::Input(Key::Alt('')) if !self.cmd_buf.is_empty() => {
@@ -916,6 +925,7 @@ impl Component for MailView {
                     _ => ViewMode::Source(Source::Decoded),
                 };
                 self.set_dirty(true);
+                self.initialised = false;
                 return true;
             }
             UIEvent::Input(ref key)
@@ -931,6 +941,7 @@ impl Component for MailView {
             {
                 self.mode = ViewMode::Normal;
                 self.set_dirty(true);
+                self.initialised = false;
                 return true;
             }
             UIEvent::Input(ref key)
@@ -1052,6 +1063,7 @@ impl Component for MailView {
 
                             ContentType::Text { .. } | ContentType::PGPSignature => {
                                 self.mode = ViewMode::Attachment(lidx);
+                                self.initialised = false;
                                 self.dirty = true;
                             }
                             ContentType::Multipart { .. } => {
@@ -1091,6 +1103,7 @@ impl Component for MailView {
                                             {
                                                 let raw_buf = RawBuffer::new(buf, name_opt);
                                                 self.mode = ViewMode::Ansi(raw_buf);
+                                                self.initialised = false;
                                                 self.dirty = true;
                                                 return true;
                                             }
@@ -1227,6 +1240,7 @@ impl Component for MailView {
                     ViewMode::Url => self.mode = ViewMode::Normal,
                     _ => {}
                 }
+                self.initialised = false;
                 self.dirty = true;
                 return true;
             }

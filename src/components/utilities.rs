@@ -276,6 +276,14 @@ pub enum PageMovement {
     End,
 }
 
+#[derive(Default, Debug, Clone)]
+pub struct SearchPattern {
+    pattern: String,
+    positions: Vec<(usize, usize)>,
+    cursor: usize,
+    movement: Option<PageMovement>,
+}
+
 /// A pager for text.
 /// `Pager` holds its own content in its own `CellBuffer` and when `draw` is called, it draws the
 /// current view of the text. It is responsible for scrolling etc.
@@ -287,6 +295,7 @@ pub struct Pager {
     height: usize,
     width: usize,
     minimum_width: usize,
+    search: Option<SearchPattern>,
     dirty: bool,
 
     colors: ThemeAttribute,
@@ -530,7 +539,40 @@ impl Component for Pager {
             empty_cell.set_bg(self.colors.bg);
             let mut content = CellBuffer::new(width, height, empty_cell);
             content.set_ascii_drawing(self.content.ascii_drawing);
+            if let Some(ref mut search) = self.search {
+                use melib::text_processing::search::KMP;
+                search.positions.clear();
+                for (y, l) in lines.iter().enumerate() {
+                    search.positions.extend(
+                        l.kmp_search(&search.pattern)
+                            .into_iter()
+                            .map(|offset| (y, offset)),
+                    );
+                }
+            }
             Pager::print_string(&mut content, lines, self.colors);
+            if let Some(ref mut search) = self.search {
+                let results_attr = crate::conf::value(context, "pager.highlight_search");
+                let results_current_attr =
+                    crate::conf::value(context, "pager.highlight_search_current");
+                search.cursor =
+                    std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
+                for (i, (y, x)) in search.positions.iter().enumerate() {
+                    for c in content.row_iter(*x..*x + search.pattern.grapheme_len(), *y) {
+                        if i == search.cursor {
+                            content[c]
+                                .set_fg(results_current_attr.fg)
+                                .set_bg(results_current_attr.bg)
+                                .set_attrs(results_current_attr.attrs);
+                        } else {
+                            content[c]
+                                .set_fg(results_attr.fg)
+                                .set_bg(results_attr.bg)
+                                .set_attrs(results_attr.attrs);
+                        }
+                    }
+                }
+            }
             self.content = content;
             self.height = height;
             self.width = width;
@@ -579,6 +621,25 @@ impl Component for Pager {
 
         if self.height == 0 || self.width == 0 {
             return;
+        }
+        if let Some(ref mut search) = self.search {
+            if !search.positions.is_empty() {
+                if let Some(mvm) = search.movement.take() {
+                    match mvm {
+                        PageMovement::Up(_) => {
+                            if self.cursor.1 > search.positions[search.cursor].0 {
+                                self.cursor.1 = search.positions[search.cursor].0;
+                            }
+                        }
+                        PageMovement::Down(_) => {
+                            if self.cursor.1 + height < search.positions[search.cursor].0 {
+                                self.cursor.1 = search.positions[search.cursor].0;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
 
         clear_area(grid, area, crate::conf::value(context, "theme_default"));
@@ -692,6 +753,49 @@ impl Component for Pager {
                         if args.is_empty() { "" } else { " " },
                         args.join(" ")
                     ))));
+                return true;
+            }
+            UIEvent::Action(Action::Listing(ListingAction::Filter(pattern))) => {
+                self.search = Some(SearchPattern {
+                    pattern: pattern.to_string(),
+                    positions: vec![],
+                    cursor: 0,
+                    movement: None,
+                });
+                self.initialised = false;
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Char('n')) if self.search.is_some() => {
+                if let Some(ref mut search) = self.search {
+                    search.movement = Some(PageMovement::Down(1));
+                    search.cursor += 1;
+                } else {
+                    unsafe {
+                        std::hint::unreachable_unchecked();
+                    }
+                }
+                self.initialised = false;
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Char('N')) if self.search.is_some() => {
+                if let Some(ref mut search) = self.search {
+                    search.movement = Some(PageMovement::Up(1));
+                    search.cursor = search.cursor.saturating_sub(1);
+                } else {
+                    unsafe {
+                        std::hint::unreachable_unchecked();
+                    }
+                }
+                self.initialised = false;
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Esc) if self.search.is_some() => {
+                self.search = None;
+                self.initialised = false;
+                self.dirty = true;
                 return true;
             }
             UIEvent::Resize => {

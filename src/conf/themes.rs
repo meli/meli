@@ -195,6 +195,8 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "mail.view.body",
     "mail.listing.attachment_flag",
     "mail.listing.thread_snooze_flag",
+    "pager.highlight_search",
+    "pager.highlight_search_current",
 ];
 
 /// `ThemeAttributeInner` but with the links resolved.
@@ -717,6 +719,8 @@ impl Default for Theme {
             }
         );
 
+        add!("pager.highlight_search", light = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::Bold }, dark = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::Bold });
+        add!("pager.highlight_search_current", light = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::Bold }, dark = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::Bold });
         Theme {
             light,
             dark,
