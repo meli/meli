@@ -902,7 +902,7 @@ impl From<(IndexStyle, (usize, MailboxHash))> for ListingComponent {
 }
 
 impl Listing {
-    const DESCRIPTION: &'static str = "listing";
+    pub const DESCRIPTION: &'static str = "listing";
     pub fn new(context: &mut Context) -> Self {
         let account_entries: Vec<AccountMenuEntry> = context
             .accounts

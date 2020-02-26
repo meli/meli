@@ -371,14 +371,17 @@ fn run_app() -> Result<()> {
     /* Create the application State. */
     let mut state = State::new(sender, receiver.clone())?;
 
-    let window = Box::new(Tabbed::new(vec![
-        Box::new(listing::Listing::new(&mut state.context)),
-        Box::new(ContactList::new(&state.context)),
-        Box::new(StatusPanel::new(crate::conf::value(
-            &state.context,
-            "theme_default",
-        ))),
-    ]));
+    let window = Box::new(Tabbed::new(
+        vec![
+            Box::new(listing::Listing::new(&mut state.context)),
+            Box::new(ContactList::new(&state.context)),
+            Box::new(StatusPanel::new(crate::conf::value(
+                &state.context,
+                "theme_default",
+            ))),
+        ],
+        &state.context,
+    ));
 
     let status_bar = Box::new(StatusBar::new(window));
     state.register_component(status_bar);

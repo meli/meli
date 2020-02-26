@@ -1449,20 +1449,26 @@ pub struct Tabbed {
 }
 
 impl Tabbed {
-    pub fn new(children: Vec<Box<dyn Component>>) -> Self {
+    pub fn new(children: Vec<Box<dyn Component>>, context: &Context) -> Self {
         let pinned = children.len();
-        Tabbed {
+        let mut ret = Tabbed {
+            help_curr_views: children
+                .get(0)
+                .map(|c| c.get_shortcuts(context))
+                .unwrap_or_default(),
+            help_content: CellBuffer::default(),
+            help_screen_cursor: (0, 0),
+            help_search: None,
             pinned,
             children,
             cursor_pos: 0,
             show_shortcuts: false,
-            help_content: CellBuffer::default(),
-            help_screen_cursor: (0, 0),
-            help_curr_views: ShortcutMaps::default(),
-            help_search: None,
             dirty: true,
             id: ComponentId::new_v4(),
-        }
+        };
+        ret.help_curr_views
+            .extend(ret.get_shortcuts(context).into_iter());
+        ret
     }
     fn draw_tabs(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let upper_left = upper_left!(area);
@@ -1819,12 +1825,15 @@ impl Component for Tabbed {
         self.dirty = false;
     }
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
-        let shortcuts = self.get_shortcuts(context);
+        let shortcuts = &self.help_curr_views;
         match &mut event {
             UIEvent::Input(Key::Alt(no)) if *no >= '1' && *no <= '9' => {
                 let no = *no as usize - '1' as usize;
                 if no < self.children.len() {
                     self.cursor_pos = no % self.children.len();
+                    let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+                    children_maps.extend(self.get_shortcuts(context));
+                    self.help_curr_views = children_maps;
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -1836,6 +1845,9 @@ impl Component for Tabbed {
             }
             UIEvent::Input(ref key) if shortcut!(key == shortcuts["general"]["next_tab"]) => {
                 self.cursor_pos = (self.cursor_pos + 1) % self.children.len();
+                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+                children_maps.extend(self.get_shortcuts(context));
+                self.help_curr_views = children_maps;
                 context
                     .replies
                     .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
@@ -1861,6 +1873,9 @@ impl Component for Tabbed {
                 self.add_component(Box::new(composer));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty(true);
+                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+                children_maps.extend(self.get_shortcuts(context));
+                self.help_curr_views = children_maps;
                 return true;
             }
             UIEvent::Action(Tab(Reply(coordinates, msg))) => {
@@ -1871,6 +1886,9 @@ impl Component for Tabbed {
                 )));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty(true);
+                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+                children_maps.extend(self.get_shortcuts(context));
+                self.help_curr_views = children_maps;
                 return true;
             }
             UIEvent::Action(Tab(Edit(account_pos, msg))) => {
@@ -1899,12 +1917,18 @@ impl Component for Tabbed {
                 self.add_component(Box::new(composer));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty(true);
+                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+                children_maps.extend(self.get_shortcuts(context));
+                self.help_curr_views = children_maps;
                 return true;
             }
             UIEvent::Action(Tab(New(ref mut e))) if e.is_some() => {
                 self.add_component(e.take().unwrap());
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty(true);
+                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+                children_maps.extend(self.get_shortcuts(context));
+                self.help_curr_views = children_maps;
                 return true;
             }
             UIEvent::Action(Tab(Close)) => {
@@ -1913,6 +1937,9 @@ impl Component for Tabbed {
                 }
                 let id = self.children[self.cursor_pos].id();
                 self.children[self.cursor_pos].kill(id, context);
+                let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+                children_maps.extend(self.get_shortcuts(context));
+                self.help_curr_views = children_maps;
                 self.set_dirty(true);
                 return true;
             }
@@ -1924,6 +1951,9 @@ impl Component for Tabbed {
                     self.children.remove(c_idx);
                     self.cursor_pos = 0;
                     self.set_dirty(true);
+                    let mut children_maps = self.children[self.cursor_pos].get_shortcuts(context);
+                    children_maps.extend(self.get_shortcuts(context));
+                    self.help_curr_views = children_maps;
                     return true;
                 } else {
                     debug!(
@@ -1975,6 +2005,20 @@ impl Component for Tabbed {
             }
             UIEvent::Resize => {
                 self.dirty = true;
+            }
+            UIEvent::Input(ref key)
+                if self.show_shortcuts
+                    && shortcut!(
+                        key == shortcuts[super::listing::Listing::DESCRIPTION]["search"]
+                    ) =>
+            {
+                context
+                    .replies
+                    .push_back(UIEvent::ExInput(Key::Paste("filter ".to_string())));
+                context
+                    .replies
+                    .push_back(UIEvent::ChangeMode(UIMode::Execute));
+                return true;
             }
             UIEvent::Input(ref key) if self.show_shortcuts => {
                 match key {
