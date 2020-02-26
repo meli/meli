@@ -2425,3 +2425,74 @@ pub mod boundaries {
         )
     }
 }
+
+use melib::text_processing::search::KMP;
+
+impl KMP for CellBuffer {
+    fn kmp_search(&self, pattern: &str) -> smallvec::SmallVec<[usize; 256]> {
+        let (mut w, prev_ind) =
+            pattern
+                .char_indices()
+                .skip(1)
+                .fold((vec![], 0), |(mut acc, prev_ind), (i, _)| {
+                    acc.push(&pattern[prev_ind..i]);
+                    (acc, i)
+                });
+        w.push(&pattern[prev_ind..]);
+        let t = Self::kmp_table(&w);
+        let mut j = 0; // (the position of the current character in text)
+        let mut k = 0; // (the position of the current character in pattern)
+        let mut ret = smallvec::SmallVec::new();
+
+        while j < self.buf.len() && k < w.len() as i32 {
+            if self.buf[j].ch() == '\n' {
+                j += 1;
+                continue;
+            }
+            if w[k as usize] == self.buf[j].ch().encode_utf8(&mut [0; 4]) {
+                j += 1;
+                k += 1;
+                if k as usize == w.len() {
+                    ret.push(j - (k as usize));
+                    k = t[k as usize];
+                }
+            } else {
+                k = t[k as usize];
+                if k < 0 {
+                    j += 1;
+                    k += 1;
+                }
+            }
+        }
+        ret
+    }
+}
+
+#[test]
+fn test_cellbuffer_search() {
+    use melib::text_processing::{Reflow, TextProcessing, _ALICE_CHAPTER_1};
+    let lines: Vec<String> = _ALICE_CHAPTER_1.split_lines_reflow(Reflow::All, Some(78));
+    let mut buf = CellBuffer::new(
+        lines.iter().map(String::len).max().unwrap(),
+        lines.len(),
+        Cell::with_char(' '),
+    );
+    let width = buf.size().0;
+    for (i, l) in lines.iter().enumerate() {
+        write_string_to_grid(
+            l,
+            &mut buf,
+            Color::Default,
+            Color::Default,
+            Attr::Default,
+            ((0, i), (width.saturating_sub(1), i)),
+            None,
+        );
+    }
+    for ind in buf.kmp_search("Alice") {
+        for c in &buf.cellvec()[ind..std::cmp::min(buf.cellvec().len(), ind + 25)] {
+            print!("{}", c.ch());
+        }
+        println!("");
+    }
+}

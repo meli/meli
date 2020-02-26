@@ -760,7 +760,7 @@ impl Component for Pager {
                     pattern: pattern.to_string(),
                     positions: vec![],
                     cursor: 0,
-                    movement: None,
+                    movement: Some(PageMovement::Home),
                 });
                 self.initialised = false;
                 self.dirty = true;
@@ -1442,6 +1442,7 @@ pub struct Tabbed {
     help_screen_cursor: (usize, usize),
     help_content: CellBuffer,
     help_curr_views: ShortcutMaps,
+    help_search: Option<SearchPattern>,
 
     dirty: bool,
     id: ComponentId,
@@ -1458,6 +1459,7 @@ impl Tabbed {
             help_content: CellBuffer::default(),
             help_screen_cursor: (0, 0),
             help_curr_views: ShortcutMaps::default(),
+            help_search: None,
             dirty: true,
             id: ComponentId::new_v4(),
         }
@@ -1737,6 +1739,67 @@ impl Component for Tabbed {
                 idx += 1;
             }
             self.help_curr_views = children_maps;
+            if let Some(ref mut search) = self.help_search {
+                use crate::melib::text_processing::search::KMP;
+                search.positions = self
+                    .help_content
+                    .kmp_search(&search.pattern)
+                    .into_iter()
+                    .map(|offset| (offset / width, offset % width))
+                    .collect::<Vec<(usize, usize)>>();
+                let results_attr = crate::conf::value(context, "pager.highlight_search");
+                let results_current_attr =
+                    crate::conf::value(context, "pager.highlight_search_current");
+                search.cursor =
+                    std::cmp::min(search.positions.len().saturating_sub(1), search.cursor);
+                for (i, (y, x)) in search.positions.iter().enumerate() {
+                    for c in self
+                        .help_content
+                        .row_iter(*x..*x + search.pattern.grapheme_len(), *y)
+                    {
+                        if i == search.cursor {
+                            self.help_content[c]
+                                .set_fg(results_current_attr.fg)
+                                .set_bg(results_current_attr.bg)
+                                .set_attrs(results_current_attr.attrs);
+                        } else {
+                            self.help_content[c]
+                                .set_fg(results_attr.fg)
+                                .set_bg(results_attr.bg)
+                                .set_attrs(results_attr.attrs);
+                        }
+                    }
+                }
+                if !search.positions.is_empty() {
+                    if let Some(mvm) = search.movement.take() {
+                        match mvm {
+                            PageMovement::Home => {
+                                if self.help_screen_cursor.1 > search.positions[search.cursor].0 {
+                                    self.help_screen_cursor.1 = search.positions[search.cursor].0;
+                                }
+                                if self.help_screen_cursor.1 + rows
+                                    < search.positions[search.cursor].0
+                                {
+                                    self.help_screen_cursor.1 = search.positions[search.cursor].0;
+                                }
+                            }
+                            PageMovement::Up(_) => {
+                                if self.help_screen_cursor.1 > search.positions[search.cursor].0 {
+                                    self.help_screen_cursor.1 = search.positions[search.cursor].0;
+                                }
+                            }
+                            PageMovement::Down(_) => {
+                                if self.help_screen_cursor.1 + rows
+                                    < search.positions[search.cursor].0
+                                {
+                                    self.help_screen_cursor.1 = search.positions[search.cursor].0;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
             copy_area(
                 grid,
                 &self.help_content,
@@ -1755,11 +1818,11 @@ impl Component for Tabbed {
         }
         self.dirty = false;
     }
-    fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
+    fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
-        match *event {
-            UIEvent::Input(Key::Alt(no)) if no >= '1' && no <= '9' => {
-                let no = no as usize - '1' as usize;
+        match &mut event {
+            UIEvent::Input(Key::Alt(no)) if *no >= '1' && *no <= '9' => {
+                let no = *no as usize - '1' as usize;
                 if no < self.children.len() {
                     self.cursor_pos = no % self.children.len();
                     context
@@ -1791,7 +1854,7 @@ impl Component for Tabbed {
                 return true;
             }
             UIEvent::Action(Tab(NewDraft(account_idx, ref draft))) => {
-                let mut composer = Composer::new(account_idx, context);
+                let mut composer = Composer::new(*account_idx, context);
                 if let Some(draft) = draft {
                     composer.set_draft(draft.clone());
                 }
@@ -1801,13 +1864,17 @@ impl Component for Tabbed {
                 return true;
             }
             UIEvent::Action(Tab(Reply(coordinates, msg))) => {
-                self.add_component(Box::new(Composer::with_context(coordinates, msg, context)));
+                self.add_component(Box::new(Composer::with_context(
+                    *coordinates,
+                    *msg,
+                    context,
+                )));
                 self.cursor_pos = self.children.len() - 1;
                 self.children[self.cursor_pos].set_dirty(true);
                 return true;
             }
             UIEvent::Action(Tab(Edit(account_pos, msg))) => {
-                let composer = match Composer::edit(account_pos, msg, context) {
+                let composer = match Composer::edit(*account_pos, *msg, context) {
                     Ok(c) => c,
                     Err(e) => {
                         context.replies.push_back(UIEvent::Notification(
@@ -1818,9 +1885,9 @@ impl Component for Tabbed {
                         log(
                             format!(
                                 "Failed to open envelope {}: {}",
-                                context.accounts[account_pos]
+                                context.accounts[*account_pos]
                                     .collection
-                                    .get_env(msg)
+                                    .get_env(*msg)
                                     .message_id_display(),
                                 e.to_string()
                             ),
@@ -1853,7 +1920,7 @@ impl Component for Tabbed {
                 if self.pinned > self.cursor_pos {
                     return true;
                 }
-                if let Some(c_idx) = self.children.iter().position(|x| x.id() == id) {
+                if let Some(c_idx) = self.children.iter().position(|x| x.id() == *id) {
                     self.children.remove(c_idx);
                     self.cursor_pos = 0;
                     self.set_dirty(true);
@@ -1864,6 +1931,47 @@ impl Component for Tabbed {
                         id, self.children
                     );
                 }
+            }
+            UIEvent::Action(Action::Listing(ListingAction::Filter(pattern)))
+                if self.show_shortcuts =>
+            {
+                self.help_search = Some(SearchPattern {
+                    pattern: pattern.to_string(),
+                    positions: vec![],
+                    cursor: 0,
+                    movement: Some(PageMovement::Home),
+                });
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Char('n')) if self.show_shortcuts && self.help_search.is_some() => {
+                if let Some(ref mut search) = self.help_search {
+                    search.movement = Some(PageMovement::Down(1));
+                    search.cursor += 1;
+                } else {
+                    unsafe {
+                        std::hint::unreachable_unchecked();
+                    }
+                }
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Char('N')) if self.show_shortcuts && self.help_search.is_some() => {
+                if let Some(ref mut search) = self.help_search {
+                    search.movement = Some(PageMovement::Up(1));
+                    search.cursor = search.cursor.saturating_sub(1);
+                } else {
+                    unsafe {
+                        std::hint::unreachable_unchecked();
+                    }
+                }
+                self.dirty = true;
+                return true;
+            }
+            UIEvent::Input(Key::Esc) if self.show_shortcuts && self.help_search.is_some() => {
+                self.help_search = None;
+                self.dirty = true;
+                return true;
             }
             UIEvent::Resize => {
                 self.dirty = true;

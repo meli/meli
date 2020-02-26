@@ -23,10 +23,41 @@ use super::TextProcessing;
 
 use smallvec::SmallVec;
 
-pub trait KMP: TextProcessing {
+pub trait KMP {
+    fn kmp_search(&self, pattern: &str) -> SmallVec<[usize; 256]>;
+    fn kmp_table(graphemes: &[&str]) -> SmallVec<[i32; 256]> {
+        let mut ret: SmallVec<_> = SmallVec::with_capacity(graphemes.len() + 1);
+        if graphemes.is_empty() {
+            return ret;
+        }
+        ret.push(-1);
+        for _ in 0..graphemes.len() {
+            ret.push(0);
+        }
+        let mut pos: usize = 1;
+        let mut cnd: i32 = 0;
+        while pos < graphemes.len() {
+            if graphemes[pos] == graphemes[cnd as usize] {
+                ret[pos] = ret[cnd as usize];
+            } else {
+                ret[pos] = cnd;
+                cnd = ret[cnd as usize];
+                while cnd >= 0 && graphemes[pos] != graphemes[cnd as usize] {
+                    cnd = ret[cnd as usize];
+                }
+            }
+            pos += 1;
+            cnd += 1;
+        }
+        ret[pos] = cnd;
+        ret
+    }
+}
+
+impl KMP for str {
     fn kmp_search(&self, pattern: &str) -> SmallVec<[usize; 256]> {
         let w = pattern.split_graphemes();
-        let t = kmp_table(&w);
+        let t = Self::kmp_table(&w);
         let mut j = 0; // (the position of the current character in text)
         let mut k = 0; // (the position of the current character in pattern)
         let mut ret = SmallVec::new();
@@ -50,36 +81,6 @@ pub trait KMP: TextProcessing {
         }
         ret
     }
-}
-
-impl KMP for str {}
-
-fn kmp_table(graphemes: &[&str]) -> SmallVec<[i32; 256]> {
-    let mut ret: SmallVec<_> = SmallVec::with_capacity(graphemes.len() + 1);
-    if graphemes.is_empty() {
-        return ret;
-    }
-    ret.push(-1);
-    for _ in 0..graphemes.len() {
-        ret.push(0);
-    }
-    let mut pos: usize = 1;
-    let mut cnd: i32 = 0;
-    while pos < graphemes.len() {
-        if graphemes[pos] == graphemes[cnd as usize] {
-            ret[pos] = ret[cnd as usize];
-        } else {
-            ret[pos] = cnd;
-            cnd = ret[cnd as usize];
-            while cnd >= 0 && graphemes[pos] != graphemes[cnd as usize] {
-                cnd = ret[cnd as usize];
-            }
-        }
-        pos += 1;
-        cnd += 1;
-    }
-    ret[pos] = cnd;
-    ret
 }
 
 #[test]

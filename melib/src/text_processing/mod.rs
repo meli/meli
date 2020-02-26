@@ -139,7 +139,7 @@ fn test_globmatch() {
     assert!(!"INBOX/Lists/".matches_glob("INBOX/Lists/*"));
 }
 
-const _ALICE_CHAPTER_1: &'static str = r#"CHAPTER I. Down the Rabbit-Hole
+pub const _ALICE_CHAPTER_1: &'static str = r#"CHAPTER I. Down the Rabbit-Hole
 
 Alice was beginning to get very tired of sitting by her sister on the 
 bank, and of having nothing to do: once or twice she had peeped into the 

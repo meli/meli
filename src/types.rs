@@ -252,7 +252,7 @@ pub mod segment_tree {
     #[test]
     fn test_segment_tree() {
         let array: SmallVec<[u8; 1024]> = [9, 1, 17, 2, 3, 23, 4, 5, 6, 37]
-            .into_iter()
+            .iter()
             .cloned()
             .collect::<SmallVec<[u8; 1024]>>();
         let segment_tree = SegmentTree::from(array.clone());
