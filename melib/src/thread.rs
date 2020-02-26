@@ -650,7 +650,7 @@ impl Threads {
         &mut self,
         envelopes: &mut Envelopes,
         env_hash: EnvelopeHash,
-        other_folder: bool,
+        other_mailbox: bool,
     ) -> bool {
         let envelopes_lck = envelopes.read().unwrap();
         let reply_to_id: Option<ThreadNodeHash> = envelopes_lck[&env_hash]
@@ -664,7 +664,7 @@ impl Threads {
             return false;
         }
 
-        if other_folder
+        if other_mailbox
             && reply_to_id.is_none()
             && !self.message_ids.contains_key(message_id)
             && !envelopes_lck[&env_hash]

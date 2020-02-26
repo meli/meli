@@ -28,9 +28,9 @@ const MAX_COLS: usize = 500;
 /// `MailView`.
 #[derive(Debug)]
 pub struct ThreadListing {
-    /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
-    cursor_pos: (usize, FolderHash, usize),
-    new_cursor_pos: (usize, FolderHash, usize),
+    /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
+    cursor_pos: (usize, MailboxHash, usize),
+    new_cursor_pos: (usize, MailboxHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -59,7 +59,7 @@ impl MailListingTrait for ThreadListing {
         SmallVec::new()
     }
 
-    /// Fill the `self.content` `CellBuffer` with the contents of the account folder the user has
+    /// Fill the `self.content` `CellBuffer` with the contents of the account mailbox the user has
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, _force: bool) {
         self.dirty = true;
@@ -127,7 +127,7 @@ impl MailListingTrait for ThreadListing {
             ret
         };
         if threads.len() == 0 {
-            let message = format!("Folder `{}` is empty.", account[&self.cursor_pos.1].name());
+            let message = format!("Mailbox `{}` is empty.", account[&self.cursor_pos.1].name());
             self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(
                 &message,
@@ -226,10 +226,10 @@ impl MailListingTrait for ThreadListing {
 }
 
 impl ListingTrait for ThreadListing {
-    fn coordinates(&self) -> (usize, FolderHash) {
+    fn coordinates(&self) -> (usize, MailboxHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
-    fn set_coordinates(&mut self, coordinates: (usize, FolderHash)) {
+    fn set_coordinates(&mut self, coordinates: (usize, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.view = None;
@@ -396,7 +396,7 @@ impl fmt::Display for ThreadListing {
 }
 
 impl ThreadListing {
-    pub fn new(coordinates: (usize, FolderHash)) -> Self {
+    pub fn new(coordinates: (usize, MailboxHash)) -> Self {
         ThreadListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),

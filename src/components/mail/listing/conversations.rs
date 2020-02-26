@@ -27,9 +27,9 @@ use std::iter::FromIterator;
 /// `ThreadView`.
 #[derive(Debug)]
 pub struct ConversationsListing {
-    /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
-    cursor_pos: (usize, FolderHash, usize),
-    new_cursor_pos: (usize, FolderHash, usize),
+    /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
+    cursor_pos: (usize, MailboxHash, usize),
+    new_cursor_pos: (usize, MailboxHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -79,11 +79,11 @@ impl MailListingTrait for ConversationsListing {
         SmallVec::from_iter(iter.into_iter())
     }
 
-    /// Fill the `self.data_columns` `CellBuffers` with the contents of the account folder the user has
+    /// Fill the `self.data_columns` `CellBuffers` with the contents of the account mailbox the user has
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
         self.dirty = true;
-        let old_folder_hash = self.cursor_pos.1;
+        let old_mailbox_hash = self.cursor_pos.1;
         let old_cursor_pos = self.cursor_pos;
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
@@ -159,7 +159,8 @@ impl MailListingTrait for ConversationsListing {
             Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
         );
 
-        if !force && old_cursor_pos == self.new_cursor_pos && old_folder_hash == self.cursor_pos.1 {
+        if !force && old_cursor_pos == self.new_cursor_pos && old_mailbox_hash == self.cursor_pos.1
+        {
             self.view.update(context);
         } else if self.unfocused {
             let thread_group = self.get_thread_under_cursor(self.cursor_pos.2);
@@ -170,11 +171,11 @@ impl MailListingTrait for ConversationsListing {
 }
 
 impl ListingTrait for ConversationsListing {
-    fn coordinates(&self) -> (usize, FolderHash) {
+    fn coordinates(&self) -> (usize, MailboxHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
 
-    fn set_coordinates(&mut self, coordinates: (usize, FolderHash)) {
+    fn set_coordinates(&mut self, coordinates: (usize, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
@@ -559,7 +560,7 @@ impl fmt::Display for ConversationsListing {
 
 impl ConversationsListing {
     const DESCRIPTION: &'static str = "compact listing";
-    pub fn new(coordinates: (usize, FolderHash)) -> Self {
+    pub fn new(coordinates: (usize, MailboxHash)) -> Self {
         ConversationsListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -592,14 +593,14 @@ impl ConversationsListing {
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
-        let folder = &context.accounts[self.cursor_pos.0][&self.cursor_pos.1].conf;
+        let mailbox = &context.accounts[self.cursor_pos.0][&self.cursor_pos.1].conf;
         let mut tags = String::new();
         let mut colors = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
-                if folder
+                if mailbox
                     .conf_override
                     .tags
                     .as_ref()
@@ -611,7 +612,7 @@ impl ConversationsListing {
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) = folder
+                if let Some(&c) = mailbox
                     .conf_override
                     .tags
                     .as_ref()

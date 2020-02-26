@@ -125,7 +125,7 @@ struct AccountMenuEntry {
     name: String,
     // Index in the config account vector.
     index: usize,
-    entries: SmallVec<[(usize, FolderHash); 16]>,
+    entries: SmallVec<[(usize, MailboxHash); 16]>,
 }
 
 pub trait MailListingTrait: ListingTrait {
@@ -137,10 +137,10 @@ pub trait MailListingTrait: ListingTrait {
     ) {
         let account = &mut context.accounts[self.coordinates().0];
         let mut envs_to_set: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
-        let folder_hash = self.coordinates().1;
-        for (_, h) in account.collection.threads[&folder_hash].thread_group_iter(thread_hash) {
+        let mailbox_hash = self.coordinates().1;
+        for (_, h) in account.collection.threads[&mailbox_hash].thread_group_iter(thread_hash) {
             envs_to_set.push(
-                account.collection.threads[&folder_hash].thread_nodes()[&h]
+                account.collection.threads[&mailbox_hash].thread_nodes()[&h]
                     .message()
                     .unwrap(),
             );
@@ -210,8 +210,8 @@ pub trait MailListingTrait: ListingTrait {
 }
 
 pub trait ListingTrait: Component {
-    fn coordinates(&self) -> (usize, FolderHash);
-    fn set_coordinates(&mut self, _: (usize, FolderHash));
+    fn coordinates(&self) -> (usize, MailboxHash);
+    fn set_coordinates(&mut self, _: (usize, MailboxHash));
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
     fn filter(&mut self, _filter_term: &str, _context: &Context) {}
@@ -446,11 +446,11 @@ impl Component for Listing {
                     self.change_account(context);
                 } else {
                     self.accounts[*account_index].entries = context.accounts[*account_index]
-                        .list_folders()
+                        .list_mailboxes()
                         .into_iter()
-                        .filter(|folder_node| {
-                            context.accounts[*account_index][&folder_node.hash]
-                                .ref_folder
+                        .filter(|mailbox_node| {
+                            context.accounts[*account_index][&mailbox_node.hash]
+                                .ref_mailbox
                                 .is_subscribed()
                         })
                         .map(|f| (f.depth, f.hash))
@@ -459,14 +459,14 @@ impl Component for Listing {
                 }
                 return true;
             }
-            UIEvent::MailboxDelete((account_index, _folder_hash))
-            | UIEvent::MailboxCreate((account_index, _folder_hash)) => {
+            UIEvent::MailboxDelete((account_index, _mailbox_hash))
+            | UIEvent::MailboxCreate((account_index, _mailbox_hash)) => {
                 self.accounts[*account_index].entries = context.accounts[*account_index]
-                    .list_folders()
+                    .list_mailboxes()
                     .into_iter()
-                    .filter(|folder_node| {
-                        context.accounts[*account_index][&folder_node.hash]
-                            .ref_folder
+                    .filter(|mailbox_node| {
+                        context.accounts[*account_index][&mailbox_node.hash]
+                            .ref_mailbox
                             .is_subscribed()
                     })
                     .map(|f| (f.depth, f.hash))
@@ -495,8 +495,8 @@ impl Component for Listing {
         let shortcuts = self.get_shortcuts(context);
         match *event {
             UIEvent::Input(ref k)
-                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_folder"])
-                    || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_folder"]) =>
+                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"])
+                    || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) =>
             {
                 let amount = if self.cmd_buf.is_empty() {
                     1
@@ -514,28 +514,28 @@ impl Component for Listing {
                     return true;
                 };
                 match k {
-                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_folder"]) => {
-                        if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"]) => {
+                        if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
                             .entries
                             .get(self.cursor_pos.1 + amount)
                         {
                             self.cursor_pos.1 += amount;
                             self.component
-                                .set_coordinates((self.cursor_pos.0, *folder_hash));
+                                .set_coordinates((self.cursor_pos.0, *mailbox_hash));
                             self.set_dirty(true);
                         } else {
                             return true;
                         }
                     }
-                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_folder"]) => {
+                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) => {
                         if self.cursor_pos.1 >= amount {
-                            if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+                            if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
                                 .entries
                                 .get(self.cursor_pos.1 - amount)
                             {
                                 self.cursor_pos.1 -= amount;
                                 self.component
-                                    .set_coordinates((self.cursor_pos.0, *folder_hash));
+                                    .set_coordinates((self.cursor_pos.0, *mailbox_hash));
                                 self.set_dirty(true);
                             } else {
                                 return true;
@@ -546,16 +546,16 @@ impl Component for Listing {
                     }
                     _ => {}
                 }
-                if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+                if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
                     .entries
                     .get(self.cursor_pos.1)
                 {
-                    /* Account might have no folders yet if it's offline */
-                    /* Check if per-folder configuration overrides general configuration */
+                    /* Account might have no mailboxes yet if it's offline */
+                    /* Check if per-mailbox configuration overrides general configuration */
                     if let Some(index_style) = context
                         .accounts
                         .get(self.cursor_pos.0)
-                        .and_then(|account| account[folder_hash].conf.conf_override.index_style)
+                        .and_then(|account| account[mailbox_hash].conf.conf_override.index_style)
                     {
                         self.component.set_style(index_style);
                     } else if let Some(index_style) = context
@@ -642,12 +642,12 @@ impl Component for Listing {
                     return true;
                 }
                 Action::ViewMailbox(idx) => {
-                    if let Some((_, folder_hash)) =
+                    if let Some((_, mailbox_hash)) =
                         self.accounts[self.cursor_pos.0].entries.get(*idx)
                     {
                         self.cursor_pos.1 = *idx;
                         self.component
-                            .set_coordinates((self.cursor_pos.0, *folder_hash));
+                            .set_coordinates((self.cursor_pos.0, *mailbox_hash));
                         self.set_dirty(true);
                     } else {
                         return true;
@@ -791,8 +791,8 @@ impl Component for Listing {
                 if shortcut!(key == shortcuts[Listing::DESCRIPTION]["refresh"]) =>
             {
                 let account = &mut context.accounts[self.cursor_pos.0];
-                if let Some(&folder_hash) = account.folders_order.get(self.cursor_pos.1) {
-                    if let Err(err) = account.refresh(folder_hash) {
+                if let Some(&mailbox_hash) = account.mailboxes_order.get(self.cursor_pos.1) {
+                    if let Err(err) = account.refresh(mailbox_hash) {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not refresh.".to_string()),
                             err.to_string(),
@@ -862,36 +862,36 @@ impl Component for Listing {
     }
 
     fn get_status(&self, context: &Context) -> String {
-        let folder_hash = if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+        let mailbox_hash = if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
             .entries
             .get(self.cursor_pos.1)
         {
-            *folder_hash
+            *mailbox_hash
         } else {
             return String::new();
         };
 
         let account = &context.accounts[self.cursor_pos.0];
         use crate::conf::accounts::MailboxStatus;
-        match account[&folder_hash].status {
+        match account[&mailbox_hash].status {
             MailboxStatus::Available | MailboxStatus::Parsing(_, _) => format!(
                 "Mailbox: {}, Messages: {}, New: {}",
-                account[&folder_hash].ref_folder.name(),
-                account.collection[&folder_hash].len(),
-                account[&folder_hash]
-                    .ref_folder
+                account[&mailbox_hash].ref_mailbox.name(),
+                account.collection[&mailbox_hash].len(),
+                account[&mailbox_hash]
+                    .ref_mailbox
                     .count()
                     .ok()
                     .map(|(v, _)| v)
                     .unwrap_or(0),
             ),
-            MailboxStatus::Failed(_) | MailboxStatus::None => account[&folder_hash].status(),
+            MailboxStatus::Failed(_) | MailboxStatus::None => account[&mailbox_hash].status(),
         }
     }
 }
 
-impl From<(IndexStyle, (usize, FolderHash))> for ListingComponent {
-    fn from((index_style, coordinates): (IndexStyle, (usize, FolderHash))) -> Self {
+impl From<(IndexStyle, (usize, MailboxHash))> for ListingComponent {
+    fn from((index_style, coordinates): (IndexStyle, (usize, MailboxHash))) -> Self {
         match index_style {
             IndexStyle::Plain => Plain(PlainListing::new(coordinates)),
             IndexStyle::Threaded => Threaded(ThreadListing::new(coordinates)),
@@ -909,10 +909,10 @@ impl Listing {
             .iter()
             .enumerate()
             .map(|(i, a)| {
-                let entries: SmallVec<[(usize, FolderHash); 16]> = a
-                    .list_folders()
+                let entries: SmallVec<[(usize, MailboxHash); 16]> = a
+                    .list_mailboxes()
                     .into_iter()
-                    .filter(|folder_node| a[&folder_node.hash].ref_folder.is_subscribed())
+                    .filter(|mailbox_node| a[&mailbox_node.hash].ref_mailbox.is_subscribed())
                     .map(|f| (f.depth, f.hash))
                     .collect::<_>();
 
@@ -981,10 +981,10 @@ impl Listing {
             debug!("BUG: invalid area in print_account");
         }
         // Each entry and its index in the account
-        let folders: FnvHashMap<FolderHash, Folder> = context.accounts[a.index]
-            .folder_entries
+        let mailboxes: FnvHashMap<MailboxHash, Mailbox> = context.accounts[a.index]
+            .mailbox_entries
             .iter()
-            .map(|(&hash, entry)| (hash, entry.ref_folder.clone()))
+            .map(|(&hash, entry)| (hash, entry.ref_mailbox.clone()))
             .collect();
 
         let upper_left = upper_left!(area);
@@ -992,21 +992,21 @@ impl Listing {
 
         let must_highlight_account: bool = self.cursor_pos.0 == a.index;
 
-        let mut lines: Vec<(usize, usize, FolderHash, Option<usize>)> = Vec::new();
+        let mut lines: Vec<(usize, usize, MailboxHash, Option<usize>)> = Vec::new();
 
-        for (i, &(depth, folder_hash)) in a.entries.iter().enumerate() {
-            if folders[&folder_hash].is_subscribed() {
-                match context.accounts[a.index].status(folder_hash) {
+        for (i, &(depth, mailbox_hash)) in a.entries.iter().enumerate() {
+            if mailboxes[&mailbox_hash].is_subscribed() {
+                match context.accounts[a.index].status(mailbox_hash) {
                     Ok(_) => {
                         lines.push((
                             depth,
                             i,
-                            folder_hash,
-                            folders[&folder_hash].count().ok().map(|(v, _)| v),
+                            mailbox_hash,
+                            mailboxes[&mailbox_hash].count().ok().map(|(v, _)| v),
                         ));
                     }
                     Err(_) => {
-                        lines.push((depth, i, folder_hash, None));
+                        lines.push((depth, i, mailbox_hash, None));
                     }
                 }
             }
@@ -1075,8 +1075,8 @@ impl Listing {
                 )
             };
 
-            let (depth, inc, folder_idx, count) = lines[idx];
-            /* Calculate how many columns the folder index tags should occupy with right alignment,
+            let (depth, inc, mailbox_idx, count) = lines[idx];
+            /* Calculate how many columns the mailbox index tags should occupy with right alignment,
              * eg.
              *  1
              *  2
@@ -1084,7 +1084,7 @@ impl Listing {
              *  9
              * 10
              */
-            let total_folder_no_digits = {
+            let total_mailbox_no_digits = {
                 let mut len = lines_len;
                 let mut ctr = 1;
                 while len > 9 {
@@ -1094,7 +1094,7 @@ impl Listing {
                 ctr
             };
             let (x, _) = write_string_to_grid(
-                &format!("{:>width$}", inc, width = total_folder_no_digits),
+                &format!("{:>width$}", inc, width = total_mailbox_no_digits),
                 grid,
                 index_att.fg,
                 index_att.bg,
@@ -1112,7 +1112,7 @@ impl Listing {
                 None,
             );
             let (x, _) = write_string_to_grid(
-                folders[&folder_idx].name(),
+                mailboxes[&mailbox_idx].name(),
                 grid,
                 att.fg,
                 att.bg,
@@ -1145,7 +1145,7 @@ impl Listing {
                     },
                 (
                     (
-                        /* Hide part of folder name if need be to fit the message count */
+                        /* Hide part of mailbox name if need be to fit the message count */
                         std::cmp::min(x, get_x(bottom_right).saturating_sub(count_string.len())),
                         y,
                     ),
@@ -1167,27 +1167,27 @@ impl Listing {
 
     fn change_account(&mut self, context: &mut Context) {
         self.accounts[self.cursor_pos.0].entries = context.accounts[self.cursor_pos.0]
-            .list_folders()
+            .list_mailboxes()
             .into_iter()
-            .filter(|folder_node| {
-                context.accounts[self.cursor_pos.0][&folder_node.hash]
-                    .ref_folder
+            .filter(|mailbox_node| {
+                context.accounts[self.cursor_pos.0][&mailbox_node.hash]
+                    .ref_mailbox
                     .is_subscribed()
             })
             .map(|f| (f.depth, f.hash))
             .collect::<_>();
-        /* Account might have no folders yet if it's offline */
-        if let Some((_, folder_hash)) = self.accounts[self.cursor_pos.0]
+        /* Account might have no mailboxes yet if it's offline */
+        if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
             .entries
             .get(self.cursor_pos.1)
         {
             self.component
-                .set_coordinates((self.cursor_pos.0, *folder_hash));
-            /* Check if per-folder configuration overrides general configuration */
+                .set_coordinates((self.cursor_pos.0, *mailbox_hash));
+            /* Check if per-mailbox configuration overrides general configuration */
             if let Some(index_style) = context
                 .accounts
                 .get(self.cursor_pos.0)
-                .and_then(|account| account[folder_hash].conf.conf_override.index_style)
+                .and_then(|account| account[mailbox_hash].conf.conf_override.index_style)
             {
                 self.component.set_style(index_style);
             } else if let Some(index_style) = context

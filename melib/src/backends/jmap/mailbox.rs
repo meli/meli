@@ -20,15 +20,15 @@
  */
 
 use super::*;
-use crate::backends::{FolderPermissions, SpecialUsageMailbox};
+use crate::backends::{MailboxPermissions, SpecialUsageMailbox};
 use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Debug, Clone)]
-pub struct JmapFolder {
+pub struct JmapMailbox {
     pub name: String,
     pub path: String,
-    pub hash: FolderHash,
-    pub v: Vec<FolderHash>,
+    pub hash: MailboxHash,
+    pub v: Vec<MailboxHash>,
     pub id: String,
     pub is_subscribed: bool,
     pub my_rights: JmapRights,
@@ -42,8 +42,8 @@ pub struct JmapFolder {
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
 }
 
-impl BackendFolder for JmapFolder {
-    fn hash(&self) -> FolderHash {
+impl BackendMailbox for JmapMailbox {
+    fn hash(&self) -> MailboxHash {
         self.hash
     }
 
@@ -57,20 +57,20 @@ impl BackendFolder for JmapFolder {
 
     fn change_name(&mut self, _s: &str) {}
 
-    fn clone(&self) -> Folder {
+    fn clone(&self) -> Mailbox {
         Box::new(std::clone::Clone::clone(self))
     }
 
-    fn children(&self) -> &[FolderHash] {
+    fn children(&self) -> &[MailboxHash] {
         &self.v
     }
 
-    fn parent(&self) -> Option<FolderHash> {
+    fn parent(&self) -> Option<MailboxHash> {
         None
     }
 
-    fn permissions(&self) -> FolderPermissions {
-        FolderPermissions::default()
+    fn permissions(&self) -> MailboxPermissions {
+        MailboxPermissions::default()
     }
 
     fn special_usage(&self) -> SpecialUsageMailbox {
@@ -83,7 +83,7 @@ impl BackendFolder for JmapFolder {
             Some("sent") => SpecialUsageMailbox::Sent,
             Some(other) => {
                 debug!(
-                    "unknown JMAP mailbox role for folder {}: {}",
+                    "unknown JMAP mailbox role for mailbox {}: {}",
                     self.path(),
                     other
                 );

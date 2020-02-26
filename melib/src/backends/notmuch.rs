@@ -20,9 +20,9 @@
  */
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
-use crate::backends::FolderHash;
+use crate::backends::MailboxHash;
 use crate::backends::{
-    BackendFolder, BackendOp, Folder, FolderPermissions, MailBackend, RefreshEventConsumer,
+    BackendMailbox, BackendOp, MailBackend, Mailbox, MailboxPermissions, RefreshEventConsumer,
     SpecialUsageMailbox,
 };
 use crate::conf::AccountSettings;
@@ -54,7 +54,7 @@ unsafe impl Sync for DbWrapper {}
 #[derive(Debug)]
 pub struct NotmuchDb {
     database: DbWrapper,
-    folders: Arc<RwLock<FnvHashMap<FolderHash, NotmuchFolder>>>,
+    mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, NotmuchMailbox>>>,
     index: Arc<RwLock<FnvHashMap<EnvelopeHash, &'static CStr>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     path: PathBuf,
@@ -66,7 +66,7 @@ unsafe impl Sync for NotmuchDb {}
 
 impl Drop for NotmuchDb {
     fn drop(&mut self) {
-        for f in self.folders.write().unwrap().values_mut() {
+        for f in self.mailboxes.write().unwrap().values_mut() {
             if let Some(query) = f.query.take() {
                 unsafe {
                     notmuch_query_destroy(query);
@@ -82,10 +82,10 @@ impl Drop for NotmuchDb {
 }
 
 #[derive(Debug, Clone, Default)]
-struct NotmuchFolder {
-    hash: FolderHash,
-    children: Vec<FolderHash>,
-    parent: Option<FolderHash>,
+struct NotmuchMailbox {
+    hash: MailboxHash,
+    children: Vec<MailboxHash>,
+    parent: Option<MailboxHash>,
     name: String,
     path: String,
     query_str: String,
@@ -97,8 +97,8 @@ struct NotmuchFolder {
     unseen: Arc<Mutex<usize>>,
 }
 
-impl BackendFolder for NotmuchFolder {
-    fn hash(&self) -> FolderHash {
+impl BackendMailbox for NotmuchMailbox {
+    fn hash(&self) -> MailboxHash {
         self.hash
     }
 
@@ -112,15 +112,15 @@ impl BackendFolder for NotmuchFolder {
 
     fn change_name(&mut self, _s: &str) {}
 
-    fn clone(&self) -> Folder {
+    fn clone(&self) -> Mailbox {
         Box::new(std::clone::Clone::clone(self))
     }
 
-    fn children(&self) -> &[FolderHash] {
+    fn children(&self) -> &[MailboxHash] {
         &self.children
     }
 
-    fn parent(&self) -> Option<FolderHash> {
+    fn parent(&self) -> Option<MailboxHash> {
         self.parent
     }
 
@@ -128,8 +128,8 @@ impl BackendFolder for NotmuchFolder {
         *self.usage.read().unwrap()
     }
 
-    fn permissions(&self) -> FolderPermissions {
-        FolderPermissions::default()
+    fn permissions(&self) -> MailboxPermissions {
+        MailboxPermissions::default()
     }
 
     fn is_subscribed(&self) -> bool {
@@ -150,8 +150,8 @@ impl BackendFolder for NotmuchFolder {
     }
 }
 
-unsafe impl Send for NotmuchFolder {}
-unsafe impl Sync for NotmuchFolder {}
+unsafe impl Send for NotmuchMailbox {}
+unsafe impl Sync for NotmuchMailbox {}
 
 impl NotmuchDb {
     pub fn new(
@@ -159,11 +159,11 @@ impl NotmuchDb {
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
     ) -> Result<Box<dyn MailBackend>> {
         let mut database: *mut notmuch_database_t = std::ptr::null_mut();
-        let path = Path::new(s.root_folder.as_str()).expand().to_path_buf();
+        let path = Path::new(s.root_mailbox.as_str()).expand().to_path_buf();
         if !path.exists() {
             return Err(MeliError::new(format!(
-                "\"root_folder\" {} for account {} is not a valid path.",
-                s.root_folder.as_str(),
+                "\"root_mailbox\" {} for account {} is not a valid path.",
+                s.root_mailbox.as_str(),
                 s.name()
             )));
         }
@@ -180,22 +180,22 @@ impl NotmuchDb {
         if status != 0 {
             return Err(MeliError::new(format!(
                 "Could not open notmuch database at path {}. notmuch_database_open returned {}.",
-                s.root_folder.as_str(),
+                s.root_mailbox.as_str(),
                 status
             )));
         }
         assert!(!database.is_null());
-        let mut folders = FnvHashMap::default();
-        for (k, f) in s.folders.iter() {
+        let mut mailboxes = FnvHashMap::default();
+        for (k, f) in s.mailboxes.iter() {
             if let Some(query_str) = f.extra.get("query") {
                 let hash = {
                     let mut h = DefaultHasher::new();
                     k.hash(&mut h);
                     h.finish()
                 };
-                folders.insert(
+                mailboxes.insert(
                     hash,
-                    NotmuchFolder {
+                    NotmuchMailbox {
                         hash,
                         name: k.to_string(),
                         path: k.to_string(),
@@ -211,7 +211,7 @@ impl NotmuchDb {
                 );
             } else {
                 return Err(MeliError::new(format!(
-                    "notmuch folder configuration entry \"{}\" should have a \"query\" value set.",
+                    "notmuch mailbox configuration entry \"{}\" should have a \"query\" value set.",
                     k
                 )));
             }
@@ -225,24 +225,24 @@ impl NotmuchDb {
             index: Arc::new(RwLock::new(Default::default())),
             tag_index: Arc::new(RwLock::new(Default::default())),
 
-            folders: Arc::new(RwLock::new(folders)),
+            mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
         }))
     }
 
     pub fn validate_config(s: &AccountSettings) -> Result<()> {
-        let path = Path::new(s.root_folder.as_str()).expand().to_path_buf();
+        let path = Path::new(s.root_mailbox.as_str()).expand().to_path_buf();
         if !path.exists() {
             return Err(MeliError::new(format!(
-                "\"root_folder\" {} for account {} is not a valid path.",
-                s.root_folder.as_str(),
+                "\"root_mailbox\" {} for account {} is not a valid path.",
+                s.root_mailbox.as_str(),
                 s.name()
             )));
         }
-        for (k, f) in s.folders.iter() {
+        for (k, f) in s.mailboxes.iter() {
             if f.extra.get("query").is_none() {
                 return Err(MeliError::new(format!(
-                    "notmuch folder configuration entry \"{}\" should have a \"query\" value set.",
+                    "notmuch mailbox configuration entry \"{}\" should have a \"query\" value set.",
                     k
                 )));
             }
@@ -288,21 +288,21 @@ impl MailBackend for NotmuchDb {
     fn is_online(&self) -> Result<()> {
         Ok(())
     }
-    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
+    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
-        let folder_hash = folder.hash();
+        let mailbox_hash = mailbox.hash();
         let database = self.database.clone();
         let index = self.index.clone();
         let tag_index = self.tag_index.clone();
-        let folders = self.folders.clone();
+        let mailboxes = self.mailboxes.clone();
         let handle = {
             let tx = w.tx();
             let closure = move |_work_context| {
                 let mut ret: Vec<Envelope> = Vec::new();
                 let database_lck = database.inner.read().unwrap();
-                let mut folders_lck = folders.write().unwrap();
-                let folder = folders_lck.get_mut(&folder_hash).unwrap();
-                let query_str = std::ffi::CString::new(folder.query_str.as_str()).unwrap();
+                let mut mailboxes_lck = mailboxes.write().unwrap();
+                let mailbox = mailboxes_lck.get_mut(&mailbox_hash).unwrap();
+                let query_str = std::ffi::CString::new(mailbox.query_str.as_str()).unwrap();
                 let query: *mut notmuch_query_t =
                     unsafe { notmuch_query_create(*database_lck, query_str.as_ptr()) };
                 if query.is_null() {
@@ -319,7 +319,7 @@ impl MailBackend for NotmuchDb {
                 if status != 0 {
                     tx.send(AsyncStatus::Payload(Err(MeliError::new(format!(
                         "Search for {} returned {}",
-                        folder.query_str.as_str(),
+                        mailbox.query_str.as_str(),
                         status,
                     )))))
                     .unwrap();
@@ -383,7 +383,7 @@ impl MailBackend for NotmuchDb {
                         index.write().unwrap().remove(&env_hash);
                     }
                 }
-                folder.query = Some(query);
+                mailbox.query = Some(query);
                 tx.send(AsyncStatus::Payload(Ok(ret))).unwrap();
                 tx.send(AsyncStatus::Finished).unwrap();
             };
@@ -405,13 +405,13 @@ impl MailBackend for NotmuchDb {
             .spawn(move || {})?;
         Ok(handle.thread().id())
     }
-    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
+    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
         Ok(self
-            .folders
+            .mailboxes
             .read()
             .unwrap()
             .iter()
-            .map(|(k, f)| (*k, BackendFolder::clone(f)))
+            .map(|(k, f)| (*k, BackendMailbox::clone(f)))
             .collect())
     }
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
@@ -424,7 +424,7 @@ impl MailBackend for NotmuchDb {
         })
     }
 
-    fn save(&self, bytes: &[u8], _folder: &str, flags: Option<Flag>) -> Result<()> {
+    fn save(&self, bytes: &[u8], _mailbox: &str, flags: Option<Flag>) -> Result<()> {
         let mut path = self
             .save_messages_to
             .as_ref()
@@ -435,7 +435,7 @@ impl MailBackend for NotmuchDb {
                 path.push(d);
                 if !path.is_dir() {
                     return Err(MeliError::new(format!(
-                        "{} is not a valid maildir folder",
+                        "{} is not a valid maildir mailbox",
                         path.display()
                     )));
                 }
@@ -443,7 +443,7 @@ impl MailBackend for NotmuchDb {
             }
             path.push("cur");
         }
-        crate::backends::MaildirType::save_to_folder(path, bytes, flags)
+        crate::backends::MaildirType::save_to_mailbox(path, bytes, flags)
     }
 
     fn as_any(&self) -> &dyn::std::any::Any {

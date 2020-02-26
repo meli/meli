@@ -38,7 +38,7 @@ pub use self::helpers::*;
 use super::execute::Action;
 use super::terminal::*;
 
-use melib::backends::FolderHash;
+use melib::backends::MailboxHash;
 use melib::{EnvelopeHash, RefreshEvent};
 use nix::unistd::Pid;
 use std;
@@ -63,7 +63,7 @@ pub enum ThreadEvent {
     Input(Key),
     /// User input and input as raw bytes.
     InputRaw((Key, Vec<u8>)),
-    /// A watched folder has been refreshed.
+    /// A watched Mailbox has been refreshed.
     RefreshMailbox(Box<RefreshEvent>),
     UIEvent(UIEvent),
     /// A thread has updated some of its information
@@ -110,13 +110,13 @@ pub enum UIEvent {
     Notification(Option<String>, String, Option<NotificationType>),
     Action(Action),
     StatusEvent(StatusEvent),
-    MailboxUpdate((usize, FolderHash)), // (account_idx, mailbox_idx)
-    MailboxDelete((usize, FolderHash)),
-    MailboxCreate((usize, FolderHash)),
+    MailboxUpdate((usize, MailboxHash)), // (account_idx, mailbox_idx)
+    MailboxDelete((usize, MailboxHash)),
+    MailboxCreate((usize, MailboxHash)),
     AccountStatusChange(usize),
     ComponentKill(Uuid),
-    WorkerProgress(FolderHash),
-    StartupCheck(FolderHash),
+    WorkerProgress(MailboxHash),
+    StartupCheck(MailboxHash),
     RefreshEvent(Box<RefreshEvent>),
     EnvelopeUpdate(EnvelopeHash),
     EnvelopeRename(EnvelopeHash, EnvelopeHash), // old_hash, new_hash

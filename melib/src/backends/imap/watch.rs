@@ -28,20 +28,20 @@ pub struct ImapWatchKit {
     pub is_online: Arc<Mutex<(Instant, Result<()>)>>,
     pub main_conn: Arc<Mutex<ImapConnection>>,
     pub uid_store: Arc<UIDStore>,
-    pub folders: Arc<RwLock<FnvHashMap<FolderHash, ImapFolder>>>,
+    pub mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, ImapMailbox>>>,
     pub sender: RefreshEventConsumer,
     pub work_context: WorkContext,
     pub tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 }
 
 macro_rules! exit_on_error {
-    ($sender:expr, $folder_hash:ident, $work_context:ident, $thread_id:ident, $($result:expr)+) => {
+    ($sender:expr, $mailbox_hash:ident, $work_context:ident, $thread_id:ident, $($result:expr)+) => {
         $(if let Err(e) = $result {
             debug!("failure: {}", e.to_string());
             $work_context.set_status.send(($thread_id, e.to_string())).unwrap();
             $work_context.finished.send($thread_id).unwrap();
             $sender.send(RefreshEvent {
-                hash: $folder_hash,
+                hash: $mailbox_hash,
                 kind: RefreshEventKind::Failure(e.clone()),
             });
             Err(e)
@@ -56,7 +56,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         mut conn,
         main_conn,
         uid_store,
-        folders,
+        mailboxes,
         sender,
         work_context,
         tag_index,
@@ -76,17 +76,17 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
             .send((thread_id, "sleeping...".to_string()))
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(5 * 60 * 1000));
-        let folders = folders.read().unwrap();
-        for folder in folders.values() {
+        let mailboxes = mailboxes.read().unwrap();
+        for mailbox in mailboxes.values() {
             work_context
                 .set_status
                 .send((
                     thread_id,
-                    format!("examining `{}` for updates...", folder.path()),
+                    format!("examining `{}` for updates...", mailbox.path()),
                 ))
                 .unwrap();
             examine_updates(
-                folder,
+                mailbox,
                 &sender,
                 &mut conn,
                 &uid_store,
@@ -109,7 +109,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         is_online,
         main_conn,
         uid_store,
-        folders,
+        mailboxes,
         sender,
         work_context,
         tag_index,
@@ -122,16 +122,16 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     }
     conn.connect()?;
     let thread_id: std::thread::ThreadId = std::thread::current().id();
-    let folder: ImapFolder = match folders
+    let mailbox: ImapMailbox = match mailboxes
         .read()
         .unwrap()
         .values()
         .find(|f| f.parent.is_none() && (f.special_usage() == SpecialUsageMailbox::Inbox))
         .map(std::clone::Clone::clone)
     {
-        Some(folder) => folder,
+        Some(mailbox) => mailbox,
         None => {
-            let err = MeliError::new("INBOX mailbox not found in local folder index. meli may have not parsed the IMAP folders correctly");
+            let err = MeliError::new("INBOX mailbox not found in local mailbox index. meli may have not parsed the IMAP mailboxes correctly");
             debug!("failure: {}", err.to_string());
             work_context
                 .set_status
@@ -144,28 +144,28 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
             return Err(err);
         }
     };
-    let folder_hash = folder.hash();
+    let mailbox_hash = mailbox.hash();
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
         sender,
-        folder_hash,
+        mailbox_hash,
         work_context,
         thread_id,
-        conn.send_command(format!("SELECT \"{}\"", folder.imap_path()).as_bytes())
+        conn.send_command(format!("SELECT \"{}\"", mailbox.imap_path()).as_bytes())
         conn.read_response(&mut response)
     );
     debug!("select response {}", &response);
     {
-        let mut prev_exists = folder.exists.lock().unwrap();
+        let mut prev_exists = mailbox.exists.lock().unwrap();
         *prev_exists = match protocol_parser::select_response(&response) {
             Ok(ok) => {
                 {
                     let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
-                    if let Some(v) = uidvalidities.get_mut(&folder_hash) {
+                    if let Some(v) = uidvalidities.get_mut(&mailbox_hash) {
                         if *v != ok.uidvalidity {
                             sender.send(RefreshEvent {
-                                hash: folder_hash,
+                                hash: mailbox_hash,
                                 kind: RefreshEventKind::Rescan,
                             });
                             *prev_exists = 0;
@@ -176,15 +176,15 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         }
                     } else {
                         sender.send(RefreshEvent {
-                            hash: folder_hash,
+                            hash: mailbox_hash,
                             kind: RefreshEventKind::Rescan,
                         });
                         sender.send(RefreshEvent {
-                            hash: folder_hash,
+                            hash: mailbox_hash,
                             kind: RefreshEventKind::Failure(MeliError::new(format!(
                                 "Unknown mailbox: {} {}",
-                                folder.path(),
-                                folder_hash
+                                mailbox.path(),
+                                mailbox_hash
                             ))),
                         });
                     }
@@ -200,7 +200,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     }
     exit_on_error!(
         sender,
-        folder_hash,
+        mailbox_hash,
         work_context,
         thread_id,
         conn.send_command(b"IDLE")
@@ -214,14 +214,14 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     let mut watch = std::time::Instant::now();
     /* duration interval to send heartbeat */
     let _26_mins = std::time::Duration::from_secs(26 * 60);
-    /* duration interval to check other folders for changes */
+    /* duration interval to check other mailboxes for changes */
     let _5_mins = std::time::Duration::from_secs(5 * 60);
     while let Some(line) = iter.next() {
         let now = std::time::Instant::now();
         if now.duration_since(beat) >= _26_mins {
             exit_on_error!(
                 sender,
-                folder_hash,
+                mailbox_hash,
                 work_context,
                 thread_id,
                 iter.conn.set_nonblocking(true)
@@ -237,21 +237,21 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         if now.duration_since(watch) >= _5_mins {
             /* Time to poll all inboxes */
             let mut conn = main_conn.lock().unwrap();
-            for folder in folders.read().unwrap().values() {
+            for mailbox in mailboxes.read().unwrap().values() {
                 work_context
                     .set_status
                     .send((
                         thread_id,
-                        format!("examining `{}` for updates...", folder.path()),
+                        format!("examining `{}` for updates...", mailbox.path()),
                     ))
                     .unwrap();
                 exit_on_error!(
                     sender,
-                    folder_hash,
+                    mailbox_hash,
                     work_context,
                     thread_id,
                     examine_updates(
-                        folder,
+                        mailbox,
                         &sender,
                         &mut conn,
                         &uid_store,
@@ -279,7 +279,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 /* UID SEARCH RECENT */
                 exit_on_error!(
                     sender,
-                    folder_hash,
+                    mailbox_hash,
                     work_context,
                     thread_id,
                     conn.send_command(b"EXAMINE INBOX")
@@ -297,7 +297,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     Ok(v) => {
                         exit_on_error!(
                             sender,
-                            folder_hash,
+                            mailbox_hash,
                             work_context,
                             thread_id,
                             conn.send_command(
@@ -331,13 +331,13 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             .hash_index
                                             .lock()
                                             .unwrap()
-                                            .insert(env.hash(), (uid, folder_hash));
+                                            .insert(env.hash(), (uid, mailbox_hash));
                                         uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
                                         debug!(
                                             "Create event {} {} {}",
                                             env.hash(),
                                             env.subject(),
-                                            folder.path(),
+                                            mailbox.path(),
                                         );
                                         if let Some((_, keywords)) = flags {
                                             let mut tag_lck = tag_index.write().unwrap();
@@ -350,12 +350,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             }
                                         }
                                         if !env.is_seen() {
-                                            *folder.unseen.lock().unwrap() += 1;
+                                            *mailbox.unseen.lock().unwrap() += 1;
                                         }
-                                        *folder.exists.lock().unwrap() += 1;
+                                        *mailbox.exists.lock().unwrap() += 1;
 
                                         sender.send(RefreshEvent {
-                                            hash: folder_hash,
+                                            hash: mailbox_hash,
                                             kind: Create(Box::new(env)),
                                         });
                                     }
@@ -390,7 +390,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 let mut conn = main_conn.lock().unwrap();
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
                  * */
-                let mut prev_exists = folder.exists.lock().unwrap();
+                let mut prev_exists = mailbox.exists.lock().unwrap();
                 debug!("exists {}", n);
                 work_context
                     .set_status
@@ -400,14 +400,14 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                             "got `{} EXISTS` notification (EXISTS was previously {} for {}",
                             n,
                             *prev_exists,
-                            folder.path()
+                            mailbox.path()
                         ),
                     ))
                     .unwrap();
                 if n > *prev_exists {
                     exit_on_error!(
                         sender,
-                        folder_hash,
+                        mailbox_hash,
                         work_context,
                         thread_id,
                         conn.send_command(b"EXAMINE INBOX")
@@ -450,7 +450,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         .hash_index
                                         .lock()
                                         .unwrap()
-                                        .insert(env.hash(), (uid, folder_hash));
+                                        .insert(env.hash(), (uid, mailbox_hash));
                                     uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
                                     if let Some((_, keywords)) = flags {
                                         let mut tag_lck = tag_index.write().unwrap();
@@ -466,13 +466,13 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         "Create event {} {} {}",
                                         env.hash(),
                                         env.subject(),
-                                        folder.path(),
+                                        mailbox.path(),
                                     );
                                     if !env.is_seen() {
-                                        *folder.unseen.lock().unwrap() += 1;
+                                        *mailbox.unseen.lock().unwrap() += 1;
                                     }
                                     sender.send(RefreshEvent {
-                                        hash: folder_hash,
+                                        hash: mailbox_hash,
                                         kind: Create(Box::new(env)),
                                     });
                                 }
@@ -507,7 +507,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         .unwrap();
     work_context.finished.send(thread_id).unwrap();
     sender.send(RefreshEvent {
-        hash: folder_hash,
+        hash: mailbox_hash,
         kind: RefreshEventKind::Failure(MeliError::new(format!(
             "IDLE connection dropped: {}",
             &err
@@ -517,7 +517,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
 }
 
 pub fn examine_updates(
-    folder: &ImapFolder,
+    mailbox: &ImapMailbox,
     sender: &RefreshEventConsumer,
     conn: &mut ImapConnection,
     uid_store: &Arc<UIDStore>,
@@ -525,15 +525,15 @@ pub fn examine_updates(
     tag_index: &Arc<RwLock<BTreeMap<u64, String>>>,
 ) -> Result<()> {
     let thread_id: std::thread::ThreadId = std::thread::current().id();
-    let folder_hash = folder.hash();
-    debug!("examining folder {} {}", folder_hash, folder.path());
+    let mailbox_hash = mailbox.hash();
+    debug!("examining mailbox {} {}", mailbox_hash, mailbox.path());
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
         sender,
-        folder_hash,
+        mailbox_hash,
         work_context,
         thread_id,
-        conn.send_command(format!("EXAMINE \"{}\"", folder.imap_path()).as_bytes())
+        conn.send_command(format!("EXAMINE \"{}\"", mailbox.imap_path()).as_bytes())
         conn.read_response(&mut response)
     );
     match protocol_parser::select_response(&response) {
@@ -542,10 +542,10 @@ pub fn examine_updates(
             {
                 let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
-                if let Some(v) = uidvalidities.get_mut(&folder_hash) {
+                if let Some(v) = uidvalidities.get_mut(&mailbox_hash) {
                     if *v != ok.uidvalidity {
                         sender.send(RefreshEvent {
-                            hash: folder_hash,
+                            hash: mailbox_hash,
                             kind: RefreshEventKind::Rescan,
                         });
                         uid_store.uid_index.lock().unwrap().clear();
@@ -555,27 +555,27 @@ pub fn examine_updates(
                     }
                 } else {
                     sender.send(RefreshEvent {
-                        hash: folder_hash,
+                        hash: mailbox_hash,
                         kind: RefreshEventKind::Rescan,
                     });
                     sender.send(RefreshEvent {
-                        hash: folder_hash,
+                        hash: mailbox_hash,
                         kind: RefreshEventKind::Failure(MeliError::new(format!(
                             "Unknown mailbox: {} {}",
-                            folder.path(),
-                            folder_hash
+                            mailbox.path(),
+                            mailbox_hash
                         ))),
                     });
                 }
             }
-            let mut prev_exists = folder.exists.lock().unwrap();
+            let mut prev_exists = mailbox.exists.lock().unwrap();
             let n = ok.exists;
             if ok.recent > 0 {
                 {
                     /* UID SEARCH RECENT */
                     exit_on_error!(
                         sender,
-                        folder_hash,
+                        mailbox_hash,
                         work_context,
                         thread_id,
                         conn.send_command(b"UID SEARCH RECENT")
@@ -591,7 +591,7 @@ pub fn examine_updates(
                         Ok(v) => {
                             exit_on_error!(
                                 sender,
-                                folder_hash,
+                                mailbox_hash,
                                 work_context,
                                 thread_id,
                                 conn.send_command(
@@ -615,7 +615,7 @@ pub fn examine_updates(
                                                 .hash_index
                                                 .lock()
                                                 .unwrap()
-                                                .insert(env.hash(), (uid, folder_hash));
+                                                .insert(env.hash(), (uid, mailbox_hash));
                                             uid_store
                                                 .uid_index
                                                 .lock()
@@ -625,7 +625,7 @@ pub fn examine_updates(
                                                 "Create event {} {} {}",
                                                 env.hash(),
                                                 env.subject(),
-                                                folder.path(),
+                                                mailbox.path(),
                                             );
                                             if let Some((_, keywords)) = flags {
                                                 let mut tag_lck = tag_index.write().unwrap();
@@ -638,10 +638,10 @@ pub fn examine_updates(
                                                 }
                                             }
                                             if !env.is_seen() {
-                                                *folder.unseen.lock().unwrap() += 1;
+                                                *mailbox.unseen.lock().unwrap() += 1;
                                             }
                                             sender.send(RefreshEvent {
-                                                hash: folder_hash,
+                                                hash: mailbox_hash,
                                                 kind: Create(Box::new(env)),
                                             });
                                         }
@@ -667,7 +667,7 @@ pub fn examine_updates(
                 debug!("exists {}", n);
                 exit_on_error!(
                     sender,
-                    folder_hash,
+                    mailbox_hash,
                     work_context,
                     thread_id,
                     conn.send_command(
@@ -693,7 +693,7 @@ pub fn examine_updates(
                                     .hash_index
                                     .lock()
                                     .unwrap()
-                                    .insert(env.hash(), (uid, folder_hash));
+                                    .insert(env.hash(), (uid, mailbox_hash));
                                 uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
                                 if let Some((_, keywords)) = flags {
                                     let mut tag_lck = tag_index.write().unwrap();
@@ -709,13 +709,13 @@ pub fn examine_updates(
                                     "Create event {} {} {}",
                                     env.hash(),
                                     env.subject(),
-                                    folder.path(),
+                                    mailbox.path(),
                                 );
                                 if !env.is_seen() {
-                                    *folder.unseen.lock().unwrap() += 1;
+                                    *mailbox.unseen.lock().unwrap() += 1;
                                 }
                                 sender.send(RefreshEvent {
-                                    hash: folder_hash,
+                                    hash: mailbox_hash,
                                     kind: Create(Box::new(env)),
                                 });
                             }

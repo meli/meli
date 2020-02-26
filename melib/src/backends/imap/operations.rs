@@ -34,7 +34,7 @@ pub struct ImapOp {
     bytes: Option<String>,
     headers: Option<String>,
     body: Option<String>,
-    folder_path: String,
+    mailbox_path: String,
     flags: Cell<Option<Flag>>,
     connection: Arc<Mutex<ImapConnection>>,
     uid_store: Arc<UIDStore>,
@@ -44,7 +44,7 @@ pub struct ImapOp {
 impl ImapOp {
     pub fn new(
         uid: usize,
-        folder_path: String,
+        mailbox_path: String,
         connection: Arc<Mutex<ImapConnection>>,
         uid_store: Arc<UIDStore>,
         tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
@@ -55,7 +55,7 @@ impl ImapOp {
             bytes: None,
             headers: None,
             body: None,
-            folder_path,
+            mailbox_path,
             flags: Cell::new(None),
             uid_store,
             tag_index,
@@ -78,7 +78,7 @@ impl BackendOp for ImapOp {
                 let mut response = String::with_capacity(8 * 1024);
                 {
                     let mut conn = self.connection.lock().unwrap();
-                    conn.send_command(format!("SELECT \"{}\"", &self.folder_path,).as_bytes())?;
+                    conn.send_command(format!("SELECT \"{}\"", &self.mailbox_path,).as_bytes())?;
                     conn.read_response(&mut response)?;
                     conn.send_command(format!("UID FETCH {} (FLAGS RFC822)", self.uid).as_bytes())?;
                     conn.read_response(&mut response)?;
@@ -116,7 +116,7 @@ impl BackendOp for ImapOp {
         } else {
             let mut response = String::with_capacity(8 * 1024);
             let mut conn = self.connection.lock().unwrap();
-            conn.send_command(format!("EXAMINE \"{}\"", &self.folder_path,).as_bytes())
+            conn.send_command(format!("EXAMINE \"{}\"", &self.mailbox_path,).as_bytes())
                 .unwrap();
             conn.read_response(&mut response).unwrap();
             conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())
@@ -154,7 +154,7 @@ impl BackendOp for ImapOp {
 
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock().unwrap();
-        conn.send_command(format!("SELECT \"{}\"", &self.folder_path,).as_bytes())?;
+        conn.send_command(format!("SELECT \"{}\"", &self.mailbox_path,).as_bytes())?;
         conn.read_response(&mut response)?;
         debug!(&response);
         conn.send_command(
@@ -190,7 +190,7 @@ impl BackendOp for ImapOp {
     fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()> {
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock().unwrap();
-        conn.send_command(format!("SELECT \"{}\"", &self.folder_path,).as_bytes())?;
+        conn.send_command(format!("SELECT \"{}\"", &self.mailbox_path,).as_bytes())?;
         conn.read_response(&mut response)?;
         conn.send_command(
             format!(

@@ -21,8 +21,8 @@
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
-use crate::backends::FolderHash;
-use crate::backends::{BackendFolder, Folder, MailBackend, RefreshEventConsumer};
+use crate::backends::MailboxHash;
+use crate::backends::{BackendMailbox, MailBackend, Mailbox, RefreshEventConsumer};
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
@@ -71,8 +71,8 @@ use rfc8620::*;
 pub mod objects;
 use objects::*;
 
-pub mod folder;
-use folder::*;
+pub mod mailbox;
+use mailbox::*;
 
 #[derive(Debug, Default)]
 pub struct EnvelopeCache {
@@ -189,7 +189,7 @@ pub struct JmapType {
     connection: Arc<JmapConnection>,
     store: Arc<RwLock<Store>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
-    folders: Arc<RwLock<FnvHashMap<FolderHash, JmapFolder>>>,
+    mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, JmapMailbox>>>,
 }
 
 impl MailBackend for JmapType {
@@ -202,18 +202,18 @@ impl MailBackend for JmapType {
             if Instant::now().duration_since(self.online.lock().unwrap().0)
                 >= std::time::Duration::new(2, 0)
             {
-                let _ = self.folders();
+                let _ = self.mailboxes();
             }
         }
     }
 
-    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
+    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
-        let folders = self.folders.clone();
+        let mailboxes = self.mailboxes.clone();
         let store = self.store.clone();
         let tag_index = self.tag_index.clone();
         let connection = self.connection.clone();
-        let folder_hash = folder.hash();
+        let mailbox_hash = mailbox.hash();
         let handle = {
             let tx = w.tx();
             let closure = move |_work_context| {
@@ -221,7 +221,7 @@ impl MailBackend for JmapType {
                     &connection,
                     &store,
                     &tag_index,
-                    &folders.read().unwrap()[&folder_hash],
+                    &mailboxes.read().unwrap()[&mailbox_hash],
                 )))
                 .unwrap();
                 tx.send(AsyncStatus::Finished).unwrap();
@@ -239,19 +239,19 @@ impl MailBackend for JmapType {
         Err(MeliError::from("sadfsa"))
     }
 
-    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
-        if self.folders.read().unwrap().is_empty() {
-            let folders = std::dbg!(protocol::get_mailboxes(&self.connection))?;
-            *self.folders.write().unwrap() = folders;
+    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+        if self.mailboxes.read().unwrap().is_empty() {
+            let mailboxes = std::dbg!(protocol::get_mailboxes(&self.connection))?;
+            *self.mailboxes.write().unwrap() = mailboxes;
         }
 
         Ok(self
-            .folders
+            .mailboxes
             .read()
             .unwrap()
             .iter()
             .filter(|(_, f)| f.is_subscribed)
-            .map(|(&h, f)| (h, BackendFolder::clone(f) as Folder))
+            .map(|(&h, f)| (h, BackendMailbox::clone(f) as Mailbox))
             .collect())
     }
 
@@ -263,7 +263,7 @@ impl MailBackend for JmapType {
         ))
     }
 
-    fn save(&self, _bytes: &[u8], _folder: &str, _flags: Option<Flag>) -> Result<()> {
+    fn save(&self, _bytes: &[u8], _mailbox: &str, _flags: Option<Flag>) -> Result<()> {
         Ok(())
     }
 
@@ -291,7 +291,7 @@ impl JmapType {
             connection: Arc::new(JmapConnection::new(&server_conf, online.clone())?),
             store: Arc::new(RwLock::new(Store::default())),
             tag_index: Arc::new(RwLock::new(Default::default())),
-            folders: Arc::new(RwLock::new(FnvHashMap::default())),
+            mailboxes: Arc::new(RwLock::new(FnvHashMap::default())),
             account_name: s.name.clone(),
             online,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),

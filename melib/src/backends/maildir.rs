@@ -39,7 +39,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Debug)]
 pub struct MaildirOp {
     hash_index: HashIndexes,
-    folder_hash: FolderHash,
+    mailbox_hash: MailboxHash,
     hash: EnvelopeHash,
     slice: Option<Mmap>,
 }
@@ -48,7 +48,7 @@ impl Clone for MaildirOp {
     fn clone(&self) -> Self {
         MaildirOp {
             hash_index: self.hash_index.clone(),
-            folder_hash: self.folder_hash,
+            mailbox_hash: self.mailbox_hash,
             hash: self.hash,
             slice: None,
         }
@@ -56,18 +56,18 @@ impl Clone for MaildirOp {
 }
 
 impl MaildirOp {
-    pub fn new(hash: EnvelopeHash, hash_index: HashIndexes, folder_hash: FolderHash) -> Self {
+    pub fn new(hash: EnvelopeHash, hash_index: HashIndexes, mailbox_hash: MailboxHash) -> Self {
         MaildirOp {
             hash_index,
-            folder_hash,
+            mailbox_hash,
             hash,
             slice: None,
         }
     }
     fn path(&self) -> PathBuf {
         let map = self.hash_index.lock().unwrap();
-        let map = &map[&self.folder_hash];
-        debug!("looking for {} in {} map", self.hash, self.folder_hash);
+        let map = &map[&self.mailbox_hash];
+        debug!("looking for {} in {} map", self.hash, self.mailbox_hash);
         if !map.contains_key(&self.hash) {
             debug!("doesn't contain it though len = {}\n{:#?}", map.len(), map);
             for e in map.iter() {
@@ -155,7 +155,7 @@ impl<'a> BackendOp for MaildirOp {
         let new_name: PathBuf = new_name.into();
         let hash_index = self.hash_index.clone();
         let mut map = hash_index.lock().unwrap();
-        let map = map.entry(self.folder_hash).or_default();
+        let map = map.entry(self.mailbox_hash).or_default();
         map.entry(old_hash).or_default().modified = Some(PathMod::Path(new_name.clone()));
 
         debug!("renaming {:?} to {:?}", path, new_name);
@@ -170,37 +170,37 @@ impl<'a> BackendOp for MaildirOp {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct MaildirFolder {
-    hash: FolderHash,
+pub struct MaildirMailbox {
+    hash: MailboxHash,
     name: String,
     fs_path: PathBuf,
     path: PathBuf,
-    parent: Option<FolderHash>,
-    children: Vec<FolderHash>,
+    parent: Option<MailboxHash>,
+    children: Vec<MailboxHash>,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
     pub is_subscribed: bool,
-    permissions: FolderPermissions,
+    permissions: MailboxPermissions,
     pub total: Arc<Mutex<usize>>,
     pub unseen: Arc<Mutex<usize>>,
 }
 
-impl MaildirFolder {
+impl MaildirMailbox {
     pub fn new(
         path: String,
         file_name: String,
-        parent: Option<FolderHash>,
-        children: Vec<FolderHash>,
+        parent: Option<MailboxHash>,
+        children: Vec<MailboxHash>,
         settings: &AccountSettings,
     ) -> Result<Self> {
         let pathbuf = PathBuf::from(&path);
         let mut h = DefaultHasher::new();
         pathbuf.hash(&mut h);
 
-        /* Check if folder path (Eg `INBOX/Lists/luddites`) is included in the subscribed
+        /* Check if mailbox path (Eg `INBOX/Lists/luddites`) is included in the subscribed
          * mailboxes in user configuration */
         let fname = pathbuf
             .strip_prefix(
-                PathBuf::from(&settings.root_folder)
+                PathBuf::from(&settings.root_mailbox)
                     .expand()
                     .parent()
                     .unwrap_or_else(|| &Path::new("/")),
@@ -213,7 +213,7 @@ impl MaildirFolder {
             true
         };
 
-        let ret = MaildirFolder {
+        let ret = MaildirMailbox {
             hash: h.finish(),
             name: file_name,
             path: fname.unwrap().to_path_buf(),
@@ -222,7 +222,7 @@ impl MaildirFolder {
             children,
             usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
             is_subscribed: false,
-            permissions: FolderPermissions {
+            permissions: MailboxPermissions {
                 create_messages: !read_only,
                 remove_messages: !read_only,
                 set_flags: !read_only,
@@ -250,7 +250,7 @@ impl MaildirFolder {
             p.push(d);
             if !p.is_dir() {
                 return Err(MeliError::new(format!(
-                    "{} is not a valid maildir folder",
+                    "{} is not a valid maildir mailbox",
                     path.display()
                 )));
             }
@@ -260,8 +260,8 @@ impl MaildirFolder {
     }
 }
 
-impl BackendFolder for MaildirFolder {
-    fn hash(&self) -> FolderHash {
+impl BackendMailbox for MaildirMailbox {
+    fn hash(&self) -> MailboxHash {
         self.hash
     }
 
@@ -277,11 +277,11 @@ impl BackendFolder for MaildirFolder {
         self.name = s.to_string();
     }
 
-    fn children(&self) -> &[FolderHash] {
+    fn children(&self) -> &[MailboxHash] {
         &self.children
     }
 
-    fn clone(&self) -> Folder {
+    fn clone(&self) -> Mailbox {
         Box::new(std::clone::Clone::clone(self))
     }
 
@@ -289,11 +289,11 @@ impl BackendFolder for MaildirFolder {
         *self.usage.read().unwrap()
     }
 
-    fn parent(&self) -> Option<FolderHash> {
+    fn parent(&self) -> Option<MailboxHash> {
         self.parent
     }
 
-    fn permissions(&self) -> FolderPermissions {
+    fn permissions(&self) -> MailboxPermissions {
         self.permissions
     }
     fn is_subscribed(&self) -> bool {

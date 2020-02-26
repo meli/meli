@@ -394,7 +394,7 @@ pub struct EmailQueryResponse {
 pub struct EmailQuery {
     #[serde(flatten)]
     pub query_call: Query<EmailFilterCondition, EmailObject>,
-    //pub filter: EmailFilterCondition, /* "inMailboxes": [ folder.id ] },*/
+    //pub filter: EmailFilterCondition, /* "inMailboxes": [ mailbox.id ] },*/
     pub collapse_threads: bool,
 }
 

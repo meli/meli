@@ -30,7 +30,7 @@ Input is received in the main loop from threads which listen on the stdin for us
 
 use super::*;
 use crate::plugins::PluginManager;
-use melib::backends::{FolderHash, NotifyFn};
+use melib::backends::{MailboxHash, NotifyFn};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use fnv::FnvHashMap;
@@ -85,7 +85,7 @@ impl InputHandler {
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: Vec<Account>,
-    pub mailbox_hashes: FnvHashMap<FolderHash, usize>,
+    pub mailbox_hashes: FnvHashMap<MailboxHash, usize>,
     pub settings: Settings,
 
     pub runtime_settings: Settings,
@@ -126,12 +126,12 @@ impl Context {
     pub fn account_status(
         &mut self,
         idx_a: usize,
-        folder_hash: FolderHash,
+        mailbox_hash: MailboxHash,
     ) -> result::Result<(), usize> {
-        match self.accounts[idx_a].status(folder_hash) {
+        match self.accounts[idx_a].status(mailbox_hash) {
             Ok(()) => {
                 self.replies
-                    .push_back(UIEvent::MailboxUpdate((idx_a, folder_hash)));
+                    .push_back(UIEvent::MailboxUpdate((idx_a, mailbox_hash)));
                 Ok(())
             }
             Err(n) => Err(n),
@@ -149,13 +149,13 @@ impl Context {
         let ret = accounts[account_pos].is_online();
         if ret.is_ok() {
             if !was_online {
-                for folder_node in accounts[account_pos].list_folders() {
+                for mailbox_node in accounts[account_pos].list_mailboxes() {
                     debug!(
-                        "hash & folder: {:?} {}",
-                        folder_node.hash,
-                        accounts[account_pos][&folder_node.hash].name()
+                        "hash & mailbox: {:?} {}",
+                        mailbox_node.hash,
+                        accounts[account_pos][&mailbox_node.hash].name()
                     );
-                    mailbox_hashes.insert(folder_node.hash, account_pos);
+                    mailbox_hashes.insert(mailbox_node.hash, account_pos);
                 }
                 /* Account::watch() needs
                  * - work_controller to pass `work_context` to the watcher threads and then add them
@@ -267,7 +267,7 @@ impl State {
                         &backends,
                         work_controller.get_context(),
                         sender.clone(),
-                        NotifyFn::new(Box::new(move |f: FolderHash| {
+                        NotifyFn::new(Box::new(move |f: MailboxHash| {
                             sender
                                 .send(ThreadEvent::UIEvent(UIEvent::WorkerProgress(f)))
                                 .unwrap();
@@ -347,7 +347,7 @@ impl State {
         for i in 0..s.context.accounts.len() {
             if s.context.is_online(i).is_ok() && s.context.accounts[i].is_empty() {
                 return Err(MeliError::new(format!(
-                    "Account {} has no folders configured.",
+                    "Account {} has no mailboxes configured.",
                     s.context.accounts[i].name()
                 )));
             }
@@ -357,7 +357,7 @@ impl State {
     }
 
     /*
-     * When we receive a folder hash from a watcher thread,
+     * When we receive a mailbox hash from a watcher thread,
      * we match the hash to the index of the mailbox, request a reload
      * and startup a thread to remind us to poll it every now and then till it's finished.
      */
@@ -796,14 +796,14 @@ impl State {
                         env::var(key.as_str()).unwrap_or_else(|e| e.to_string()),
                     )));
             }
-            Folder(account_name, op) => {
+            Mailbox(account_name, op) => {
                 if let Some(account) = self
                     .context
                     .accounts
                     .iter_mut()
                     .find(|a| a.name() == account_name)
                 {
-                    match account.folder_operation(op) {
+                    match account.mailbox_operation(op) {
                         Err(err) => {
                             self.context.replies.push_back(UIEvent::StatusEvent(
                                 StatusEvent::DisplayMessage(err.to_string()),
@@ -911,9 +911,9 @@ impl State {
                 self.child = Some(child);
                 return;
             }
-            UIEvent::WorkerProgress(folder_hash) => {
-                if let Some(&account_idx) = self.context.mailbox_hashes.get(&folder_hash) {
-                    let _ = self.context.accounts[account_idx].status(folder_hash);
+            UIEvent::WorkerProgress(mailbox_hash) => {
+                if let Some(&account_idx) = self.context.mailbox_hashes.get(&mailbox_hash) {
+                    let _ = self.context.accounts[account_idx].status(mailbox_hash);
                 }
                 return;
             }

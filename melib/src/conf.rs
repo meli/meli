@@ -25,14 +25,14 @@ use std::collections::HashMap;
 #[derive(Debug, Serialize, Default, Clone)]
 pub struct AccountSettings {
     pub name: String,
-    pub root_folder: String,
+    pub root_mailbox: String,
     pub format: String,
     pub identity: String,
     pub read_only: bool,
     pub display_name: Option<String>,
-    pub subscribed_folders: Vec<String>,
+    pub subscribed_mailboxes: Vec<String>,
     #[serde(default)]
-    pub folders: HashMap<String, FolderConf>,
+    pub mailboxes: HashMap<String, MailboxConf>,
     #[serde(default)]
     pub manual_refresh: bool,
     #[serde(flatten)]
@@ -49,8 +49,8 @@ impl AccountSettings {
     pub fn set_name(&mut self, s: String) {
         self.name = s;
     }
-    pub fn root_folder(&self) -> &str {
-        &self.root_folder
+    pub fn root_mailbox(&self) -> &str {
+        &self.root_mailbox
     }
     pub fn identity(&self) -> &str {
         &self.identity
@@ -62,8 +62,8 @@ impl AccountSettings {
         self.display_name.as_ref()
     }
 
-    pub fn subscribed_folders(&self) -> &Vec<String> {
-        &self.subscribed_folders
+    pub fn subscribed_mailboxes(&self) -> &Vec<String> {
+        &self.subscribed_mailboxes
     }
 
     #[cfg(feature = "vcard")]
@@ -74,7 +74,7 @@ impl AccountSettings {
 
 #[serde(default)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FolderConf {
+pub struct MailboxConf {
     pub alias: Option<String>,
     #[serde(default = "true_val")]
     pub autoload: bool,
@@ -88,9 +88,9 @@ pub struct FolderConf {
     pub extra: HashMap<String, String>,
 }
 
-impl Default for FolderConf {
+impl Default for MailboxConf {
     fn default() -> Self {
-        FolderConf {
+        MailboxConf {
             alias: None,
             autoload: true,
             subscribe: ToggleFlag::Unset,
@@ -101,7 +101,7 @@ impl Default for FolderConf {
     }
 }
 
-impl FolderConf {
+impl MailboxConf {
     pub fn alias(&self) -> Option<&str> {
         self.alias.as_ref().map(String::as_str)
     }

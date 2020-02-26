@@ -48,9 +48,9 @@ macro_rules! address_list {
 /// `ThreadView`.
 #[derive(Debug)]
 pub struct CompactListing {
-    /// (x, y, z): x is accounts, y is folders, z is index inside a folder.
-    cursor_pos: (usize, FolderHash, usize),
-    new_cursor_pos: (usize, FolderHash, usize),
+    /// (x, y, z): x is accounts, y is mailboxes, z is index inside a mailbox.
+    cursor_pos: (usize, MailboxHash, usize),
+    new_cursor_pos: (usize, MailboxHash, usize),
     length: usize,
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
@@ -100,7 +100,7 @@ impl MailListingTrait for CompactListing {
         SmallVec::from_iter(iter.into_iter())
     }
 
-    /// Fill the `self.data_columns` `CellBuffers` with the contents of the account folder the user has
+    /// Fill the `self.data_columns` `CellBuffers` with the contents of the account mailbox the user has
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
         self.dirty = true;
@@ -184,11 +184,11 @@ impl MailListingTrait for CompactListing {
 }
 
 impl ListingTrait for CompactListing {
-    fn coordinates(&self) -> (usize, FolderHash) {
+    fn coordinates(&self) -> (usize, MailboxHash) {
         (self.new_cursor_pos.0, self.new_cursor_pos.1)
     }
 
-    fn set_coordinates(&mut self, coordinates: (usize, FolderHash)) {
+    fn set_coordinates(&mut self, coordinates: (usize, MailboxHash)) {
         self.new_cursor_pos = (coordinates.0, coordinates.1, 0);
         self.unfocused = false;
         self.view = ThreadView::default();
@@ -618,7 +618,7 @@ impl fmt::Display for CompactListing {
 
 impl CompactListing {
     const DESCRIPTION: &'static str = "compact listing";
-    pub fn new(coordinates: (usize, FolderHash)) -> Self {
+    pub fn new(coordinates: (usize, MailboxHash)) -> Self {
         CompactListing {
             cursor_pos: (0, 1, 0),
             new_cursor_pos: (coordinates.0, coordinates.1, 0),
@@ -650,14 +650,14 @@ impl CompactListing {
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
-        let folder = &context.accounts[self.cursor_pos.0][&self.cursor_pos.1].conf;
+        let mailbox = &context.accounts[self.cursor_pos.0][&self.cursor_pos.1].conf;
         let mut tags = String::new();
         let mut colors: SmallVec<[_; 8]> = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
-                if folder
+                if mailbox
                     .conf_override
                     .tags
                     .as_ref()
@@ -669,7 +669,7 @@ impl CompactListing {
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) = folder
+                if let Some(&c) = mailbox
                     .conf_override
                     .tags
                     .as_ref()

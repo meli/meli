@@ -18,36 +18,38 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use crate::backends::{BackendFolder, Folder, FolderHash, FolderPermissions, SpecialUsageMailbox};
+use crate::backends::{
+    BackendMailbox, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
+};
 use crate::error::*;
 use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Debug, Default, Clone)]
-pub struct ImapFolder {
-    pub(super) hash: FolderHash,
+pub struct ImapMailbox {
+    pub(super) hash: MailboxHash,
     pub(super) imap_path: String,
     pub(super) path: String,
     pub(super) name: String,
-    pub(super) parent: Option<FolderHash>,
-    pub(super) children: Vec<FolderHash>,
+    pub(super) parent: Option<MailboxHash>,
+    pub(super) children: Vec<MailboxHash>,
     pub separator: u8,
     pub usage: Arc<RwLock<SpecialUsageMailbox>>,
     pub no_select: bool,
     pub is_subscribed: bool,
 
-    pub permissions: Arc<Mutex<FolderPermissions>>,
+    pub permissions: Arc<Mutex<MailboxPermissions>>,
     pub exists: Arc<Mutex<usize>>,
     pub unseen: Arc<Mutex<usize>>,
 }
 
-impl ImapFolder {
+impl ImapMailbox {
     pub fn imap_path(&self) -> &str {
         &self.imap_path
     }
 }
 
-impl BackendFolder for ImapFolder {
-    fn hash(&self) -> FolderHash {
+impl BackendMailbox for ImapMailbox {
+    fn hash(&self) -> MailboxHash {
         self.hash
     }
 
@@ -63,11 +65,11 @@ impl BackendFolder for ImapFolder {
         self.name = s.to_string();
     }
 
-    fn children(&self) -> &[FolderHash] {
+    fn children(&self) -> &[MailboxHash] {
         &self.children
     }
 
-    fn clone(&self) -> Folder {
+    fn clone(&self) -> Mailbox {
         Box::new(std::clone::Clone::clone(self))
     }
 
@@ -75,11 +77,11 @@ impl BackendFolder for ImapFolder {
         *self.usage.read().unwrap()
     }
 
-    fn parent(&self) -> Option<FolderHash> {
+    fn parent(&self) -> Option<MailboxHash> {
         self.parent
     }
 
-    fn permissions(&self) -> FolderPermissions {
+    fn permissions(&self) -> MailboxPermissions {
         *self.permissions.lock().unwrap()
     }
     fn is_subscribed(&self) -> bool {

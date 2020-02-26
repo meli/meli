@@ -9,29 +9,29 @@
 #
 # Setting up a Maildir account
 #[accounts.account-name]
-#root_folder = "/path/to/root/folder"
+#root_mailbox = "/path/to/root/mailbox"
 #format = "Maildir"
 #index_style = "Conversations" # or [plain, threaded, compact]
 #identity="email@address.tld"
 #display_name = "Name"
-#subscribed_folders = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
+#subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 
-# Set folder-specific settings
-#  [accounts.account-name.folders]
+# Set mailbox-specific settings
+#  [accounts.account-name.mailboxes]
 #  "INBOX" = { rename="Inbox" }
 #  "drafts" = { rename="Drafts" }
-#  "foobar-devel" = { ignore = true } # don't show notifications for this folder
+#  "foobar-devel" = { ignore = true } # don't show notifications for this mailbox
 
 # Setting up an mbox account
 #[accounts.mbox]
-#root_folder = "/var/mail/username"
+#root_mailbox = "/var/mail/username"
 #format = "mbox"
 #index_style = "Compact"
 #identity="username@hostname.local"
 #
 # Setting up an IMAP account
 #[accounts."imap"]
-#root_folder = "INBOX"
+#root_mailbox = "INBOX"
 #format = "imap"
 #server_hostname="mail.server.tld"
 #server_password="pha2hiLohs2eeeish2phaii1We3ood4chakaiv0hien2ahie3m"
@@ -42,20 +42,20 @@
 #index_style = "Conversations"
 #identity = "username@server.tld"
 #display_name = "Name Name"
-## match every folder:
-#subscribed_folders = ["*" ]
-## match specific folders:
-#subscribed_folders = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
+## match every mailbox:
+#subscribed_mailboxes = ["*" ]
+## match specific mailboxes:
+#subscribed_mailboxes = ["INBOX", "INBOX/Sent", "INBOX/Drafts", "INBOX/Junk"]
 
 # Setting up an account for an already existing notmuch database
 #[accounts.notmuch]
-#root_folder = "/path/to/folder" # where .notmuch/ directory is located
+#root_mailbox = "/path/to/folder" # where .notmuch/ directory is located
 #format = "notmuch"
 #index_style = "conversations"
 #identity="username@server.tld"
 #display_name = "Name Name"
-#  # notmuch folders are virtual, they are defined by their alias and the notmuch query that corresponds to their content.
-#  [accounts.notmuch.folders]
+#  # notmuch mailboxes are virtual, they are defined by their alias and the notmuch query that corresponds to their content.
+#  [accounts.notmuch.mailboxes]
 #  "INBOX" = {  query="tag:inbox", subscribe = true }
 #  "Drafts" = {  query="tag:draft", subscribe = true }
 #  "Sent" = {  query="from:username@server.tld from:username2@server.tld", subscribe = true }
@@ -88,8 +88,8 @@
 #[shortcuts.listing]
 #prev_page = "PageUp"
 #next_page = "PageDown"
-#prev_folder = 'K'
-#next_folder = 'J'
+#prev_mailbox = 'K'
+#next_mailbox = 'J'
 #prev_account = 'l'
 #next_account = 'h'
 #new_mail = 'm'

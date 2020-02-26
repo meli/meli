@@ -22,8 +22,8 @@
 use super::*;
 use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
-use melib::backends::FolderHash;
-use melib::backends::{Backend, BackendOp, Backends, Folder, MailBackend, RefreshEventConsumer};
+use melib::backends::MailboxHash;
+use melib::backends::{Backend, BackendOp, Backends, MailBackend, Mailbox, RefreshEventConsumer};
 use melib::conf::AccountSettings;
 use melib::email::{Envelope, EnvelopeHash, Flag};
 use melib::error::{MeliError, Result};
@@ -86,9 +86,9 @@ impl MailBackend for PluginBackend {
 
     fn connect(&mut self) {}
 
-    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
+    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
-        let _folder_hash = folder.hash();
+        let _mailbox_hash = mailbox.hash();
         let channel = self.channel.clone();
         let handle = {
             let tx = w.tx();
@@ -180,7 +180,7 @@ impl MailBackend for PluginBackend {
 
     fn refresh(
         &mut self,
-        _folder_hash: FolderHash,
+        _mailbox_hash: MailboxHash,
         _sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
         Err(MeliError::new("Unimplemented."))
@@ -193,9 +193,9 @@ impl MailBackend for PluginBackend {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
-        let mut ret: FnvHashMap<FolderHash, Folder> = Default::default();
-        ret.insert(0, Folder::default());
+    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+        let mut ret: FnvHashMap<MailboxHash, Mailbox> = Default::default();
+        ret.insert(0, Mailbox::default());
         Ok(ret)
     }
 
@@ -208,13 +208,13 @@ impl MailBackend for PluginBackend {
         })
     }
 
-    fn save(&self, _bytes: &[u8], _folder: &str, _flags: Option<Flag>) -> Result<()> {
+    fn save(&self, _bytes: &[u8], _mailbox: &str, _flags: Option<Flag>) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn create_folder(
+    fn create_mailbox(
         &mut self,
         _name: String,
-    ) -> Result<(FolderHash, FnvHashMap<FolderHash, Folder>)> {
+    ) -> Result<(MailboxHash, FnvHashMap<MailboxHash, Mailbox>)> {
         Err(MeliError::new("Unimplemented."))
     }
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {

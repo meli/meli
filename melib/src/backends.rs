@@ -193,12 +193,12 @@ pub enum RefreshEventKind {
 
 #[derive(Debug)]
 pub struct RefreshEvent {
-    hash: FolderHash,
+    hash: MailboxHash,
     kind: RefreshEventKind,
 }
 
 impl RefreshEvent {
-    pub fn hash(&self) -> FolderHash {
+    pub fn hash(&self) -> MailboxHash {
         self.hash
     }
     pub fn kind(self) -> RefreshEventKind {
@@ -220,7 +220,7 @@ impl RefreshEventConsumer {
     }
 }
 
-pub struct NotifyFn(Box<dyn Fn(FolderHash) -> () + Send + Sync>);
+pub struct NotifyFn(Box<dyn Fn(MailboxHash) -> () + Send + Sync>);
 
 impl fmt::Debug for NotifyFn {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -228,17 +228,17 @@ impl fmt::Debug for NotifyFn {
     }
 }
 
-impl From<Box<dyn Fn(FolderHash) -> () + Send + Sync>> for NotifyFn {
-    fn from(kind: Box<dyn Fn(FolderHash) -> () + Send + Sync>) -> Self {
+impl From<Box<dyn Fn(MailboxHash) -> () + Send + Sync>> for NotifyFn {
+    fn from(kind: Box<dyn Fn(MailboxHash) -> () + Send + Sync>) -> Self {
         NotifyFn(kind)
     }
 }
 
 impl NotifyFn {
-    pub fn new(b: Box<dyn Fn(FolderHash) -> () + Send + Sync>) -> Self {
+    pub fn new(b: Box<dyn Fn(MailboxHash) -> () + Send + Sync>) -> Self {
         NotifyFn(b)
     }
-    pub fn notify(&self, f: FolderHash) {
+    pub fn notify(&self, f: MailboxHash) {
         self.0(f);
     }
 }
@@ -246,10 +246,10 @@ impl NotifyFn {
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online(&self) -> Result<()>;
     fn connect(&mut self) {}
-    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>>;
+    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>>;
     fn refresh(
         &mut self,
-        _folder_hash: FolderHash,
+        _mailbox_hash: MailboxHash,
         _sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
         Err(MeliError::new("Unimplemented."))
@@ -259,10 +259,10 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId>;
-    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>>;
+    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>>;
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp>;
 
-    fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()>;
+    fn save(&self, bytes: &[u8], mailbox: &str, flags: Option<Flag>) -> Result<()>;
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         None
     }
@@ -272,32 +272,32 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         unimplemented!()
     }
 
-    fn create_folder(
+    fn create_mailbox(
         &mut self,
         _path: String,
-    ) -> Result<(FolderHash, FnvHashMap<FolderHash, Folder>)> {
+    ) -> Result<(MailboxHash, FnvHashMap<MailboxHash, Mailbox>)> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn delete_folder(
+    fn delete_mailbox(
         &mut self,
-        _folder_hash: FolderHash,
-    ) -> Result<FnvHashMap<FolderHash, Folder>> {
+        _mailbox_hash: MailboxHash,
+    ) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn set_folder_subscription(&mut self, _folder_hash: FolderHash, _val: bool) -> Result<()> {
+    fn set_mailbox_subscription(&mut self, _mailbox_hash: MailboxHash, _val: bool) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn rename_folder(&mut self, _folder_hash: FolderHash, _new_path: String) -> Result<Folder> {
+    fn rename_mailbox(&mut self, _mailbox_hash: MailboxHash, _new_path: String) -> Result<Mailbox> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn set_folder_permissions(
+    fn set_mailbox_permissions(
         &mut self,
-        _folder_hash: FolderHash,
-        _val: FolderPermissions,
+        _mailbox_hash: MailboxHash,
+        _val: MailboxPermissions,
     ) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
@@ -315,7 +315,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 /// ```ignore
 /// /* Create operation from Backend */
 ///
-/// let op = backend.operation(message.hash(), mailbox.folder.hash());
+/// let op = backend.operation(message.hash(), mailbox.hash());
 /// ```
 ///
 /// # Example
@@ -443,30 +443,30 @@ impl SpecialUsageMailbox {
     }
 }
 
-pub trait BackendFolder: Debug {
-    fn hash(&self) -> FolderHash;
+pub trait BackendMailbox: Debug {
+    fn hash(&self) -> MailboxHash;
     fn name(&self) -> &str;
-    /// Path of folder within the mailbox hierarchy, with `/` as separator.
+    /// Path of mailbox within the mailbox hierarchy, with `/` as separator.
     fn path(&self) -> &str;
     fn change_name(&mut self, new_name: &str);
-    fn clone(&self) -> Folder;
-    fn children(&self) -> &[FolderHash];
-    fn parent(&self) -> Option<FolderHash>;
+    fn clone(&self) -> Mailbox;
+    fn children(&self) -> &[MailboxHash];
+    fn parent(&self) -> Option<MailboxHash>;
     fn is_subscribed(&self) -> bool;
     fn set_is_subscribed(&mut self, new_val: bool) -> Result<()>;
     fn set_special_usage(&mut self, new_val: SpecialUsageMailbox) -> Result<()>;
     fn special_usage(&self) -> SpecialUsageMailbox;
-    fn permissions(&self) -> FolderPermissions;
+    fn permissions(&self) -> MailboxPermissions;
     fn count(&self) -> Result<(usize, usize)>;
 }
 
 #[derive(Debug)]
-struct DummyFolder {
-    v: Vec<FolderHash>,
+struct DummyMailbox {
+    v: Vec<MailboxHash>,
 }
 
-impl BackendFolder for DummyFolder {
-    fn hash(&self) -> FolderHash {
+impl BackendMailbox for DummyMailbox {
+    fn hash(&self) -> MailboxHash {
         0
     }
 
@@ -480,24 +480,24 @@ impl BackendFolder for DummyFolder {
 
     fn change_name(&mut self, _s: &str) {}
 
-    fn clone(&self) -> Folder {
-        folder_default()
+    fn clone(&self) -> Mailbox {
+        mailbox_default()
     }
 
     fn special_usage(&self) -> SpecialUsageMailbox {
         SpecialUsageMailbox::Normal
     }
 
-    fn children(&self) -> &[FolderHash] {
+    fn children(&self) -> &[MailboxHash] {
         &self.v
     }
 
-    fn parent(&self) -> Option<FolderHash> {
+    fn parent(&self) -> Option<MailboxHash> {
         None
     }
 
-    fn permissions(&self) -> FolderPermissions {
-        FolderPermissions::default()
+    fn permissions(&self) -> MailboxPermissions {
+        MailboxPermissions::default()
     }
     fn is_subscribed(&self) -> bool {
         true
@@ -513,29 +513,29 @@ impl BackendFolder for DummyFolder {
     }
 }
 
-pub fn folder_default() -> Folder {
-    Box::new(DummyFolder {
+pub fn mailbox_default() -> Mailbox {
+    Box::new(DummyMailbox {
         v: Vec::with_capacity(0),
     })
 }
 
-pub type FolderHash = u64;
-pub type Folder = Box<dyn BackendFolder + Send + Sync>;
+pub type MailboxHash = u64;
+pub type Mailbox = Box<dyn BackendMailbox + Send + Sync>;
 
-impl Clone for Folder {
+impl Clone for Mailbox {
     fn clone(&self) -> Self {
-        BackendFolder::clone(self.deref())
+        BackendMailbox::clone(self.deref())
     }
 }
 
-impl Default for Folder {
+impl Default for Mailbox {
     fn default() -> Self {
-        folder_default()
+        mailbox_default()
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct FolderPermissions {
+pub struct MailboxPermissions {
     pub create_messages: bool,
     pub remove_messages: bool,
     pub set_flags: bool,
@@ -546,22 +546,22 @@ pub struct FolderPermissions {
     pub change_permissions: bool,
 }
 
-impl Default for FolderPermissions {
+impl Default for MailboxPermissions {
     fn default() -> Self {
-        FolderPermissions {
+        MailboxPermissions {
             create_messages: false,
             remove_messages: false,
             set_flags: false,
             create_child: false,
             rename_messages: false,
             delete_messages: false,
-            delete_mailbox: false,
+            delete_mailbox: true,
             change_permissions: false,
         }
     }
 }
 
-impl std::fmt::Display for FolderPermissions {
+impl std::fmt::Display for MailboxPermissions {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(fmt, "{:#?}", self)
     }

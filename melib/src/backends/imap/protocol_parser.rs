@@ -213,7 +213,7 @@ macro_rules! dbg_dmp (
 * LIST (\HasChildren) "." INBOX
  */
 named!(
-    pub list_folder_result<ImapFolder>,
+    pub list_mailbox_result<ImapMailbox>,
     do_parse!(
         ws!(alt_complete!(tag!("* LIST (") | tag!("* LSUB (")))
             >> properties: take_until!(&b")"[0..])
@@ -223,7 +223,7 @@ named!(
             >> path: alt_complete!(delimited!(tag!("\""), is_not!("\""), tag!("\"")) | call!(rest))
             >> ({
                 let separator: u8 = separator[0];
-                let mut f = ImapFolder::default();
+                let mut f = ImapMailbox::default();
                 f.no_select = false;
                 f.is_subscribed = false;
                 for p in properties.split(|&b| b == b' ') {

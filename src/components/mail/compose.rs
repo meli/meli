@@ -63,7 +63,7 @@ impl std::ops::DerefMut for EmbedStatus {
 
 #[derive(Debug)]
 pub struct Composer {
-    reply_context: Option<(FolderHash, EnvelopeHash)>,
+    reply_context: Option<(MailboxHash, EnvelopeHash)>,
     account_cursor: usize,
 
     cursor: Cursor,
@@ -164,7 +164,7 @@ impl Composer {
     }
 
     pub fn with_context(
-        coordinates: (usize, FolderHash),
+        coordinates: (usize, MailboxHash),
         msg: EnvelopeHash,
         context: &Context,
     ) -> Self {
@@ -1092,7 +1092,7 @@ pub fn send_draft(
     context: &mut Context,
     account_cursor: usize,
     mut draft: Draft,
-    folder_type: SpecialUsageMailbox,
+    mailbox_type: SpecialUsageMailbox,
     flags: Flag,
 ) -> bool {
     use std::io::Write;
@@ -1229,7 +1229,7 @@ pub fn send_draft(
     save_draft(
         bytes.as_bytes(),
         context,
-        folder_type,
+        mailbox_type,
         flags,
         account_cursor,
     );
@@ -1239,12 +1239,12 @@ pub fn send_draft(
 pub fn save_draft(
     bytes: &[u8],
     context: &mut Context,
-    folder_type: SpecialUsageMailbox,
+    mailbox_type: SpecialUsageMailbox,
     flags: Flag,
     account_cursor: usize,
 ) {
     if let Err(MeliError { summary, details }) =
-        context.accounts[account_cursor].save_special(bytes, folder_type, flags)
+        context.accounts[account_cursor].save_special(bytes, mailbox_type, flags)
     {
         context.replies.push_back(UIEvent::Notification(
             summary.map(|s| s.into()),

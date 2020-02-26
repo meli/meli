@@ -24,7 +24,7 @@
 use melib::parsec::*;
 use melib::UnixTimestamp;
 use melib::{
-    backends::{FolderHash, MailBackend},
+    backends::{MailBackend, MailboxHash},
     email::EnvelopeHash,
     thread::{SortField, SortOrder},
     Result,
@@ -429,7 +429,7 @@ pub fn query_to_imap(q: &Query) -> String {
 pub fn imap_search(
     term: &str,
     (_sort_field, _sort_order): (SortField, SortOrder),
-    folder_hash: FolderHash,
+    mailbox_hash: MailboxHash,
     backend: &Arc<RwLock<Box<dyn MailBackend>>>,
 ) -> Result<smallvec::SmallVec<[EnvelopeHash; 512]>> {
     let query = query().parse(term)?.1;
@@ -437,7 +437,7 @@ pub fn imap_search(
 
     let b = (*backend_lck).as_any();
     if let Some(imap_backend) = b.downcast_ref::<melib::backends::ImapType>() {
-        imap_backend.search(query_to_imap(&query), folder_hash)
+        imap_backend.search(query_to_imap(&query), mailbox_hash)
     } else {
         panic!("Could not downcast ImapType backend. BUG");
     }

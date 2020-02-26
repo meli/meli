@@ -24,7 +24,7 @@
  */
 
 use crate::components::Component;
-use melib::backends::FolderHash;
+use melib::backends::MailboxHash;
 pub use melib::thread::{SortField, SortOrder};
 use melib::{Draft, EnvelopeHash};
 
@@ -55,7 +55,7 @@ pub enum ListingAction {
 pub enum TabAction {
     New(Option<Box<dyn Component>>),
     NewDraft(usize, Option<Draft>),
-    Reply((usize, FolderHash), EnvelopeHash), // thread coordinates (account, mailbox) and envelope
+    Reply((usize, MailboxHash), EnvelopeHash), // thread coordinates (account, mailbox) and envelope
     Close,
     Edit(usize, EnvelopeHash), // account_position, envelope hash
     Kill(Uuid),
@@ -87,14 +87,14 @@ pub enum AccountAction {
 }
 
 #[derive(Debug)]
-pub enum FolderOperation {
-    Create(NewFolderPath),
-    Delete(FolderPath),
-    Subscribe(FolderPath),
-    Unsubscribe(FolderPath),
-    Rename(FolderPath, NewFolderPath),
+pub enum MailboxOperation {
+    Create(NewMailboxPath),
+    Delete(MailboxPath),
+    Subscribe(MailboxPath),
+    Unsubscribe(MailboxPath),
+    Rename(MailboxPath, NewMailboxPath),
     // Placeholder
-    SetPermissions(FolderPath),
+    SetPermissions(MailboxPath),
 }
 
 #[derive(Debug)]
@@ -110,7 +110,7 @@ pub enum Action {
     SetEnv(String, String),
     PrintEnv(String),
     Compose(ComposeAction),
-    Folder(AccountName, FolderOperation),
+    Mailbox(AccountName, MailboxOperation),
     AccountAction(AccountName, AccountAction),
 }
 
@@ -128,12 +128,12 @@ impl Action {
             Action::SetEnv(_, _) => false,
             Action::PrintEnv(_) => false,
             Action::Compose(_) => false,
-            Action::Folder(_, _) => true,
+            Action::Mailbox(_, _) => true,
             Action::AccountAction(_, _) => false,
         }
     }
 }
 
 type AccountName = String;
-type FolderPath = String;
-type NewFolderPath = String;
+type MailboxPath = String;
+type NewMailboxPath = String;

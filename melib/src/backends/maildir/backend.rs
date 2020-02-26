@@ -20,10 +20,10 @@
  */
 
 use super::{
-    BackendFolder, BackendOp, Folder, FolderHash, MailBackend, RefreshEvent, RefreshEventConsumer,
-    RefreshEventKind::*,
+    BackendMailbox, BackendOp, MailBackend, Mailbox, MailboxHash, RefreshEvent,
+    RefreshEventConsumer, RefreshEventKind::*,
 };
-use super::{MaildirFolder, MaildirOp};
+use super::{MaildirMailbox, MaildirOp};
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
@@ -88,7 +88,7 @@ impl From<PathBuf> for MaildirPath {
 #[derive(Debug, Default)]
 pub struct HashIndex {
     index: FnvHashMap<EnvelopeHash, MaildirPath>,
-    hash: FolderHash,
+    hash: MailboxHash,
 }
 
 impl Deref for HashIndex {
@@ -104,14 +104,14 @@ impl DerefMut for HashIndex {
     }
 }
 
-pub type HashIndexes = Arc<Mutex<FnvHashMap<FolderHash, HashIndex>>>;
+pub type HashIndexes = Arc<Mutex<FnvHashMap<MailboxHash, HashIndex>>>;
 
 /// Maildir backend https://cr.yp.to/proto/maildir.html
 #[derive(Debug)]
 pub struct MaildirType {
     name: String,
-    folders: FnvHashMap<FolderHash, MaildirFolder>,
-    folder_index: Arc<Mutex<FnvHashMap<EnvelopeHash, FolderHash>>>,
+    mailboxes: FnvHashMap<MailboxHash, MaildirMailbox>,
+    mailbox_index: Arc<Mutex<FnvHashMap<EnvelopeHash, MailboxHash>>>,
     hash_indexes: HashIndexes,
     path: PathBuf,
 }
@@ -181,32 +181,32 @@ impl MailBackend for MaildirType {
         Ok(())
     }
 
-    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
+    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
         Ok(self
-            .folders
+            .mailboxes
             .iter()
-            .map(|(h, f)| (*h, BackendFolder::clone(f)))
+            .map(|(h, f)| (*h, BackendMailbox::clone(f)))
             .collect())
     }
 
-    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
-        self.multicore(4, folder)
+    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
+        self.multicore(4, mailbox)
     }
     fn refresh(
         &mut self,
-        folder_hash: FolderHash,
+        mailbox_hash: MailboxHash,
         sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
         let w = AsyncBuilder::new();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
 
         let handle = {
-            let folder: &MaildirFolder = &self.folders[&folder_hash];
-            let path: PathBuf = folder.fs_path().into();
-            let name = format!("refresh {:?}", folder.name());
+            let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
+            let path: PathBuf = mailbox.fs_path().into();
+            let name = format!("refresh {:?}", mailbox.name());
             let root_path = self.path.to_path_buf();
             let map = self.hash_indexes.clone();
-            let folder_index = self.folder_index.clone();
+            let mailbox_index = self.mailbox_index.clone();
 
             Box::new(move |work_context: crate::async_workers::WorkContext| {
                 work_context
@@ -237,14 +237,14 @@ impl MailBackend for MaildirType {
                     }
                     let mut current_hashes = {
                         let mut map = map.lock().unwrap();
-                        let map = map.entry(folder_hash).or_default();
+                        let map = map.entry(mailbox_hash).or_default();
                         map.keys().cloned().collect::<FnvHashSet<EnvelopeHash>>()
                     };
                     for file in files {
                         let hash = get_file_hash(&file);
                         {
                             let mut map = map.lock().unwrap();
-                            let map = map.entry(folder_hash).or_default();
+                            let map = map.entry(mailbox_hash).or_default();
                             if map.contains_key(&hash) {
                                 map.remove(&hash);
                                 current_hashes.remove(&hash);
@@ -252,9 +252,9 @@ impl MailBackend for MaildirType {
                             }
                             (*map).insert(hash, PathBuf::from(&file).into());
                         }
-                        let op = Box::new(MaildirOp::new(hash, map.clone(), folder_hash));
+                        let op = Box::new(MaildirOp::new(hash, map.clone(), mailbox_hash));
                         if let Some(e) = Envelope::from_token(op, hash) {
-                            folder_index.lock().unwrap().insert(e.hash(), folder_hash);
+                            mailbox_index.lock().unwrap().insert(e.hash(), mailbox_hash);
                             let file_name = PathBuf::from(file)
                                 .strip_prefix(&root_path)
                                 .unwrap()
@@ -277,7 +277,7 @@ impl MailBackend for MaildirType {
                                 bincode::serialize_into(writer, &e).unwrap();
                             }
                             sender.send(RefreshEvent {
-                                hash: folder_hash,
+                                hash: mailbox_hash,
                                 kind: Create(Box::new(e)),
                             });
                         } else {
@@ -290,7 +290,7 @@ impl MailBackend for MaildirType {
                         }
                     }
                     for ev in current_hashes.into_iter().map(|h| RefreshEvent {
-                        hash: folder_hash,
+                        hash: mailbox_hash,
                         kind: Remove(h),
                     }) {
                         sender.send(ev);
@@ -299,7 +299,7 @@ impl MailBackend for MaildirType {
                 };
                 if let Err(err) = thunk(&sender) {
                     sender.send(RefreshEvent {
-                        hash: folder_hash,
+                        hash: mailbox_hash,
                         kind: Failure(err),
                     });
                 }
@@ -319,14 +319,14 @@ impl MailBackend for MaildirType {
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
         debug!("watching {:?}", root_path);
         let hash_indexes = self.hash_indexes.clone();
-        let folder_index = self.folder_index.clone();
-        let folder_counts = self
-            .folders
+        let mailbox_index = self.mailbox_index.clone();
+        let mailbox_counts = self
+            .mailboxes
             .iter()
             .map(|(&k, v)| (k, (v.unseen.clone(), v.total.clone())))
-            .collect::<FnvHashMap<FolderHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>>();
+            .collect::<FnvHashMap<MailboxHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>>();
         let handle = thread::Builder::new()
-            .name("folder watch".to_string())
+            .name("mailbox watch".to_string())
             .spawn(move || {
                 // Move `watcher` in the closure's scope so that it doesn't get dropped.
                 let _watcher = watcher;
@@ -360,7 +360,7 @@ impl MailBackend for MaildirType {
 
 
                                 }
-                                let folder_hash = get_path_hash!(pathbuf);
+                                let mailbox_hash = get_path_hash!(pathbuf);
                                 let file_name = pathbuf
                                     .as_path()
                                     .strip_prefix(&root_path)
@@ -368,12 +368,12 @@ impl MailBackend for MaildirType {
                                     .to_path_buf();
                                 if let Some(env) = add_path_to_index(
                                     &hash_indexes,
-                                    folder_hash,
+                                    mailbox_hash,
                                     pathbuf.as_path(),
                                     &cache_dir,
                                     file_name,
                                 ) {
-                                    folder_index.lock().unwrap().insert(env.hash(),folder_hash);
+                                    mailbox_index.lock().unwrap().insert(env.hash(),mailbox_hash);
                                     debug!(
                                         "Create event {} {} {}",
                                         env.hash(),
@@ -381,11 +381,11 @@ impl MailBackend for MaildirType {
                                         pathbuf.display()
                                     );
                                         if !env.is_seen() {
-                                            *folder_counts[&folder_hash].0.lock().unwrap() += 1;
+                                            *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
                                         }
-                                            *folder_counts[&folder_hash].1.lock().unwrap() += 1;
+                                            *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
                                     sender.send(RefreshEvent {
-                                        hash: folder_hash,
+                                        hash: mailbox_hash,
                                         kind: Create(Box::new(env)),
                                     });
                                 }
@@ -394,10 +394,10 @@ impl MailBackend for MaildirType {
                             DebouncedEvent::NoticeWrite(pathbuf)
                             | DebouncedEvent::Write(pathbuf) => {
                                 debug!("DebouncedEvent::Write(path = {:?}", &pathbuf);
-                                let folder_hash = get_path_hash!(pathbuf);
+                                let mailbox_hash = get_path_hash!(pathbuf);
                                 let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                                 let index_lock =
-                                    &mut hash_indexes_lock.entry(folder_hash).or_default();
+                                    &mut hash_indexes_lock.entry(mailbox_hash).or_default();
                                 let file_name = pathbuf
                                     .as_path()
                                     .strip_prefix(&root_path)
@@ -418,14 +418,14 @@ impl MailBackend for MaildirType {
                                          * envelope. */
                                         if let Some(env) = add_path_to_index(
                                             &hash_indexes,
-                                            folder_hash,
+                                            mailbox_hash,
                                             pathbuf.as_path(),
                                             &cache_dir,
                                             file_name,
                                         ) {
-                                            folder_index.lock().unwrap().insert(env.hash(),folder_hash);
+                                            mailbox_index.lock().unwrap().insert(env.hash(),mailbox_hash);
                                             sender.send(RefreshEvent {
-                                                hash: folder_hash,
+                                                hash: mailbox_hash,
                                                 kind: Create(Box::new(env)),
                                             });
                                         }
@@ -438,7 +438,7 @@ impl MailBackend for MaildirType {
                                     let op = Box::new(MaildirOp::new(
                                         new_hash,
                                         hash_indexes.clone(),
-                                        folder_hash,
+                                        mailbox_hash,
                                     ));
                                     if let Some(env) = Envelope::from_token(op, new_hash) {
                                         debug!("{}\t{:?}", new_hash, &pathbuf);
@@ -451,7 +451,7 @@ impl MailBackend for MaildirType {
                                         /* Send Write notice */
 
                                         sender.send(RefreshEvent {
-                                            hash: folder_hash,
+                                            hash: mailbox_hash,
                                             kind: Update(old_hash, Box::new(env)),
                                         });
                                     }
@@ -461,9 +461,9 @@ impl MailBackend for MaildirType {
                             DebouncedEvent::NoticeRemove(pathbuf)
                             | DebouncedEvent::Remove(pathbuf) => {
                                 debug!("DebouncedEvent::Remove(path = {:?}", pathbuf);
-                                let folder_hash = get_path_hash!(pathbuf);
+                                let mailbox_hash = get_path_hash!(pathbuf);
                                 let mut hash_indexes_lock = hash_indexes.lock().unwrap();
-                                let index_lock = hash_indexes_lock.entry(folder_hash).or_default();
+                                let index_lock = hash_indexes_lock.entry(mailbox_hash).or_default();
                                 let hash: EnvelopeHash = if let Some((k, _)) =
                                     index_lock.iter().find(|(_, v)| *v.buf == pathbuf)
                                 {
@@ -493,9 +493,9 @@ impl MailBackend for MaildirType {
                                 });
 
                                 //FIXME: check if envelope was unseen to update unseen count
-                                *folder_counts[&folder_hash].1.lock().unwrap() += 1;
+                                *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
                                 sender.send(RefreshEvent {
-                                    hash: folder_hash,
+                                    hash: mailbox_hash,
                                     kind: Remove(hash),
                                 });
                             }
@@ -505,12 +505,12 @@ impl MailBackend for MaildirType {
                                     "DebouncedEvent::Rename(src = {:?}, dest = {:?})",
                                     src, dest
                                 );
-                                let folder_hash = get_path_hash!(src);
+                                let mailbox_hash = get_path_hash!(src);
                                 let old_hash: EnvelopeHash = get_file_hash(src.as_path());
                                 let new_hash: EnvelopeHash = get_file_hash(dest.as_path());
 
                                 let mut hash_indexes_lock = hash_indexes.lock().unwrap();
-                                let index_lock = hash_indexes_lock.entry(folder_hash).or_default();
+                                let index_lock = hash_indexes_lock.entry(mailbox_hash).or_default();
 
                                 if index_lock.contains_key(&old_hash)
                                     && !index_lock[&old_hash].removed
@@ -524,7 +524,7 @@ impl MailBackend for MaildirType {
                                         hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
                                     });
-                                    folder_index.lock().unwrap().insert(new_hash,get_path_hash!(dest) );
+                                    mailbox_index.lock().unwrap().insert(new_hash,get_path_hash!(dest) );
                                     index_lock.insert(new_hash, dest.into());
                                     continue;
                                 } else if !index_lock.contains_key(&new_hash)
@@ -556,12 +556,12 @@ impl MailBackend for MaildirType {
                                     drop(hash_indexes_lock);
                                     if let Some(env) = add_path_to_index(
                                         &hash_indexes,
-                                        folder_hash,
+                                        mailbox_hash,
                                         dest.as_path(),
                                         &cache_dir,
                                         file_name,
                                     ) {
-                                        folder_index.lock().unwrap().insert(env.hash(),folder_hash);
+                                        mailbox_index.lock().unwrap().insert(env.hash(), mailbox_hash);
                                         debug!(
                                             "Create event {} {} {}",
                                             env.hash(),
@@ -569,11 +569,11 @@ impl MailBackend for MaildirType {
                                             dest.display()
                                         );
                                         if !env.is_seen() {
-                                            *folder_counts[&folder_hash].0.lock().unwrap() += 1;
+                                            *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
                                         }
-                                            *folder_counts[&folder_hash].1.lock().unwrap() += 1;
+                                            *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
                                         sender.send(RefreshEvent {
-                                            hash: folder_hash,
+                                            hash: mailbox_hash,
                                             kind: Create(Box::new(env)),
                                         });
                                         continue;
@@ -595,10 +595,10 @@ impl MailBackend for MaildirType {
                                 });
                                 */
                             }
-                            /* Trigger rescan of folder */
+                            /* Trigger rescan of mailbox */
                             DebouncedEvent::Rescan => {
-                                /* Actually should rescan all folders */
-                                unreachable!("Unimplemented: rescan of all folders in MaildirType")
+                                /* Actually should rescan all mailboxes */
+                                unreachable!("Unimplemented: rescan of all mailboxes in MaildirType")
                             }
                             _ => {}
                         },
@@ -613,20 +613,20 @@ impl MailBackend for MaildirType {
         Box::new(MaildirOp::new(
             hash,
             self.hash_indexes.clone(),
-            self.folder_index.lock().unwrap()[&hash],
+            self.mailbox_index.lock().unwrap()[&hash],
         ))
     }
 
-    fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
-        for f in self.folders.values() {
-            if f.name == folder || f.path.to_str().unwrap() == folder {
-                return MaildirType::save_to_folder(f.fs_path.clone(), bytes, flags);
+    fn save(&self, bytes: &[u8], mailbox: &str, flags: Option<Flag>) -> Result<()> {
+        for f in self.mailboxes.values() {
+            if f.name == mailbox || f.path.to_str().unwrap() == mailbox {
+                return MaildirType::save_to_mailbox(f.fs_path.clone(), bytes, flags);
             }
         }
 
         Err(MeliError::new(format!(
-            "'{}' is not a valid folder.",
-            folder
+            "'{}' is not a valid mailbox.",
+            mailbox
         )))
     }
 
@@ -634,35 +634,35 @@ impl MailBackend for MaildirType {
         self
     }
 
-    fn create_folder(
+    fn create_mailbox(
         &mut self,
         new_path: String,
-    ) -> Result<(FolderHash, FnvHashMap<FolderHash, Folder>)> {
+    ) -> Result<(MailboxHash, FnvHashMap<MailboxHash, Mailbox>)> {
         let mut path = self.path.clone();
         path.push(&new_path);
         if !path.starts_with(&self.path) {
-            return Err(MeliError::new(format!("Path given (`{}`) is absolute. Please provide a path relative to the account's root folder.", &new_path)));
+            return Err(MeliError::new(format!("Path given (`{}`) is absolute. Please provide a path relative to the account's root mailbox.", &new_path)));
         }
 
         std::fs::create_dir(&path)?;
         /* create_dir does not create intermediate directories (like `mkdir -p`), so the parent must be a valid
-         * folder at this point. */
+         * mailbox at this point. */
 
         let parent = path.parent().and_then(|p| {
-            self.folders
+            self.mailboxes
                 .iter()
                 .find(|(_, f)| f.fs_path == p)
                 .map(|item| *item.0)
         });
 
-        let folder_hash = get_path_hash!(&path);
+        let mailbox_hash = get_path_hash!(&path);
         if let Some(parent) = parent {
-            self.folders
+            self.mailboxes
                 .entry(parent)
-                .and_modify(|entry| entry.children.push(folder_hash));
+                .and_modify(|entry| entry.children.push(mailbox_hash));
         }
-        let new_folder = MaildirFolder {
-            hash: folder_hash,
+        let new_mailbox = MaildirMailbox {
+            hash: mailbox_hash,
             path: PathBuf::from(&new_path),
             name: new_path,
             fs_path: path,
@@ -675,29 +675,29 @@ impl MailBackend for MaildirType {
             total: Default::default(),
         };
 
-        self.folders.insert(folder_hash, new_folder);
-        Ok((folder_hash, self.folders()?))
+        self.mailboxes.insert(mailbox_hash, new_mailbox);
+        Ok((mailbox_hash, self.mailboxes()?))
     }
 
-    fn delete_folder(
+    fn delete_mailbox(
         &mut self,
-        _folder_hash: FolderHash,
-    ) -> Result<FnvHashMap<FolderHash, Folder>> {
+        _mailbox_hash: MailboxHash,
+    ) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn set_folder_subscription(&mut self, _folder_hash: FolderHash, _val: bool) -> Result<()> {
+    fn set_mailbox_subscription(&mut self, _mailbox_hash: MailboxHash, _val: bool) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn rename_folder(&mut self, _folder_hash: FolderHash, _new_path: String) -> Result<Folder> {
+    fn rename_mailbox(&mut self, _mailbox_hash: MailboxHash, _new_path: String) -> Result<Mailbox> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn set_folder_permissions(
+    fn set_mailbox_permissions(
         &mut self,
-        _folder_hash: FolderHash,
-        _val: crate::backends::FolderPermissions,
+        _mailbox_hash: MailboxHash,
+        _val: crate::backends::MailboxPermissions,
     ) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
@@ -708,12 +708,12 @@ impl MaildirType {
         settings: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool>,
     ) -> Result<Box<dyn MailBackend>> {
-        let mut folders: FnvHashMap<FolderHash, MaildirFolder> = Default::default();
-        fn recurse_folders<P: AsRef<Path>>(
-            folders: &mut FnvHashMap<FolderHash, MaildirFolder>,
+        let mut mailboxes: FnvHashMap<MailboxHash, MaildirMailbox> = Default::default();
+        fn recurse_mailboxes<P: AsRef<Path>>(
+            mailboxes: &mut FnvHashMap<MailboxHash, MaildirMailbox>,
             settings: &AccountSettings,
             p: P,
-        ) -> Result<Vec<FolderHash>> {
+        ) -> Result<Vec<MailboxHash>> {
             if !p.as_ref().exists() || !p.as_ref().is_dir() {
                 return Err(MeliError::new(format!(
                     "Configuration error: Path \"{}\" {}",
@@ -734,20 +734,20 @@ impl MaildirType {
                             continue 'entries;
                         }
                         if path.is_dir() {
-                            if let Ok(mut f) = MaildirFolder::new(
+                            if let Ok(mut f) = MaildirMailbox::new(
                                 path.to_str().unwrap().to_string(),
                                 path.file_name().unwrap().to_str().unwrap().to_string(),
                                 None,
                                 Vec::new(),
                                 &settings,
                             ) {
-                                f.children = recurse_folders(folders, settings, &path)?;
+                                f.children = recurse_mailboxes(mailboxes, settings, &path)?;
                                 f.children
                                     .iter()
-                                    .map(|c| folders.get_mut(c).map(|f| f.parent = Some(f.hash)))
+                                    .map(|c| mailboxes.get_mut(c).map(|f| f.parent = Some(f.hash)))
                                     .count();
                                 children.push(f.hash);
-                                folders.insert(f.hash, f);
+                                mailboxes.insert(f.hash, f);
                             }
                         }
                     }
@@ -755,55 +755,55 @@ impl MaildirType {
             }
             Ok(children)
         };
-        let root_path = PathBuf::from(settings.root_folder()).expand();
+        let root_path = PathBuf::from(settings.root_mailbox()).expand();
         if !root_path.exists() {
             return Err(MeliError::new(format!(
                 "Configuration error ({}): root_path `{}` is not a valid directory.",
                 settings.name(),
-                settings.root_folder.as_str()
+                settings.root_mailbox.as_str()
             )));
         } else if !root_path.is_dir() {
             return Err(MeliError::new(format!(
                 "Configuration error ({}): root_path `{}` is not a directory.",
                 settings.name(),
-                settings.root_folder.as_str()
+                settings.root_mailbox.as_str()
             )));
         }
 
-        if let Ok(f) = MaildirFolder::new(
+        if let Ok(f) = MaildirMailbox::new(
             root_path.to_str().unwrap().to_string(),
             root_path.file_name().unwrap().to_str().unwrap().to_string(),
             None,
             Vec::with_capacity(0),
             settings,
         ) {
-            folders.insert(f.hash, f);
+            mailboxes.insert(f.hash, f);
         }
 
-        if folders.is_empty() {
-            let children = recurse_folders(&mut folders, settings, &root_path)?;
+        if mailboxes.is_empty() {
+            let children = recurse_mailboxes(&mut mailboxes, settings, &root_path)?;
             children
                 .iter()
-                .map(|c| folders.get_mut(c).map(|f| f.parent = None))
+                .map(|c| mailboxes.get_mut(c).map(|f| f.parent = None))
                 .count();
         } else {
-            let root_hash = *folders.keys().nth(0).unwrap();
-            let children = recurse_folders(&mut folders, settings, &root_path)?;
+            let root_hash = *mailboxes.keys().nth(0).unwrap();
+            let children = recurse_mailboxes(&mut mailboxes, settings, &root_path)?;
             children
                 .iter()
-                .map(|c| folders.get_mut(c).map(|f| f.parent = Some(root_hash)))
+                .map(|c| mailboxes.get_mut(c).map(|f| f.parent = Some(root_hash)))
                 .count();
-            folders.get_mut(&root_hash).map(|f| f.children = children);
+            mailboxes.get_mut(&root_hash).map(|f| f.children = children);
         }
-        for f in folders.values_mut() {
+        for f in mailboxes.values_mut() {
             if is_subscribed(f.path()) {
                 f.is_subscribed = true;
             }
         }
 
         let mut hash_indexes =
-            FnvHashMap::with_capacity_and_hasher(folders.len(), Default::default());
-        for &fh in folders.keys() {
+            FnvHashMap::with_capacity_and_hasher(mailboxes.len(), Default::default());
+        for &fh in mailboxes.keys() {
             hash_indexes.insert(
                 fh,
                 HashIndex {
@@ -814,37 +814,37 @@ impl MaildirType {
         }
         Ok(Box::new(MaildirType {
             name: settings.name().to_string(),
-            folders,
+            mailboxes,
             hash_indexes: Arc::new(Mutex::new(hash_indexes)),
-            folder_index: Default::default(),
+            mailbox_index: Default::default(),
             path: root_path,
         }))
     }
-    fn owned_folder_idx(&self, folder: &Folder) -> FolderHash {
+    fn owned_mailbox_idx(&self, mailbox: &Mailbox) -> MailboxHash {
         *self
-            .folders
+            .mailboxes
             .iter()
-            .find(|(_, f)| f.hash() == folder.hash())
+            .find(|(_, f)| f.hash() == mailbox.hash())
             .unwrap()
             .0
     }
 
-    pub fn multicore(&mut self, cores: usize, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
+    pub fn multicore(&mut self, cores: usize, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
 
         let handle = {
             let tx = w.tx();
-            let folder: &MaildirFolder = &self.folders[&self.owned_folder_idx(folder)];
-            let folder_hash = folder.hash();
-            let unseen = folder.unseen.clone();
-            let total = folder.total.clone();
+            let mailbox: &MaildirMailbox = &self.mailboxes[&self.owned_mailbox_idx(mailbox)];
+            let mailbox_hash = mailbox.hash();
+            let unseen = mailbox.unseen.clone();
+            let total = mailbox.total.clone();
             let tx_final = w.tx();
-            let mut path: PathBuf = folder.fs_path().into();
-            let name = format!("parsing {:?}", folder.name());
+            let mut path: PathBuf = mailbox.fs_path().into();
+            let name = format!("parsing {:?}", mailbox.name());
             let root_path = self.path.to_path_buf();
             let map = self.hash_indexes.clone();
-            let folder_index = self.folder_index.clone();
+            let mailbox_index = self.mailbox_index.clone();
 
             let closure = move |work_context: crate::async_workers::WorkContext| {
                 work_context
@@ -886,7 +886,7 @@ impl MaildirType {
                                 let cache_dir = cache_dir.clone();
                                 let tx = tx.clone();
                                 let map = map.clone();
-                                let folder_index = folder_index.clone();
+                                let mailbox_index = mailbox_index.clone();
                                 let root_path = root_path.clone();
                                 let s = scope.builder().name(name.clone()).spawn(move |_| {
                                     let len = chunk.len();
@@ -896,7 +896,7 @@ impl MaildirType {
                                     for c in chunk.chunks(size) {
                                         //thread::yield_now();
                                         let map = map.clone();
-                                        let folder_index = folder_index.clone();
+                                        let mailbox_index = mailbox_index.clone();
                                         let len = c.len();
                                         for file in c {
                                             /* Check if we have a cache file with this email's
@@ -916,13 +916,13 @@ impl MaildirType {
                                                     bincode::deserialize_from(reader);
                                                 if let Ok(env) = result {
                                                     let mut map = map.lock().unwrap();
-                                                    let map = map.entry(folder_hash).or_default();
+                                                    let map = map.entry(mailbox_hash).or_default();
                                                     let hash = env.hash();
                                                     map.insert(hash, file.clone().into());
-                                                    folder_index
+                                                    mailbox_index
                                                         .lock()
                                                         .unwrap()
-                                                        .insert(hash, folder_hash);
+                                                        .insert(hash, mailbox_hash);
                                                     if !env.is_seen() {
                                                         *unseen.lock().unwrap() += 1;
                                                     }
@@ -934,19 +934,19 @@ impl MaildirType {
                                             let hash = get_file_hash(file);
                                             {
                                                 let mut map = map.lock().unwrap();
-                                                let map = map.entry(folder_hash).or_default();
+                                                let map = map.entry(mailbox_hash).or_default();
                                                 (*map).insert(hash, PathBuf::from(file).into());
                                             }
                                             let op = Box::new(MaildirOp::new(
                                                 hash,
                                                 map.clone(),
-                                                folder_hash,
+                                                mailbox_hash,
                                             ));
                                             if let Some(e) = Envelope::from_token(op, hash) {
-                                                folder_index
+                                                mailbox_index
                                                     .lock()
                                                     .unwrap()
-                                                    .insert(e.hash(), folder_hash);
+                                                    .insert(e.hash(), mailbox_hash);
                                                 if let Ok(cached) =
                                                     cache_dir.place_cache_file(file_name)
                                                 {
@@ -1011,7 +1011,7 @@ impl MaildirType {
         w.build(handle)
     }
 
-    pub fn save_to_folder(mut path: PathBuf, bytes: &[u8], flags: Option<Flag>) -> Result<()> {
+    pub fn save_to_mailbox(mut path: PathBuf, bytes: &[u8], flags: Option<Flag>) -> Result<()> {
         path.push("cur");
         {
             let mut rand_buf = [0u8; 16];
@@ -1071,18 +1071,18 @@ impl MaildirType {
     }
 
     pub fn validate_config(s: &AccountSettings) -> Result<()> {
-        let root_path = PathBuf::from(s.root_folder()).expand();
+        let root_path = PathBuf::from(s.root_mailbox()).expand();
         if !root_path.exists() {
             return Err(MeliError::new(format!(
                 "Configuration error ({}): root_path `{}` is not a valid directory.",
                 s.name(),
-                s.root_folder.as_str()
+                s.root_mailbox.as_str()
             )));
         } else if !root_path.is_dir() {
             return Err(MeliError::new(format!(
                 "Configuration error ({}): root_path `{}` is not a directory.",
                 s.name(),
-                s.root_folder.as_str()
+                s.root_mailbox.as_str()
             )));
         }
 
@@ -1092,7 +1092,7 @@ impl MaildirType {
 
 fn add_path_to_index(
     hash_index: &HashIndexes,
-    folder_hash: FolderHash,
+    mailbox_hash: MailboxHash,
     path: &Path,
     cache_dir: &xdg::BaseDirectories,
     file_name: PathBuf,
@@ -1102,16 +1102,16 @@ fn add_path_to_index(
     let hash = get_file_hash(path);
     {
         let mut map = hash_index.lock().unwrap();
-        let map = map.entry(folder_hash).or_default();
+        let map = map.entry(mailbox_hash).or_default();
         map.insert(hash, path.to_path_buf().into());
         debug!(
             "inserted {} in {} map, len={}",
             hash,
-            folder_hash,
+            mailbox_hash,
             map.len()
         );
     }
-    let op = Box::new(MaildirOp::new(hash, hash_index.clone(), folder_hash));
+    let op = Box::new(MaildirOp::new(hash, hash_index.clone(), mailbox_hash));
     if let Some(e) = Envelope::from_token(op, hash) {
         debug!("add_path_to_index gen {}\t{}", hash, file_name.display());
         if let Ok(cached) = cache_dir.place_cache_file(file_name) {

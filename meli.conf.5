@@ -56,23 +56,23 @@ example configuration
 .Bd -literal
 # Setting up a Maildir account
 [accounts.account-name]
-root_folder = "/path/to/root/folder"
+root_mailbox = "/path/to/root/folder"
 format = "Maildir"
 index_style = "Compact"
 identity="email@address.tld"
-subscribed_folders = ["folder", "folder/Sent"] # or [ "*", ] for all folders
+subscribed_mailboxes = ["folder", "folder/Sent"] # or [ "*", ] for all mailboxes
 display_name = "Name"
 
-# Set folder-specific settings
-  [accounts.account-name.folders]
+# Set mailbox-specific settings
+  [accounts.account-name.mailboxes]
   "INBOX" = { alias="Inbox" } #inline table
   "drafts" = { alias="Drafts" } #inline table
-  [accounts.account-name.folders."foobar-devel"] # or a regular table
-    ignore = true # don't show notifications for this folder
+  [accounts.account-name.mailboxes."foobar-devel"] # or a regular table
+    ignore = true # don't show notifications for this mailbox
 
 # Setting up an mbox account
 [accounts.mbox]
-root_folder = "/var/mail/username"
+root_mailbox = "/var/mail/username"
 format = "mbox"
 index_style = "Compact"
 identity="username@hostname.local"
@@ -105,16 +105,16 @@ available options are listed below.
 .Sy default values are shown in parentheses.
 .Sh ACCOUNTS
 .Bl -tag -width 36n
-.It Ic root_folder Ar String
-the backend-specific path of the root_folder, usually INBOX.
+.It Ic root_mailbox Ar String
+the backend-specific path of the root_mailbox, usually INBOX.
 .It Ic format Ar String Op maildir mbox imap notmuch jmap
 the format of the mail backend.
-.It Ic subscribed_folders Ar [String,]
-an array of folder paths to display in the UI.
-Paths are relative to the root folder (eg "INBOX/Sent", not "Sent").
+.It Ic subscribed_mailboxes Ar [String,]
+an array of mailbox paths to display in the UI.
+Paths are relative to the root mailbox (eg "INBOX/Sent", not "Sent").
 The glob wildcard
 .Em \&*
-can be used to match every folder name and path.
+can be used to match every mailbox name and path.
 .It Ic identity Ar String
 your e-mail address that is inserted in the From: headers of outgoing mail
 .It Ic index_style Ar String
@@ -148,20 +148,20 @@ Available options are 'none' and 'sqlite3'
 .It Ic vcard_folder Ar String
 (optional) Folder that contains .vcf files.
 They are parsed and imported read-only.
-.It Ic folders Ar folder_config
-(optional) configuration for each folder.
+.It Ic mailboxes Ar mailbox
+(optional) configuration for each mailbox.
 Its format is described below in
-.Sx FOLDERS Ns
+.Sx mailboxes Ns
 \&.
 .El
 .Sh notmuch only
-.Ic root_folder
+.Ic root_mailbox
 points to the directory which contains the
 .Pa .notmuch/
 subdirectory.
-notmuch folders are virtual, since they are defined by user-given notmuch queries.
-Thus you have to explicitly state the folders you want in the
-.Ic folders
+notmuch mailboxes are virtual, since they are defined by user-given notmuch queries.
+Thus you have to explicitly state the mailboxes you want in the
+.Ic mailboxes
 field and set the
 .Ar query
 property to each of them.
@@ -170,7 +170,7 @@ Example:
 [accounts.notmuch]
 format = "notmuch"
 \&...
-  [accounts.notmuch.folders]
+  [accounts.notmuch.mailboxes]
   "INBOX" = {  query="tag:inbox", subscribe = true }
   "Drafts" = {  query="tag:draft", subscribe = true }
   "Sent" = {  query="from:username@server.tld from:username2@server.tld", subscribe = true }
@@ -213,22 +213,22 @@ example:
 .\" default value
 .Pq Em false
 .El
-.Sh FOLDERS
+.Sh mailboxes
 .Bl -tag -width 36n
 .It Ic alias Ar String
-(optional) show a different name for this folder in the UI
+(optional) show a different name for this mailbox in the UI
 .It Ic autoload Ar boolean
-(optional) load this folder on startup (not functional yet)
+(optional) load this mailbox on startup (not functional yet)
 .It Ic subscribe Ar boolean
-(optional) watch this folder for updates
+(optional) watch this mailbox for updates
 .\" default value
 .Pq Em true
 .It Ic ignore Ar boolean
-(optional) silently insert updates for this folder, if any
+(optional) silently insert updates for this mailbox, if any
 .\" default value
 .Pq Em false
 .It Ic usage Ar boolean
-(optional) special usage of this folder.
+(optional) special usage of this mailbox.
 Valid values are:
 .Bl -bullet -compact
 .It
@@ -248,9 +248,9 @@ Valid values are:
 .It
 .Ar Trash
 .El
-otherwise usage is inferred from the folder title.
+otherwise usage is inferred from the mailbox title.
 .It Ic conf_override Ar boolean
-(optional) override global settings for this folder.
+(optional) override global settings for this mailbox.
 Available sections to override are
 .Em pager, notifications, shortcuts, composing
 and the account options
@@ -258,9 +258,9 @@ and the account options
 \&.
 Example:
 .Bd -literal
-[accounts."imap.domain.tld".folders."INBOX"]
+[accounts."imap.domain.tld".mailboxes."INBOX"]
   index_style = "plain"
-  [accounts."imap.domain.tld".folders."INBOX".pager]
+  [accounts."imap.domain.tld".mailboxes."INBOX".pager]
     filter = ""
 .Ed
 .El
@@ -347,12 +347,12 @@ Go to previous page.
 Go to next page.
 .\" default value
 .Pq Em PageDown
-.It Ic prev_folder
-Go to previous folder.
+.It Ic prev_mailbox
+Go to previous mailbox.
 .\" default value
 .Pq Em K
-.It Ic next_folder
-Go to next folder.
+.It Ic next_mailbox
+Go to next mailbox.
 .\" default value
 .Pq Em J
 .It Ic prev_account
@@ -372,7 +372,7 @@ Set thread as seen.
 .\" default value
 .Pq Em n
 .It Ic refresh
-Manually request a folder refresh.
+Manually request a mailbox refresh.
 .\" default value
 .Pq Em F5
 .It Ic search
@@ -622,8 +622,8 @@ example configuration:
 colors = { signed="#Ff6600", replied="DeepSkyBlue4", draft="#f00", replied="8" }
 [accounts.dummy]
 \&...
-  [accounts.dummy.folders]
-  # per folder override:
+  [accounts.dummy.mailboxes]
+  # per mailbox override:
   "INBOX" = {  tags.ignore_tags=["inbox", ] }
 .Ed
 .Sh PGP

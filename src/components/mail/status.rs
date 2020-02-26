@@ -308,9 +308,9 @@ impl StatusPanel {
                 }
             }
             let count = a
-                .folder_entries
+                .mailbox_entries
                 .values()
-                .map(|entry| &entry.ref_folder)
+                .map(|entry| &entry.ref_mailbox)
                 .fold((0, 0), |acc, f| {
                     let count = f.count().unwrap_or((0, 0));
                     (acc.0 + count.0, acc.1 + count.1)
@@ -361,9 +361,9 @@ impl StatusPanel {
                 None,
             );
             for (i, f) in a
-                .folder_entries
+                .mailbox_entries
                 .values()
-                .map(|entry| &entry.ref_folder)
+                .map(|entry| &entry.ref_mailbox)
                 .filter(|f| f.special_usage() != SpecialUsageMailbox::Normal)
                 .enumerate()
             {
@@ -479,9 +479,9 @@ impl Component for AccountStatus {
             None,
         );
         for f in a
-            .folder_entries
+            .mailbox_entries
             .values()
-            .map(|entry| &entry.ref_folder)
+            .map(|entry| &entry.ref_mailbox)
             .filter(|f| f.special_usage() != SpecialUsageMailbox::Normal)
         {
             line += 1;
@@ -497,7 +497,7 @@ impl Component for AccountStatus {
         }
         line += 2;
         write_string_to_grid(
-            "Subscribed folders:",
+            "Subscribed mailboxes:",
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
@@ -506,8 +506,8 @@ impl Component for AccountStatus {
             None,
         );
         line += 2;
-        for folder_node in a.list_folders() {
-            let f: &Folder = &a[&folder_node.hash].ref_folder;
+        for mailbox_node in a.list_mailboxes() {
+            let f: &Mailbox = &a[&mailbox_node.hash].ref_mailbox;
             if f.is_subscribed() {
                 write_string_to_grid(
                     f.path(),

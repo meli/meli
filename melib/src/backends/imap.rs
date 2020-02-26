@@ -24,8 +24,8 @@ use smallvec::SmallVec;
 #[macro_use]
 mod protocol_parser;
 pub use protocol_parser::{UntaggedResponse::*, *};
-mod folder;
-pub use folder::*;
+mod mailbox;
+pub use mailbox::*;
 mod operations;
 pub use operations::*;
 mod connection;
@@ -35,10 +35,10 @@ pub use watch::*;
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
-use crate::backends::FolderHash;
+use crate::backends::MailboxHash;
 use crate::backends::RefreshEvent;
 use crate::backends::RefreshEventKind::{self, *};
-use crate::backends::{BackendFolder, Folder, MailBackend, RefreshEventConsumer};
+use crate::backends::{BackendMailbox, MailBackend, Mailbox, RefreshEventConsumer};
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
@@ -117,8 +117,8 @@ macro_rules! get_conf_val {
 
 #[derive(Debug)]
 pub struct UIDStore {
-    uidvalidity: Arc<Mutex<FnvHashMap<FolderHash, UID>>>,
-    hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, FolderHash)>>>,
+    uidvalidity: Arc<Mutex<FnvHashMap<MailboxHash, UID>>>,
+    hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     uid_index: Arc<Mutex<FnvHashMap<UID, EnvelopeHash>>>,
 
     byte_cache: Arc<Mutex<FnvHashMap<UID, EnvelopeCache>>>,
@@ -134,7 +134,7 @@ pub struct ImapType {
     can_create_flags: Arc<Mutex<bool>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 
-    folders: Arc<RwLock<FnvHashMap<FolderHash, ImapFolder>>>,
+    mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, ImapMailbox>>>,
 }
 
 impl MailBackend for ImapType {
@@ -152,16 +152,16 @@ impl MailBackend for ImapType {
         }
     }
 
-    fn get(&mut self, folder: &Folder) -> Async<Result<Vec<Envelope>>> {
+    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let handle = {
             let tx = w.tx();
             let uid_store = self.uid_store.clone();
             let tag_index = self.tag_index.clone();
             let can_create_flags = self.can_create_flags.clone();
-            let folder_hash = folder.hash();
-            let (permissions, folder_path, folder_exists, no_select, unseen) = {
-                let f = &self.folders.read().unwrap()[&folder_hash];
+            let mailbox_hash = mailbox.hash();
+            let (permissions, mailbox_path, mailbox_exists, no_select, unseen) = {
+                let f = &self.mailboxes.read().unwrap()[&mailbox_hash];
                 (
                     f.permissions.clone(),
                     f.imap_path().to_string(),
@@ -182,24 +182,24 @@ impl MailBackend for ImapType {
                     let tx = _tx;
                     let mut response = String::with_capacity(8 * 1024);
                     let mut conn = connection.lock()?;
-                    debug!("locked for get {}", folder_path);
+                    debug!("locked for get {}", mailbox_path);
 
                     /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
                      * returns READ-ONLY for both cases) */
-                    conn.send_command(format!("SELECT \"{}\"", folder_path).as_bytes())?;
+                    conn.send_command(format!("SELECT \"{}\"", mailbox_path).as_bytes())?;
                     conn.read_response(&mut response)?;
                     let examine_response = protocol_parser::select_response(&response)?;
                     *can_create_flags.lock().unwrap() = examine_response.can_create_flags;
                     debug!(
-                        "folder: {} examine_response: {:?}",
-                        folder_path, examine_response
+                        "mailbox: {} examine_response: {:?}",
+                        mailbox_path, examine_response
                     );
                     let mut exists: usize = examine_response.uidnext - 1;
                     {
                         let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
                         let v = uidvalidities
-                            .entry(folder_hash)
+                            .entry(mailbox_hash)
                             .or_insert(examine_response.uidvalidity);
                         *v = examine_response.uidvalidity;
 
@@ -210,11 +210,11 @@ impl MailBackend for ImapType {
                         permissions.rename_messages = !examine_response.read_only;
                         permissions.delete_messages = !examine_response.read_only;
                         permissions.delete_messages = !examine_response.read_only;
-                        let mut folder_exists = folder_exists.lock().unwrap();
-                        *folder_exists = exists;
+                        let mut mailbox_exists = mailbox_exists.lock().unwrap();
+                        *mailbox_exists = exists;
                     }
                     /* reselecting the same mailbox with EXAMINE prevents expunging it */
-                    conn.send_command(format!("EXAMINE \"{}\"", folder_path).as_bytes())?;
+                    conn.send_command(format!("EXAMINE \"{}\"", mailbox_path).as_bytes())?;
                     conn.read_response(&mut response)?;
 
                     let mut tag_lck = tag_index.write().unwrap();
@@ -247,7 +247,7 @@ impl MailBackend for ImapType {
                             let mut env = envelope.unwrap();
                             let mut h = DefaultHasher::new();
                             h.write_usize(uid);
-                            h.write(folder_path.as_bytes());
+                            h.write(mailbox_path.as_bytes());
                             env.set_hash(h.finish());
                             if let Some((flags, keywords)) = flags {
                                 if !flags.contains(Flag::SEEN) {
@@ -266,7 +266,7 @@ impl MailBackend for ImapType {
                                 .hash_index
                                 .lock()
                                 .unwrap()
-                                .insert(env.hash(), (uid, folder_hash));
+                                .insert(env.hash(), (uid, mailbox_hash));
                             uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
                             envelopes.push(env);
                         }
@@ -290,15 +290,15 @@ impl MailBackend for ImapType {
 
     fn refresh(
         &mut self,
-        folder_hash: FolderHash,
+        mailbox_hash: MailboxHash,
         sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
         self.connection.lock().unwrap().connect()?;
         let inbox = self
-            .folders
+            .mailboxes
             .read()
             .unwrap()
-            .get(&folder_hash)
+            .get(&mailbox_hash)
             .map(std::clone::Clone::clone)
             .unwrap();
         let tag_index = self.tag_index.clone();
@@ -340,7 +340,7 @@ impl MailBackend for ImapType {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
-        let folders = self.folders.clone();
+        let mailboxes = self.mailboxes.clone();
         let tag_index = self.tag_index.clone();
         let conn = ImapConnection::new_connection(&self.server_conf, self.online.clone());
         let main_conn = self.connection.clone();
@@ -365,7 +365,7 @@ impl MailBackend for ImapType {
                     is_online,
                     main_conn,
                     uid_store,
-                    folders,
+                    mailboxes,
                     sender,
                     work_context,
                     tag_index,
@@ -379,38 +379,41 @@ impl MailBackend for ImapType {
         Ok(handle.thread().id())
     }
 
-    fn folders(&self) -> Result<FnvHashMap<FolderHash, Folder>> {
+    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
         {
-            let folders = self.folders.read().unwrap();
-            if !folders.is_empty() {
-                return Ok(folders
+            let mailboxes = self.mailboxes.read().unwrap();
+            if !mailboxes.is_empty() {
+                return Ok(mailboxes
                     .iter()
-                    .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
+                    .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Mailbox))
                     .collect());
             }
         }
-        let mut folders = self.folders.write()?;
-        *folders = ImapType::imap_folders(&self.connection)?;
-        folders.retain(|_, f| (self.is_subscribed)(f.path()));
-        let keys = folders.keys().cloned().collect::<FnvHashSet<FolderHash>>();
+        let mut mailboxes = self.mailboxes.write()?;
+        *mailboxes = ImapType::imap_mailboxes(&self.connection)?;
+        mailboxes.retain(|_, f| (self.is_subscribed)(f.path()));
+        let keys = mailboxes
+            .keys()
+            .cloned()
+            .collect::<FnvHashSet<MailboxHash>>();
         let mut uid_lock = self.uid_store.uidvalidity.lock().unwrap();
-        for f in folders.values_mut() {
+        for f in mailboxes.values_mut() {
             uid_lock.entry(f.hash()).or_default();
             f.children.retain(|c| keys.contains(c));
         }
         drop(uid_lock);
-        Ok(folders
+        Ok(mailboxes
             .iter()
             .filter(|(_, f)| f.is_subscribed)
-            .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Folder))
+            .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Mailbox))
             .collect())
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
-        let (uid, folder_hash) = self.uid_store.hash_index.lock().unwrap()[&hash];
+        let (uid, mailbox_hash) = self.uid_store.hash_index.lock().unwrap()[&hash];
         Box::new(ImapOp::new(
             uid,
-            self.folders.read().unwrap()[&folder_hash]
+            self.mailboxes.read().unwrap()[&mailbox_hash]
                 .imap_path()
                 .to_string(),
             self.connection.clone(),
@@ -419,28 +422,28 @@ impl MailBackend for ImapType {
         ))
     }
 
-    fn save(&self, bytes: &[u8], folder: &str, flags: Option<Flag>) -> Result<()> {
+    fn save(&self, bytes: &[u8], mailbox: &str, flags: Option<Flag>) -> Result<()> {
         let path = {
-            let folders = self.folders.read().unwrap();
+            let mailboxes = self.mailboxes.read().unwrap();
 
-            let f_result = folders
+            let f_result = mailboxes
                 .values()
-                .find(|v| v.path == folder || v.name == folder);
+                .find(|v| v.path == mailbox || v.name == mailbox);
             if f_result
                 .map(|f| !f.permissions.lock().unwrap().create_messages)
                 .unwrap_or(false)
             {
                 return Err(MeliError::new(format!(
-                    "You are not allowed to create messages in folder {}",
-                    folder
+                    "You are not allowed to create messages in mailbox {}",
+                    mailbox
                 )));
             }
 
             f_result
                 .map(|v| v.imap_path().to_string())
                 .ok_or(MeliError::new(format!(
-                    "Folder with name {} not found.",
-                    folder
+                    "Mailbox with name {} not found.",
+                    mailbox
                 )))?
         };
         let mut response = String::with_capacity(8 * 1024);
@@ -478,10 +481,10 @@ impl MailBackend for ImapType {
         }
     }
 
-    fn create_folder(
+    fn create_mailbox(
         &mut self,
         mut path: String,
-    ) -> Result<(FolderHash, FnvHashMap<FolderHash, Folder>)> {
+    ) -> Result<(MailboxHash, FnvHashMap<MailboxHash, Mailbox>)> {
         /* Must transform path to something the IMAP server will accept
          *
          * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
@@ -496,21 +499,21 @@ impl MailBackend for ImapType {
          * decision is unpleasant for you.
          */
 
-        let mut folders = self.folders.write().unwrap();
-        for root_folder in folders.values().filter(|f| f.parent.is_none()) {
-            if path.starts_with(&root_folder.name) {
-                debug!("path starts with {:?}", &root_folder);
+        let mut mailboxes = self.mailboxes.write().unwrap();
+        for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
+            if path.starts_with(&root_mailbox.name) {
+                debug!("path starts with {:?}", &root_mailbox);
                 path = path.replace(
                     '/',
-                    (root_folder.separator as char).encode_utf8(&mut [0; 4]),
+                    (root_mailbox.separator as char).encode_utf8(&mut [0; 4]),
                 );
                 break;
             }
         }
 
-        if folders.values().any(|f| f.path == path) {
+        if mailboxes.values().any(|f| f.path == path) {
             return Err(MeliError::new(format!(
-                "Folder named `{}` in account `{}` already exists.",
+                "Mailbox named `{}` in account `{}` already exists.",
                 path, self.account_name,
             )));
         }
@@ -527,21 +530,24 @@ impl MailBackend for ImapType {
         let ret: Result<()> = ImapResponse::from(&response).into();
         ret?;
         let new_hash = get_path_hash!(path.as_str());
-        folders.clear();
-        drop(folders);
-        Ok((new_hash, self.folders().map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?))
+        mailboxes.clear();
+        drop(mailboxes);
+        Ok((new_hash, self.mailboxes().map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?))
     }
 
-    fn delete_folder(&mut self, folder_hash: FolderHash) -> Result<FnvHashMap<FolderHash, Folder>> {
-        let mut folders = self.folders.write().unwrap();
-        let permissions = folders[&folder_hash].permissions();
+    fn delete_mailbox(
+        &mut self,
+        mailbox_hash: MailboxHash,
+    ) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+        let mut mailboxes = self.mailboxes.write().unwrap();
+        let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.delete_mailbox {
-            return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", folders[&folder_hash].name(), permissions)));
+            return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
         }
         let mut response = String::with_capacity(8 * 1024);
         {
             let mut conn_lck = self.connection.lock()?;
-            if !folders[&folder_hash].no_select {
+            if !mailboxes[&mailbox_hash].no_select {
                 /* make sure mailbox is not selected before it gets deleted, otherwise
                  * connection gets dropped by server */
                 if conn_lck
@@ -550,42 +556,46 @@ impl MailBackend for ImapType {
                     .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
                 {
                     conn_lck.send_command(
-                        format!("UNSELECT \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                        format!("UNSELECT \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
                     )?;
                     conn_lck.read_response(&mut response)?;
                 } else {
                     conn_lck.send_command(
-                        format!("SELECT \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                        format!("SELECT \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
                     )?;
                     conn_lck.read_response(&mut response)?;
                     conn_lck.send_command(
-                        format!("EXAMINE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                        format!("EXAMINE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
                     )?;
                     conn_lck.read_response(&mut response)?;
                 }
             }
-            if folders[&folder_hash].is_subscribed() {
+            if mailboxes[&mailbox_hash].is_subscribed() {
                 conn_lck.send_command(
-                    format!("UNSUBSCRIBE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                    format!("UNSUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
                 )?;
                 conn_lck.read_response(&mut response)?;
             }
 
             conn_lck.send_command(
-                debug!(format!("DELETE \"{}\"", folders[&folder_hash].imap_path())).as_bytes(),
+                debug!(format!(
+                    "DELETE \"{}\"",
+                    mailboxes[&mailbox_hash].imap_path()
+                ))
+                .as_bytes(),
             )?;
             conn_lck.read_response(&mut response)?;
         }
         let ret: Result<()> = ImapResponse::from(&response).into();
         ret?;
-        folders.clear();
-        drop(folders);
-        self.folders().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
+        mailboxes.clear();
+        drop(mailboxes);
+        self.mailboxes().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
     }
 
-    fn set_folder_subscription(&mut self, folder_hash: FolderHash, new_val: bool) -> Result<()> {
-        let mut folders = self.folders.write().unwrap();
-        if folders[&folder_hash].is_subscribed() == new_val {
+    fn set_mailbox_subscription(&mut self, mailbox_hash: MailboxHash, new_val: bool) -> Result<()> {
+        let mut mailboxes = self.mailboxes.write().unwrap();
+        if mailboxes[&mailbox_hash].is_subscribed() == new_val {
             return Ok(());
         }
 
@@ -594,11 +604,11 @@ impl MailBackend for ImapType {
             let mut conn_lck = self.connection.lock()?;
             if new_val {
                 conn_lck.send_command(
-                    format!("SUBSCRIBE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                    format!("SUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
                 )?;
             } else {
                 conn_lck.send_command(
-                    format!("UNSUBSCRIBE \"{}\"", folders[&folder_hash].imap_path()).as_bytes(),
+                    format!("UNSUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
                 )?;
             }
             conn_lck.read_response(&mut response)?;
@@ -606,24 +616,28 @@ impl MailBackend for ImapType {
 
         let ret: Result<()> = ImapResponse::from(&response).into();
         if ret.is_ok() {
-            folders.entry(folder_hash).and_modify(|entry| {
+            mailboxes.entry(mailbox_hash).and_modify(|entry| {
                 let _ = entry.set_is_subscribed(new_val);
             });
         }
         ret
     }
 
-    fn rename_folder(&mut self, folder_hash: FolderHash, mut new_path: String) -> Result<Folder> {
-        let mut folders = self.folders.write().unwrap();
-        let permissions = folders[&folder_hash].permissions();
+    fn rename_mailbox(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        mut new_path: String,
+    ) -> Result<Mailbox> {
+        let mut mailboxes = self.mailboxes.write().unwrap();
+        let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.delete_mailbox {
-            return Err(MeliError::new(format!("You do not have permission to rename folder `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", folders[&folder_hash].name(), permissions)));
+            return Err(MeliError::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
         }
         let mut response = String::with_capacity(8 * 1024);
-        if folders[&folder_hash].separator != b'/' {
+        if mailboxes[&mailbox_hash].separator != b'/' {
             new_path = new_path.replace(
                 '/',
-                (folders[&folder_hash].separator as char).encode_utf8(&mut [0; 4]),
+                (mailboxes[&mailbox_hash].separator as char).encode_utf8(&mut [0; 4]),
             );
         }
         {
@@ -631,7 +645,7 @@ impl MailBackend for ImapType {
             conn_lck.send_command(
                 debug!(format!(
                     "RENAME \"{}\" \"{}\"",
-                    folders[&folder_hash].imap_path(),
+                    mailboxes[&mailbox_hash].imap_path(),
                     new_path
                 ))
                 .as_bytes(),
@@ -641,23 +655,23 @@ impl MailBackend for ImapType {
         let new_hash = get_path_hash!(new_path.as_str());
         let ret: Result<()> = ImapResponse::from(&response).into();
         ret?;
-        folders.clear();
-        drop(folders);
-        self.folders().map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
-        Ok(BackendFolder::clone(
-            &self.folders.read().unwrap()[&new_hash],
+        mailboxes.clear();
+        drop(mailboxes);
+        self.mailboxes().map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
+        Ok(BackendMailbox::clone(
+            &self.mailboxes.read().unwrap()[&new_hash],
         ))
     }
 
-    fn set_folder_permissions(
+    fn set_mailbox_permissions(
         &mut self,
-        folder_hash: FolderHash,
-        _val: crate::backends::FolderPermissions,
+        mailbox_hash: MailboxHash,
+        _val: crate::backends::MailboxPermissions,
     ) -> Result<()> {
-        let folders = self.folders.write().unwrap();
-        let permissions = folders[&folder_hash].permissions();
+        let mailboxes = self.mailboxes.write().unwrap();
+        let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.change_permissions {
-            return Err(MeliError::new(format!("You do not have permission to change permissions for folder `{}`. Set permissions for this mailbox are {}", folders[&folder_hash].name(), permissions)));
+            return Err(MeliError::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
         }
 
         Err(MeliError::new("Unimplemented."))
@@ -698,7 +712,7 @@ impl ImapType {
 
             can_create_flags: Arc::new(Mutex::new(false)),
             tag_index: Arc::new(RwLock::new(Default::default())),
-            folders: Arc::new(RwLock::new(Default::default())),
+            mailboxes: Arc::new(RwLock::new(Default::default())),
             connection: Arc::new(Mutex::new(connection)),
             uid_store: Arc::new(UIDStore {
                 uidvalidity: Default::default(),
@@ -742,10 +756,10 @@ impl ImapType {
         }
     }
 
-    pub fn imap_folders(
+    pub fn imap_mailboxes(
         connection: &Arc<Mutex<ImapConnection>>,
-    ) -> Result<FnvHashMap<FolderHash, ImapFolder>> {
-        let mut folders: FnvHashMap<FolderHash, ImapFolder> = Default::default();
+    ) -> Result<FnvHashMap<MailboxHash, ImapMailbox>> {
+        let mut mailboxes: FnvHashMap<MailboxHash, ImapMailbox> = Default::default();
         let mut res = String::with_capacity(8 * 1024);
         let mut conn = connection.lock().unwrap();
         conn.send_command(b"LIST \"\" \"*\"")?;
@@ -755,33 +769,33 @@ impl ImapType {
         /* Remove "M__ OK .." line */
         lines.next_back();
         for l in lines.map(|l| l.trim()) {
-            if let Ok(mut folder) =
-                protocol_parser::list_folder_result(l.as_bytes()).to_full_result()
+            if let Ok(mut mailbox) =
+                protocol_parser::list_mailbox_result(l.as_bytes()).to_full_result()
             {
-                if let Some(parent) = folder.parent {
-                    if folders.contains_key(&parent) {
-                        folders
+                if let Some(parent) = mailbox.parent {
+                    if mailboxes.contains_key(&parent) {
+                        mailboxes
                             .entry(parent)
-                            .and_modify(|e| e.children.push(folder.hash));
+                            .and_modify(|e| e.children.push(mailbox.hash));
                     } else {
                         /* Insert dummy parent entry, populating only the children field. Later
                          * when we encounter the parent entry we will swap its children with
                          * dummy's */
-                        folders.insert(
+                        mailboxes.insert(
                             parent,
-                            ImapFolder {
-                                children: vec![folder.hash],
-                                ..ImapFolder::default()
+                            ImapMailbox {
+                                children: vec![mailbox.hash],
+                                ..ImapMailbox::default()
                             },
                         );
                     }
                 }
-                if folders.contains_key(&folder.hash) {
-                    let entry = folders.entry(folder.hash).or_default();
-                    std::mem::swap(&mut entry.children, &mut folder.children);
-                    *entry = folder;
+                if mailboxes.contains_key(&mailbox.hash) {
+                    let entry = mailboxes.entry(mailbox.hash).or_default();
+                    std::mem::swap(&mut entry.children, &mut mailbox.children);
+                    *entry = mailbox;
                 } else {
-                    folders.insert(folder.hash, folder);
+                    mailboxes.insert(mailbox.hash, mailbox);
                 }
             } else {
                 debug!("parse error for {:?}", l);
@@ -795,9 +809,9 @@ impl ImapType {
         lines.next_back();
         for l in lines.map(|l| l.trim()) {
             if let Ok(subscription) =
-                protocol_parser::list_folder_result(l.as_bytes()).to_full_result()
+                protocol_parser::list_mailbox_result(l.as_bytes()).to_full_result()
             {
-                if let Some(f) = folders.get_mut(&subscription.hash()) {
+                if let Some(f) = mailboxes.get_mut(&subscription.hash()) {
                     if subscription.no_select {
                         continue;
                     }
@@ -807,7 +821,7 @@ impl ImapType {
                 debug!("parse error for {:?}", l);
             }
         }
-        Ok(debug!(folders))
+        Ok(debug!(mailboxes))
     }
 
     pub fn capabilities(&self) -> Vec<String> {
@@ -823,13 +837,13 @@ impl ImapType {
     pub fn search(
         &self,
         query: String,
-        folder_hash: FolderHash,
+        mailbox_hash: MailboxHash,
     ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
-        let folders_lck = self.folders.read()?;
+        let mailboxes_lck = self.mailboxes.read()?;
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = self.connection.lock()?;
         conn.send_command(
-            format!("EXAMINE \"{}\"", folders_lck[&folder_hash].imap_path()).as_bytes(),
+            format!("EXAMINE \"{}\"", mailboxes_lck[&mailbox_hash].imap_path()).as_bytes(),
         )?;
         conn.read_response(&mut response)?;
         conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query).as_bytes())?;

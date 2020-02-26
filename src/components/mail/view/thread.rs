@@ -51,7 +51,7 @@ pub struct ThreadView {
     expanded_pos: usize,
     new_expanded_pos: usize,
     reversed: bool,
-    coordinates: (usize, FolderHash, usize),
+    coordinates: (usize, MailboxHash, usize),
     thread_group: ThreadHash,
     mailview: MailView,
     show_mailview: bool,
@@ -69,13 +69,13 @@ pub struct ThreadView {
 impl ThreadView {
     const DESCRIPTION: &'static str = "thread view";
     /*
-     * coordinates: (account index, folder_hash, root set thread_node index)
+     * coordinates: (account index, mailbox_hash, root set thread_node index)
      * expanded_hash: optional position of expanded entry when we render the threadview. Default
      *  expanded message is the last one.
      * context: current context
      */
     pub fn new(
-        coordinates: (usize, FolderHash, usize),
+        coordinates: (usize, MailboxHash, usize),
         thread_group: ThreadHash,
         expanded_hash: Option<ThreadNodeHash>,
         context: &Context,

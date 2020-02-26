@@ -86,7 +86,7 @@ impl ViewMode {
 /// menus
 #[derive(Debug, Default)]
 pub struct MailView {
-    coordinates: (usize, FolderHash, EnvelopeHash),
+    coordinates: (usize, MailboxHash, EnvelopeHash),
     pager: Pager,
     subview: Option<Box<dyn Component>>,
     dirty: bool,
@@ -124,7 +124,7 @@ impl fmt::Display for MailView {
 impl MailView {
     const DESCRIPTION: &'static str = "view mail";
     pub fn new(
-        coordinates: (usize, FolderHash, EnvelopeHash),
+        coordinates: (usize, MailboxHash, EnvelopeHash),
         pager: Option<Pager>,
         subview: Option<Box<dyn Component>>,
         context: &Context,
@@ -342,7 +342,7 @@ impl MailView {
         }
     }
 
-    pub fn update(&mut self, new_coordinates: (usize, FolderHash, EnvelopeHash)) {
+    pub fn update(&mut self, new_coordinates: (usize, MailboxHash, EnvelopeHash)) {
         self.coordinates = new_coordinates;
         self.mode = ViewMode::Normal;
         self.initialised = false;

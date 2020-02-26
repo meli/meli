@@ -22,8 +22,8 @@
 /*! Entities that handle Mail specific functions.
  */
 use super::*;
-use melib::backends::Folder;
-use melib::backends::FolderHash;
+use melib::backends::Mailbox;
+use melib::backends::MailboxHash;
 use melib::thread::ThreadNodeHash;
 
 pub mod listing;

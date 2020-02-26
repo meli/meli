@@ -94,7 +94,7 @@ The menu's visibility may be toggled with
 .Ic toggle_menu_visibility Ns
 ).
 .Pp
-The view into each folder has 4 modes: plain, threaded, conversations and compact.
+The view into each mailbox has 4 modes: plain, threaded, conversations and compact.
 Plain views each mail indvidually, threaded shows their thread relationship visually, and conversations includes one entry per thread of emails (compact is one row per thread).
 .Pp
 If you're using a light color palette in your terminal, you may set
@@ -224,9 +224,9 @@ To save your draft without sending it, issue command
 .Cm close
 and select 'save as draft'.
 .Pp
-With no Draft or Sent folder,
+With no Draft or Sent mailbox,
 .Nm
-tries first saving mail in your INBOX and then at any other folder.
+tries first saving mail in your INBOX and then at any other mailbox.
 On complete failure to save your draft or sent message it will be saved in your
 .Em tmp
 directory instead and you will be notified of its location.
@@ -307,17 +307,17 @@ filter mailbox with
 key.
 Escape exits filter results
 .It Cm set read, set unread
-.It Cm create-folder Ar ACCOUNT Ar FOLDER_PATH
-create folder with given path.
+.It Cm create-mailbox Ar ACCOUNT Ar MAILBOX_PATH
+create mailbox with given path.
 Be careful with backends and separator sensitivity (eg IMAP)
-.It Cm subscribe-folder Ar ACCOUNT Ar FOLDER_PATH
-subscribe to folder with given path
-.It Cm unsubscribe-folder Ar ACCOUNT Ar FOLDER_PATH
-unsubscribe to folder with given path
-.It Cm rename-folder Ar ACCOUNT Ar FOLDER_PATH_SRC Ar FOLDER_PATH_DEST
-rename folder
-.It Cm delete-folder Ar ACCOUNT Ar FOLDER_PATH
-delete folder
+.It Cm subscribe-mailbox Ar ACCOUNT Ar MAILBOX_PATH
+subscribe to mailbox with given path
+.It Cm unsubscribe-mailbox Ar ACCOUNT Ar MAILBOX_PATH
+unsubscribe to mailbox with given path
+.It Cm rename-mailbox Ar ACCOUNT Ar MAILBOX_PATH_SRC Ar MAILBOX_PATH_DEST
+rename mailbox
+.It Cm delete-mailbox Ar ACCOUNT Ar MAILBOX_PATH
+delete mailbox
 .El
 .Pp
 envelope view commands:
@@ -376,9 +376,9 @@ Non-complete list of shortcuts and their default values.
 PageUp,
 .It Ic next_page
 PageDown
-.It Ic prev_folder
+.It Ic prev_mailbox
 \&'K'
-.It Ic next_folder
+.It Ic next_mailbox
 \&'J'
 .It Ic prev_account
 \&'l'

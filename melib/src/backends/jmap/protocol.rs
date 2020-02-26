@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::folder::JmapFolder;
+use super::mailbox::JmapMailbox;
 use super::*;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -94,7 +94,7 @@ impl Request {
     }
 }
 
-pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<FolderHash, JmapFolder>> {
+pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<MailboxHash, JmapMailbox>> {
     let seq = get_request_no!(conn.request_no);
     let res = conn
         .client
@@ -141,7 +141,7 @@ pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<FolderHash, Jma
             let hash = crate::get_path_hash!(&name);
             (
                 hash,
-                JmapFolder {
+                JmapMailbox {
                     name: name.clone(),
                     hash,
                     path: name,
@@ -170,12 +170,12 @@ pub struct JsonResponse<'a> {
     method_responses: Vec<MethodResponse<'a>>,
 }
 
-pub fn get_message_list(conn: &JmapConnection, folder: &JmapFolder) -> Result<Vec<String>> {
+pub fn get_message_list(conn: &JmapConnection, mailbox: &JmapMailbox) -> Result<Vec<String>> {
     let email_call: EmailQuery = EmailQuery::new(
         Query::new()
             .account_id(conn.mail_account_id().to_string())
             .filter(Some(
-                EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
+                EmailFilterCondition::new().in_mailbox(Some(mailbox.id.clone())),
             ))
             .position(0),
     )
@@ -241,13 +241,13 @@ pub fn get(
     conn: &JmapConnection,
     store: &Arc<RwLock<Store>>,
     tag_index: &Arc<RwLock<BTreeMap<u64, String>>>,
-    folder: &JmapFolder,
+    mailbox: &JmapMailbox,
 ) -> Result<Vec<Envelope>> {
     let email_query_call: EmailQuery = EmailQuery::new(
         Query::new()
             .account_id(conn.mail_account_id().to_string())
             .filter(Some(
-                EmailFilterCondition::new().in_mailbox(Some(folder.id.clone())),
+                EmailFilterCondition::new().in_mailbox(Some(mailbox.id.clone())),
             ))
             .position(0),
     )

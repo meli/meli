@@ -24,7 +24,7 @@ use crate::components::utilities::PageMovement;
 
 #[derive(Debug)]
 pub struct OfflineListing {
-    cursor_pos: (usize, FolderHash),
+    cursor_pos: (usize, MailboxHash),
     _row_updates: SmallVec<[ThreadHash; 8]>,
 
     id: ComponentId,
@@ -44,11 +44,11 @@ impl MailListingTrait for OfflineListing {
 }
 
 impl ListingTrait for OfflineListing {
-    fn coordinates(&self) -> (usize, FolderHash) {
+    fn coordinates(&self) -> (usize, MailboxHash) {
         self.cursor_pos
     }
 
-    fn set_coordinates(&mut self, coordinates: (usize, FolderHash)) {
+    fn set_coordinates(&mut self, coordinates: (usize, MailboxHash)) {
         self.cursor_pos = coordinates;
     }
 
@@ -75,7 +75,7 @@ impl fmt::Display for OfflineListing {
 }
 
 impl OfflineListing {
-    pub fn new(cursor_pos: (usize, FolderHash)) -> Self {
+    pub fn new(cursor_pos: (usize, MailboxHash)) -> Self {
         OfflineListing {
             cursor_pos,
             _row_updates: SmallVec::new(),

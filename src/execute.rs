@@ -25,7 +25,7 @@ pub use melib::thread::{SortField, SortOrder};
 use nom::{digit, not_line_ending, IResult};
 use std;
 pub mod actions;
-use actions::FolderOperation;
+use actions::MailboxOperation;
 pub mod history;
 pub use crate::actions::AccountAction::{self, *};
 pub use crate::actions::Action::{self, *};
@@ -247,74 +247,74 @@ define_commands!([
                       );
                   )
                 },
-                { tags: ["create-folder "],
-                  desc: "create-folder ACCOUNT FOLDER_PATH",
+                { tags: ["create-mailbox "],
+                  desc: "create-mailbox ACCOUNT MAILBOX_PATH",
                   parser:(
-                      named!( create_folder<Action>,
+                      named!( create_mailbox<Action>,
                               do_parse!(
-                                  ws!(tag!("create-folder"))
+                                  ws!(tag!("create-mailbox"))
                                   >> account: quoted_argument
                                   >> is_a!(" ")
                                   >> path: quoted_argument
-                                  >> (Folder(account.to_string(), FolderOperation::Create(path.to_string())))
+                                  >> (Mailbox(account.to_string(), MailboxOperation::Create(path.to_string())))
                               )
                       );
                   )
                 },
-                { tags: ["subscribe-folder "],
-                  desc: "subscribe-folder ACCOUNT FOLDER_PATH",
+                { tags: ["subscribe-mailbox "],
+                  desc: "subscribe-mailbox ACCOUNT MAILBOX_PATH",
                   parser:(
-                      named!( sub_folder<Action>,
+                      named!( sub_mailbox<Action>,
                               do_parse!(
-                                  ws!(tag!("subscribe-folder"))
+                                  ws!(tag!("subscribe-mailbox"))
                                   >> account: quoted_argument
                                   >> is_a!(" ")
                                   >> path: quoted_argument
-                                  >> (Folder(account.to_string(), FolderOperation::Subscribe(path.to_string())))
+                                  >> (Mailbox(account.to_string(), MailboxOperation::Subscribe(path.to_string())))
                               )
                       );
                   )
                 },
-                { tags: ["unsubscribe-folder "],
-                  desc: "unsubscribe-folder ACCOUNT FOLDER_PATH",
+                { tags: ["unsubscribe-mailbox "],
+                  desc: "unsubscribe-mailbox ACCOUNT MAILBOX_PATH",
                   parser:(
-                      named!( unsub_folder<Action>,
+                      named!( unsub_mailbox<Action>,
                               do_parse!(
-                                  ws!(tag!("unsubscribe-folder"))
+                                  ws!(tag!("unsubscribe-mailbox"))
                                   >> account: quoted_argument
                                   >> is_a!(" ")
                                   >> path: quoted_argument
-                                  >> (Folder(account.to_string(), FolderOperation::Unsubscribe(path.to_string())))
+                                  >> (Mailbox(account.to_string(), MailboxOperation::Unsubscribe(path.to_string())))
                               )
                       );
                   )
                 },
-                { tags: ["rename-folder "],
-                  desc: "rename-folder ACCOUNT FOLDER_PATH_SRC FOLDER_PATH_DEST",
+                { tags: ["rename-mailbox "],
+                  desc: "rename-mailbox ACCOUNT MAILBOX_PATH_SRC MAILBOX_PATH_DEST",
                   parser:(
-                      named!( rename_folder<Action>,
+                      named!( rename_mailbox<Action>,
                               do_parse!(
-                                  ws!(tag!("rename-folder"))
+                                  ws!(tag!("rename-mailbox"))
                                   >> account: quoted_argument
                                   >> is_a!(" ")
                                   >> src: quoted_argument
                                   >> is_a!(" ")
                                   >> dest: quoted_argument
-                                  >> (Folder(account.to_string(), FolderOperation::Rename(src.to_string(), dest.to_string())))
+                                  >> (Mailbox(account.to_string(), MailboxOperation::Rename(src.to_string(), dest.to_string())))
                               )
                       );
                   )
                 },
-                { tags: ["delete-folder "],
-                  desc: "delete-folder ACCOUNT FOLDER_PATH",
+                { tags: ["delete-mailbox "],
+                  desc: "delete-mailbox ACCOUNT MAILBOX_PATH",
                   parser:(
-                      named!( delete_folder<Action>,
+                      named!( delete_mailbox<Action>,
                               do_parse!(
-                                  ws!(tag!("delete-folder"))
+                                  ws!(tag!("delete-mailbox"))
                                   >> account: quoted_argument
                                   >> is_a!(" ")
                                   >> path: quoted_argument
-                                  >> (Folder(account.to_string(), FolderOperation::Delete(path.to_string())))
+                                  >> (Mailbox(account.to_string(), MailboxOperation::Delete(path.to_string())))
                               )
                       );
                   )
@@ -437,5 +437,5 @@ named!(account_action<Action>, alt_complete!(reindex));
 named!(view<Action>, alt_complete!(pipe | save_attachment));
 
 named!(pub parse_command<Action>,
-       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | view | compose_action | create_folder | sub_folder | unsub_folder | delete_folder | rename_folder | account_action )
+       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | view | compose_action | create_mailbox | sub_mailbox | unsub_mailbox | delete_mailbox | rename_mailbox | account_action )
 );

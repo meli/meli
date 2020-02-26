@@ -51,7 +51,7 @@ use self::notifications::NotificationsSettings;
 use self::terminal::TerminalSettings;
 use crate::pager::PagerSettings;
 use crate::plugins::Plugin;
-use melib::conf::{AccountSettings, FolderConf, ToggleFlag};
+use melib::conf::{AccountSettings, MailboxConf, ToggleFlag};
 use melib::error::*;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -85,27 +85,27 @@ pub struct MailUIConf {
 
 #[serde(default)]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct FileFolderConf {
+pub struct FileMailboxConf {
     #[serde(flatten)]
     pub conf_override: MailUIConf,
     #[serde(flatten)]
-    pub folder_conf: FolderConf,
+    pub mailbox_conf: MailboxConf,
 }
 
-impl FileFolderConf {
+impl FileMailboxConf {
     pub fn conf_override(&self) -> &MailUIConf {
         &self.conf_override
     }
 
-    pub fn folder_conf(&self) -> &FolderConf {
-        &self.folder_conf
+    pub fn mailbox_conf(&self) -> &MailboxConf {
+        &self.mailbox_conf
     }
 }
 
 use crate::conf::deserializers::extra_settings;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FileAccount {
-    root_folder: String,
+    root_mailbox: String,
     format: String,
     identity: String,
     #[serde(default = "none")]
@@ -115,9 +115,9 @@ pub struct FileAccount {
     #[serde(default = "false_val")]
     read_only: bool,
     #[serde(default)]
-    subscribed_folders: Vec<String>,
+    subscribed_mailboxes: Vec<String>,
     #[serde(default)]
-    folders: HashMap<String, FileFolderConf>,
+    mailboxes: HashMap<String, FileMailboxConf>,
     #[serde(default)]
     cache_type: CacheType,
     #[serde(default)]
@@ -132,44 +132,44 @@ pub struct FileAccount {
 impl From<FileAccount> for AccountConf {
     fn from(x: FileAccount) -> Self {
         let format = x.format.to_lowercase();
-        let root_folder = x.root_folder.clone();
+        let root_mailbox = x.root_mailbox.clone();
         let identity = x.identity.clone();
         let display_name = x.display_name.clone();
-        let folders = x
-            .folders
+        let mailboxes = x
+            .mailboxes
             .iter()
-            .map(|(k, v)| (k.clone(), v.folder_conf.clone()))
+            .map(|(k, v)| (k.clone(), v.mailbox_conf.clone()))
             .collect();
 
         let acc = AccountSettings {
             name: String::new(),
-            root_folder,
+            root_mailbox,
             format,
             identity,
             read_only: x.read_only,
             display_name,
-            subscribed_folders: x.subscribed_folders.clone(),
-            folders,
+            subscribed_mailboxes: x.subscribed_mailboxes.clone(),
+            mailboxes,
             manual_refresh: x.manual_refresh,
             extra: x.extra.clone(),
         };
 
-        let folder_confs = x.folders.clone();
+        let mailbox_confs = x.mailboxes.clone();
         AccountConf {
             account: acc,
             conf: x,
-            folder_confs,
+            mailbox_confs,
         }
     }
 }
 
 impl FileAccount {
-    pub fn folders(&self) -> &HashMap<String, FileFolderConf> {
-        &self.folders
+    pub fn mailboxes(&self) -> &HashMap<String, FileMailboxConf> {
+        &self.mailboxes
     }
 
-    pub fn folder(&self) -> &str {
-        &self.root_folder
+    pub fn mailbox(&self) -> &str {
+        &self.root_mailbox
     }
 
     pub fn index_style(&self) -> IndexStyle {
@@ -207,7 +207,7 @@ pub struct FileSettings {
 pub struct AccountConf {
     pub(crate) account: AccountSettings,
     pub(crate) conf: FileAccount,
-    pub(crate) folder_confs: HashMap<String, FileFolderConf>,
+    pub(crate) mailbox_confs: HashMap<String, FileMailboxConf>,
 }
 
 impl AccountConf {
@@ -342,13 +342,13 @@ impl FileSettings {
         s.terminal.themes.validate()?;
         for (name, acc) in &s.accounts {
             let FileAccount {
-                root_folder,
+                root_mailbox,
                 format,
                 identity,
                 read_only,
                 display_name,
-                subscribed_folders,
-                folders,
+                subscribed_mailboxes,
+                mailboxes,
                 extra,
                 manual_refresh,
                 refresh_command: _,
@@ -359,16 +359,16 @@ impl FileSettings {
             let lowercase_format = format.to_lowercase();
             let s = AccountSettings {
                 name: name.to_string(),
-                root_folder,
+                root_mailbox,
                 format: format.clone(),
                 identity,
                 read_only,
                 display_name,
-                subscribed_folders,
+                subscribed_mailboxes,
                 manual_refresh,
-                folders: folders
+                mailboxes: mailboxes
                     .into_iter()
-                    .map(|(k, v)| (k, v.folder_conf))
+                    .map(|(k, v)| (k, v.mailbox_conf))
                     .collect(),
                 extra,
             };
@@ -714,8 +714,8 @@ mod pp {
         let mut ret = pp_helper(&p_buf, 0)?;
         drop(p_buf);
         if let Ok(xdg_dirs) = xdg::BaseDirectories::with_prefix("meli") {
-            for theme_folder in xdg_dirs.find_config_files("themes") {
-                let read_dir = std::fs::read_dir(theme_folder)?;
+            for theme_mailbox in xdg_dirs.find_config_files("themes") {
+                let read_dir = std::fs::read_dir(theme_mailbox)?;
                 for theme in read_dir {
                     ret.extend(pp_helper(&theme?.path(), 0)?.chars());
                 }
