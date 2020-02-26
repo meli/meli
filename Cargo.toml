@@ -55,7 +55,7 @@ debug = false
 members = ["melib", "testing", ]
 
 [features]
-default = ["sqlite3"]
+default = ["sqlite3", "notmuch"]
 notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
 sqlite3 = ["rusqlite"]

@@ -99,6 +99,12 @@ impl Default for Backends {
     }
 }
 
+#[cfg(feature = "notmuch_backend")]
+pub const NOTMUCH_ERROR_MSG: &'static str =
+    "libnotmuch5 was not found in your system. Make sure it is installed and in the library paths.\n";
+#[cfg(not(feature = "notmuch_backend"))]
+pub const NOTMUCH_ERROR_MSG: &'static str = "this version of meli is not compiled with notmuch support. Use an appropriate version and make sure libnotmuch5 is installed and in the library paths.\n";
+
 impl Backends {
     pub fn new() -> Self {
         let mut b = Backends {
@@ -136,13 +142,15 @@ impl Backends {
         }
         #[cfg(feature = "notmuch_backend")]
         {
-            b.register(
-                "notmuch".to_string(),
-                Backend {
-                    create_fn: Box::new(|| Box::new(|f, i| NotmuchDb::new(f, i))),
-                    validate_conf_fn: Box::new(NotmuchDb::validate_config),
-                },
-            );
+            if libloading::Library::new("libnotmuch.so.5").is_ok() {
+                b.register(
+                    "notmuch".to_string(),
+                    Backend {
+                        create_fn: Box::new(|| Box::new(|f, i| NotmuchDb::new(f, i))),
+                        validate_conf_fn: Box::new(NotmuchDb::validate_config),
+                    },
+                );
+            }
         }
         #[cfg(feature = "jmap_backend")]
         {
@@ -159,6 +167,9 @@ impl Backends {
 
     pub fn get(&self, key: &str) -> BackendCreator {
         if !self.map.contains_key(key) {
+            if key == "notmuch" {
+                eprint!("{}", NOTMUCH_ERROR_MSG);
+            }
             panic!("{} is not a valid mail backend", key);
         }
         (self.map[key].create_fn)()
@@ -175,7 +186,17 @@ impl Backends {
         (self
             .map
             .get(key)
-            .ok_or_else(|| MeliError::new(format!("{} is not a valid mail backend", key)))?
+            .ok_or_else(|| {
+                MeliError::new(format!(
+                    "{}{} is not a valid mail backend",
+                    if key == "notmuch" {
+                        NOTMUCH_ERROR_MSG
+                    } else {
+                        ""
+                    },
+                    key
+                ))
+            })?
             .validate_conf_fn)(s)
     }
 }

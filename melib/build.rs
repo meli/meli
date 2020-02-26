@@ -23,10 +23,6 @@
 include!("src/text_processing/types.rs");
 
 fn main() -> Result<(), std::io::Error> {
-    #[cfg(feature = "notmuch_backend")]
-    {
-        println!("cargo:rustc-link-lib=notmuch");
-    }
     #[cfg(feature = "unicode_algorithms")]
     {
         use std::fs::File;
