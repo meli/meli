@@ -138,7 +138,7 @@ impl MailBackend for PluginBackend {
                                             env.set_to(value);
                                         }
                                         let parse_result =
-                                            melib::email::parser::phrase(subject.as_bytes());
+                                            melib::email::parser::phrase(subject.as_bytes(), false);
                                         if parse_result.is_done() {
                                             let value = parse_result.to_full_result().unwrap();
                                             env.set_subject(value);

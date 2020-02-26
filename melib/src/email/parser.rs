@@ -455,7 +455,7 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
             }
         }
         if !flag {
-            let (rest, output) = match phrase(input) {
+            let (rest, output) = match phrase(input, false) {
                 IResult::Done(rest, raw) => (rest, raw),
                 _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
             };
@@ -480,7 +480,7 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
             }
         }
         if flag {
-            match phrase(&input[0..end + display_name.length + 3]) {
+            match phrase(&input[0..end + display_name.length + 3], false) {
                 IResult::Error(e) => IResult::Error(e),
                 IResult::Incomplete(i) => IResult::Incomplete(i),
                 IResult::Done(_, raw) => {
@@ -659,7 +659,7 @@ fn eat_comments(input: &[u8]) -> Vec<u8> {
  *
  * We should use a custom parser here*/
 pub fn date(input: &[u8]) -> Result<UnixTimestamp> {
-    let mut parsed_result = phrase(&eat_comments(input)).to_full_result()?;
+    let mut parsed_result = phrase(&eat_comments(input), false).to_full_result()?;
     if let Some(pos) = parsed_result.find(b"-0000") {
         parsed_result[pos] = b'+';
     }
@@ -873,7 +873,7 @@ named!(
     )
 );
 
-pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+pub fn phrase(input: &[u8], multiline: /* preserve newlines */ bool) -> IResult<&[u8], Vec<u8>> {
     if input.is_empty() {
         return IResult::Done(&[], Vec::with_capacity(0));
     }
@@ -907,16 +907,21 @@ pub fn phrase(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 
         let end = end.unwrap_or_else(|| input.len() - ptr) + ptr;
         let ascii_s = ptr;
-        let mut ascii_e;
+        let mut ascii_e = 0;
 
         while ptr < end && !(is_whitespace!(input[ptr])) {
             ptr += 1;
+        }
+        if !multiline {
+            ascii_e = ptr;
         }
 
         while ptr < input.len() && (is_whitespace!(input[ptr])) {
             ptr += 1;
         }
-        ascii_e = ptr;
+        if multiline {
+            ascii_e = ptr;
+        }
         if ptr >= input.len() {
             acc.extend(
                 ascii_token(&input[ascii_s..ascii_e])
@@ -1056,33 +1061,33 @@ mod tests {
         let words = b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
      =?iso-8859-7?B?INb18+nq3l0gzd3hIMHt4erv3+358+c6IMzF0c/TIMHQz9TFy8XTzMHU?=
       =?iso-8859-7?B?2c0gwiDUzC4gysHNLiDFzsXUwdPH0yAyMDE3LTE4OiDTx8zFydnTxw==?=";
-        assert_eq!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" , std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap());
+        assert_eq!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" , std::str::from_utf8(&phrase(words.trim(), false).to_full_result().unwrap()).unwrap());
         let words = b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=";
         assert_eq!(
             "Πρόσθετη εξεταστική",
-            std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words.trim(), false).to_full_result().unwrap()).unwrap()
         );
         let words = b"[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
         assert_eq!(
             "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
-            std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words.trim(), false).to_full_result().unwrap()).unwrap()
         );
         let words = b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
 	=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=
 	=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
         assert_eq!(
             "Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
-            std::str::from_utf8(&phrase(words.trim()).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words.trim(), false).to_full_result().unwrap()).unwrap()
         );
         let words = b"sdf";
         assert_eq!(
             "sdf",
-            std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words, false).to_full_result().unwrap()).unwrap()
         );
         let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
         assert_eq!(
             "Seg fault στην εκτέλεση του example ru n _sniper",
-            std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words, false).to_full_result().unwrap()).unwrap()
         );
         let words = b"Re: [Advcomparch]
  =?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?=
@@ -1090,28 +1095,31 @@ mod tests {
 
         assert_eq!(
             "Re: [Advcomparch] Seg fault στην εκτέλεση του example ru n _sniper",
-            std::str::from_utf8(&phrase(words).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words, false).to_full_result().unwrap()).unwrap()
         );
 
         let words = r#"[internal] =?UTF-8?B?zp3Orc6/z4Igzp/OtM63zrPPjM+CIM6jz4XOs86zz4E=?=
  =?UTF-8?B?zrHPhs6uz4I=?="#;
         assert_eq!(
             "[internal] Νέος Οδηγός Συγγραφής",
-            std::str::from_utf8(&phrase(words.as_bytes()).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words.as_bytes(), false).to_full_result().unwrap())
+                .unwrap()
         );
 
         let words = r#"=?UTF-8?Q?Re=3a_Climate_crisis_reality_check_=e2=80=93=c2=a0EcoHust?=
  =?UTF-8?Q?ler?="#;
         assert_eq!(
             "Re: Climate crisis reality check –\u{a0}EcoHustler",
-            std::str::from_utf8(&phrase(words.as_bytes()).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words.as_bytes(), false).to_full_result().unwrap())
+                .unwrap()
         );
 
         let words = r#"Re: Climate crisis reality check =?windows-1250?B?lqBFY29IdXN0?=
  =?windows-1250?B?bGVy?="#;
         assert_eq!(
             "Re: Climate crisis reality check –\u{a0}EcoHustler",
-            std::str::from_utf8(&phrase(words.as_bytes()).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words.as_bytes(), false).to_full_result().unwrap())
+                .unwrap()
         );
     }
 

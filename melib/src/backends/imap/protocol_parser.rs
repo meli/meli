@@ -957,7 +957,7 @@ named!(pub literal<&[u8]>,length_bytes!(delimited!(tag!("{"), map_res!(digit, |s
 // Return a byte sequence surrounded by "s and decoded if necessary
 pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     if let IResult::Done(r, o) = literal(input) {
-        return match crate::email::parser::phrase(o) {
+        return match crate::email::parser::phrase(o, false) {
             IResult::Done(_, out) => IResult::Done(r, out),
             e => e,
         };
@@ -969,7 +969,7 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     let mut i = 1;
     while i < input.len() {
         if input[i] == b'\"' && (i == 0 || (input[i - 1] != b'\\')) {
-            return match crate::email::parser::phrase(&input[1..i]) {
+            return match crate::email::parser::phrase(&input[1..i], false) {
                 IResult::Done(_, out) => IResult::Done(&input[i + 1..], out),
                 e => e,
             };

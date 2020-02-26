@@ -246,7 +246,7 @@ impl Envelope {
                     self.set_from(value);
                 }
             } else if name.eq_ignore_ascii_case(b"subject") {
-                let parse_result = parser::phrase(value.trim());
+                let parse_result = parser::phrase(value.trim(), false);
                 if parse_result.is_done() {
                     let value = parse_result.to_full_result().unwrap();
                     self.set_subject(value);
@@ -267,7 +267,7 @@ impl Envelope {
                 self.set_in_reply_to(value);
                 in_reply_to = Some(value);
             } else if name.eq_ignore_ascii_case(b"date") {
-                let parse_result = parser::phrase(value);
+                let parse_result = parser::phrase(value, false);
                 if parse_result.is_done() {
                     let value = parse_result.to_full_result().unwrap();
                     self.set_date(value.as_slice());
@@ -302,7 +302,7 @@ impl Envelope {
                 self.other_headers.insert(
                     String::from_utf8(name.to_vec())
                         .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into()),
-                    parser::phrase(value)
+                    parser::phrase(value, false)
                         .to_full_result()
                         .map(|value| {
                             String::from_utf8(value).unwrap_or_else(|err| {

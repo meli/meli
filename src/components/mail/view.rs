@@ -689,7 +689,7 @@ impl Component for MailView {
                                     Ok(headers
                                         .into_iter()
                                         .map(|(h, v)| {
-                                            melib::email::parser::phrase(v)
+                                            melib::email::parser::phrase(v, true)
                                                 .to_full_result()
                                                 .map(|v| {
                                                     let mut h = h.to_vec();
@@ -1078,7 +1078,7 @@ impl Component for MailView {
                                 let attachment_type = u.mime_type();
                                 let binary = query_default_app(&attachment_type);
                                 let mut name_opt = name.as_ref().and_then(|n| {
-                                    melib::email::parser::phrase(n.as_bytes())
+                                    melib::email::parser::phrase(n.as_bytes(), false)
                                         .to_full_result()
                                         .ok()
                                         .and_then(|n| String::from_utf8(n).ok())

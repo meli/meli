@@ -185,7 +185,7 @@ impl AttachmentBuilder {
                     let mut name: Option<String> = None;
                     for (n, v) in params {
                         if n.eq_ignore_ascii_case(b"name") {
-                            if let Ok(v) = crate::email::parser::phrase(v.trim())
+                            if let Ok(v) = crate::email::parser::phrase(v.trim(), false)
                                 .to_full_result()
                                 .as_ref()
                                 .and_then(|r| Ok(String::from_utf8_lossy(r).to_string()))
