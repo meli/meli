@@ -134,14 +134,14 @@ define_commands!([
                       );
                   )
                 },
-                { tags: ["filter"],
-                  desc: "filter <TERM>, filters list with given term",
+                { tags: ["search"],
+                  desc: "search <TERM>, searches list with given term",
                   parser:(
-                      named!(filter<Action>,
+                      named!(search<Action>,
                              do_parse!(
-                                 ws!(tag!("filter"))
+                                 ws!(tag!("search"))
                                  >> string: map_res!(call!(not_line_ending), std::str::from_utf8)
-                                 >> (Listing(Filter(String::from(string))))
+                                 >> (Listing(Search(String::from(string))))
                              )
                       );
                   )
@@ -424,7 +424,7 @@ named!(
 
 named!(
     listing_action<Action>,
-    alt_complete!(toggle | envelope_action | filter | toggle_thread_snooze | open_in_new_tab | tag)
+    alt_complete!(toggle | envelope_action | search | toggle_thread_snooze | open_in_new_tab | tag)
 );
 
 named!(

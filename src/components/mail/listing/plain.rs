@@ -1180,7 +1180,7 @@ impl Component for PlainListing {
                 self.refresh_mailbox(context, false);
                 return true;
             }
-            UIEvent::Action(Action::Listing(Filter(ref filter_term))) if !self.unfocused => {
+            UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused => {
                 self.filter(filter_term, context);
                 self.dirty = true;
             }

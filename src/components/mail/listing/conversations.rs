@@ -1291,7 +1291,7 @@ impl Component for ConversationsListing {
                 self.dirty = true;
             }
             UIEvent::Action(ref action) => match action {
-                Action::Listing(Filter(ref filter_term)) if !self.unfocused => {
+                Action::Listing(Search(ref filter_term)) if !self.unfocused => {
                     self.filter(filter_term, context);
                     self.dirty = true;
                     return true;

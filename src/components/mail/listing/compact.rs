@@ -1354,13 +1354,10 @@ impl Component for CompactListing {
                 self.set_dirty(true);
                 return true;
             }
-            UIEvent::Action(ref action) => match action {
-                Action::Listing(Filter(ref filter_term)) if !self.unfocused => {
-                    self.filter(filter_term, context);
-                    self.dirty = true;
-                }
-                _ => {}
-            },
+            UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused => {
+                self.filter(filter_term, context);
+                self.dirty = true;
+            }
             _ => {}
         }
         false

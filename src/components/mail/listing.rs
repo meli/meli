@@ -773,7 +773,7 @@ impl Component for Listing {
             {
                 context
                     .replies
-                    .push_back(UIEvent::ExInput(Key::Paste("filter ".to_string())));
+                    .push_back(UIEvent::ExInput(Key::Paste("search ".to_string())));
                 context
                     .replies
                     .push_back(UIEvent::ChangeMode(UIMode::Execute));

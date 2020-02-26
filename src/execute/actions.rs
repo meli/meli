@@ -43,7 +43,7 @@ pub enum ListingAction {
     SetThreaded,
     SetCompact,
     SetConversations,
-    Filter(String),
+    Search(String),
     SetSeen,
     SetUnseen,
     Delete,
