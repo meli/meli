@@ -934,7 +934,6 @@ impl Component for Composer {
                     }
                 }
                 self.initialized = false;
-                context.restore_input();
                 self.dirty = true;
                 return true;
             }
