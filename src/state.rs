@@ -52,6 +52,10 @@ struct InputHandler {
 
 impl InputHandler {
     fn restore(&self, tx: Sender<ThreadEvent>) {
+        /* Clear channel without blocking. switch_to_main_screen() issues a kill when
+         * returning from a fork and there's no input thread, so the newly created thread will
+         * receive it and die. */
+        let _ = self.rx.try_iter().count();
         let rx = self.rx.clone();
         thread::Builder::new()
             .name("input-thread".to_string())
