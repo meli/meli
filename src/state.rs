@@ -68,6 +68,7 @@ impl InputHandler {
                         tx.send(ThreadEvent::InputRaw(i)).unwrap();
                     },
                     &rx,
+                    None,
                 )
             })
             .unwrap();

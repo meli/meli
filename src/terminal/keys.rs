@@ -24,7 +24,6 @@ use crossbeam::{channel::Receiver, select};
 use serde::{Serialize, Serializer};
 use termion::event::Event as TermionEvent;
 use termion::event::Key as TermionKey;
-use termion::input::TermRead;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Key {
@@ -167,18 +166,23 @@ pub fn get_events(
     mut closure: impl FnMut(Key),
     closure_raw: impl FnMut((Key, Vec<u8>)),
     rx: &Receiver<InputCommand>,
+    input: Option<(TermionEvent, Vec<u8>)>,
 ) -> () {
     let stdin = std::io::stdin();
     let mut input_mode = InputMode::Normal;
     let mut paste_buf = String::with_capacity(256);
-    for c in stdin.events() {
+    for c in input
+        .map(|v| Ok(v))
+        .into_iter()
+        .chain(stdin.events_and_raw())
+    {
         select! {
             default => {},
             recv(rx) -> cmd => {
                 match cmd.unwrap() {
                     InputCommand::Kill => return,
                     InputCommand::Raw => {
-                        get_events_raw(closure, closure_raw, rx);
+                        get_events_raw(closure, closure_raw, rx, c.ok());
                         return;
                     }
                     InputCommand::NoRaw => unreachable!(),
@@ -187,16 +191,16 @@ pub fn get_events(
         };
 
         match c {
-            Ok(TermionEvent::Key(k)) if input_mode == InputMode::Normal => {
+            Ok((TermionEvent::Key(k), _)) if input_mode == InputMode::Normal => {
                 closure(Key::from(k));
             }
-            Ok(TermionEvent::Key(TermionKey::Char(k))) if input_mode == InputMode::Paste => {
+            Ok((TermionEvent::Key(TermionKey::Char(k)), _)) if input_mode == InputMode::Paste => {
                 paste_buf.push(k);
             }
-            Ok(TermionEvent::Unsupported(ref k)) if k.as_slice() == BRACKET_PASTE_START => {
+            Ok((TermionEvent::Unsupported(ref k), _)) if k.as_slice() == BRACKET_PASTE_START => {
                 input_mode = InputMode::Paste;
             }
-            Ok(TermionEvent::Unsupported(ref k)) if k.as_slice() == BRACKET_PASTE_END => {
+            Ok((TermionEvent::Unsupported(ref k), _)) if k.as_slice() == BRACKET_PASTE_END => {
                 input_mode = InputMode::Normal;
                 let ret = Key::from(&paste_buf);
                 paste_buf.clear();
@@ -212,18 +216,23 @@ pub fn get_events_raw(
     closure_nonraw: impl FnMut(Key),
     mut closure: impl FnMut((Key, Vec<u8>)),
     rx: &Receiver<InputCommand>,
+    input: Option<(TermionEvent, Vec<u8>)>,
 ) -> () {
     let stdin = std::io::stdin();
     let mut input_mode = InputMode::Normal;
     let mut paste_buf = String::with_capacity(256);
-    for c in stdin.events_and_raw() {
+    for c in input
+        .map(|v| Ok(v))
+        .into_iter()
+        .chain(stdin.events_and_raw())
+    {
         select! {
             default => {},
             recv(rx) -> cmd => {
                 match cmd.unwrap() {
                     InputCommand::Kill => return,
                     InputCommand::NoRaw => {
-                        get_events(closure_nonraw, closure, rx);
+                        get_events(closure_nonraw, closure, rx, c.ok());
                         return;
                     }
                     InputCommand::Raw => unreachable!(),
