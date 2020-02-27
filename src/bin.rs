@@ -528,6 +528,11 @@ fn run_app() -> Result<()> {
                                 state.redraw();
                             }
                         },
+                        signal_hook::SIGCHLD => {
+                            state.rcv_event(UIEvent::EmbedInput((Key::Null, vec![0])));
+                            state.redraw();
+
+                        }
                         other => {
                             debug!("got other signal: {:?}", other);
                         }
