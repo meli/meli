@@ -69,17 +69,9 @@ two packages: `librust-openssl-sys-dev librust-libdbus-sys-dev`
 
 A `*.deb` package can be built with `make deb-dist`
 
-# Building with notmuch
+# Using notmuch
 
-To use the optional notmuch backend feature, you must have `libnotmuch` installed in your system. In Debian-like systems, install the `libnotmuch5 libnotmuch-dev` packages.
-
-To build with notmuch support, prepend the environment variable `MELI_FEATURES='notmuch'` to your make invocation:
-
-```sh
-MELI_FEATURES="notmuch" make
-```
-
-or if building directly with cargo, use the flag `--features="notmuch"'.
+To use the optional notmuch backend feature, you must have `libnotmuch5` installed in your system. In Debian-like systems, install the `libnotmuch5` packages. meli detects the library's presence on runtime.
 
 # Building with JMAP
 
