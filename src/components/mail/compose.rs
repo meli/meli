@@ -456,27 +456,25 @@ impl Component for Composer {
             Color::Byte(189),
             Color::Byte(167),
         );
-        if mid != 0 {
-            clear_area(
-                grid,
+        clear_area(
+            grid,
+            (
+                pos_dec(upper_left, (0, 1)),
+                set_x(bottom_right, get_x(upper_left) + mid),
+            ),
+            theme_default,
+        );
+        clear_area(
+            grid,
+            (
                 (
-                    pos_dec(upper_left, (0, 1)),
-                    set_x(bottom_right, get_x(upper_left) + mid),
+                    get_x(bottom_right).saturating_sub(mid),
+                    get_y(upper_left) - 1,
                 ),
-                theme_default,
-            );
-            clear_area(
-                grid,
-                (
-                    (
-                        get_x(bottom_right).saturating_sub(mid),
-                        get_y(upper_left) - 1,
-                    ),
-                    bottom_right,
-                ),
-                theme_default,
-            );
-        }
+                bottom_right,
+            ),
+            theme_default,
+        );
 
         /* Regardless of view mode, do the following */
         self.form.draw(grid, header_area, context);

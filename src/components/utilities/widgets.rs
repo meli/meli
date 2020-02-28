@@ -443,7 +443,7 @@ impl Component for FormWidget {
                         }
                         for row in grid.bounds_iter((
                             pos_inc(upper_left, (0, i)),
-                            set_y(bottom_right, i + get_y(upper_left)),
+                            (get_x(bottom_right).saturating_sub(1), i + get_y(upper_left)),
                         )) {
                             for c in row {
                                 grid[c]
