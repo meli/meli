@@ -153,6 +153,7 @@ impl Drop for Account {
                     return;
                 };
             };
+            /*
             if let Ok(data) = data_dir.place_data_file("mailbox") {
                 /* place result in cache directory */
                 let f = match fs::File::create(data) {
@@ -172,6 +173,7 @@ impl Drop for Account {
                     eprintln!("{}", err);
                 };
             };
+                */
         }
     }
 }
