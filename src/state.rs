@@ -220,7 +220,7 @@ impl Drop for State {
             use nix::sys::wait::{waitpid, WaitPidFlag};
             /* Try wait, we don't want to block */
             if let Err(e) = waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
-                eprintln!("Failed to wait on subprocess {}: {}", child_pid, e);
+                debug!("Failed to wait on subprocess {}: {}", child_pid, e);
             }
         }
     }

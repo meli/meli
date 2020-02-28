@@ -64,8 +64,10 @@ pub struct WorkController {
 
 impl Drop for WorkController {
     fn drop(&mut self) {
-        for _ in 0..self.threads.lock().unwrap().len() {
-            self.thread_end_tx.send(true).unwrap();
+        if let Ok(lock) = self.threads.lock() {
+            for _ in 0..lock.len() {
+                let _ = self.thread_end_tx.send(true);
+            }
         }
     }
 }
