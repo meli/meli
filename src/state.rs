@@ -960,7 +960,9 @@ impl State {
                     msg: msg.clone(),
                 });
                 self.display_messages_active = true;
+                self.display_messages_expiration_start = None;
                 self.display_messages_pos = self.display_messages.len() - 1;
+                self.redraw();
             }
             UIEvent::FinishedUIDialog(ref id, ref mut results)
                 if self.overlay.iter().any(|c| c.id() == *id) =>

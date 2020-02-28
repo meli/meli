@@ -631,6 +631,11 @@ impl Account {
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::piped())
                 .spawn()?;
+            self.sender
+                .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                    StatusEvent::DisplayMessage(format!("Running command {}", refresh_command)),
+                )))
+                .unwrap();
             return Ok(());
         }
 
@@ -1045,6 +1050,10 @@ impl Account {
             self.init();
         }
         self.is_online = ret.is_ok();
+        if !self.is_online {
+            self.backend.write().unwrap().connect();
+        }
+
         ret
     }
 
