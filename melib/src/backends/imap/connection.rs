@@ -507,6 +507,9 @@ impl Iterator for ImapBlockingConnection {
                         return Some(result[0..*prev_res_length].to_vec());
                     }
                 }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    continue;
+                }
                 Err(e) => {
                     debug!(&conn.stream);
                     debug!(&e);
