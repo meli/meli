@@ -195,6 +195,7 @@ pub trait MailListingTrait: ListingTrait {
                 _ => unreachable!(),
             }
             self.row_updates().push(thread_hash);
+            self.set_dirty(true);
             drop(envelope);
         }
     }

@@ -1007,6 +1007,10 @@ impl Component for Composer {
     }
 
     fn kill(&mut self, uuid: Uuid, context: &mut Context) {
+        if self.id != uuid {
+            return;
+        }
+
         if !self.has_changes {
             context.replies.push_back(UIEvent::Action(Tab(Kill(uuid))));
             return;
