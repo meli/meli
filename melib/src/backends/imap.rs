@@ -32,6 +32,7 @@ mod connection;
 pub use connection::*;
 mod watch;
 pub use watch::*;
+pub mod managesieve;
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
@@ -69,6 +70,7 @@ pub struct ImapServerConf {
     pub server_port: u16,
     pub use_starttls: bool,
     pub danger_accept_invalid_certs: bool,
+    pub protocol: ImapProtocol,
 }
 
 struct IsSubscribedFn(Box<dyn Fn(&str) -> bool + Send + Sync>);
@@ -87,6 +89,7 @@ impl std::ops::Deref for IsSubscribedFn {
 }
 type Capabilities = FnvHashSet<Vec<u8>>;
 
+#[macro_export]
 macro_rules! get_conf_val {
     ($s:ident[$var:literal]) => {
         $s.extra.get($var).ok_or_else(|| {
@@ -697,6 +700,7 @@ impl ImapType {
             server_port,
             use_starttls,
             danger_accept_invalid_certs,
+            protocol: ImapProtocol::IMAP,
         };
         let online = Arc::new(Mutex::new((
             Instant::now(),

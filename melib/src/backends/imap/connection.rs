@@ -35,10 +35,17 @@ use std::time::Instant;
 use super::protocol_parser;
 use super::{Capabilities, ImapServerConf};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ImapProtocol {
+    IMAP,
+    ManageSieve,
+}
+
 #[derive(Debug)]
 pub struct ImapStream {
     cmd_id: usize,
     stream: native_tls::TlsStream<std::net::TcpStream>,
+    protocol: ImapProtocol,
 }
 
 #[derive(Debug)]
@@ -79,11 +86,19 @@ impl ImapStream {
         let mut socket = TcpStream::connect(&addr)?;
         socket.set_read_timeout(Some(std::time::Duration::new(4, 0)))?;
         socket.set_write_timeout(Some(std::time::Duration::new(4, 0)))?;
-        let cmd_id = 0;
+        let cmd_id = 1;
         if server_conf.use_starttls {
-            socket.write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())?;
-
             let mut buf = vec![0; 1024];
+            match server_conf.protocol {
+                ImapProtocol::IMAP => {
+                    socket.write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())?
+                }
+                ImapProtocol::ManageSieve => {
+                    let len = socket.read(&mut buf)?;
+                    debug!(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
+                    debug!(socket.write_all(b"STARTTLS\r\n")?);
+                }
+            }
             let mut response = String::with_capacity(1024);
             let mut broken = false;
             let now = std::time::Instant::now();
@@ -91,12 +106,23 @@ impl ImapStream {
             while now.elapsed().as_secs() < 3 {
                 let len = socket.read(&mut buf)?;
                 response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
-                if response.starts_with("* OK ") && response.find("\r\n").is_some() {
-                    if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                        response.drain(0..pos + 2);
+                match server_conf.protocol {
+                    ImapProtocol::IMAP => {
+                        if response.starts_with("* OK ") && response.find("\r\n").is_some() {
+                            if let Some(pos) = response.as_bytes().find(b"\r\n") {
+                                response.drain(0..pos + 2);
+                            }
+                        }
+                    }
+                    ImapProtocol::ManageSieve => {
+                        if response.starts_with("OK ") && response.find("\r\n").is_some() {
+                            response.clear();
+                            broken = true;
+                            break;
+                        }
                     }
                 }
-                if response.starts_with("M0 OK") {
+                if response.starts_with("M1 OK") {
                     broken = true;
                     break;
                 }
@@ -134,7 +160,31 @@ impl ImapStream {
             conn_result?
         };
         let mut res = String::with_capacity(8 * 1024);
-        let mut ret = ImapStream { cmd_id, stream };
+        let mut ret = ImapStream {
+            cmd_id,
+            stream,
+            protocol: server_conf.protocol,
+        };
+        if let ImapProtocol::ManageSieve = server_conf.protocol {
+            use data_encoding::BASE64;
+            ret.read_response(&mut res)?;
+            ret.send_command(
+                format!(
+                    "AUTHENTICATE \"PLAIN\" \"{}\"",
+                    BASE64.encode(
+                        format!(
+                            "\0{}\0{}",
+                            &server_conf.server_username, &server_conf.server_password
+                        )
+                        .as_bytes()
+                    )
+                )
+                .as_bytes(),
+            )?;
+            ret.read_response(&mut res)?;
+            return Ok((Default::default(), ret));
+        }
+
         ret.send_command(b"CAPABILITY")?;
         ret.read_response(&mut res)?;
         let capabilities: std::result::Result<Vec<&[u8]>, _> = res
@@ -229,7 +279,10 @@ impl ImapStream {
     }
 
     pub fn read_response(&mut self, ret: &mut String) -> Result<()> {
-        let id = format!("M{} ", self.cmd_id - 1);
+        let id = match self.protocol {
+            ImapProtocol::IMAP => format!("M{} ", self.cmd_id - 1),
+            ImapProtocol::ManageSieve => String::new(),
+        };
         self.read_lines(ret, &id, true)
     }
 
@@ -292,15 +345,26 @@ impl ImapStream {
 
     pub fn send_command(&mut self, command: &[u8]) -> Result<()> {
         let command = command.trim();
-        self.stream.write_all(b"M")?;
-        self.stream.write_all(self.cmd_id.to_string().as_bytes())?;
-        self.stream.write_all(b" ")?;
-        self.cmd_id += 1;
+        match self.protocol {
+            ImapProtocol::IMAP => {
+                self.stream.write_all(b"M")?;
+                self.stream.write_all(self.cmd_id.to_string().as_bytes())?;
+                self.stream.write_all(b" ")?;
+                self.cmd_id += 1;
+            }
+            ImapProtocol::ManageSieve => {}
+        }
+
         self.stream.write_all(command)?;
         self.stream.write_all(b"\r\n")?;
-        debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
-            std::str::from_utf8_unchecked(command)
-        });
+        match self.protocol {
+            ImapProtocol::IMAP => {
+                debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
+                    std::str::from_utf8_unchecked(command)
+                });
+            }
+            ImapProtocol::ManageSieve => {}
+        }
         Ok(())
     }
 
@@ -365,14 +429,20 @@ impl ImapConnection {
 
     pub fn read_response(&mut self, ret: &mut String) -> Result<()> {
         self.try_send(|s| s.read_response(ret))?;
-        let r: ImapResponse = ImapResponse::from(&ret);
-        if let ImapResponse::Bye(ref response_code) = r {
-            self.stream = Err(MeliError::new(format!(
-                "Offline: received BYE: {:?}",
-                response_code
-            )));
+
+        match self.server_conf.protocol {
+            ImapProtocol::IMAP => {
+                let r: ImapResponse = ImapResponse::from(&ret);
+                if let ImapResponse::Bye(ref response_code) = r {
+                    self.stream = Err(MeliError::new(format!(
+                        "Offline: received BYE: {:?}",
+                        response_code
+                    )));
+                }
+                r.into()
+            }
+            ImapProtocol::ManageSieve => Ok(()),
         }
-        r.into()
     }
 
     pub fn read_lines(&mut self, ret: &mut String, termination_string: String) -> Result<()> {
