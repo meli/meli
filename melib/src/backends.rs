@@ -210,6 +210,7 @@ pub enum RefreshEventKind {
     Rename(EnvelopeHash, EnvelopeHash),
     Create(Box<Envelope>),
     Remove(EnvelopeHash),
+    NewFlags(EnvelopeHash, (Flag, Vec<String>)),
     Rescan,
     Failure(MeliError),
 }

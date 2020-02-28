@@ -648,6 +648,7 @@ pub enum UntaggedResponse {
     /// messages).
     /// ```
     Recent(usize),
+    Fetch(usize, (Flag, Vec<String>)),
 }
 
 named!(
@@ -664,6 +665,8 @@ named!(
                 b"EXPUNGE" => Some(Expunge(num)),
                 b"EXISTS" => Some(Exists(num)),
                 b"RECENT" => Some(Recent(num)),
+                _ if tag.starts_with(b"FETCH ") => flags(
+unsafe { std::str::from_utf8_unchecked(&tag[b"FETCH (FLAGS (".len()..]) }).map(|flags| Fetch(num, flags)).to_full_result().map_err(|err| debug!("untagged_response malformed fetch: {}", unsafe { std::str::from_utf8_unchecked(tag) })).ok(),
                 _ => {
                     debug!("unknown untagged_response: {}", unsafe { std::str::from_utf8_unchecked(tag) });
                     None
@@ -675,8 +678,8 @@ named!(
 
 named!(
     pub search_results<Vec<usize>>,
-    alt_complete!(do_parse!( tag!("* SEARCH")
-                            >> list: separated_nonempty_list_complete!(tag!(" "), map_res!(is_not!("\r\n"), |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) }))
+    alt_complete!(do_parse!( tag!("* SEARCH ")
+                            >> list: separated_nonempty_list_complete!(tag!(b" "), map_res!(is_not!(" \r\n"), |s: &[u8]| {  usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) }))
                             >> tag!("\r\n")
                             >> ({ list })) |
     do_parse!(tag!("* SEARCH\r\n") >> ({ Vec::new() })))
@@ -690,6 +693,23 @@ named!(
                             >> ({ list })) |
     do_parse!(tag!("* SEARCH\r\n") >> ({ &b""[0..] })))
 );
+
+#[test]
+fn test_imap_search() {
+    assert_eq!(search_results(b"* SEARCH\r\n").to_full_result(), Ok(vec![]));
+    assert_eq!(
+        search_results(b"* SEARCH 1\r\n").to_full_result(),
+        Ok(vec![1])
+    );
+    assert_eq!(
+        search_results(b"* SEARCH 1 2 3 4\r\n").to_full_result(),
+        Ok(vec![1, 2, 3, 4])
+    );
+    assert_eq!(
+        search_results_raw(b"* SEARCH 1 2 3 4\r\n").to_full_result(),
+        Ok(&b"1 2 3 4"[..])
+    );
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct SelectResponse {

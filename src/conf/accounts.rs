@@ -453,6 +453,34 @@ impl Account {
                     self.collection.update(old_hash, *envelope, mailbox_hash);
                     return Some(EnvelopeUpdate(old_hash));
                 }
+                RefreshEventKind::NewFlags(env_hash, (flags, tags)) => {
+                    let mut envelopes = self.collection.envelopes.write().unwrap();
+                    envelopes.entry(env_hash).and_modify(|entry| {
+                        for f in tags {
+                            let hash = tag_hash!(f);
+                            if !entry.labels().contains(&hash) {
+                                entry.labels_mut().push(hash);
+                            }
+                        }
+                        entry.set_flags(flags);
+                    });
+                    #[cfg(feature = "sqlite3")]
+                    {
+                        if let Err(err) = crate::sqlite3::remove(env_hash).and_then(|_| {
+                            crate::sqlite3::insert(&envelopes[&env_hash], &self.backend, &self.name)
+                        }) {
+                            melib::log(
+                                format!(
+                                    "Failed to update envelope {} in cache: {}",
+                                    envelopes[&env_hash].message_id_display(),
+                                    err.to_string()
+                                ),
+                                melib::ERROR,
+                            );
+                        }
+                    }
+                    return Some(EnvelopeUpdate(env_hash));
+                }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
                     debug!("rename {} to {}", old_hash, new_hash);
                     self.collection.rename(old_hash, new_hash, mailbox_hash);

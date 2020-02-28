@@ -492,6 +492,47 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     *prev_exists = n;
                 }
             }
+            Ok(Some(Fetch(msg_seq, flags))) => {
+                /* a * {msg_seq} FETCH (FLAGS ({flags})) was received, so find out UID from msg_seq
+                 * and send update
+                 */
+                let mut conn = main_conn.lock().unwrap();
+                debug!("fetch {} {:?}", msg_seq, flags);
+                exit_on_error!(
+                    sender,
+                    mailbox_hash,
+                    work_context,
+                    thread_id,
+                    conn.send_command(b"EXAMINE INBOX")
+                    conn.read_response(&mut response)
+                    conn.send_command(
+                        &[
+                        b"UID SEARCH ",
+                        format!("{}", msg_seq).as_bytes(),
+                        ]
+                        .join(&b' '),
+                    )
+                    conn.read_response(&mut response)
+                );
+                match search_results(response.split_rn().next().unwrap_or("").as_bytes())
+                    .to_full_result()
+                {
+                    Ok(mut v) => {
+                        if let Some(uid) = v.pop() {
+                            if let Some(env_hash) = uid_store.uid_index.lock().unwrap().get(&uid) {
+                                sender.send(RefreshEvent {
+                                    hash: mailbox_hash,
+                                    kind: NewFlags(*env_hash, flags),
+                                });
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        debug!(&response);
+                        debug!(e);
+                    }
+                }
+            }
             Ok(None) | Err(_) => {}
         }
         work_context
