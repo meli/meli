@@ -1710,6 +1710,16 @@ pub fn write_string_to_grid(
         if c == '\r' {
             continue;
         }
+        if c == '\n' {
+            y += 1;
+            if line_break.is_none() {
+                break;
+            } else {
+                x = line_break.unwrap();
+                inspect_bounds!(grid, area, x, y, line_break);
+                continue;
+            }
+        }
         if c == '\t' {
             grid[(x, y)].set_ch(' ');
             x += 1;
