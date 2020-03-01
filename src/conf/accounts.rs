@@ -627,7 +627,7 @@ impl Account {
         if let Some(ref refresh_command) = self.settings.conf().refresh_command {
             let parts = crate::split_command!(refresh_command);
             let (cmd, args) = (parts[0], &parts[1..]);
-            std::process::Command::new(cmd)
+            let child = std::process::Command::new(cmd)
                 .args(args)
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
@@ -636,6 +636,11 @@ impl Account {
             self.sender
                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                     StatusEvent::DisplayMessage(format!("Running command {}", refresh_command)),
+                )))
+                .unwrap();
+            self.sender
+                .send(ThreadEvent::UIEvent(UIEvent::Fork(
+                    crate::ForkType::Generic(child),
                 )))
                 .unwrap();
             return Ok(());

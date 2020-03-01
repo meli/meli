@@ -454,15 +454,26 @@ impl Component for EnvelopeView {
                                         None,
                                         true,
                                     );
-                                    Command::new(&binary)
+                                    match Command::new(&binary)
                                         .arg(p.path())
                                         .stdin(Stdio::piped())
                                         .stdout(Stdio::piped())
                                         .spawn()
-                                        .unwrap_or_else(|_| {
-                                            panic!("Failed to start {}", binary.display())
-                                        });
-                                    context.temp_files.push(p);
+                                    {
+                                        Ok(child) => {
+                                            context.children.push(child);
+                                            context.temp_files.push(p);
+                                        }
+                                        Err(err) => {
+                                            context.replies.push_back(UIEvent::StatusEvent(
+                                                StatusEvent::DisplayMessage(format!(
+                                                    "Failed to start {}: {}",
+                                                    binary.display(),
+                                                    err
+                                                )),
+                                            ));
+                                        }
+                                    }
                                 } else {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                         StatusEvent::DisplayMessage(format!(
@@ -528,12 +539,17 @@ impl Component for EnvelopeView {
                     }
                 };
 
-                Command::new("xdg-open")
+                match Command::new("xdg-open")
                     .arg(url)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
-                    .expect("Failed to start xdg_open");
+                {
+                    Ok(child) => context.children.push(child),
+                    Err(_err) => context.replies.push_back(UIEvent::StatusEvent(
+                        StatusEvent::DisplayMessage("Failed to start xdg_open".into()),
+                    )),
+                }
                 return true;
             }
             UIEvent::Input(Key::Char('u')) => {

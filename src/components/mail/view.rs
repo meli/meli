@@ -1117,15 +1117,26 @@ impl Component for MailView {
                                         }
                                         _ => {}
                                     }
-                                    Command::new(&binary)
+                                    match Command::new(&binary)
                                         .arg(p.path())
                                         .stdin(Stdio::piped())
                                         .stdout(Stdio::piped())
                                         .spawn()
-                                        .unwrap_or_else(|_| {
-                                            panic!("Failed to start {}", binary.display())
-                                        });
-                                    context.temp_files.push(p);
+                                    {
+                                        Ok(child) => {
+                                            context.temp_files.push(p);
+                                            context.children.push(child);
+                                        }
+                                        Err(err) => {
+                                            context.replies.push_back(UIEvent::StatusEvent(
+                                                StatusEvent::DisplayMessage(format!(
+                                                    "Failed to start {}: {}",
+                                                    binary.display(),
+                                                    err
+                                                )),
+                                            ));
+                                        }
+                                    }
                                 } else {
                                     context.replies.push_back(UIEvent::StatusEvent(
                                             StatusEvent::DisplayMessage(if name.is_some() {
@@ -1217,17 +1228,22 @@ impl Component for MailView {
                     }
                 };
 
-                if let Err(e) = Command::new("xdg-open")
+                match Command::new("xdg-open")
                     .arg(url)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
                 {
-                    context.replies.push_back(UIEvent::Notification(
-                        Some("Failed to launch xdg-open".to_string()),
-                        e.to_string(),
-                        Some(NotificationType::ERROR),
-                    ));
+                    Ok(child) => {
+                        context.children.push(child);
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Failed to launch xdg-open".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                    }
                 }
                 return true;
             }
@@ -1427,18 +1443,23 @@ impl Component for MailView {
                                         }
                                     }
                                     list_management::ListAction::Url(url) => {
-                                        if let Err(e) = Command::new("xdg-open")
+                                        match Command::new("xdg-open")
                                             .arg(String::from_utf8_lossy(url).into_owned())
                                             .stdin(Stdio::piped())
                                             .stdout(Stdio::piped())
                                             .spawn()
                                         {
-                                            context.replies.push_back(UIEvent::StatusEvent(
-                                                StatusEvent::DisplayMessage(format!(
-                                                    "Couldn't launch xdg-open: {}",
-                                                    e
-                                                )),
-                                            ));
+                                            Ok(child) => {
+                                                context.children.push(child);
+                                            }
+                                            Err(err) => {
+                                                context.replies.push_back(UIEvent::StatusEvent(
+                                                    StatusEvent::DisplayMessage(format!(
+                                                        "Couldn't launch xdg-open: {}",
+                                                        err
+                                                    )),
+                                                ));
+                                            }
                                         }
                                         return true;
                                     }
@@ -1447,18 +1468,21 @@ impl Component for MailView {
                         }
                         MailingListAction::ListArchive if actions.archive.is_some() => {
                             /* open archive url with xdg-open */
-                            if let Err(e) = Command::new("xdg-open")
+                            match Command::new("xdg-open")
                                 .arg(actions.archive.unwrap())
                                 .stdin(Stdio::piped())
                                 .stdout(Stdio::piped())
                                 .spawn()
                             {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(format!(
-                                        "Couldn't launch xdg-open: {}",
-                                        e
-                                    )),
-                                ));
+                                Ok(child) => context.children.push(child),
+                                Err(err) => {
+                                    context.replies.push_back(UIEvent::StatusEvent(
+                                        StatusEvent::DisplayMessage(format!(
+                                            "Couldn't launch xdg-open: {}",
+                                            err
+                                        )),
+                                    ));
+                                }
                             }
                             return true;
                         }

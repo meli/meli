@@ -103,6 +103,7 @@ pub struct Context {
     receiver: Receiver<ThreadEvent>,
     input: InputHandler,
     work_controller: WorkController,
+    pub children: Vec<std::process::Child>,
     pub plugin_manager: PluginManager,
 
     pub temp_files: Vec<File>,
@@ -216,8 +217,16 @@ impl Drop for State {
     fn drop(&mut self) {
         // When done, restore the defaults to avoid messing with the terminal.
         self.switch_to_main_screen();
+        use nix::sys::wait::{waitpid, WaitPidFlag};
+        for child in self.context.children.iter_mut() {
+            if let Err(err) = waitpid(
+                nix::unistd::Pid::from_raw(child.id() as i32),
+                Some(WaitPidFlag::WNOHANG),
+            ) {
+                debug!("Failed to wait on subprocess {}: {}", child.id(), err);
+            }
+        }
         if let Some(ForkType::Embed(child_pid)) = self.child.take() {
-            use nix::sys::wait::{waitpid, WaitPidFlag};
             /* Try wait, we don't want to block */
             if let Err(e) = waitpid(child_pid, Some(WaitPidFlag::WNOHANG)) {
                 debug!("Failed to wait on subprocess {}: {}", child_pid, e);
@@ -329,6 +338,7 @@ impl State {
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),
                 work_controller,
+                children: vec![],
                 plugin_manager,
 
                 sender,
@@ -909,6 +919,10 @@ impl State {
                 self.switch_to_main_screen();
                 self.switch_to_alternate_screen();
                 self.context.restore_input();
+                return;
+            }
+            UIEvent::Fork(ForkType::Generic(child)) => {
+                self.context.children.push(child);
                 return;
             }
             UIEvent::Fork(child) => {

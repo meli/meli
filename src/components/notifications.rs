@@ -165,18 +165,23 @@ impl Component for NotificationFilter {
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
         if let UIEvent::Notification(ref title, ref body, ref kind) = event {
             if let Some(ref bin) = context.runtime_settings.notifications.script {
-                if let Err(err) = Command::new(bin)
+                match Command::new(bin)
                     .arg(title.as_ref().map(String::as_str).unwrap_or("meli"))
                     .arg(body)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
                 {
-                    log(
-                        format!("Could not run notification script: {}.", err.to_string()),
-                        ERROR,
-                    );
-                    debug!("{:?}", err);
+                    Ok(child) => {
+                        context.children.push(child);
+                    }
+                    Err(err) => {
+                        log(
+                            format!("Could not run notification script: {}.", err.to_string()),
+                            ERROR,
+                        );
+                        debug!("{:?}", err);
+                    }
                 }
             }
 

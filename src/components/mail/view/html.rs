@@ -137,13 +137,26 @@ impl Component for HtmlView {
             let binary = query_default_app("text/html");
             if let Ok(binary) = binary {
                 let p = create_temp_file(&self.bytes, None, None, true);
-                Command::new(&binary)
+                match Command::new(&binary)
                     .arg(p.path())
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()
-                    .unwrap_or_else(|_| panic!("Failed to start {}", binary.display()));
-                context.temp_files.push(p);
+                {
+                    Ok(child) => {
+                        context.temp_files.push(p);
+                        context.children.push(child);
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!(
+                                "Failed to start {}: {}",
+                                binary.display(),
+                                err
+                            )),
+                        ));
+                    }
+                }
             } else {
                 context
                     .replies

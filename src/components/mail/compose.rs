@@ -912,21 +912,26 @@ impl Component for Composer {
 
                 let parts = split_command!(editor);
                 let (cmd, args) = (parts[0], &parts[1..]);
-                if let Err(e) = Command::new(cmd)
+                match Command::new(cmd)
                     .args(args)
                     .arg(&f.path())
                     .stdin(Stdio::inherit())
                     .stdout(Stdio::inherit())
-                    .output()
+                    .spawn()
                 {
-                    context.replies.push_back(UIEvent::Notification(
-                        Some(format!("Failed to execute {}", editor)),
-                        e.to_string(),
-                        Some(NotificationType::ERROR),
-                    ));
-                    context.replies.push_back(UIEvent::Fork(ForkType::Finished));
-                    context.restore_input();
-                    return true;
+                    Ok(mut child) => {
+                        let _ = child.wait();
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some(format!("Failed to execute {}: {}", editor, err)),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        context.replies.push_back(UIEvent::Fork(ForkType::Finished));
+                        context.restore_input();
+                        return true;
+                    }
                 }
                 context.replies.push_back(UIEvent::Fork(ForkType::Finished));
                 let result = f.read_to_string();
@@ -973,7 +978,7 @@ impl Component for Composer {
                             .spawn()
                         {
                             Ok(child) => {
-                                let out = child
+                                let _ = child
                                     .wait_with_output()
                                     .expect("failed to launch cmd")
                                     .stdout;
@@ -1005,7 +1010,7 @@ impl Component for Composer {
                             Err(err) => {
                                 context.replies.push_back(UIEvent::Notification(
                                     None,
-                                    format!("could not execute pipe cmd: {}", cmd),
+                                    format!("could not execute pipe cmd {}: {}", cmd, err),
                                     Some(NotificationType::ERROR),
                                 ));
                                 return true;
