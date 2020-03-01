@@ -737,8 +737,7 @@ impl CompactListing {
             SmallVec::new(),
         );
 
-        for (idx, thread) in items.enumerate() {
-            self.length += 1;
+        for thread in items {
             let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
             let root_env_hash = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
@@ -761,6 +760,12 @@ impl CompactListing {
             let root_envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
                 .collection
                 .get_env(root_env_hash);
+            use crate::cache::{Query, QueryTrait};
+            if let Some(filter_query) = context.settings.listing.filter.as_ref() {
+                if !root_envelope.is_match(filter_query) {
+                    continue;
+                }
+            }
 
             let entry_strings = self.make_entry_string(&root_envelope, context, threads, thread);
             row_widths.1.push(
@@ -796,11 +801,12 @@ impl CompactListing {
                 min_width.4,
                 entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
             ); /* subject */
-            rows.push(((idx, (thread, root_env_hash)), entry_strings));
+            rows.push(((self.length, (thread, root_env_hash)), entry_strings));
             self.all_threads.insert(thread);
 
-            self.order.insert(thread, idx);
+            self.order.insert(thread, self.length);
             self.selection.insert(thread, false);
+            self.length += 1;
         }
 
         min_width.0 = self.length.saturating_sub(1).to_string().len();

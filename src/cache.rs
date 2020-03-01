@@ -35,7 +35,7 @@ use std::sync::{Arc, RwLock};
 pub use query_parser::query;
 use Query::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub enum Query {
     Before(UnixTimestamp),
     After(UnixTimestamp),
@@ -59,6 +59,44 @@ pub enum Query {
     And(Box<Query>, Box<Query>),
     Or(Box<Query>, Box<Query>),
     Not(Box<Query>),
+}
+
+pub trait QueryTrait {
+    fn is_match(&self, query: &Query) -> bool;
+}
+
+impl QueryTrait for melib::Envelope {
+    fn is_match(&self, query: &Query) -> bool {
+        use Query::*;
+        match query {
+            Before(timestamp) => self.date() < *timestamp,
+            After(timestamp) => self.date() > *timestamp,
+            Between(timestamp_a, timestamp_b) => {
+                self.date() > *timestamp_a && self.date() < *timestamp_b
+            }
+            On(timestamp) => {
+                self.date() > timestamp.saturating_sub(60 * 60 * 24)
+                    && self.date() < *timestamp + 60 * 60 * 24
+            }
+            From(s) => self.other_headers()["From"].contains(s),
+            To(s) => self.other_headers()["To"].contains(s),
+            Cc(s) => self.other_headers()["Cc"].contains(s),
+            Bcc(s) => self.other_headers()["Bcc"].contains(s),
+            AllAddresses(s) => {
+                self.is_match(&From(s.clone()))
+                    || self.is_match(&To(s.clone()))
+                    || self.is_match(&Cc(s.clone()))
+                    || self.is_match(&Bcc(s.clone()))
+            }
+            Flags(v) => v.iter().any(|s| self.flags() == s.as_str()),
+            Subject(s) => self.other_headers()["Subject"].contains(s),
+            HasAttachment => self.has_attachments(),
+            And(q_a, q_b) => self.is_match(q_a) && self.is_match(q_b),
+            Or(q_a, q_b) => self.is_match(q_a) || self.is_match(q_b),
+            Not(q) => !self.is_match(q),
+            _ => false,
+        }
+    }
 }
 
 pub mod query_parser {
@@ -449,5 +487,21 @@ pub fn escape_double_quote(w: &str) -> Cow<str> {
         Cow::from(w.replace('"', "\"\""))
     } else {
         Cow::from(w)
+    }
+}
+
+use serde::{de, Deserialize, Deserializer};
+impl<'de> Deserialize<'de> for Query {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <String>::deserialize(deserializer)?;
+        let _q = query().parse(&s);
+        if let Some(q) = _q.ok() {
+            Ok(q.1)
+        } else {
+            Err(de::Error::custom("invalid query value"))
+        }
     }
 }

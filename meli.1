@@ -430,6 +430,37 @@ attachment according to its mailcap entry.
 .It Ic v
 (un)selects mail entries in mail listings
 .El
+.Sh QUERY ABNF SYNTAX
+.Bl -bullet
+.It
+.Li query = \&"(\&" query \&")\&" | from | to | cc | bcc | alladdresses | subject | flags | has_attachments | query \&"or\&" query | query \&"and\&" query | not query
+.It
+.Li not = \&"not\&" | \&"!\&"
+.It
+.Li quoted = ALPHA / SP *(ALPHA / DIGIT / SP)
+.It
+.Li term = ALPHA *(ALPHA / DIGIT) | DQUOTE quoted DQUOTE
+.It
+.Li tagname = term
+.It
+.Li flagval = \&"passed\&" | \&"replied\&" | \&"seen\&" | \&"read\&" | \&"junk\&" | \&"trash\&" | \&"trashed\&" | \&"draft\&" | \&"flagged\&" | tagname
+.It
+.Li flagterm = flagval | flagval \&",\&" flagterm
+.It
+.Li from = \&"from:\&" term
+.It
+.Li to = \&"to:\&" term
+.It
+.Li cc = \&"cc:\&" term
+.It
+.Li bcc = \&"bcc:\&" term
+.It
+.Li alladdresses = \&"alladdresses:\&" term
+.It
+.Li subject = \&"subject:\&" term
+.It
+.Li flags = \&"flags:\&" flag | \&"tags:\&" flag | \&"is:\&" flag
+.El
 .Sh EXIT STATUS
 .Nm
 exits with 0 on a successful run.

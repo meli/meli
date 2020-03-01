@@ -20,6 +20,7 @@
  */
 
 use super::default_vals::*;
+use crate::cache::Query;
 
 /// Settings for mail listings
 #[derive(Debug, Deserialize, Clone, Default, Serialize)]
@@ -38,4 +39,9 @@ pub struct ListingSettings {
     /// Default: true
     #[serde(default = "true_val")]
     pub recent_dates: bool,
+
+    /// Show only envelopes that match this query
+    /// Default: None
+    #[serde(default = "none")]
+    pub filter: Option<Query>,
 }

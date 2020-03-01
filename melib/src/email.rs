@@ -65,6 +65,20 @@ bitflags! {
     }
 }
 
+impl PartialEq<&str> for Flag {
+    fn eq(&self, other: &&str) -> bool {
+        (other.eq_ignore_ascii_case("passed") && self.contains(Flag::PASSED))
+            || (other.eq_ignore_ascii_case("replied") && self.contains(Flag::REPLIED))
+            || (other.eq_ignore_ascii_case("seen") && self.contains(Flag::SEEN))
+            || (other.eq_ignore_ascii_case("read") && self.contains(Flag::SEEN))
+            || (other.eq_ignore_ascii_case("junk") && self.contains(Flag::TRASHED))
+            || (other.eq_ignore_ascii_case("trash") && self.contains(Flag::TRASHED))
+            || (other.eq_ignore_ascii_case("trashed") && self.contains(Flag::TRASHED))
+            || (other.eq_ignore_ascii_case("draft") && self.contains(Flag::DRAFT))
+            || (other.eq_ignore_ascii_case("flagged") && self.contains(Flag::FLAGGED))
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct EnvelopeWrapper {
     envelope: Envelope,
@@ -113,7 +127,7 @@ pub type EnvelopeHash = u64;
 ///  Access to the underlying email object in the account's backend (for example the file or the
 ///  entry in an IMAP server) is given through `operation_token`. For more information see
 ///  `BackendOp`.
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Envelope {
     date: String,
     from: Vec<Address>,
@@ -150,6 +164,12 @@ impl fmt::Debug for Envelope {
     }
 }
 
+impl Default for Envelope {
+    fn default() -> Self {
+        Envelope::new(0)
+    }
+}
+
 impl Envelope {
     pub fn new(hash: EnvelopeHash) -> Self {
         Envelope {
@@ -162,7 +182,17 @@ impl Envelope {
             message_id: MessageID::default(),
             in_reply_to: None,
             references: None,
-            other_headers: FnvHashMap::default(),
+            other_headers: [
+                ("From".to_string(), String::new()),
+                ("To".to_string(), String::new()),
+                ("Subject".to_string(), String::new()),
+                ("Date".to_string(), String::new()),
+                ("Cc".to_string(), String::new()),
+                ("Bcc".to_string(), String::new()),
+            ]
+            .iter()
+            .cloned()
+            .collect(),
 
             timestamp: 0,
 
@@ -218,9 +248,17 @@ impl Envelope {
         let mut in_reply_to = None;
 
         for (name, value) in headers {
-            if value.len() == 1 && value.is_empty() {
-                continue;
-            }
+            self.other_headers.insert(
+                String::from_utf8(name.to_vec())
+                    .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into()),
+                parser::phrase(value, false)
+                    .to_full_result()
+                    .map(|value| {
+                        String::from_utf8(value)
+                            .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into())
+                    })
+                    .unwrap_or_else(|_| String::from_utf8_lossy(value).into()),
+            );
             if name.eq_ignore_ascii_case(b"to") {
                 let parse_result = parser::rfc2822address_list(value);
                 if parse_result.is_done() {
@@ -298,19 +336,6 @@ impl Envelope {
                     }
                     _ => {}
                 }
-            } else {
-                self.other_headers.insert(
-                    String::from_utf8(name.to_vec())
-                        .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into()),
-                    parser::phrase(value, false)
-                        .to_full_result()
-                        .map(|value| {
-                            String::from_utf8(value).unwrap_or_else(|err| {
-                                String::from_utf8_lossy(&err.into_bytes()).into()
-                            })
-                        })
-                        .unwrap_or_else(|_| String::from_utf8_lossy(value).into()),
-                );
             }
         }
         /*

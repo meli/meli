@@ -607,6 +607,16 @@ this is usually what you want
 (optional) Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
 .\" default value
 .Pq Em true
+.It Ic filter Ar Query
+(optional) Show only envelopes matching this query (for query syntax see
+.Xr meli 1 )
+.\" default value
+.Pq Em None
+.Pp
+Example:
+.Bd -literal
+filter = "not flags:seen" # show only unseen messages
+.Ed
 .El
 .Sh TAGS
 .Bl -tag -width 36n
