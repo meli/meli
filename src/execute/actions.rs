@@ -77,6 +77,7 @@ pub enum ViewAction {
 #[derive(Debug)]
 pub enum ComposeAction {
     AddAttachment(String),
+    AddAttachmentPipe(String),
     RemoveAttachment(usize),
     ToggleSign,
 }

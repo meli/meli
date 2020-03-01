@@ -216,10 +216,16 @@ define_commands!([
                   desc: "add-attachment PATH",
                   parser:(
                       named!( add_attachment<Action>,
-                              do_parse!(
+                              alt_complete!(
+                                   do_parse!(
+                                  ws!(tag!("add-attachment"))
+                                  >> ws!(tag!("<"))
+                                  >> cmd: quoted_argument
+                                  >> (Compose(AddAttachmentPipe(cmd.to_string()))))
+                                  | do_parse!(
                                   ws!(tag!("add-attachment"))
                                   >> path: quoted_argument
-                                  >> (Compose(AddAttachment(path.to_string())))
+                                  >> (Compose(AddAttachment(path.to_string()))))
                               )
                       );
                   )

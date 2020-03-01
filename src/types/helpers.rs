@@ -43,7 +43,7 @@ impl Drop for File {
 }
 
 impl File {
-    pub fn file(&mut self) -> std::fs::File {
+    pub fn file(&self) -> std::fs::File {
         OpenOptions::new()
             .read(true)
             .write(true)

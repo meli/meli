@@ -147,6 +147,23 @@ impl Composer {
             id: ComponentId::new_v4(),
             ..Default::default()
         };
+        for (h, v) in context.settings.composing.default_header_values.iter() {
+            if v.is_empty() {
+                continue;
+            }
+            if let Some(k) = ret
+                .draft
+                .headers()
+                .keys()
+                .find(|k| k.eq_ignore_ascii_case(h))
+            {
+                let _k = k.clone();
+                ret.draft.headers_mut().insert(_k, v.into());
+            } else {
+                /* set_header() also updates draft's header_order field */
+                ret.draft.set_header(h, v.into());
+            }
+        }
         ret.pager
             .set_colors(crate::conf::value(context, "theme_default"));
         ret

@@ -21,6 +21,7 @@
 
 //! Configuration for composing email.
 use super::default_vals::{false_val, none, true_val};
+use std::collections::HashMap;
 
 /// Settings for writing and sending new e-mail
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -38,6 +39,10 @@ pub struct ComposingSettings {
     /// Default: true
     #[serde(default = "true_val")]
     pub format_flowed: bool,
+    /// Set default header values for new drafts
+    /// Default: empty
+    #[serde(default)]
+    pub default_header_values: HashMap<String, String>,
 }
 
 impl Default for ComposingSettings {
@@ -47,6 +52,7 @@ impl Default for ComposingSettings {
             editor_cmd: None,
             embed: false,
             format_flowed: true,
+            default_header_values: HashMap::default(),
         }
     }
 }
