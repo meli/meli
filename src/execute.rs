@@ -79,6 +79,10 @@ define_commands!([
                                          | map!(ws!(tag!("unseen")), |_| Listing(SetUnseen))
                                      )
                                  ) | map!(preceded!(tag!("delete"), eof!()), |_| Listing(Delete))
+                                  | do_parse!(tag!("copyto")
+                                      >> is_a!(" ")
+                                      >> path: quoted_argument
+                                      >> ({ Listing(CopyTo(path.to_string())) }))
                              )
                      ); )
                  },

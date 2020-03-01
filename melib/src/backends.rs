@@ -287,6 +287,9 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp>;
 
     fn save(&self, bytes: &[u8], mailbox: &str, flags: Option<Flag>) -> Result<()>;
+    fn delete(&self, env_hash: EnvelopeHash) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         None
     }

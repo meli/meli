@@ -146,7 +146,7 @@ pub trait MailListingTrait: ListingTrait {
             );
         }
         for env_hash in envs_to_set {
-            let op = account.operation(env_hash);
+            let mut op = account.operation(env_hash);
             let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
             match a {
                 ListingAction::SetSeen => {
@@ -164,7 +164,30 @@ pub trait MailListingTrait: ListingTrait {
                     }
                 }
                 ListingAction::Delete => {
-                    /* do nothing */
+                    drop(envelope);
+                    if let Err(err) = account.delete(env_hash) {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not delete.".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        return;
+                    }
+                    continue;
+                }
+                ListingAction::CopyTo(ref mailbox_path) => {
+                    drop(envelope);
+                    if let Err(err) = op
+                        .as_bytes()
+                        .and_then(|bytes| account.save(bytes, mailbox_path, None))
+                    {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not copy.".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        return;
+                    }
                     continue;
                 }
                 ListingAction::Tag(Remove(ref tag_str)) => {

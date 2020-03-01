@@ -954,6 +954,64 @@ impl Component for Composer {
             }
             UIEvent::Action(ref a) => {
                 match a {
+                    Action::Compose(ComposeAction::AddAttachmentPipe(ref cmd)) => {
+                        let parts = split_command!(cmd);
+                        if parts.is_empty() {
+                            context.replies.push_back(UIEvent::Notification(
+                                None,
+                                format!("pipe cmd value is invalid: {}", cmd),
+                                Some(NotificationType::ERROR),
+                            ));
+                            return false;
+                        }
+                        let (cmd, args) = (parts[0], &parts[1..]);
+                        let f = create_temp_file(&[], None, None, true);
+                        match std::process::Command::new(cmd)
+                            .args(args)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::from(f.file()))
+                            .spawn()
+                        {
+                            Ok(child) => {
+                                let out = child
+                                    .wait_with_output()
+                                    .expect("failed to launch cmd")
+                                    .stdout;
+                                let mut attachment =
+                                    match melib::email::attachment_from_file(f.path()) {
+                                        Ok(a) => a,
+                                        Err(e) => {
+                                            context.replies.push_back(UIEvent::Notification(
+                                                Some("could not add attachment".to_string()),
+                                                e.to_string(),
+                                                Some(NotificationType::ERROR),
+                                            ));
+                                            self.dirty = true;
+                                            return true;
+                                        }
+                                    };
+                                if let Ok(mime_type) = query_mime_info(f.path()) {
+                                    match attachment.content_type {
+                                        ContentType::Other { ref mut tag, .. } => {
+                                            *tag = mime_type;
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                self.draft.attachments_mut().push(attachment);
+                                self.dirty = true;
+                                return true;
+                            }
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification(
+                                    None,
+                                    format!("could not execute pipe cmd: {}", cmd),
+                                    Some(NotificationType::ERROR),
+                                ));
+                                return true;
+                            }
+                        }
+                    }
                     Action::Compose(ComposeAction::AddAttachment(ref path)) => {
                         let mut attachment = match melib::email::attachment_from_file(path) {
                             Ok(a) => a,

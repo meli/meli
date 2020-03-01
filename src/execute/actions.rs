@@ -46,6 +46,7 @@ pub enum ListingAction {
     Search(String),
     SetSeen,
     SetUnseen,
+    CopyTo(MailboxPath),
     Delete,
     OpenInNewTab,
     Tag(TagAction),

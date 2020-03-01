@@ -876,6 +876,16 @@ impl Account {
         self.backend.write().unwrap().save(bytes, mailbox, flags)
     }
 
+    pub fn delete(&self, env_hash: EnvelopeHash) -> Result<()> {
+        if self.settings.account.read_only() {
+            return Err(MeliError::new(format!(
+                "Account {} is read-only.",
+                self.name.as_str()
+            )));
+        }
+        self.backend.write().unwrap().delete(env_hash)
+    }
+
     pub fn contains_key(&self, h: EnvelopeHash) -> bool {
         self.collection.contains_key(&h)
     }
