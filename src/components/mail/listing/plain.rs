@@ -613,32 +613,20 @@ impl PlainListing {
         }
     }
     fn make_entry_string(&self, e: EnvelopeRef, context: &Context) -> EntryStrings {
-        let mailbox = &context.accounts[self.cursor_pos.0][&self.cursor_pos.1].conf;
+        let settings = mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags);
         let mut tags = String::new();
         let mut colors = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
-                if mailbox
-                    .conf_override
-                    .tags
-                    .as_ref()
-                    .map(|s| s.ignore_tags.contains(t))
-                    .unwrap_or(false)
-                {
+                if settings.ignore_tags.contains(t) {
                     continue;
                 }
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) = mailbox
-                    .conf_override
-                    .tags
-                    .as_ref()
-                    .map(|s| s.colors.get(t))
-                    .unwrap_or(None)
-                {
+                if let Some(&c) = settings.colors.get(t) {
                     colors.push(c);
                 } else {
                     colors.push(Color::Byte(8));
@@ -703,8 +691,7 @@ impl PlainListing {
             Box::new(self.filtered_selection.iter().map(|h| *h))
                 as Box<dyn Iterator<Item = EnvelopeHash>>
         };
-        for (idx, i) in iter.enumerate() {
-            self.length += 1;
+        for i in iter {
             if !context.accounts[self.cursor_pos.0].contains_key(i) {
                 debug!("key = {}", i);
                 debug!(
@@ -717,6 +704,16 @@ impl PlainListing {
                 panic!();
             }
             let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0].collection.get_env(i);
+            use crate::cache::QueryTrait;
+            if let Some(filter_query) =
+                mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].listing)
+                    .filter
+                    .as_ref()
+            {
+                if !envelope.is_match(filter_query) {
+                    continue;
+                }
+            }
 
             let entry_strings = self.make_entry_string(envelope, context);
             min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
@@ -731,8 +728,9 @@ impl PlainListing {
                 self.all_envelopes.insert(i);
             }
 
-            self.order.insert(i, idx);
+            self.order.insert(i, self.length);
             self.selection.insert(i, false);
+            self.length += 1;
         }
 
         min_width.0 = self.length.saturating_sub(1).to_string().len();

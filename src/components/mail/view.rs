@@ -161,9 +161,10 @@ impl MailView {
             Some(Box::new(move |a: &'closure Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
                     use std::io::Write;
-                    let settings = &context.settings;
+                    let settings =
+                        mailbox_settings!(context[self.coordinates.0][&self.coordinates.1].pager);
                     /* FIXME: duplication with view/html.rs */
-                    if let Some(filter_invocation) = settings.pager.html_filter.as_ref() {
+                    if let Some(filter_invocation) = settings.html_filter.as_ref() {
                         let parts = split_command!(filter_invocation);
                         let (cmd, args) = (parts[0], &parts[1..]);
                         let command_obj = Command::new(cmd)
@@ -399,7 +400,10 @@ impl Component for MailView {
 
                 self.headers_no = 0;
                 let mut skip_header_ctr = self.headers_cursor;
-                let sticky = context.settings.pager.headers_sticky || height_p < height;
+                let sticky =
+                    mailbox_settings!(context[self.coordinates.0][&self.coordinates.1].pager)
+                        .headers_sticky
+                        || height_p < height;
                 let (_, mut y) = upper_left;
                 macro_rules! print_header {
                     ($($string:expr)+) => {
@@ -569,7 +573,9 @@ impl Component for MailView {
                 context
                     .dirty_areas
                     .push_back((upper_left, set_y(bottom_right, y + 3)));
-                if !context.settings.pager.headers_sticky {
+                if !mailbox_settings!(context[self.coordinates.0][&self.coordinates.1].pager)
+                    .headers_sticky
+                {
                     let height_p = self.pager.size().1;
 
                     let height = height!(area).saturating_sub(y).saturating_sub(1);
@@ -637,11 +643,11 @@ impl Component for MailView {
                     self.initialised = false;
                 }
                 ViewMode::Normal
-                    if context
-                        .settings
-                        .pager
-                        .auto_choose_multipart_alternative
-                        .is_true()
+                    if mailbox_settings!(
+                        context[self.coordinates.0][&self.coordinates.1].pager
+                    )
+                    .auto_choose_multipart_alternative
+                    .is_true()
                         && match body.content_type {
                             ContentType::Multipart {
                                 kind: MultipartType::Alternative,
@@ -807,7 +813,10 @@ impl Component for MailView {
             _ => match event {
                 UIEvent::Input(ref key)
                     if shortcut!(key == shortcuts[Pager::DESCRIPTION]["scroll_up"])
-                        && !context.settings.pager.headers_sticky
+                        && !mailbox_settings!(
+                            context[self.coordinates.0][&self.coordinates.1].pager
+                        )
+                        .headers_sticky
                         && self.headers_cursor <= self.headers_no =>
                 {
                     self.force_draw_headers = true;
@@ -823,7 +832,10 @@ impl Component for MailView {
                 }
                 UIEvent::Input(ref key)
                     if shortcut!(key == shortcuts[Pager::DESCRIPTION]["scroll_down"])
-                        && !context.settings.pager.headers_sticky
+                        && !mailbox_settings!(
+                            context[self.coordinates.0][&self.coordinates.1].pager
+                        )
+                        .headers_sticky
                         && self.headers_cursor < self.headers_no =>
                 {
                     self.force_draw_headers = true;

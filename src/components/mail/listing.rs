@@ -576,19 +576,9 @@ impl Component for Listing {
                 {
                     /* Account might have no mailboxes yet if it's offline */
                     /* Check if per-mailbox configuration overrides general configuration */
-                    if let Some(index_style) = context
-                        .accounts
-                        .get(self.cursor_pos.0)
-                        .and_then(|account| account[mailbox_hash].conf.conf_override.index_style)
-                    {
-                        self.component.set_style(index_style);
-                    } else if let Some(index_style) = context
-                        .accounts
-                        .get(self.cursor_pos.0)
-                        .and_then(|account| Some(account.settings.conf.index_style()))
-                    {
-                        self.component.set_style(index_style);
-                    }
+                    let index_style =
+                        mailbox_acc_settings!(context[self.cursor_pos.0][mailbox_hash].index_style);
+                    self.component.set_style(*index_style);
                 }
                 context
                     .replies
@@ -1208,19 +1198,10 @@ impl Listing {
             self.component
                 .set_coordinates((self.cursor_pos.0, *mailbox_hash));
             /* Check if per-mailbox configuration overrides general configuration */
-            if let Some(index_style) = context
-                .accounts
-                .get(self.cursor_pos.0)
-                .and_then(|account| account[mailbox_hash].conf.conf_override.index_style)
-            {
-                self.component.set_style(index_style);
-            } else if let Some(index_style) = context
-                .accounts
-                .get(self.cursor_pos.0)
-                .and_then(|account| Some(account.settings.conf.index_style()))
-            {
-                self.component.set_style(index_style);
-            }
+
+            let index_style =
+                mailbox_acc_settings!(context[self.cursor_pos.0][mailbox_hash].index_style);
+            self.component.set_style(*index_style);
         } else {
             /* Set to dummy */
             self.component = Offline(OfflineListing::new((self.cursor_pos.0, 0)));

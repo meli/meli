@@ -593,32 +593,20 @@ impl ConversationsListing {
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
-        let mailbox = &context.accounts[self.cursor_pos.0][&self.cursor_pos.1].conf;
+        let settings = mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags);
         let mut tags = String::new();
         let mut colors = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
-                if mailbox
-                    .conf_override
-                    .tags
-                    .as_ref()
-                    .map(|s| s.ignore_tags.contains(t))
-                    .unwrap_or(false)
-                {
+                if settings.ignore_tags.contains(t) {
                     continue;
                 }
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) = mailbox
-                    .conf_override
-                    .tags
-                    .as_ref()
-                    .map(|s| s.colors.get(t))
-                    .unwrap_or(None)
-                {
+                if let Some(&c) = settings.colors.get(t) {
                     colors.push(c);
                 } else {
                     colors.push(Color::Byte(8));
@@ -670,8 +658,7 @@ impl ConversationsListing {
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
-        for (idx, thread) in items.enumerate() {
-            self.length += 1;
+        for thread in items {
             let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
             let root_env_hash = thread_node.message().unwrap_or_else(|| {
                 let mut iter_ptr = thread_node.children()[0];
@@ -710,6 +697,16 @@ impl ConversationsListing {
             let root_envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
                 .collection
                 .get_env(root_env_hash);
+            use crate::cache::QueryTrait;
+            if let Some(filter_query) =
+                mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].listing)
+                    .filter
+                    .as_ref()
+            {
+                if !root_envelope.is_match(filter_query) {
+                    continue;
+                }
+            }
 
             let strings =
                 self.make_entry_string(root_envelope, context, &from_address_list, threads, thread);
@@ -725,11 +722,12 @@ impl ConversationsListing {
                 max_entry_columns,
                 strings.date.len() + 1 + strings.from.grapheme_width(),
             );
-            rows.push(((idx, (thread, root_env_hash)), strings));
+            rows.push(((self.length, (thread, root_env_hash)), strings));
             self.all_threads.insert(thread);
 
-            self.order.insert(thread, idx);
+            self.order.insert(thread, self.length);
             self.selection.insert(thread, false);
+            self.length += 1;
         }
 
         let width = max_entry_columns;

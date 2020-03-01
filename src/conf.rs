@@ -70,6 +70,29 @@ macro_rules! split_command {
     }};
 }
 
+#[macro_export]
+macro_rules! mailbox_acc_settings {
+    ($context:ident[$account_idx:expr][$mailbox_path:expr].$field:ident) => {{
+        $context.accounts[$account_idx][$mailbox_path]
+            .conf
+            .conf_override
+            .$field
+            .as_ref()
+            .unwrap_or(&$context.accounts[$account_idx].settings.conf.$field)
+    }};
+}
+#[macro_export]
+macro_rules! mailbox_settings {
+    ($context:ident[$account_idx:expr][$mailbox_path:expr].$field:ident) => {{
+        $context.accounts[$account_idx][$mailbox_path]
+            .conf
+            .conf_override
+            .$field
+            .as_ref()
+            .unwrap_or(&$context.settings.$field)
+    }};
+}
+
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MailUIConf {
     pub pager: Option<PagerSettings>,
@@ -110,7 +133,7 @@ pub struct FileAccount {
     identity: String,
     #[serde(default = "none")]
     display_name: Option<String>,
-    index_style: IndexStyle,
+    pub index_style: IndexStyle,
 
     #[serde(default = "false_val")]
     read_only: bool,

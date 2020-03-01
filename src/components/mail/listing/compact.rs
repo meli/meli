@@ -760,8 +760,12 @@ impl CompactListing {
             let root_envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
                 .collection
                 .get_env(root_env_hash);
-            use crate::cache::{Query, QueryTrait};
-            if let Some(filter_query) = context.settings.listing.filter.as_ref() {
+            use crate::cache::QueryTrait;
+            if let Some(filter_query) =
+                mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].listing)
+                    .filter
+                    .as_ref()
+            {
                 if !root_envelope.is_match(filter_query) {
                     continue;
                 }
