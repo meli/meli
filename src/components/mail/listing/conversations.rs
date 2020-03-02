@@ -117,7 +117,7 @@ impl MailListingTrait for ConversationsListing {
         }
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+        match context.accounts[self.cursor_pos.0].load(self.cursor_pos.1) {
             Ok(()) => {}
             Err(_) => {
                 let default_cell = {

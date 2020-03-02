@@ -1010,17 +1010,17 @@ impl Listing {
 
         for (i, &(depth, mailbox_hash)) in a.entries.iter().enumerate() {
             if mailboxes[&mailbox_hash].is_subscribed() {
-                match context.accounts[a.index].status(mailbox_hash) {
-                    Ok(_) => {
+                match context.accounts[a.index][&mailbox_hash].status {
+                    crate::conf::accounts::MailboxStatus::Failed(_) => {
+                        lines.push((depth, i, mailbox_hash, None));
+                    }
+                    _ => {
                         lines.push((
                             depth,
                             i,
                             mailbox_hash,
                             mailboxes[&mailbox_hash].count().ok().map(|(v, _)| v),
                         ));
-                    }
-                    Err(_) => {
-                        lines.push((depth, i, mailbox_hash, None));
                     }
                 }
             }

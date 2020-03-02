@@ -391,6 +391,13 @@ impl Collection {
     pub fn contains_key(&self, env_hash: &EnvelopeHash) -> bool {
         self.envelopes.read().unwrap().contains_key(env_hash)
     }
+
+    pub fn new_mailbox(&mut self, mailbox_hash: MailboxHash) {
+        if !self.mailboxes.contains_key(&mailbox_hash) {
+            self.mailboxes.insert(mailbox_hash, Default::default());
+            self.threads.insert(mailbox_hash, Threads::default());
+        }
+    }
 }
 
 impl Index<&MailboxHash> for Collection {

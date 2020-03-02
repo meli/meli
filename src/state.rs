@@ -37,7 +37,6 @@ use fnv::FnvHashMap;
 use smallvec::SmallVec;
 use std::env;
 use std::io::Write;
-use std::result;
 use std::thread;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
@@ -128,20 +127,6 @@ impl Context {
 
     pub fn restore_input(&self) {
         self.input.restore(self.sender.clone());
-    }
-    pub fn account_status(
-        &mut self,
-        idx_a: usize,
-        mailbox_hash: MailboxHash,
-    ) -> result::Result<(), usize> {
-        match self.accounts[idx_a].status(mailbox_hash) {
-            Ok(()) => {
-                self.replies
-                    .push_back(UIEvent::MailboxUpdate((idx_a, mailbox_hash)));
-                Ok(())
-            }
-            Err(n) => Err(n),
-        }
     }
 
     pub fn is_online(&mut self, account_pos: usize) -> Result<()> {
@@ -379,7 +364,7 @@ impl State {
     pub fn refresh_event(&mut self, event: RefreshEvent) {
         let hash = event.hash();
         if let Some(&idxa) = self.context.mailbox_hashes.get(&hash) {
-            if self.context.accounts[idxa].status(hash).is_err() {
+            if self.context.accounts[idxa].load(hash).is_err() {
                 self.context.replies.push_back(UIEvent::from(event));
                 return;
             }
@@ -932,7 +917,7 @@ impl State {
             }
             UIEvent::WorkerProgress(mailbox_hash) => {
                 if let Some(&account_idx) = self.context.mailbox_hashes.get(&mailbox_hash) {
-                    let _ = self.context.accounts[account_idx].status(mailbox_hash);
+                    let _ = self.context.accounts[account_idx].load(mailbox_hash);
                 }
                 return;
             }

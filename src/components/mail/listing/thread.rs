@@ -88,7 +88,7 @@ impl MailListingTrait for ThreadListing {
 
         // Get mailbox as a reference.
         //
-        match context.accounts[self.cursor_pos.0].status(self.cursor_pos.1) {
+        match context.accounts[self.cursor_pos.0].load(self.cursor_pos.1) {
             Ok(_) => {}
             Err(_) => {
                 let default_cell = {

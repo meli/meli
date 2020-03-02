@@ -62,7 +62,7 @@ pub enum MailboxStatus {
 
 impl Default for MailboxStatus {
     fn default() -> Self {
-        MailboxStatus::Parsing(0, 0)
+        MailboxStatus::None
     }
 }
 
@@ -97,7 +97,7 @@ impl MailboxEntry {
         match self.status {
             MailboxStatus::Available => self.name().to_string(),
             MailboxStatus::Failed(ref e) => e.to_string(),
-            MailboxStatus::None => "Not subscribed, is this a bug?".to_string(),
+            MailboxStatus::None => "Retrieving mailbox".to_string(),
             MailboxStatus::Parsing(done, total) => {
                 format!("Parsing messages. [{}/{}]", done, total)
             }
@@ -334,16 +334,17 @@ impl Account {
                 continue;
             }
             mailbox_entries.entry(*h).and_modify(|entry| {
-                entry.status = MailboxStatus::Parsing(0, 0);
-                entry.worker = Account::new_worker(
-                    f.clone(),
-                    &mut self.backend,
-                    &self.work_context,
-                    self.notify_fn.clone(),
-                );
+                if entry.conf.mailbox_conf.autoload {
+                    entry.status = MailboxStatus::Parsing(0, 0);
+                    entry.worker = Account::new_worker(
+                        f.clone(),
+                        &mut self.backend,
+                        &self.work_context,
+                        self.notify_fn.clone(),
+                    );
+                }
             });
-            collection.mailboxes.insert(*h, Default::default());
-            collection.threads.insert(*h, Threads::default());
+            collection.new_mailbox(*h);
         }
 
         build_mailboxes_order(&mut tree, &mailbox_entries, &mut mailboxes_order);
@@ -716,39 +717,7 @@ impl Account {
         &self.name
     }
 
-    fn load_mailbox(&mut self, mailbox_hash: MailboxHash, payload: Result<Vec<Envelope>>) {
-        if payload.is_err() {
-            self.mailbox_entries
-                .entry(mailbox_hash)
-                .and_modify(|entry| {
-                    entry.status = MailboxStatus::Failed(payload.unwrap_err());
-                });
-            self.sender
-                .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
-                .unwrap();
-            return;
-        }
-        let envelopes = payload
-            .unwrap()
-            .into_iter()
-            .map(|e| (e.hash(), e))
-            .collect::<FnvHashMap<EnvelopeHash, Envelope>>();
-        if let Some(updated_mailboxes) =
-            self.collection
-                .merge(envelopes, mailbox_hash, self.sent_mailbox)
-        {
-            for f in updated_mailboxes {
-                self.sender
-                    .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
-                    .unwrap();
-            }
-        }
-        self.sender
-            .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
-            .unwrap();
-    }
-
-    pub fn status(&mut self, mailbox_hash: MailboxHash) -> result::Result<(), usize> {
+    pub fn load(&mut self, mailbox_hash: MailboxHash) -> result::Result<(), usize> {
         if mailbox_hash == 0 {
             return Err(0);
         }
@@ -761,22 +730,65 @@ impl Account {
                 .as_mut()
             {
                 None => {
-                    return if self.mailbox_entries[&mailbox_hash].status.is_available()
-                        || (self.mailbox_entries[&mailbox_hash].status.is_parsing()
-                            && self.collection.mailboxes.contains_key(&mailbox_hash))
-                    {
-                        Ok(())
-                    } else {
-                        Err(0)
-                    };
+                    return match self.mailbox_entries[&mailbox_hash].status {
+                        MailboxStatus::Available | MailboxStatus::Parsing(_, _)
+                            if self.collection.mailboxes.contains_key(&mailbox_hash) =>
+                        {
+                            Ok(())
+                        }
+                        MailboxStatus::None => {
+                            let handle = Account::new_worker(
+                                self.mailbox_entries[&mailbox_hash].ref_mailbox.clone(),
+                                &mut self.backend,
+                                &self.work_context,
+                                self.notify_fn.clone(),
+                            );
+                            self.mailbox_entries
+                                .entry(mailbox_hash)
+                                .and_modify(|entry| {
+                                    entry.worker = handle;
+                                });
+                            self.collection.new_mailbox(mailbox_hash);
+                            Err(0)
+                        }
+                        _ => Err(0),
+                    }
                 }
                 Some(ref mut w) => match debug!(w.poll()) {
                     Ok(AsyncStatus::NoUpdate) => {
                         break;
                     }
-                    Ok(AsyncStatus::Payload(envs)) => {
+                    Ok(AsyncStatus::Payload(payload)) => {
                         debug!("got payload in status for {}", mailbox_hash);
-                        self.load_mailbox(mailbox_hash, envs);
+                        if payload.is_err() {
+                            self.mailbox_entries
+                                .entry(mailbox_hash)
+                                .and_modify(|entry| {
+                                    entry.status = MailboxStatus::Failed(payload.unwrap_err());
+                                });
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
+                                .unwrap();
+                            return Err(0);
+                        }
+                        let envelopes = payload
+                            .unwrap()
+                            .into_iter()
+                            .map(|e| (e.hash(), e))
+                            .collect::<FnvHashMap<EnvelopeHash, Envelope>>();
+                        if let Some(updated_mailboxes) =
+                            self.collection
+                                .merge(envelopes, mailbox_hash, self.sent_mailbox)
+                        {
+                            for f in updated_mailboxes {
+                                self.sender
+                                    .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
+                                    .unwrap();
+                            }
+                        }
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
+                            .unwrap();
                     }
                     Ok(AsyncStatus::Finished) => {
                         debug!("got finished in status for {}", mailbox_hash);
