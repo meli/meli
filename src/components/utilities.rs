@@ -1645,7 +1645,8 @@ impl Component for Tabbed {
                 return;
             }
             let mut max_length = 6;
-            let mut max_width = "Use Up, Down, Left, Right to scroll.".len() + 3;
+            let mut max_width =
+                "Press ? to close, use EXECUTE command \"search\" to find shortcuts".len() + 3;
 
             let mut shortcuts = children_maps.iter().collect::<Vec<_>>();
             shortcuts.sort_by_key(|(k, _)| *k);
@@ -1665,6 +1666,7 @@ impl Component for Tabbed {
             }
             self.help_content =
                 CellBuffer::new_with_context(max_width, max_length + 2, Cell::default(), context);
+            self.help_content.set_growable(true);
             let (width, height) = self.help_content.size();
             let (cols, rows) = (width!(area), height!(area));
             if cols == 0 || rows == 0 {
@@ -1694,6 +1696,15 @@ impl Component for Tabbed {
                 ((x + 1, y), (max_width.saturating_sub(2), max_length - 1)),
                 None,
             );
+            write_string_to_grid(
+                "use EXECUTE command \"search\" to find shortcuts",
+                &mut self.help_content,
+                Color::Default,
+                Color::Default,
+                Attr::Default,
+                ((2, 1), (max_width.saturating_sub(2), max_length - 1)),
+                None,
+            );
             /* In this case we will be scrolling, so show the user how to do it */
             if height.wrapping_div(rows) > 0 || width.wrapping_div(cols) > 0 {
                 write_string_to_grid(
@@ -1702,11 +1713,11 @@ impl Component for Tabbed {
                     Color::Default,
                     Color::Default,
                     Attr::Default,
-                    ((2, 1), (max_width.saturating_sub(2), max_length - 1)),
+                    ((2, 2), (max_width.saturating_sub(2), max_length - 1)),
                     None,
                 );
             }
-            let mut idx = 1;
+            let mut idx = 2;
             for (desc, shortcuts) in shortcuts.iter() {
                 write_string_to_grid(
                     desc,
