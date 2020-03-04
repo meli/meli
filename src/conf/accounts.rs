@@ -1122,7 +1122,7 @@ impl Account {
             let mut ret = SmallVec::new();
             let envelopes = self.collection.envelopes.read().unwrap();
 
-            for &env_hash in &self.collection[&mailbox_hash].iter() {
+            for &env_hash in self.collection[&mailbox_hash].iter() {
                 let envelope = &envelopes[&env_hash];
                 if envelope.subject().contains(&search_term) {
                     ret.push(env_hash);
