@@ -23,9 +23,7 @@
 extern crate melib;
 use melib::*;
 
-use std::alloc::System;
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
 extern crate notify_rust;
 extern crate xdg_utils;
 #[macro_use]
@@ -43,7 +41,6 @@ extern crate serde_json;
 extern crate smallvec;
 
 use melib::backends::imap::managesieve::new_managesieve_connection;
-use melib::AccountSettings;
 use melib::Result;
 
 mod unix;
@@ -126,7 +123,7 @@ fn main() -> Result<()> {
         use std::io::Write;
         input.clear();
         print!("> ");
-        io::stdout().flush();
+        io::stdout().flush().unwrap();
         match io::stdin().read_line(&mut input) {
             Ok(_) => {
                 if input.trim().eq_ignore_ascii_case("logout") {
