@@ -688,7 +688,29 @@ impl ImapType {
     ) -> Result<Box<dyn MailBackend>> {
         let server_hostname = get_conf_val!(s["server_hostname"])?;
         let server_username = get_conf_val!(s["server_username"])?;
-        let server_password = get_conf_val!(s["server_password"])?;
+        let server_password = if !s.extra.contains_key("server_password_command") {
+            get_conf_val!(s["server_password"])?.to_string()
+        } else {
+            let invocation = get_conf_val!(s["server_password_command"])?
+                .split_whitespace()
+                .collect::<Vec<&str>>();
+            let output = std::process::Command::new(invocation[0])
+                .args(&invocation[1..])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()?;
+            if !output.status.success() {
+                return Err(MeliError::new(format!(
+                    "({}) server_password_command `{}` returned {}: {}",
+                    s.name,
+                    get_conf_val!(s["server_password_command"])?,
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                )));
+            }
+            std::str::from_utf8(&output.stdout)?.trim_end().to_string()
+        };
         let server_port = get_conf_val!(s["server_port"], 143)?;
         let use_starttls = get_conf_val!(s["use_starttls"], !(server_port == 993))?;
         let danger_accept_invalid_certs: bool =
@@ -696,7 +718,7 @@ impl ImapType {
         let server_conf = ImapServerConf {
             server_hostname: server_hostname.to_string(),
             server_username: server_username.to_string(),
-            server_password: server_password.to_string(),
+            server_password,
             server_port,
             use_starttls,
             danger_accept_invalid_certs,
@@ -876,7 +898,14 @@ impl ImapType {
     pub fn validate_config(s: &AccountSettings) -> Result<()> {
         get_conf_val!(s["server_hostname"])?;
         get_conf_val!(s["server_username"])?;
-        get_conf_val!(s["server_password"])?;
+        if !s.extra.contains_key("server_password_command") {
+            get_conf_val!(s["server_password"])?;
+        } else if s.extra.contains_key("server_password") {
+            return Err(MeliError::new(format!(
+                "Configuration error ({}): both server_password and server_password_command are set, cannot choose",
+                s.name.as_str(),
+            )));
+        }
         get_conf_val!(s["server_port"], 143)?;
         get_conf_val!(s["use_starttls"], false)?;
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
