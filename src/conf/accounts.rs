@@ -327,7 +327,6 @@ impl Account {
         }
 
         let mut tree: Vec<MailboxNode> = Vec::new();
-        let mut collection: Collection = Collection::new(Default::default());
         for (h, f) in ref_mailboxes.iter() {
             if !f.is_subscribed() {
                 /* Skip unsubscribed mailbox */
@@ -344,7 +343,7 @@ impl Account {
                     );
                 }
             });
-            collection.new_mailbox(*h);
+            self.collection.new_mailbox(*h);
         }
 
         build_mailboxes_order(&mut tree, &mailbox_entries, &mut mailboxes_order);
@@ -352,7 +351,6 @@ impl Account {
         self.mailbox_entries = mailbox_entries;
         self.tree = tree;
         self.sent_mailbox = sent_mailbox;
-        self.collection = collection;
     }
 
     fn new_worker(
@@ -536,7 +534,11 @@ impl Account {
                             );
                         }
                     }
-                    self.collection.insert(*envelope, mailbox_hash);
+
+                    if self.collection.insert(*envelope, mailbox_hash) {
+                        /* is a duplicate */
+                        return None;
+                    }
 
                     if self.mailbox_entries[&mailbox_hash]
                         .conf

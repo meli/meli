@@ -827,6 +827,7 @@ impl ImapType {
                 debug!("parse error for {:?}", l);
             }
         }
+        mailboxes.retain(|_, v| v.hash != 0);
         conn.send_command(b"LSUB \"\" \"*\"")?;
         conn.read_response(&mut res)?;
         debug!("out: {}", &res);

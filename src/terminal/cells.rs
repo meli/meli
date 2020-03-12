@@ -1707,6 +1707,7 @@ pub fn write_string_to_grid(
         }
     }
     for c in s.chars() {
+        inspect_bounds!(grid, area, x, y, line_break);
         if c == '\r' {
             continue;
         }
@@ -1753,8 +1754,6 @@ pub fn write_string_to_grid(
             _ => {}
         }
         x += 1;
-
-        inspect_bounds!(grid, area, x, y, line_break);
     }
     (x, y)
 }

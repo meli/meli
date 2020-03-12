@@ -679,6 +679,13 @@ impl Threads {
             .message_ids
             .get(message_id)
             .cloned()
+            .or(
+                if envelopes_lck[&env_hash].thread() != ThreadNodeHash::null() {
+                    Some(envelopes_lck[&env_hash].thread())
+                } else {
+                    None
+                },
+            )
             .unwrap_or_else(|| ThreadNodeHash::new());
         {
             let mut node = self.thread_nodes.entry(new_id).or_default();

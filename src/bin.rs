@@ -97,11 +97,15 @@ fn notify(
     signals: &[c_int],
     sender: crossbeam::channel::Sender<ThreadEvent>,
 ) -> std::result::Result<crossbeam::channel::Receiver<c_int>, std::io::Error> {
+    use std::time::Duration;
     let alarm_sender = sender.clone();
     let alarm_handler = move |info: &nix::libc::siginfo_t| {
         let value = unsafe { info.si_value().sival_ptr as u8 };
         alarm_sender
-            .send(ThreadEvent::UIEvent(UIEvent::Timer(value)))
+            .send_timeout(
+                ThreadEvent::UIEvent(UIEvent::Timer(value)),
+                Duration::from_millis(500),
+            )
             .unwrap();
     };
     unsafe {
@@ -114,11 +118,11 @@ fn notify(
         loop {
             ctr %= 3;
             if ctr == 0 {
-                sender.send(ThreadEvent::Pulse).unwrap();
+                sender.send_timeout(ThreadEvent::Pulse, Duration::from_millis(500));
             }
 
             for signal in signals.pending() {
-                s.send(signal).unwrap();
+                s.send_timeout(signal, Duration::from_millis(500)).unwrap();
             }
 
             std::thread::sleep(std::time::Duration::from_millis(100));

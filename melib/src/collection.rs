@@ -350,8 +350,13 @@ impl Collection {
         }
     }
 
-    pub fn insert(&mut self, envelope: Envelope, mailbox_hash: MailboxHash) {
+    pub fn insert(&mut self, envelope: Envelope, mailbox_hash: MailboxHash) -> bool {
         let hash = envelope.hash();
+        if self.message_ids.contains_key(envelope.message_id().raw()) {
+            /* Duplicate. For example could be same message sent to two mailing lists and we get
+             * it twice */
+            return true;
+        };
         self.mailboxes.entry(mailbox_hash).and_modify(|m| {
             m.insert(hash);
         });
@@ -369,6 +374,7 @@ impl Collection {
         {
             self.insert_reply(hash);
         }
+        false
     }
 
     pub fn insert_reply(&mut self, env_hash: EnvelopeHash) {

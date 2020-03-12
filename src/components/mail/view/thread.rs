@@ -647,6 +647,7 @@ impl ThreadView {
 
         /* First draw the thread subject on the first row */
         let y = if self.dirty {
+            clear_area(grid, area, crate::conf::value(context, "theme_default"));
             let account = &context.accounts[self.coordinates.0];
             let threads = &account.collection.threads[&self.coordinates.1];
             let thread_root = threads
@@ -749,6 +750,7 @@ impl ThreadView {
 
         /* First draw the thread subject on the first row */
         let y = {
+            clear_area(grid, area, crate::conf::value(context, "theme_default"));
             let account = &context.accounts[self.coordinates.0];
             let threads = &account.collection.threads[&self.coordinates.1];
             let thread_root = threads
