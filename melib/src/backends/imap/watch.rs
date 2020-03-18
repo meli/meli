@@ -301,7 +301,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                             work_context,
                             thread_id,
                             conn.send_command(
-                                &[b"UID FETCH", v, b"(FLAGS RFC822.HEADER)"]
+                                &[b"UID FETCH", v, b"(FLAGS RFC822)"]
                                 .join(&b' '),
                                 )
                             conn.read_response(&mut response)
@@ -416,7 +416,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                             &[
                             b"FETCH",
                             format!("{}:{}", *prev_exists + 1, n).as_bytes(),
-                            b"(UID FLAGS RFC822.HEADER)",
+                            b"(UID FLAGS RFC822)",
                             ]
                             .join(&b' '),
                         )
@@ -636,7 +636,7 @@ pub fn examine_updates(
                                 work_context,
                                 thread_id,
                                 conn.send_command(
-                                    &[b"UID FETCH", v, b"(FLAGS RFC822.HEADER)"]
+                                    &[b"UID FETCH", v, b"(FLAGS RFC822)"]
                                     .join(&b' '),
                                     )
                                 conn.read_response(&mut response)
@@ -715,7 +715,7 @@ pub fn examine_updates(
                         &[
                         b"FETCH",
                         format!("{}:{}", *prev_exists + 1, n).as_bytes(),
-                        b"(UID FLAGS RFC822.HEADER)",
+                        b"(UID FLAGS RFC822)",
                         ]
                         .join(&b' '),
                         )
