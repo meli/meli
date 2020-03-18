@@ -448,24 +448,11 @@ impl MailBackend for NotmuchDb {
     }
 
     fn save(&self, bytes: &[u8], _mailbox: &str, flags: Option<Flag>) -> Result<()> {
-        let mut path = self
+        let path = self
             .save_messages_to
             .as_ref()
             .unwrap_or(&self.path)
             .to_path_buf();
-        if !(path.ends_with("cur") || path.ends_with("new") || path.ends_with("tmp")) {
-            for d in &["cur", "new", "tmp"] {
-                path.push(d);
-                if !path.is_dir() {
-                    return Err(MeliError::new(format!(
-                        "{} is not a valid maildir mailbox",
-                        path.display()
-                    )));
-                }
-                path.pop();
-            }
-            path.push("cur");
-        }
         crate::backends::MaildirType::save_to_mailbox(path, bytes, flags)
     }
 

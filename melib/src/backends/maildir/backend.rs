@@ -1012,6 +1012,16 @@ impl MaildirType {
     }
 
     pub fn save_to_mailbox(mut path: PathBuf, bytes: &[u8], flags: Option<Flag>) -> Result<()> {
+        for d in &["cur", "new", "tmp"] {
+            path.push(d);
+            if !path.is_dir() {
+                return Err(MeliError::new(format!(
+                    "{} is not a valid maildir mailbox",
+                    path.display()
+                )));
+            }
+            path.pop();
+        }
         path.push("cur");
         {
             let mut rand_buf = [0u8; 16];
