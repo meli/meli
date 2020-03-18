@@ -650,31 +650,27 @@ impl CompactListing {
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
-        let mailbox = &context.accounts[self.cursor_pos.0][&self.cursor_pos.1].conf;
         let mut tags = String::new();
         let mut colors: SmallVec<[_; 8]> = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
-                if mailbox
-                    .conf_override
-                    .tags
-                    .as_ref()
-                    .map(|s| s.ignore_tags.contains(t))
-                    .unwrap_or(false)
+                if mailbox_settings!(
+                    context[self.cursor_pos.0][&self.cursor_pos.1]
+                        .tags
+                        .ignore_tags
+                )
+                .contains(t)
                 {
                     continue;
                 }
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) = mailbox
-                    .conf_override
-                    .tags
-                    .as_ref()
-                    .map(|s| s.colors.get(t))
-                    .unwrap_or(None)
+                if let Some(&c) =
+                    mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
+                        .get(t)
                 {
                     colors.push(c);
                 } else {
@@ -761,10 +757,12 @@ impl CompactListing {
                 .collection
                 .get_env(root_env_hash);
             use crate::cache::QueryTrait;
-            if let Some(filter_query) =
-                mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].listing)
+            if let Some(filter_query) = mailbox_settings!(
+                context[self.cursor_pos.0][&self.cursor_pos.1]
+                    .listing
                     .filter
-                    .as_ref()
+            )
+            .as_ref()
             {
                 if !root_envelope.is_match(filter_query) {
                     continue;

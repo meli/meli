@@ -19,29 +19,48 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::default_vals::*;
+use super::{default_vals::*, IndexStyle};
 use crate::cache::Query;
+use crate::override_def;
 
-/// Settings for mail listings
-#[derive(Debug, Deserialize, Clone, Default, Serialize)]
-pub struct ListingSettings {
-    /// Number of context lines when going to next page.
-    /// Default: 0
-    #[serde(default = "zero_val")]
-    pub context_lines: usize,
+override_def!(
+    ListingSettingsOverride,
+    /// Settings for mail listings
+    #[derive(Debug, Deserialize, Clone, Serialize)]
+    pub struct ListingSettings {
+        /// Number of context lines when going to next page.
+        /// Default: 0
+        #[serde(default = "zero_val", alias = "context-lines")]
+        context_lines: usize,
 
-    /// Datetime formatting passed verbatim to strftime(3).
-    /// Default: %Y-%m-%d %T
-    #[serde(default = "none")]
-    pub datetime_fmt: Option<String>,
+        /// Datetime formatting passed verbatim to strftime(3).
+        /// Default: %Y-%m-%d %T
+        #[serde(default = "none", alias = "datetime-fmt")]
+        datetime_fmt: Option<String>,
 
-    /// Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
-    /// Default: true
-    #[serde(default = "true_val")]
-    pub recent_dates: bool,
+        /// Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
+        /// Default: true
+        #[serde(default = "true_val", alias = "recent-dates")]
+        recent_dates: bool,
 
-    /// Show only envelopes that match this query
-    /// Default: None
-    #[serde(default = "none")]
-    pub filter: Option<Query>,
+        /// Show only envelopes that match this query
+        /// Default: None
+        #[serde(default = "none")]
+        filter: Option<Query>,
+
+        #[serde(default, alias = "index-style")]
+        index_style: IndexStyle,
+    }
+);
+
+impl Default for ListingSettings {
+    fn default() -> Self {
+        Self {
+            context_lines: 0,
+            datetime_fmt: None,
+            recent_dates: true,
+            filter: None,
+            index_style: IndexStyle::default(),
+        }
+    }
 }

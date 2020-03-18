@@ -20,26 +20,30 @@
  */
 
 use super::default_vals::*;
+use crate::override_def;
 
-/// Settings for digital signing and encryption
-#[derive(Debug, Deserialize, Clone, Serialize)]
-pub struct PGPSettings {
-    /// auto verify signed e-mail according to RFC3156
-    #[serde(default = "true_val")]
-    pub auto_verify_signatures: bool,
+override_def!(
+    PGPSettingsOverride,
+    /// Settings for digital signing and encryption
+    #[derive(Debug, Deserialize, Clone, Serialize)]
+    pub struct PGPSettings {
+        /// auto verify signed e-mail according to RFC3156
+        #[serde(default = "true_val", alias = "auto-verify-signatures")]
+        auto_verify_signatures: bool,
 
-    /// always sign sent messages
-    #[serde(default = "false_val")]
-    pub auto_sign: bool,
+        /// always sign sent messages
+        #[serde(default = "false_val", alias = "auto-sign")]
+        auto_sign: bool,
 
-    // https://tools.ietf.org/html/rfc4880#section-12.2
-    #[serde(default = "none")]
-    pub key: Option<String>,
+        // https://tools.ietf.org/html/rfc4880#section-12.2
+        #[serde(default = "none")]
+        key: Option<String>,
 
-    /// gpg binary name or file location to use
-    #[serde(default)]
-    pub gpg_binary: Option<String>,
-}
+        /// gpg binary name or file location to use
+        #[serde(default, alias = "gpg-binary")]
+        gpg_binary: Option<String>,
+    }
+);
 
 impl Default for PGPSettings {
     fn default() -> Self {

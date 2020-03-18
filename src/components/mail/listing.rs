@@ -576,8 +576,9 @@ impl Component for Listing {
                 {
                     /* Account might have no mailboxes yet if it's offline */
                     /* Check if per-mailbox configuration overrides general configuration */
-                    let index_style =
-                        mailbox_acc_settings!(context[self.cursor_pos.0][mailbox_hash].index_style);
+                    let index_style = mailbox_settings!(
+                        context[self.cursor_pos.0][mailbox_hash].listing.index_style
+                    );
                     self.component.set_style(*index_style);
                 }
                 context
@@ -1200,7 +1201,7 @@ impl Listing {
             /* Check if per-mailbox configuration overrides general configuration */
 
             let index_style =
-                mailbox_acc_settings!(context[self.cursor_pos.0][mailbox_hash].index_style);
+                mailbox_settings!(context[self.cursor_pos.0][mailbox_hash].listing.index_style);
             self.component.set_style(*index_style);
         } else {
             /* Set to dummy */

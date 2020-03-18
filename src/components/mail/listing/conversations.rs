@@ -593,20 +593,28 @@ impl ConversationsListing {
         hash: ThreadHash,
     ) -> EntryStrings {
         let thread = threads.thread_ref(hash);
-        let settings = mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags);
         let mut tags = String::new();
         let mut colors = SmallVec::new();
         let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
         if let Some(t) = backend_lck.tags() {
             let tags_lck = t.read().unwrap();
             for t in e.labels().iter() {
-                if settings.ignore_tags.contains(t) {
+                if mailbox_settings!(
+                    context[self.cursor_pos.0][&self.cursor_pos.1]
+                        .tags
+                        .ignore_tags
+                )
+                .contains(t)
+                {
                     continue;
                 }
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) = settings.colors.get(t) {
+                if let Some(&c) =
+                    mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
+                        .get(t)
+                {
                     colors.push(c);
                 } else {
                     colors.push(Color::Byte(8));
@@ -698,10 +706,12 @@ impl ConversationsListing {
                 .collection
                 .get_env(root_env_hash);
             use crate::cache::QueryTrait;
-            if let Some(filter_query) =
-                mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].listing)
+            if let Some(filter_query) = mailbox_settings!(
+                context[self.cursor_pos.0][&self.cursor_pos.1]
+                    .listing
                     .filter
-                    .as_ref()
+            )
+            .as_ref()
             {
                 if !root_envelope.is_match(filter_query) {
                     continue;

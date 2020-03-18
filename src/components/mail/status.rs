@@ -290,7 +290,7 @@ impl StatusPanel {
                 None,
             );
             write_string_to_grid(
-                &a.runtime_settings.account().identity,
+                &a.settings.account().identity,
                 &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,

@@ -21,18 +21,22 @@
 
 //! E-mail tag configuration and {de,}serializing.
 
+use crate::override_def;
 use crate::terminal::Color;
 use serde::{Deserialize, Deserializer};
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::hash::Hasher;
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
-pub struct TagsSettings {
-    #[serde(default, deserialize_with = "tag_color_de")]
-    pub colors: HashMap<u64, Color>,
-    #[serde(default, deserialize_with = "tag_set_de")]
-    pub ignore_tags: HashSet<u64>,
-}
+override_def!(
+    TagsSettingsOverride,
+    #[derive(Debug, Deserialize, Clone, Serialize)]
+    pub struct TagsSettings {
+        #[serde(default, deserialize_with = "tag_color_de")]
+        colors: HashMap<u64, Color>,
+        #[serde(default, deserialize_with = "tag_set_de", alias = "ignore-tags")]
+        ignore_tags: HashSet<u64>,
+    }
+);
 
 impl Default for TagsSettings {
     fn default() -> Self {
@@ -43,7 +47,9 @@ impl Default for TagsSettings {
     }
 }
 
-pub fn tag_set_de<'de, D>(deserializer: D) -> std::result::Result<HashSet<u64>, D::Error>
+pub fn tag_set_de<'de, D, T: std::convert::From<HashSet<u64>>>(
+    deserializer: D,
+) -> std::result::Result<T, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -54,10 +60,13 @@ where
             hasher.write(tag.as_bytes());
             hasher.finish()
         })
-        .collect())
+        .collect::<HashSet<u64>>()
+        .into())
 }
 
-pub fn tag_color_de<'de, D>(deserializer: D) -> std::result::Result<HashMap<u64, Color>, D::Error>
+pub fn tag_color_de<'de, D, T: std::convert::From<HashMap<u64, Color>>>(
+    deserializer: D,
+) -> std::result::Result<T, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -81,5 +90,6 @@ where
                 },
             )
         })
-        .collect())
+        .collect::<HashMap<u64, Color>>()
+        .into())
 }

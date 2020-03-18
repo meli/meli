@@ -46,10 +46,10 @@ pub use self::shortcuts::*;
 pub use self::tags::*;
 
 use self::default_vals::*;
-use self::listing::ListingSettings;
-use self::notifications::NotificationsSettings;
+use self::listing::{ListingSettings, ListingSettingsOverride};
+use self::notifications::{NotificationsSettings, NotificationsSettingsOverride};
 use self::terminal::TerminalSettings;
-use crate::pager::PagerSettings;
+use crate::pager::{PagerSettings, PagerSettingsOverride};
 use crate::plugins::Plugin;
 use melib::conf::{AccountSettings, MailboxConf, ToggleFlag};
 use melib::error::*;
@@ -72,38 +72,87 @@ macro_rules! split_command {
 
 #[macro_export]
 macro_rules! mailbox_acc_settings {
-    ($context:ident[$account_idx:expr][$mailbox_path:expr].$field:ident) => {{
-        $context.accounts[$account_idx][$mailbox_path]
-            .conf
+    ($context:ident[$account_idx:expr].$setting:ident.$field:ident) => {{
+        $context.accounts[$account_idx]
+            .settings
             .conf_override
+            .$setting
             .$field
             .as_ref()
-            .unwrap_or(&$context.accounts[$account_idx].settings.conf.$field)
+            .unwrap_or(&$context.settings.$setting.$field)
     }};
 }
 #[macro_export]
 macro_rules! mailbox_settings {
-    ($context:ident[$account_idx:expr][$mailbox_path:expr].$field:ident) => {{
+    ($context:ident[$account_idx:expr][$mailbox_path:expr].$setting:ident.$field:ident) => {{
         $context.accounts[$account_idx][$mailbox_path]
             .conf
             .conf_override
+            .$setting
             .$field
             .as_ref()
-            .unwrap_or(&$context.settings.$field)
+            .or($context.accounts[$account_idx]
+                .settings
+                .conf_override
+                .$setting
+                .$field
+                .as_ref())
+            .unwrap_or(&$context.settings.$setting.$field)
     }};
+}
+
+#[macro_export]
+macro_rules! override_def {
+    ($override_name:ident,
+       $(#[$outer:meta])*
+      pub struct $name:ident { $( $(#[$fouter:meta])* $fname:ident : $ft:ty),*,
+      }) => {
+        $(#[$outer])*
+        pub struct $name {
+            $(
+                $(#[$fouter])*
+                pub $fname : $ft
+            ),*
+        }
+        $(#[$outer])*
+        pub struct $override_name {
+            $(
+                $(#[$fouter])*
+                pub $fname : Option<$ft>
+            ),*
+        }
+        impl Default for $override_name {
+            fn default() -> Self {
+                $override_name {
+                    $(
+                        $fname : None
+                    ),*
+                }
+            }
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MailUIConf {
-    pub pager: Option<PagerSettings>,
-    pub listing: Option<ListingSettings>,
-    pub notifications: Option<NotificationsSettings>,
-    pub shortcuts: Option<Shortcuts>,
-    pub composing: Option<ComposingSettings>,
+    #[serde(default)]
+    pub pager: PagerSettingsOverride,
+    #[serde(default)]
+    pub listing: ListingSettingsOverride,
+    #[serde(default)]
+    pub notifications: NotificationsSettingsOverride,
+    #[serde(default)]
+    pub shortcuts: ShortcutsOverride,
+    #[serde(default)]
+    pub composing: ComposingSettingsOverride,
+    #[serde(default)]
     pub identity: Option<String>,
-    pub index_style: Option<IndexStyle>,
-    pub tags: Option<TagsSettings>,
+    #[serde(default)]
+    pub tags: TagsSettingsOverride,
+    #[serde(default)]
     pub theme: Option<Theme>,
+    #[serde(default)]
+    pub pgp: PGPSettingsOverride,
 }
 
 #[serde(default)]
@@ -133,7 +182,6 @@ pub struct FileAccount {
     identity: String,
     #[serde(default = "none")]
     display_name: Option<String>,
-    pub index_style: IndexStyle,
 
     #[serde(default = "false_val")]
     read_only: bool,
@@ -147,6 +195,8 @@ pub struct FileAccount {
     pub manual_refresh: bool,
     #[serde(default = "none")]
     pub refresh_command: Option<String>,
+    #[serde(flatten)]
+    pub conf_override: MailUIConf,
     #[serde(flatten)]
     #[serde(deserialize_with = "extra_settings")]
     pub extra: HashMap<String, String>, /* use custom deserializer to convert any given value (eg bool, number, etc) to string */
@@ -180,6 +230,7 @@ impl From<FileAccount> for AccountConf {
         let mailbox_confs = x.mailboxes.clone();
         AccountConf {
             account: acc,
+            conf_override: x.conf_override.clone(),
             conf: x,
             mailbox_confs,
         }
@@ -193,10 +244,6 @@ impl FileAccount {
 
     pub fn mailbox(&self) -> &str {
         &self.root_mailbox
-    }
-
-    pub fn index_style(&self) -> IndexStyle {
-        self.index_style
     }
 
     pub fn cache_type(&self) -> &CacheType {
@@ -230,12 +277,16 @@ pub struct FileSettings {
 pub struct AccountConf {
     pub(crate) account: AccountSettings,
     pub(crate) conf: FileAccount,
+    pub conf_override: MailUIConf,
     pub(crate) mailbox_confs: HashMap<String, FileMailboxConf>,
 }
 
 impl AccountConf {
     pub fn account(&self) -> &AccountSettings {
         &self.account
+    }
+    pub fn account_mut(&mut self) -> &mut AccountSettings {
+        &mut self.account
     }
     pub fn conf(&self) -> &FileAccount {
         &self.conf
@@ -375,8 +426,8 @@ impl FileSettings {
                 extra,
                 manual_refresh,
                 refresh_command: _,
-                index_style: _,
                 cache_type: _,
+                conf_override: _,
             } = acc.clone();
 
             let lowercase_format = format.to_lowercase();
@@ -448,48 +499,48 @@ impl Default for IndexStyle {
  */
 
 mod default_vals {
-    pub(in crate::conf) fn false_val() -> bool {
-        false
+    pub(in crate::conf) fn false_val<T: std::convert::From<bool>>() -> T {
+        false.into()
     }
 
-    pub(in crate::conf) fn true_val() -> bool {
-        true
+    pub(in crate::conf) fn true_val<T: std::convert::From<bool>>() -> T {
+        true.into()
     }
 
-    pub(in crate::conf) fn zero_val() -> usize {
-        0
+    pub(in crate::conf) fn zero_val<T: std::convert::From<usize>>() -> T {
+        0.into()
     }
 
-    pub(in crate::conf) fn eighty_percent() -> usize {
-        80
+    pub(in crate::conf) fn eighty_val<T: std::convert::From<usize>>() -> T {
+        80.into()
     }
 
     pub(in crate::conf) fn none<T>() -> Option<T> {
         None
     }
 
-    pub(in crate::conf) fn internal_value_false() -> super::ToggleFlag {
-        super::ToggleFlag::InternalVal(false)
+    pub(in crate::conf) fn internal_value_false<T: std::convert::From<super::ToggleFlag>>() -> T {
+        super::ToggleFlag::InternalVal(false).into()
     }
 
-    pub(in crate::conf) fn internal_value_true() -> super::ToggleFlag {
-        super::ToggleFlag::InternalVal(true)
+    pub(in crate::conf) fn internal_value_true<T: std::convert::From<super::ToggleFlag>>() -> T {
+        super::ToggleFlag::InternalVal(true).into()
     }
 }
 
 mod deserializers {
     use serde::{Deserialize, Deserializer};
-    pub(in crate::conf) fn non_empty_string<'de, D>(
+    pub(in crate::conf) fn non_empty_string<'de, D, T: std::convert::From<Option<String>>>(
         deserializer: D,
-    ) -> std::result::Result<Option<String>, D::Error>
+    ) -> std::result::Result<T, D::Error>
     where
         D: Deserializer<'de>,
     {
         let s = <String>::deserialize(deserializer)?;
         if s.is_empty() {
-            Ok(None)
+            Ok(None.into())
         } else {
-            Ok(Some(s))
+            Ok(Some(s).into())
         }
     }
 

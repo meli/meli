@@ -21,29 +21,34 @@
 
 //! Configuration for composing email.
 use super::default_vals::{false_val, none, true_val};
+use crate::override_def;
 use std::collections::HashMap;
 
-/// Settings for writing and sending new e-mail
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ComposingSettings {
-    /// A command to pipe new emails to
-    /// Required
-    pub mailer_cmd: String,
-    /// Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
-    #[serde(default = "none")]
-    pub editor_cmd: Option<String>,
-    /// Embed editor (for terminal interfaces) instead of forking and waiting.
-    #[serde(default = "false_val")]
-    pub embed: bool,
-    /// Set "format=flowed" in plain text attachments.
-    /// Default: true
-    #[serde(default = "true_val")]
-    pub format_flowed: bool,
-    /// Set default header values for new drafts
-    /// Default: empty
-    #[serde(default)]
-    pub default_header_values: HashMap<String, String>,
-}
+override_def!(
+    ComposingSettingsOverride,
+    /// Settings for writing and sending new e-mail
+    #[derive(Debug, Serialize, Deserialize, Clone)]
+    pub struct ComposingSettings {
+        /// A command to pipe new emails to
+        /// Required
+        #[serde(alias = "mailer-cmd")]
+        mailer_cmd: String,
+        /// Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
+        #[serde(default = "none", alias = "editor-cmd")]
+        editor_cmd: Option<String>,
+        /// Embed editor (for terminal interfaces) instead of forking and waiting.
+        #[serde(default = "false_val")]
+        embed: bool,
+        /// Set "format=flowed" in plain text attachments.
+        /// Default: true
+        #[serde(default = "true_val", alias = "format-flowed")]
+        format_flowed: bool,
+        /// Set default header values for new drafts
+        /// Default: empty
+        #[serde(default, alias = "default-header-values")]
+        default_header_values: HashMap<String, String>,
+    }
+);
 
 impl Default for ComposingSettings {
     fn default() -> Self {

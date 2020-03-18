@@ -122,7 +122,6 @@ pub struct Account {
     pub(crate) address_book: AddressBook,
     pub(crate) work_context: WorkContext,
     pub(crate) settings: AccountConf,
-    pub(crate) runtime_settings: AccountConf,
     pub(crate) backend: Arc<RwLock<Box<dyn MailBackend>>>,
 
     sender: Sender<ThreadEvent>,
@@ -242,7 +241,6 @@ impl Account {
             sent_mailbox: Default::default(),
             collection: Default::default(),
             work_context,
-            runtime_settings: settings.clone(),
             settings,
             backend: Arc::new(RwLock::new(backend)),
             notify_fn,

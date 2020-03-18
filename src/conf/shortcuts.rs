@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use crate::override_def;
 use crate::terminal::Key;
 use fnv::FnvHashMap;
 
@@ -32,24 +33,42 @@ macro_rules! shortcut {
     };
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Shortcuts {
-    #[serde(default)]
-    pub general: GeneralShortcuts,
-    #[serde(default)]
-    pub listing: ListingShortcuts,
-    #[serde(default)]
-    pub composing: ComposingShortcuts,
-    #[serde(default, alias = "compact-listing")]
-    pub compact_listing: CompactListingShortcuts,
-    #[serde(default, alias = "contact-list")]
-    pub contact_list: ContactListShortcuts,
-    #[serde(default, alias = "envelope-view")]
-    pub envelope_view: EnvelopeViewShortcuts,
-    #[serde(default, alias = "thread-view")]
-    pub thread_view: ThreadViewShortcuts,
-    #[serde(default)]
-    pub pager: PagerShortcuts,
+override_def!(
+    ShortcutsOverride,
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Shortcuts {
+        #[serde(default)]
+        general: GeneralShortcuts,
+        #[serde(default)]
+        listing: ListingShortcuts,
+        #[serde(default)]
+        composing: ComposingShortcuts,
+        #[serde(default, alias = "compact-listing")]
+        compact_listing: CompactListingShortcuts,
+        #[serde(default, alias = "contact-list")]
+        contact_list: ContactListShortcuts,
+        #[serde(default, alias = "envelope-view")]
+        envelope_view: EnvelopeViewShortcuts,
+        #[serde(default, alias = "thread-view")]
+        thread_view: ThreadViewShortcuts,
+        #[serde(default)]
+        pager: PagerShortcuts,
+    }
+);
+
+impl Default for Shortcuts {
+    fn default() -> Self {
+        Self {
+            general: GeneralShortcuts::default(),
+            listing: ListingShortcuts::default(),
+            composing: ComposingShortcuts::default(),
+            compact_listing: CompactListingShortcuts::default(),
+            contact_list: ContactListShortcuts::default(),
+            envelope_view: EnvelopeViewShortcuts::default(),
+            thread_view: ThreadViewShortcuts::default(),
+            pager: PagerShortcuts::default(),
+        }
+    }
 }
 
 /// Create a struct holding all of a Component's shortcuts.

@@ -147,7 +147,9 @@ impl Composer {
             id: ComponentId::new_v4(),
             ..Default::default()
         };
-        for (h, v) in context.settings.composing.default_header_values.iter() {
+        for (h, v) in
+            mailbox_acc_settings!(context[account_cursor].composing.default_header_values).iter()
+        {
             if v.is_empty() {
                 continue;
             }
@@ -298,12 +300,9 @@ impl Composer {
             write_string_to_grid(
                 &format!(
                     "☑ sign with {}",
-                    context
-                        .settings
-                        .pgp
-                        .key
+                    mailbox_acc_settings!(context[self.account_cursor].pgp.key)
                         .as_ref()
-                        .map(String::as_str)
+                        .map(|s| s.as_str())
                         .unwrap_or("default key")
                 ),
                 grid,
@@ -392,7 +391,9 @@ impl Component for Composer {
 
         if !self.initialized {
             if self.sign_mail.is_unset() {
-                self.sign_mail = ToggleFlag::InternalVal(context.settings.pgp.auto_sign);
+                self.sign_mail = ToggleFlag::InternalVal(*mailbox_acc_settings!(
+                    context[self.account_cursor].pgp.auto_sign
+                ));
             }
             if !self.draft.headers().contains_key("From") || self.draft.headers()["From"].is_empty()
             {
@@ -859,8 +860,10 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
             {
                 /* Edit draft in $EDITOR */
-                let settings = &context.settings;
-                let editor = if let Some(editor_cmd) = settings.composing.editor_cmd.as_ref() {
+                let editor = if let Some(editor_cmd) =
+                    mailbox_acc_settings!(context[self.account_cursor].composing.editor_cmd)
+                        .as_ref()
+                {
                     editor_cmd.to_string()
                 } else {
                     match std::env::var("EDITOR") {
@@ -884,7 +887,7 @@ impl Component for Composer {
                     true,
                 );
 
-                if settings.composing.embed {
+                if *mailbox_acc_settings!(context[self.account_cursor].composing.embed) {
                     self.embed = Some(EmbedStatus::Running(
                         crate::terminal::embed::create_pty(
                             width!(self.embed_area),
@@ -1124,7 +1127,8 @@ impl Component for Composer {
             Default::default()
         };
 
-        let our_map: ShortcutMap = context.settings.shortcuts.composing.key_values();
+        let our_map: ShortcutMap =
+            mailbox_acc_settings!(context[self.account_cursor].shortcuts.composing).key_values();
         map.insert(Composer::DESCRIPTION, our_map);
 
         map
@@ -1178,9 +1182,10 @@ pub fn send_draft(
 ) -> bool {
     use std::io::Write;
     use std::process::{Command, Stdio};
-    let settings = &context.settings;
-    let format_flowed = settings.composing.format_flowed;
-    let parts = split_command!(settings.composing.mailer_cmd);
+    let format_flowed = *mailbox_acc_settings!(context[account_cursor].composing.format_flowed);
+    let parts = split_command!(mailbox_acc_settings!(
+        context[account_cursor].composing.mailer_cmd
+    ));
     if parts.is_empty() {
         context.replies.push_back(UIEvent::Notification(
             None,
@@ -1233,8 +1238,12 @@ pub fn send_draft(
             }
             let output = crate::components::mail::pgp::sign(
                 body.into(),
-                context.settings.pgp.gpg_binary.as_ref().map(String::as_str),
-                context.settings.pgp.key.as_ref().map(String::as_str),
+                mailbox_acc_settings!(context[account_cursor].pgp.gpg_binary)
+                    .as_ref()
+                    .map(|s| s.as_str()),
+                mailbox_acc_settings!(context[account_cursor].pgp.key)
+                    .as_ref()
+                    .map(|s| s.as_str()),
             );
             if let Err(e) = &output {
                 debug!("{:?} could not sign draft msg", e);
