@@ -239,6 +239,59 @@ where
     return 0;
 }
 
+pub fn rfc3339_to_timestamp<T>(s: T) -> UnixTimestamp
+where
+    T: Into<Vec<u8>>,
+{
+    let s = CString::new(s).unwrap();
+    let mut new_tm: ::libc::tm = unsafe { std::mem::zeroed() };
+    for fmt in &[&b"%Y-%m-%dT%H:%M:%S\0"[..], &b"%Y-%m-%d\0"[..]] {
+        unsafe {
+            let fmt = CStr::from_bytes_with_nul_unchecked(fmt);
+            let ret = strptime(s.as_ptr(), fmt.as_ptr(), &mut new_tm as *mut _);
+            if ret.is_null() {
+                continue;
+            }
+            let rest = CStr::from_ptr(ret);
+            let tm_gmtoff = if rest.to_bytes().len() > 4
+                && rest.to_bytes().is_ascii()
+                && rest.to_bytes()[1..3].iter().all(u8::is_ascii_digit)
+                && rest.to_bytes()[4..6].iter().all(u8::is_ascii_digit)
+            {
+                let offset = std::str::from_utf8_unchecked(&rest.to_bytes()[0..6]);
+                if let (Ok(mut hr_offset), Ok(mut min_offset)) =
+                    (offset[1..3].parse::<i64>(), offset[4..6].parse::<i64>())
+                {
+                    if rest.to_bytes()[0] == b'-' {
+                        hr_offset = -hr_offset;
+                        min_offset = -min_offset;
+                    }
+                    hr_offset * 60 * 60 + min_offset * 60
+                } else {
+                    0
+                }
+            } else {
+                let rest = if rest.to_bytes().starts_with(b"(") && rest.to_bytes().ends_with(b")") {
+                    &rest.to_bytes()[1..rest.to_bytes().len() - 1]
+                } else {
+                    rest.to_bytes()
+                };
+
+                if let Ok(idx) = TIMEZONE_ABBR.binary_search_by(|probe| probe.0.cmp(rest)) {
+                    let (hr_offset, min_offset) = debug!(TIMEZONE_ABBR[idx]).1;
+                    (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
+                } else {
+                    0
+                }
+            };
+            return tm_to_secs(new_tm)
+                .map(|res| (res - tm_gmtoff) as u64)
+                .unwrap_or(0);
+        }
+    }
+    return 0;
+}
+
 // FIXME: Handle non-local timezone?
 pub fn timestamp_from_string<T>(s: T, fmt: &str) -> Option<UnixTimestamp>
 where

@@ -231,11 +231,13 @@ impl std::fmt::Display for EmailAddress {
 impl std::convert::From<EmailObject> for crate::Envelope {
     fn from(mut t: EmailObject) -> crate::Envelope {
         let mut env = crate::Envelope::new(0);
-        if let Some(ref mut sent_at) = t.sent_at {
-            env.set_date(std::mem::replace(sent_at, String::new()).as_bytes());
-        }
         if let Ok(d) = crate::email::parser::date(env.date_as_str().as_bytes()) {
             env.set_datetime(d);
+        }
+        if let Some(ref mut sent_at) = t.sent_at {
+            let unix = crate::datetime::rfc3339_to_timestamp(sent_at.as_bytes().to_vec());
+            env.set_datetime(unix);
+            env.set_date(std::mem::replace(sent_at, String::new()).as_bytes());
         }
 
         if let Some(v) = t.message_id.get(0) {
