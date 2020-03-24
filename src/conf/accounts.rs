@@ -1048,8 +1048,48 @@ impl Account {
 
                 Ok(format!("'`{}` has been deleted.", &path))
             }
-            MailboxOperation::Subscribe(_) => Err(MeliError::new("Not implemented.")),
-            MailboxOperation::Unsubscribe(_) => Err(MeliError::new("Not implemented.")),
+            MailboxOperation::Subscribe(path) => {
+                let mailbox_hash = if let Some((mailbox_hash, _)) = self
+                    .mailbox_entries
+                    .iter()
+                    .find(|(_, f)| f.ref_mailbox.path() == path)
+                {
+                    *mailbox_hash
+                } else {
+                    return Err(MeliError::new("Mailbox with that path not found."));
+                };
+                self.backend
+                    .write()
+                    .unwrap()
+                    .set_mailbox_subscription(mailbox_hash, true)?;
+                self.mailbox_entries.entry(mailbox_hash).and_modify(|m| {
+                    m.conf.mailbox_conf.subscribe = super::ToggleFlag::True;
+                    let _ = m.ref_mailbox.set_is_subscribed(true);
+                });
+
+                Ok(format!("'`{}` has been subscribed.", &path))
+            }
+            MailboxOperation::Unsubscribe(path) => {
+                let mailbox_hash = if let Some((mailbox_hash, _)) = self
+                    .mailbox_entries
+                    .iter()
+                    .find(|(_, f)| f.ref_mailbox.path() == path)
+                {
+                    *mailbox_hash
+                } else {
+                    return Err(MeliError::new("Mailbox with that path not found."));
+                };
+                self.backend
+                    .write()
+                    .unwrap()
+                    .set_mailbox_subscription(mailbox_hash, false)?;
+                self.mailbox_entries.entry(mailbox_hash).and_modify(|m| {
+                    m.conf.mailbox_conf.subscribe = super::ToggleFlag::False;
+                    let _ = m.ref_mailbox.set_is_subscribed(false);
+                });
+
+                Ok(format!("'`{}` has been unsubscribed.", &path))
+            }
             MailboxOperation::Rename(_, _) => Err(MeliError::new("Not implemented.")),
             MailboxOperation::SetPermissions(_) => Err(MeliError::new("Not implemented.")),
         }
