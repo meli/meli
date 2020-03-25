@@ -75,6 +75,8 @@ impl BackendOp for ImapOp {
             if cache.bytes.is_some() {
                 self.bytes = cache.bytes.clone();
             } else {
+                drop(cache);
+                drop(bytes_cache);
                 let mut response = String::with_capacity(8 * 1024);
                 {
                     let mut conn = self.connection.lock().unwrap();
@@ -93,6 +95,8 @@ impl BackendOp for ImapOp {
                 } = protocol_parser::uid_fetch_response(&response)?.1;
                 assert_eq!(uid, self.uid);
                 assert!(body.is_some());
+                let mut bytes_cache = self.uid_store.byte_cache.lock()?;
+                let cache = bytes_cache.entry(self.uid).or_default();
                 if let Some((flags, _)) = flags {
                     self.flags.set(Some(flags));
                     cache.flags = Some(flags);
