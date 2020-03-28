@@ -437,6 +437,13 @@ impl Component for MailView {
                     format!("Date: {}", envelope.date_as_str())
                     format!("From: {}", envelope.field_from_to_string())
                     format!("To: {}", envelope.field_to_to_string())
+                );
+                if envelope.other_headers().contains_key("Cc")
+                    && !envelope.other_headers()["Cc"].is_empty()
+                {
+                    print_header!(format!("Cc: {}", envelope.field_cc_to_string()));
+                }
+                print_header!(
                     format!("Subject: {}", envelope.subject())
                     format!("Message-ID: <{}>", envelope.message_id_raw())
                 );
