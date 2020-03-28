@@ -72,11 +72,10 @@ impl JmapConnection {
         let res_text = req.text()?;
 
         let session: JmapSession = serde_json::from_str(&res_text).map_err(|_| {
-            let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)", &server_conf.server_hostname));
+            let err = MeliError::new(format!("Could not connect to JMAP server endpoint for {}. Is your server hostname setting correct? (i.e. \"jmap.mailserver.org\") (Note: only session resource discovery via /.well-known/jmap is supported. DNS SRV records are not suppported.)\nReply from server: {}", &server_conf.server_hostname, &res_text));
                 *online_status.lock().unwrap() = (Instant::now(), Err(err.clone()));
                 err
-        }
-                )?;
+        })?;
         if !session
             .capabilities
             .contains_key("urn:ietf:params:jmap:core")

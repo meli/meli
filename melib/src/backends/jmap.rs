@@ -236,7 +236,7 @@ impl MailBackend for JmapType {
         _sender: RefreshEventConsumer,
         _work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
-        Err(MeliError::from("sadfsa"))
+        Err(MeliError::from("JMAP watch for updates is unimplemented"))
     }
 
     fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
