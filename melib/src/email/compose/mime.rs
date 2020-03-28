@@ -48,7 +48,9 @@ pub fn encode_header(value: &str) -> String {
                                 .encode(value[current_window_start..idx].as_bytes())
                                 .trim()
                         ));
-                        if idx != value.len() - 1 {
+                        if idx != value.len() - 1
+                            && (idx == 0 || value[..idx].chars().last() != Some(' '))
+                        {
                             ret.push(' ');
                         }
                         is_current_window_ascii = true;
@@ -150,4 +152,44 @@ pub fn encode_header(value: &str) -> String {
         ));
     }
     ret
+}
+#[test]
+fn test_encode_header() {
+    let words = "compilers/2020a σε Rust";
+    assert_eq!(
+        "compilers/2020a =?UTF-8?B?z4POtSA=?=Rust",
+        &encode_header(&words),
+    );
+    assert_eq!(
+        &std::str::from_utf8(
+            &crate::email::parser::phrase(encode_header(&words).as_bytes(), false)
+                .to_full_result()
+                .unwrap()
+        )
+        .unwrap(),
+        &words,
+    );
+    let words = "[internal] =?UTF-8?B?zp3Orc6/z4Igzp/OtM63zrPPjM+CIM6jz4U=?= =?UTF-8?B?zrPOs8+BzrHPhs6uz4I=?=";
+    let words_enc = r#"[internal] Νέος Οδηγός Συγγραφής"#;
+    assert_eq!(words, &encode_header(&words_enc),);
+    assert_eq!(
+        r#"[internal] Νέος Οδηγός Συγγραφής"#,
+        std::str::from_utf8(
+            &crate::email::parser::phrase(encode_header(&words_enc).as_bytes(), false)
+                .to_full_result()
+                .unwrap()
+        )
+        .unwrap(),
+    );
+    let words = "[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
+    let words_enc = "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store";
+    assert_eq!(
+        "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
+        std::str::from_utf8(
+            &crate::email::parser::phrase(encode_header(&words_enc).as_bytes(), false)
+                .to_full_result()
+                .unwrap()
+        )
+        .unwrap(),
+    );
 }
