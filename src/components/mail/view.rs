@@ -1210,7 +1210,7 @@ impl Component for MailView {
                 if shortcut!(key == shortcuts[MailView::DESCRIPTION]["toggle_expand_headers"]) =>
             {
                 self.expand_headers = !self.expand_headers;
-                self.dirty = true;
+                self.set_dirty(true);
                 return true;
             }
             UIEvent::Input(ref key)

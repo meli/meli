@@ -62,7 +62,6 @@ pub struct ThreadView {
     movement: Option<PageMovement>,
     dirty: bool,
     content: CellBuffer,
-    initiated: bool,
     id: ComponentId,
 }
 
@@ -82,7 +81,6 @@ impl ThreadView {
     ) -> Self {
         let mut view = ThreadView {
             reversed: false,
-            initiated: false,
             coordinates,
             thread_group,
             mailview: MailView::default(),
@@ -799,57 +797,53 @@ impl ThreadView {
             return;
         }
 
-        /* if this is the first ever draw, there is nothing on the grid to update so populate it
-         * first */
-        if !self.initiated {
-            clear_area(
-                grid,
-                (set_y(upper_left, y), bottom_right),
-                crate::conf::value(context, "theme_default"),
-            );
-            let (width, height) = self.content.size();
+        clear_area(
+            grid,
+            (set_y(upper_left, y), set_y(bottom_right, mid + 1)),
+            crate::conf::value(context, "theme_default"),
+        );
+        let (width, height) = self.content.size();
 
-            match (self.show_mailview, self.show_thread) {
-                (true, true) => {
-                    let area = (set_y(upper_left, y), set_y(bottom_right, mid));
-                    let upper_left = upper_left!(area);
-                    let bottom_right = bottom_right!(area);
+        match (self.show_mailview, self.show_thread) {
+            (true, true) => {
+                let area = (set_y(upper_left, y), set_y(bottom_right, mid));
+                let upper_left = upper_left!(area);
+                let bottom_right = bottom_right!(area);
 
-                    let rows = (get_y(bottom_right).saturating_sub(get_y(upper_left) + 1)) / 2;
-                    if rows == 0 {
-                        return;
-                    }
-                    let page_no = (self.new_cursor_pos).wrapping_div(rows);
-                    let top_idx = page_no * rows;
-
-                    copy_area(
-                        grid,
-                        &self.content,
-                        area,
-                        ((0, 2 * top_idx), (width - 1, height - 1)),
-                    );
+                let rows = (get_y(bottom_right).saturating_sub(get_y(upper_left) + 1)) / 2;
+                if rows == 0 {
+                    return;
                 }
-                (false, true) => {
-                    let area = (set_y(upper_left, y), bottom_right);
-                    let upper_left = upper_left!(area);
+                let page_no = (self.new_cursor_pos).wrapping_div(rows);
+                let top_idx = page_no * rows;
 
-                    let rows = (get_y(bottom_right).saturating_sub(get_y(upper_left) + 1)) / 2;
-                    if rows == 0 {
-                        return;
-                    }
-                    let page_no = (self.new_cursor_pos).wrapping_div(rows);
-                    let top_idx = page_no * rows;
-                    copy_area(
-                        grid,
-                        &self.content,
-                        area,
-                        ((0, 2 * top_idx), (width - 1, height - 1)),
-                    );
-                }
-                (_, false) => { /* show only envelope */ }
+                copy_area(
+                    grid,
+                    &self.content,
+                    area,
+                    ((0, 2 * top_idx), (width - 1, height - 1)),
+                );
+                context.dirty_areas.push_back(area);
             }
-            context.dirty_areas.push_back(area);
-            self.initiated = true;
+            (false, true) => {
+                let area = (set_y(upper_left, y), bottom_right);
+                let upper_left = upper_left!(area);
+
+                let rows = (get_y(bottom_right).saturating_sub(get_y(upper_left) + 1)) / 2;
+                if rows == 0 {
+                    return;
+                }
+                let page_no = (self.new_cursor_pos).wrapping_div(rows);
+                let top_idx = page_no * rows;
+                copy_area(
+                    grid,
+                    &self.content,
+                    area,
+                    ((0, 2 * top_idx), (width - 1, height - 1)),
+                );
+                context.dirty_areas.push_back(area);
+            }
+            (_, false) => { /* show only envelope */ }
         }
 
         match (self.show_mailview, self.show_thread) {
@@ -988,10 +982,7 @@ impl Component for ThreadView {
                 /* Handle this before self.mailview does */
                 context
                     .replies
-                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(Self {
-                        initiated: false,
-                        ..self.clone()
-                    }))))));
+                    .push_back(UIEvent::Action(Tab(New(Some(Box::new(self.clone()))))));
                 return true;
             }
             _ => {}
@@ -1048,7 +1039,6 @@ impl Component for ThreadView {
                 }
                 self.new_expanded_pos = self.current_pos();
                 self.show_mailview = true;
-                //self.initiated = false;
                 self.set_dirty(true);
                 return true;
             }
@@ -1056,7 +1046,6 @@ impl Component for ThreadView {
                 if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["toggle_mailview"]) =>
             {
                 self.show_mailview = !self.show_mailview;
-                self.initiated = false;
                 self.set_dirty(true);
                 return true;
             }
@@ -1064,7 +1053,6 @@ impl Component for ThreadView {
                 if shortcut!(key == shortcuts[ThreadView::DESCRIPTION]["toggle_threadview"]) =>
             {
                 self.show_thread = !self.show_thread;
-                self.initiated = false;
                 self.set_dirty(true);
                 return true;
             }
@@ -1074,7 +1062,6 @@ impl Component for ThreadView {
                 self.reversed = !self.reversed;
                 let expanded_hash = self.entries[self.expanded_pos].index.1;
                 self.initiate(Some(expanded_hash), context);
-                self.initiated = false;
                 self.dirty = true;
                 return true;
             }
