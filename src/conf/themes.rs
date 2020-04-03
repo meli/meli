@@ -195,6 +195,7 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "mail.view.body",
     "mail.listing.attachment_flag",
     "mail.listing.thread_snooze_flag",
+    "mail.listing.tag_default",
     "pager.highlight_search",
     "pager.highlight_search_current",
 ];
@@ -716,6 +717,20 @@ impl Default for Theme {
             },
             dark = {
                 fg: Color::Red,
+            }
+        );
+
+        add!(
+            "mail.listing.tag_default",
+            light = {
+                fg: Color::White,
+                bg: Color::Byte(8),
+                attrs: Attr::Bold
+            },
+            dark = {
+                fg: Color::White,
+                bg: Color::Byte(8),
+                attrs: Attr::Bold
             }
         );
 

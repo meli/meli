@@ -122,6 +122,7 @@ impl MailListingTrait for CompactListing {
             selected: crate::conf::value(context, "mail.listing.compact.selected"),
             attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
+            tag_default: crate::conf::value(context, "mail.listing.tag_default"),
             theme_default: crate::conf::value(context, "theme_default"),
             ..self.color_cache
         };
@@ -668,14 +669,11 @@ impl CompactListing {
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) =
+                colors.push(
                     mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
                         .get(t)
-                {
-                    colors.push(c);
-                } else {
-                    colors.push(Color::Byte(8));
-                }
+                        .map(|&c| c),
+                );
             }
             if !tags.is_empty() {
                 tags.pop();
@@ -927,12 +925,13 @@ impl CompactListing {
             let x = {
                 let mut x = x + 1;
                 for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
                     let (_x, _) = write_string_to_grid(
                         t,
                         &mut self.data_columns.columns[4],
-                        Color::White,
+                        self.color_cache.tag_default.fg,
                         color,
-                        Attr::Bold,
+                        self.color_cache.tag_default.attrs,
                         ((x + 1, idx), (min_width.4, idx)),
                         None,
                     );
@@ -1096,12 +1095,13 @@ impl CompactListing {
             let x = {
                 let mut x = x + 1;
                 for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
                     let (_x, _) = write_string_to_grid(
                         t,
                         &mut columns[4],
-                        Color::White,
+                        self.color_cache.tag_default.fg,
                         color,
-                        Attr::Bold,
+                        self.color_cache.tag_default.attrs,
                         ((x + 1, idx), (min_width.4, idx)),
                         None,
                     );

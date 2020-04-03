@@ -109,6 +109,7 @@ impl MailListingTrait for ConversationsListing {
             highlighted: crate::conf::value(context, "mail.listing.conversations.highlighted"),
             attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
+            tag_default: crate::conf::value(context, "mail.listing.tag_default"),
             ..self.color_cache
         };
 
@@ -611,14 +612,11 @@ impl ConversationsListing {
                 tags.push(' ');
                 tags.push_str(tags_lck.get(t).as_ref().unwrap());
                 tags.push(' ');
-                if let Some(&c) =
+                colors.push(
                     mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
                         .get(t)
-                {
-                    colors.push(c);
-                } else {
-                    colors.push(Color::Byte(8));
-                }
+                        .map(|&c| c),
+                );
             }
             if !tags.is_empty() {
                 tags.pop();
@@ -785,12 +783,13 @@ impl ConversationsListing {
                 None,
             );
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                let color = color.unwrap_or(self.color_cache.tag_default.bg);
                 let (_x, _) = write_string_to_grid(
                     t,
                     &mut self.content,
-                    Color::White,
+                    self.color_cache.tag_default.fg,
                     color,
-                    Attr::Bold,
+                    self.color_cache.tag_default.attrs,
                     ((x + 1, 3 * idx), (width - 1, 3 * idx)),
                     None,
                 );
@@ -992,12 +991,13 @@ impl ConversationsListing {
         let x = {
             let mut x = x + 1;
             for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                let color = color.unwrap_or(self.color_cache.tag_default.bg);
                 let (_x, _) = write_string_to_grid(
                     t,
                     &mut self.content,
-                    Color::White,
+                    self.color_cache.tag_default.fg,
                     color,
-                    Attr::Bold,
+                    self.color_cache.tag_default.attrs,
                     ((x + 1, 3 * idx), (width - 1, 3 * idx)),
                     None,
                 );

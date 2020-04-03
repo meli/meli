@@ -58,6 +58,7 @@ struct ColorCache {
     selected: ThemeAttribute,
     attachment_flag: ThemeAttribute,
     thread_snooze_flag: ThemeAttribute,
+    tag_default: ThemeAttribute,
 
     /* Conversations */
     subject: ThemeAttribute,
@@ -118,7 +119,7 @@ column_str!(struct DateString(String));
 column_str!(struct FromString(String));
 column_str!(struct SubjectString(String));
 column_str!(struct FlagString(String));
-column_str!(struct TagString(String, SmallVec<[Color; 8]>));
+column_str!(struct TagString(String, SmallVec<[Option<Color>; 8]>));
 
 #[derive(Debug)]
 struct AccountMenuEntry {
