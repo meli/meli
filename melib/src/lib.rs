@@ -137,6 +137,7 @@ extern crate encoding;
 extern crate bitflags;
 extern crate fnv;
 extern crate uuid;
+pub use smallvec;
 
 pub use crate::backends::{Backends, RefreshEvent, RefreshEventConsumer, SpecialUsageMailbox};
 pub use crate::collection::*;

@@ -21,14 +21,7 @@
 
 use crate::parsec::*;
 use crate::UnixTimestamp;
-use crate::{
-    backends::{MailBackend, MailboxHash},
-    email::EnvelopeHash,
-    thread::{SortField, SortOrder},
-    Result,
-};
 use std::borrow::Cow;
-use std::sync::{Arc, RwLock};
 
 pub use query_parser::query;
 use Query::*;
@@ -229,9 +222,9 @@ pub mod query_parser {
     ///
     /// # Invocation
     /// ```
-    /// use ui::cache::query;
-    /// use ui::cache::Query;
-    /// use crate::parsec::Parser;
+    /// use melib::search::query;
+    /// use melib::search::Query;
+    /// use melib::parsec::Parser;
     ///
     /// let input = "test";
     /// let query = query().parse(input);
@@ -368,114 +361,6 @@ pub mod query_parser {
             query().parse_complete("flags:test,testtest"),
             query().parse_complete("tags:test,testtest")
         );
-    }
-}
-
-pub fn query_to_imap(q: &Query) -> String {
-    fn rec(q: &Query, s: &mut String) {
-        match q {
-            Subject(t) => {
-                s.push_str(" SUBJECT \"");
-                s.extend(escape_double_quote(t).chars());
-                s.push_str("\"");
-            }
-            From(t) => {
-                s.push_str(" FROM \"");
-                s.extend(escape_double_quote(t).chars());
-                s.push_str("\"");
-            }
-            To(t) => {
-                s.push_str(" TO \"");
-                s.extend(escape_double_quote(t).chars());
-                s.push_str("\"");
-            }
-            Cc(t) => {
-                s.push_str(" CC \"");
-                s.extend(escape_double_quote(t).chars());
-                s.push_str("\"");
-            }
-            Bcc(t) => {
-                s.push_str(" BCC \"");
-                s.extend(escape_double_quote(t).chars());
-                s.push_str("\"");
-            }
-            AllText(t) => {
-                s.push_str(" TEXT \"");
-                s.extend(escape_double_quote(t).chars());
-                s.push_str("\"");
-            }
-            Flags(v) => {
-                for f in v {
-                    match f.as_str() {
-                        "draft" => {
-                            s.push_str(" DRAFT ");
-                        }
-                        "deleted" => {
-                            s.push_str(" DELETED ");
-                        }
-                        "flagged" => {
-                            s.push_str(" FLAGGED ");
-                        }
-                        "recent" => {
-                            s.push_str(" RECENT ");
-                        }
-                        "seen" | "read" => {
-                            s.push_str(" SEEN ");
-                        }
-                        "unseen" | "unread" => {
-                            s.push_str(" UNSEEN ");
-                        }
-                        "answered" => {
-                            s.push_str(" ANSWERED ");
-                        }
-                        "unanswered" => {
-                            s.push_str(" UNANSWERED ");
-                        }
-                        keyword => {
-                            s.push_str(" KEYWORD ");
-                            s.extend(keyword.chars());
-                            s.push_str(" ");
-                        }
-                    }
-                }
-            }
-            And(q1, q2) => {
-                rec(q1, s);
-                s.push_str(" ");
-                rec(q2, s);
-            }
-            Or(q1, q2) => {
-                s.push_str(" OR ");
-                rec(q1, s);
-                s.push_str(" ");
-                rec(q2, s);
-            }
-            Not(q) => {
-                s.push_str(" NOT ");
-                rec(q, s);
-            }
-            _ => {}
-        }
-    }
-    let mut ret = String::new();
-    rec(q, &mut ret);
-    ret
-}
-
-pub fn imap_search(
-    term: &str,
-    (_sort_field, _sort_order): (SortField, SortOrder),
-    mailbox_hash: MailboxHash,
-    backend: &Arc<RwLock<Box<dyn MailBackend>>>,
-) -> Result<smallvec::SmallVec<[EnvelopeHash; 512]>> {
-    let query = query().parse(term)?.1;
-    let backend_lck = backend.read().unwrap();
-
-    let b = (*backend_lck).as_any();
-    if let Some(imap_backend) = b.downcast_ref::<crate::backends::ImapType>() {
-        imap_backend.search(query_to_imap(&query), mailbox_hash)
-    } else {
-        panic!("Could not downcast ImapType backend. BUG");
     }
 }
 

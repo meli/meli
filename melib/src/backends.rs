@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use smallvec::SmallVec;
 #[macro_export]
 macro_rules! tag_hash {
     ($tag:ident) => {{
@@ -326,6 +327,14 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         _mailbox_hash: MailboxHash,
         _val: MailboxPermissions,
     ) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn search(
+        &self,
+        _query: crate::search::Query,
+        _mailbox_hash: Option<MailboxHash>,
+    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
         Err(MeliError::new("Unimplemented."))
     }
 }

@@ -704,6 +704,136 @@ impl MailBackend for ImapType {
 
         Err(MeliError::new("Unimplemented."))
     }
+
+    fn search(
+        &self,
+        query: crate::search::Query,
+        mailbox_hash: Option<MailboxHash>,
+    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
+        if mailbox_hash.is_none() {
+            return Err(MeliError::new(
+                "Cannot search without specifying mailbox on IMAP",
+            ));
+        }
+        let mailbox_hash = mailbox_hash.unwrap();
+        fn rec(q: &crate::search::Query, s: &mut String) {
+            use crate::search::{escape_double_quote, Query::*};
+            match q {
+                Subject(t) => {
+                    s.push_str(" SUBJECT \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str("\"");
+                }
+                From(t) => {
+                    s.push_str(" FROM \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str("\"");
+                }
+                To(t) => {
+                    s.push_str(" TO \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str("\"");
+                }
+                Cc(t) => {
+                    s.push_str(" CC \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str("\"");
+                }
+                Bcc(t) => {
+                    s.push_str(" BCC \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str("\"");
+                }
+                AllText(t) => {
+                    s.push_str(" TEXT \"");
+                    s.extend(escape_double_quote(t).chars());
+                    s.push_str("\"");
+                }
+                Flags(v) => {
+                    for f in v {
+                        match f.as_str() {
+                            "draft" => {
+                                s.push_str(" DRAFT ");
+                            }
+                            "deleted" => {
+                                s.push_str(" DELETED ");
+                            }
+                            "flagged" => {
+                                s.push_str(" FLAGGED ");
+                            }
+                            "recent" => {
+                                s.push_str(" RECENT ");
+                            }
+                            "seen" | "read" => {
+                                s.push_str(" SEEN ");
+                            }
+                            "unseen" | "unread" => {
+                                s.push_str(" UNSEEN ");
+                            }
+                            "answered" => {
+                                s.push_str(" ANSWERED ");
+                            }
+                            "unanswered" => {
+                                s.push_str(" UNANSWERED ");
+                            }
+                            keyword => {
+                                s.push_str(" KEYWORD ");
+                                s.extend(keyword.chars());
+                                s.push_str(" ");
+                            }
+                        }
+                    }
+                }
+                And(q1, q2) => {
+                    rec(q1, s);
+                    s.push_str(" ");
+                    rec(q2, s);
+                }
+                Or(q1, q2) => {
+                    s.push_str(" OR ");
+                    rec(q1, s);
+                    s.push_str(" ");
+                    rec(q2, s);
+                }
+                Not(q) => {
+                    s.push_str(" NOT ");
+                    rec(q, s);
+                }
+                _ => {}
+            }
+        }
+        let mut query_str = String::new();
+        rec(&query, &mut query_str);
+
+        let mailboxes_lck = self.mailboxes.read()?;
+        let mut response = String::with_capacity(8 * 1024);
+        let mut conn = try_lock(&self.connection)?;
+        conn.send_command(
+            format!("EXAMINE \"{}\"", mailboxes_lck[&mailbox_hash].imap_path()).as_bytes(),
+        )?;
+        conn.read_response(&mut response)?;
+        conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str).as_bytes())?;
+        conn.read_response(&mut response)?;
+        debug!(&response);
+
+        let mut lines = response.lines();
+        for l in lines.by_ref() {
+            if l.starts_with("* SEARCH") {
+                use std::iter::FromIterator;
+                let uid_index = self.uid_store.uid_index.lock()?;
+                return Ok(SmallVec::from_iter(
+                    l["* SEARCH".len()..]
+                        .trim()
+                        .split_whitespace()
+                        .map(usize::from_str)
+                        .filter_map(std::result::Result::ok)
+                        .filter_map(|uid| uid_index.get(&uid))
+                        .map(|env_hash_ref| *env_hash_ref),
+                ));
+            }
+        }
+        Err(MeliError::new(response))
+    }
 }
 
 impl ImapType {
@@ -885,41 +1015,6 @@ impl ImapType {
                     .collect::<Vec<String>>()
             })
             .unwrap_or_default()
-    }
-
-    pub fn search(
-        &self,
-        query: String,
-        mailbox_hash: MailboxHash,
-    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
-        let mailboxes_lck = self.mailboxes.read()?;
-        let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection)?;
-        conn.send_command(
-            format!("EXAMINE \"{}\"", mailboxes_lck[&mailbox_hash].imap_path()).as_bytes(),
-        )?;
-        conn.read_response(&mut response)?;
-        conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query).as_bytes())?;
-        conn.read_response(&mut response)?;
-        debug!(&response);
-
-        let mut lines = response.lines();
-        for l in lines.by_ref() {
-            if l.starts_with("* SEARCH") {
-                use std::iter::FromIterator;
-                let uid_index = self.uid_store.uid_index.lock()?;
-                return Ok(SmallVec::from_iter(
-                    l["* SEARCH".len()..]
-                        .trim()
-                        .split_whitespace()
-                        .map(usize::from_str)
-                        .filter_map(std::result::Result::ok)
-                        .filter_map(|uid| uid_index.get(&uid))
-                        .map(|env_hash_ref| *env_hash_ref),
-                ));
-            }
-        }
-        Err(MeliError::new(response))
     }
 
     pub fn validate_config(s: &AccountSettings) -> Result<()> {

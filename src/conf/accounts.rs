@@ -1133,7 +1133,13 @@ impl Account {
         mailbox_hash: MailboxHash,
     ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
         if self.settings.account().format() == "imap" {
-            return melib::search::imap_search(search_term, sort, mailbox_hash, &self.backend);
+            use melib::parsec::Parser;
+            let query = melib::search::query().parse(search_term)?.1;
+            return self
+                .backend
+                .read()
+                .unwrap()
+                .search(query, Some(mailbox_hash));
         }
 
         #[cfg(feature = "notmuch")]
