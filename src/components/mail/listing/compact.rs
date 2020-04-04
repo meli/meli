@@ -618,7 +618,7 @@ impl fmt::Display for CompactListing {
 }
 
 impl CompactListing {
-    const DESCRIPTION: &'static str = "compact listing";
+    pub const DESCRIPTION: &'static str = "compact listing";
     pub fn new(coordinates: (usize, MailboxHash)) -> Self {
         CompactListing {
             cursor_pos: (0, 1, 0),

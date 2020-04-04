@@ -310,6 +310,12 @@ impl ListingComponent {
     }
 }
 
+#[derive(PartialEq, Debug)]
+enum ListingFocus {
+    Menu,
+    Mailbox,
+}
+
 #[derive(Debug)]
 pub struct Listing {
     component: ListingComponent,
@@ -317,6 +323,7 @@ pub struct Listing {
     dirty: bool,
     visible: bool,
     cursor_pos: (usize, usize),
+    menu_cursor_pos: (usize, usize),
     startup_checks_rate: RateLimit,
     id: ComponentId,
     theme_default: ThemeAttribute,
@@ -326,6 +333,7 @@ pub struct Listing {
     cmd_buf: String,
     /// This is the width of the right container to the entire width.
     ratio: usize, // right/(container width) * 100
+    focus: ListingFocus,
 }
 
 impl fmt::Display for Listing {
@@ -513,309 +521,489 @@ impl Component for Listing {
             _ => {}
         }
 
-        if self.component.process_event(event, context) {
+        if self.focus == ListingFocus::Mailbox && self.component.process_event(event, context) {
             return true;
         }
 
         let shortcuts = self.get_shortcuts(context);
-        match *event {
-            UIEvent::Input(ref k)
-                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"])
-                    || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) =>
-            {
-                let amount = if self.cmd_buf.is_empty() {
-                    1
-                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                    amount
-                } else {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                    return true;
-                };
-                match k {
-                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"]) => {
-                        if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
-                            .entries
-                            .get(self.cursor_pos.1 + amount)
-                        {
-                            self.cursor_pos.1 += amount;
-                            self.component
-                                .set_coordinates((self.cursor_pos.0, *mailbox_hash));
-                            self.set_dirty(true);
-                        } else {
-                            return true;
-                        }
-                    }
-                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) => {
-                        if self.cursor_pos.1 >= amount {
+        if self.focus == ListingFocus::Mailbox {
+            match *event {
+                UIEvent::Input(Key::Left) => {
+                    self.focus = ListingFocus::Menu;
+                    self.ratio = 50;
+                    self.set_dirty(true);
+                }
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"])
+                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) =>
+                {
+                    let amount = if self.cmd_buf.is_empty() {
+                        1
+                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        amount
+                    } else {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        return true;
+                    };
+                    match k {
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"]) => {
                             if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
                                 .entries
-                                .get(self.cursor_pos.1 - amount)
+                                .get(self.cursor_pos.1 + amount)
                             {
-                                self.cursor_pos.1 -= amount;
+                                self.cursor_pos.1 += amount;
                                 self.component
                                     .set_coordinates((self.cursor_pos.0, *mailbox_hash));
                                 self.set_dirty(true);
                             } else {
                                 return true;
                             }
+                        }
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) => {
+                            if self.cursor_pos.1 >= amount {
+                                if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
+                                    .entries
+                                    .get(self.cursor_pos.1 - amount)
+                                {
+                                    self.cursor_pos.1 -= amount;
+                                    self.component
+                                        .set_coordinates((self.cursor_pos.0, *mailbox_hash));
+                                    self.set_dirty(true);
+                                } else {
+                                    return true;
+                                }
+                            } else {
+                                return true;
+                            }
+                        }
+                        _ => {}
+                    }
+                    if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
+                        .entries
+                        .get(self.cursor_pos.1)
+                    {
+                        /* Account might have no mailboxes yet if it's offline */
+                        /* Check if per-mailbox configuration overrides general configuration */
+                        let index_style = mailbox_settings!(
+                            context[self.cursor_pos.0][mailbox_hash].listing.index_style
+                        );
+                        self.component.set_style(*index_style);
+                    }
+                    context
+                        .replies
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.get_status(context),
+                        )));
+                    return true;
+                }
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"])
+                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) =>
+                {
+                    let amount = if self.cmd_buf.is_empty() {
+                        1
+                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        amount
+                    } else {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        return true;
+                    };
+                    match k {
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"]) => {
+                            if self.cursor_pos.0 + amount < self.accounts.len() {
+                                self.cursor_pos = (self.cursor_pos.0 + amount, 0);
+                            } else {
+                                return true;
+                            }
+                        }
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) => {
+                            if self.cursor_pos.0 >= amount {
+                                self.cursor_pos = (self.cursor_pos.0 - amount, 0);
+                            } else {
+                                return true;
+                            }
+                        }
+                        _ => return false,
+                    }
+                    self.change_account(context);
+
+                    return true;
+                }
+                UIEvent::Action(ref action) => match action {
+                    Action::Listing(ListingAction::SetPlain) => {
+                        self.component.set_style(IndexStyle::Plain);
+                        return true;
+                    }
+                    Action::Listing(ListingAction::SetThreaded) => {
+                        self.component.set_style(IndexStyle::Threaded);
+                        return true;
+                    }
+                    Action::Listing(ListingAction::SetCompact) => {
+                        self.component.set_style(IndexStyle::Compact);
+                        return true;
+                    }
+                    Action::Listing(ListingAction::SetConversations) => {
+                        self.component.set_style(IndexStyle::Conversations);
+                        return true;
+                    }
+                    Action::Listing(a @ ListingAction::SetSeen)
+                    | Action::Listing(a @ ListingAction::SetUnseen)
+                    | Action::Listing(a @ ListingAction::Delete)
+                    | Action::Listing(a @ ListingAction::Tag(_)) => {
+                        let focused = self.component.get_focused_items(context);
+                        for i in focused {
+                            self.component.perform_action(context, i, a);
+                        }
+                        self.component.set_dirty(true);
+                        return true;
+                    }
+                    Action::ViewMailbox(idx) => {
+                        if let Some((_, mailbox_hash)) =
+                            self.accounts[self.cursor_pos.0].entries.get(*idx)
+                        {
+                            self.cursor_pos.1 = *idx;
+                            self.component
+                                .set_coordinates((self.cursor_pos.0, *mailbox_hash));
+                            self.set_dirty(true);
                         } else {
                             return true;
                         }
+                        return true;
                     }
                     _ => {}
+                },
+                UIEvent::ChangeMode(UIMode::Normal) => {
+                    self.dirty = true;
                 }
-                if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
-                    .entries
-                    .get(self.cursor_pos.1)
+                UIEvent::Resize => {
+                    self.set_dirty(true);
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_up"]) =>
                 {
-                    /* Account might have no mailboxes yet if it's offline */
-                    /* Check if per-mailbox configuration overrides general configuration */
-                    let index_style = mailbox_settings!(
-                        context[self.cursor_pos.0][mailbox_hash].listing.index_style
-                    );
-                    self.component.set_style(*index_style);
-                }
-                context
-                    .replies
-                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                        self.get_status(context),
-                    )));
-                return true;
-            }
-            UIEvent::Input(ref k)
-                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"])
-                    || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) =>
-            {
-                let amount = if self.cmd_buf.is_empty() {
-                    1
-                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                    amount
-                } else {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                    return true;
-                };
-                match k {
-                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"]) => {
-                        if self.cursor_pos.0 + amount < self.accounts.len() {
-                            self.cursor_pos = (self.cursor_pos.0 + amount, 0);
-                        } else {
-                            return true;
-                        }
-                    }
-                    k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) => {
-                        if self.cursor_pos.0 >= amount {
-                            self.cursor_pos = (self.cursor_pos.0 - amount, 0);
-                        } else {
-                            return true;
-                        }
-                    }
-                    _ => return false,
-                }
-                self.change_account(context);
-
-                return true;
-            }
-            UIEvent::Action(ref action) => match action {
-                Action::Listing(ListingAction::SetPlain) => {
-                    self.component.set_style(IndexStyle::Plain);
-                    return true;
-                }
-                Action::Listing(ListingAction::SetThreaded) => {
-                    self.component.set_style(IndexStyle::Threaded);
-                    return true;
-                }
-                Action::Listing(ListingAction::SetCompact) => {
-                    self.component.set_style(IndexStyle::Compact);
-                    return true;
-                }
-                Action::Listing(ListingAction::SetConversations) => {
-                    self.component.set_style(IndexStyle::Conversations);
-                    return true;
-                }
-                Action::Listing(a @ ListingAction::SetSeen)
-                | Action::Listing(a @ ListingAction::SetUnseen)
-                | Action::Listing(a @ ListingAction::Delete)
-                | Action::Listing(a @ ListingAction::Tag(_)) => {
-                    let focused = self.component.get_focused_items(context);
-                    for i in focused {
-                        self.component.perform_action(context, i, a);
-                    }
-                    self.component.set_dirty(true);
-                    return true;
-                }
-                Action::ViewMailbox(idx) => {
-                    if let Some((_, mailbox_hash)) =
-                        self.accounts[self.cursor_pos.0].entries.get(*idx)
-                    {
-                        self.cursor_pos.1 = *idx;
-                        self.component
-                            .set_coordinates((self.cursor_pos.0, *mailbox_hash));
-                        self.set_dirty(true);
+                    let amount = if self.cmd_buf.is_empty() {
+                        1
+                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        amount
                     } else {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
                         return true;
+                    };
+                    self.component.set_movement(PageMovement::Up(amount));
+                    return true;
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_down"]) =>
+                {
+                    let amount = if self.cmd_buf.is_empty() {
+                        1
+                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        amount
+                    } else {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        return true;
+                    };
+                    self.component.set_movement(PageMovement::Down(amount));
+                    return true;
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
+                {
+                    let mult = if self.cmd_buf.is_empty() {
+                        1
+                    } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        mult
+                    } else {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        return true;
+                    };
+                    self.component.set_movement(PageMovement::PageUp(mult));
+                    return true;
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["next_page"]) =>
+                {
+                    let mult = if self.cmd_buf.is_empty() {
+                        1
+                    } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        mult
+                    } else {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        return true;
+                    };
+                    self.component.set_movement(PageMovement::PageDown(mult));
+                    return true;
+                }
+                UIEvent::Input(ref key) if *key == Key::Home => {
+                    self.component.set_movement(PageMovement::Home);
+                    return true;
+                }
+                UIEvent::Input(ref key) if *key == Key::End => {
+                    self.component.set_movement(PageMovement::End);
+                    return true;
+                }
+                UIEvent::Input(ref k)
+                    if shortcut!(
+                        k == shortcuts[Listing::DESCRIPTION]["toggle_menu_visibility"]
+                    ) =>
+                {
+                    self.menu_visibility = !self.menu_visibility;
+                    self.set_dirty(true);
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["search"]) =>
+                {
+                    context
+                        .replies
+                        .push_back(UIEvent::ExInput(Key::Paste("search ".to_string())));
+                    context
+                        .replies
+                        .push_back(UIEvent::ChangeMode(UIMode::Execute));
+                    return true;
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["set_seen"]) =>
+                {
+                    let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
+                    if self.process_event(&mut event, context) {
+                        return true;
+                    }
+                }
+                UIEvent::Input(ref key)
+                    if shortcut!(key == shortcuts[Listing::DESCRIPTION]["refresh"]) =>
+                {
+                    let account = &mut context.accounts[self.cursor_pos.0];
+                    if let Some(&mailbox_hash) = account.mailboxes_order.get(self.cursor_pos.1) {
+                        if let Err(err) = account.refresh(mailbox_hash) {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Could not refresh.".to_string()),
+                                err.to_string(),
+                                Some(NotificationType::INFO),
+                            ));
+                        }
                     }
                     return true;
                 }
                 _ => {}
-            },
-            UIEvent::ChangeMode(UIMode::Normal) => {
-                self.dirty = true;
             }
-            UIEvent::Resize => {
-                self.set_dirty(true);
-            }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_up"]) =>
-            {
-                let amount = if self.cmd_buf.is_empty() {
-                    1
-                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                    amount
-                } else {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+        } else if self.focus == ListingFocus::Menu {
+            match *event {
+                UIEvent::Input(Key::Right) => {
+                    self.focus = ListingFocus::Mailbox;
+                    self.ratio = 90;
+                    self.set_dirty(true);
                     return true;
-                };
-                self.component.set_movement(PageMovement::Up(amount));
-                return true;
-            }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["scroll_down"]) =>
-            {
-                let amount = if self.cmd_buf.is_empty() {
-                    1
-                } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
-                    self.cmd_buf.clear();
+                }
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[CompactListing::DESCRIPTION]["open_thread"]) =>
+                {
+                    self.cursor_pos = self.menu_cursor_pos;
+                    self.change_account(context);
+                    self.focus = ListingFocus::Mailbox;
+                    self.ratio = 90;
+                    self.set_dirty(true);
                     context
                         .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                    amount
-                } else {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
+                            self.get_status(context),
+                        )));
                     return true;
-                };
-                self.component.set_movement(PageMovement::Down(amount));
-                return true;
-            }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
-            {
-                let mult = if self.cmd_buf.is_empty() {
-                    1
-                } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                    mult
-                } else {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                }
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["scroll_up"])
+                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["scroll_down"]) =>
+                {
+                    let mut amount = if self.cmd_buf.is_empty() {
+                        1
+                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        amount
+                    } else {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        return true;
+                    };
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["scroll_up"]) {
+                        while amount > 0 {
+                            if self.menu_cursor_pos.1 > 0 {
+                                self.menu_cursor_pos.1 -= 1;
+                            } else if self.menu_cursor_pos.0 > 0 {
+                                self.menu_cursor_pos.0 -= 1;
+                                self.menu_cursor_pos.1 = self.accounts[self.menu_cursor_pos.0]
+                                    .entries
+                                    .len()
+                                    .saturating_sub(1);
+                            } else {
+                                return true;
+                            }
+                            amount -= 1;
+                        }
+                    } else if shortcut!(k == shortcuts[Listing::DESCRIPTION]["scroll_down"]) {
+                        while amount > 0 {
+                            if self.menu_cursor_pos.1 + 1
+                                < self.accounts[self.menu_cursor_pos.0].entries.len()
+                            {
+                                self.menu_cursor_pos.1 += 1;
+                            } else if self.menu_cursor_pos.0 + 1 < self.accounts.len() {
+                                self.menu_cursor_pos.0 += 1;
+                                self.menu_cursor_pos.1 = 0;
+                            } else {
+                                return true;
+                            }
+                            amount -= 1;
+                        }
+                    }
+                    self.set_dirty(true);
                     return true;
-                };
-                self.component.set_movement(PageMovement::PageUp(mult));
-                return true;
-            }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["next_page"]) =>
-            {
-                let mult = if self.cmd_buf.is_empty() {
-                    1
-                } else if let Ok(mult) = self.cmd_buf.parse::<usize>() {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
-                    mult
-                } else {
-                    self.cmd_buf.clear();
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                }
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"])
+                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) =>
+                {
+                    let amount = if self.cmd_buf.is_empty() {
+                        1
+                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        amount
+                    } else {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        return true;
+                    };
+                    match k {
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"]) => {
+                            if let Some((_, mailbox_hash)) = self.accounts[self.menu_cursor_pos.0]
+                                .entries
+                                .get(self.menu_cursor_pos.1 + amount)
+                            {
+                                self.menu_cursor_pos.1 += amount;
+                                self.set_dirty(true);
+                            } else {
+                                return true;
+                            }
+                        }
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) => {
+                            if self.cursor_pos.1 >= amount {
+                                if let Some((_, mailbox_hash)) = self.accounts
+                                    [self.menu_cursor_pos.0]
+                                    .entries
+                                    .get(self.menu_cursor_pos.1 - amount)
+                                {
+                                    self.menu_cursor_pos.1 -= amount;
+                                    self.set_dirty(true);
+                                } else {
+                                    return true;
+                                }
+                            } else {
+                                return true;
+                            }
+                        }
+                        _ => {}
+                    }
                     return true;
-                };
-                self.component.set_movement(PageMovement::PageDown(mult));
-                return true;
+                }
+                UIEvent::Input(ref k)
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"])
+                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) =>
+                {
+                    let amount = if self.cmd_buf.is_empty() {
+                        1
+                    } else if let Ok(amount) = self.cmd_buf.parse::<usize>() {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        amount
+                    } else {
+                        self.cmd_buf.clear();
+                        context
+                            .replies
+                            .push_back(UIEvent::StatusEvent(StatusEvent::BufClear));
+                        return true;
+                    };
+                    match k {
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"]) => {
+                            if self.menu_cursor_pos.0 + amount < self.accounts.len() {
+                                self.menu_cursor_pos = (self.menu_cursor_pos.0 + amount, 0);
+                            } else {
+                                return true;
+                            }
+                        }
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) => {
+                            if self.menu_cursor_pos.0 >= amount {
+                                self.menu_cursor_pos = (self.menu_cursor_pos.0 - amount, 0);
+                            } else {
+                                return true;
+                            }
+                        }
+                        _ => return false,
+                    }
+                    self.set_dirty(true);
+
+                    return true;
+                }
+                _ => {}
             }
-            UIEvent::Input(ref key) if *key == Key::Home => {
-                self.component.set_movement(PageMovement::Home);
-                return true;
-            }
-            UIEvent::Input(ref key) if *key == Key::End => {
-                self.component.set_movement(PageMovement::End);
-                return true;
-            }
-            UIEvent::Input(ref k)
-                if shortcut!(k == shortcuts[Listing::DESCRIPTION]["toggle_menu_visibility"]) =>
-            {
-                self.menu_visibility = !self.menu_visibility;
-                self.set_dirty(true);
-            }
+        }
+        match *event {
             UIEvent::Input(ref k)
                 if shortcut!(k == shortcuts[Listing::DESCRIPTION]["new_mail"]) =>
             {
                 context
                     .replies
                     .push_back(UIEvent::Action(Tab(NewDraft(self.cursor_pos.0, None))));
-                return true;
-            }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["search"]) =>
-            {
-                context
-                    .replies
-                    .push_back(UIEvent::ExInput(Key::Paste("search ".to_string())));
-                context
-                    .replies
-                    .push_back(UIEvent::ChangeMode(UIMode::Execute));
-                return true;
-            }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["set_seen"]) =>
-            {
-                let mut event = UIEvent::Action(Action::Listing(ListingAction::SetSeen));
-                if self.process_event(&mut event, context) {
-                    return true;
-                }
-            }
-            UIEvent::Input(ref key)
-                if shortcut!(key == shortcuts[Listing::DESCRIPTION]["refresh"]) =>
-            {
-                let account = &mut context.accounts[self.cursor_pos.0];
-                if let Some(&mailbox_hash) = account.mailboxes_order.get(self.cursor_pos.1) {
-                    if let Err(err) = account.refresh(mailbox_hash) {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not refresh.".to_string()),
-                            err.to_string(),
-                            Some(NotificationType::INFO),
-                        ));
-                    }
-                }
                 return true;
             }
             UIEvent::StartupCheck(_) => {
@@ -945,12 +1133,14 @@ impl Listing {
             visible: true,
             dirty: true,
             cursor_pos: (0, 0),
+            menu_cursor_pos: (0, 0),
             startup_checks_rate: RateLimit::new(2, 1000),
             theme_default: conf::value(context, "theme_default"),
             id: ComponentId::new_v4(),
             show_divider: false,
             menu_visibility: true,
             ratio: 90,
+            focus: ListingFocus::Mailbox,
             cmd_buf: String::with_capacity(4),
         };
         ret.change_account(context);
@@ -1006,7 +1196,9 @@ impl Listing {
         let upper_left = upper_left!(area);
         let bottom_right = bottom_right!(area);
 
-        let must_highlight_account: bool = self.cursor_pos.0 == a.index;
+        let must_highlight_account: bool = (self.focus == ListingFocus::Mailbox
+            && self.cursor_pos.0 == a.index)
+            || (self.focus == ListingFocus::Menu && self.menu_cursor_pos.0 == a.index);
 
         let mut lines: Vec<(usize, usize, MailboxHash, Option<usize>)> = Vec::new();
 
@@ -1060,7 +1252,9 @@ impl Listing {
                 break;
             }
             let (att, index_att, unread_count_att) = if must_highlight_account {
-                if self.cursor_pos.1 == idx {
+                if (self.focus == ListingFocus::Mailbox && self.cursor_pos.1 == idx)
+                    || (self.focus == ListingFocus::Menu && self.menu_cursor_pos.1 == idx)
+                {
                     let mut ret = (
                         crate::conf::value(context, "mail.sidebar_highlighted"),
                         crate::conf::value(context, "mail.sidebar_highlighted_index"),
