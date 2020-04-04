@@ -360,6 +360,20 @@ impl fmt::Display for Attachment {
                 ..
             } => write!(f, "\"{}\", [{}]", name, self.mime_type()),
             ContentType::Other { .. } => write!(f, "Data attachment of type {}", self.mime_type()),
+            ContentType::Text { ref parameters, .. }
+                if parameters
+                    .iter()
+                    .any(|(name, _)| name.eq_ignore_ascii_case(b"name")) =>
+            {
+                let name = String::from_utf8_lossy(
+                    parameters
+                        .iter()
+                        .find(|(name, _)| name == b"name")
+                        .map(|(_, value)| value)
+                        .unwrap(),
+                );
+                write!(f, "\"{}\", [{}]", name, self.mime_type())
+            }
             ContentType::Text { .. } => write!(f, "Text attachment of type {}", self.mime_type()),
             ContentType::Multipart {
                 parts: ref sub_att_vec,
