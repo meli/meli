@@ -300,9 +300,11 @@ impl Draft {
         } else {
             let mut parts = Vec::with_capacity(self.attachments.len() + 1);
             let attachments = std::mem::replace(&mut self.attachments, Vec::new());
-            let mut body_attachment = AttachmentBuilder::default();
-            body_attachment.set_raw(self.body.as_bytes().to_vec());
-            parts.push(body_attachment);
+            if !self.body.is_empty() {
+                let mut body_attachment = AttachmentBuilder::default();
+                body_attachment.set_raw(self.body.as_bytes().to_vec());
+                parts.push(body_attachment);
+            }
             parts.extend(attachments.into_iter());
             build_multipart(&mut ret, MultipartType::Mixed, parts);
         }
