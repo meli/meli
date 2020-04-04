@@ -1,7 +1,7 @@
 /*
- * meli
+ * meli - melib
  *
- * Copyright 2017-2018 Manos Pitsidianakis
+ * Copyright 2019-2020 Manos Pitsidianakis
  *
  * This file is part of meli.
  *
@@ -19,11 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*! Search queries.
- */
-use melib::parsec::*;
-use melib::UnixTimestamp;
-use melib::{
+use crate::parsec::*;
+use crate::UnixTimestamp;
+use crate::{
     backends::{MailBackend, MailboxHash},
     email::EnvelopeHash,
     thread::{SortField, SortOrder},
@@ -65,7 +63,7 @@ pub trait QueryTrait {
     fn is_match(&self, query: &Query) -> bool;
 }
 
-impl QueryTrait for melib::Envelope {
+impl QueryTrait for crate::Envelope {
     fn is_match(&self, query: &Query) -> bool {
         use Query::*;
         match query {
@@ -233,7 +231,7 @@ pub mod query_parser {
     /// ```
     /// use ui::cache::query;
     /// use ui::cache::Query;
-    /// use melib::parsec::Parser;
+    /// use crate::parsec::Parser;
     ///
     /// let input = "test";
     /// let query = query().parse(input);
@@ -474,7 +472,7 @@ pub fn imap_search(
     let backend_lck = backend.read().unwrap();
 
     let b = (*backend_lck).as_any();
-    if let Some(imap_backend) = b.downcast_ref::<melib::backends::ImapType>() {
+    if let Some(imap_backend) = b.downcast_ref::<crate::backends::ImapType>() {
         imap_backend.search(query_to_imap(&query), mailbox_hash)
     } else {
         panic!("Could not downcast ImapType backend. BUG");

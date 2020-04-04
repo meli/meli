@@ -1133,7 +1133,7 @@ impl Account {
         mailbox_hash: MailboxHash,
     ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
         if self.settings.account().format() == "imap" {
-            return crate::cache::imap_search(search_term, sort, mailbox_hash, &self.backend);
+            return melib::search::imap_search(search_term, sort, mailbox_hash, &self.backend);
         }
 
         #[cfg(feature = "notmuch")]

@@ -123,6 +123,7 @@ pub mod thread;
 pub use crate::email::*;
 pub use crate::thread::*;
 pub mod parsec;
+pub mod search;
 
 #[macro_use]
 extern crate serde_derive;

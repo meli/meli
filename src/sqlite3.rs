@@ -22,7 +22,7 @@
 /*! Use an sqlite3 database for fast searching.
  */
 use smallvec::SmallVec;
-use crate::cache::{escape_double_quote, query, Query::{self, *}};
+use melib::search::{escape_double_quote, query, Query::{self, *}};
 use crate::melib::parsec::Parser;
 use melib::{
     backends::MailBackend,

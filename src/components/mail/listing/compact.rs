@@ -754,7 +754,7 @@ impl CompactListing {
             let root_envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
                 .collection
                 .get_env(root_env_hash);
-            use crate::cache::QueryTrait;
+            use melib::search::QueryTrait;
             if let Some(filter_query) = mailbox_settings!(
                 context[self.cursor_pos.0][&self.cursor_pos.1]
                     .listing

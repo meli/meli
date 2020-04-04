@@ -20,8 +20,8 @@
  */
 
 use super::{default_vals::*, IndexStyle};
-use crate::cache::Query;
 use crate::override_def;
+use melib::search::Query;
 
 override_def!(
     ListingSettingsOverride,
