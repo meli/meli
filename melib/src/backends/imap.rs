@@ -140,9 +140,23 @@ pub struct ImapType {
     mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, ImapMailbox>>>,
 }
 
+#[inline(always)]
+pub(self) fn try_lock<T>(connection: &Arc<Mutex<T>>) -> Result<std::sync::MutexGuard<T>> {
+    let now = Instant::now();
+    while Instant::now().duration_since(now) <= std::time::Duration::new(2, 0) {
+        if let Ok(guard) = connection.try_lock() {
+            return Ok(guard);
+        }
+    }
+    Err("Connection timeout".into())
+}
+
 impl MailBackend for ImapType {
     fn is_online(&self) -> Result<()> {
-        self.online.lock().unwrap().1.clone()
+        if let Ok(mut g) = try_lock(&self.connection) {
+            let _ = g.connect();
+        }
+        try_lock(&self.online)?.1.clone()
     }
 
     fn connect(&mut self) {
@@ -150,7 +164,9 @@ impl MailBackend for ImapType {
             if Instant::now().duration_since(self.online.lock().unwrap().0)
                 >= std::time::Duration::new(2, 0)
             {
-                let _ = self.connection.lock().unwrap().connect();
+                if let Ok(mut g) = try_lock(&self.connection) {
+                    let _ = g.connect();
+                }
             }
         }
     }
@@ -184,7 +200,7 @@ impl MailBackend for ImapType {
                 if let Err(err) = (move || {
                     let tx = _tx;
                     let mut response = String::with_capacity(8 * 1024);
-                    let mut conn = connection.lock()?;
+                    let mut conn = try_lock(&connection)?;
                     debug!("locked for get {}", mailbox_path);
 
                     /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
@@ -296,7 +312,6 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
         sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
-        self.connection.lock().unwrap().connect()?;
         let inbox = self
             .mailboxes
             .read()
@@ -311,7 +326,17 @@ impl MailBackend for ImapType {
         let w = AsyncBuilder::new();
         let closure = move |work_context: WorkContext| {
             let thread = std::thread::current();
-            let mut conn = main_conn.lock().unwrap();
+            let mut conn = match try_lock(&main_conn) {
+                Ok(conn) => conn,
+                Err(err) => {
+                    sender.send(RefreshEvent {
+                        hash: mailbox_hash,
+                        kind: RefreshEventKind::Failure(err.clone()),
+                    });
+
+                    return;
+                }
+            };
             work_context
                 .set_name
                 .send((
@@ -450,7 +475,7 @@ impl MailBackend for ImapType {
                 )))?
         };
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = self.connection.lock().unwrap();
+        let mut conn = try_lock(&self.connection)?;
         let flags = flags.unwrap_or(Flag::empty());
         conn.send_command(
             format!(
@@ -523,7 +548,7 @@ impl MailBackend for ImapType {
 
         let mut response = String::with_capacity(8 * 1024);
         {
-            let mut conn_lck = self.connection.lock()?;
+            let mut conn_lck = try_lock(&self.connection)?;
 
             conn_lck.send_command(format!("CREATE \"{}\"", path,).as_bytes())?;
             conn_lck.read_response(&mut response)?;
@@ -549,7 +574,7 @@ impl MailBackend for ImapType {
         }
         let mut response = String::with_capacity(8 * 1024);
         {
-            let mut conn_lck = self.connection.lock()?;
+            let mut conn_lck = try_lock(&self.connection)?;
             if !mailboxes[&mailbox_hash].no_select {
                 /* make sure mailbox is not selected before it gets deleted, otherwise
                  * connection gets dropped by server */
@@ -604,7 +629,7 @@ impl MailBackend for ImapType {
 
         let mut response = String::with_capacity(8 * 1024);
         {
-            let mut conn_lck = self.connection.lock()?;
+            let mut conn_lck = try_lock(&self.connection)?;
             if new_val {
                 conn_lck.send_command(
                     format!("SUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
@@ -644,7 +669,7 @@ impl MailBackend for ImapType {
             );
         }
         {
-            let mut conn_lck = self.connection.lock()?;
+            let mut conn_lck = try_lock(&self.connection)?;
             conn_lck.send_command(
                 debug!(format!(
                     "RENAME \"{}\" \"{}\"",
@@ -787,7 +812,7 @@ impl ImapType {
     ) -> Result<FnvHashMap<MailboxHash, ImapMailbox>> {
         let mut mailboxes: FnvHashMap<MailboxHash, ImapMailbox> = Default::default();
         let mut res = String::with_capacity(8 * 1024);
-        let mut conn = connection.lock().unwrap();
+        let mut conn = try_lock(&connection)?;
         conn.send_command(b"LIST \"\" \"*\"")?;
         conn.read_response(&mut res)?;
         debug!("out: {}", &res);
@@ -852,13 +877,14 @@ impl ImapType {
     }
 
     pub fn capabilities(&self) -> Vec<String> {
-        self.connection
-            .lock()
-            .unwrap()
-            .capabilities
-            .iter()
-            .map(|c| String::from_utf8_lossy(c).into())
-            .collect::<Vec<String>>()
+        try_lock(&self.connection)
+            .map(|c| {
+                c.capabilities
+                    .iter()
+                    .map(|c| String::from_utf8_lossy(c).into())
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default()
     }
 
     pub fn search(
@@ -868,7 +894,7 @@ impl ImapType {
     ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
         let mailboxes_lck = self.mailboxes.read()?;
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = self.connection.lock()?;
+        let mut conn = try_lock(&self.connection)?;
         conn.send_command(
             format!("EXAMINE \"{}\"", mailboxes_lck[&mailbox_hash].imap_path()).as_bytes(),
         )?;

@@ -83,7 +83,7 @@ impl ImapStream {
             )));
         };
 
-        let mut socket = TcpStream::connect(&addr)?;
+        let mut socket = TcpStream::connect_timeout(&addr, std::time::Duration::new(4, 0))?;
         socket.set_read_timeout(Some(std::time::Duration::new(4, 0)))?;
         socket.set_write_timeout(Some(std::time::Duration::new(4, 0)))?;
         let cmd_id = 1;
@@ -577,7 +577,11 @@ impl Iterator for ImapBlockingConnection {
                         return Some(result[0..*prev_res_length].to_vec());
                     }
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::Interrupted =>
+                {
+                    debug!(&e);
                     continue;
                 }
                 Err(e) => {

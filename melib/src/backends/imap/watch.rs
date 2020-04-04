@@ -62,7 +62,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         tag_index,
     } = kit;
     loop {
-        if is_online.lock().unwrap().1.is_ok() {
+        if super::try_lock(&is_online)?.1.is_ok() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -76,7 +76,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
             .send((thread_id, "sleeping...".to_string()))
             .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(5 * 60 * 1000));
-        let mailboxes = mailboxes.read().unwrap();
+        let mailboxes = mailboxes.read()?;
         for mailbox in mailboxes.values() {
             work_context
                 .set_status
@@ -94,9 +94,9 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
                 &tag_index,
             )?;
         }
-        let mut main_conn = main_conn.lock().unwrap();
-        main_conn.send_command(b"NOOP").unwrap();
-        main_conn.read_response(&mut response).unwrap();
+        let mut main_conn = super::try_lock(&main_conn)?;
+        main_conn.send_command(b"NOOP")?;
+        main_conn.read_response(&mut response)?;
     }
 }
 
@@ -115,7 +115,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         tag_index,
     } = kit;
     loop {
-        if is_online.lock().unwrap().1.is_ok() {
+        if super::try_lock(&is_online)?.1.is_ok() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -169,9 +169,11 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                 kind: RefreshEventKind::Rescan,
                             });
                             *prev_exists = 0;
+                            /*
                             uid_store.uid_index.lock().unwrap().clear();
                             uid_store.hash_index.lock().unwrap().clear();
                             uid_store.byte_cache.lock().unwrap().clear();
+                            */
                             *v = ok.uidvalidity;
                         }
                     } else {
@@ -219,6 +221,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     while let Some(line) = iter.next() {
         let now = std::time::Instant::now();
         if now.duration_since(beat) >= _26_mins {
+            let mut main_conn_lck = super::try_lock(&main_conn)?;
             exit_on_error!(
                 sender,
                 mailbox_hash,
@@ -229,14 +232,14 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 iter.conn.read_response(&mut response)
                 iter.conn.send_command(b"IDLE")
                 iter.conn.set_nonblocking(false)
-                main_conn.lock().unwrap().send_command(b"NOOP")
-                main_conn.lock().unwrap().read_response(&mut response)
+                main_conn_lck.send_command(b"NOOP")
+                main_conn_lck.read_response(&mut response)
             );
             beat = now;
         }
         if now.duration_since(watch) >= _5_mins {
             /* Time to poll all inboxes */
-            let mut conn = main_conn.lock().unwrap();
+            let mut conn = try_lock(&main_conn)?;
             for mailbox in mailboxes.read().unwrap().values() {
                 work_context
                     .set_status
@@ -271,7 +274,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
             .map_err(MeliError::from)
         {
             Ok(Some(Recent(r))) => {
-                let mut conn = main_conn.lock().unwrap();
+                let mut conn = super::try_lock(&main_conn)?;
                 work_context
                     .set_status
                     .send((thread_id, format!("got `{} RECENT` notification", r)))
@@ -387,7 +390,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 debug!("expunge {}", n);
             }
             Ok(Some(Exists(n))) => {
-                let mut conn = main_conn.lock().unwrap();
+                let mut conn = super::try_lock(&main_conn)?;
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
                  * */
                 let mut prev_exists = mailbox.exists.lock().unwrap();
@@ -496,7 +499,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 /* a * {msg_seq} FETCH (FLAGS ({flags})) was received, so find out UID from msg_seq
                  * and send update
                  */
-                let mut conn = main_conn.lock().unwrap();
+                let mut conn = super::try_lock(&main_conn)?;
                 debug!("fetch {} {:?}", msg_seq, flags);
                 exit_on_error!(
                     sender,
@@ -589,9 +592,11 @@ pub fn examine_updates(
                             hash: mailbox_hash,
                             kind: RefreshEventKind::Rescan,
                         });
+                        /*
                         uid_store.uid_index.lock().unwrap().clear();
                         uid_store.hash_index.lock().unwrap().clear();
                         uid_store.byte_cache.lock().unwrap().clear();
+                        */
                         *v = ok.uidvalidity;
                     }
                 } else {

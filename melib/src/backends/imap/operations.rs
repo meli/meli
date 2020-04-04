@@ -79,7 +79,7 @@ impl BackendOp for ImapOp {
                 drop(bytes_cache);
                 let mut response = String::with_capacity(8 * 1024);
                 {
-                    let mut conn = self.connection.lock().unwrap();
+                    let mut conn = try_lock(&self.connection)?;
                     conn.send_command(format!("SELECT \"{}\"", &self.mailbox_path,).as_bytes())?;
                     conn.read_response(&mut response)?;
                     conn.send_command(format!("UID FETCH {} (FLAGS RFC822)", self.uid).as_bytes())?;
@@ -110,22 +110,32 @@ impl BackendOp for ImapOp {
     }
 
     fn fetch_flags(&self) -> Flag {
+        macro_rules! or_return_default {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(ok) => ok,
+                    Err(_) => return Default::default(),
+                }
+            };
+        }
         if self.flags.get().is_some() {
             return self.flags.get().unwrap();
         }
-        let mut bytes_cache = self.uid_store.byte_cache.lock().unwrap();
+        let mut bytes_cache = or_return_default!(self.uid_store.byte_cache.lock());
         let cache = bytes_cache.entry(self.uid).or_default();
         if cache.flags.is_some() {
             self.flags.set(cache.flags);
         } else {
             let mut response = String::with_capacity(8 * 1024);
-            let mut conn = self.connection.lock().unwrap();
-            conn.send_command(format!("EXAMINE \"{}\"", &self.mailbox_path,).as_bytes())
-                .unwrap();
-            conn.read_response(&mut response).unwrap();
-            conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())
-                .unwrap();
-            conn.read_response(&mut response).unwrap();
+            let mut conn = or_return_default!(try_lock(&self.connection));
+            or_return_default!(
+                conn.send_command(format!("EXAMINE \"{}\"", &self.mailbox_path,).as_bytes())
+            );
+            or_return_default!(conn.read_response(&mut response));
+            or_return_default!(
+                conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())
+            );
+            or_return_default!(conn.read_response(&mut response));
             debug!(
                 "fetch response is {} bytes and {} lines",
                 response.len(),
@@ -146,7 +156,7 @@ impl BackendOp for ImapOp {
                     cache.flags = Some(flags);
                     self.flags.set(Some(flags));
                 }
-                Err(e) => Err(e).unwrap(),
+                Err(e) => or_return_default!(Err(e)),
             }
         }
         self.flags.get().unwrap()
@@ -157,7 +167,7 @@ impl BackendOp for ImapOp {
         flags.set(f, value);
 
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = self.connection.lock().unwrap();
+        let mut conn = try_lock(&self.connection)?;
         conn.send_command(format!("SELECT \"{}\"", &self.mailbox_path,).as_bytes())?;
         conn.read_response(&mut response)?;
         debug!(&response);
@@ -183,7 +193,7 @@ impl BackendOp for ImapOp {
                     self.flags.set(Some(flags));
                 }
             }
-            Err(e) => Err(e).unwrap(),
+            Err(e) => Err(e)?,
         }
         let mut bytes_cache = self.uid_store.byte_cache.lock()?;
         let cache = bytes_cache.entry(self.uid).or_default();
@@ -193,7 +203,7 @@ impl BackendOp for ImapOp {
 
     fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()> {
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = self.connection.lock().unwrap();
+        let mut conn = try_lock(&self.connection)?;
         conn.send_command(format!("SELECT \"{}\"", &self.mailbox_path,).as_bytes())?;
         conn.read_response(&mut response)?;
         conn.send_command(
