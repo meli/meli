@@ -127,7 +127,7 @@ impl MailListingTrait for PlainListing {
             ..self.color_cache
         };
         if !context.settings.terminal.use_color() {
-            self.color_cache.highlighted.attrs |= Attr::Reverse;
+            self.color_cache.highlighted.attrs |= Attr::REVERSE;
         }
 
         // Get mailbox as a reference.
@@ -982,7 +982,7 @@ impl Component for PlainListing {
                     grid,
                     Color::Default,
                     Color::Default,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     area,
                     Some(get_x(upper_left)),
                 );

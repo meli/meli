@@ -45,6 +45,8 @@ extern crate nom;
 
 extern crate serde_json;
 extern crate smallvec;
+#[macro_use]
+extern crate bitflags;
 
 #[global_allocator]
 static GLOBAL: System = System;

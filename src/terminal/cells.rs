@@ -448,11 +448,11 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// let cell = Cell::new('x', Color::Default, Color::Green, Attr::Default);
+    /// let cell = Cell::new('x', Color::Default, Color::Green, Attr::DEFAULT);
     /// assert_eq!(cell.ch(), 'x');
     /// assert_eq!(cell.fg(), Color::Default);
     /// assert_eq!(cell.bg(), Color::Green);
-    /// assert_eq!(cell.attrs(), Attr::Default);
+    /// assert_eq!(cell.attrs(), Attr::DEFAULT);
     /// ```
     pub fn new(ch: char, fg: Color, bg: Color, attrs: Attr) -> Cell {
         Cell {
@@ -475,10 +475,10 @@ impl Cell {
     /// assert_eq!(cell.ch(), 'x');
     /// assert_eq!(cell.fg(), Color::Default);
     /// assert_eq!(cell.bg(), Color::Default);
-    /// assert_eq!(cell.attrs(), Attr::Default);
+    /// assert_eq!(cell.attrs(), Attr::DEFAULT);
     /// ```
     pub fn with_char(ch: char) -> Cell {
-        Cell::new(ch, Color::Default, Color::Default, Attr::Default)
+        Cell::new(ch, Color::Default, Color::Default, Attr::DEFAULT)
     }
 
     /// Creates a new `Cell` with the given style and a blank `char`.
@@ -486,10 +486,10 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// let mut cell = Cell::with_style(Color::Default, Color::Red, Attr::Bold);
+    /// let mut cell = Cell::with_style(Color::Default, Color::Red, Attr::BOLD);
     /// assert_eq!(cell.fg(), Color::Default);
     /// assert_eq!(cell.bg(), Color::Red);
-    /// assert_eq!(cell.attrs(), Attr::Bold);
+    /// assert_eq!(cell.attrs(), Attr::BOLD);
     /// assert_eq!(cell.ch(), ' ');
     /// ```
     pub fn with_style(fg: Color, bg: Color, attr: Attr) -> Cell {
@@ -531,7 +531,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// let mut cell = Cell::with_style(Color::Blue, Color::Default, Attr::Default);
+    /// let mut cell = Cell::with_style(Color::Blue, Color::Default, Attr::DEFAULT);
     /// assert_eq!(cell.fg(), Color::Blue);
     /// ```
     pub fn fg(&self) -> Color {
@@ -561,7 +561,7 @@ impl Cell {
     /// # Examples
     ///
     /// ```no_run
-    /// let mut cell = Cell::with_style(Color::Default, Color::Green, Attr::Default);
+    /// let mut cell = Cell::with_style(Color::Default, Color::Green, Attr::DEFAULT);
     /// assert_eq!(cell.bg(), Color::Green);
     /// ```
     pub fn bg(&self) -> Color {
@@ -633,7 +633,7 @@ impl Default for Cell {
     /// assert_eq!(cell.bg(), Color::Default);
     /// ```
     fn default() -> Cell {
-        Cell::new(' ', Color::Default, Color::Default, Attr::Default)
+        Cell::new(' ', Color::Default, Color::Default, Attr::DEFAULT)
     }
 }
 
@@ -642,7 +642,7 @@ impl Default for Cell {
 /// `Color::Default` represents the default color of the underlying terminal.
 ///
 /// The eight basic colors may be used directly and correspond to 0x00..0x07 in the 8-bit (256)
-/// color range; in addition, the eight basic colors coupled with `Attr::Bold` correspond to
+/// color range; in addition, the eight basic colors coupled with `Attr::BOLD` correspond to
 /// 0x08..0x0f in the 8-bit color range.
 ///
 /// `Color::Byte(..)` may be used to specify a color in the 8-bit range.
@@ -1362,83 +1362,105 @@ impl Serialize for Color {
     }
 }
 
-/// The attributes of a `Cell`.
-///
-/// `Attr` enumerates all combinations of attributes a given style may have.
-///
-/// `Attr::Default` represents no attribute.
-///
-/// # Examples
-///
-/// ```no_run
-/// // Default attribute.
-/// let def = Attr::Default;
-///
-/// // Base attribute.
-/// let base = Attr::Bold;
-///
-/// // Combination.
-/// let comb = Attr::UnderlineReverse;
-/// ```
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Attr {
-    /// Terminal default.
-    Default = 0b000,
-    Bold = 0b001,
-    Underline = 0b100,
-    BoldUnderline = 0b011,
-    Reverse = 0b010,
-    BoldReverse = 0b101,
-    UnderlineReverse = 0b110,
-    BoldReverseUnderline = 0b111,
-}
-
-impl core::ops::BitOr for Attr {
-    type Output = Attr;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        match self as u8 | rhs as u8 {
-            0b000 => Attr::Default,
-            0b001 => Attr::Bold,
-            0b100 => Attr::Underline,
-            0b011 => Attr::BoldUnderline,
-            0b010 => Attr::Reverse,
-            0b101 => Attr::BoldReverse,
-            0b110 => Attr::UnderlineReverse,
-            0b111 => Attr::BoldReverseUnderline,
-            _ => unsafe { std::hint::unreachable_unchecked() },
-        }
-    }
-}
-
-impl core::ops::BitAnd for Attr {
-    type Output = bool;
-
-    fn bitand(self, rhs: Self) -> Self::Output {
-        self as u8 & rhs as u8 > 0
-    }
-}
-
-impl core::ops::BitOrAssign for Attr {
-    fn bitor_assign(&mut self, rhs: Attr) {
-        use Attr::*;
-        *self = match *self as u8 | rhs as u8 {
-            0b000 => Default,
-            0b001 => Bold,
-            0b100 => Underline,
-            0b011 => BoldUnderline,
-            0b010 => Reverse,
-            0b101 => BoldReverse,
-            0b110 => UnderlineReverse,
-            0b111 => BoldReverseUnderline,
-            _ => unsafe { std::hint::unreachable_unchecked() },
-        };
+bitflags::bitflags! {
+    /// The attributes of a `Cell`.
+    ///
+    /// `Attr` enumerates all combinations of attributes a given style may have.
+    ///
+    /// `Attr::DEFAULT` represents no attribute.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // Default attribute.
+    /// let def = Attr::DEFAULT;
+    ///
+    /// // Base attribute.
+    /// let base = Attr::BOLD;
+    ///
+    /// // Combination.
+    /// let comb = Attr::UNDERLINE | Attr::REVERSE;
+    /// ```
+    pub struct Attr: u8 {
+        /// Terminal default.
+        const DEFAULT   = 0b000_0000;
+        const BOLD      = 0b000_0001;
+        const DIM       = 0b000_0010;
+        const ITALICS   = 0b000_0100;
+        const UNDERLINE = 0b000_1000;
+        const BLINK     = 0b001_0000;
+        const REVERSE   = 0b010_0000;
+        const HIDDEN    = 0b100_0000;
     }
 }
 
 impl Default for Attr {
     fn default() -> Self {
-        Attr::Default
+        Attr::DEFAULT
+    }
+}
+
+impl fmt::Display for Attr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Attr::DEFAULT => write!(f, "Default"),
+            Attr::BOLD => write!(f, "Bold"),
+            Attr::DIM => write!(f, "Dim"),
+            Attr::ITALICS => write!(f, "Italics"),
+            Attr::UNDERLINE => write!(f, "Underline"),
+            Attr::BLINK => write!(f, "Blink"),
+            Attr::REVERSE => write!(f, "Reverse"),
+            Attr::HIDDEN => write!(f, "Hidden"),
+            combination => {
+                let mut ctr = 0;
+                if combination.intersects(Attr::BOLD) {
+                    ctr += 1;
+                    Attr::BOLD.fmt(f)?;
+                }
+                if combination.intersects(Attr::DIM) {
+                    if ctr > 0 {
+                        write!(f, "|")?;
+                    }
+                    ctr += 1;
+                    Attr::DIM.fmt(f)?;
+                }
+                if combination.intersects(Attr::ITALICS) {
+                    if ctr > 0 {
+                        write!(f, "|")?;
+                    }
+                    ctr += 1;
+                    Attr::ITALICS.fmt(f)?;
+                }
+                if combination.intersects(Attr::UNDERLINE) {
+                    if ctr > 0 {
+                        write!(f, "|")?;
+                    }
+                    ctr += 1;
+                    Attr::UNDERLINE.fmt(f)?;
+                }
+                if combination.intersects(Attr::BLINK) {
+                    if ctr > 0 {
+                        write!(f, "|")?;
+                    }
+                    ctr += 1;
+                    Attr::BLINK.fmt(f)?;
+                }
+                if combination.intersects(Attr::REVERSE) {
+                    if ctr > 0 {
+                        write!(f, "|")?;
+                    }
+                    ctr += 1;
+                    Attr::REVERSE.fmt(f)?;
+                }
+                if combination.intersects(Attr::HIDDEN) {
+                    if ctr > 0 {
+                        write!(f, "|")?;
+                    }
+                    Attr::HIDDEN.fmt(f)?;
+                }
+                write!(f, "")
+            }
+        }
     }
 }
 
@@ -1448,9 +1470,9 @@ impl<'de> Deserialize<'de> for Attr {
         D: Deserializer<'de>,
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
-            Attr::from_string_de::<'de, D>(s)
+            Attr::from_string_de::<'de, D, String>(s)
         } else {
-            Err(de::Error::custom("invalid attr value"))
+            Err(de::Error::custom("Attributes value must be a string."))
         }
     }
 }
@@ -1460,52 +1482,93 @@ impl Serialize for Attr {
     where
         S: Serializer,
     {
-        match self {
-            Attr::Default => serializer.serialize_str("Default"),
-            Attr::Bold => serializer.serialize_str("Bold"),
-            Attr::Underline => serializer.serialize_str("Underline"),
-            Attr::BoldUnderline => serializer.serialize_str("BoldUnderline"),
-            Attr::Reverse => serializer.serialize_str("Reverse"),
-            Attr::BoldReverse => serializer.serialize_str("BoldReverse"),
-            Attr::UnderlineReverse => serializer.serialize_str("UnderlineReverse"),
-            Attr::BoldReverseUnderline => serializer.serialize_str("BoldReverseUnderline"),
-        }
+        serializer.serialize_str(&self.to_string())
     }
 }
 
 impl Attr {
-    pub fn from_string_de<'de, D>(s: String) -> std::result::Result<Self, D::Error>
+    pub fn from_string_de<'de, D, T: AsRef<str>>(s: T) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        match s.as_str() {
-            "Default" => Ok(Attr::Default),
-            "Bold" => Ok(Attr::Bold),
-            "Underline" => Ok(Attr::Underline),
-            "BoldUnderline" => Ok(Attr::BoldUnderline),
-            "Reverse" => Ok(Attr::Reverse),
-            "BoldReverse" => Ok(Attr::BoldReverse),
-            "UnderlineReverse" => Ok(Attr::UnderlineReverse),
-            "BoldReverseUnderline" => Ok(Attr::BoldReverseUnderline),
-            _ => Err(de::Error::custom("invalid attr value")),
+        match s.as_ref().trim() {
+            "Default" => Ok(Attr::DEFAULT),
+            "Dim" => Ok(Attr::DIM),
+            "Bold" => Ok(Attr::BOLD),
+            "Italics" => Ok(Attr::ITALICS),
+            "Underline" => Ok(Attr::UNDERLINE),
+            "Blink" => Ok(Attr::BLINK),
+            "Reverse" => Ok(Attr::REVERSE),
+            "Hidden" => Ok(Attr::HIDDEN),
+            combination if combination.contains("|") => {
+                let mut ret = Attr::DEFAULT;
+                for c in combination.trim().split("|") {
+                    ret |= Self::from_string_de::<'de, D, &str>(c)?;
+                }
+                Ok(ret)
+            }
+            _ => Err(de::Error::custom(
+                r#"Text attribute value must either be a single attribute (eg "Bold") or a combination of attributes separated by "|" (eg "Bold|Underline"). Valid attributes are "Default", "Bold", "Italics", "Underline", "Blink", "Reverse" and "Hidden"."#,
+            )),
         }
     }
     pub fn write(self, prev: Attr, stdout: &mut crate::StateStdout) -> std::io::Result<()> {
         use std::io::Write;
-        match (self & Attr::Bold, prev & Attr::Bold) {
+        match (self.intersects(Attr::BOLD), prev.intersects(Attr::BOLD)) {
             (true, true) | (false, false) => Ok(()),
             (false, true) => write!(stdout, "\x1B[22m"),
             (true, false) => write!(stdout, "\x1B[1m"),
         }
-        .and_then(|_| match (self & Attr::Underline, prev & Attr::Underline) {
-            (true, true) | (false, false) => Ok(()),
-            (false, true) => write!(stdout, "\x1B[24m"),
-            (true, false) => write!(stdout, "\x1B[4m"),
+        .and_then(
+            |_| match (self.intersects(Attr::DIM), prev.intersects(Attr::DIM)) {
+                (true, true) | (false, false) => Ok(()),
+                (false, true) => write!(stdout, "\x1B[22m"),
+                (true, false) => write!(stdout, "\x1B[2m"),
+            },
+        )
+        .and_then(|_| {
+            match (
+                self.intersects(Attr::ITALICS),
+                prev.intersects(Attr::ITALICS),
+            ) {
+                (true, true) | (false, false) => Ok(()),
+                (false, true) => write!(stdout, "\x1B[23m"),
+                (true, false) => write!(stdout, "\x1B[3m"),
+            }
         })
-        .and_then(|_| match (self & Attr::Reverse, prev & Attr::Reverse) {
-            (true, true) | (false, false) => Ok(()),
-            (false, true) => write!(stdout, "\x1B[27m"),
-            (true, false) => write!(stdout, "\x1B[7m"),
+        .and_then(|_| {
+            match (
+                self.intersects(Attr::UNDERLINE),
+                prev.intersects(Attr::UNDERLINE),
+            ) {
+                (true, true) | (false, false) => Ok(()),
+                (false, true) => write!(stdout, "\x1B[24m"),
+                (true, false) => write!(stdout, "\x1B[4m"),
+            }
+        })
+        .and_then(
+            |_| match (self.intersects(Attr::BLINK), prev.intersects(Attr::BLINK)) {
+                (true, true) | (false, false) => Ok(()),
+                (false, true) => write!(stdout, "\x1B[25m"),
+                (true, false) => write!(stdout, "\x1B[5m"),
+            },
+        )
+        .and_then(|_| {
+            match (
+                self.intersects(Attr::REVERSE),
+                prev.intersects(Attr::REVERSE),
+            ) {
+                (true, true) | (false, false) => Ok(()),
+                (false, true) => write!(stdout, "\x1B[27m"),
+                (true, false) => write!(stdout, "\x1B[7m"),
+            }
+        })
+        .and_then(|_| {
+            match (self.intersects(Attr::HIDDEN), prev.intersects(Attr::HIDDEN)) {
+                (true, true) | (false, false) => Ok(()),
+                (false, true) => write!(stdout, "\x1B[28m"),
+                (true, false) => write!(stdout, "\x1B[8m"),
+            }
         })
     }
 }
@@ -2493,7 +2556,7 @@ fn test_cellbuffer_search() {
             &mut buf,
             Color::Default,
             Color::Default,
-            Attr::Default,
+            Attr::DEFAULT,
             ((0, i), (width.saturating_sub(1), i)),
             None,
         );

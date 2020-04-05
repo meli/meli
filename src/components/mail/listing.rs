@@ -1226,7 +1226,7 @@ impl Listing {
             grid,
             self.theme_default.fg,
             self.theme_default.bg,
-            Attr::Bold,
+            Attr::BOLD,
             area,
             None,
         );
@@ -1262,9 +1262,9 @@ impl Listing {
                     );
 
                     if !context.settings.terminal.use_color() {
-                        ret.0.attrs |= Attr::Reverse;
-                        ret.1.attrs |= Attr::Reverse;
-                        ret.2.attrs |= Attr::Reverse;
+                        ret.0.attrs |= Attr::REVERSE;
+                        ret.1.attrs |= Attr::REVERSE;
+                        ret.2.attrs |= Attr::REVERSE;
                     }
                     ret
                 } else {
@@ -1349,9 +1349,9 @@ impl Listing {
                 unread_count_att.bg,
                 unread_count_att.attrs
                     | if count.unwrap_or(0) > 0 {
-                        Attr::Bold
+                        Attr::BOLD
                     } else {
-                        Attr::Default
+                        Attr::DEFAULT
                     },
                 (
                     (

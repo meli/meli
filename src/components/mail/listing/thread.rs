@@ -83,7 +83,7 @@ impl MailListingTrait for ThreadListing {
             ..self.color_cache
         };
         if !context.settings.terminal.use_color() {
-            self.color_cache.highlighted.attrs |= Attr::Reverse;
+            self.color_cache.highlighted.attrs |= Attr::REVERSE;
         }
 
         // Get mailbox as a reference.
@@ -191,7 +191,7 @@ impl MailListingTrait for ThreadListing {
                     &mut self.content,
                     fg_color,
                     bg_color,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     ((0, idx), (MAX_COLS - 1, idx)),
                     None,
                 );

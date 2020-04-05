@@ -695,7 +695,7 @@ impl State {
         .unwrap();
         let mut current_fg = Color::Default;
         let mut current_bg = Color::Default;
-        let mut current_attrs = Attr::Default;
+        let mut current_attrs = Attr::DEFAULT;
         write!(stdout, "\x1B[m").unwrap();
         for x in x_start..=x_end {
             let c = &grid[(x, y)];
@@ -730,7 +730,7 @@ impl State {
             cursor::Goto(x_start as u16 + 1, (y + 1) as u16)
         )
         .unwrap();
-        let mut current_attrs = Attr::Default;
+        let mut current_attrs = Attr::DEFAULT;
         write!(stdout, "\x1B[m").unwrap();
         for x in x_start..=x_end {
             let c = &grid[(x, y)];

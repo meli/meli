@@ -457,7 +457,7 @@ impl Component for Composer {
             grid,
             Color::Byte(189),
             Color::Byte(167),
-            Attr::Default,
+            Attr::DEFAULT,
             (
                 pos_dec(upper_left!(header_area), (0, 1)),
                 bottom_right!(header_area),

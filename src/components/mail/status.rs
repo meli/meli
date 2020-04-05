@@ -53,7 +53,7 @@ impl Component for StatusPanel {
                 &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
-                Attr::Bold,
+                Attr::BOLD,
                 ((1, 1), (width - 1, height - 1)),
                 Some(1),
             );
@@ -91,7 +91,7 @@ impl Component for StatusPanel {
                 &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
-                Attr::Bold,
+                Attr::BOLD,
                 ((1, y + 1), (width - 1, height - 1)),
                 Some(1),
             );
@@ -276,7 +276,7 @@ impl StatusPanel {
                 &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
-                Attr::Bold,
+                Attr::BOLD,
                 ((3, 12 + i * 10), (120 - 2, 12 + i * 10)),
                 Some(3),
             );
@@ -356,7 +356,7 @@ impl StatusPanel {
                 &mut self.content,
                 self.theme_default.fg,
                 self.theme_default.bg,
-                Attr::Bold,
+                Attr::BOLD,
                 ((5 + column_width, y + 2), (120 - 2, y + 2)),
                 None,
             );
@@ -395,7 +395,7 @@ impl Component for AccountStatus {
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
-            Attr::Bold,
+            Attr::BOLD,
             ((1, 0), (width - 1, height - 1)),
             None,
         );
@@ -406,7 +406,7 @@ impl Component for AccountStatus {
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
-            Attr::Bold,
+            Attr::BOLD,
             ((1, line), (width - 1, height - 1)),
             None,
         );
@@ -429,7 +429,7 @@ impl Component for AccountStatus {
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
-            Attr::Bold,
+            Attr::BOLD,
             ((1, line), (width - 1, height - 1)),
             None,
         );
@@ -474,7 +474,7 @@ impl Component for AccountStatus {
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
-            Attr::Bold,
+            Attr::BOLD,
             ((1, line), (width - 1, height - 1)),
             None,
         );
@@ -501,7 +501,7 @@ impl Component for AccountStatus {
             &mut self.content,
             self.theme_default.fg,
             self.theme_default.bg,
-            Attr::Bold,
+            Attr::BOLD,
             ((1, line), (width - 1, height - 1)),
             None,
         );
@@ -531,7 +531,7 @@ impl Component for AccountStatus {
                     &mut self.content,
                     self.theme_default.fg,
                     self.theme_default.bg,
-                    Attr::Bold,
+                    Attr::BOLD,
                     ((1, line), (width - 1, height - 1)),
                     None,
                 );

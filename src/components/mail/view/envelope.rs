@@ -241,7 +241,7 @@ impl Component for EnvelopeView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     area,
                     Some(get_x(upper_left)),
                 );
@@ -255,7 +255,7 @@ impl Component for EnvelopeView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     (set_y(upper_left, y + 1), bottom_right),
                     Some(get_x(upper_left)),
                 );
@@ -269,7 +269,7 @@ impl Component for EnvelopeView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     (set_y(upper_left, y + 1), bottom_right),
                     Some(get_x(upper_left)),
                 );
@@ -283,7 +283,7 @@ impl Component for EnvelopeView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     (set_y(upper_left, y + 1), bottom_right),
                     Some(get_x(upper_left)),
                 );
@@ -297,7 +297,7 @@ impl Component for EnvelopeView {
                     grid,
                     Color::Byte(33),
                     Color::Default,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     (set_y(upper_left, y + 1), bottom_right),
                     Some(get_x(upper_left)),
                 );

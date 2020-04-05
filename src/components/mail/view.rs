@@ -492,7 +492,7 @@ impl Component for MailView {
                                 grid,
                                 Color::Default,
                                 Color::Default,
-                                Attr::Default,
+                                Attr::DEFAULT,
                                 ((_x, y), bottom_right),
                                 None,
                             );
@@ -524,7 +524,7 @@ impl Component for MailView {
                                 grid,
                                 Color::Default,
                                 Color::Default,
-                                Attr::Default,
+                                Attr::DEFAULT,
                                 ((x, y), bottom_right),
                                 Some(get_x(upper_left)),
                             );
@@ -537,7 +537,7 @@ impl Component for MailView {
                                 grid,
                                 Color::Default,
                                 Color::Default,
-                                Attr::Default,
+                                Attr::DEFAULT,
                                 ((x, y), bottom_right),
                                 Some(get_x(upper_left)),
                             );
@@ -550,7 +550,7 @@ impl Component for MailView {
                                 grid,
                                 Color::Default,
                                 Color::Default,
-                                Attr::Default,
+                                Attr::DEFAULT,
                                 ((x, y), bottom_right),
                                 Some(get_x(upper_left)),
                             );
@@ -743,7 +743,7 @@ impl Component for MailView {
                         grid,
                         Color::Default,
                         Color::Default,
-                        Attr::Default,
+                        Attr::DEFAULT,
                         (set_y(upper_left, y), bottom_right),
                         Some(get_x(upper_left)),
                     );

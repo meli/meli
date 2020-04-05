@@ -262,7 +262,7 @@ impl Default for ThemeValue<Color> {
 
 impl Default for ThemeValue<Attr> {
     fn default() -> Self {
-        ThemeValue::Value(Attr::Default)
+        ThemeValue::Value(Attr::DEFAULT)
     }
 }
 
@@ -272,7 +272,7 @@ impl<'de> Deserialize<'de> for ThemeValue<Attr> {
         D: Deserializer<'de>,
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
-            if let Ok(c) = Attr::from_string_de::<'de, D>(s.clone()) {
+            if let Ok(c) = Attr::from_string_de::<'de, D, String>(s.clone()) {
                 Ok(ThemeValue::Value(c))
             } else {
                 Ok(ThemeValue::Link(s.into()))
@@ -473,7 +473,7 @@ impl Default for Theme {
                 dark.insert($key.into(), ThemeAttributeInner::default());
             };
         }
-        add!("theme_default", dark = { fg: Color::Default, bg: Color::Default, attrs: Attr::Default }, light = { fg: Color::Default, bg: Color::Default, attrs: Attr::Default });
+        add!("theme_default", dark = { fg: Color::Default, bg: Color::Default, attrs: Attr::DEFAULT }, light = { fg: Color::Default, bg: Color::Default, attrs: Attr::DEFAULT });
         add!("status.bar", dark = { fg: Color::Byte(123), bg: Color::Byte(26) }, light = { fg: Color::Byte(123), bg: Color::Byte(26) });
         add!("status.notification", dark = { fg: Color::Byte(219), bg: Color::Byte(88) }, light = { fg: Color::Byte(219), bg: Color::Byte(88) });
 
@@ -482,13 +482,13 @@ impl Default for Theme {
         add!("tab.bar");
         add!(
             "widgets.list.header",
-            dark = { fg: Color::Black, bg: Color::White, attrs: Attr::Bold },
-            light = {fg: Color::White, bg: Color::Black, attrs: Attr::Bold }
+            dark = { fg: Color::Black, bg: Color::White, attrs: Attr::BOLD },
+            light = {fg: Color::White, bg: Color::Black, attrs: Attr::BOLD }
         );
         add!(
             "widgets.form.label",
-            dark = { attrs: Attr::Bold },
-            light = { attrs: Attr::Bold }
+            dark = { attrs: Attr::BOLD },
+            light = { attrs: Attr::BOLD }
         );
         add!("widgets.form.field");
         add!("widgets.form.highlighted", light = { bg: Color::Byte(246) }, dark = { bg: Color::Byte(246) });
@@ -567,7 +567,6 @@ impl Default for Theme {
             dark = {
                 fg: Color::Byte(0),
                 bg: Color::Byte(251)
-
             },
             light = {
                 fg: Color::Byte(0),
@@ -725,17 +724,17 @@ impl Default for Theme {
             light = {
                 fg: Color::White,
                 bg: Color::Byte(8),
-                attrs: Attr::Bold
+                attrs: Attr::BOLD
             },
             dark = {
                 fg: Color::White,
                 bg: Color::Byte(8),
-                attrs: Attr::Bold
+                attrs: Attr::BOLD
             }
         );
 
-        add!("pager.highlight_search", light = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::Bold }, dark = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::Bold });
-        add!("pager.highlight_search_current", light = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::Bold }, dark = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::Bold });
+        add!("pager.highlight_search", light = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD });
+        add!("pager.highlight_search_current", light = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD });
         Theme {
             light,
             dark,

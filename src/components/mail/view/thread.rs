@@ -266,7 +266,7 @@ impl ThreadView {
                     } else {
                         Color::Byte(251)
                     },
-                    Attr::Default,
+                    Attr::DEFAULT,
                     (
                         (e.index.0 * 4 + 1, 2 * y),
                         (e.index.0 * 4 + e.heading.grapheme_width() + 1, height - 1),
@@ -348,7 +348,7 @@ impl ThreadView {
                     } else {
                         Color::Byte(251)
                     },
-                    Attr::Default,
+                    Attr::DEFAULT,
                     (
                         (e.index.0 * 4 + 1, 2 * y),
                         (e.index.0 * 4 + e.heading.grapheme_width() + 1, height - 1),
@@ -668,7 +668,7 @@ impl ThreadView {
                 grid,
                 Color::Byte(33),
                 Color::Default,
-                Attr::Default,
+                Attr::DEFAULT,
                 area,
                 Some(get_x(upper_left)),
             );
@@ -771,7 +771,7 @@ impl ThreadView {
                 grid,
                 Color::Byte(33),
                 Color::Default,
-                Attr::Default,
+                Attr::DEFAULT,
                 area,
                 Some(get_x(upper_left)),
             );

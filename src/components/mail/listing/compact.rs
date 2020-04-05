@@ -127,7 +127,7 @@ impl MailListingTrait for CompactListing {
             ..self.color_cache
         };
         if !context.settings.terminal.use_color() {
-            self.color_cache.highlighted.attrs |= Attr::Reverse;
+            self.color_cache.highlighted.attrs |= Attr::REVERSE;
         }
 
         // Get mailbox as a reference.
@@ -1040,7 +1040,7 @@ impl CompactListing {
                 &mut columns[0],
                 fg_color,
                 bg_color,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, idx), (min_width.0, idx)),
                 None,
             );
@@ -1052,7 +1052,7 @@ impl CompactListing {
                 &mut columns[1],
                 fg_color,
                 bg_color,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, idx), (min_width.1.saturating_sub(1), idx)),
                 None,
             );
@@ -1064,7 +1064,7 @@ impl CompactListing {
                 &mut columns[2],
                 fg_color,
                 bg_color,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, idx), (min_width.2, idx)),
                 None,
             );
@@ -1076,7 +1076,7 @@ impl CompactListing {
                 &mut columns[3],
                 fg_color,
                 bg_color,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, idx), (min_width.3, idx)),
                 None,
             );
@@ -1088,7 +1088,7 @@ impl CompactListing {
                 &mut columns[4],
                 fg_color,
                 bg_color,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, idx), (min_width.4, idx)),
                 None,
             );

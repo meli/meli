@@ -287,13 +287,13 @@ impl ContactList {
         if a.name.grapheme_len() + s.len() > width + 1 {
             /* Print account name */
             let (x, y) =
-                write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::Bold, area, None);
+                write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::BOLD, area, None);
             write_string_to_grid(
                 &s,
                 grid,
                 fg_color,
                 bg_color,
-                Attr::Bold,
+                Attr::BOLD,
                 (
                     pos_dec(
                         (get_x(bottom_right!(area)), get_y(upper_left!(area))),
@@ -308,7 +308,7 @@ impl ContactList {
                 grid,
                 fg_color,
                 bg_color,
-                Attr::Bold,
+                Attr::BOLD,
                 (
                     pos_dec(
                         (get_x(bottom_right!(area)), get_y(upper_left!(area))),
@@ -327,13 +327,13 @@ impl ContactList {
             /* Print account name */
 
             let (x, y) =
-                write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::Bold, area, None);
+                write_string_to_grid(&a.name, grid, fg_color, bg_color, Attr::BOLD, area, None);
             write_string_to_grid(
                 &s,
                 grid,
                 fg_color,
                 bg_color,
-                Attr::Bold,
+                Attr::BOLD,
                 (
                     pos_dec(
                         (get_x(bottom_right!(area)), get_y(upper_left!(area))),

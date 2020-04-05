@@ -439,7 +439,7 @@ impl Component for FormWidget {
                         let mut field_attrs =
                             crate::conf::value(context, "widgets.form.highlighted");
                         if !context.settings.terminal.use_color() {
-                            field_attrs.attrs |= Attr::Reverse;
+                            field_attrs.attrs |= Attr::REVERSE;
                         }
                         for row in grid.bounds_iter((
                             pos_inc(upper_left, (0, i)),
@@ -670,7 +670,7 @@ where
                     } else {
                         theme_default.bg
                     },
-                    Attr::Bold,
+                    Attr::BOLD,
                     (
                         pos_inc(upper_left, (len, 0)),
                         pos_inc(upper_left, (cur_len + len, 0)),
@@ -847,7 +847,7 @@ impl AutoComplete {
                 .unwrap_or(0)
                 + 1,
             entries.len(),
-            Cell::with_style(Color::Byte(23), Color::Byte(7), Attr::Default),
+            Cell::with_style(Color::Byte(23), Color::Byte(7), Attr::DEFAULT),
         );
         let width = content.cols();
         for (i, e) in entries.iter().enumerate() {
@@ -856,7 +856,7 @@ impl AutoComplete {
                 &mut content,
                 Color::Byte(23),
                 Color::Byte(7),
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, i), (width - 1, i)),
                 None,
             );
@@ -865,7 +865,7 @@ impl AutoComplete {
                 &mut content,
                 Color::Byte(23),
                 Color::Byte(7),
-                Attr::Default,
+                Attr::DEFAULT,
                 ((x + 2, i), (width - 1, i)),
                 None,
             );
@@ -874,7 +874,7 @@ impl AutoComplete {
                 &mut content,
                 Color::Byte(23),
                 Color::Byte(7),
-                Attr::Default,
+                Attr::DEFAULT,
                 ((width - 1, i), (width - 1, i)),
                 None,
             );

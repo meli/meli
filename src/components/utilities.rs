@@ -495,13 +495,13 @@ impl Pager {
                 content,
                 colors.fg,
                 colors.bg,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, i), (width.saturating_sub(1), i)),
                 None,
             );
             if l.starts_with("⤷") {
                 content[(0, i)].set_fg(Color::Byte(240));
-                content[(0, i)].set_attrs(Attr::Bold);
+                content[(0, i)].set_attrs(Attr::BOLD);
             }
         }
     }
@@ -874,7 +874,7 @@ impl StatusBar {
     fn draw_status_bar(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         let mut attribute = crate::conf::value(context, "status.bar");
         if !context.settings.terminal.use_color() {
-            attribute.attrs |= Attr::Reverse;
+            attribute.attrs |= Attr::REVERSE;
         }
         let (x, y) = write_string_to_grid(
             &self.status,
@@ -900,7 +900,7 @@ impl StatusBar {
                     get_x(bottom_right!(area)),
                 )
             {
-                grid[(x, y)].set_attrs(attribute.attrs | Attr::Bold);
+                grid[(x, y)].set_attrs(attribute.attrs | Attr::BOLD);
             }
         }
 
@@ -923,7 +923,7 @@ impl StatusBar {
             grid,
             Color::Byte(219),
             Color::Byte(88),
-            Attr::Default,
+            Attr::DEFAULT,
             area,
             None,
         );
@@ -931,7 +931,7 @@ impl StatusBar {
             pos_inc(upper_left!(area), (self.ex_buffer.cursor(), 0)).0,
             y,
         ) {
-            cell.set_attrs(Attr::Underline);
+            cell.set_attrs(Attr::UNDERLINE);
         }
         change_colors(grid, area, Color::Byte(219), Color::Byte(88));
         context.dirty_areas.push_back(area);
@@ -1125,7 +1125,7 @@ impl Component for StatusBar {
                         grid,
                         Color::Byte(88),  // DarkRed,
                         Color::Byte(174), //LightPink3
-                        Attr::Default,
+                        Attr::DEFAULT,
                         (
                             set_y(
                                 upper_left!(hist_area),
@@ -1140,7 +1140,7 @@ impl Component for StatusBar {
                         grid,
                         Color::White,
                         Color::Byte(174),
-                        Attr::Default,
+                        Attr::DEFAULT,
                         ((x + 2, y), bottom_right!(hist_area)),
                         None,
                     );
@@ -1165,7 +1165,7 @@ impl Component for StatusBar {
                             grid,
                             Color::Byte(97), // MediumPurple3,
                             Color::Byte(88), //LightPink3
-                            Attr::Default,
+                            Attr::DEFAULT,
                             (
                                 (
                                     get_x(upper_left)
@@ -1482,7 +1482,7 @@ impl Tabbed {
         let tab_unfocused_attribute = crate::conf::value(context, "tab.unfocused");
         let mut tab_focused_attribute = crate::conf::value(context, "tab.focused");
         if !context.settings.terminal.use_color() {
-            tab_focused_attribute.attrs |= Attr::Reverse;
+            tab_focused_attribute.attrs |= Attr::REVERSE;
         }
 
         let mut x = get_x(upper_left);
@@ -1683,7 +1683,7 @@ impl Component for Tabbed {
                 &mut self.help_content,
                 Color::Default,
                 Color::Default,
-                Attr::Bold,
+                Attr::BOLD,
                 ((2, 0), (max_width.saturating_sub(2), max_length - 1)),
                 None,
             );
@@ -1692,7 +1692,7 @@ impl Component for Tabbed {
                 &mut self.help_content,
                 Color::Default,
                 Color::Default,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((x + 1, y), (max_width.saturating_sub(2), max_length - 1)),
                 None,
             );
@@ -1701,7 +1701,7 @@ impl Component for Tabbed {
                 &mut self.help_content,
                 Color::Default,
                 Color::Default,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((2, 1), (max_width.saturating_sub(2), max_length - 1)),
                 None,
             );
@@ -1712,7 +1712,7 @@ impl Component for Tabbed {
                     &mut self.help_content,
                     Color::Default,
                     Color::Default,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     ((2, 2), (max_width.saturating_sub(2), max_length - 1)),
                     None,
                 );
@@ -1724,7 +1724,7 @@ impl Component for Tabbed {
                     &mut self.help_content,
                     Color::Default,
                     Color::Default,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
                     None,
                 );
@@ -1738,7 +1738,7 @@ impl Component for Tabbed {
                         &mut self.help_content,
                         Color::Default,
                         Color::Default,
-                        Attr::Bold,
+                        Attr::BOLD,
                         ((2, 2 + idx), (max_width.saturating_sub(2), max_length - 1)),
                         None,
                     );
@@ -1747,7 +1747,7 @@ impl Component for Tabbed {
                         &mut self.help_content,
                         Color::Default,
                         Color::Default,
-                        Attr::Default,
+                        Attr::DEFAULT,
                         ((x + 2, y), (max_width.saturating_sub(2), max_length - 1)),
                         None,
                     );
@@ -2167,7 +2167,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
         let shortcuts = self.get_shortcuts(context);
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
-            highlighted_attrs.attrs |= Attr::Reverse;
+            highlighted_attrs.attrs |= Attr::REVERSE;
         }
         match (event, self.cursor) {
             (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
@@ -2188,7 +2188,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         &mut self.content,
                         Color::Default,
                         Color::Default,
-                        Attr::Default,
+                        Attr::DEFAULT,
                         ((3, c + 2), (width - 2, c + 2)),
                         None,
                     );
@@ -2198,7 +2198,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         &mut self.content,
                         Color::Default,
                         Color::Default,
-                        Attr::Default,
+                        Attr::DEFAULT,
                         ((3, c + 2), (width - 2, c + 2)),
                         None,
                     );
@@ -2240,7 +2240,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         self.content[c]
                             .set_fg(Color::Default)
                             .set_bg(Color::Default)
-                            .set_attrs(Attr::Default);
+                            .set_attrs(Attr::DEFAULT);
                     }
                     for c in self.content.row_iter(2..(width - 2), c + 1) {
                         self.content[c]
@@ -2256,7 +2256,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         self.content[c]
                             .set_fg(Color::Default)
                             .set_bg(Color::Default)
-                            .set_attrs(Attr::Default);
+                            .set_attrs(Attr::DEFAULT);
                     }
                     for c in self.content.row_iter(2..4, c + 1) {
                         self.content[c]
@@ -2280,14 +2280,14 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     self.content[c]
                         .set_fg(Color::Default)
                         .set_bg(Color::Default)
-                        .set_attrs(Attr::Default);
+                        .set_attrs(Attr::DEFAULT);
                 }
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
                 let mut highlighted_attrs =
                     crate::conf::value(context, "widgets.options.highlighted");
                 if !context.settings.terminal.use_color() {
-                    highlighted_attrs.attrs |= Attr::Reverse;
+                    highlighted_attrs.attrs |= Attr::REVERSE;
                 }
                 for c in self.content.row_iter(2..4, c + 2) {
                     self.content[c]
@@ -2308,7 +2308,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         self.content[c]
                             .set_fg(Color::Default)
                             .set_bg(Color::Default)
-                            .set_attrs(Attr::Default);
+                            .set_attrs(Attr::DEFAULT);
                     }
                     for c in self.content.row_iter(2..(width - 2), c + 3) {
                         self.content[c]
@@ -2324,7 +2324,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                         self.content[c]
                             .set_fg(Color::Default)
                             .set_bg(Color::Default)
-                            .set_attrs(Attr::Default);
+                            .set_attrs(Attr::DEFAULT);
                     }
                     for c in self.content.row_iter(2..4, c + 3) {
                         self.content[c]
@@ -2345,7 +2345,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     self.content[c]
                         .set_fg(Color::Default)
                         .set_bg(Color::Default)
-                        .set_attrs(Attr::Default);
+                        .set_attrs(Attr::DEFAULT);
                 }
                 for c in self.content.row_iter(
                     ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
@@ -2370,7 +2370,7 @@ impl<T: 'static + PartialEq + Debug + Clone + Sync + Send> Component for UIDialo
                     self.content[c]
                         .set_fg(Color::Default)
                         .set_bg(Color::Default)
-                        .set_attrs(Attr::Default);
+                        .set_attrs(Attr::DEFAULT);
                 }
                 for c in self.content.row_iter(
                     ((width - "OK    Cancel".len()) / 2 + 6)
@@ -2455,7 +2455,7 @@ impl Component for UIConfirmationDialog {
         let shortcuts = self.get_shortcuts(context);
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
-            highlighted_attrs.attrs |= Attr::Reverse;
+            highlighted_attrs.attrs |= Attr::REVERSE;
         }
         match (event, self.cursor) {
             (UIEvent::Input(Key::Char('\n')), _) if self.single_only => {
@@ -2476,7 +2476,7 @@ impl Component for UIConfirmationDialog {
                         &mut self.content,
                         Color::Default,
                         Color::Default,
-                        Attr::Default,
+                        Attr::DEFAULT,
                         ((3, c + 2), (width - 2, c + 2)),
                         None,
                     );
@@ -2486,7 +2486,7 @@ impl Component for UIConfirmationDialog {
                         &mut self.content,
                         Color::Default,
                         Color::Default,
-                        Attr::Default,
+                        Attr::DEFAULT,
                         ((3, c + 2), (width - 2, c + 2)),
                         None,
                     );
@@ -2528,7 +2528,7 @@ impl Component for UIConfirmationDialog {
                         self.content[c]
                             .set_fg(Color::Default)
                             .set_bg(Color::Default)
-                            .set_attrs(Attr::Default);
+                            .set_attrs(Attr::DEFAULT);
                     }
                     for c in self.content.row_iter(2..(width - 2), c + 1) {
                         self.content[c]
@@ -2544,7 +2544,7 @@ impl Component for UIConfirmationDialog {
                         self.content[c]
                             .set_fg(Color::Default)
                             .set_bg(Color::Default)
-                            .set_attrs(Attr::Default);
+                            .set_attrs(Attr::DEFAULT);
                     }
                     for c in self.content.row_iter(2..4, c + 1) {
                         self.content[c]
@@ -2568,14 +2568,14 @@ impl Component for UIConfirmationDialog {
                     self.content[c]
                         .set_fg(Color::Default)
                         .set_bg(Color::Default)
-                        .set_attrs(Attr::Default);
+                        .set_attrs(Attr::DEFAULT);
                 }
                 let c = self.entries.len().saturating_sub(1);
                 self.cursor = SelectorCursor::Entry(c);
                 let mut highlighted_attrs =
                     crate::conf::value(context, "widgets.options.highlighted");
                 if !context.settings.terminal.use_color() {
-                    highlighted_attrs.attrs |= Attr::Reverse;
+                    highlighted_attrs.attrs |= Attr::REVERSE;
                 }
                 for c in self.content.row_iter(2..4, c + 2) {
                     self.content[c]
@@ -2596,7 +2596,7 @@ impl Component for UIConfirmationDialog {
                         self.content[c]
                             .set_fg(Color::Default)
                             .set_bg(Color::Default)
-                            .set_attrs(Attr::Default);
+                            .set_attrs(Attr::DEFAULT);
                     }
                     for c in self.content.row_iter(2..(width - 2), c + 3) {
                         self.content[c]
@@ -2612,7 +2612,7 @@ impl Component for UIConfirmationDialog {
                         self.content[c]
                             .set_fg(Color::Default)
                             .set_bg(Color::Default)
-                            .set_attrs(Attr::Default);
+                            .set_attrs(Attr::DEFAULT);
                     }
                     for c in self.content.row_iter(2..4, c + 3) {
                         self.content[c]
@@ -2633,7 +2633,7 @@ impl Component for UIConfirmationDialog {
                     self.content[c]
                         .set_fg(Color::Default)
                         .set_bg(Color::Default)
-                        .set_attrs(Attr::Default);
+                        .set_attrs(Attr::DEFAULT);
                 }
                 for c in self.content.row_iter(
                     ((width - "OK    Cancel".len()) / 2)..((width - "OK    Cancel".len()) / 2 + 1),
@@ -2658,7 +2658,7 @@ impl Component for UIConfirmationDialog {
                     self.content[c]
                         .set_fg(Color::Default)
                         .set_bg(Color::Default)
-                        .set_attrs(Attr::Default);
+                        .set_attrs(Attr::DEFAULT);
                 }
                 for c in self.content.row_iter(
                     ((width - "OK    Cancel".len()) / 2 + 6)
@@ -2767,7 +2767,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             &mut content,
             Color::Byte(8),
             Color::Default,
-            Attr::Default,
+            Attr::DEFAULT,
             ((0, 0), (width - 1, 0)),
             None,
         );
@@ -2776,7 +2776,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             &mut content,
             Color::Default,
             Color::Default,
-            Attr::Default,
+            Attr::DEFAULT,
             ((2, 0), (width - 1, 0)),
             None,
         );
@@ -2786,7 +2786,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 &mut content,
                 Color::Byte(8),
                 Color::Default,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((x + i, 0), (width - 1, 0)),
                 None,
             );
@@ -2796,7 +2796,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             &mut content,
             Color::Byte(8),
             Color::Default,
-            Attr::Default,
+            Attr::DEFAULT,
             ((width - 1, 0), (width - 1, 0)),
             None,
         );
@@ -2805,7 +2805,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             &mut content,
             Color::Byte(8),
             Color::Default,
-            Attr::Default,
+            Attr::DEFAULT,
             ((0, height - 1), (width - 1, height - 1)),
             None,
         );
@@ -2818,7 +2818,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             &mut content,
             Color::Byte(8),
             Color::Default,
-            Attr::Default,
+            Attr::DEFAULT,
             ((1, height - 1), (width - 2, height - 1)),
             None,
         );
@@ -2827,7 +2827,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
             &mut content,
             Color::Byte(8),
             Color::Default,
-            Attr::Default,
+            Attr::DEFAULT,
             ((width - 1, height - 1), (width - 1, height - 1)),
             None,
         );
@@ -2837,7 +2837,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 &mut content,
                 Color::Byte(8),
                 Color::Default,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, i), (width - 1, i)),
                 None,
             );
@@ -2846,14 +2846,14 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 &mut content,
                 Color::Byte(8),
                 Color::Default,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((width - 1, i), (width - 1, i)),
                 None,
             );
         }
         let mut highlighted_attrs = crate::conf::value(context, "widgets.options.highlighted");
         if !context.settings.terminal.use_color() {
-            highlighted_attrs.attrs |= Attr::Reverse;
+            highlighted_attrs.attrs |= Attr::REVERSE;
         }
         if single_only {
             for (i, e) in entries.iter().enumerate() {
@@ -2869,7 +2869,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                     if i == 0 {
                         highlighted_attrs.attrs
                     } else {
-                        Attr::Default
+                        Attr::DEFAULT
                     },
                     ((2, i + 2), (width - 1, i + 2)),
                     None,
@@ -2882,7 +2882,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                     &mut content,
                     Color::Default,
                     Color::Default,
-                    Attr::Default,
+                    Attr::DEFAULT,
                     ((2, i + 2), (width - 1, i + 2)),
                     None,
                 );
@@ -2903,7 +2903,7 @@ impl<T: PartialEq + Debug + Clone + Sync + Send, F: 'static + Sync + Send> Selec
                 &mut content,
                 Color::Default,
                 Color::Default,
-                Attr::Bold,
+                Attr::BOLD,
                 (
                     ((width - "OK    Cancel".len()) / 2, height - 3),
                     (width - 1, height - 3),

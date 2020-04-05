@@ -114,7 +114,7 @@ impl MailListingTrait for ConversationsListing {
         };
 
         if !context.settings.terminal.use_color() {
-            self.color_cache.highlighted.attrs |= Attr::Reverse;
+            self.color_cache.highlighted.attrs |= Attr::REVERSE;
         }
         // Get mailbox as a reference.
         //
@@ -765,7 +765,7 @@ impl ConversationsListing {
                 &mut self.content,
                 fg_color,
                 bg_color,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, 3 * idx), (width - 1, 3 * idx)),
                 None,
             );
@@ -778,7 +778,7 @@ impl ConversationsListing {
                 &mut self.content,
                 fg_color,
                 bg_color,
-                Attr::Bold,
+                Attr::BOLD,
                 ((x, 3 * idx), (width - 1, 3 * idx)),
                 None,
             );
@@ -817,7 +817,7 @@ impl ConversationsListing {
                 &mut self.content,
                 fg_color,
                 bg_color,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
                 None,
             );
@@ -833,7 +833,7 @@ impl ConversationsListing {
                 &mut self.content,
                 fg_color,
                 bg_color,
-                Attr::Default,
+                Attr::DEFAULT,
                 ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
                 None,
             );
@@ -971,7 +971,7 @@ impl ConversationsListing {
             &mut self.content,
             fg_color,
             bg_color,
-            Attr::Default,
+            Attr::DEFAULT,
             ((0, 3 * idx), (width - 1, 3 * idx)),
             None,
         );
@@ -984,7 +984,7 @@ impl ConversationsListing {
             &mut self.content,
             fg_color,
             bg_color,
-            Attr::Bold,
+            Attr::BOLD,
             ((x, 3 * idx), (width - 1, 3 * idx)),
             None,
         );
@@ -1029,7 +1029,7 @@ impl ConversationsListing {
             &mut self.content,
             fg_color,
             bg_color,
-            Attr::Default,
+            Attr::DEFAULT,
             ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
             None,
         );
@@ -1043,7 +1043,7 @@ impl ConversationsListing {
             &mut self.content,
             fg_color,
             bg_color,
-            Attr::Default,
+            Attr::DEFAULT,
             ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
             None,
         );
