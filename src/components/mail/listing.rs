@@ -843,7 +843,7 @@ impl Component for Listing {
                     return true;
                 }
                 UIEvent::Input(ref k)
-                    if shortcut!(k == shortcuts[CompactListing::DESCRIPTION]["open_thread"]) =>
+                    if shortcut!(k == shortcuts[Listing::DESCRIPTION]["open_mailbox"]) =>
                 {
                     self.cursor_pos = self.menu_cursor_pos;
                     self.change_account(context);
@@ -1058,7 +1058,10 @@ impl Component for Listing {
 
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
         let mut map = self.component.get_shortcuts(context);
-        let config_map = context.settings.shortcuts.listing.key_values();
+        let mut config_map = context.settings.shortcuts.listing.key_values();
+        if self.focus != ListingFocus::Menu {
+            config_map.remove("open_mailbox");
+        }
         map.insert(Listing::DESCRIPTION, config_map);
 
         map
