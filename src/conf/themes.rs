@@ -174,14 +174,20 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "mail.sidebar_highlighted_account_index",
     "mail.listing.compact.even",
     "mail.listing.compact.odd",
-    "mail.listing.compact.unseen",
-    "mail.listing.compact.selected",
-    "mail.listing.compact.highlighted",
+    "mail.listing.compact.even_unseen",
+    "mail.listing.compact.odd_unseen",
+    "mail.listing.compact.even_selected",
+    "mail.listing.compact.odd_selected",
+    "mail.listing.compact.even_highlighted",
+    "mail.listing.compact.odd_highlighted",
     "mail.listing.plain.even",
     "mail.listing.plain.odd",
-    "mail.listing.plain.unseen",
-    "mail.listing.plain.selected",
-    "mail.listing.plain.highlighted",
+    "mail.listing.plain.even_unseen",
+    "mail.listing.plain.odd_unseen",
+    "mail.listing.plain.even_selected",
+    "mail.listing.plain.odd_selected",
+    "mail.listing.plain.even_highlighted",
+    "mail.listing.plain.odd_highlighted",
     "mail.listing.conversations",
     "mail.listing.conversations.subject",
     "mail.listing.conversations.from",
@@ -578,7 +584,7 @@ impl Default for Theme {
         );
         add!("mail.listing.compact.odd");
         add!(
-            "mail.listing.compact.unseen",
+            "mail.listing.compact.even_unseen",
             dark = {
                 fg: Color::Byte(0),
                 bg: Color::Byte(251)
@@ -588,7 +594,26 @@ impl Default for Theme {
                 bg: Color::Byte(251)
             }
         );
-        add!("mail.listing.compact.selected",
+        add!(
+            "mail.listing.compact.odd_unseen",
+            dark = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+            },
+            light = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+            }
+        );
+        add!("mail.listing.compact.even_selected",
+            dark = {
+                bg: Color::Byte(210)
+            },
+            light = {
+                bg: Color::Byte(210)
+            }
+        );
+        add!("mail.listing.compact.odd_selected",
             dark = {
                 bg: Color::Byte(210)
             },
@@ -597,7 +622,16 @@ impl Default for Theme {
             }
         );
         add!(
-            "mail.listing.compact.highlighted",
+            "mail.listing.compact.even_highlighted",
+            dark = {
+                bg: Color::Byte(246)
+            },
+            light = {
+                bg: Color::Byte(244)
+            }
+        );
+        add!(
+            "mail.listing.compact.odd_highlighted",
             dark = {
                 bg: Color::Byte(246)
             },
@@ -674,7 +708,7 @@ impl Default for Theme {
         );
         add!("mail.listing.plain.odd");
         add!(
-            "mail.listing.plain.unseen",
+            "mail.listing.plain.even_unseen",
             dark = {
                 fg: Color::Byte(0),
                 bg: Color::Byte(251)
@@ -685,7 +719,27 @@ impl Default for Theme {
                 bg: Color::Byte(251)
             }
         );
-        add!("mail.listing.plain.selected",
+        add!(
+            "mail.listing.plain.odd_unseen",
+            dark = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+
+            },
+            light = {
+                fg: Color::Byte(0),
+                bg: Color::Byte(251)
+            }
+        );
+        add!("mail.listing.plain.even_selected",
+            dark = {
+                bg: Color::Byte(210)
+            },
+            light = {
+                bg: Color::Byte(210)
+            }
+        );
+        add!("mail.listing.plain.odd_selected",
             dark = {
                 bg: Color::Byte(210)
             },
@@ -694,7 +748,16 @@ impl Default for Theme {
             }
         );
         add!(
-            "mail.listing.plain.highlighted",
+            "mail.listing.plain.even_highlighted",
+            dark = {
+                bg: Color::Byte(246)
+            },
+            light = {
+                bg: Color::Byte(244)
+            }
+        );
+        add!(
+            "mail.listing.plain.odd_highlighted",
             dark = {
                 bg: Color::Byte(246)
             },

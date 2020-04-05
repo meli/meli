@@ -116,11 +116,14 @@ impl MailListingTrait for PlainListing {
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
         self.color_cache = ColorCache {
-            unseen: crate::conf::value(context, "mail.listing.plain.unseen"),
-            highlighted: crate::conf::value(context, "mail.listing.plain.highlighted"),
             even: crate::conf::value(context, "mail.listing.plain.even"),
             odd: crate::conf::value(context, "mail.listing.plain.odd"),
-            selected: crate::conf::value(context, "mail.listing.plain.selected"),
+            even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
+            odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
+            even_highlighted: crate::conf::value(context, "mail.listing.plain.even_highlighted"),
+            odd_highlighted: crate::conf::value(context, "mail.listing.plain.odd_highlighted"),
+            even_selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
+            odd_selected: crate::conf::value(context, "mail.listing.plain.odd_selected"),
             attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             tag_default: crate::conf::value(context, "mail.listing.tag_default"),
@@ -213,31 +216,63 @@ impl ListingTrait for PlainListing {
         let envelope: EnvelopeRef = account.collection.get_env(i);
 
         let fg_color = if !envelope.is_seen() {
-            self.color_cache.unseen.fg
+            if idx % 2 == 0 {
+                self.color_cache.even_unseen.fg
+            } else {
+                self.color_cache.odd_unseen.fg
+            }
         } else if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted.fg
+            if idx % 2 == 0 {
+                self.color_cache.even_highlighted.fg
+            } else {
+                self.color_cache.odd_highlighted.fg
+            }
         } else if idx % 2 == 0 {
             self.color_cache.even.fg
         } else {
             self.color_cache.odd.fg
         };
         let bg_color = if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted.bg
+            if idx % 2 == 0 {
+                self.color_cache.even_highlighted.bg
+            } else {
+                self.color_cache.odd_highlighted.bg
+            }
         } else if self.selection[&i] {
-            self.color_cache.selected.bg
+            if idx % 2 == 0 {
+                self.color_cache.even_selected.bg
+            } else {
+                self.color_cache.odd_selected.bg
+            }
         } else if !envelope.is_seen() {
-            self.color_cache.unseen.bg
+            if idx % 2 == 0 {
+                self.color_cache.even_unseen.bg
+            } else {
+                self.color_cache.odd_unseen.bg
+            }
         } else if idx % 2 == 0 {
             self.color_cache.even.bg
         } else {
             self.color_cache.odd.bg
         };
         let attrs = if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted.attrs
+            if idx % 2 == 0 {
+                self.color_cache.even_highlighted.attrs
+            } else {
+                self.color_cache.odd_highlighted.attrs
+            }
         } else if self.selection[&i] {
-            self.color_cache.selected.attrs
+            if idx % 2 == 0 {
+                self.color_cache.even_selected.attrs
+            } else {
+                self.color_cache.odd_selected.attrs
+            }
         } else if !envelope.is_seen() {
-            self.color_cache.unseen.attrs
+            if idx % 2 == 0 {
+                self.color_cache.even_unseen.attrs
+            } else {
+                self.color_cache.odd_unseen.attrs
+            }
         } else if idx % 2 == 0 {
             self.color_cache.even.attrs
         } else {
@@ -791,7 +826,11 @@ impl PlainListing {
 
             let envelope: EnvelopeRef = context.accounts[self.cursor_pos.0].collection.get_env(i);
             let row_attr = if !envelope.is_seen() {
-                self.color_cache.unseen
+                if idx % 2 == 0 {
+                    self.color_cache.even_unseen
+                } else {
+                    self.color_cache.odd_unseen
+                }
             } else if idx % 2 == 0 {
                 self.color_cache.even
             } else {

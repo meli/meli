@@ -115,11 +115,14 @@ impl MailListingTrait for CompactListing {
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
         self.color_cache = ColorCache {
-            unseen: crate::conf::value(context, "mail.listing.compact.unseen"),
-            highlighted: crate::conf::value(context, "mail.listing.compact.highlighted"),
+            even_unseen: crate::conf::value(context, "mail.listing.compact.even_unseen"),
+            even_selected: crate::conf::value(context, "mail.listing.compact.even_selected"),
+            even_highlighted: crate::conf::value(context, "mail.listing.compact.even_highlighted"),
+            odd_unseen: crate::conf::value(context, "mail.listing.compact.odd_unseen"),
+            odd_selected: crate::conf::value(context, "mail.listing.compact.odd_selected"),
+            odd_highlighted: crate::conf::value(context, "mail.listing.compact.odd_highlighted"),
             even: crate::conf::value(context, "mail.listing.compact.even"),
             odd: crate::conf::value(context, "mail.listing.compact.odd"),
-            selected: crate::conf::value(context, "mail.listing.compact.selected"),
             attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             tag_default: crate::conf::value(context, "mail.listing.tag_default"),
@@ -210,31 +213,63 @@ impl ListingTrait for CompactListing {
         let thread = threads.thread_ref(thread_hash);
 
         let fg_color = if thread.unseen() > 0 {
-            self.color_cache.unseen.fg
+            if idx % 2 == 0 {
+                self.color_cache.even_unseen.fg
+            } else {
+                self.color_cache.odd_unseen.fg
+            }
         } else if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted.fg
+            if idx % 2 == 0 {
+                self.color_cache.even_highlighted.fg
+            } else {
+                self.color_cache.odd_highlighted.fg
+            }
         } else if idx % 2 == 0 {
             self.color_cache.even.fg
         } else {
             self.color_cache.odd.fg
         };
         let bg_color = if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted.bg
+            if idx % 2 == 0 {
+                self.color_cache.even_highlighted.bg
+            } else {
+                self.color_cache.odd_highlighted.bg
+            }
         } else if self.selection[&thread_hash] {
-            self.color_cache.selected.bg
+            if idx % 2 == 0 {
+                self.color_cache.even_selected.bg
+            } else {
+                self.color_cache.odd_selected.bg
+            }
         } else if thread.unseen() > 0 {
-            self.color_cache.unseen.bg
+            if idx % 2 == 0 {
+                self.color_cache.even_unseen.bg
+            } else {
+                self.color_cache.odd_unseen.bg
+            }
         } else if idx % 2 == 0 {
             self.color_cache.even.bg
         } else {
             self.color_cache.odd.bg
         };
         let attrs = if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted.attrs
+            if idx % 2 == 0 {
+                self.color_cache.even_highlighted.attrs
+            } else {
+                self.color_cache.odd_highlighted.attrs
+            }
         } else if self.selection[&thread_hash] {
-            self.color_cache.selected.attrs
+            if idx % 2 == 0 {
+                self.color_cache.even_selected.attrs
+            } else {
+                self.color_cache.odd_selected.attrs
+            }
         } else if thread.unseen() > 0 {
-            self.color_cache.unseen.attrs
+            if idx % 2 == 0 {
+                self.color_cache.even_unseen.attrs
+            } else {
+                self.color_cache.odd_unseen.attrs
+            }
         } else if idx % 2 == 0 {
             self.color_cache.even.attrs
         } else {
@@ -851,7 +886,11 @@ impl CompactListing {
             }
             let thread = threads.thread_ref(thread);
             let row_attr = if thread.unseen() > 0 {
-                self.color_cache.unseen
+                if idx % 2 == 0 {
+                    self.color_cache.even_unseen
+                } else {
+                    self.color_cache.odd_unseen
+                }
             } else if idx % 2 == 0 {
                 self.color_cache.even
             } else {
@@ -1017,12 +1056,16 @@ impl CompactListing {
                 return;
             }
             let idx = self.order[&thread_hash];
-            let (fg_color, bg_color) = if thread.unseen() > 0 {
-                (self.color_cache.unseen.fg, self.color_cache.unseen.bg)
+            let row_attr = if thread.unseen() > 0 {
+                if idx % 2 == 0 {
+                    self.color_cache.even_unseen
+                } else {
+                    self.color_cache.odd_unseen
+                }
             } else if idx % 2 == 0 {
-                (self.color_cache.even.fg, self.color_cache.even.bg)
+                self.color_cache.even
             } else {
-                (self.color_cache.odd.fg, self.color_cache.odd.bg)
+                self.color_cache.odd
             };
             let envelope: EnvelopeRef = account.collection.get_env(env_hash);
             let strings = self.make_entry_string(&envelope, context, threads, thread_hash);
@@ -1038,57 +1081,57 @@ impl CompactListing {
             let (x, _) = write_string_to_grid(
                 &idx.to_string(),
                 &mut columns[0],
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.0, idx)),
                 None,
             );
             for c in columns[0].row_iter(x..min_width.0, idx) {
-                columns[0][c].set_bg(bg_color);
+                columns[0][c].set_bg(row_attr.bg);
             }
             let (x, _) = write_string_to_grid(
                 &strings.date,
                 &mut columns[1],
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.1.saturating_sub(1), idx)),
                 None,
             );
             for c in columns[1].row_iter(x..min_width.1, idx) {
-                columns[1][c].set_bg(bg_color);
+                columns[1][c].set_bg(row_attr.bg);
             }
             let (x, _) = write_string_to_grid(
                 &strings.from,
                 &mut columns[2],
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.2, idx)),
                 None,
             );
             for c in columns[2].row_iter(x..min_width.2, idx) {
-                columns[2][c].set_bg(bg_color);
+                columns[2][c].set_bg(row_attr.bg);
             }
             let (x, _) = write_string_to_grid(
                 &strings.flag,
                 &mut columns[3],
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.3, idx)),
                 None,
             );
             for c in columns[3].row_iter(x..min_width.3, idx) {
-                columns[3][c].set_bg(bg_color);
+                columns[3][c].set_bg(row_attr.bg);
             }
             let (x, _) = write_string_to_grid(
                 &strings.subject,
                 &mut columns[4],
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, idx), (min_width.4, idx)),
                 None,
             );
@@ -1125,7 +1168,7 @@ impl CompactListing {
             };
             for c in columns[4].row_iter(x..min_width.4, idx) {
                 columns[4][c].set_ch(' ');
-                columns[4][c].set_bg(bg_color);
+                columns[4][c].set_bg(row_attr.bg);
             }
             match (thread.snoozed(), thread.has_attachments()) {
                 (true, true) => {

@@ -100,7 +100,7 @@ impl MailListingTrait for ConversationsListing {
             from: crate::conf::value(context, "mail.listing.conversations.from"),
             date: crate::conf::value(context, "mail.listing.conversations.date"),
             padding: crate::conf::value(context, "mail.listing.conversations.padding"),
-            selected: crate::conf::value(context, "mail.listing.compact.selected"),
+            selected: crate::conf::value(context, "mail.listing.conversations.selected"),
             unseen: crate::conf::value(context, "mail.listing.conversations.unseen"),
             unseen_padding: crate::conf::value(
                 context,
@@ -560,7 +560,7 @@ impl fmt::Display for ConversationsListing {
 }
 
 impl ConversationsListing {
-    const DESCRIPTION: &'static str = "compact listing";
+    const DESCRIPTION: &'static str = "conversations listing";
     pub fn new(coordinates: (usize, MailboxHash)) -> Self {
         ConversationsListing {
             cursor_pos: (0, 1, 0),
