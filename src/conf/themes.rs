@@ -323,7 +323,79 @@ pub struct Theme {
 }
 
 impl Theme {
+    fn validate_keys(
+        name: &str,
+        theme: &HashMap<Cow<'static, str>, ThemeAttributeInner>,
+        hash_set: &HashSet<&'static str>,
+    ) -> Result<()> {
+        let keys = theme
+            .keys()
+            .filter_map(|k| {
+                if !hash_set.contains(&k.as_ref()) {
+                    Some((None, "key", k.as_ref()))
+                } else {
+                    None
+                }
+            })
+            .chain(theme.iter().filter_map(|(key, a)| {
+                if let ThemeValue::Link(ref r) = a.fg {
+                    if !hash_set.contains(&r.as_ref()) {
+                        Some((Some(key), "fg link", r.as_ref()))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }))
+            .chain(theme.iter().filter_map(|(key, a)| {
+                if let ThemeValue::Link(ref r) = a.bg {
+                    if !hash_set.contains(&r.as_ref()) {
+                        Some((Some(key), "bg link", r.as_ref()))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }))
+            .chain(theme.iter().filter_map(|(key, a)| {
+                if let ThemeValue::Link(ref r) = a.attrs {
+                    if !hash_set.contains(&r.as_ref()) {
+                        Some((Some(key), "attrs link", r.as_ref()))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }))
+            .collect::<SmallVec<[(Option<_>, &'_ str, &'_ str); 128]>>();
+
+        if !keys.is_empty() {
+            return Err(format!(
+                "{} theme contains unrecognized theme keywords: {}",
+                name,
+                keys.into_iter()
+                    .map(|(key_opt, desc, link)| if let Some(key) = key_opt {
+                        format!("{} {}: \"{}\"", key, desc, link)
+                    } else {
+                        format!("{}: \"{}\"", desc, link)
+                    })
+                    .collect::<SmallVec<[String; 128]>>()
+                    .join(", ")
+            )
+            .into());
+        }
+        Ok(())
+    }
     pub fn validate(&self) -> Result<()> {
+        let hash_set: HashSet<&'static str> = DEFAULT_KEYS.into_iter().map(|k| *k).collect();
+        Theme::validate_keys("light", &self.light, &hash_set)?;
+        Theme::validate_keys("dark", &self.dark, &hash_set)?;
+        for (name, t) in self.other_themes.iter() {
+            Theme::validate_keys(name, t, &hash_set)?;
+        }
         if let Err(err) = is_cyclic(&self.light) {
             return Err(MeliError::new(format!(
                 "light theme contains a cycle: {}",
@@ -342,63 +414,6 @@ impl Theme {
                     "{} theme contains a cycle: {}",
                     k, err
                 )));
-            }
-        }
-        let hash_set: HashSet<&'static str> = DEFAULT_KEYS.into_iter().map(|k| *k).collect();
-        let keys = self
-            .light
-            .keys()
-            .filter_map(|k| {
-                if !hash_set.contains(&k.as_ref()) {
-                    Some(k.as_ref())
-                } else {
-                    None
-                }
-            })
-            .collect::<SmallVec<[&'_ str; 128]>>();
-        if !keys.is_empty() {
-            return Err(format!(
-                "light theme contains unrecognized theme keywords: {}",
-                keys.join(", ")
-            )
-            .into());
-        }
-        let keys = self
-            .dark
-            .keys()
-            .filter_map(|k| {
-                if !hash_set.contains(&k.as_ref()) {
-                    Some(k.as_ref())
-                } else {
-                    None
-                }
-            })
-            .collect::<SmallVec<[&'_ str; 128]>>();
-        if !keys.is_empty() {
-            return Err(format!(
-                "light theme contains unrecognized theme keywords: {}",
-                keys.join(", ")
-            )
-            .into());
-        }
-        for (name, t) in self.other_themes.iter() {
-            let keys = t
-                .keys()
-                .filter_map(|k| {
-                    if !hash_set.contains(&k.as_ref()) {
-                        Some(k.as_ref())
-                    } else {
-                        None
-                    }
-                })
-                .collect::<SmallVec<[&'_ str; 128]>>();
-            if !keys.is_empty() {
-                return Err(format!(
-                    "`{}` theme contains unrecognized theme keywords: {}",
-                    name,
-                    keys.join(", ")
-                )
-                .into());
             }
         }
         Ok(())
