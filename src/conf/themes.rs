@@ -318,14 +318,95 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Theme {
-    #[serde(default)]
     pub light: HashMap<Cow<'static, str>, ThemeAttributeInner>,
-    #[serde(default)]
     pub dark: HashMap<Cow<'static, str>, ThemeAttributeInner>,
-    #[serde(flatten, default)]
     pub other_themes: HashMap<String, HashMap<Cow<'static, str>, ThemeAttributeInner>>,
+}
+
+impl<'de> Deserialize<'de> for Theme {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct ThemeOptions {
+            #[serde(default)]
+            light: HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
+            #[serde(default)]
+            dark: HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
+            #[serde(flatten, default)]
+            other_themes: HashMap<String, HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>>,
+        }
+        #[derive(Deserialize)]
+        struct ThemeAttributeInnerOptions {
+            #[serde(default)]
+            fg: Option<ThemeValue<Color>>,
+            #[serde(default)]
+            bg: Option<ThemeValue<Color>>,
+            #[serde(default)]
+            attrs: Option<ThemeValue<Attr>>,
+        }
+
+        let mut ret = Theme::default();
+        let mut s = <ThemeOptions>::deserialize(deserializer)?;
+        for tk in s.other_themes.keys() {
+            ret.other_themes.insert(tk.clone(), ret.dark.clone());
+        }
+
+        for (k, v) in ret.light.iter_mut() {
+            if let Some(att) = s.light.get_mut(k).and_then(|att| att.fg.take()) {
+                v.fg = att;
+            }
+            if let Some(att) = s.light.get_mut(k).and_then(|att| att.bg.take()) {
+                v.bg = att;
+            }
+            if let Some(att) = s.light.get_mut(k).and_then(|att| att.attrs.take()) {
+                v.attrs = att;
+            }
+        }
+        for (k, v) in ret.dark.iter_mut() {
+            if let Some(att) = s.dark.get_mut(k).and_then(|att| att.fg.take()) {
+                v.fg = att;
+            }
+            if let Some(att) = s.dark.get_mut(k).and_then(|att| att.bg.take()) {
+                v.bg = att;
+            }
+            if let Some(att) = s.dark.get_mut(k).and_then(|att| att.attrs.take()) {
+                v.attrs = att;
+            }
+        }
+        for (tk, t) in ret.other_themes.iter_mut() {
+            for (k, v) in t.iter_mut() {
+                if let Some(att) = s
+                    .other_themes
+                    .get_mut(tk)
+                    .and_then(|theme| theme.get_mut(k))
+                    .and_then(|att| att.fg.take())
+                {
+                    v.fg = att;
+                }
+                if let Some(att) = s
+                    .other_themes
+                    .get_mut(tk)
+                    .and_then(|theme| theme.get_mut(k))
+                    .and_then(|att| att.bg.take())
+                {
+                    v.bg = att;
+                }
+                if let Some(att) = s
+                    .other_themes
+                    .get_mut(tk)
+                    .and_then(|theme| theme.get_mut(k))
+                    .and_then(|att| att.attrs.take())
+                {
+                    v.attrs = att;
+                }
+            }
+        }
+        Ok(ret)
+    }
 }
 
 impl Theme {
