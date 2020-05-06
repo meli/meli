@@ -20,7 +20,7 @@
  */
 
 use super::{
-    BackendMailbox, BackendOp, MailBackend, Mailbox, MailboxHash, RefreshEvent,
+    BackendMailbox, BackendOp, MailBackend, Mailbox, MailboxHash, MaildirPathTrait, RefreshEvent,
     RefreshEventConsumer, RefreshEventKind::*,
 };
 use super::{MaildirMailbox, MaildirOp};
@@ -485,15 +485,20 @@ impl MailBackend for MaildirType {
                                             &index_lock[&hash].buf.display()
                                         ),
                                     }
+                                    index_lock.entry(hash).and_modify(|e| {
+                                        e.removed = false;
+                                    });
                                     continue;
+                                }
+                                *mailbox_counts[&mailbox_hash].1.lock().unwrap() -= 1;
+                                if !pathbuf.flags().contains(Flag::SEEN) {
+                                    *mailbox_counts[&mailbox_hash].0.lock().unwrap() -= 1;
                                 }
 
                                 index_lock.entry(hash).and_modify(|e| {
                                     e.removed = true;
                                 });
 
-                                //FIXME: check if envelope was unseen to update unseen count
-                                *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
                                 sender.send(RefreshEvent {
                                     hash: mailbox_hash,
                                     kind: Remove(hash),
@@ -511,6 +516,10 @@ impl MailBackend for MaildirType {
 
                                 let mut hash_indexes_lock = hash_indexes.lock().unwrap();
                                 let index_lock = hash_indexes_lock.entry(mailbox_hash).or_default();
+                                // TODO: Represent index states with an enum: make illegal
+                                // states unrepresentable.
+                                let was_seen: bool = src.flags().contains(Flag::SEEN);
+                                let is_seen: bool = dest.flags().contains(Flag::SEEN);
 
                                 if index_lock.contains_key(&old_hash)
                                     && !index_lock[&old_hash].removed
@@ -524,11 +533,17 @@ impl MailBackend for MaildirType {
                                         hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),
                                     });
+                                    if !was_seen && is_seen {
+                                        let mut lck = mailbox_counts[&mailbox_hash].0.lock().unwrap();
+                                        *lck = lck.saturating_sub(1);
+                                    } else if was_seen && !is_seen {
+                                        *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
+                                    }
                                     mailbox_index.lock().unwrap().insert(new_hash,get_path_hash!(dest) );
                                     index_lock.insert(new_hash, dest.into());
                                     continue;
                                 } else if !index_lock.contains_key(&new_hash)
-                                    || index_lock
+                                    && index_lock
                                         .get(&old_hash)
                                         .map(|e| e.removed)
                                         .unwrap_or(false)
@@ -571,7 +586,7 @@ impl MailBackend for MaildirType {
                                         if !env.is_seen() {
                                             *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
                                         }
-                                            *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
+                                        *mailbox_counts[&mailbox_hash].1.lock().unwrap() += 1;
                                         sender.send(RefreshEvent {
                                             hash: mailbox_hash,
                                             kind: Create(Box::new(env)),
@@ -581,6 +596,9 @@ impl MailBackend for MaildirType {
                                         debug!("not valid email");
                                     }
                                 } else {
+                                    if was_seen && !is_seen {
+                                        *mailbox_counts[&mailbox_hash].0.lock().unwrap() += 1;
+                                    }
                                     sender.send(RefreshEvent {
                                         hash: get_path_hash!(dest),
                                         kind: Rename(old_hash, new_hash),

@@ -96,30 +96,10 @@ impl<'a> BackendOp for MaildirOp {
         /* Unwrap is safe since we use ? above. */
         Ok(unsafe { self.slice.as_ref().unwrap().as_slice() })
     }
+
     fn fetch_flags(&self) -> Flag {
-        let mut flag = Flag::default();
         let path = self.path();
-        let path = path.to_str().unwrap(); // Assume UTF-8 validity
-        if !path.contains(":2,") {
-            return flag;
-        }
-
-        for f in path.chars().rev() {
-            match f {
-                ',' => break,
-                'D' => flag |= Flag::DRAFT,
-                'F' => flag |= Flag::FLAGGED,
-                'P' => flag |= Flag::PASSED,
-                'R' => flag |= Flag::REPLIED,
-                'S' => flag |= Flag::SEEN,
-                'T' => flag |= Flag::TRASHED,
-                _ => {
-                    debug!("DEBUG: in fetch_flags, path is {}", path);
-                }
-            }
-        }
-
-        flag
+        path.flags()
     }
 
     fn set_flag(&mut self, envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
@@ -311,5 +291,36 @@ impl BackendMailbox for MaildirMailbox {
 
     fn count(&self) -> Result<(usize, usize)> {
         Ok((*self.unseen.lock()?, *self.total.lock()?))
+    }
+}
+
+pub trait MaildirPathTrait {
+    fn flags(&self) -> Flag;
+}
+
+impl MaildirPathTrait for Path {
+    fn flags(&self) -> Flag {
+        let mut flag = Flag::default();
+        let path = self.to_string_lossy();
+        if !path.contains(":2,") {
+            return flag;
+        }
+
+        for f in path.chars().rev() {
+            match f {
+                ',' => break,
+                'D' => flag |= Flag::DRAFT,
+                'F' => flag |= Flag::FLAGGED,
+                'P' => flag |= Flag::PASSED,
+                'R' => flag |= Flag::REPLIED,
+                'S' => flag |= Flag::SEEN,
+                'T' => flag |= Flag::TRASHED,
+                _ => {
+                    debug!("DEBUG: in MaildirPathTrait::flags(), encountered unknown flag marker {:?}, path is {}", f, path);
+                }
+            }
+        }
+
+        flag
     }
 }
