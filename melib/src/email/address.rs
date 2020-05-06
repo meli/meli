@@ -95,12 +95,18 @@ impl Address {
     }
 
     pub fn get_tags(&self, separator: char) -> Vec<String> {
-        let mut ret = Vec::new();
         let email = self.get_email();
-        let at_pos = email.as_bytes().iter().position(|&b| b == b'@').unwrap();
+        let at_pos = email
+            .as_bytes()
+            .iter()
+            .position(|&b| b == b'@')
+            .unwrap_or(0);
         let email: &str = email[..at_pos].into();
-        ret.extend(email.split(separator).skip(1).map(str::to_string));
-        ret
+        email
+            .split(separator)
+            .skip(1)
+            .map(str::to_string)
+            .collect::<_>()
     }
 }
 
@@ -190,7 +196,7 @@ pub struct MessageID(pub Vec<u8>, pub StrBuilder);
 
 impl StrBuild for MessageID {
     fn new(string: &[u8], slice: &[u8]) -> Self {
-        let offset = string.find(slice).unwrap();
+        let offset = string.find(slice).unwrap_or(0);
         MessageID(
             string.to_owned(),
             StrBuilder {

@@ -77,11 +77,17 @@ impl BytesExt for [u8] {
     }
     // https://stackoverflow.com/a/35907071
     fn find(&self, needle: &[u8]) -> Option<usize> {
+        if needle.is_empty() {
+            return None;
+        }
         self.windows(needle.len())
             .position(|window| window == needle)
     }
 
     fn rfind(&self, needle: &[u8]) -> Option<usize> {
+        if needle.is_empty() {
+            return None;
+        }
         self.windows(needle.len())
             .rposition(|window| window == needle)
     }
