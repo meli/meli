@@ -348,7 +348,7 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
     }
     let tag_end_idx = tag_end_idx.unwrap();
 
-    if input[2 + tag_end_idx] != b'?' {
+    if tag_end_idx + 2 >= input.len() || input[2 + tag_end_idx] != b'?' {
         return IResult::Error(error_code!(ErrorKind::Custom(43)));
     }
     /* See if input ends with "?=" and get ending index
@@ -357,7 +357,7 @@ fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
      */
     let mut encoded_end_idx = None;
     for i in (3 + tag_end_idx)..input.len() {
-        if input[i] == b'?' && i < input.len() && input[i + 1] == b'=' {
+        if input[i] == b'?' && i + 1 < input.len() && input[i + 1] == b'=' {
             encoded_end_idx = Some(i);
             break;
         }
@@ -477,18 +477,20 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
             return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
         let mut end = input.len();
+        let mut at_flag = false;
         let mut flag = false;
         for (i, b) in input[display_name.length + 2..].iter().enumerate() {
             match *b {
-                b'@' => flag = true,
+                b'@' => at_flag = true,
                 b'>' => {
                     end = i;
+                    flag = true;
                     break;
                 }
                 _ => {}
             }
         }
-        if flag {
+        if at_flag && flag {
             match phrase(&input[0..end + display_name.length + 3], false) {
                 IResult::Error(e) => IResult::Error(e),
                 IResult::Incomplete(i) => IResult::Incomplete(i),
