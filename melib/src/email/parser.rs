@@ -190,6 +190,9 @@ fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
             return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
     }
+    if ptr >= input.len() {
+        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    }
     while input[ptr] == b' ' || input[ptr] == b'\t' {
         ptr += 1;
         if ptr >= input.len() {
@@ -227,7 +230,7 @@ fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
             return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
     }
-    if name.is_empty() {
+    if name.is_empty() || input.len() <= ptr {
         return IResult::Error(error_code!(ErrorKind::Custom(43)));
     }
     if input[ptr] == b':' {
@@ -936,6 +939,9 @@ pub fn phrase(input: &[u8], multiline: /* preserve newlines */ bool) -> IResult<
                 .find(b" ")
                 .unwrap_or_else(|| ascii_s + input[ascii_s..].len());
             ptr = ascii_e;
+        }
+        if ascii_s >= ascii_e {
+            return IResult::Error(error_code!(ErrorKind::Custom(43)));
         }
 
         acc.extend(
