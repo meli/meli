@@ -235,7 +235,8 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             env.set_datetime(d);
         }
         if let Some(ref mut sent_at) = t.sent_at {
-            let unix = crate::datetime::rfc3339_to_timestamp(sent_at.as_bytes().to_vec());
+            let unix =
+                crate::datetime::rfc3339_to_timestamp(sent_at.as_bytes().to_vec()).unwrap_or(0);
             env.set_datetime(unix);
             env.set_date(std::mem::replace(sent_at, String::new()).as_bytes());
         }

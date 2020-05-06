@@ -22,6 +22,8 @@
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 
+use crate::error::Result;
+
 pub type UnixTimestamp = u64;
 
 use libc::{timeval, timezone};
@@ -53,25 +55,26 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>) -> Strin
         let i: i64 = timestamp.try_into().unwrap_or(0);
         localtime_r(&i as *const i64, &mut new_tm as *mut ::libc::tm);
     }
-    let fmt = fmt.map(|slice| CString::new(slice).unwrap());
+    let fmt = fmt
+        .map(|slice| CString::new(slice))
+        .map(|res| res.ok())
+        .and_then(|opt| opt);
     let format: &CStr = if let Some(ref s) = fmt {
         &s
     } else {
         unsafe { CStr::from_bytes_with_nul_unchecked(b"%a, %d %b %Y %T %z\0") }
     };
-    let s: CString;
-    unsafe {
-        let mut vec: [u8; 256] = [0; 256];
-        let ret = strftime(
+    let mut vec: [u8; 256] = [0; 256];
+    let ret = unsafe {
+        strftime(
             vec.as_mut_ptr() as *mut _,
             256,
             format.as_ptr(),
             &new_tm as *const _,
-        );
-        s = CString::new(&vec[0..ret]).unwrap();
-    }
+        )
+    };
 
-    s.to_string_lossy().to_string()
+    String::from_utf8_lossy(&vec[0..ret]).into_owned()
 }
 
 fn tm_to_secs(tm: ::libc::tm) -> std::result::Result<i64, ()> {
@@ -184,11 +187,11 @@ fn month_to_secs(month: usize, is_leap: bool) -> i64 {
     return t;
 }
 
-pub fn rfc822_to_timestamp<T>(s: T) -> UnixTimestamp
+pub fn rfc822_to_timestamp<T>(s: T) -> Result<UnixTimestamp>
 where
     T: Into<Vec<u8>>,
 {
-    let s = CString::new(s).unwrap();
+    let s = CString::new(s)?;
     let mut new_tm: ::libc::tm = unsafe { std::mem::zeroed() };
     for fmt in &[
         &b"%a, %e %h %Y %H:%M:%S \0"[..],
@@ -231,19 +234,19 @@ where
                     0
                 }
             };
-            return tm_to_secs(new_tm)
+            return Ok(tm_to_secs(new_tm)
                 .map(|res| (res - tm_gmtoff) as u64)
-                .unwrap_or(0);
+                .unwrap_or(0));
         }
     }
-    return 0;
+    return Ok(0);
 }
 
-pub fn rfc3339_to_timestamp<T>(s: T) -> UnixTimestamp
+pub fn rfc3339_to_timestamp<T>(s: T) -> Result<UnixTimestamp>
 where
     T: Into<Vec<u8>>,
 {
-    let s = CString::new(s).unwrap();
+    let s = CString::new(s)?;
     let mut new_tm: ::libc::tm = unsafe { std::mem::zeroed() };
     for fmt in &[&b"%Y-%m-%dT%H:%M:%S\0"[..], &b"%Y-%m-%d\0"[..]] {
         unsafe {
@@ -284,31 +287,31 @@ where
                     0
                 }
             };
-            return tm_to_secs(new_tm)
+            return Ok(tm_to_secs(new_tm)
                 .map(|res| (res - tm_gmtoff) as u64)
-                .unwrap_or(0);
+                .unwrap_or(0));
         }
     }
-    return 0;
+    return Ok(0);
 }
 
 // FIXME: Handle non-local timezone?
-pub fn timestamp_from_string<T>(s: T, fmt: &str) -> Option<UnixTimestamp>
+pub fn timestamp_from_string<T>(s: T, fmt: &str) -> Result<Option<UnixTimestamp>>
 where
     T: Into<Vec<u8>>,
 {
     let mut new_tm: ::libc::tm = unsafe { std::mem::zeroed() };
-    let fmt = CString::new(fmt).unwrap();
+    let fmt = CString::new(fmt)?;
     unsafe {
         let ret = strptime(
-            CString::new(s).unwrap().as_ptr(),
+            CString::new(s)?.as_ptr(),
             fmt.as_ptr(),
             &mut new_tm as *mut _,
         );
         if ret.is_null() {
-            return None;
+            return Ok(None);
         }
-        return Some(mktime(&new_tm as *const _) as u64);
+        return Ok(Some(mktime(&new_tm as *const _) as u64));
     }
 }
 

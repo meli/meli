@@ -167,6 +167,13 @@ impl From<serde_json::error::Error> for MeliError {
     }
 }
 
+impl From<std::ffi::NulError> for MeliError {
+    #[inline]
+    fn from(kind: std::ffi::NulError) -> MeliError {
+        MeliError::new(format!("{}", kind))
+    }
+}
+
 impl From<&str> for MeliError {
     #[inline]
     fn from(kind: &str) -> MeliError {

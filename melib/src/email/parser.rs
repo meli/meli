@@ -664,7 +664,7 @@ pub fn date(input: &[u8]) -> Result<UnixTimestamp> {
         parsed_result[pos] = b'+';
     }
 
-    Ok(crate::datetime::rfc822_to_timestamp(parsed_result.trim()))
+    crate::datetime::rfc822_to_timestamp(parsed_result.trim())
 }
 
 named!(pub message_id<&[u8]>,

@@ -201,7 +201,8 @@ impl<V: VCardVersion> TryInto<Card> for VCard<V> {
                       T102200Z
                       T102200-0800
                       */
-            card.birthday = crate::datetime::timestamp_from_string(val.value.as_str(), "%Y%m%d");
+            card.birthday = crate::datetime::timestamp_from_string(val.value.as_str(), "%Y%m%d")
+                .unwrap_or_default();
         }
         if let Some(val) = self.0.remove("EMAIL") {
             card.set_email(val.value);
