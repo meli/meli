@@ -43,17 +43,34 @@ pub mod bindings;
 use bindings::*;
 
 #[derive(Debug, Clone)]
-struct DbWrapper {
+struct DbConnection {
+    lib: Arc<libloading::Library>,
     inner: Arc<RwLock<*mut notmuch_database_t>>,
     database_ph: std::marker::PhantomData<&'static mut notmuch_database_t>,
 }
 
-unsafe impl Send for DbWrapper {}
-unsafe impl Sync for DbWrapper {}
+unsafe impl Send for DbConnection {}
+unsafe impl Sync for DbConnection {}
+
+macro_rules! call {
+    ($lib:expr, $func:ty) => {{
+        let func: libloading::Symbol<$func> = $lib.get(stringify!($func).as_bytes()).unwrap();
+        func
+    }};
+}
+
+impl Drop for DbConnection {
+    fn drop(&mut self) {
+        let inner = self.inner.write().unwrap();
+        unsafe {
+            call!(self.lib, notmuch_database_close)(*inner);
+            call!(self.lib, notmuch_database_destroy)(*inner);
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct NotmuchDb {
-    database: DbWrapper,
     lib: Arc<libloading::Library>,
     mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, NotmuchMailbox>>>,
     index: Arc<RwLock<FnvHashMap<EnvelopeHash, &'static CStr>>>,
@@ -65,30 +82,6 @@ pub struct NotmuchDb {
 unsafe impl Send for NotmuchDb {}
 unsafe impl Sync for NotmuchDb {}
 
-macro_rules! call {
-    ($lib:expr, $func:ty) => {{
-        let func: libloading::Symbol<$func> = $lib.get(stringify!($func).as_bytes()).unwrap();
-        func
-    }};
-}
-
-impl Drop for NotmuchDb {
-    fn drop(&mut self) {
-        for f in self.mailboxes.write().unwrap().values_mut() {
-            if let Some(query) = f.query.take() {
-                unsafe {
-                    call!(self.lib, notmuch_query_destroy)(query);
-                }
-            }
-        }
-        let inner = self.database.inner.write().unwrap();
-        unsafe {
-            call!(self.lib, notmuch_database_close)(*inner);
-            call!(self.lib, notmuch_database_destroy)(*inner);
-        }
-    }
-}
-
 #[derive(Debug, Clone, Default)]
 struct NotmuchMailbox {
     hash: MailboxHash,
@@ -97,8 +90,6 @@ struct NotmuchMailbox {
     name: String,
     path: String,
     query_str: String,
-    query: Option<*mut notmuch_query_t>,
-    phantom: std::marker::PhantomData<&'static mut notmuch_query_t>,
     usage: Arc<RwLock<SpecialUsageMailbox>>,
 
     total: Arc<Mutex<usize>>,
@@ -167,7 +158,6 @@ impl NotmuchDb {
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
     ) -> Result<Box<dyn MailBackend>> {
         let lib = Arc::new(libloading::Library::new("libnotmuch.so.5")?);
-        let mut database: *mut notmuch_database_t = std::ptr::null_mut();
         let path = Path::new(s.root_mailbox.as_str()).expand().to_path_buf();
         if !path.exists() {
             return Err(MeliError::new(format!(
@@ -177,23 +167,6 @@ impl NotmuchDb {
             )));
         }
 
-        let path_c = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
-        let path_ptr = path_c.as_ptr();
-        let status = unsafe {
-            call!(lib, notmuch_database_open)(
-                path_ptr,
-                notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_WRITE,
-                &mut database as *mut _,
-            )
-        };
-        if status != 0 {
-            return Err(MeliError::new(format!(
-                "Could not open notmuch database at path {}. notmuch_database_open returned {}.",
-                s.root_mailbox.as_str(),
-                status
-            )));
-        }
-        assert!(!database.is_null());
         let mut mailboxes = FnvHashMap::default();
         for (k, f) in s.mailboxes.iter() {
             if let Some(query_str) = f.extra.get("query") {
@@ -210,10 +183,8 @@ impl NotmuchDb {
                         path: k.to_string(),
                         children: vec![],
                         parent: None,
-                        query: None,
                         query_str: query_str.to_string(),
                         usage: Arc::new(RwLock::new(SpecialUsageMailbox::Normal)),
-                        phantom: std::marker::PhantomData,
                         total: Arc::new(Mutex::new(0)),
                         unseen: Arc::new(Mutex::new(0)),
                     },
@@ -227,10 +198,6 @@ impl NotmuchDb {
         }
         Ok(Box::new(NotmuchDb {
             lib,
-            database: DbWrapper {
-                inner: Arc::new(RwLock::new(database)),
-                database_ph: std::marker::PhantomData,
-            },
             path,
             index: Arc::new(RwLock::new(Default::default())),
             tag_index: Arc::new(RwLock::new(Default::default())),
@@ -261,7 +228,8 @@ impl NotmuchDb {
     }
 
     pub fn search(&self, query_s: &str) -> Result<SmallVec<[EnvelopeHash; 512]>> {
-        let database_lck = self.database.inner.read().unwrap();
+        let database = self.new_connection(false)?;
+        let database_lck = database.inner.read().unwrap();
         let query_str = std::ffi::CString::new(query_s).unwrap();
         let query: *mut notmuch_query_t =
             unsafe { call!(self.lib, notmuch_query_create)(*database_lck, query_str.as_ptr()) };
@@ -295,7 +263,40 @@ impl NotmuchDb {
             ret.push(env_hash);
         }
 
+        unsafe {
+            call!(self.lib, notmuch_query_destroy)(query);
+        }
         Ok(ret)
+    }
+
+    fn new_connection(&self, write: bool) -> Result<DbConnection> {
+        let path_c = std::ffi::CString::new(self.path.to_str().unwrap()).unwrap();
+        let path_ptr = path_c.as_ptr();
+        let mut database: *mut notmuch_database_t = std::ptr::null_mut();
+        let status = unsafe {
+            call!(self.lib, notmuch_database_open)(
+                path_ptr,
+                if write {
+                    notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_WRITE
+                } else {
+                    notmuch_database_mode_t_NOTMUCH_DATABASE_MODE_READ_ONLY
+                },
+                &mut database as *mut _,
+            )
+        };
+        if status != 0 {
+            return Err(MeliError::new(format!(
+                "Could not open notmuch database at path {}. notmuch_database_open returned {}.",
+                self.path.display(),
+                status
+            )));
+        }
+        assert!(!database.is_null());
+        Ok(DbConnection {
+            lib: self.lib.clone(),
+            inner: Arc::new(RwLock::new(database)),
+            database_ph: std::marker::PhantomData,
+        })
     }
 }
 
@@ -306,7 +307,7 @@ impl MailBackend for NotmuchDb {
     fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let mailbox_hash = mailbox.hash();
-        let database = self.database.clone();
+        let database = self.new_connection(false);
         let index = self.index.clone();
         let tag_index = self.tag_index.clone();
         let mailboxes = self.mailboxes.clone();
@@ -314,6 +315,12 @@ impl MailBackend for NotmuchDb {
         let handle = {
             let tx = w.tx();
             let closure = move |_work_context| {
+                if let Err(err) = database {
+                    tx.send(AsyncStatus::Payload(Err(err))).unwrap();
+                    tx.send(AsyncStatus::Finished).unwrap();
+                    return;
+                }
+                let database = Arc::new(database.unwrap());
                 let mut ret: Vec<Envelope> = Vec::new();
                 let database_lck = database.inner.read().unwrap();
                 let mut mailboxes_lck = mailboxes.write().unwrap();
@@ -405,7 +412,9 @@ impl MailBackend for NotmuchDb {
                         index.write().unwrap().remove(&env_hash);
                     }
                 }
-                mailbox.query = Some(query);
+                unsafe {
+                    call!(lib, notmuch_query_destroy)(query);
+                }
                 tx.send(AsyncStatus::Payload(Ok(ret))).unwrap();
                 tx.send(AsyncStatus::Finished).unwrap();
             };
@@ -438,7 +447,7 @@ impl MailBackend for NotmuchDb {
     }
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
         Box::new(NotmuchOp {
-            database: self.database.clone(),
+            database: Arc::new(self.new_connection(true).unwrap()),
             lib: self.lib.clone(),
             hash,
             index: self.index.clone(),
@@ -470,7 +479,7 @@ struct NotmuchOp {
     hash: EnvelopeHash,
     index: Arc<RwLock<FnvHashMap<EnvelopeHash, &'static CStr>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
-    database: DbWrapper,
+    database: Arc<DbConnection>,
     bytes: Option<String>,
     lib: Arc<libloading::Library>,
 }
