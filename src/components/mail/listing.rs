@@ -399,65 +399,30 @@ impl Component for Listing {
         }
 
         if right_component_width == total_cols {
-            if let Err(err) = context.is_online(self.cursor_pos.0) {
-                clear_area(grid, area, self.theme_default);
-                let (x, _) = write_string_to_grid(
-                    "offline: ",
-                    grid,
-                    Color::Byte(243),
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    (set_x(upper_left, mid + 1), bottom_right),
-                    None,
-                );
-                write_string_to_grid(
-                    &err.to_string(),
-                    grid,
-                    Color::Red,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    (set_x(upper_left, x + 1), bottom_right),
-                    None,
-                );
-                context.dirty_areas.push_back(area);
-                return;
-            } else {
-                self.component.draw(grid, area, context);
+            if context.is_online(self.cursor_pos.0).is_err() {
+                match self.component {
+                    ListingComponent::Offline(_) => {}
+                    _ => {
+                        self.component = Offline(OfflineListing::new((self.cursor_pos.0, 0)));
+                    }
+                }
             }
+
+            self.component.draw(grid, area, context);
         } else if right_component_width == 0 {
             self.draw_menu(grid, area, context);
         } else {
             self.draw_menu(grid, (upper_left, (mid, get_y(bottom_right))), context);
-            if let Err(err) = context.is_online(self.cursor_pos.0) {
-                clear_area(
-                    grid,
-                    (set_x(upper_left, mid + 1), bottom_right),
-                    self.theme_default,
-                );
-                let (x, _) = write_string_to_grid(
-                    "offline: ",
-                    grid,
-                    Color::Byte(243),
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    (set_x(upper_left, mid + 1), bottom_right),
-                    None,
-                );
-                write_string_to_grid(
-                    &err.to_string(),
-                    grid,
-                    Color::Red,
-                    self.theme_default.bg,
-                    self.theme_default.attrs,
-                    (set_x(upper_left, x + 1), bottom_right),
-                    None,
-                );
-                self.component.set_dirty(false);
-                context.dirty_areas.push_back(area);
-            } else {
-                self.component
-                    .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
+            if context.is_online(self.cursor_pos.0).is_err() {
+                match self.component {
+                    ListingComponent::Offline(_) => {}
+                    _ => {
+                        self.component = Offline(OfflineListing::new((self.cursor_pos.0, 0)));
+                    }
+                }
             }
+            self.component
+                .draw(grid, (set_x(upper_left, mid + 1), bottom_right), context);
         }
         self.dirty = false;
     }
@@ -560,28 +525,24 @@ impl Component for Listing {
                     };
                     match k {
                         k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"]) => {
-                            if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
+                            if self.accounts[self.cursor_pos.0]
                                 .entries
                                 .get(self.cursor_pos.1 + amount)
+                                .is_some()
                             {
                                 self.cursor_pos.1 += amount;
-                                self.component
-                                    .set_coordinates((self.cursor_pos.0, *mailbox_hash));
-                                self.set_dirty(true);
                             } else {
                                 return true;
                             }
                         }
                         k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) => {
                             if self.cursor_pos.1 >= amount {
-                                if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
+                                if self.accounts[self.cursor_pos.0]
                                     .entries
                                     .get(self.cursor_pos.1 - amount)
+                                    .is_some()
                                 {
                                     self.cursor_pos.1 -= amount;
-                                    self.component
-                                        .set_coordinates((self.cursor_pos.0, *mailbox_hash));
-                                    self.set_dirty(true);
                                 } else {
                                     return true;
                                 }
@@ -591,22 +552,7 @@ impl Component for Listing {
                         }
                         _ => {}
                     }
-                    if let Some((_, mailbox_hash)) = self.accounts[self.cursor_pos.0]
-                        .entries
-                        .get(self.cursor_pos.1)
-                    {
-                        /* Account might have no mailboxes yet if it's offline */
-                        /* Check if per-mailbox configuration overrides general configuration */
-                        let index_style = mailbox_settings!(
-                            context[self.cursor_pos.0][mailbox_hash].listing.index_style
-                        );
-                        self.component.set_style(*index_style);
-                    }
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                            self.get_status(context),
-                        )));
+                    self.change_account(context);
                     return true;
                 }
                 UIEvent::Input(ref k)
@@ -930,9 +876,10 @@ impl Component for Listing {
                     };
                     match k {
                         k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_mailbox"]) => {
-                            if let Some((_, mailbox_hash)) = self.accounts[self.menu_cursor_pos.0]
+                            if self.accounts[self.menu_cursor_pos.0]
                                 .entries
                                 .get(self.menu_cursor_pos.1 + amount)
+                                .is_some()
                             {
                                 self.menu_cursor_pos.1 += amount;
                                 self.set_dirty(true);
@@ -942,10 +889,10 @@ impl Component for Listing {
                         }
                         k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_mailbox"]) => {
                             if self.cursor_pos.1 >= amount {
-                                if let Some((_, mailbox_hash)) = self.accounts
-                                    [self.menu_cursor_pos.0]
+                                if self.accounts[self.menu_cursor_pos.0]
                                     .entries
                                     .get(self.menu_cursor_pos.1 - amount)
+                                    .is_some()
                                 {
                                     self.menu_cursor_pos.1 -= amount;
                                     self.set_dirty(true);
@@ -962,7 +909,9 @@ impl Component for Listing {
                 }
                 UIEvent::Input(ref k)
                     if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"])
-                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) =>
+                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"])
+                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_page"])
+                        || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
                 {
                     let amount = if self.cmd_buf.is_empty() {
                         1
@@ -980,14 +929,18 @@ impl Component for Listing {
                         return true;
                     };
                     match k {
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"]) => {
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_account"])
+                            || shortcut!(k == shortcuts[Listing::DESCRIPTION]["next_page"]) =>
+                        {
                             if self.menu_cursor_pos.0 + amount < self.accounts.len() {
                                 self.menu_cursor_pos = (self.menu_cursor_pos.0 + amount, 0);
                             } else {
                                 return true;
                             }
                         }
-                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"]) => {
+                        k if shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_account"])
+                            || shortcut!(k == shortcuts[Listing::DESCRIPTION]["prev_page"]) =>
+                        {
                             if self.menu_cursor_pos.0 >= amount {
                                 self.menu_cursor_pos = (self.menu_cursor_pos.0 - amount, 0);
                             } else {
@@ -1417,5 +1370,6 @@ impl Listing {
             .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(debug!(
                 self.get_status(context)
             ))));
+        self.menu_cursor_pos = self.cursor_pos;
     }
 }

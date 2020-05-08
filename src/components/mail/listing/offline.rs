@@ -39,7 +39,6 @@ impl MailListingTrait for OfflineListing {
         return SmallVec::new();
     }
 
-    /// chosen.
     fn refresh_mailbox(&mut self, _context: &mut Context, _force: bool) {}
 }
 
@@ -85,7 +84,35 @@ impl OfflineListing {
 }
 
 impl Component for OfflineListing {
-    fn draw(&mut self, _grid: &mut CellBuffer, _area: Area, _context: &mut Context) {}
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        let theme_default = conf::value(context, "theme_default");
+        clear_area(grid, area, theme_default);
+        if let Err(err) = context.is_online(self.cursor_pos.0) {
+            let (x, _) = write_string_to_grid(
+                "offline: ",
+                grid,
+                Color::Byte(243),
+                theme_default.bg,
+                theme_default.attrs,
+                area,
+                None,
+            );
+            write_string_to_grid(
+                &err.to_string(),
+                grid,
+                Color::Red,
+                theme_default.bg,
+                theme_default.attrs,
+                (set_x(upper_left!(area), x + 1), bottom_right!(area)),
+                None,
+            );
+        } else {
+            context
+                .replies
+                .push_back(UIEvent::AccountStatusChange(self.cursor_pos.0));
+        }
+        context.dirty_areas.push_back(area);
+    }
     fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
         false
     }
