@@ -28,6 +28,7 @@ use crossbeam::{
 };
 use fnv::FnvHashMap;
 use melib::async_workers::{Work, WorkContext};
+use melib::datetime::{self, UnixTimestamp};
 use melib::text_processing::Truncate;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -41,6 +42,7 @@ const MAX_WORKER: usize = 4;
 pub struct Worker {
     pub name: String,
     pub status: String,
+    pub heartbeat: UnixTimestamp,
 }
 
 impl From<String> for Worker {
@@ -48,6 +50,7 @@ impl From<String> for Worker {
         Worker {
             name: val,
             status: String::new(),
+            heartbeat: datetime::now(),
         }
     }
 }
@@ -265,12 +268,23 @@ impl WorkController {
                             new_name.truncate_at_boundary(256);
                             let mut threads = threads_lock.lock().unwrap();
                             let mut static_threads = _static_threads_lock.lock().unwrap();
+                            let now = datetime::now();
                             if threads.contains_key(&thread_id) {
-                                threads.entry(thread_id).and_modify(|e| e.name = new_name);
+                                threads.entry(thread_id).and_modify(|e| {
+                                    e.name = new_name;
+                                    e.heartbeat = now;
+                                });
                             } else if static_threads.contains_key(&thread_id) {
-                                static_threads.entry(thread_id).and_modify(|e| e.name = new_name);
+                                static_threads.entry(thread_id).and_modify(|e| {
+
+                                    e.name = new_name;
+                                    e.heartbeat = now;
+                                });
                             } else {
-                                 static_threads.insert(thread_id, new_name.into());
+                                 static_threads.insert(thread_id, Worker { heartbeat: now, .. new_name.into() });
+                                static_threads.entry(thread_id).and_modify(|e| {
+                                    e.heartbeat = now;
+                                });
                             }
                             pulse.send(ThreadEvent::Pulse).unwrap();
                         }
@@ -280,13 +294,20 @@ impl WorkController {
                             new_status.truncate_at_boundary(256);
                             let mut threads = threads_lock.lock().unwrap();
                             let mut static_threads = _static_threads_lock.lock().unwrap();
+                            let now = datetime::now();
                             if threads.contains_key(&thread_id) {
-                                threads.entry(thread_id).and_modify(|e| e.status = new_status);
+                                threads.entry(thread_id).and_modify(|e| {
+                                    e.status = new_status;
+                                    e.heartbeat = now;
+                                });
                             } else if static_threads.contains_key(&thread_id) {
-                                static_threads.entry(thread_id).and_modify(|e| e.status = new_status);
+                                static_threads.entry(thread_id).and_modify(|e| {
+                                    e.status = new_status;
+                                    e.heartbeat = now;
+                                });
                                 debug!(&static_threads[&thread_id]);
                             } else {
-                                 static_threads.insert(thread_id, Worker { status: new_status, .. String::new().into() });
+                                 static_threads.insert(thread_id, Worker { status: new_status, heartbeat: now, .. String::new().into() });
                             }
                             pulse.send(ThreadEvent::Pulse).unwrap();
                         }

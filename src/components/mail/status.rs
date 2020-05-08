@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug)]
@@ -27,6 +28,7 @@ pub struct StatusPanel {
     cursor: (usize, usize),
     account_cursor: usize,
     status: Option<AccountStatus>,
+    date_cache: HashMap<UnixTimestamp, String>,
     content: CellBuffer,
     dirty: bool,
     theme_default: ThemeAttribute,
@@ -68,9 +70,10 @@ impl Component for StatusPanel {
             for worker in workers {
                 let (x, y_off) = write_string_to_grid(
                     &format!(
-                        "- {:<max_name$} {}",
+                        "- {:<max_name$} {} [{}]",
                         worker.name.as_str(),
                         worker.status.as_str(),
+                        self.timestamp_fmt(worker.heartbeat),
                         max_name = max_name
                     ),
                     &mut self.content,
@@ -108,9 +111,10 @@ impl Component for StatusPanel {
             for worker in workers {
                 let (x, y_off) = write_string_to_grid(
                     &format!(
-                        "- {:<max_name$} {}",
+                        "- {:<max_name$} {} [{}]",
                         worker.name.as_str(),
                         worker.status.as_str(),
+                        self.timestamp_fmt(worker.heartbeat),
                         max_name = max_name
                     ),
                     &mut self.content,
@@ -241,6 +245,7 @@ impl StatusPanel {
             account_cursor: 0,
             content,
             status: None,
+            date_cache: Default::default(),
             dirty: true,
             theme_default,
             id: ComponentId::new_v4(),
@@ -378,6 +383,15 @@ impl StatusPanel {
                 );
             }
         }
+    }
+    fn timestamp_fmt(&mut self, t: UnixTimestamp) -> &str {
+        if !self.date_cache.contains_key(&t) {
+            self.date_cache.insert(
+                t,
+                melib::datetime::timestamp_to_string(t, Some("%Y-%m-%d %T")),
+            );
+        }
+        &self.date_cache[&t]
     }
 }
 
