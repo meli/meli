@@ -241,8 +241,8 @@ impl<'a> Iterator for LineBreakCandidateIter<'a> {
                 // Treat X (CM | ZWJ)* as if it were X.
                 // where X is any line break class except BK, CR, LF, NL, SP, or ZW.
 
-                /* Unreachable since we break lines based on graphemes, not characters */
-                unreachable!();
+                *pos += grapheme.len();
+                return self.next();
             }
             WJ => {
                 /*: LB11 Do not break before or after Word joiner and related characters.*/
