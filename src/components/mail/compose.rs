@@ -1333,8 +1333,9 @@ pub fn save_draft(
     flags: Flag,
     account_cursor: usize,
 ) {
-    if let Err(MeliError { summary, details }) =
-        context.accounts[account_cursor].save_special(bytes, mailbox_type, flags)
+    if let Err(MeliError {
+        summary, details, ..
+    }) = context.accounts[account_cursor].save_special(bytes, mailbox_type, flags)
     {
         context.replies.push_back(UIEvent::Notification(
             summary.map(|s| s.into()),

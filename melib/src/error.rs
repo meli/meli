@@ -30,15 +30,17 @@ use std::io;
 use std::result;
 use std::str;
 use std::string;
+use std::sync::Arc;
 
 use nom;
 
 pub type Result<T> = result::Result<T, MeliError>;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct MeliError {
     pub summary: Option<Cow<'static, str>>,
     pub details: Cow<'static, str>,
+    pub source: Option<std::sync::Arc<dyn Error + Send + Sync + 'static>>,
 }
 
 impl MeliError {
@@ -49,6 +51,7 @@ impl MeliError {
         MeliError {
             summary: None,
             details: msg.into(),
+            source: None,
         }
     }
 
@@ -59,11 +62,26 @@ impl MeliError {
         self.summary = Some(summary.into());
         self
     }
+
+    pub fn set_source(
+        mut self,
+        new_val: Option<std::sync::Arc<dyn Error + Send + Sync + 'static>>,
+    ) -> MeliError {
+        self.source = new_val;
+        self
+    }
 }
 
 impl fmt::Display for MeliError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
+        if let Some(summary) = self.summary.as_ref() {
+            write!(f, "Summary: {}\n", summary)?;
+        }
+        let ret = write!(f, "{}", self.details)?;
+        if let Some(source) = self.source.as_ref() {
+            write!(f, "\nCaused by: {}", source)?;
+        }
+        Ok(ret)
     }
 }
 
@@ -74,15 +92,15 @@ impl Into<String> for MeliError {
 }
 
 impl Error for MeliError {
-    fn description(&self) -> &str {
-        &self.details
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source.as_ref().map(|s| &(*(*s)) as _)
     }
 }
 
 impl From<io::Error> for MeliError {
     #[inline]
     fn from(kind: io::Error) -> MeliError {
-        MeliError::new(kind.description().to_string())
+        MeliError::new(kind.to_string()).set_source(Some(Arc::new(kind)))
     }
 }
 
@@ -103,14 +121,14 @@ impl<'a> From<Cow<'a, str>> for MeliError {
 impl From<string::FromUtf8Error> for MeliError {
     #[inline]
     fn from(kind: string::FromUtf8Error) -> MeliError {
-        MeliError::new(format!("{:?}", kind))
+        MeliError::new(format!("{:?}", kind)).set_source(Some(Arc::new(kind)))
     }
 }
 
 impl From<str::Utf8Error> for MeliError {
     #[inline]
     fn from(kind: str::Utf8Error) -> MeliError {
-        MeliError::new(format!("{:?}", kind))
+        MeliError::new(format!("{:?}", kind)).set_source(Some(Arc::new(kind)))
     }
 }
 //use std::option;
@@ -132,7 +150,7 @@ impl<T> From<std::sync::PoisonError<T>> for MeliError {
 impl From<native_tls::HandshakeError<std::net::TcpStream>> for MeliError {
     #[inline]
     fn from(kind: native_tls::HandshakeError<std::net::TcpStream>) -> MeliError {
-        MeliError::new(format!("{}", kind))
+        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
     }
 }
 
@@ -140,14 +158,14 @@ impl From<native_tls::HandshakeError<std::net::TcpStream>> for MeliError {
 impl From<native_tls::Error> for MeliError {
     #[inline]
     fn from(kind: native_tls::Error) -> MeliError {
-        MeliError::new(format!("{}", kind))
+        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
     }
 }
 
 impl From<std::num::ParseIntError> for MeliError {
     #[inline]
     fn from(kind: std::num::ParseIntError) -> MeliError {
-        MeliError::new(format!("{}", kind))
+        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
     }
 }
 
@@ -155,7 +173,7 @@ impl From<std::num::ParseIntError> for MeliError {
 impl From<reqwest::Error> for MeliError {
     #[inline]
     fn from(kind: reqwest::Error) -> MeliError {
-        MeliError::new(format!("{}", kind))
+        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
     }
 }
 
@@ -163,14 +181,21 @@ impl From<reqwest::Error> for MeliError {
 impl From<serde_json::error::Error> for MeliError {
     #[inline]
     fn from(kind: serde_json::error::Error) -> MeliError {
-        MeliError::new(format!("{}", kind))
+        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
+    }
+}
+
+impl From<Box<dyn Error + Sync + Send + 'static>> for MeliError {
+    #[inline]
+    fn from(kind: Box<dyn Error + Sync + Send + 'static>) -> MeliError {
+        MeliError::new(format!("{}", kind)).set_source(Some(kind.into()))
     }
 }
 
 impl From<std::ffi::NulError> for MeliError {
     #[inline]
     fn from(kind: std::ffi::NulError) -> MeliError {
-        MeliError::new(format!("{}", kind))
+        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
     }
 }
 

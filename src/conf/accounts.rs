@@ -51,7 +51,7 @@ use std::sync::{Arc, RwLock};
 
 pub type Worker = Option<Async<Result<Vec<Envelope>>>>;
 
-#[derive(Serialize, Debug)]
+#[derive(Debug)]
 pub enum MailboxStatus {
     Available,
     Failed(MeliError),
