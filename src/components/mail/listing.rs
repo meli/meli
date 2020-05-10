@@ -199,8 +199,6 @@ pub trait MailListingTrait: ListingTrait {
                     continue;
                 }
                 ListingAction::Tag(Remove(ref tag_str)) => {
-                    let backend_lck = account.backend.write().unwrap();
-                    let mut op = backend_lck.operation(envelope.hash());
                     if let Err(err) = op.set_tag(&mut envelope, tag_str.to_string(), false) {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not set tag.".to_string()),
@@ -211,9 +209,6 @@ pub trait MailListingTrait: ListingTrait {
                     }
                 }
                 ListingAction::Tag(Add(ref tag_str)) => {
-                    let backend_lck = account.backend.write().unwrap();
-                    let mut op = backend_lck.operation(envelope.hash());
-
                     if let Err(err) = op.set_tag(&mut envelope, tag_str.to_string(), true) {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not set tag.".to_string()),
