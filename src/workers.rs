@@ -26,10 +26,10 @@ use crossbeam::{
     channel::{bounded, unbounded, Sender},
     select,
 };
-use fnv::FnvHashMap;
 use melib::async_workers::{Work, WorkContext};
 use melib::datetime::{self, UnixTimestamp};
 use melib::text_processing::Truncate;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -59,9 +59,9 @@ pub struct WorkController {
     pub queue: WorkQueue,
     thread_end_tx: Sender<bool>,
     /// Worker threads that take up on jobs from self.queue
-    pub threads: Arc<Mutex<FnvHashMap<thread::ThreadId, Worker>>>,
+    pub threads: Arc<Mutex<HashMap<thread::ThreadId, Worker>>>,
     /// Special function threads that live indefinitely (eg watching a mailbox)
-    pub static_threads: Arc<Mutex<FnvHashMap<thread::ThreadId, Worker>>>,
+    pub static_threads: Arc<Mutex<HashMap<thread::ThreadId, Worker>>>,
     work_context: WorkContext,
 }
 
@@ -177,11 +177,11 @@ impl WorkController {
         // Create a SyncFlag to share whether or not there are more jobs to be done.
         let (thread_end_tx, thread_end_rx) = bounded(1);
 
-        let threads_lock: Arc<Mutex<FnvHashMap<thread::ThreadId, Worker>>> =
-            Arc::new(Mutex::new(FnvHashMap::default()));
+        let threads_lock: Arc<Mutex<HashMap<thread::ThreadId, Worker>>> =
+            Arc::new(Mutex::new(HashMap::default()));
 
-        let static_threads_lock: Arc<Mutex<FnvHashMap<thread::ThreadId, Worker>>> =
-            Arc::new(Mutex::new(FnvHashMap::default()));
+        let static_threads_lock: Arc<Mutex<HashMap<thread::ThreadId, Worker>>> =
+            Arc::new(Mutex::new(HashMap::default()));
 
         let mut threads = threads_lock.lock().unwrap();
         /* spawn worker threads */

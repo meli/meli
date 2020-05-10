@@ -24,7 +24,6 @@
  */
 
 use super::{AccountConf, FileMailboxConf};
-use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
     BackendOp, Backends, MailBackend, Mailbox, MailboxHash, NotifyFn, ReadOnlyOp, RefreshEvent,
@@ -37,6 +36,7 @@ use melib::thread::{SortField, SortOrder, ThreadNode, ThreadNodeHash, Threads};
 use melib::AddressBook;
 use melib::Collection;
 use smallvec::SmallVec;
+use std::collections::HashMap;
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use crate::{StatusEvent, ThreadEvent};
@@ -114,7 +114,7 @@ pub struct Account {
     pub index: usize,
     name: String,
     pub is_online: bool,
-    pub(crate) mailbox_entries: FnvHashMap<MailboxHash, MailboxEntry>,
+    pub(crate) mailbox_entries: HashMap<MailboxHash, MailboxEntry>,
     pub(crate) mailboxes_order: Vec<MailboxHash>,
     tree: Vec<MailboxNode>,
     sent_mailbox: Option<MailboxHash>,
@@ -251,7 +251,7 @@ impl Account {
     }
 
     fn init(&mut self) {
-        let mut ref_mailboxes: FnvHashMap<MailboxHash, Mailbox> =
+        let mut ref_mailboxes: HashMap<MailboxHash, Mailbox> =
             match self.backend.read().unwrap().mailboxes() {
                 Ok(f) => f,
                 Err(err) => {
@@ -259,8 +259,8 @@ impl Account {
                     return;
                 }
             };
-        let mut mailbox_entries: FnvHashMap<MailboxHash, MailboxEntry> =
-            FnvHashMap::with_capacity_and_hasher(ref_mailboxes.len(), Default::default());
+        let mut mailbox_entries: HashMap<MailboxHash, MailboxEntry> =
+            HashMap::with_capacity_and_hasher(ref_mailboxes.len(), Default::default());
         let mut mailboxes_order: Vec<MailboxHash> = Vec::with_capacity(ref_mailboxes.len());
 
         let mut sent_mailbox = None;
@@ -775,7 +775,7 @@ impl Account {
                             .unwrap()
                             .into_iter()
                             .map(|e| (e.hash(), e))
-                            .collect::<FnvHashMap<EnvelopeHash, Envelope>>();
+                            .collect::<HashMap<EnvelopeHash, Envelope>>();
                         if let Some(updated_mailboxes) =
                             self.collection
                                 .merge(envelopes, mailbox_hash, self.sent_mailbox)
@@ -1206,7 +1206,7 @@ impl IndexMut<&MailboxHash> for Account {
 
 fn build_mailboxes_order(
     tree: &mut Vec<MailboxNode>,
-    mailbox_entries: &FnvHashMap<MailboxHash, MailboxEntry>,
+    mailbox_entries: &HashMap<MailboxHash, MailboxEntry>,
     mailboxes_order: &mut Vec<MailboxHash>,
 ) {
     tree.clear();
@@ -1215,7 +1215,7 @@ fn build_mailboxes_order(
         if f.ref_mailbox.parent().is_none() {
             fn rec(
                 h: MailboxHash,
-                mailbox_entries: &FnvHashMap<MailboxHash, MailboxEntry>,
+                mailbox_entries: &HashMap<MailboxHash, MailboxEntry>,
                 depth: usize,
             ) -> MailboxNode {
                 let mut node = MailboxNode {

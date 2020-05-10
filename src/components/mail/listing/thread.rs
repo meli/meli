@@ -39,7 +39,7 @@ pub struct ThreadListing {
     color_cache: ColorCache,
 
     row_updates: SmallVec<[ThreadHash; 8]>,
-    order: FnvHashMap<EnvelopeHash, usize>,
+    order: HashMap<EnvelopeHash, usize>,
     /// If we must redraw on next redraw event
     dirty: bool,
     /// If `self.view` is focused or not.
@@ -153,7 +153,7 @@ impl MailListingTrait for ThreadListing {
             .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
             .collect::<_>();
         let mut iter = threads.threads_group_iter(roots).peekable();
-        let thread_nodes: &FnvHashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
+        let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
         while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
@@ -406,7 +406,7 @@ impl ThreadListing {
             content: CellBuffer::new(0, 0, Cell::with_char(' ')),
             color_cache: ColorCache::default(),
             row_updates: SmallVec::new(),
-            order: FnvHashMap::default(),
+            order: HashMap::default(),
             dirty: true,
             unfocused: false,
             view: None,

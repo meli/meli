@@ -31,7 +31,6 @@ extern crate serde_derive;
 extern crate linkify;
 extern crate uuid;
 
-extern crate fnv;
 extern crate termion;
 
 #[macro_use]

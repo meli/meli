@@ -20,7 +20,6 @@
  */
 
 use super::*;
-use fnv::FnvHashMap;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::MailboxHash;
 use melib::backends::{Backend, BackendOp, Backends, MailBackend, Mailbox, RefreshEventConsumer};
@@ -28,6 +27,7 @@ use melib::conf::AccountSettings;
 use melib::email::{Envelope, EnvelopeHash, Flag};
 use melib::error::{MeliError, Result};
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 
 // TODO replace with melib::Envelope after simplifying melib::Envelope's
@@ -193,8 +193,8 @@ impl MailBackend for PluginBackend {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
-        let mut ret: FnvHashMap<MailboxHash, Mailbox> = Default::default();
+    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
+        let mut ret: HashMap<MailboxHash, Mailbox> = Default::default();
         ret.insert(0, Mailbox::default());
         Ok(ret)
     }
@@ -214,7 +214,7 @@ impl MailBackend for PluginBackend {
     fn create_mailbox(
         &mut self,
         _name: String,
-    ) -> Result<(MailboxHash, FnvHashMap<MailboxHash, Mailbox>)> {
+    ) -> Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         Err(MeliError::new("Unimplemented."))
     }
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {

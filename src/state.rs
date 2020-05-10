@@ -33,8 +33,8 @@ use crate::plugins::PluginManager;
 use melib::backends::{MailboxHash, NotifyFn};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use fnv::FnvHashMap;
 use smallvec::SmallVec;
+use std::collections::HashMap;
 use std::env;
 use std::io::Write;
 use std::thread;
@@ -89,7 +89,7 @@ impl InputHandler {
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: Vec<Account>,
-    pub mailbox_hashes: FnvHashMap<MailboxHash, usize>,
+    pub mailbox_hashes: HashMap<MailboxHash, usize>,
     pub settings: Settings,
 
     pub runtime_settings: Settings,
@@ -315,7 +315,7 @@ impl State {
 
             context: Context {
                 accounts,
-                mailbox_hashes: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
+                mailbox_hashes: HashMap::with_capacity_and_hasher(1, Default::default()),
 
                 settings: settings.clone(),
                 runtime_settings: settings,

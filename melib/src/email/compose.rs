@@ -24,6 +24,7 @@ use crate::backends::BackendOp;
 use crate::email::attachments::AttachmentBuilder;
 use crate::shellexpand::ShellExpandTrait;
 use data_encoding::BASE64_MIME;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -35,11 +36,10 @@ pub mod random;
 //use self::mime::*;
 
 use super::parser;
-use fnv::FnvHashMap;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Draft {
-    pub headers: FnvHashMap<String, String>,
+    pub headers: HashMap<String, String>,
     pub header_order: Vec<String>,
     pub body: String,
 
@@ -48,7 +48,7 @@ pub struct Draft {
 
 impl Default for Draft {
     fn default() -> Self {
-        let mut headers = FnvHashMap::with_capacity_and_hasher(8, Default::default());
+        let mut headers = HashMap::with_capacity_and_hasher(8, Default::default());
         let mut header_order = Vec::with_capacity(8);
         headers.insert("From".into(), "".into());
         headers.insert("To".into(), "".into());
@@ -214,11 +214,11 @@ impl Draft {
         ret
     }
 
-    pub fn headers_mut(&mut self) -> &mut FnvHashMap<String, String> {
+    pub fn headers_mut(&mut self) -> &mut HashMap<String, String> {
         &mut self.headers
     }
 
-    pub fn headers(&self) -> &FnvHashMap<String, String> {
+    pub fn headers(&self) -> &HashMap<String, String> {
         &self.headers
     }
 

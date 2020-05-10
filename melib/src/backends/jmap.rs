@@ -26,9 +26,8 @@ use crate::backends::{BackendMailbox, MailBackend, Mailbox, RefreshEventConsumer
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
-use fnv::FnvHashMap;
 use reqwest::blocking::Client;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
@@ -175,9 +174,9 @@ macro_rules! get_conf_val {
 
 #[derive(Debug, Default)]
 pub struct Store {
-    byte_cache: FnvHashMap<EnvelopeHash, EnvelopeCache>,
-    id_store: FnvHashMap<EnvelopeHash, Id>,
-    blob_id_store: FnvHashMap<EnvelopeHash, Id>,
+    byte_cache: HashMap<EnvelopeHash, EnvelopeCache>,
+    id_store: HashMap<EnvelopeHash, Id>,
+    blob_id_store: HashMap<EnvelopeHash, Id>,
 }
 
 #[derive(Debug)]
@@ -189,7 +188,7 @@ pub struct JmapType {
     connection: Arc<JmapConnection>,
     store: Arc<RwLock<Store>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
-    mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, JmapMailbox>>>,
+    mailboxes: Arc<RwLock<HashMap<MailboxHash, JmapMailbox>>>,
 }
 
 impl MailBackend for JmapType {
@@ -239,7 +238,7 @@ impl MailBackend for JmapType {
         Err(MeliError::from("JMAP watch for updates is unimplemented"))
     }
 
-    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
         if self.mailboxes.read().unwrap().is_empty() {
             let mailboxes = std::dbg!(protocol::get_mailboxes(&self.connection))?;
             *self.mailboxes.write().unwrap() = mailboxes;
@@ -291,7 +290,7 @@ impl JmapType {
             connection: Arc::new(JmapConnection::new(&server_conf, online.clone())?),
             store: Arc::new(RwLock::new(Store::default())),
             tag_index: Arc::new(RwLock::new(Default::default())),
-            mailboxes: Arc::new(RwLock::new(FnvHashMap::default())),
+            mailboxes: Arc::new(RwLock::new(HashMap::default())),
             account_name: s.name.clone(),
             online,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),

@@ -22,7 +22,7 @@
 /*!
  * Email parsing, handling, sending etc.
  */
-use fnv::FnvHashMap;
+use std::collections::HashMap;
 mod compose;
 pub use self::compose::*;
 
@@ -138,7 +138,7 @@ pub struct Envelope {
     message_id: MessageID,
     in_reply_to: Option<MessageID>,
     pub references: Option<References>,
-    other_headers: FnvHashMap<String, String>,
+    other_headers: HashMap<String, String>,
 
     timestamp: UnixTimestamp,
     thread: ThreadNodeHash,
@@ -577,11 +577,11 @@ impl Envelope {
         }
     }
 
-    pub fn other_headers(&self) -> &FnvHashMap<String, String> {
+    pub fn other_headers(&self) -> &HashMap<String, String> {
         &self.other_headers
     }
 
-    pub fn other_headers_mut(&mut self) -> &mut FnvHashMap<String, String> {
+    pub fn other_headers_mut(&mut self) -> &mut HashMap<String, String> {
         &mut self.other_headers
     }
 

@@ -24,10 +24,10 @@
 use crate::split_command;
 use crate::state::Context;
 use crate::types::{create_temp_file, ForkType, UIEvent};
-use fnv::FnvHashMap;
 use melib::attachments::decode;
 use melib::text_processing::GlobMatch;
 use melib::{email::Attachment, MeliError, Result};
+use std::collections::HashMap;
 use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
@@ -72,7 +72,7 @@ impl MailcapEntry {
             }
         }
 
-        let mut hash_map = FnvHashMap::default();
+        let mut hash_map = HashMap::new();
         let mut content = String::new();
 
         std::fs::File::open(mailcap_path.as_path())?.read_to_string(&mut content)?;

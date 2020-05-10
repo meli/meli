@@ -135,7 +135,6 @@ extern crate encoding;
 
 #[macro_use]
 extern crate bitflags;
-extern crate fnv;
 extern crate uuid;
 pub use smallvec;
 

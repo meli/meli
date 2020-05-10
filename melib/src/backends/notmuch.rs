@@ -29,10 +29,11 @@ use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
-use fnv::FnvHashMap;
 use smallvec::SmallVec;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::BTreeMap;
+use std::collections::{
+    hash_map::{DefaultHasher, HashMap},
+    BTreeMap,
+};
 use std::error::Error;
 use std::ffi::{CStr, CString, OsStr};
 use std::hash::{Hash, Hasher};
@@ -104,8 +105,8 @@ impl Drop for DbConnection {
 pub struct NotmuchDb {
     lib: Arc<libloading::Library>,
     revision_uuid: Arc<RwLock<u64>>,
-    mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, NotmuchMailbox>>>,
-    index: Arc<RwLock<FnvHashMap<EnvelopeHash, CString>>>,
+    mailboxes: Arc<RwLock<HashMap<MailboxHash, NotmuchMailbox>>>,
+    index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     path: PathBuf,
     save_messages_to: Option<PathBuf>,
@@ -199,7 +200,7 @@ impl NotmuchDb {
             )));
         }
 
-        let mut mailboxes = FnvHashMap::default();
+        let mut mailboxes = HashMap::default();
         for (k, f) in s.mailboxes.iter() {
             if let Some(query_str) = f.extra.get("query") {
                 let hash = {
@@ -490,7 +491,7 @@ impl MailBackend for NotmuchDb {
             })?;
         Ok(handle.thread().id())
     }
-    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
         Ok(self
             .mailboxes
             .read()
@@ -533,7 +534,7 @@ impl MailBackend for NotmuchDb {
 #[derive(Debug)]
 struct NotmuchOp {
     hash: EnvelopeHash,
-    index: Arc<RwLock<FnvHashMap<EnvelopeHash, CString>>>,
+    index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     database: Arc<DbConnection>,
     bytes: Option<String>,

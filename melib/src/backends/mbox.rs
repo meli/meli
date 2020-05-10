@@ -36,12 +36,12 @@ use crate::email::*;
 use crate::error::{MeliError, Result};
 use crate::get_path_hash;
 use crate::shellexpand::ShellExpandTrait;
-use fnv::FnvHashMap;
 use libc;
 use memmap::{Mmap, Protection};
 use nom::{IResult, Needed};
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
@@ -269,7 +269,7 @@ impl BackendOp for MboxOp {
 }
 
 pub fn mbox_parse(
-    index: Arc<Mutex<FnvHashMap<EnvelopeHash, (Offset, Length)>>>,
+    index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
     input: &[u8],
     file_offset: usize,
 ) -> IResult<&[u8], Vec<Envelope>> {
@@ -387,8 +387,8 @@ pub fn mbox_parse(
 #[derive(Debug, Default)]
 pub struct MboxType {
     path: PathBuf,
-    index: Arc<Mutex<FnvHashMap<EnvelopeHash, (Offset, Length)>>>,
-    mailboxes: Arc<Mutex<FnvHashMap<MailboxHash, MboxMailbox>>>,
+    index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
+    mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
 }
 
 impl MailBackend for MboxType {
@@ -588,7 +588,7 @@ impl MailBackend for MboxType {
             })?;
         Ok(handle.thread().id())
     }
-    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
         Ok(self
             .mailboxes
             .lock()

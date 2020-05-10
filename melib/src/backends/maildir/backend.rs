@@ -34,10 +34,10 @@ extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::time::Duration;
 
-use fnv::{FnvHashMap, FnvHashSet, FnvHasher};
+use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::ffi::OsStr;
 use std::fs;
-use std::hash::{Hash, Hasher};
+use std::hash::{Hasher, Hash};
 use std::io::{self, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::os::unix::fs::PermissionsExt;
@@ -87,31 +87,31 @@ impl From<PathBuf> for MaildirPath {
 
 #[derive(Debug, Default)]
 pub struct HashIndex {
-    index: FnvHashMap<EnvelopeHash, MaildirPath>,
+    index: HashMap<EnvelopeHash, MaildirPath>,
     hash: MailboxHash,
 }
 
 impl Deref for HashIndex {
-    type Target = FnvHashMap<EnvelopeHash, MaildirPath>;
-    fn deref(&self) -> &FnvHashMap<EnvelopeHash, MaildirPath> {
+    type Target = HashMap<EnvelopeHash, MaildirPath>;
+    fn deref(&self) -> &HashMap<EnvelopeHash, MaildirPath> {
         &self.index
     }
 }
 
 impl DerefMut for HashIndex {
-    fn deref_mut(&mut self) -> &mut FnvHashMap<EnvelopeHash, MaildirPath> {
+    fn deref_mut(&mut self) -> &mut HashMap<EnvelopeHash, MaildirPath> {
         &mut self.index
     }
 }
 
-pub type HashIndexes = Arc<Mutex<FnvHashMap<MailboxHash, HashIndex>>>;
+pub type HashIndexes = Arc<Mutex<HashMap<MailboxHash, HashIndex>>>;
 
 /// Maildir backend https://cr.yp.to/proto/maildir.html
 #[derive(Debug)]
 pub struct MaildirType {
     name: String,
-    mailboxes: FnvHashMap<MailboxHash, MaildirMailbox>,
-    mailbox_index: Arc<Mutex<FnvHashMap<EnvelopeHash, MailboxHash>>>,
+    mailboxes: HashMap<MailboxHash, MaildirMailbox>,
+    mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     hash_indexes: HashIndexes,
     path: PathBuf,
 }
@@ -150,11 +150,11 @@ pub(super) fn get_file_hash(file: &Path) -> EnvelopeHash {
     let mut f = fs::File::open(&file).unwrap_or_else(|_| panic!("Can't open {}", file.display()));
     f.read_to_end(&mut buf)
         .unwrap_or_else(|_| panic!("Can't read {}", file.display()));
-    let mut hasher = FnvHasher::default();
+    let mut hasher = DefaultHasher::default();
     hasher.write(&buf);
     hasher.finish()
         */
-    let mut hasher = FnvHasher::default();
+    let mut hasher = DefaultHasher::default();
     file.hash(&mut hasher);
     hasher.finish()
 }
@@ -181,7 +181,7 @@ impl MailBackend for MaildirType {
         Ok(())
     }
 
-    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
         Ok(self
             .mailboxes
             .iter()
@@ -238,7 +238,7 @@ impl MailBackend for MaildirType {
                     let mut current_hashes = {
                         let mut map = map.lock().unwrap();
                         let map = map.entry(mailbox_hash).or_default();
-                        map.keys().cloned().collect::<FnvHashSet<EnvelopeHash>>()
+                        map.keys().cloned().collect::<HashSet<EnvelopeHash>>()
                     };
                     for file in files {
                         let hash = get_file_hash(&file);
@@ -324,7 +324,7 @@ impl MailBackend for MaildirType {
             .mailboxes
             .iter()
             .map(|(&k, v)| (k, (v.unseen.clone(), v.total.clone())))
-            .collect::<FnvHashMap<MailboxHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>>();
+            .collect::<HashMap<MailboxHash, (Arc<Mutex<usize>>, Arc<Mutex<usize>>)>>();
         let handle = thread::Builder::new()
             .name("mailbox watch".to_string())
             .spawn(move || {
@@ -655,7 +655,7 @@ impl MailBackend for MaildirType {
     fn create_mailbox(
         &mut self,
         new_path: String,
-    ) -> Result<(MailboxHash, FnvHashMap<MailboxHash, Mailbox>)> {
+    ) -> Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         let mut path = self.path.clone();
         path.push(&new_path);
         if !path.starts_with(&self.path) {
@@ -700,7 +700,7 @@ impl MailBackend for MaildirType {
     fn delete_mailbox(
         &mut self,
         _mailbox_hash: MailboxHash,
-    ) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+    ) -> Result<HashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))
     }
 
@@ -726,9 +726,9 @@ impl MaildirType {
         settings: &AccountSettings,
         is_subscribed: Box<dyn Fn(&str) -> bool>,
     ) -> Result<Box<dyn MailBackend>> {
-        let mut mailboxes: FnvHashMap<MailboxHash, MaildirMailbox> = Default::default();
+        let mut mailboxes: HashMap<MailboxHash, MaildirMailbox> = Default::default();
         fn recurse_mailboxes<P: AsRef<Path>>(
-            mailboxes: &mut FnvHashMap<MailboxHash, MaildirMailbox>,
+            mailboxes: &mut HashMap<MailboxHash, MaildirMailbox>,
             settings: &AccountSettings,
             p: P,
         ) -> Result<Vec<MailboxHash>> {
@@ -820,12 +820,12 @@ impl MaildirType {
         }
 
         let mut hash_indexes =
-            FnvHashMap::with_capacity_and_hasher(mailboxes.len(), Default::default());
+            HashMap::with_capacity_and_hasher(mailboxes.len(), Default::default());
         for &fh in mailboxes.keys() {
             hash_indexes.insert(
                 fh,
                 HashIndex {
-                    index: FnvHashMap::with_capacity_and_hasher(0, Default::default()),
+                    index: HashMap::with_capacity_and_hasher(0, Default::default()),
                     hash: fh,
                 },
             );

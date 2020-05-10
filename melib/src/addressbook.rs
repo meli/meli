@@ -23,7 +23,7 @@
 pub mod vcard;
 
 use crate::datetime::{self, UnixTimestamp};
-use fnv::FnvHashMap;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use std::ops::Deref;
@@ -61,7 +61,7 @@ pub struct AddressBook {
     display_name: String,
     created: UnixTimestamp,
     last_edited: UnixTimestamp,
-    pub cards: FnvHashMap<CardId, Card>,
+    pub cards: HashMap<CardId, Card>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -80,7 +80,7 @@ pub struct Card {
 
     color: u8,
     last_edited: UnixTimestamp,
-    extra_properties: FnvHashMap<String, String>,
+    extra_properties: HashMap<String, String>,
 
     /// If true, we can't make any changes because we do not manage this resource.
     external_resource: bool,
@@ -92,7 +92,7 @@ impl AddressBook {
             display_name,
             created: datetime::now(),
             last_edited: datetime::now(),
-            cards: FnvHashMap::default(),
+            cards: HashMap::default(),
         }
     }
 
@@ -132,9 +132,9 @@ impl AddressBook {
 }
 
 impl Deref for AddressBook {
-    type Target = FnvHashMap<CardId, Card>;
+    type Target = HashMap<CardId, Card>;
 
-    fn deref(&self) -> &FnvHashMap<CardId, Card> {
+    fn deref(&self) -> &HashMap<CardId, Card> {
         &self.cards
     }
 }
@@ -156,7 +156,7 @@ impl Card {
 
             last_edited: datetime::now(),
             external_resource: false,
-            extra_properties: FnvHashMap::default(),
+            extra_properties: HashMap::default(),
             color: 0,
         }
     }
@@ -229,7 +229,7 @@ impl Card {
         self.extra_properties.get(key).map(String::as_str)
     }
 
-    pub fn extra_properties(&self) -> &FnvHashMap<String, String> {
+    pub fn extra_properties(&self) -> &HashMap<String, String> {
         &self.extra_properties
     }
 
@@ -242,8 +242,8 @@ impl Card {
     }
 }
 
-impl From<FnvHashMap<String, String>> for Card {
-    fn from(mut map: FnvHashMap<String, String>) -> Card {
+impl From<HashMap<String, String>> for Card {
+    fn from(mut map: HashMap<String, String>) -> Card {
         let mut card = Card::new();
         if let Some(val) = map.remove("TITLE") {
             card.title = val;

@@ -25,8 +25,8 @@ use crate::error::*;
 use std::io::Read;
 use std::io::Write;
 extern crate native_tls;
-use fnv::FnvHashSet;
 use native_tls::TlsConnector;
+use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -241,9 +241,7 @@ impl ImapStream {
                     capabilities = protocol_parser::capabilities(l.as_bytes())
                         .to_full_result()
                         .map(|capabilities| {
-                            FnvHashSet::from_iter(
-                                capabilities.into_iter().map(|s: &[u8]| s.to_vec()),
-                            )
+                            HashSet::from_iter(capabilities.into_iter().map(|s: &[u8]| s.to_vec()))
                         })
                         .ok();
                 }
@@ -270,7 +268,7 @@ impl ImapStream {
             ret.send_command(b"CAPABILITY")?;
             ret.read_response(&mut res).unwrap();
             let capabilities = protocol_parser::capabilities(res.as_bytes()).to_full_result()?;
-            let capabilities = FnvHashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
+            let capabilities = HashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
             Ok((capabilities, ret))
         } else {
             let capabilities = capabilities.unwrap();

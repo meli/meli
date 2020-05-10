@@ -28,7 +28,7 @@ pub struct ImapWatchKit {
     pub is_online: Arc<Mutex<(Instant, Result<()>)>>,
     pub main_conn: Arc<Mutex<ImapConnection>>,
     pub uid_store: Arc<UIDStore>,
-    pub mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, ImapMailbox>>>,
+    pub mailboxes: Arc<RwLock<HashMap<MailboxHash, ImapMailbox>>>,
     pub sender: RefreshEventConsumer,
     pub work_context: WorkContext,
     pub tag_index: Arc<RwLock<BTreeMap<u64, String>>>,

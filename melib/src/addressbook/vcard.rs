@@ -23,7 +23,7 @@
 use super::*;
 use crate::error::{MeliError, Result};
 use crate::parsec::{match_literal_anycase, one_or_more, peek, prefix, take_until, Parser};
-use fnv::FnvHashMap;
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 /* Supported vcard versions */
@@ -50,14 +50,14 @@ static FOOTER: &'static str = "END:VCARD\r\n";
 
 #[derive(Debug)]
 pub struct VCard<T: VCardVersion>(
-    fnv::FnvHashMap<String, ContentLine>,
+    HashMap<String, ContentLine>,
     std::marker::PhantomData<*const T>,
 );
 
 impl<V: VCardVersion> VCard<V> {
     pub fn new_v4() -> VCard<impl VCardVersion> {
         VCard(
-            FnvHashMap::default(),
+            HashMap::default(),
             std::marker::PhantomData::<*const VCardVersion4>,
         )
     }
@@ -78,7 +78,7 @@ impl CardDeserializer {
             &input[HEADER.len()..input.len() - FOOTER.len()]
         };
 
-        let mut ret = FnvHashMap::default();
+        let mut ret = HashMap::default();
 
         enum Stage {
             Group,

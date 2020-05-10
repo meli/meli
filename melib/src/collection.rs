@@ -27,10 +27,10 @@ use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use fnv::{FnvHashMap, FnvHashSet};
+use std::collections::{HashMap, HashSet};
 
 pub struct EnvelopeRef<'g> {
-    guard: RwLockReadGuard<'g, FnvHashMap<EnvelopeHash, Envelope>>,
+    guard: RwLockReadGuard<'g, HashMap<EnvelopeHash, Envelope>>,
     env_hash: EnvelopeHash,
 }
 
@@ -43,7 +43,7 @@ impl Deref for EnvelopeRef<'_> {
 }
 
 pub struct EnvelopeRefMut<'g> {
-    guard: RwLockWriteGuard<'g, FnvHashMap<EnvelopeHash, Envelope>>,
+    guard: RwLockWriteGuard<'g, HashMap<EnvelopeHash, Envelope>>,
     env_hash: EnvelopeHash,
 }
 
@@ -63,13 +63,13 @@ impl DerefMut for EnvelopeRefMut<'_> {
 
 #[derive(Debug, Clone, Deserialize, Default, Serialize)]
 pub struct Collection {
-    pub envelopes: Arc<RwLock<FnvHashMap<EnvelopeHash, Envelope>>>,
-    message_ids: FnvHashMap<Vec<u8>, EnvelopeHash>,
+    pub envelopes: Arc<RwLock<HashMap<EnvelopeHash, Envelope>>>,
+    message_ids: HashMap<Vec<u8>, EnvelopeHash>,
     date_index: BTreeMap<UnixTimestamp, EnvelopeHash>,
     subject_index: Option<BTreeMap<String, EnvelopeHash>>,
-    pub threads: FnvHashMap<MailboxHash, Threads>,
+    pub threads: HashMap<MailboxHash, Threads>,
     sent_mailbox: Option<MailboxHash>,
-    pub mailboxes: FnvHashMap<MailboxHash, FnvHashSet<EnvelopeHash>>,
+    pub mailboxes: HashMap<MailboxHash, HashSet<EnvelopeHash>>,
 }
 
 impl Drop for Collection {
@@ -93,17 +93,17 @@ impl Drop for Collection {
 }
 
 impl Collection {
-    pub fn new(envelopes: FnvHashMap<EnvelopeHash, Envelope>) -> Collection {
+    pub fn new(envelopes: HashMap<EnvelopeHash, Envelope>) -> Collection {
         let date_index = BTreeMap::new();
         let subject_index = None;
-        let message_ids = FnvHashMap::with_capacity_and_hasher(2048, Default::default());
+        let message_ids = HashMap::with_capacity_and_hasher(2048, Default::default());
 
         /* Scrap caching for now. When a cached threads file is loaded, we must remove/rehash the
          * thread nodes that shouldn't exist anymore (e.g. because their file moved from /new to
          * /cur, or it was deleted).
          */
-        let threads = FnvHashMap::with_capacity_and_hasher(16, Default::default());
-        let mailboxes = FnvHashMap::with_capacity_and_hasher(16, Default::default());
+        let threads = HashMap::with_capacity_and_hasher(16, Default::default());
+        let mailboxes = HashMap::with_capacity_and_hasher(16, Default::default());
 
         Collection {
             envelopes: Arc::new(RwLock::new(envelopes)),
@@ -190,7 +190,7 @@ impl Collection {
     /// Returns a list of already existing mailboxs whose threads were updated
     pub fn merge(
         &mut self,
-        mut new_envelopes: FnvHashMap<EnvelopeHash, Envelope>,
+        mut new_envelopes: HashMap<EnvelopeHash, Envelope>,
         mailbox_hash: MailboxHash,
         sent_mailbox: Option<MailboxHash>,
     ) -> Option<SmallVec<[MailboxHash; 8]>> {
@@ -407,14 +407,14 @@ impl Collection {
 }
 
 impl Index<&MailboxHash> for Collection {
-    type Output = FnvHashSet<EnvelopeHash>;
-    fn index(&self, index: &MailboxHash) -> &FnvHashSet<EnvelopeHash> {
+    type Output = HashSet<EnvelopeHash>;
+    fn index(&self, index: &MailboxHash) -> &HashSet<EnvelopeHash> {
         &self.mailboxes[index]
     }
 }
 
 impl IndexMut<&MailboxHash> for Collection {
-    fn index_mut(&mut self, index: &MailboxHash) -> &mut FnvHashSet<EnvelopeHash> {
+    fn index_mut(&mut self, index: &MailboxHash) -> &mut HashSet<EnvelopeHash> {
         self.mailboxes.get_mut(index).unwrap()
     }
 }

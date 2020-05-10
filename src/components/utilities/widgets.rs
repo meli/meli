@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use fnv::FnvHashMap;
+use std::collections::HashMap;
 
 type AutoCompleteFn = Box<dyn Fn(&Context, &str) -> Vec<AutoCompleteEntry> + Send + Sync>;
 
@@ -298,7 +298,7 @@ impl fmt::Display for Field {
 
 #[derive(Debug, Default)]
 pub struct FormWidget {
-    fields: FnvHashMap<String, Field>,
+    fields: HashMap<String, Field>,
     layout: Vec<String>,
     buttons: ButtonWidget<bool>,
 
@@ -375,11 +375,11 @@ impl FormWidget {
         self.fields.insert(value.0, value.1);
     }
 
-    pub fn values_mut(&mut self) -> &mut FnvHashMap<String, Field> {
+    pub fn values_mut(&mut self) -> &mut HashMap<String, Field> {
         &mut self.fields
     }
 
-    pub fn collect(self) -> Option<FnvHashMap<String, Field>> {
+    pub fn collect(self) -> Option<HashMap<String, Field>> {
         if let Some(true) = self.buttons_result() {
             Some(self.fields)
         } else {
@@ -598,7 +598,7 @@ pub struct ButtonWidget<T>
 where
     T: 'static + std::fmt::Debug + Default + Send + Sync,
 {
-    buttons: FnvHashMap<String, T>,
+    buttons: HashMap<String, T>,
     layout: Vec<String>,
 
     result: Option<T>,

@@ -64,8 +64,8 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
-use fnv::FnvHashMap;
 use std;
+use std::collections::HashMap;
 
 #[macro_export]
 macro_rules! get_path_hash {
@@ -88,7 +88,7 @@ pub type BackendCreator = Box<
 /// A hashmap containing all available mail backends.
 /// An abstraction over any available backends.
 pub struct Backends {
-    map: FnvHashMap<std::string::String, Backend>,
+    map: HashMap<std::string::String, Backend>,
 }
 
 pub struct Backend {
@@ -111,7 +111,7 @@ pub const NOTMUCH_ERROR_MSG: &'static str = "this version of meli is not compile
 impl Backends {
     pub fn new() -> Self {
         let mut b = Backends {
-            map: FnvHashMap::with_capacity_and_hasher(1, Default::default()),
+            map: HashMap::with_capacity_and_hasher(1, Default::default()),
         };
         #[cfg(feature = "maildir_backend")]
         {
@@ -284,7 +284,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId>;
-    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>>;
+    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>>;
     fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp>;
 
     fn save(&self, bytes: &[u8], mailbox: &str, flags: Option<Flag>) -> Result<()>;
@@ -303,14 +303,14 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn create_mailbox(
         &mut self,
         _path: String,
-    ) -> Result<(MailboxHash, FnvHashMap<MailboxHash, Mailbox>)> {
+    ) -> Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         Err(MeliError::new("Unimplemented."))
     }
 
     fn delete_mailbox(
         &mut self,
         _mailbox_hash: MailboxHash,
-    ) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+    ) -> Result<HashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))
     }
 

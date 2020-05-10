@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use fnv::FnvHashMap;
+use std::collections::HashMap;
 
 mod contact_list;
 
@@ -205,7 +205,7 @@ impl Component for ContactManager {
                             let fields = std::mem::replace(&mut self.form, FormWidget::default())
                                 .collect()
                                 .unwrap();
-                            let fields: FnvHashMap<String, String> = fields
+                            let fields: HashMap<String, String> = fields
                                 .into_iter()
                                 .map(|(s, v)| {
                                     (

@@ -43,9 +43,9 @@ pub use iterators::*;
 use crate::text_processing::grapheme_clusters::*;
 use uuid::Uuid;
 
-use fnv::{FnvHashMap, FnvHashSet};
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::iter::FromIterator;
 use std::ops::Index;
@@ -56,7 +56,7 @@ use std::sync::{Arc, RwLock};
 
 use smallvec::SmallVec;
 
-type Envelopes = Arc<RwLock<FnvHashMap<EnvelopeHash, Envelope>>>;
+type Envelopes = Arc<RwLock<HashMap<EnvelopeHash, Envelope>>>;
 
 macro_rules! uuid_hash_type {
     ($n:ident) => {
@@ -407,15 +407,15 @@ impl ThreadNode {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Threads {
-    pub thread_nodes: FnvHashMap<ThreadNodeHash, ThreadNode>,
+    pub thread_nodes: HashMap<ThreadNodeHash, ThreadNode>,
     root_set: RefCell<Vec<ThreadNodeHash>>,
     tree_index: RefCell<Vec<ThreadNodeHash>>,
-    pub groups: FnvHashMap<ThreadHash, ThreadGroup>,
+    pub groups: HashMap<ThreadHash, ThreadGroup>,
 
-    message_ids: FnvHashMap<Vec<u8>, ThreadNodeHash>,
-    pub message_ids_set: FnvHashSet<Vec<u8>>,
-    pub missing_message_ids: FnvHashSet<Vec<u8>>,
-    pub hash_set: FnvHashSet<EnvelopeHash>,
+    message_ids: HashMap<Vec<u8>, ThreadNodeHash>,
+    pub message_ids_set: HashSet<Vec<u8>>,
+    pub missing_message_ids: HashSet<Vec<u8>>,
+    pub hash_set: HashSet<EnvelopeHash>,
     sort: RefCell<(SortField, SortOrder)>,
     subsort: RefCell<(SortField, SortOrder)>,
 }
@@ -468,22 +468,19 @@ impl Threads {
         /* To reconstruct thread information from the mails we need: */
 
         /* a vector to hold thread members */
-        let thread_nodes: FnvHashMap<ThreadNodeHash, ThreadNode> =
-            FnvHashMap::with_capacity_and_hasher(
-                (length as f64 * 1.2) as usize,
-                Default::default(),
-            );
+        let thread_nodes: HashMap<ThreadNodeHash, ThreadNode> =
+            HashMap::with_capacity_and_hasher((length as f64 * 1.2) as usize, Default::default());
         /* A hash table of Message IDs */
-        let message_ids: FnvHashMap<Vec<u8>, ThreadNodeHash> =
-            FnvHashMap::with_capacity_and_hasher(length, Default::default());
+        let message_ids: HashMap<Vec<u8>, ThreadNodeHash> =
+            HashMap::with_capacity_and_hasher(length, Default::default());
         /* A hash set of Message IDs we haven't encountered yet as an Envelope */
-        let missing_message_ids: FnvHashSet<Vec<u8>> =
-            FnvHashSet::with_capacity_and_hasher(length, Default::default());
+        let missing_message_ids: HashSet<Vec<u8>> =
+            HashSet::with_capacity_and_hasher(length, Default::default());
         /* A hash set of Message IDs we have encountered as a MessageID */
-        let message_ids_set: FnvHashSet<Vec<u8>> =
-            FnvHashSet::with_capacity_and_hasher(length, Default::default());
-        let hash_set: FnvHashSet<EnvelopeHash> =
-            FnvHashSet::with_capacity_and_hasher(length, Default::default());
+        let message_ids_set: HashSet<Vec<u8>> =
+            HashSet::with_capacity_and_hasher(length, Default::default());
+        let hash_set: HashSet<EnvelopeHash> =
+            HashSet::with_capacity_and_hasher(length, Default::default());
 
         Threads {
             thread_nodes,
@@ -582,7 +579,7 @@ impl Threads {
 
     pub fn amend(&mut self, envelopes: &mut Envelopes) {
         let envelopes_lck = envelopes.read().unwrap();
-        let new_hash_set = FnvHashSet::from_iter(envelopes_lck.keys().cloned());
+        let new_hash_set = HashSet::from_iter(envelopes_lck.keys().cloned());
 
         let difference: Vec<EnvelopeHash> =
             self.hash_set.difference(&new_hash_set).cloned().collect();
@@ -831,7 +828,7 @@ impl Threads {
                 .message_ids
                 .iter()
                 .map(|(a, &b)| (b, a.to_vec()))
-                .collect::<FnvHashMap<ThreadNodeHash, Vec<u8>>>(),
+                .collect::<HashMap<ThreadNodeHash, Vec<u8>>>(),
             &envelopes,
         );
         */
@@ -1168,7 +1165,7 @@ impl Threads {
         thread.message().unwrap()
     }
 
-    pub fn thread_nodes(&self) -> &FnvHashMap<ThreadNodeHash, ThreadNode> {
+    pub fn thread_nodes(&self) -> &HashMap<ThreadNodeHash, ThreadNode> {
         &self.thread_nodes
     }
 
@@ -1206,13 +1203,13 @@ impl Index<&ThreadNodeHash> for Threads {
 /*
 fn print_threadnodes(
     node_hash: ThreadNodeHash,
-    nodes: &FnvHashMap<ThreadNodeHash, ThreadNode>,
+    nodes: &HashMap<ThreadNodeHash, ThreadNode>,
     envelopes: &Envelopes,
 ) {
     fn help(
         level: usize,
         node_hash: ThreadNodeHash,
-        nodes: &FnvHashMap<ThreadNodeHash, ThreadNode>,
+        nodes: &HashMap<ThreadNodeHash, ThreadNode>,
         envelopes: &Envelopes,
     ) {
         eprint!("{}ThreadNode {}\n{}\tmessage: {}\n{}\tparent: {}\n{}\tthread_group: {}\n{}\tchildren (len: {}):\n",
@@ -1261,8 +1258,8 @@ struct Graph {
 /*
 fn save_graph(
     node_arr: &[ThreadNodeHash],
-    nodes: &FnvHashMap<ThreadNodeHash, ThreadNode>,
-    ids: &FnvHashMap<ThreadNodeHash, Vec<u8>>,
+    nodes: &HashMap<ThreadNodeHash, ThreadNode>,
+    ids: &HashMap<ThreadNodeHash, Vec<u8>>,
     envelopes: &Envelopes,
 ) {
     let envelopes = envelopes.read().unwrap();

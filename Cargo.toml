@@ -34,7 +34,6 @@ serde = "1.0.71"
 serde_derive = "1.0.71"
 serde_json = "1.0"
 toml = "0.5.3"
-fnv = "1.0.3" # >:c
 linkify = "0.3.1" # >:c
 xdg-utils = "0.3.0"
 nom = "3.2.0"

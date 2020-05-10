@@ -43,8 +43,8 @@ use crate::backends::{BackendMailbox, MailBackend, Mailbox, RefreshEventConsumer
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
-use fnv::{FnvHashMap, FnvHashSet};
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
+use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
@@ -87,7 +87,7 @@ impl std::ops::Deref for IsSubscribedFn {
         &self.0
     }
 }
-type Capabilities = FnvHashSet<Vec<u8>>;
+type Capabilities = HashSet<Vec<u8>>;
 
 #[macro_export]
 macro_rules! get_conf_val {
@@ -120,11 +120,11 @@ macro_rules! get_conf_val {
 
 #[derive(Debug)]
 pub struct UIDStore {
-    uidvalidity: Arc<Mutex<FnvHashMap<MailboxHash, UID>>>,
-    hash_index: Arc<Mutex<FnvHashMap<EnvelopeHash, (UID, MailboxHash)>>>,
-    uid_index: Arc<Mutex<FnvHashMap<UID, EnvelopeHash>>>,
+    uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
+    hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
+    uid_index: Arc<Mutex<HashMap<UID, EnvelopeHash>>>,
 
-    byte_cache: Arc<Mutex<FnvHashMap<UID, EnvelopeCache>>>,
+    byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
 }
 #[derive(Debug)]
 pub struct ImapType {
@@ -137,7 +137,7 @@ pub struct ImapType {
     can_create_flags: Arc<Mutex<bool>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 
-    mailboxes: Arc<RwLock<FnvHashMap<MailboxHash, ImapMailbox>>>,
+    mailboxes: Arc<RwLock<HashMap<MailboxHash, ImapMailbox>>>,
 }
 
 #[inline(always)]
@@ -407,7 +407,7 @@ impl MailBackend for ImapType {
         Ok(handle.thread().id())
     }
 
-    fn mailboxes(&self) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+    fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
         {
             let mailboxes = self.mailboxes.read().unwrap();
             if !mailboxes.is_empty() {
@@ -420,10 +420,7 @@ impl MailBackend for ImapType {
         let mut mailboxes = self.mailboxes.write()?;
         *mailboxes = ImapType::imap_mailboxes(&self.connection)?;
         mailboxes.retain(|_, f| (self.is_subscribed)(f.path()));
-        let keys = mailboxes
-            .keys()
-            .cloned()
-            .collect::<FnvHashSet<MailboxHash>>();
+        let keys = mailboxes.keys().cloned().collect::<HashSet<MailboxHash>>();
         let mut uid_lock = self.uid_store.uidvalidity.lock().unwrap();
         for f in mailboxes.values_mut() {
             uid_lock.entry(f.hash()).or_default();
@@ -512,7 +509,7 @@ impl MailBackend for ImapType {
     fn create_mailbox(
         &mut self,
         mut path: String,
-    ) -> Result<(MailboxHash, FnvHashMap<MailboxHash, Mailbox>)> {
+    ) -> Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         /* Must transform path to something the IMAP server will accept
          *
          * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
@@ -566,7 +563,7 @@ impl MailBackend for ImapType {
     fn delete_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
-    ) -> Result<FnvHashMap<MailboxHash, Mailbox>> {
+    ) -> Result<HashMap<MailboxHash, Mailbox>> {
         let mut mailboxes = self.mailboxes.write().unwrap();
         let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.delete_mailbox {
@@ -939,8 +936,8 @@ impl ImapType {
 
     pub fn imap_mailboxes(
         connection: &Arc<Mutex<ImapConnection>>,
-    ) -> Result<FnvHashMap<MailboxHash, ImapMailbox>> {
-        let mut mailboxes: FnvHashMap<MailboxHash, ImapMailbox> = Default::default();
+    ) -> Result<HashMap<MailboxHash, ImapMailbox>> {
+        let mut mailboxes: HashMap<MailboxHash, ImapMailbox> = Default::default();
         let mut res = String::with_capacity(8 * 1024);
         let mut conn = try_lock(&connection)?;
         conn.send_command(b"LIST \"\" \"*\"")?;

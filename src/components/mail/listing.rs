@@ -22,6 +22,7 @@
 use super::*;
 use crate::types::segment_tree::SegmentTree;
 use smallvec::SmallVec;
+use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 
 mod conversations;
@@ -1149,7 +1150,7 @@ impl Listing {
             debug!("BUG: invalid area in print_account");
         }
         // Each entry and its index in the account
-        let mailboxes: FnvHashMap<MailboxHash, Mailbox> = context.accounts[a.index]
+        let mailboxes: HashMap<MailboxHash, Mailbox> = context.accounts[a.index]
             .mailbox_entries
             .iter()
             .map(|(&hash, entry)| (hash, entry.ref_mailbox.clone()))

@@ -29,7 +29,7 @@ pub struct JmapConnection {
     pub online_status: Arc<Mutex<(Instant, Result<()>)>>,
     pub server_conf: JmapServerConf,
     pub account_id: Arc<Mutex<String>>,
-    pub method_call_states: Arc<Mutex<FnvHashMap<&'static str, String>>>,
+    pub method_call_states: Arc<Mutex<HashMap<&'static str, String>>>,
 }
 
 impl JmapConnection {

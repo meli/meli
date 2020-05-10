@@ -21,7 +21,7 @@
 
 use crate::override_def;
 use crate::terminal::Key;
-use fnv::FnvHashMap;
+use std::collections::HashMap;
 
 #[macro_export]
 macro_rules! shortcut {
@@ -95,7 +95,7 @@ macro_rules! shortcut_key_values {
                 }
             }
             /// Returns a hashmap of all shortcuts and their values
-            pub fn key_values(&self) -> FnvHashMap<&'static str, Key> {
+            pub fn key_values(&self) -> HashMap<&'static str, Key> {
                 [
                 $((stringify!($fname),(self.$fname).clone()),)*
                 ].iter().cloned().collect()

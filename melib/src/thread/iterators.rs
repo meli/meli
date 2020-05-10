@@ -20,8 +20,8 @@
  */
 
 use super::{ThreadNode, ThreadNodeHash};
-use fnv::FnvHashMap;
 use smallvec::SmallVec;
+use std::collections::HashMap;
 
 /* `ThreadsIterator` returns messages according to the sorted order. For example, for the following
  * threads:
@@ -42,7 +42,7 @@ pub struct ThreadsGroupIterator<'a> {
     pub(super) root_tree: SmallVec<[ThreadNodeHash; 1024]>,
     pub(super) pos: usize,
     pub(super) stack: SmallVec<[usize; 16]>,
-    pub(super) thread_nodes: &'a FnvHashMap<ThreadNodeHash, ThreadNode>,
+    pub(super) thread_nodes: &'a HashMap<ThreadNodeHash, ThreadNode>,
 }
 impl<'a> Iterator for ThreadsGroupIterator<'a> {
     type Item = (usize, ThreadNodeHash, bool);
@@ -100,7 +100,7 @@ pub struct ThreadGroupIterator<'a> {
     pub(super) group: ThreadNodeHash,
     pub(super) pos: usize,
     pub(super) stack: SmallVec<[usize; 16]>,
-    pub(super) thread_nodes: &'a FnvHashMap<ThreadNodeHash, ThreadNode>,
+    pub(super) thread_nodes: &'a HashMap<ThreadNodeHash, ThreadNode>,
 }
 
 impl<'a> Iterator for ThreadGroupIterator<'a> {

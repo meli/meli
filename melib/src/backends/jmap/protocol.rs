@@ -25,6 +25,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use smallvec::SmallVec;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
 
@@ -94,7 +95,7 @@ impl Request {
     }
 }
 
-pub fn get_mailboxes(conn: &JmapConnection) -> Result<FnvHashMap<MailboxHash, JmapMailbox>> {
+pub fn get_mailboxes(conn: &JmapConnection) -> Result<HashMap<MailboxHash, JmapMailbox>> {
     let seq = get_request_no!(conn.request_no);
     let res = conn
         .client

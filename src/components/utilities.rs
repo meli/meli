@@ -27,7 +27,7 @@ use text_processing::Reflow;
 mod widgets;
 
 pub use self::widgets::*;
-use fnv::FnvHashSet;
+use std::collections::HashSet;
 
 /// A horizontally split in half container.
 #[derive(Debug)]
@@ -814,8 +814,7 @@ impl Component for Pager {
         self.dirty = value;
     }
     fn get_shortcuts(&self, context: &Context) -> ShortcutMaps {
-        let config_map: FnvHashMap<&'static str, Key> =
-            context.settings.shortcuts.pager.key_values();
+        let config_map: HashMap<&'static str, Key> = context.settings.shortcuts.pager.key_values();
         let mut ret: ShortcutMaps = Default::default();
         ret.insert(Pager::DESCRIPTION, config_map);
         ret
@@ -986,7 +985,7 @@ impl Component for StatusBar {
                     return;
                 }
 
-                let mut unique_suggestions: FnvHashSet<&str> = FnvHashSet::default();
+                let mut unique_suggestions: HashSet<&str> = HashSet::default();
                 let mut suggestions: Vec<AutoCompleteEntry> = self
                     .cmd_history
                     .iter()
