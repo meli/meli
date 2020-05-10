@@ -792,8 +792,6 @@ impl BackendOp for NotmuchOp {
         let hash = tag_hash!(tag);
         if value {
             self.tag_index.write().unwrap().insert(hash, tag);
-        } else {
-            self.tag_index.write().unwrap().remove(&hash);
         }
         if !envelope.labels().iter().any(|&h_| h_ == hash) {
             if value {

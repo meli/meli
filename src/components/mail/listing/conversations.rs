@@ -606,6 +606,7 @@ impl ConversationsListing {
                         .ignore_tags
                 )
                 .contains(t)
+                    || !tags_lck.contains_key(t)
                 {
                     continue;
                 }
