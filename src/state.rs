@@ -30,7 +30,7 @@ Input is received in the main loop from threads which listen on the stdin for us
 
 use super::*;
 use crate::plugins::PluginManager;
-use melib::backends::{MailboxHash, NotifyFn};
+use melib::backends::{AccountHash, MailboxHash, NotifyFn};
 
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use smallvec::SmallVec;
@@ -89,7 +89,7 @@ impl InputHandler {
 /// A context container for loaded settings, accounts, UI changes, etc.
 pub struct Context {
     pub accounts: Vec<Account>,
-    pub mailbox_hashes: HashMap<MailboxHash, usize>,
+    pub account_hashes: HashMap<AccountHash, usize>,
     pub settings: Settings,
 
     pub runtime_settings: Settings,
@@ -132,7 +132,6 @@ impl Context {
     pub fn is_online(&mut self, account_pos: usize) -> Result<()> {
         let Context {
             ref mut accounts,
-            ref mut mailbox_hashes,
             ref mut replies,
             ..
         } = self;
@@ -146,7 +145,6 @@ impl Context {
                         mailbox_node.hash,
                         accounts[account_pos][&mailbox_node.hash].name()
                     );
-                    mailbox_hashes.insert(mailbox_node.hash, account_pos);
                 }
                 /* Account::watch() needs
                  * - work_controller to pass `work_context` to the watcher threads and then add them
@@ -246,6 +244,7 @@ impl State {
         let cols = termsize.0 as usize;
         let rows = termsize.1 as usize;
 
+        let mut account_hashes = HashMap::with_capacity_and_hasher(1, Default::default());
         let work_controller = WorkController::new(sender.clone());
         let accounts: Vec<Account> = {
             let mut file_accs = settings
@@ -259,6 +258,14 @@ impl State {
                 .enumerate()
                 .map(|(index, (n, a_s))| {
                     let sender = sender.clone();
+                    let account_hash = {
+                        use std::collections::hash_map::DefaultHasher;
+                        use std::hash::Hasher;
+                        let mut hasher = DefaultHasher::new();
+                        hasher.write(n.as_bytes());
+                        hasher.finish()
+                    };
+                    account_hashes.insert(account_hash, index);
                     Account::new(
                         index,
                         n.to_string(),
@@ -268,7 +275,10 @@ impl State {
                         sender.clone(),
                         NotifyFn::new(Box::new(move |f: MailboxHash| {
                             sender
-                                .send(ThreadEvent::UIEvent(UIEvent::WorkerProgress(f)))
+                                .send(ThreadEvent::UIEvent(UIEvent::WorkerProgress(
+                                    account_hash,
+                                    f,
+                                )))
                                 .unwrap();
                         })),
                     )
@@ -315,8 +325,7 @@ impl State {
 
             context: Context {
                 accounts,
-                mailbox_hashes: HashMap::with_capacity_and_hasher(1, Default::default()),
-
+                account_hashes,
                 settings: settings.clone(),
                 runtime_settings: settings,
                 dirty_areas: VecDeque::with_capacity(5),
@@ -362,25 +371,31 @@ impl State {
      * and startup a thread to remind us to poll it every now and then till it's finished.
      */
     pub fn refresh_event(&mut self, event: RefreshEvent) {
-        let hash = event.hash();
-        if let Some(&idxa) = self.context.mailbox_hashes.get(&hash) {
-            if self.context.accounts[idxa].load(hash).is_err() {
-                self.context.replies.push_back(UIEvent::from(event));
-                return;
-            }
-            let Context {
-                ref mut accounts, ..
-            } = &mut self.context;
-
-            if let Some(notification) = accounts[idxa].reload(event, hash) {
-                if let UIEvent::Notification(_, _, _) = notification {
-                    self.rcv_event(UIEvent::MailboxUpdate((idxa, hash)));
+        let account_hash = event.account_hash();
+        let mailbox_hash = event.mailbox_hash();
+        if let Some(&idxa) = self.context.account_hashes.get(&account_hash) {
+            if self.context.accounts[idxa]
+                .mailbox_entries
+                .contains_key(&mailbox_hash)
+            {
+                if self.context.accounts[idxa].load(mailbox_hash).is_err() {
+                    self.context.replies.push_back(UIEvent::from(event));
+                    return;
                 }
-                self.rcv_event(notification);
-            }
-        } else {
-            if let melib::backends::RefreshEventKind::Failure(err) = event.kind() {
-                debug!(err);
+                let Context {
+                    ref mut accounts, ..
+                } = &mut self.context;
+
+                if let Some(notification) = accounts[idxa].reload(event, mailbox_hash) {
+                    if let UIEvent::Notification(_, _, _) = notification {
+                        self.rcv_event(UIEvent::MailboxUpdate((idxa, mailbox_hash)));
+                    }
+                    self.rcv_event(notification);
+                }
+            } else {
+                if let melib::backends::RefreshEventKind::Failure(err) = event.kind() {
+                    debug!(err);
+                }
             }
         }
     }
@@ -915,8 +930,8 @@ impl State {
                 self.child = Some(child);
                 return;
             }
-            UIEvent::WorkerProgress(mailbox_hash) => {
-                if let Some(&account_idx) = self.context.mailbox_hashes.get(&mailbox_hash) {
+            UIEvent::WorkerProgress(account_hash, mailbox_hash) => {
+                if let Some(&account_idx) = self.context.account_hashes.get(&account_hash) {
                     let _ = self.context.accounts[account_idx].load(mailbox_hash);
                 }
                 return;

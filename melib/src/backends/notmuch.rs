@@ -109,6 +109,7 @@ pub struct NotmuchDb {
     index: Arc<RwLock<HashMap<EnvelopeHash, CString>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     path: PathBuf,
+    account_name: String,
     save_messages_to: Option<PathBuf>,
 }
 
@@ -238,6 +239,7 @@ impl NotmuchDb {
 
             mailboxes: Arc::new(RwLock::new(mailboxes)),
             save_messages_to: None,
+            account_name: s.name().to_string(),
         }))
     }
 
@@ -435,6 +437,11 @@ impl MailBackend for NotmuchDb {
         watcher.watch(&self.path, RecursiveMode::Recursive).unwrap();
         let path = self.path.clone();
         let lib = self.lib.clone();
+        let account_hash = {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(self.account_name.as_bytes());
+            hasher.finish()
+        };
         {
             let database = NotmuchDb::new_connection(path.as_path(), lib.clone(), false)?;
             let mut revision_uuid_lck = self.revision_uuid.write().unwrap();
@@ -450,10 +457,7 @@ impl MailBackend for NotmuchDb {
         let revision_uuid = self.revision_uuid.clone();
 
         let handle = std::thread::Builder::new()
-            .name(format!(
-                "watching {}",
-                self.path.file_name().unwrap().to_str().unwrap()
-            ))
+            .name(format!("watching {}", self.account_name))
             .spawn(move || {
                 let _watcher = watcher;
                 let c = move || -> std::result::Result<(), MeliError> {
@@ -484,7 +488,8 @@ impl MailBackend for NotmuchDb {
 
                 if let Err(err) = c() {
                     sender.send(RefreshEvent {
-                        hash: 0,
+                        account_hash,
+                        mailbox_hash: 0,
                         kind: Failure(err.into()),
                     });
                 }

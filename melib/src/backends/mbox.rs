@@ -41,8 +41,9 @@ use memmap::{Mmap, Protection};
 use nom::{IResult, Needed};
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
-use std::collections::HashMap;
+use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::fs::File;
+use std::hash::Hasher;
 use std::io::BufReader;
 use std::io::Read;
 use std::os::unix::io::AsRawFd;
@@ -386,6 +387,7 @@ pub fn mbox_parse(
 /// Mbox backend
 #[derive(Debug, Default)]
 pub struct MboxType {
+    account_name: String,
     path: PathBuf,
     index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
     mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
@@ -461,13 +463,15 @@ impl MailBackend for MboxType {
                 .map_err(MeliError::new)?;
             debug!("watching {:?}", f.path.as_path());
         }
+        let account_hash = {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(self.account_name.as_bytes());
+            hasher.finish()
+        };
         let index = self.index.clone();
         let mailboxes = self.mailboxes.clone();
         let handle = std::thread::Builder::new()
-            .name(format!(
-                "watching {}",
-                self.path.file_name().unwrap().to_str().unwrap()
-            ))
+            .name(format!("watching {}", self.account_name,))
             .spawn(move || {
                 // Move `watcher` in the closure's scope so that it doesn't get dropped.
                 let _watcher = watcher;
@@ -521,14 +525,16 @@ impl MailBackend for MboxType {
                                     {
                                         for env in envelopes {
                                             sender.send(RefreshEvent {
-                                                hash: mailbox_hash,
+                                                account_hash,
+                                                mailbox_hash,
                                                 kind: RefreshEventKind::Create(Box::new(env)),
                                             });
                                         }
                                     }
                                 } else {
                                     sender.send(RefreshEvent {
-                                        hash: mailbox_hash,
+                                        account_hash,
+                                        mailbox_hash,
                                         kind: RefreshEventKind::Rescan,
                                     });
                                 }
@@ -547,7 +553,8 @@ impl MailBackend for MboxType {
                                 {
                                     let mailbox_hash = get_path_hash!(&pathbuf);
                                     sender.send(RefreshEvent {
-                                        hash: mailbox_hash,
+                                        account_hash,
+                                        mailbox_hash,
                                         kind: RefreshEventKind::Failure(MeliError::new(format!(
                                             "mbox mailbox {} was removed.",
                                             pathbuf.display()
@@ -560,7 +567,8 @@ impl MailBackend for MboxType {
                                 if mailboxes.lock().unwrap().values().any(|f| &f.path == &src) {
                                     let mailbox_hash = get_path_hash!(&src);
                                     sender.send(RefreshEvent {
-                                        hash: mailbox_hash,
+                                        account_hash,
+                                        mailbox_hash,
                                         kind: RefreshEventKind::Failure(MeliError::new(format!(
                                             "mbox mailbox {} was renamed to {}.",
                                             src.display(),
@@ -572,9 +580,10 @@ impl MailBackend for MboxType {
                             }
                             /* Trigger rescan of mailboxes */
                             DebouncedEvent::Rescan => {
-                                for h in mailboxes.lock().unwrap().keys() {
+                                for &mailbox_hash in mailboxes.lock().unwrap().keys() {
                                     sender.send(RefreshEvent {
-                                        hash: *h,
+                                        account_hash,
+                                        mailbox_hash,
                                         kind: RefreshEventKind::Rescan,
                                     });
                                 }
@@ -628,6 +637,7 @@ impl MboxType {
             )));
         }
         let ret = MboxType {
+            account_name: s.name().to_string(),
             path,
             ..Default::default()
         };

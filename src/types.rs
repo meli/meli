@@ -38,7 +38,7 @@ pub use self::helpers::*;
 use super::execute::Action;
 use super::terminal::*;
 
-use melib::backends::MailboxHash;
+use melib::backends::{AccountHash, MailboxHash};
 use melib::{EnvelopeHash, RefreshEvent};
 use nix::unistd::Pid;
 use std;
@@ -115,7 +115,7 @@ pub enum UIEvent {
     MailboxCreate((usize, MailboxHash)),
     AccountStatusChange(usize),
     ComponentKill(Uuid),
-    WorkerProgress(MailboxHash),
+    WorkerProgress(AccountHash, MailboxHash),
     StartupCheck(MailboxHash),
     RefreshEvent(Box<RefreshEvent>),
     EnvelopeUpdate(EnvelopeHash),

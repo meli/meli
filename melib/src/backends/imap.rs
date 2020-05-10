@@ -36,9 +36,9 @@ pub mod managesieve;
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
-use crate::backends::MailboxHash;
 use crate::backends::RefreshEvent;
 use crate::backends::RefreshEventKind::{self, *};
+use crate::backends::{AccountHash, MailboxHash};
 use crate::backends::{BackendMailbox, MailBackend, Mailbox, RefreshEventConsumer};
 use crate::conf::AccountSettings;
 use crate::email::*;
@@ -120,12 +120,26 @@ macro_rules! get_conf_val {
 
 #[derive(Debug)]
 pub struct UIDStore {
+    account_hash: AccountHash,
     uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     uid_index: Arc<Mutex<HashMap<UID, EnvelopeHash>>>,
 
     byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
 }
+
+impl Default for UIDStore {
+    fn default() -> Self {
+        UIDStore {
+            account_hash: 0,
+            uidvalidity: Default::default(),
+            hash_index: Default::default(),
+            uid_index: Default::default(),
+            byte_cache: Default::default(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ImapType {
     account_name: String,
@@ -323,6 +337,11 @@ impl MailBackend for ImapType {
         let main_conn = self.connection.clone();
         let uid_store = self.uid_store.clone();
         let account_name = self.account_name.clone();
+        let account_hash = {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(self.account_name.as_bytes());
+            hasher.finish()
+        };
         let w = AsyncBuilder::new();
         let closure = move |work_context: WorkContext| {
             let thread = std::thread::current();
@@ -330,7 +349,8 @@ impl MailBackend for ImapType {
                 Ok(conn) => conn,
                 Err(err) => {
                     sender.send(RefreshEvent {
-                        hash: mailbox_hash,
+                        account_hash,
+                        mailbox_hash,
                         kind: RefreshEventKind::Failure(err.clone()),
                     });
 
@@ -350,6 +370,7 @@ impl MailBackend for ImapType {
                 .send((thread.id(), "refresh".to_string()))
                 .unwrap();
             watch::examine_updates(
+                account_hash,
                 &inbox,
                 &sender,
                 &mut conn,
@@ -374,6 +395,11 @@ impl MailBackend for ImapType {
         let main_conn = self.connection.clone();
         let is_online = self.online.clone();
         let uid_store = self.uid_store.clone();
+        let account_hash = {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(self.account_name.as_bytes());
+            hasher.finish()
+        };
         let handle = std::thread::Builder::new()
             .name(format!("{} imap connection", self.account_name.as_str(),))
             .spawn(move || {
@@ -397,6 +423,7 @@ impl MailBackend for ImapType {
                     sender,
                     work_context,
                     tag_index,
+                    account_hash,
                 };
                 if has_idle {
                     idle(kit).ok().take();
@@ -881,6 +908,15 @@ impl ImapType {
             Err(MeliError::new("Account is uninitialised.")),
         )));
         let connection = ImapConnection::new_connection(&server_conf, online.clone());
+        let account_hash = {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(s.name.as_bytes());
+            hasher.finish()
+        };
+        let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
+            account_hash,
+            ..UIDStore::default()
+        });
 
         Ok(Box::new(ImapType {
             account_name: s.name().to_string(),
@@ -892,12 +928,7 @@ impl ImapType {
             tag_index: Arc::new(RwLock::new(Default::default())),
             mailboxes: Arc::new(RwLock::new(Default::default())),
             connection: Arc::new(Mutex::new(connection)),
-            uid_store: Arc::new(UIDStore {
-                uidvalidity: Default::default(),
-                hash_index: Default::default(),
-                uid_index: Default::default(),
-                byte_cache: Default::default(),
-            }),
+            uid_store,
         }))
     }
 

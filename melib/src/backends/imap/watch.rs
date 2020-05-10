@@ -24,6 +24,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
+    pub account_hash: AccountHash,
     pub conn: ImapConnection,
     pub is_online: Arc<Mutex<(Instant, Result<()>)>>,
     pub main_conn: Arc<Mutex<ImapConnection>>,
@@ -35,13 +36,14 @@ pub struct ImapWatchKit {
 }
 
 macro_rules! exit_on_error {
-    ($sender:expr, $mailbox_hash:ident, $work_context:ident, $thread_id:ident, $($result:expr)+) => {
+    ($sender:expr, $account_hash:ident, $mailbox_hash:ident, $work_context:ident, $thread_id:ident, $($result:expr)+) => {
         $(if let Err(e) = $result {
             debug!("failure: {}", e.to_string());
             $work_context.set_status.send(($thread_id, e.to_string())).unwrap();
             $work_context.finished.send($thread_id).unwrap();
             $sender.send(RefreshEvent {
-                hash: $mailbox_hash,
+                account_hash: $account_hash,
+                mailbox_hash: $mailbox_hash,
                 kind: RefreshEventKind::Failure(e.clone()),
             });
             Err(e)
@@ -60,6 +62,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         sender,
         work_context,
         tag_index,
+        account_hash,
     } = kit;
     loop {
         if super::try_lock(&is_online)?.1.is_ok() {
@@ -86,6 +89,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
                 ))
                 .unwrap();
             examine_updates(
+                account_hash,
                 mailbox,
                 &sender,
                 &mut conn,
@@ -113,6 +117,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         sender,
         work_context,
         tag_index,
+        account_hash,
     } = kit;
     loop {
         if super::try_lock(&is_online)?.1.is_ok() {
@@ -138,7 +143,8 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 .send((thread_id, err.to_string()))
                 .unwrap();
             sender.send(RefreshEvent {
-                hash: 0,
+                account_hash,
+                mailbox_hash: 0,
                 kind: RefreshEventKind::Failure(err.clone()),
             });
             return Err(err);
@@ -148,6 +154,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
         sender,
+        account_hash,
         mailbox_hash,
         work_context,
         thread_id,
@@ -165,7 +172,8 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     if let Some(v) = uidvalidities.get_mut(&mailbox_hash) {
                         if *v != ok.uidvalidity {
                             sender.send(RefreshEvent {
-                                hash: mailbox_hash,
+                                account_hash,
+                                mailbox_hash,
                                 kind: RefreshEventKind::Rescan,
                             });
                             *prev_exists = 0;
@@ -178,11 +186,13 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         }
                     } else {
                         sender.send(RefreshEvent {
-                            hash: mailbox_hash,
+                            account_hash,
+                            mailbox_hash,
                             kind: RefreshEventKind::Rescan,
                         });
                         sender.send(RefreshEvent {
-                            hash: mailbox_hash,
+                            account_hash,
+                            mailbox_hash,
                             kind: RefreshEventKind::Failure(MeliError::new(format!(
                                 "Unknown mailbox: {} {}",
                                 mailbox.path(),
@@ -202,6 +212,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     }
     exit_on_error!(
         sender,
+        account_hash,
         mailbox_hash,
         work_context,
         thread_id,
@@ -224,6 +235,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
             let mut main_conn_lck = super::try_lock(&main_conn)?;
             exit_on_error!(
                 sender,
+                account_hash,
                 mailbox_hash,
                 work_context,
                 thread_id,
@@ -250,10 +262,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     .unwrap();
                 exit_on_error!(
                     sender,
+                    account_hash,
                     mailbox_hash,
                     work_context,
                     thread_id,
                     examine_updates(
+                        account_hash,
                         mailbox,
                         &sender,
                         &mut conn,
@@ -282,6 +296,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 /* UID SEARCH RECENT */
                 exit_on_error!(
                     sender,
+                    account_hash,
                     mailbox_hash,
                     work_context,
                     thread_id,
@@ -300,6 +315,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     Ok(v) => {
                         exit_on_error!(
                             sender,
+                            account_hash,
                             mailbox_hash,
                             work_context,
                             thread_id,
@@ -358,7 +374,8 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         *mailbox.exists.lock().unwrap() += 1;
 
                                         sender.send(RefreshEvent {
-                                            hash: mailbox_hash,
+                                            account_hash,
+                                            mailbox_hash,
                                             kind: Create(Box::new(env)),
                                         });
                                     }
@@ -410,6 +427,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 if n > *prev_exists {
                     exit_on_error!(
                         sender,
+                        account_hash,
                         mailbox_hash,
                         work_context,
                         thread_id,
@@ -475,7 +493,8 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         *mailbox.unseen.lock().unwrap() += 1;
                                     }
                                     sender.send(RefreshEvent {
-                                        hash: mailbox_hash,
+                                        account_hash,
+                                        mailbox_hash,
                                         kind: Create(Box::new(env)),
                                     });
                                 }
@@ -503,6 +522,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 debug!("fetch {} {:?}", msg_seq, flags);
                 exit_on_error!(
                     sender,
+                    account_hash,
                     mailbox_hash,
                     work_context,
                     thread_id,
@@ -524,7 +544,8 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         if let Some(uid) = v.pop() {
                             if let Some(env_hash) = uid_store.uid_index.lock().unwrap().get(&uid) {
                                 sender.send(RefreshEvent {
-                                    hash: mailbox_hash,
+                                    account_hash,
+                                    mailbox_hash,
                                     kind: NewFlags(*env_hash, flags),
                                 });
                             }
@@ -551,7 +572,8 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         .unwrap();
     work_context.finished.send(thread_id).unwrap();
     sender.send(RefreshEvent {
-        hash: mailbox_hash,
+        account_hash,
+        mailbox_hash,
         kind: RefreshEventKind::Failure(MeliError::new(format!(
             "IDLE connection dropped: {}",
             &err
@@ -561,6 +583,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
 }
 
 pub fn examine_updates(
+    account_hash: AccountHash,
     mailbox: &ImapMailbox,
     sender: &RefreshEventConsumer,
     conn: &mut ImapConnection,
@@ -574,6 +597,7 @@ pub fn examine_updates(
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
         sender,
+        account_hash,
         mailbox_hash,
         work_context,
         thread_id,
@@ -589,7 +613,8 @@ pub fn examine_updates(
                 if let Some(v) = uidvalidities.get_mut(&mailbox_hash) {
                     if *v != ok.uidvalidity {
                         sender.send(RefreshEvent {
-                            hash: mailbox_hash,
+                            account_hash,
+                            mailbox_hash,
                             kind: RefreshEventKind::Rescan,
                         });
                         /*
@@ -601,11 +626,13 @@ pub fn examine_updates(
                     }
                 } else {
                     sender.send(RefreshEvent {
-                        hash: mailbox_hash,
+                        account_hash,
+                        mailbox_hash,
                         kind: RefreshEventKind::Rescan,
                     });
                     sender.send(RefreshEvent {
-                        hash: mailbox_hash,
+                        account_hash,
+                        mailbox_hash,
                         kind: RefreshEventKind::Failure(MeliError::new(format!(
                             "Unknown mailbox: {} {}",
                             mailbox.path(),
@@ -621,6 +648,7 @@ pub fn examine_updates(
                     /* UID SEARCH RECENT */
                     exit_on_error!(
                         sender,
+                        account_hash,
                         mailbox_hash,
                         work_context,
                         thread_id,
@@ -637,6 +665,7 @@ pub fn examine_updates(
                         Ok(v) => {
                             exit_on_error!(
                                 sender,
+                                account_hash,
                                 mailbox_hash,
                                 work_context,
                                 thread_id,
@@ -687,7 +716,8 @@ pub fn examine_updates(
                                                 *mailbox.unseen.lock().unwrap() += 1;
                                             }
                                             sender.send(RefreshEvent {
-                                                hash: mailbox_hash,
+                                                account_hash,
+                                                mailbox_hash,
                                                 kind: Create(Box::new(env)),
                                             });
                                         }
@@ -713,6 +743,7 @@ pub fn examine_updates(
                 debug!("exists {}", n);
                 exit_on_error!(
                     sender,
+                    account_hash,
                     mailbox_hash,
                     work_context,
                     thread_id,
@@ -761,7 +792,8 @@ pub fn examine_updates(
                                     *mailbox.unseen.lock().unwrap() += 1;
                                 }
                                 sender.send(RefreshEvent {
-                                    hash: mailbox_hash,
+                                    account_hash,
+                                    mailbox_hash,
                                     kind: Create(Box::new(env)),
                                 });
                             }

@@ -204,7 +204,7 @@ impl Backends {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RefreshEventKind {
     Update(EnvelopeHash, Box<Envelope>),
     /// Rename(old_hash, new_hash)
@@ -216,16 +216,22 @@ pub enum RefreshEventKind {
     Failure(MeliError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RefreshEvent {
-    hash: MailboxHash,
+    mailbox_hash: MailboxHash,
+    account_hash: AccountHash,
     kind: RefreshEventKind,
 }
 
 impl RefreshEvent {
-    pub fn hash(&self) -> MailboxHash {
-        self.hash
+    pub fn mailbox_hash(&self) -> MailboxHash {
+        self.mailbox_hash
     }
+
+    pub fn account_hash(&self) -> AccountHash {
+        self.account_hash
+    }
+
     pub fn kind(self) -> RefreshEventKind {
         /* consumes self! */
         self.kind
@@ -242,6 +248,12 @@ impl RefreshEventConsumer {
     }
     pub fn send(&self, r: RefreshEvent) {
         self.0(r);
+    }
+}
+
+impl fmt::Debug for RefreshEventConsumer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "RefreshEventConsumer")
     }
 }
 
@@ -555,6 +567,7 @@ pub fn mailbox_default() -> Mailbox {
     })
 }
 
+pub type AccountHash = u64;
 pub type MailboxHash = u64;
 pub type Mailbox = Box<dyn BackendMailbox + Send + Sync>;
 
