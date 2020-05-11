@@ -1384,6 +1384,27 @@ impl Component for CompactListing {
                 self.view
                     .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
             }
+            UIEvent::EnvelopeUpdate(ref env_hash) => {
+                let account = &context.accounts[self.cursor_pos.0];
+                let threads = &account.collection.threads[&self.cursor_pos.1];
+                if !account.collection.contains_key(&env_hash) {
+                    return false;
+                }
+                let new_env_thread_node_hash = account.collection.get_env(*env_hash).thread();
+                if !threads.thread_nodes.contains_key(&new_env_thread_node_hash) {
+                    return false;
+                }
+                let thread: ThreadHash =
+                    threads.find_group(threads.thread_nodes()[&new_env_thread_node_hash].group);
+                if self.order.contains_key(&thread) {
+                    self.row_updates.push(thread);
+                }
+
+                self.dirty = true;
+
+                self.view
+                    .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
+            }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }

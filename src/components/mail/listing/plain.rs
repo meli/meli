@@ -1206,6 +1206,20 @@ impl Component for PlainListing {
                 self.view
                     .process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context);
             }
+            UIEvent::EnvelopeUpdate(ref env_hash) => {
+                let account = &context.accounts[self.cursor_pos.0];
+                if !account.collection.contains_key(env_hash)
+                    || !account.collection[&self.cursor_pos.1].contains(env_hash)
+                {
+                    return false;
+                }
+
+                self.row_updates.push(*env_hash);
+                self.dirty = true;
+
+                self.view
+                    .process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context);
+            }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
             }
