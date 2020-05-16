@@ -347,6 +347,10 @@ impl MailBackend for NotmuchDb {
                 let database_lck = database.inner.read().unwrap();
                 let mut mailboxes_lck = mailboxes.write().unwrap();
                 let mailbox = mailboxes_lck.get_mut(&mailbox_hash).unwrap();
+                let mut total_lck = mailbox.total.lock().unwrap();
+                let mut unseen_lck = mailbox.unseen.lock().unwrap();
+                *total_lck = 0;
+                *unseen_lck = 0;
                 let query: Query =
                     match Query::new(lib.clone(), &database_lck, mailbox.query_str.as_str()) {
                         Ok(q) => q,
@@ -378,6 +382,10 @@ impl MailBackend for NotmuchDb {
                                 .entry(env.hash())
                                 .or_default()
                                 .push(mailbox_hash);
+                            *total_lck += 1;
+                            if !env.is_seen() {
+                                *unseen_lck += 1;
+                            }
                             ret.push(env);
                         }
                         Err(err) => {
@@ -510,6 +518,13 @@ impl MailBackend for NotmuchDb {
                                                         &query_str,
                                                     )?;
                                                     if query.count().unwrap_or(0) > 0 {
+                                                        let mut total_lck = m.total.lock().unwrap();
+                                                        let mut unseen_lck =
+                                                            m.unseen.lock().unwrap();
+                                                        *total_lck += 1;
+                                                        if !env.is_seen() {
+                                                            *unseen_lck += 1;
+                                                        }
                                                         sender.send(RefreshEvent {
                                                             account_hash,
                                                             mailbox_hash,
@@ -544,6 +559,9 @@ impl MailBackend for NotmuchDb {
                                                 mailbox_index_lck.get(&env_hash)
                                             {
                                                 for &mailbox_hash in mailbox_hashes {
+                                                    let m = &mailboxes_lck[&mailbox_hash];
+                                                    let mut total_lck = m.total.lock().unwrap();
+                                                    *total_lck = total_lck.saturating_sub(1);
                                                     sender.send(RefreshEvent {
                                                         account_hash,
                                                         mailbox_hash,
