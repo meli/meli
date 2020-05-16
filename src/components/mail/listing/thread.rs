@@ -73,11 +73,11 @@ impl MailListingTrait for ThreadListing {
         self.cursor_pos.0 = self.new_cursor_pos.0;
 
         self.color_cache = ColorCache {
-            unseen: crate::conf::value(context, "mail.listing.plain.unseen"),
-            highlighted: crate::conf::value(context, "mail.listing.plain.highlighted"),
+            unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
+            highlighted: crate::conf::value(context, "mail.listing.plain.even_highlighted"),
             even: crate::conf::value(context, "mail.listing.plain.even"),
             odd: crate::conf::value(context, "mail.listing.plain.odd"),
-            selected: crate::conf::value(context, "mail.listing.plain.selected"),
+            selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
             attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
             ..self.color_cache
@@ -237,6 +237,7 @@ impl ListingTrait for ThreadListing {
         self.row_updates.clear();
         self.initialised = false;
     }
+
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
         {
