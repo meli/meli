@@ -678,7 +678,10 @@ impl BackendOp for NotmuchOp {
         flags
     }
 
-    fn set_flag(&mut self, _envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
+    fn set_flag(&mut self, envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
+        let mut flags = self.fetch_flags();
+        flags.set(f, value);
+        envelope.set_flags(flags);
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let mut index_lck = self.index.write().unwrap();
         unsafe {
