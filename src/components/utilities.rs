@@ -1248,12 +1248,6 @@ impl Component for StatusBar {
                 self.ex_buffer_cmd_history_pos.take();
                 return true;
             }
-            UIEvent::ExInput(k @ Key::Backspace) | UIEvent::ExInput(k @ Key::Ctrl('h')) => {
-                self.dirty = true;
-                self.ex_buffer
-                    .process_event(&mut UIEvent::InsertInput(k.clone()), context);
-                return true;
-            }
             UIEvent::ExInput(Key::Up) => {
                 self.auto_complete.dec_cursor();
                 self.dirty = true;
@@ -1321,6 +1315,12 @@ impl Component for StatusBar {
                     self.dirty = true;
                 }
 
+                return true;
+            }
+            UIEvent::ExInput(k @ Key::Backspace) | UIEvent::ExInput(k @ Key::Ctrl(_)) => {
+                self.dirty = true;
+                self.ex_buffer
+                    .process_event(&mut UIEvent::InsertInput(k.clone()), context);
                 return true;
             }
             UIEvent::Resize => {
