@@ -37,22 +37,31 @@
 //! - A `debug` macro that works like `std::dbg` but for multiple threads. (see `dbg` module)
 #[macro_use]
 pub mod dbg {
+
+    #[macro_export]
+    macro_rules! log_tag {
+        () => {
+            eprint!(
+                "[{}][{:?}] {}:{}_{}: ",
+                crate::datetime::timestamp_to_string(crate::datetime::now(), Some("%Y-%m-%d %T")),
+                std::thread::current()
+                    .name()
+                    .map(std::string::ToString::to_string)
+                    .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
+                file!(),
+                line!(),
+                column!()
+            );
+        };
+    }
+
     #[allow(clippy::redundant_closure)]
     #[macro_export]
     macro_rules! debug {
         ($val:literal) => {
             {
             if cfg!(feature="debug-tracing") {
-                eprint!(
-                    "[{:?}] {}:{}_{}:	",
-                    std::thread::current()
-                    .name()
-                    .map(std::string::ToString::to_string)
-                    .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
-                    file!(),
-                    line!(),
-                    column!()
-                );
+                log_tag!();
                 eprintln!($val);
             }
             $val
@@ -65,16 +74,7 @@ pub mod dbg {
                 // of temporaries - https://stackoverflow.com/a/48732525/1063961
                 match $val {
                     tmp => {
-                        eprint!(
-                            "[{:?}] {}:{}_{}:	",
-                            std::thread::current()
-                            .name()
-                            .map(std::string::ToString::to_string)
-                            .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
-                            file!(),
-                            line!(),
-                            column!()
-                        );
+                        log_tag!();
                         eprintln!("{} = {:?}", stringify, tmp);
                         tmp
                     }
@@ -85,16 +85,7 @@ pub mod dbg {
         };
         ($fmt:literal, $($arg:tt)*) => {
             if cfg!(feature="debug-tracing") {
-                eprint!(
-                    "[{:?}] {}:{}_{}:	",
-                    std::thread::current()
-                    .name()
-                    .map(std::string::ToString::to_string)
-                    .unwrap_or_else(|| format!("{:?}", std::thread::current().id())),
-                    file!(),
-                    line!(),
-                    column!()
-                );
+                log_tag!();
                 eprintln!($fmt, $($arg)*);
             }
         };
