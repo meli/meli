@@ -338,7 +338,7 @@ fn test_rfcs() {
     /* Some tests were lazily stolen from https://rachelbythebay.com/w/2013/06/11/time/ */
 
     assert_eq!(
-        rfc822_to_timestamp("Wed, 8 Jan 2020 10:44:03 -0800"),
+        rfc822_to_timestamp("Wed, 8 Jan 2020 10:44:03 -0800").unwrap(),
         1578509043
     );
 
@@ -363,80 +363,86 @@ fn test_rfcs() {
     */
     //unsafe { __tm_to_secs(&mkt!(2009, 02, 13, 23, 31, 30) as *const _) },
     assert_eq!(
-        rfc822_to_timestamp("Fri, 13 Feb 2009 15:31:30 -0800"),
+        rfc822_to_timestamp("Fri, 13 Feb 2009 15:31:30 -0800").unwrap(),
         1234567890
     );
 
     //unsafe { __tm_to_secs(&mkt!(2931, 05, 05, 00, 33, 09) as *const _) },
     assert_eq!(
-        rfc822_to_timestamp("Sat, 05 May 2931 00:33:09 +0000"),
+        rfc822_to_timestamp("Sat, 05 May 2931 00:33:09 +0000").unwrap(),
         30336942789
     );
     //2214-11-06 20:05:12 = 7726651512 [OK]
     assert_eq!(
-        rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 -0300"), //2214-11-06 20:05:12
+        rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 -0300").unwrap(), //2214-11-06 20:05:12
         7726651512
     );
     assert_eq!(
-        rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 -0300"), //2214-11-06 20:05:12
-        rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 (ADT)"), //2214-11-06 20:05:12
+        rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 -0300").unwrap(), //2214-11-06 20:05:12
+        rfc822_to_timestamp("Sun, 06 Nov 2214 17:05:12 (ADT)").unwrap(), //2214-11-06 20:05:12
     );
     //2661-11-06 06:38:02 = 21832612682 [OK]
     assert_eq!(
-        rfc822_to_timestamp("Wed, 06 Nov 2661 06:38:02 +0000"), //2661-11-06 06:38:02
+        rfc822_to_timestamp("Wed, 06 Nov 2661 06:38:02 +0000").unwrap(), //2661-11-06 06:38:02
         21832612682
     );
     //2508-12-09 04:27:08 = 17007251228 [OK]
     assert_eq!(
-        rfc822_to_timestamp("Sun, 09 Dec 2508 04:27:08 +0000"), //2508-12-09 04:27:08
+        rfc822_to_timestamp("Sun, 09 Dec 2508 04:27:08 +0000").unwrap(), //2508-12-09 04:27:08
         17007251228
     );
     //2375-11-07 05:08:24 = 12807349704 [OK]
     assert_eq!(
-        rfc822_to_timestamp("Fri, 07 Nov 2375 05:08:24 +0000"), //2375-11-07 05:08:24
+        rfc822_to_timestamp("Fri, 07 Nov 2375 05:08:24 +0000").unwrap(), //2375-11-07 05:08:24
         12807349704
     );
     //2832-09-03 02:46:10 = 27223353970 [OK]
     assert_eq!(
-        rfc822_to_timestamp("Fri, 03 Sep 2832 02:46:10 +0000"), //2832-09-03 02:46:10
+        rfc822_to_timestamp("Fri, 03 Sep 2832 02:46:10 +0000").unwrap(), //2832-09-03 02:46:10
         27223353970
     );
     //2983-02-25 12:47:17 = 31972020437 [OK]
     assert_eq!(
-        rfc822_to_timestamp("Tue, 25 Feb 2983 15:47:17 +0300"), //2983-02-25 12:47:17
+        rfc822_to_timestamp("Tue, 25 Feb 2983 15:47:17 +0300").unwrap(), //2983-02-25 12:47:17
         31972020437
     );
 
     assert_eq!(
-        rfc822_to_timestamp("Thu, 30 Mar 2017 17:32:06 +0300 (EEST)"),
+        rfc822_to_timestamp("Thu, 30 Mar 2017 17:32:06 +0300 (EEST)").unwrap(),
         1490884326
     );
 
     assert_eq!(
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530"),
+        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
         1493035594
     );
 
     assert_eq!(
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530"),
-        rfc822_to_timestamp("Mon, 24 Apr 2017 12:06:34 +0000"),
+        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
+        rfc822_to_timestamp("Mon, 24 Apr 2017 12:06:34 +0000").unwrap(),
     );
 
     assert_eq!(
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530"),
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 (SLST)"),
+        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
+        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 (SLST)").unwrap(),
     );
 
     assert_eq!(
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530"),
-        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 SLST"),
+        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 +0530").unwrap(),
+        rfc822_to_timestamp("Mon, 24 Apr 2017 17:36:34 SLST").unwrap(),
     );
 
     assert_eq!(
-        rfc822_to_timestamp("27 Dec 2019 14:42:46 +0100"),
+        rfc822_to_timestamp("27 Dec 2019 14:42:46 +0100").unwrap(),
         1577454166
     );
+
+    assert_eq!(
+        rfc822_to_timestamp("Mon, 16 Mar 2020 10:23:01 +0200").unwrap(),
+        1584346981
+    );
 }
+
 const TIMEZONE_ABBR: &'static [(&'static [u8], (i8, i8))] = &[
     (b"ACDT", (10, 30)),
     (b"ACST", (09, 30)),
