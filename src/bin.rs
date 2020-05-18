@@ -98,31 +98,47 @@ fn notify(
     sender: crossbeam::channel::Sender<ThreadEvent>,
 ) -> std::result::Result<crossbeam::channel::Receiver<c_int>, std::io::Error> {
     use std::time::Duration;
-    let alarm_sender = sender.clone();
+    let (alarm_pipe_r, alarm_pipe_w) = nix::unistd::pipe().map_err(|err| {
+        std::io::Error::from_raw_os_error(err.as_errno().map(|n| n as i32).unwrap_or(0))
+    })?;
     let alarm_handler = move |info: &nix::libc::siginfo_t| {
         let value = unsafe { info.si_value().sival_ptr as u8 };
-        alarm_sender
-            .send_timeout(
-                ThreadEvent::UIEvent(UIEvent::Timer(value)),
-                Duration::from_millis(500),
-            )
-            .unwrap();
+        let _ = nix::unistd::write(alarm_pipe_w, &[value]);
     };
     unsafe {
         signal_hook_registry::register_sigaction(signal_hook::SIGALRM, alarm_handler)?;
     }
     let (s, r) = crossbeam::channel::bounded(100);
     let signals = signal_hook::iterator::Signals::new(signals)?;
+    let _ = nix::fcntl::fcntl(
+        alarm_pipe_r,
+        nix::fcntl::FcntlArg::F_SETFL(nix::fcntl::OFlag::O_NONBLOCK),
+    );
     std::thread::spawn(move || {
+        let mut buf = [0; 1];
         let mut ctr = 0;
         loop {
             ctr %= 3;
             if ctr == 0 {
-                sender.send_timeout(ThreadEvent::Pulse, Duration::from_millis(500));
+                let _ = sender
+                    .send_timeout(ThreadEvent::Pulse, Duration::from_millis(500))
+                    .ok();
             }
 
             for signal in signals.pending() {
-                s.send_timeout(signal, Duration::from_millis(500)).unwrap();
+                let _ = s.send_timeout(signal, Duration::from_millis(500)).ok();
+            }
+            while nix::unistd::read(alarm_pipe_r, buf.as_mut())
+                .map(|s| s > 0)
+                .unwrap_or(false)
+            {
+                let value = buf[0];
+                sender
+                    .send_timeout(
+                        ThreadEvent::UIEvent(UIEvent::Timer(value)),
+                        Duration::from_millis(500),
+                    )
+                    .unwrap();
             }
 
             std::thread::sleep(std::time::Duration::from_millis(100));
