@@ -247,6 +247,19 @@ pub mod segment_tree {
             }
             max
         }
+
+        pub fn update(&mut self, pos: usize, value: u8) {
+            let mut ctr = pos + self.array.len();
+
+            // Update leaf node value
+            self.tree[ctr] = value;
+            while ctr > 1 {
+                // move up one level
+                ctr >>= 1;
+
+                self.tree[ctr] = std::cmp::max(self.tree[2 * ctr], self.tree[2 * ctr + 1]);
+            }
+        }
     }
 
     #[test]
@@ -255,10 +268,14 @@ pub mod segment_tree {
             .iter()
             .cloned()
             .collect::<SmallVec<[u8; 1024]>>();
-        let segment_tree = SegmentTree::from(array.clone());
+        let mut segment_tree = SegmentTree::from(array.clone());
 
         assert_eq!(segment_tree.get_max(0, 5), 23);
         assert_eq!(segment_tree.get_max(6, 9), 37);
+
+        segment_tree.update(2_usize, 24_u8);
+
+        assert_eq!(segment_tree.get_max(0, 5), 24);
     }
 }
 
