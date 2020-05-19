@@ -36,7 +36,7 @@ use melib::thread::{SortField, SortOrder, ThreadNode, ThreadNodeHash, Threads};
 use melib::AddressBook;
 use melib::Collection;
 use smallvec::SmallVec;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use crate::{StatusEvent, ThreadEvent};
@@ -264,8 +264,20 @@ impl Account {
         let mut mailboxes_order: Vec<MailboxHash> = Vec::with_capacity(ref_mailboxes.len());
 
         let mut sent_mailbox = None;
+
+        /* Keep track of which mailbox config values we encounter in the actual mailboxes returned
+         * by the backend. For each of the actual mailboxes, delete the key from the hash set. If
+         * any are left, they are misconfigurations (eg misspelling) and a warning is shown to the
+         * user */
+        let mut mailbox_conf_hash_set = self
+            .settings
+            .mailbox_confs
+            .keys()
+            .cloned()
+            .collect::<HashSet<String>>();
         for f in ref_mailboxes.values_mut() {
             if let Some(conf) = self.settings.mailbox_confs.get_mut(f.path()) {
+                mailbox_conf_hash_set.remove(f.path());
                 conf.mailbox_conf.usage = if f.special_usage() != SpecialUsageMailbox::Normal {
                     Some(f.special_usage())
                 } else {
@@ -322,6 +334,44 @@ impl Account {
                     },
                 );
             }
+        }
+
+        for missing_mailbox in &mailbox_conf_hash_set {
+            melib::log(
+                format!(
+                    "Account `{}` mailbox `{}` configured but not present in account's mailboxes. Is it misspelled?",
+                    &self.name, missing_mailbox,
+                ),
+                melib::WARN,
+            );
+            self.sender
+                .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(format!(
+                                    "Account `{}` mailbox `{}` configured but not present in account's mailboxes. Is it misspelled?",
+                                    &self.name, missing_mailbox,
+                            )),
+                )))
+                .unwrap();
+        }
+        if !mailbox_conf_hash_set.is_empty() {
+            let mut mailbox_comma_sep_list_string = mailbox_entries
+                .values()
+                .map(|e| e.name.as_str())
+                .fold(String::new(), |mut acc, el| {
+                    acc.push('`');
+                    acc.push_str(el);
+                    acc.push('`');
+                    acc.push_str(", ");
+                    acc
+                });
+            mailbox_comma_sep_list_string.drain(mailbox_comma_sep_list_string.len() - 2..);
+            melib::log(
+                format!(
+                    "Account `{}` has the following mailboxes: [{}]",
+                    &self.name, mailbox_comma_sep_list_string,
+                ),
+                melib::WARN,
+            );
         }
 
         let mut tree: Vec<MailboxNode> = Vec::new();
