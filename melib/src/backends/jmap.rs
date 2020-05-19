@@ -240,7 +240,7 @@ impl MailBackend for JmapType {
 
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
         if self.mailboxes.read().unwrap().is_empty() {
-            let mailboxes = std::dbg!(protocol::get_mailboxes(&self.connection))?;
+            let mailboxes = debug!(protocol::get_mailboxes(&self.connection))?;
             *self.mailboxes.write().unwrap() = mailboxes;
         }
 
