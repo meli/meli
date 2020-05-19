@@ -19,8 +19,9 @@
 
 # Options
 PREFIX ?= /usr/local
-BINDIR ?= ${PREFIX}/bin
-MANDIR ?= ${PREFIX}/share/man
+EXPANDED_PREFIX := `cd ${PREFIX} && pwd -P`
+BINDIR ?= ${EXPANDED_PREFIX}/bin
+MANDIR ?= ${EXPANDED_PREFIX}/share/man
 
 CARGO_TARGET_DIR ?= target
 MIN_RUSTC ?= 1.39.0
@@ -30,7 +31,7 @@ CARGO_BIN ?= cargo
 MANPAGES ?= meli.1 meli.conf.5 meli-themes.5
 FEATURES ?= --features "${MELI_FEATURES}"
 
-MANPATHS := `manpath 2> /dev/null`
+MANPATHS = `ACCUM="";for m in \`manpath 2> /dev/null | tr ':' ' '\`; do if [ -d "$${m}" ]; then REAL_PATH=\`cd $${m} && pwd\` ACCUM="$${ACCUM}:$${REAL_PATH}";fi;done;echo -n $${ACCUM} | sed 's/^://'`
 VERSION ?= `sed -n "s/^version\s*=\s*\"\(.*\)\"/\1/p" Cargo.toml`
 
 # Output parameters
@@ -60,7 +61,7 @@ help:
 	@echo " - ${BOLD}deb-dist${ANSI_RESET} (builds debian package in the parent directory)"
 	@echo " - ${BOLD}distclean${ANSI_RESET} (cleans distribution build artifacts)"
 	@echo "\nENVIRONMENT variables of interest:"
-	@echo "* PREFIX = ${UNDERLINE}${PREFIX}${ANSI_RESET}"
+	@echo "* PREFIX = ${UNDERLINE}${EXPANDED_PREFIX}${ANSI_RESET}"
 	@echo -n "* MELI_FEATURES = ${UNDERLINE}"
 	@[ -z $${MELI_FEATURES+x} ] && echo -n "unset" || echo -n ${MELI_FEATURES}
 	@echo ${ANSI_RESET}
@@ -69,7 +70,7 @@ help:
 	@echo -n "* MANPATH = ${UNDERLINE}"
 	@[ $${MANPATH+x} ] && echo -n $${MANPATH} || echo -n "unset"
 	@echo ${ANSI_RESET}
-	@echo "* output of manpath(1) = ${UNDERLINE}${MANPATHS}${ANSI_RESET}"
+	@echo "* (cleaned) output of manpath(1) = ${UNDERLINE}${MANPATHS}${ANSI_RESET}"
 	@echo -n "* NO_MAN ${UNDERLINE}"
 	@[ $${NO_MAN+x} ] && echo -n "set" || echo -n "unset"
 	@echo ${ANSI_RESET}
