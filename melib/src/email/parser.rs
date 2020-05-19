@@ -521,7 +521,7 @@ fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
                     };
 
                     IResult::Done(
-                        &input[rest_start..],
+                        input.get(rest_start..).unwrap_or_default(),
                         Address::Mailbox(MailboxAddress {
                             raw,
                             display_name,
