@@ -778,6 +778,7 @@ impl MaildirType {
                                 path.file_name().unwrap().to_str().unwrap().to_string(),
                                 None,
                                 Vec::new(),
+                                false,
                                 &settings,
                             ) {
                                 f.children = recurse_mailboxes(mailboxes, settings, &path)?;
@@ -787,6 +788,33 @@ impl MaildirType {
                                     .count();
                                 children.push(f.hash);
                                 mailboxes.insert(f.hash, f);
+                            } else {
+                                /* If directory is invalid (i.e. has no {cur,new,tmp} subfolders),
+                                 * accept it ONLY if it contains subdirs of any depth that are
+                                 * valid maildir paths
+                                 */
+                                let subdirs = recurse_mailboxes(mailboxes, settings, &path)?;
+                                if !subdirs.is_empty() {
+                                    if let Ok(f) = MaildirMailbox::new(
+                                        path.to_str().unwrap().to_string(),
+                                        path.file_name().unwrap().to_str().unwrap().to_string(),
+                                        None,
+                                        subdirs,
+                                        true,
+                                        &settings,
+                                    ) {
+                                        f.children
+                                            .iter()
+                                            .map(|c| {
+                                                mailboxes
+                                                    .get_mut(c)
+                                                    .map(|f| f.parent = Some(f.hash))
+                                            })
+                                            .count();
+                                        children.push(f.hash);
+                                        mailboxes.insert(f.hash, f);
+                                    }
+                                }
                             }
                         }
                     }
@@ -814,6 +842,7 @@ impl MaildirType {
             root_path.file_name().unwrap().to_str().unwrap().to_string(),
             None,
             Vec::with_capacity(0),
+            false,
             settings,
         ) {
             mailboxes.insert(f.hash, f);

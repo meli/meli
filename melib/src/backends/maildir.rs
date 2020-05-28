@@ -170,6 +170,7 @@ impl MaildirMailbox {
         file_name: String,
         parent: Option<MailboxHash>,
         children: Vec<MailboxHash>,
+        accept_invalid: bool,
         settings: &AccountSettings,
     ) -> Result<Self> {
         let pathbuf = PathBuf::from(&path);
@@ -215,7 +216,9 @@ impl MaildirMailbox {
             unseen: Arc::new(Mutex::new(0)),
             total: Arc::new(Mutex::new(0)),
         };
-        ret.is_valid()?;
+        if !accept_invalid {
+            ret.is_valid()?;
+        }
         Ok(ret)
     }
 
