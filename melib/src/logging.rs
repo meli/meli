@@ -25,7 +25,7 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Hash, Debug, Serialize, Deserialize)]
 pub enum LoggingLevel {
     OFF,
     FATAL,
@@ -54,6 +54,12 @@ impl std::fmt::Display for LoggingLevel {
     }
 }
 
+impl Default for LoggingLevel {
+    fn default() -> Self {
+        LoggingLevel::INFO
+    }
+}
+
 use LoggingLevel::*;
 
 struct LoggingBackend {
@@ -63,15 +69,15 @@ struct LoggingBackend {
 
 thread_local!(static LOG: Arc<Mutex<LoggingBackend>> = Arc::new(Mutex::new({
     let data_dir = xdg::BaseDirectories::with_prefix("meli").unwrap();
-let log_file = OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
-                         .create(true) /* a new file will be created if the file does not yet already exist.*/
-                         .read(true)
-                         .open(data_dir.place_data_file("meli.log").unwrap()).unwrap();
-LoggingBackend {
-    dest: BufWriter::new(log_file),
-    level: INFO,
-}
-})));
+    let log_file = OpenOptions::new().append(true) /* writes will append to a file instead of overwriting previous contents */
+        .create(true) /* a new file will be created if the file does not yet already exist.*/
+        .read(true)
+        .open(data_dir.place_data_file("meli.log").unwrap()).unwrap();
+    LoggingBackend {
+        dest: BufWriter::new(log_file),
+        level: LoggingLevel::default(),
+    }}))
+);
 
 pub fn log(val: String, level: LoggingLevel) {
     LOG.with(|f| {

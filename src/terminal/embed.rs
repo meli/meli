@@ -19,7 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::split_command;
 use crate::terminal::position::*;
 use melib::log;
 use melib::ERROR;

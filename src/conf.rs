@@ -271,6 +271,8 @@ pub struct FileSettings {
     pub terminal: TerminalSettings,
     #[serde(default)]
     pub plugins: HashMap<String, Plugin>,
+    #[serde(default)]
+    pub log: LogSettings,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -308,6 +310,7 @@ pub struct Settings {
     pub pgp: PGPSettings,
     pub terminal: TerminalSettings,
     pub plugins: HashMap<String, Plugin>,
+    pub log: LogSettings,
 }
 
 impl FileSettings {
@@ -465,6 +468,13 @@ impl Settings {
             s.insert(id, ac);
         }
 
+        if let Some(ref log_path) = fs.log.log_file {
+            melib::change_log_dest(log_path.into());
+        }
+        if fs.log.maximum_level != melib::LoggingLevel::default() {
+            melib::change_log_level(fs.log.maximum_level);
+        }
+
         Ok(Settings {
             accounts: s,
             pager: fs.pager,
@@ -476,6 +486,7 @@ impl Settings {
             pgp: fs.pgp,
             terminal: fs.terminal,
             plugins: fs.plugins,
+            log: fs.log,
         })
     }
 }
@@ -797,4 +808,12 @@ mod pp {
         }
         Ok(ret)
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LogSettings {
+    #[serde(default)]
+    log_file: Option<PathBuf>,
+    #[serde(default)]
+    maximum_level: melib::LoggingLevel,
 }

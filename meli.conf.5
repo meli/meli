@@ -49,7 +49,27 @@ can have nested configuration files by using the following
 include macro:
 .Dl include(\&"/path/to/file\&")
 .Sh SECTIONS
-The top level sections of the config are accounts, shortcuts, notifications, pager, listing, composing, pgp, terminal.
+The top level sections of the config are:
+.Bl -bullet -compact
+.It
+accounts
+.It
+shortcuts
+.It
+notifications
+.It
+pager
+.It
+listing
+.It
+composing
+.It
+pgp
+.It
+terminal
+.It
+log
+.El
 .Sh EXAMPLES
 example configuration
 .sp
@@ -702,6 +722,40 @@ theme = "themeB"
 [terminal.themes.themeC]
 \&...
 .Ed
+.El
+.Sh LOG
+.Bl -tag -width 36n
+.It Ic log_file Ar String
+(optional) path of the log file
+.\" default value
+.Pq Pa $XDG_DATA_HOME/meli/meli.log
+.It Ic maximum_level Ar String
+(optional) maximum level of messages to log. All levels less or equal to the
+.Ic maximum_level
+will be appended to the log file. Available levels are, in partial order:
+.Bl -bullet -compact
+.It
+.Em OFF
+.It
+.Em FATAL
+.It
+.Em ERROR
+.It
+.Em WARN
+.It
+.Em INFO
+.It
+.Em DEBUG
+.It
+.Em TRACE
+.El
+This means that to turn logging off, set
+.Ic maximum_level
+to
+.Em OFF Ns
+\&.
+.\" default value
+.Pq Em INFO
 .El
 .Sh SEE ALSO
 .Xr meli 1 ,
