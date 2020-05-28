@@ -42,10 +42,9 @@ extern crate termion;
 #[macro_use]
 extern crate nom;
 
+extern crate bitflags;
 extern crate serde_json;
 extern crate smallvec;
-#[macro_use]
-extern crate bitflags;
 
 #[global_allocator]
 static GLOBAL: System = System;
