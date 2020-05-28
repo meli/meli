@@ -176,9 +176,9 @@ impl PluginManager {
         match plugin.kind {
             PluginKind::LongLived => {
                 /* spawn thread */
-                let parts = split_command!(&plugin.executable);
-                let child = std::process::Command::new(&parts[0])
-                    .args(&parts[1..])
+                let inv = &plugin.executable;
+                let child = std::process::Command::new("sh")
+                    .args(&["-c", inv])
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .spawn()?;
@@ -241,9 +241,9 @@ impl PluginManager {
                     return reply;
                 }
                 PluginKind::Filter => {
-                    let parts = split_command!(&plugin.executable);
-                    let mut child = std::process::Command::new(&parts[0])
-                        .args(&parts[1..])
+                    let inv = &plugin.executable;
+                    let mut child = std::process::Command::new("sh")
+                        .args(&["-c", inv])
                         .stdin(Stdio::piped())
                         .stdout(Stdio::piped())
                         .spawn()?;

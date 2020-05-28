@@ -913,11 +913,13 @@ impl Component for Composer {
                     context.input_kill();
                 }
 
-                let parts = split_command!(editor);
-                let (cmd, args) = (parts[0], &parts[1..]);
-                match Command::new(cmd)
-                    .args(args)
-                    .arg(&f.path())
+                let editor_cmd = format!("{} {}", editor, f.path().display());
+                log(
+                    format!("Executing: sh -c \"{}\"", editor_cmd.replace("\"", "\\\"")),
+                    DEBUG,
+                );
+                match Command::new("sh")
+                    .args(&["-c", &editor_cmd])
                     .stdin(Stdio::inherit())
                     .stdout(Stdio::inherit())
                     .spawn()
@@ -963,8 +965,7 @@ impl Component for Composer {
             UIEvent::Action(ref a) => {
                 match a {
                     Action::Compose(ComposeAction::AddAttachmentPipe(ref cmd)) => {
-                        let parts = split_command!(cmd);
-                        if parts.is_empty() {
+                        if cmd.is_empty() {
                             context.replies.push_back(UIEvent::Notification(
                                 None,
                                 format!("pipe cmd value is invalid: {}", cmd),
@@ -972,10 +973,9 @@ impl Component for Composer {
                             ));
                             return false;
                         }
-                        let (cmd, args) = (parts[0], &parts[1..]);
                         let f = create_temp_file(&[], None, None, true);
-                        match std::process::Command::new(cmd)
-                            .args(args)
+                        match std::process::Command::new("sh")
+                            .args(&["-c", cmd])
                             .stdin(std::process::Stdio::null())
                             .stdout(std::process::Stdio::from(f.file()))
                             .spawn()
@@ -1183,10 +1183,8 @@ pub fn send_draft(
     use std::io::Write;
     use std::process::{Command, Stdio};
     let format_flowed = *mailbox_acc_settings!(context[account_cursor].composing.format_flowed);
-    let parts = split_command!(mailbox_acc_settings!(
-        context[account_cursor].composing.mailer_cmd
-    ));
-    if parts.is_empty() {
+    let cmd = mailbox_acc_settings!(context[account_cursor].composing.mailer_cmd);
+    if cmd.is_empty() {
         context.replies.push_back(UIEvent::Notification(
             None,
             String::from("mailer_cmd configuration value is empty"),
@@ -1195,9 +1193,8 @@ pub fn send_draft(
         return false;
     }
     let bytes;
-    let (cmd, args) = (parts[0], &parts[1..]);
-    let mut msmtp = Command::new(cmd)
-        .args(args)
+    let mut msmtp = Command::new("sh")
+        .args(&["-c", cmd])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

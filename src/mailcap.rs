@@ -21,7 +21,6 @@
 
 /*! Find mailcap entries to execute attachments.
  */
-use crate::split_command;
 use crate::state::Context;
 use crate::types::{create_temp_file, ForkType, UIEvent};
 use melib::attachments::decode;
@@ -180,10 +179,15 @@ impl MailcapEntry {
                 {
                     context.input_kill();
                 }
+                let cmd_string = format!("{} {}", cmd, args.join(" "));
+                melib::log(
+                    format!("Executing: sh -c \"{}\"", cmd_string.replace("\"", "\\\"")),
+                    melib::DEBUG,
+                );
                 if copiousoutput {
                     let out = if needs_stdin {
-                        let mut child = Command::new(cmd)
-                            .args(args)
+                        let mut child = Command::new("sh")
+                            .args(&["-c", &cmd_string])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn()?;
@@ -191,8 +195,8 @@ impl MailcapEntry {
                         child.stdin.as_mut().unwrap().write_all(&decode(a, None))?;
                         child.wait_with_output()?.stdout
                     } else {
-                        let child = Command::new(cmd)
-                            .args(args)
+                        let child = Command::new("sh")
+                            .args(&["-c", &cmd_string])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn()?;
@@ -213,8 +217,8 @@ impl MailcapEntry {
                     debug!(pager.wait_with_output()?.stdout);
                 } else {
                     if needs_stdin {
-                        let mut child = Command::new(cmd)
-                            .args(args)
+                        let mut child = Command::new("sh")
+                            .args(&["-c", &cmd_string])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::inherit())
                             .spawn()?;
@@ -222,8 +226,8 @@ impl MailcapEntry {
                         child.stdin.as_mut().unwrap().write_all(&decode(a, None))?;
                         debug!(child.wait_with_output()?.stdout);
                     } else {
-                        let child = Command::new(cmd)
-                            .args(args)
+                        let child = Command::new("sh")
+                            .args(&["-c", &cmd_string])
                             .stdin(Stdio::inherit())
                             .stdout(Stdio::inherit())
                             .spawn()?;

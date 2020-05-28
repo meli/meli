@@ -870,11 +870,9 @@ impl ImapType {
         let server_password = if !s.extra.contains_key("server_password_command") {
             get_conf_val!(s["server_password"])?.to_string()
         } else {
-            let invocation = get_conf_val!(s["server_password_command"])?
-                .split_whitespace()
-                .collect::<Vec<&str>>();
-            let output = std::process::Command::new(invocation[0])
-                .args(&invocation[1..])
+            let invocation = get_conf_val!(s["server_password_command"])?;
+            let output = std::process::Command::new("sh")
+                .args(&["-c", invocation])
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())

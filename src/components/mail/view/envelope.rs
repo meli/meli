@@ -98,10 +98,8 @@ impl EnvelopeView {
                     use std::io::Write;
                     let settings = &context.settings;
                     if let Some(filter_invocation) = settings.pager.html_filter.as_ref() {
-                        let parts = split_command!(filter_invocation);
-                        let (cmd, args) = (parts[0], &parts[1..]);
-                        let command_obj = Command::new(cmd)
-                            .args(args)
+                        let command_obj = Command::new("sh")
+                            .args(&["-c", filter_invocation])
                             .stdin(Stdio::piped())
                             .stdout(Stdio::piped())
                             .spawn();

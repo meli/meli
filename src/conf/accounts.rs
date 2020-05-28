@@ -676,10 +676,8 @@ impl Account {
     }
     pub fn refresh(&mut self, mailbox_hash: MailboxHash) -> Result<()> {
         if let Some(ref refresh_command) = self.settings.conf().refresh_command {
-            let parts = crate::split_command!(refresh_command);
-            let (cmd, args) = (parts[0], &parts[1..]);
-            let child = std::process::Command::new(cmd)
-                .args(args)
+            let child = std::process::Command::new("sh")
+                .args(&["-c", refresh_command])
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::piped())

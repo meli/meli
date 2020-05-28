@@ -115,19 +115,12 @@ pub fn create_pty(
                     std::process::exit(-1);
                 }
             }
-            let parts = split_command!(command);
-            let (cmd, _) = (parts[0], &parts[1..]);
-            let _parts = parts
-                .iter()
-                .map(|&a| CString::new(a).unwrap())
-                .collect::<Vec<CString>>();
             if let Err(e) = nix::unistd::execv(
-                &CString::new(cmd).unwrap(),
-                _parts
-                    .iter()
-                    .map(|a| a.as_c_str())
-                    .collect::<Vec<&_>>()
-                    .as_slice(),
+                &CString::new("sh").unwrap(),
+                &[
+                    &CString::new("-c").unwrap(),
+                    &CString::new(command.as_bytes()).unwrap(),
+                ],
             ) {
                 log(format!("Could not execute `{}`: {}", command, e,), ERROR);
                 std::process::exit(-1);
