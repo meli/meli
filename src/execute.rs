@@ -622,15 +622,14 @@ named!(pub parse_command<Action>,
 );
 
 #[test]
+#[ignore]
 fn test_parser() {
-    use std::io::{self, Read};
-    let mut state: Vec<Token> = vec![];
-    let mut buffer = String::new();
+    use std::io;
     let mut input = String::new();
     loop {
         input.clear();
         match io::stdin().read_line(&mut input) {
-            Ok(n) => {
+            Ok(_n) => {
                 let mut sugg = Default::default();
                 //print!("{}", input);
                 for (_tags, desc, tokens) in COMMAND_COMPLETION.iter() {

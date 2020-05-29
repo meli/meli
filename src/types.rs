@@ -364,7 +364,7 @@ fn test_rate_limit() {
     let mut rt = RateLimit::new(1, 3);
     std::thread::sleep(std::time::Duration::from_millis(2000));
     let (lock, cvar) = &*pair;
-    let mut started = lock.lock().unwrap();
+    let started = lock.lock().unwrap();
     let result = cvar
         .wait_timeout(started, std::time::Duration::from_millis(100))
         .unwrap();
