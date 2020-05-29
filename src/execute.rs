@@ -26,6 +26,7 @@ use nom::{digit, not_line_ending, IResult};
 use std;
 pub mod actions;
 use actions::MailboxOperation;
+use std::collections::HashSet;
 pub mod history;
 pub use crate::actions::AccountAction::{self, *};
 pub use crate::actions::Action::{self, *};
@@ -37,10 +38,24 @@ pub use crate::actions::TagAction::{self, *};
 pub use crate::actions::ViewAction::{self, *};
 use std::str::FromStr;
 
-/* Create a const table with every command part that can be auto-completed and its description */
+/// Helper macro to convert an array of tokens into a TokenStream
+macro_rules! to_stream {
+    ($token: expr) => {
+        TokenStream {
+            tokens: &[$token],
+        }
+    };
+    ($($tokens:expr),*) => {
+        TokenStream {
+            tokens: &[$($token),*],
+        }
+    };
+}
+
+/// Macro to create a const table with every command part that can be auto-completed and its description
 macro_rules! define_commands {
-    ( [$({ tags: [$( $tags:literal),*], desc: $desc:literal, parser: ($parser:item)}),*]) => {
-        pub const COMMAND_COMPLETION: &[(&str, &str)] = &[$($( ($tags, $desc ) ),*),* ];
+    ( [$({ tags: [$( $tags:literal),*], desc: $desc:literal, tokens: $tokens:expr, parser: ($parser:item)}),*]) => {
+        pub const COMMAND_COMPLETION: &[(&str, &str, TokenStream)] = &[$($( ($tags, $desc, TokenStream { tokens: $tokens } ) ),*),* ];
         $( $parser )*
     };
 }
@@ -65,9 +80,142 @@ pub fn quoted_argument(input: &[u8]) -> IResult<&[u8], &str> {
         return map_res!(input, is_not!(" "), std::str::from_utf8);
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct TokenStream {
+    tokens: &'static [TokenAdicity],
+}
+
+use Token::*;
+use TokenAdicity::*;
+
+impl TokenStream {
+    fn matches<'s>(&self, s: &mut &'s str, sugg: &mut HashSet<String>) -> Vec<(&'s str, Token)> {
+        let mut tokens = vec![];
+        for t in self.tokens.iter() {
+            let mut ptr = 0;
+            while ptr + 1 < s.len() && s.as_bytes()[ptr].is_ascii_whitespace() {
+                ptr += 1;
+            }
+            *s = &s[ptr..];
+            //println!("{:?} {:?}", t, s);
+            if s.is_empty() {
+                match t.inner() {
+                    Literal(lit) => {
+                        sugg.insert(format!(" {}", lit));
+                    }
+                    Alternatives(v) => {
+                        for t in v.iter() {
+                            //println!("adding empty suggestions for {:?}", t);
+                            let mut _s = *s;
+                            t.matches(&mut _s, sugg);
+                        }
+                    }
+                    Seq(_s) => {}
+                    RestOfStringValue => {}
+                    IndexValue
+                    | Filepath
+                    | AccountName
+                    | MailboxPath
+                    | QuotedStringValue
+                    | AlphanumericStringValue => {}
+                }
+                return tokens;
+            }
+            match t.inner() {
+                Literal(lit) => {
+                    if lit.starts_with(*s) && lit.len() != s.len() {
+                        sugg.insert(lit[s.len()..].to_string());
+                        return tokens;
+                    } else if s.starts_with(lit) {
+                        tokens.push((&s[..lit.len()], *t.inner()));
+                        *s = &s[lit.len()..];
+                    } else {
+                        return vec![];
+                    }
+                }
+                Alternatives(v) => {
+                    let mut cont = true;
+                    for t in v.iter() {
+                        let mut _s = *s;
+                        let mut m = t.matches(&mut _s, sugg);
+                        if !m.is_empty() {
+                            tokens.extend(m.drain(..));
+                            //println!("_s is empty {}", _s.is_empty());
+                            cont = !_s.is_empty();
+                            *s = _s;
+                            break;
+                        }
+                    }
+                    if !cont {
+                        *s = "";
+                    }
+                }
+                Seq(_s) => {
+                    return vec![];
+                }
+                RestOfStringValue => {
+                    tokens.push((*s, *t.inner()));
+                    return tokens;
+                }
+                IndexValue
+                | Filepath
+                | AccountName
+                | MailboxPath
+                | QuotedStringValue
+                | AlphanumericStringValue => {
+                    let mut ptr = 0;
+                    while ptr + 1 < s.len() && !s.as_bytes()[ptr].is_ascii_whitespace() {
+                        ptr += 1;
+                    }
+                    tokens.push((&s[..ptr], *t.inner()));
+                    *s = &s[ptr..];
+                }
+            }
+        }
+        tokens
+    }
+}
+
+/// `Token` wrapper that defines how many times a token is expected to be repeated
+#[derive(Debug, Copy, Clone)]
+pub enum TokenAdicity {
+    ZeroOrOne(Token),
+    ZeroOrMore(Token),
+    One(Token),
+    OneOrMore(Token),
+}
+
+impl TokenAdicity {
+    fn inner(&self) -> &Token {
+        match self {
+            ZeroOrOne(ref t) => t,
+            ZeroOrMore(ref t) => t,
+            One(ref t) => t,
+            OneOrMore(ref t) => t,
+        }
+    }
+}
+
+/// A token encountered in the UI's command execution bar
+#[derive(Debug, Copy, Clone)]
+pub enum Token {
+    Literal(&'static str),
+    Filepath,
+    Alternatives(&'static [TokenStream]),
+    Seq(&'static [TokenAdicity]),
+    AccountName,
+    MailboxPath,
+    QuotedStringValue,
+    RestOfStringValue,
+    AlphanumericStringValue,
+    IndexValue,
+}
+
 define_commands!([
                  { tags: ["set"],
                    desc: "set [seen/unseen], toggles message's Seen flag.",
+                   tokens: &[One(Literal("set")), One(Alternatives(&[to_stream!(One(Literal("seen"))), to_stream!(One(Literal("unseen")))]))],
                    parser:
                      ( named!(
                              envelope_action<Action>,
@@ -88,12 +236,14 @@ define_commands!([
                  },
                  { tags: ["close"],
                    desc: "close non-sticky tabs",
+                   tokens: &[One(Literal("close"))],
                    parser: (
                        named!(close<Action>, map!(ws!(tag!("close")), |_| Tab(Close)));
                    )
                  },
-                 { tags: ["goto"],
-                   desc: "goto [n], switch to nth mailbox in this account",
+                 { tags: ["go"],
+                   desc: "go [n], switch to nth mailbox in this account",
+                   tokens: &[One(Literal("goto")), One(IndexValue)],
                    parser: (
                        named!(
                            goto<Action>,
@@ -103,6 +253,7 @@ define_commands!([
                  },
                  { tags: ["subsort"],
                    desc: "subsort [date/subject] [asc/desc], sorts first level replies in threads.",
+                   tokens: &[One(Literal("subsort")), One(Alternatives(&[to_stream!(One(Literal("date"))), to_stream!(One(Literal("subject")))])), One(Alternatives(&[to_stream!(One(Literal("asc"))), to_stream!(One(Literal("desc")))])) ],
                    parser: (
                        named!(
                            subsort<Action>,
@@ -112,6 +263,7 @@ define_commands!([
                  },
                 { tags: ["sort"],
                   desc: "sort [date/subject] [asc/desc], sorts threads.",
+                   tokens: &[One(Literal("sort")), One(Alternatives(&[to_stream!(One(Literal("date"))), to_stream!(One(Literal("subject")))])), One(Alternatives(&[to_stream!(One(Literal("asc"))), to_stream!(One(Literal("desc")))])) ],
                   parser: (
                       named!(
                           sort<Action>,
@@ -123,6 +275,7 @@ define_commands!([
                 },
                 { tags: ["set", "set plain", "set threaded", "set compact"],
                   desc: "set [plain/threaded/compact/conversations], changes the mail listing view",
+                  tokens: &[One(Literal("set")), One(Alternatives(&[to_stream!(One(Literal("plain"))), to_stream!(One(Literal("threaded"))), to_stream!(One(Literal("compact"))), to_stream!(One(Literal("conversations")))]))],
                   parser: (
                       named!(
                           toggle<Action>,
@@ -132,6 +285,7 @@ define_commands!([
                 },
                 { tags: ["toggle_thread_snooze"],
                   desc: "turn off new notifications for this thread",
+                  tokens: &[One(Literal("toggle_thread_snooze"))],
                   parser: (
                       named!(toggle_thread_snooze<Action>,
                              map!(ws!(tag!("toggle_thread_snooze")), |_| ToggleThreadSnooze)
@@ -140,6 +294,7 @@ define_commands!([
                 },
                 { tags: ["search"],
                   desc: "search <TERM>, searches list with given term",
+                  tokens: &[One(Literal("search")), One(RestOfStringValue)],
                   parser:(
                       named!(search<Action>,
                              do_parse!(
@@ -152,6 +307,7 @@ define_commands!([
                 },
                 { tags: ["list-archive", "list-post", "list-unsubscribe", "list-"],
                   desc: "list-[unsubscribe/post/archive]",
+                  tokens: &[One(Alternatives(&[to_stream!(One(Literal("list-archive"))), to_stream!(One(Literal("list-post"))), to_stream!(One(Literal("list-unsubscribe")))]))],
                   parser: (
                       named!(
                           mailinglist<Action>,
@@ -168,7 +324,8 @@ define_commands!([
                   )
                 },
                 { tags: ["setenv "],
-                  desc:"setenv VAR=VALUE",
+                  desc: "setenv VAR=VALUE",
+                  tokens: &[One(Literal("setenv")), OneOrMore(Seq(&[One(AlphanumericStringValue), One(Literal("=")), One(QuotedStringValue)]))],
                   parser: (
                       named!( setenv<Action>,
                               do_parse!(
@@ -183,6 +340,7 @@ define_commands!([
                 },
                 { tags: ["printenv "],
                   desc: "printenv VAR",
+                  tokens: &[],
                   parser:(
                       named!( printenv<Action>,
                               do_parse!(
@@ -196,6 +354,7 @@ define_commands!([
                 /* Pipe pager contents to binary */
                 { tags: ["pipe "],
                   desc: "pipe EXECUTABLE ARGS",
+                  tokens: &[One(Literal("pipe")), One(Filepath), ZeroOrMore(QuotedStringValue)],
                   parser:(
                       named!( pipe<Action>,
                               alt_complete!(
@@ -218,6 +377,7 @@ define_commands!([
                 },
                 { tags: ["add-attachment "],
                   desc: "add-attachment PATH",
+                  tokens: &[One(Literal("add-attachment")), One(Filepath)],
                   parser:(
                       named!( add_attachment<Action>,
                               alt_complete!(
@@ -236,6 +396,7 @@ define_commands!([
                 },
                 { tags: ["remove-attachment "],
                   desc: "remove-attachment INDEX",
+                  tokens: &[One(Literal("remove-attachment")), One(IndexValue)],
                   parser:(
                       named!( remove_attachment<Action>,
                               do_parse!(
@@ -248,6 +409,7 @@ define_commands!([
                 },
                 { tags: ["toggle sign "],
                   desc: "switch between sign/unsign for this draft",
+                  tokens: &[One(Literal("toggle")), One(Literal("sign"))],
                   parser:(
                       named!( toggle_sign<Action>,
                               do_parse!(
@@ -259,6 +421,7 @@ define_commands!([
                 },
                 { tags: ["create-mailbox "],
                   desc: "create-mailbox ACCOUNT MAILBOX_PATH",
+                  tokens: &[One(Literal("create-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
                       named!( create_mailbox<Action>,
                               do_parse!(
@@ -273,6 +436,7 @@ define_commands!([
                 },
                 { tags: ["subscribe-mailbox "],
                   desc: "subscribe-mailbox ACCOUNT MAILBOX_PATH",
+                  tokens: &[One(Literal("subscribe-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
                       named!( sub_mailbox<Action>,
                               do_parse!(
@@ -287,6 +451,7 @@ define_commands!([
                 },
                 { tags: ["unsubscribe-mailbox "],
                   desc: "unsubscribe-mailbox ACCOUNT MAILBOX_PATH",
+                  tokens: &[One(Literal("unsubscribe-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
                       named!( unsub_mailbox<Action>,
                               do_parse!(
@@ -301,6 +466,7 @@ define_commands!([
                 },
                 { tags: ["rename-mailbox "],
                   desc: "rename-mailbox ACCOUNT MAILBOX_PATH_SRC MAILBOX_PATH_DEST",
+                  tokens: &[One(Literal("rename-mailbox")), One(AccountName), One(MailboxPath), One(MailboxPath)],
                   parser:(
                       named!( rename_mailbox<Action>,
                               do_parse!(
@@ -317,6 +483,7 @@ define_commands!([
                 },
                 { tags: ["delete-mailbox "],
                   desc: "delete-mailbox ACCOUNT MAILBOX_PATH",
+                  tokens: &[One(Literal("delete-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
                       named!( delete_mailbox<Action>,
                               do_parse!(
@@ -331,6 +498,7 @@ define_commands!([
                 },
                 { tags: ["reindex "],
                   desc: "reindex ACCOUNT, rebuild account cache in the background",
+                  tokens: &[One(Literal("reindex")), One(AccountName)],
                   parser:(
                       named!( reindex<Action>,
                               do_parse!(
@@ -343,6 +511,7 @@ define_commands!([
                 },
                 { tags: ["open-in-tab"],
                   desc: "opens envelope view in new tab",
+                  tokens: &[One(Literal("open-in-tab"))],
                   parser:(
                       named!( open_in_new_tab<Action>,
                               do_parse!(
@@ -354,6 +523,7 @@ define_commands!([
                 },
                 { tags: ["save-attachment "],
                   desc: "save-attachment INDEX PATH",
+                  tokens: &[One(Literal("save-attachment")), One(IndexValue), One(Filepath)],
                   parser:(
                       named!( save_attachment<Action>,
                               do_parse!(
@@ -367,6 +537,7 @@ define_commands!([
                 },
                 { tags: ["tag", "tag add", "tag remove"],
                    desc: "tag [add/remove], edits message's tags.",
+                   tokens: &[One(Literal("tag")), One(Alternatives(&[to_stream!(One(Literal("add"))), to_stream!(One(Literal("remove")))]))],
                    parser:
                      ( named!(
                              tag<Action>,
@@ -449,3 +620,67 @@ named!(view<Action>, alt_complete!(pipe | save_attachment));
 named!(pub parse_command<Action>,
        alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | view | compose_action | create_mailbox | sub_mailbox | unsub_mailbox | delete_mailbox | rename_mailbox | account_action )
 );
+
+#[test]
+fn test_parser() {
+    use std::io::{self, Read};
+    let mut state: Vec<Token> = vec![];
+    let mut buffer = String::new();
+    let mut input = String::new();
+    loop {
+        input.clear();
+        match io::stdin().read_line(&mut input) {
+            Ok(n) => {
+                let mut sugg = Default::default();
+                //print!("{}", input);
+                for (_tags, desc, tokens) in COMMAND_COMPLETION.iter() {
+                    let m = tokens.matches(&mut input.as_str().trim(), &mut sugg);
+                    if !m.is_empty() {
+                        print!("{:?} ", desc);
+                        println!(" result = {:#?}\n\n", m);
+                    }
+                }
+                println!(
+                    "suggestions = {:#?}",
+                    sugg.into_iter()
+                        .map(|s| format!(
+                            "{}{}",
+                            input.as_str().trim(),
+                            if input.trim().is_empty() {
+                                s.trim()
+                            } else {
+                                s.as_str()
+                            }
+                        ))
+                        .collect::<Vec<String>>()
+                );
+                if input.trim() == "quit" {
+                    break;
+                }
+            }
+            Err(error) => println!("error: {}", error),
+        }
+    }
+    println!("alright");
+}
+
+/// Get command suggestions for input
+pub fn command_completion_suggestions(input: &str) -> Vec<String> {
+    let mut sugg = Default::default();
+    for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
+        let _m = tokens.matches(&mut &(*input), &mut sugg);
+    }
+    sugg.into_iter()
+        .map(|s| {
+            format!(
+                "{}{}",
+                input.trim(),
+                if input.trim().is_empty() {
+                    s.trim()
+                } else {
+                    s.as_str()
+                }
+            )
+        })
+        .collect::<Vec<String>>()
+}

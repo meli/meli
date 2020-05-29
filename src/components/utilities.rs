@@ -960,7 +960,7 @@ impl Component for StatusBar {
             context,
         );
 
-        if !self.is_dirty() {
+        if self.mode != UIMode::Execute && !self.is_dirty() {
             return;
         }
         self.dirty = false;
@@ -999,6 +999,18 @@ impl Component for StatusBar {
                         }
                     })
                     .collect();
+                let command_completion_suggestions =
+                    crate::execute::command_completion_suggestions(self.ex_buffer.as_str());
+
+                suggestions.extend(command_completion_suggestions.iter().filter_map(|e| {
+                    if !unique_suggestions.contains(e.as_str()) {
+                        unique_suggestions.insert(e.as_str());
+                        Some(e.clone().into())
+                    } else {
+                        None
+                    }
+                }));
+                /*
                 suggestions.extend(crate::execute::COMMAND_COMPLETION.iter().filter_map(|e| {
                     if e.0.starts_with(self.ex_buffer.as_str()) {
                         Some(e.into())
@@ -1006,6 +1018,7 @@ impl Component for StatusBar {
                         None
                     }
                 }));
+                */
                 if let Some(p) = self
                     .ex_buffer
                     .as_str()
@@ -1031,6 +1044,8 @@ impl Component for StatusBar {
                     self.container.set_dirty(true);
                 }
 
+                suggestions.sort_by(|a, b| a.entry.cmp(&b.entry));
+                suggestions.dedup_by(|a, b| &a.entry == &b.entry);
                 if self.auto_complete.set_suggestions(suggestions) {
                     let len = self.auto_complete.suggestions().len() - 1;
                     self.auto_complete.set_cursor(len);
@@ -1217,7 +1232,9 @@ impl Component for StatusBar {
                     UIMode::Execute => {
                         self.height = 2;
                     }
-                    _ => {}
+                    _ => {
+                        self.height = 1;
+                    }
                 };
             }
             UIEvent::ExInput(Key::Char('\t')) => {
