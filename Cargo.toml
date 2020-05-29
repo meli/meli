@@ -27,21 +27,21 @@ xdg = "2.1.0"
 crossbeam = "0.7.2"
 signal-hook = "0.1.12"
 signal-hook-registry = "1.2.0"
-nix = "0.16.1"
+nix = "0.17.0"
 melib = { path = "melib", version = "0.5.0" }
 
 serde = "1.0.71"
 serde_derive = "1.0.71"
 serde_json = "1.0"
 toml = "0.5.3"
-linkify = "0.3.1" # >:c
+linkify = "0.4.0"
 xdg-utils = "0.3.0"
 nom = "3.2.0"
 notify = "4.0.1" # >:c
 notify-rust = "^3" # >:c
 termion = "1.5.1"
 bincode = "1.2.0"
-uuid = { version = "0.7.4", features = ["serde", "v4"] }
+uuid = { version = "0.8.1", features = ["serde", "v4"] }
 unicode-segmentation = "1.2.1" # >:c
 libc = {version = "0.2.59", features = ["extra_traits",]}
 rusqlite = {version = "0.20.0", optional =true }
