@@ -1839,7 +1839,7 @@ pub fn clear_area(grid: &mut CellBuffer, area: Area, attributes: crate::conf::Th
 
 pub mod ansi {
     //! Create a `CellBuffer` from a string slice containing ANSI escape codes.
-    use super::{Cell, CellBuffer, Color};
+    use super::{Attr, Cell, CellBuffer, Color};
     /// Create a `CellBuffer` from a string slice containing ANSI escape codes.
     pub fn ansi_to_cellbuffer(s: &str) -> Option<CellBuffer> {
         let mut buf: Vec<Cell> = Vec::with_capacity(2048);
@@ -1856,6 +1856,7 @@ pub mod ansi {
         let mut cols = 0;
         let mut current_fg = Color::Default;
         let mut current_bg = Color::Default;
+        let mut current_attrs = Attr::DEFAULT;
         let mut cur_cell;
         let mut state: State;
         for l in s.lines() {
@@ -1880,6 +1881,7 @@ pub mod ansi {
                         cur_cell.set_ch(c);
                         cur_cell.set_fg(current_fg);
                         cur_cell.set_bg(current_bg);
+                        cur_cell.set_attrs(current_attrs);
                         buf.push(cur_cell);
                         cur_cell = Cell::default();
 
@@ -1889,16 +1891,66 @@ pub mod ansi {
                         /* Reset styles */
                         current_fg = Color::Default;
                         current_bg = Color::Default;
+                        current_attrs = Attr::DEFAULT;
                         state = Start;
                     }
-                    (Csi, '0') => {
-                        if chars.next() != Some('m') {
-                            return None;
+                    (Csi, '0'..='8') if chars.peek() == Some(&'m') => {
+                        match chars.next() {
+                            Some('0') => {
+                                //Reset all attributes
+                                current_fg = Color::Default;
+                                current_bg = Color::Default;
+                                current_attrs = Attr::DEFAULT;
+                                state = Start;
+                            }
+                            Some('1') => {
+                                current_attrs.set(Attr::BOLD, true);
+                            }
+                            Some('2') => {
+                                current_attrs.set(Attr::DIM, true);
+                            }
+                            Some('3') => {
+                                current_attrs.set(Attr::ITALICS, true);
+                            }
+                            Some('4') => {
+                                current_attrs.set(Attr::UNDERLINE, true);
+                            }
+                            Some('5') => {
+                                current_attrs.set(Attr::BLINK, true);
+                            }
+                            Some('7') => {
+                                current_attrs.set(Attr::REVERSE, true);
+                            }
+                            Some('8') => {
+                                current_attrs.set(Attr::HIDDEN, true);
+                            }
+                            _ => return None,
                         }
-                        /* Reset styles */
-                        current_fg = Color::Default;
-                        current_bg = Color::Default;
-                        state = Start;
+                    }
+                    (Csi, '2') => {
+                        match (chars.next(), chars.next()) {
+                            (Some('2'), Some('m')) => {
+                                current_attrs.set(Attr::BOLD, false);
+                                current_attrs.set(Attr::DIM, false);
+                            }
+                            (Some('3'), Some('m')) => {
+                                current_attrs.set(Attr::ITALICS, false);
+                            }
+                            (Some('4'), Some('m')) => {
+                                current_attrs.set(Attr::UNDERLINE, false);
+                            }
+                            (Some('5'), Some('m')) => {
+                                current_attrs.set(Attr::BLINK, false);
+                            }
+                            (Some('7'), Some('m')) => {
+                                current_attrs.set(Attr::REVERSE, false);
+                            }
+                            (Some('8'), Some('m')) => {
+                                current_attrs.set(Attr::HIDDEN, false);
+                            }
+                            (Some('9'), Some('m')) => { /* Not crossed out */ }
+                            _ => return None,
+                        }
                     }
                     (Csi, '3') => {
                         match chars.next() {
