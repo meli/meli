@@ -34,10 +34,10 @@ extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::time::Duration;
 
-use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
+use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fs;
-use std::hash::{Hasher, Hash};
+use std::hash::{Hash, Hasher};
 use std::io::{self, Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::os::unix::fs::PermissionsExt;

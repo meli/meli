@@ -621,7 +621,7 @@ impl MailBackend for NotmuchDb {
         crate::backends::MaildirType::save_to_mailbox(path, bytes, flags)
     }
 
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
 

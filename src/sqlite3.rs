@@ -21,9 +21,11 @@
 
 /*! Use an sqlite3 database for fast searching.
  */
-use smallvec::SmallVec;
-use melib::search::{escape_double_quote, query, Query::{self, *}};
 use crate::melib::parsec::Parser;
+use melib::search::{
+    escape_double_quote, query,
+    Query::{self, *},
+};
 use melib::{
     backends::MailBackend,
     email::{Envelope, EnvelopeHash},
@@ -32,8 +34,9 @@ use melib::{
     MeliError, Result, ERROR,
 };
 use rusqlite::{params, Connection};
-use std::path::PathBuf;
+use smallvec::SmallVec;
 use std::convert::TryInto;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 pub fn db_path() -> Result<PathBuf> {
@@ -70,7 +73,9 @@ pub fn db_path() -> Result<PathBuf> {
 pub fn open_db() -> Result<Connection> {
     let db_path = db_path()?;
     if !db_path.exists() {
-        return Err(MeliError::new("Database hasn't been initialised. Run `reindex` command"));
+        return Err(MeliError::new(
+            "Database hasn't been initialised. Run `reindex` command",
+        ));
     }
     Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))
 }
@@ -166,7 +171,11 @@ END; ",
     Ok(conn)
 }
 
-pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>, acc_name: &str) -> Result<()> {
+pub fn insert(
+    envelope: &Envelope,
+    backend: &Arc<RwLock<Box<dyn MailBackend>>>,
+    acc_name: &str,
+) -> Result<()> {
     let conn = open_db()?;
     let backend_lck = backend.read().unwrap();
     let op = backend_lck.operation(envelope.hash());
@@ -193,7 +202,10 @@ pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>, 
         }
     };
 
-    if let Err(err) = conn.execute("INSERT OR IGNORE INTO accounts (name) VALUES (?1)", params![acc_name, ]) {
+    if let Err(err) = conn.execute(
+        "INSERT OR IGNORE INTO accounts (name) VALUES (?1)",
+        params![acc_name,],
+    ) {
         debug!(
             "Failed to insert envelope {}: {}",
             envelope.message_id_display(),
@@ -210,8 +222,15 @@ pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>, 
         return Err(MeliError::new(err.to_string()));
     }
     let account_id: i32 = {
-        let mut stmt = conn.prepare("SELECT id FROM accounts WHERE name = ?").unwrap();
-        let x = stmt.query_map(params![acc_name], |row| row.get(0)).unwrap().next().unwrap().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT id FROM accounts WHERE name = ?")
+            .unwrap();
+        let x = stmt
+            .query_map(params![acc_name], |row| row.get(0))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap();
         x
     };
     if let Err(err) = conn.execute(
@@ -239,46 +258,66 @@ pub fn insert(envelope: &Envelope, backend: &Arc<RwLock<Box<dyn MailBackend>>>, 
 
 pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
     let conn = open_db()?;
-    if let Err(err) = conn.execute(
-        "DELETE FROM envelopes WHERE hash = ?",
-        params![env_hash.to_be_bytes().to_vec(), ])
-        .map_err(|e| MeliError::new(e.to_string())) {
-            debug!(
+    if let Err(err) = conn
+        .execute(
+            "DELETE FROM envelopes WHERE hash = ?",
+            params![env_hash.to_be_bytes().to_vec(),],
+        )
+        .map_err(|e| MeliError::new(e.to_string()))
+    {
+        debug!(
+            "Failed to remove envelope {}: {}",
+            env_hash,
+            err.to_string()
+        );
+        log(
+            format!(
                 "Failed to remove envelope {}: {}",
                 env_hash,
                 err.to_string()
-            );
-            log(
-                format!(
-                    "Failed to remove envelope {}: {}",
-                    env_hash,
-                    err.to_string()
-                ),
-                ERROR,
-            );
-            return Err(err);
+            ),
+            ERROR,
+        );
+        return Err(err);
     }
     Ok(())
 }
 
 pub fn index(context: &mut crate::state::Context, account_name: &str) -> Result<()> {
-    let account = if let Some(a) =  context.accounts.iter().find(|acc| acc.name() == account_name) {
-        a} else {
-            return Err(MeliError::new(format!("Account {} was not found.", account_name)));
+    let account = if let Some(a) = context
+        .accounts
+        .iter()
+        .find(|acc| acc.name() == account_name)
+    {
+        a
+    } else {
+        return Err(MeliError::new(format!(
+            "Account {} was not found.",
+            account_name
+        )));
     };
 
-    let (acc_name, acc_mutex, backend_mutex):( String, Arc<RwLock<_>>, Arc<_>) = if *account.settings.conf.cache_type() != crate::conf::CacheType::Sqlite3 {
-            return Err(MeliError::new(format!("Account {} doesn't have an sqlite3 search backend.", account_name)));
-    } else {
+    let (acc_name, acc_mutex, backend_mutex): (String, Arc<RwLock<_>>, Arc<_>) =
+        if *account.settings.conf.cache_type() != crate::conf::CacheType::Sqlite3 {
+            return Err(MeliError::new(format!(
+                "Account {} doesn't have an sqlite3 search backend.",
+                account_name
+            )));
+        } else {
             (
                 account.name().to_string(),
                 account.collection.envelopes.clone(),
                 account.backend.clone(),
-            )};
+            )
+        };
     let conn = open_or_create_db()?;
     let work_context = context.work_controller().get_context();
-    let env_hashes =
-        acc_mutex.read().unwrap().keys().cloned().collect::<Vec<_>>();
+    let env_hashes = acc_mutex
+        .read()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
 
     /* Sleep, index and repeat in order not to block the main process */
     let handle = std::thread::Builder::new().name(String::from("rebuilding index")).spawn(move || {

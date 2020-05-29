@@ -618,7 +618,7 @@ impl MailBackend for MboxType {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
 }
