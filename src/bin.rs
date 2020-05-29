@@ -429,33 +429,28 @@ fn run_app() -> Result<()> {
                         _ => {debug!(&r);}
                     }
                     match r.unwrap() {
-                        ThreadEvent::Input(Key::Ctrl('z')) => {
+                        ThreadEvent::Input((Key::Ctrl('z'), _)) if state.mode != UIMode::Embed => {
                             state.switch_to_main_screen();
                             //_thread_handler.join().expect("Couldn't join on the associated thread");
                             let self_pid = nix::unistd::Pid::this();
                             nix::sys::signal::kill(self_pid, nix::sys::signal::Signal::SIGSTOP).unwrap();
                             state.switch_to_alternate_screen();
-                            state.restore_input();
                             // BUG: thread sends input event after one received key
                             state.update_size();
                             state.render();
                             state.redraw();
                         },
-                        ThreadEvent::Input(Key::Ctrl('l')) => {
+                        ThreadEvent::Input(raw_input @ (Key::Ctrl('l'), _)) => {
                             /* Manual screen redraw */
                             state.update_size();
                             state.render();
                             state.redraw();
-                        },
-                        ThreadEvent::InputRaw(raw_input @ (Key::Ctrl('l'), _)) => {
-                            /* Manual screen redraw */
-                            state.update_size();
-                            state.render();
-                            state.redraw();
+                            if state.mode == UIMode::Embed {
                             state.rcv_event(UIEvent::EmbedInput(raw_input));
                             state.redraw();
+                            }
                         },
-                        ThreadEvent::Input(k) => {
+                        ThreadEvent::Input((k, r)) => {
                             match state.mode {
                                 UIMode::Normal => {
                                     match k {
@@ -504,16 +499,14 @@ fn run_app() -> Result<()> {
                                         },
                                     }
                                 },
-                                UIMode::Embed => state.redraw(),
-
+                                UIMode::Embed => {
+                                    state.rcv_event(UIEvent::EmbedInput((k,r)));
+                                    state.redraw();
+                                },
                                 UIMode::Fork => {
                                     break 'inner; // `goto` 'reap loop, and wait on child.
                                 },
                             }
-                        },
-                        ThreadEvent::InputRaw(raw_input) => {
-                            state.rcv_event(UIEvent::EmbedInput(raw_input));
-                            state.redraw();
                         },
                         ThreadEvent::RefreshMailbox(event) => {
                             state.refresh_event(*event);

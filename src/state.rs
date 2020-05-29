@@ -37,6 +37,7 @@ use smallvec::SmallVec;
 use std::collections::HashMap;
 use std::env;
 use std::io::Write;
+use std::os::unix::io::RawFd;
 use std::thread;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
@@ -45,6 +46,7 @@ use termion::{clear, cursor};
 pub type StateStdout = termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>;
 
 struct InputHandler {
+    pipe: (RawFd, RawFd),
     rx: Receiver<InputCommand>,
     tx: Sender<InputCommand>,
 }
@@ -54,35 +56,26 @@ impl InputHandler {
         /* Clear channel without blocking. switch_to_main_screen() issues a kill when
          * returning from a fork and there's no input thread, so the newly created thread will
          * receive it and die. */
-        let _ = self.rx.try_iter().count();
+        //let _ = self.rx.try_iter().count();
         let rx = self.rx.clone();
+        let pipe = self.pipe.0;
         thread::Builder::new()
             .name("input-thread".to_string())
             .spawn(move || {
                 get_events(
-                    |k| {
-                        tx.send(ThreadEvent::Input(k)).unwrap();
-                    },
                     |i| {
-                        tx.send(ThreadEvent::InputRaw(i)).unwrap();
+                        tx.send(ThreadEvent::Input(i)).unwrap();
                     },
                     &rx,
-                    None,
+                    pipe,
                 )
             })
             .unwrap();
     }
 
     fn kill(&self) {
+        let _ = nix::unistd::write(self.pipe.1, &[1]);
         self.tx.send(InputCommand::Kill).unwrap();
-    }
-
-    fn switch_to_raw(&self) {
-        self.tx.send(InputCommand::Raw).unwrap();
-    }
-
-    fn switch_from_raw(&self) {
-        self.tx.send(InputCommand::NoRaw).unwrap();
     }
 }
 
@@ -115,14 +108,6 @@ impl Context {
 
     pub fn input_kill(&self) {
         self.input.kill();
-    }
-
-    pub fn input_from_raw(&self) {
-        self.input.switch_from_raw();
-    }
-
-    pub fn input_to_raw(&self) {
-        self.input.switch_to_raw();
     }
 
     pub fn restore_input(&self) {
@@ -225,6 +210,8 @@ impl State {
          * stdin, see get_events() for details
          * */
         let input_thread = unbounded();
+        let input_thread_pipe = nix::unistd::pipe()
+            .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>)?;
         let mut backends = Backends::new();
         let settings = Settings::new()?;
         let mut plugin_manager = PluginManager::new();
@@ -338,6 +325,7 @@ impl State {
                 sender,
                 receiver,
                 input: InputHandler {
+                    pipe: input_thread_pipe,
                     rx: input_thread.1,
                     tx: input_thread.0,
                 },
@@ -423,7 +411,6 @@ impl State {
         .unwrap();
         self.flush();
         self.stdout = None;
-        self.context.input.kill();
     }
 
     pub fn switch_to_alternate_screen(&mut self) {
@@ -937,16 +924,10 @@ impl State {
                 return;
             }
             UIEvent::ChangeMode(m) => {
-                if self.mode == UIMode::Embed {
-                    self.context.input_from_raw();
-                }
                 self.context
                     .sender
                     .send(ThreadEvent::UIEvent(UIEvent::ChangeMode(m)))
                     .unwrap();
-                if m == UIMode::Embed {
-                    self.context.input_to_raw();
-                }
             }
             UIEvent::Timer(id) if id == self.draw_rate_limit.id() => {
                 self.draw_rate_limit.reset();

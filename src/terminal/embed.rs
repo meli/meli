@@ -20,8 +20,7 @@
  */
 
 use crate::terminal::position::*;
-use melib::log;
-use melib::ERROR;
+use melib::{log, ERROR, error::*};
 
 use nix::fcntl::{open, OFlag};
 use nix::libc::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
@@ -29,8 +28,8 @@ use nix::pty::{grantpt, posix_openpt, ptsname, unlockpt, Winsize};
 use nix::sys::stat;
 use nix::unistd::{dup2, fork, ForkResult};
 use nix::{ioctl_none_bad, ioctl_write_ptr_bad};
-use std::ffi::CString;
-use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd};
+use std::ffi::{CString, OsStr};
+use std::os::unix::{ffi::OsStrExt, io::{AsRawFd, FromRawFd, IntoRawFd}};
 
 mod grid;
 
@@ -56,7 +55,7 @@ pub fn create_pty(
     width: usize,
     height: usize,
     command: String,
-) -> nix::Result<Arc<Mutex<EmbedGrid>>> {
+) -> Result<Arc<Mutex<EmbedGrid>>> {
     // Open a new PTY master
     let master_fd = posix_openpt(OFlag::O_RDWR)?;
 
@@ -115,17 +114,31 @@ pub fn create_pty(
                     std::process::exit(-1);
                 }
             }
-            if let Err(e) = nix::unistd::execv(
-                &CString::new("sh").unwrap(),
-                &[
-                    &CString::new("-c").unwrap(),
-                    &CString::new(command.as_bytes()).unwrap(),
-                ],
-            ) {
-                log(format!("Could not execute `{}`: {}", command, e,), ERROR);
-                std::process::exit(-1);
+            /* Find posix sh location, because POSIX shell is not always at /bin/sh */
+            let path_var = std::process::Command::new("getconf").args(&["PATH"]).output()?.stdout;
+            for mut p in std::env::split_paths(&OsStr::from_bytes(&path_var[..])) {
+                p.push("sh");
+                if p.exists() {
+                    if let Err(e) = nix::unistd::execv(
+                        &CString::new(p.as_os_str().as_bytes()).unwrap(),
+                        &[
+                        &CString::new("sh").unwrap(),
+                        &CString::new("-c").unwrap(),
+                        &CString::new(command.as_bytes()).unwrap(),
+                        ],
+                    ) {
+                        log(format!("Could not execute `{}`: {}", command, e,), ERROR);
+                        std::process::exit(-1);
+                    }
+                }
             }
-            /* This path shouldn't be executed. */
+            log(
+                format!(
+                    "Could not execute `{}`: did not find the standard POSIX sh shell in PATH = {}",
+                    command, String::from_utf8_lossy(&path_var),
+                ),
+                ERROR,
+            );
             std::process::exit(-1);
         }
         Ok(ForkResult::Parent { child }) => child,

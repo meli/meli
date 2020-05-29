@@ -137,8 +137,7 @@ impl PartialEq<Key> for &Key {
 /// Keep track of whether we're accepting normal user input or a pasted string.
 enum InputMode {
     Normal,
-    Paste,
-    PasteRaw(Vec<u8>),
+    Paste(Vec<u8>),
 }
 
 #[derive(Debug)]
@@ -146,12 +145,10 @@ enum InputMode {
 pub enum InputCommand {
     /// Exit thread
     Kill,
-    /// Send raw bytes as well
-    Raw,
-    /// Ignore raw bytes
-    NoRaw,
 }
 
+use nix::poll::{poll, PollFd, PollFlags};
+use std::os::unix::io::{AsRawFd, RawFd};
 use termion::input::TermReadEventsAndRaw;
 /*
  * If we fork (for example start $EDITOR) we want the input-thread to stop reading from stdin. The
@@ -163,111 +160,68 @@ use termion::input::TermReadEventsAndRaw;
  */
 /// The thread function that listens for user input and forwards it to the main event loop.
 pub fn get_events(
-    mut closure: impl FnMut(Key),
-    closure_raw: impl FnMut((Key, Vec<u8>)),
-    rx: &Receiver<InputCommand>,
-    input: Option<(TermionEvent, Vec<u8>)>,
-) -> () {
-    let stdin = std::io::stdin();
-    let mut input_mode = InputMode::Normal;
-    let mut paste_buf = String::with_capacity(256);
-    for c in input
-        .map(|v| Ok(v))
-        .into_iter()
-        .chain(stdin.events_and_raw())
-    {
-        select! {
-            default => {},
-            recv(rx) -> cmd => {
-                match cmd.unwrap() {
-                    InputCommand::Kill => return,
-                    InputCommand::Raw => {
-                        get_events_raw(closure, closure_raw, rx, c.ok());
-                        return;
-                    }
-                    InputCommand::NoRaw => unreachable!(),
-                }
-            }
-        };
-
-        match c {
-            Ok((TermionEvent::Key(k), _)) if input_mode == InputMode::Normal => {
-                closure(Key::from(k));
-            }
-            Ok((TermionEvent::Key(TermionKey::Char(k)), _)) if input_mode == InputMode::Paste => {
-                paste_buf.push(k);
-            }
-            Ok((TermionEvent::Unsupported(ref k), _)) if k.as_slice() == BRACKET_PASTE_START => {
-                input_mode = InputMode::Paste;
-            }
-            Ok((TermionEvent::Unsupported(ref k), _)) if k.as_slice() == BRACKET_PASTE_END => {
-                input_mode = InputMode::Normal;
-                let ret = Key::from(&paste_buf);
-                paste_buf.clear();
-                closure(ret);
-            }
-            _ => {} // Mouse events or errors.
-        }
-    }
-}
-
-/// Same as `get_events` but also forwards the raw bytes of the input as well
-pub fn get_events_raw(
-    closure_nonraw: impl FnMut(Key),
     mut closure: impl FnMut((Key, Vec<u8>)),
     rx: &Receiver<InputCommand>,
-    input: Option<(TermionEvent, Vec<u8>)>,
+    new_command_fd: RawFd,
 ) -> () {
     let stdin = std::io::stdin();
+    let stdin_fd = PollFd::new(std::io::stdin().as_raw_fd(), PollFlags::POLLIN);
+    let new_command_pollfd = nix::poll::PollFd::new(new_command_fd, nix::poll::PollFlags::POLLIN);
     let mut input_mode = InputMode::Normal;
     let mut paste_buf = String::with_capacity(256);
-    for c in input
-        .map(|v| Ok(v))
-        .into_iter()
-        .chain(stdin.events_and_raw())
-    {
+    let mut stdin_iter = stdin.events_and_raw();
+    'poll_while: while let Ok(_n_raw) = poll(&mut [new_command_pollfd, stdin_fd], -1) {
+        //debug!(_n_raw);
         select! {
-            default => {},
+            default => {
+                if stdin_fd.revents().is_some() {
+                    if let Some(c) = stdin_iter.next(){
+                        match (c, &mut input_mode) {
+                            (Ok((TermionEvent::Key(k), bytes)), InputMode::Normal) => {
+                                closure((Key::from(k), bytes));
+                            }
+                            (
+                                Ok((TermionEvent::Key(TermionKey::Char(k)), ref mut bytes)), InputMode::Paste(ref mut buf),
+                            ) => {
+                                paste_buf.push(k);
+                                let bytes = std::mem::replace(bytes, Vec::new());
+                                buf.extend(bytes.into_iter());
+                            }
+                            (Ok((TermionEvent::Unsupported(ref k), _)), _) if k.as_slice() == BRACKET_PASTE_START => {
+                                input_mode = InputMode::Paste(Vec::new());
+                            }
+                            (Ok((TermionEvent::Unsupported(ref k), _)), InputMode::Paste(ref mut buf))
+                                if k.as_slice() == BRACKET_PASTE_END =>
+                                {
+                                    let buf = std::mem::replace(buf, Vec::new());
+                                    input_mode = InputMode::Normal;
+                                    let ret = Key::from(&paste_buf);
+                                    paste_buf.clear();
+                                    closure((ret, buf));
+                                }
+                            _ => {} // Mouse events or errors.
+                        }
+                    }
+                }
+            },
             recv(rx) -> cmd => {
+                use nix::sys::time::TimeValLike;
+                let mut buf = [0;2];
+                //debug!("get_events_raw will nix::unistd::read");
+                let mut read_fd_set = nix::sys::select::FdSet::new();
+                read_fd_set.insert(new_command_fd);
+                let mut error_fd_set = nix::sys::select::FdSet::new();
+                error_fd_set.insert(new_command_fd);
+                let timeval:  nix::sys::time::TimeSpec = nix::sys::time::TimeSpec::seconds(2);
+                if nix::sys::select::pselect(None, Some(&mut read_fd_set), None, Some(&mut error_fd_set), Some(&timeval), None).is_err() || error_fd_set.highest() == Some(new_command_fd) || read_fd_set.highest() != Some(new_command_fd) {
+                    continue 'poll_while;
+                };
+                let _ = nix::unistd::read(new_command_fd, buf.as_mut());
                 match cmd.unwrap() {
                     InputCommand::Kill => return,
-                    InputCommand::NoRaw => {
-                        get_events(closure_nonraw, closure, rx, c.ok());
-                        return;
-                    }
-                    InputCommand::Raw => unreachable!(),
                 }
             }
         };
-
-        match (c, &mut input_mode) {
-            (Ok((TermionEvent::Key(k), bytes)), InputMode::Normal) => {
-                closure((Key::from(k), bytes));
-            }
-            (
-                Ok((TermionEvent::Key(TermionKey::Char(k)), ref mut bytes)),
-                InputMode::PasteRaw(ref mut buf),
-            ) => {
-                paste_buf.push(k);
-                let bytes = std::mem::replace(bytes, Vec::new());
-                buf.extend(bytes.into_iter());
-            }
-            (Ok((TermionEvent::Unsupported(ref k), _)), _)
-                if k.as_slice() == BRACKET_PASTE_START =>
-            {
-                input_mode = InputMode::PasteRaw(Vec::new());
-            }
-            (Ok((TermionEvent::Unsupported(ref k), _)), InputMode::PasteRaw(ref mut buf))
-                if k.as_slice() == BRACKET_PASTE_END =>
-            {
-                let buf = std::mem::replace(buf, Vec::new());
-                input_mode = InputMode::Normal;
-                let ret = Key::from(&paste_buf);
-                paste_buf.clear();
-                closure((ret, buf));
-            }
-            _ => {} // Mouse events or errors.
-        }
     }
 }
 

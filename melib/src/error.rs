@@ -199,6 +199,13 @@ impl From<std::ffi::NulError> for MeliError {
     }
 }
 
+impl From<nix::Error> for MeliError {
+    #[inline]
+    fn from(kind: nix::Error) -> MeliError {
+        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
+    }
+}
+
 impl From<&str> for MeliError {
     #[inline]
     fn from(kind: &str) -> MeliError {

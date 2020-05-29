@@ -60,9 +60,8 @@ pub enum StatusEvent {
 pub enum ThreadEvent {
     NewThread(thread::ThreadId, String),
     /// User input.
-    Input(Key),
+    Input((Key, Vec<u8>)),
     /// User input and input as raw bytes.
-    InputRaw((Key, Vec<u8>)),
     /// A watched Mailbox has been refreshed.
     RefreshMailbox(Box<RefreshEvent>),
     UIEvent(UIEvent),

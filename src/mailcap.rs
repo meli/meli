@@ -176,9 +176,6 @@ impl MailcapEntry {
                         a => a.to_string(),
                     })
                     .collect::<Vec<String>>();
-                {
-                    context.input_kill();
-                }
                 let cmd_string = format!("{} {}", cmd, args.join(" "));
                 melib::log(
                     format!("Executing: sh -c \"{}\"", cmd_string.replace("\"", "\\\"")),
@@ -236,7 +233,6 @@ impl MailcapEntry {
                     }
                 }
                 context.replies.push_back(UIEvent::Fork(ForkType::Finished));
-                context.restore_input();
                 Ok(())
             }
         }
