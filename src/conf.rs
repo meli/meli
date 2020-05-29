@@ -191,7 +191,7 @@ pub struct FileAccount {
     mailboxes: HashMap<String, FileMailboxConf>,
     #[serde(default)]
     cache_type: CacheType,
-    #[serde(default)]
+    #[serde(default = "false_val")]
     pub manual_refresh: bool,
     #[serde(default = "none")]
     pub refresh_command: Option<String>,
