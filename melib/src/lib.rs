@@ -141,6 +141,9 @@ pub use shellexpand::ShellExpandTrait;
 pub mod shellexpand {
 
     use smallvec::SmallVec;
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::io::AsRawFd;
     use std::path::{Path, PathBuf};
 
     pub trait ShellExpandTrait {
@@ -181,12 +184,10 @@ pub mod shellexpand {
             ret
         }
 
+        #[cfg(target_os = "linux")]
         fn complete(&self, force: bool) -> SmallVec<[String; 128]> {
             use libc::dirent64;
             use nix::fcntl::OFlag;
-            use std::ffi::OsStr;
-            use std::os::unix::ffi::OsStrExt;
-            use std::os::unix::io::AsRawFd;
             const BUF_SIZE: ::libc::size_t = 8 << 10;
 
             let (prefix, _match) = if self.as_os_str().as_bytes().ends_with(b"/.") {
@@ -286,6 +287,70 @@ pub mod shellexpand {
                 // It sometimes writes a partial list of entries even if the full list would fit."
             }
             return entries;
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        fn complete(&self, force: bool) -> SmallVec<[String; 128]> {
+            let mut entries = SmallVec::new();
+            let (prefix, _match) = {
+                if self.exists() && (!force || self.as_os_str().as_bytes().ends_with(b"/")) {
+                    // println!("{} {:?}", self.display(), self.components().last());
+                    return entries;
+                } else {
+                    let last_component = self
+                        .components()
+                        .last()
+                        .map(|c| c.as_os_str())
+                        .unwrap_or(OsStr::from_bytes(b""));
+                    let prefix = if let Some(p) = self.parent() {
+                        p
+                    } else {
+                        return entries;
+                    };
+                    (prefix, last_component)
+                }
+            };
+            if force && self.is_dir() && !self.as_os_str().as_bytes().ends_with(b"/") {
+                entries.push("/".to_string());
+            }
+
+            if let Ok(iter) = std::fs::read_dir(&prefix) {
+                for entry in iter {
+                    if let Ok(entry) = entry {
+                        if entry.path().as_os_str().as_bytes() != b"."
+                            && entry.path().as_os_str().as_bytes() != b".."
+                            && entry
+                                .path()
+                                .as_os_str()
+                                .as_bytes()
+                                .starts_with(_match.as_bytes())
+                        {
+                            if entry.path().is_dir()
+                                && !entry.path().as_os_str().as_bytes().ends_with(b"/")
+                            {
+                                let mut s = unsafe {
+                                    String::from_utf8_unchecked(
+                                        entry.path().as_os_str().as_bytes()
+                                            [_match.as_bytes().len()..]
+                                            .to_vec(),
+                                    )
+                                };
+                                s.push('/');
+                                entries.push(s);
+                            } else {
+                                entries.push(unsafe {
+                                    String::from_utf8_unchecked(
+                                        entry.path().as_os_str().as_bytes()
+                                            [_match.as_bytes().len()..]
+                                            .to_vec(),
+                                    )
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            entries
         }
     }
 
