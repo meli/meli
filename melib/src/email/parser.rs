@@ -105,6 +105,22 @@ impl BytesExt for [u8] {
     }
 }
 
+pub trait BytesIterExt {
+    fn join(&mut self, sep: u8) -> Vec<u8>;
+}
+
+impl<'a, P: for<'r> FnMut(&'r u8) -> bool> BytesIterExt for std::slice::Split<'a, u8, P> {
+    fn join(&mut self, sep: u8) -> Vec<u8> {
+        self.fold(vec![], |mut acc, el| {
+            if !acc.is_empty() {
+                acc.push(sep);
+            }
+            acc.extend(el.iter());
+            acc
+        })
+    }
+}
+
 fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
     if input.len() < 3 {
         IResult::Incomplete(Needed::Size(1))

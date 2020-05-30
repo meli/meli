@@ -19,7 +19,8 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::protocol_parser::{ImapLineSplit, ImapResponse};
+use super::protocol_parser::{ImapLineSplit, ImapResponse, RequiredResponses};
+use crate::backends::MailboxHash;
 use crate::email::parser::BytesExt;
 use crate::error::*;
 use std::io::Read;
@@ -29,11 +30,11 @@ use native_tls::TlsConnector;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
 use super::protocol_parser;
-use super::{Capabilities, ImapServerConf};
+use super::{Capabilities, ImapServerConf, UIDStore};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ImapProtocol {
@@ -53,7 +54,8 @@ pub struct ImapConnection {
     pub stream: Result<ImapStream>,
     pub server_conf: ImapServerConf,
     pub capabilities: Capabilities,
-    pub online: Arc<Mutex<(Instant, Result<()>)>>,
+    pub uid_store: Arc<UIDStore>,
+    pub current_mailbox: Option<MailboxHash>,
 }
 
 impl Drop for ImapStream {
@@ -390,18 +392,19 @@ impl ImapStream {
 impl ImapConnection {
     pub fn new_connection(
         server_conf: &ImapServerConf,
-        online: Arc<Mutex<(Instant, Result<()>)>>,
+        uid_store: Arc<UIDStore>,
     ) -> ImapConnection {
         ImapConnection {
             stream: Err(MeliError::new("Offline".to_string())),
             server_conf: server_conf.clone(),
             capabilities: Capabilities::default(),
-            online,
+            uid_store,
+            current_mailbox: None,
         }
     }
 
     pub fn connect(&mut self) -> Result<()> {
-        if let (instant, ref mut status @ Ok(())) = *self.online.lock().unwrap() {
+        if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
             if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
                 *status = Err(MeliError::new("Connection timed out"));
                 self.stream = Err(MeliError::new("Connection timed out"));
@@ -412,12 +415,12 @@ impl ImapConnection {
         }
         let new_stream = ImapStream::new_connection(&self.server_conf);
         if new_stream.is_err() {
-            *self.online.lock().unwrap() = (
+            *self.uid_store.is_online.lock().unwrap() = (
                 Instant::now(),
                 Err(new_stream.as_ref().unwrap_err().clone()),
             );
         } else {
-            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
         }
         let (capabilities, stream) = new_stream?;
         self.stream = Ok(stream);
@@ -425,21 +428,43 @@ impl ImapConnection {
         Ok(())
     }
 
-    pub fn read_response(&mut self, ret: &mut String) -> Result<()> {
-        self.try_send(|s| s.read_response(ret))?;
+    pub fn read_response(
+        &mut self,
+        ret: &mut String,
+        required_responses: RequiredResponses,
+    ) -> Result<()> {
+        let mut response = String::new();
+        ret.clear();
+        self.try_send(|s| s.read_response(&mut response))?;
 
         match self.server_conf.protocol {
             ImapProtocol::IMAP => {
-                let r: ImapResponse = ImapResponse::from(&ret);
+                let r: ImapResponse = ImapResponse::from(&response);
                 if let ImapResponse::Bye(ref response_code) = r {
                     self.stream = Err(MeliError::new(format!(
                         "Offline: received BYE: {:?}",
                         response_code
                     )));
+                    ret.push_str(&response);
+                } else {
+                    /*debug!(
+                        "check every line for required_responses: {:#?}",
+                        &required_responses
+                    );*/
+                    for l in response.split_rn() {
+                        /*debug!("check line: {}", &l);*/
+                        if required_responses.check(l) || !self.process_untagged(l)? {
+                            ret.push_str(l);
+                        }
+                    }
+                    //ret.push_str(&response);
                 }
                 r.into()
             }
-            ImapProtocol::ManageSieve => Ok(()),
+            ImapProtocol::ManageSieve => {
+                ret.push_str(&response);
+                Ok(())
+            }
         }
     }
 
@@ -471,7 +496,7 @@ impl ImapConnection {
         &mut self,
         mut action: impl FnMut(&mut ImapStream) -> Result<()>,
     ) -> Result<()> {
-        if let (instant, ref mut status @ Ok(())) = *self.online.lock().unwrap() {
+        if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
             if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
                 *status = Err(MeliError::new("Connection timed out"));
                 self.stream = Err(MeliError::new("Connection timed out"));
@@ -484,17 +509,79 @@ impl ImapConnection {
         }
         let new_stream = ImapStream::new_connection(&self.server_conf);
         if new_stream.is_err() {
-            *self.online.lock().unwrap() = (
+            *self.uid_store.is_online.lock().unwrap() = (
                 Instant::now(),
                 Err(new_stream.as_ref().unwrap_err().clone()),
             );
         } else {
-            *self.online.lock().unwrap() = (Instant::now(), Ok(()));
+            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
         }
         let (capabilities, stream) = new_stream?;
         self.stream = Ok(stream);
         self.capabilities = capabilities;
         Err(MeliError::new("Connection timed out"))
+    }
+
+    pub fn select_mailbox(&mut self, mailbox_hash: MailboxHash, ret: &mut String) -> Result<()> {
+        self.send_command(
+            format!(
+                "SELECT \"{}\"",
+                self.uid_store.mailboxes.read().unwrap()[&mailbox_hash].imap_path()
+            )
+            .as_bytes(),
+        )?;
+        self.read_response(ret, RequiredResponses::SELECT_REQUIRED)?;
+        debug!("select response {}", ret);
+        self.current_mailbox = Some(mailbox_hash);
+        Ok(())
+    }
+
+    pub fn examine_mailbox(&mut self, mailbox_hash: MailboxHash, ret: &mut String) -> Result<()> {
+        self.send_command(
+            format!(
+                "EXAMINE \"{}\"",
+                self.uid_store.mailboxes.read().unwrap()[&mailbox_hash].imap_path()
+            )
+            .as_bytes(),
+        )?;
+        self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)?;
+        debug!("examine response {}", ret);
+        self.current_mailbox = Some(mailbox_hash);
+        Ok(())
+    }
+
+    pub fn unselect(&mut self) -> Result<()> {
+        if let Some(mailbox_hash) = self.current_mailbox.take() {
+            let mut response = String::with_capacity(8 * 1024);
+            if self
+                .capabilities
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
+            {
+                self.send_command(b"UNSELECT")?;
+                self.read_response(&mut response, RequiredResponses::empty())?;
+            } else {
+                /* `RFC3691 - UNSELECT Command` states: "[..] IMAP4 provides this
+                 * functionality (via a SELECT command with a nonexistent mailbox name or
+                 * reselecting the same mailbox with EXAMINE command)[..]
+                 */
+                
+                self.select_mailbox(mailbox_hash, &mut response)?;
+                self.examine_mailbox(mailbox_hash, &mut response)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn add_refresh_event(&mut self, ev: crate::backends::RefreshEvent) {
+        if let Some(ref sender) = self.uid_store.sender.read().unwrap().as_ref() {
+            sender.send(ev);
+            for ev in self.uid_store.refresh_events.lock().unwrap().drain(..) {
+                sender.send(ev);
+            }
+        } else {
+            self.uid_store.refresh_events.lock().unwrap().push(ev);
+        }
     }
 }
 

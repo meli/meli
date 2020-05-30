@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::{ImapConnection, ImapProtocol, ImapServerConf};
+use super::{ImapConnection, ImapProtocol, ImapServerConf, UIDStore};
 use crate::conf::AccountSettings;
 use crate::error::{MeliError, Result};
 use crate::get_conf_val;
@@ -95,11 +95,14 @@ pub fn new_managesieve_connection(s: &AccountSettings) -> Result<ImapConnection>
         danger_accept_invalid_certs,
         protocol: ImapProtocol::ManageSieve,
     };
-    let online = Arc::new(Mutex::new((
-        Instant::now(),
-        Err(MeliError::new("Account is uninitialised.")),
-    )));
-    Ok(ImapConnection::new_connection(&server_conf, online))
+    let uid_store = Arc::new(UIDStore {
+        is_online: Arc::new(Mutex::new((
+            Instant::now(),
+            Err(MeliError::new("Account is uninitialised.")),
+        ))),
+        ..Default::default()
+    });
+    Ok(ImapConnection::new_connection(&server_conf, uid_store))
 }
 
 impl ManageSieve for ImapConnection {

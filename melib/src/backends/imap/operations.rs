@@ -35,19 +35,19 @@ pub struct ImapOp {
     headers: Option<String>,
     body: Option<String>,
     mailbox_path: String,
+    mailbox_hash: MailboxHash,
     flags: Cell<Option<Flag>>,
     connection: Arc<Mutex<ImapConnection>>,
     uid_store: Arc<UIDStore>,
-    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 }
 
 impl ImapOp {
     pub fn new(
         uid: usize,
         mailbox_path: String,
+        mailbox_hash: MailboxHash,
         connection: Arc<Mutex<ImapConnection>>,
         uid_store: Arc<UIDStore>,
-        tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
     ) -> Self {
         ImapOp {
             uid,
@@ -56,16 +56,16 @@ impl ImapOp {
             headers: None,
             body: None,
             mailbox_path,
+            mailbox_hash,
             flags: Cell::new(None),
             uid_store,
-            tag_index,
         }
     }
 }
 
 impl BackendOp for ImapOp {
     fn description(&self) -> String {
-        unimplemented!();
+        format!("Message in mailbox: {}", &self.mailbox_path)
     }
 
     fn as_bytes(&mut self) -> Result<&[u8]> {
@@ -79,11 +79,11 @@ impl BackendOp for ImapOp {
                 drop(bytes_cache);
                 let mut response = String::with_capacity(8 * 1024);
                 {
-                    let mut conn = try_lock(&self.connection)?;
-                    conn.send_command(format!("SELECT \"{}\"", &self.mailbox_path,).as_bytes())?;
-                    conn.read_response(&mut response)?;
+                    let mut conn =
+                        try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
+                    conn.examine_mailbox(self.mailbox_hash, &mut response)?;
                     conn.send_command(format!("UID FETCH {} (FLAGS RFC822)", self.uid).as_bytes())?;
-                    conn.read_response(&mut response)?;
+                    conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)?;
                 }
                 debug!(
                     "fetch response is {} bytes and {} lines",
@@ -127,15 +127,15 @@ impl BackendOp for ImapOp {
             self.flags.set(cache.flags);
         } else {
             let mut response = String::with_capacity(8 * 1024);
-            let mut conn = or_return_default!(try_lock(&self.connection));
-            or_return_default!(
-                conn.send_command(format!("EXAMINE \"{}\"", &self.mailbox_path,).as_bytes())
-            );
-            or_return_default!(conn.read_response(&mut response));
+            let mut conn = or_return_default!(try_lock(
+                &self.connection,
+                Some(std::time::Duration::new(2, 0))
+            ));
+            or_return_default!(conn.examine_mailbox(self.mailbox_hash, &mut response));
             or_return_default!(
                 conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())
             );
-            or_return_default!(conn.read_response(&mut response));
+            or_return_default!(conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED));
             debug!(
                 "fetch response is {} bytes and {} lines",
                 response.len(),
@@ -167,9 +167,8 @@ impl BackendOp for ImapOp {
         flags.set(f, value);
 
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection)?;
-        conn.send_command(format!("SELECT \"{}\"", &self.mailbox_path,).as_bytes())?;
-        conn.read_response(&mut response)?;
+        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
+        conn.select_mailbox(self.mailbox_hash, &mut response)?;
         debug!(&response);
         conn.send_command(
             format!(
@@ -179,7 +178,7 @@ impl BackendOp for ImapOp {
             )
             .as_bytes(),
         )?;
-        conn.read_response(&mut response)?;
+        conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)?;
         debug!(&response);
         match protocol_parser::uid_fetch_flags_response(response.as_bytes())
             .to_full_result()
@@ -203,9 +202,8 @@ impl BackendOp for ImapOp {
 
     fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()> {
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection)?;
-        conn.send_command(format!("SELECT \"{}\"", &self.mailbox_path,).as_bytes())?;
-        conn.read_response(&mut response)?;
+        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
+        conn.select_mailbox(self.mailbox_hash, &mut response)?;
         conn.send_command(
             format!(
                 "UID STORE {} {}FLAGS.SILENT ({})",
@@ -215,15 +213,15 @@ impl BackendOp for ImapOp {
             )
             .as_bytes(),
         )?;
-        conn.read_response(&mut response)?;
+        conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)?;
         protocol_parser::uid_fetch_flags_response(response.as_bytes())
             .to_full_result()
             .map_err(MeliError::from)?;
         let hash = tag_hash!(tag);
         if value {
-            self.tag_index.write().unwrap().insert(hash, tag);
+            self.uid_store.tag_index.write().unwrap().insert(hash, tag);
         } else {
-            self.tag_index.write().unwrap().remove(&hash);
+            self.uid_store.tag_index.write().unwrap().remove(&hash);
         }
         if !envelope.labels().iter().any(|&h_| h_ == hash) {
             if value {

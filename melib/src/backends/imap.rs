@@ -33,6 +33,7 @@ pub use connection::*;
 mod watch;
 pub use watch::*;
 pub mod managesieve;
+mod untagged;
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::BackendOp;
@@ -126,6 +127,12 @@ pub struct UIDStore {
     uid_index: Arc<Mutex<HashMap<UID, EnvelopeHash>>>,
 
     byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
+    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
+
+    mailboxes: Arc<RwLock<HashMap<MailboxHash, ImapMailbox>>>,
+    is_online: Arc<Mutex<(Instant, Result<()>)>>,
+    refresh_events: Arc<Mutex<Vec<RefreshEvent>>>,
+    sender: Arc<RwLock<Option<RefreshEventConsumer>>>,
 }
 
 impl Default for UIDStore {
@@ -136,6 +143,14 @@ impl Default for UIDStore {
             hash_index: Default::default(),
             uid_index: Default::default(),
             byte_cache: Default::default(),
+            mailboxes: Arc::new(RwLock::new(Default::default())),
+            tag_index: Arc::new(RwLock::new(Default::default())),
+            is_online: Arc::new(Mutex::new((
+                Instant::now(),
+                Err(MeliError::new("Account is uninitialised.")),
+            ))),
+            refresh_events: Default::default(),
+            sender: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -143,21 +158,21 @@ impl Default for UIDStore {
 #[derive(Debug)]
 pub struct ImapType {
     account_name: String,
-    online: Arc<Mutex<(Instant, Result<()>)>>,
     is_subscribed: Arc<IsSubscribedFn>,
     connection: Arc<Mutex<ImapConnection>>,
     server_conf: ImapServerConf,
     uid_store: Arc<UIDStore>,
     can_create_flags: Arc<Mutex<bool>>,
-    tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
-
-    mailboxes: Arc<RwLock<HashMap<MailboxHash, ImapMailbox>>>,
 }
 
 #[inline(always)]
-pub(self) fn try_lock<T>(connection: &Arc<Mutex<T>>) -> Result<std::sync::MutexGuard<T>> {
+pub(self) fn try_lock<T>(
+    connection: &Arc<Mutex<T>>,
+    dur: Option<std::time::Duration>,
+) -> Result<std::sync::MutexGuard<T>> {
     let now = Instant::now();
-    while Instant::now().duration_since(now) <= std::time::Duration::new(2, 0) {
+    while Instant::now().duration_since(now) <= dur.unwrap_or(std::time::Duration::from_millis(150))
+    {
         if let Ok(guard) = connection.try_lock() {
             return Ok(guard);
         }
@@ -167,18 +182,18 @@ pub(self) fn try_lock<T>(connection: &Arc<Mutex<T>>) -> Result<std::sync::MutexG
 
 impl MailBackend for ImapType {
     fn is_online(&self) -> Result<()> {
-        if let Ok(mut g) = try_lock(&self.connection) {
+        if let Ok(mut g) = try_lock(&self.connection, None) {
             let _ = g.connect();
         }
-        try_lock(&self.online)?.1.clone()
+        try_lock(&self.uid_store.is_online, None)?.1.clone()
     }
 
     fn connect(&mut self) {
         if self.is_online().is_err() {
-            if Instant::now().duration_since(self.online.lock().unwrap().0)
+            if Instant::now().duration_since(self.uid_store.is_online.lock().unwrap().0)
                 >= std::time::Duration::new(2, 0)
             {
-                if let Ok(mut g) = try_lock(&self.connection) {
+                if let Ok(mut g) = try_lock(&self.connection, None) {
                     let _ = g.connect();
                 }
             }
@@ -190,11 +205,10 @@ impl MailBackend for ImapType {
         let handle = {
             let tx = w.tx();
             let uid_store = self.uid_store.clone();
-            let tag_index = self.tag_index.clone();
             let can_create_flags = self.can_create_flags.clone();
             let mailbox_hash = mailbox.hash();
             let (permissions, mailbox_path, mailbox_exists, no_select, unseen) = {
-                let f = &self.mailboxes.read().unwrap()[&mailbox_hash];
+                let f = &self.uid_store.mailboxes.read().unwrap()[&mailbox_hash];
                 (
                     f.permissions.clone(),
                     f.imap_path().to_string(),
@@ -214,13 +228,12 @@ impl MailBackend for ImapType {
                 if let Err(err) = (move || {
                     let tx = _tx;
                     let mut response = String::with_capacity(8 * 1024);
-                    let mut conn = try_lock(&connection)?;
+                    let mut conn = connection.lock()?;
                     debug!("locked for get {}", mailbox_path);
 
                     /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
                      * returns READ-ONLY for both cases) */
-                    conn.send_command(format!("SELECT \"{}\"", mailbox_path).as_bytes())?;
-                    conn.read_response(&mut response)?;
+                    conn.select_mailbox(mailbox_hash, &mut response)?;
                     let examine_response = protocol_parser::select_response(&response)?;
                     *can_create_flags.lock().unwrap() = examine_response.can_create_flags;
                     debug!(
@@ -247,22 +260,27 @@ impl MailBackend for ImapType {
                         *mailbox_exists = exists;
                     }
                     /* reselecting the same mailbox with EXAMINE prevents expunging it */
-                    conn.send_command(format!("EXAMINE \"{}\"", mailbox_path).as_bytes())?;
-                    conn.read_response(&mut response)?;
+                    conn.examine_mailbox(mailbox_hash, &mut response)?;
 
-                    let mut tag_lck = tag_index.write().unwrap();
+                    let mut tag_lck = uid_store.tag_index.write().unwrap();
                     let mut our_unseen = 0;
-                    while exists > 1 {
+                    while exists > 0 {
                         let mut envelopes = vec![];
-                        conn.send_command(
-                            format!(
-                                "UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)",
-                                std::cmp::max(exists.saturating_sub(500), 1),
-                                exists
-                            )
-                            .as_bytes(),
-                        )?;
-                        conn.read_response(&mut response)?;
+                        debug!("{} exists= {}", mailbox_hash, exists);
+                        if exists == 1 {
+                            debug!("UID FETCH 1 (UID FLAGS ENVELOPE BODYSTRUCTURE)");
+                            conn.send_command(b"UID FETCH 1 (UID FLAGS ENVELOPE BODYSTRUCTURE)")?;
+                        } else {
+                            conn.send_command(
+                                debug!(format!(
+                                    "UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)",
+                                    std::cmp::max(exists.saturating_sub(500), 1),
+                                    exists
+                                ))
+                                .as_bytes(),
+                            )?
+                        };
+                        conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)?;
                         debug!(
                             "fetch response is {} bytes and {} lines",
                             response.len(),
@@ -304,14 +322,18 @@ impl MailBackend for ImapType {
                             envelopes.push(env);
                         }
                         exists = std::cmp::max(exists.saturating_sub(500), 1);
-                        debug!("sending payload");
+                        debug!("sending payload for {}", mailbox_hash);
 
                         *unseen.lock().unwrap() = our_unseen;
                         tx.send(AsyncStatus::Payload(Ok(envelopes))).unwrap();
+                        if exists == 1 {
+                            break;
+                        }
                     }
                     drop(conn);
                     Ok(())
                 })() {
+                    debug!("sending error payload for {}: {:?}", mailbox_hash, &err);
                     tx.send(AsyncStatus::Payload(Err(err))).unwrap();
                 }
                 tx.send(AsyncStatus::Finished).unwrap();
@@ -327,14 +349,15 @@ impl MailBackend for ImapType {
         sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
         let inbox = self
+            .uid_store
             .mailboxes
             .read()
             .unwrap()
             .get(&mailbox_hash)
             .map(std::clone::Clone::clone)
             .unwrap();
-        let tag_index = self.tag_index.clone();
         let main_conn = self.connection.clone();
+        *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
         let account_name = self.account_name.clone();
         let account_hash = {
@@ -345,14 +368,20 @@ impl MailBackend for ImapType {
         let w = AsyncBuilder::new();
         let closure = move |work_context: WorkContext| {
             let thread = std::thread::current();
-            let mut conn = match try_lock(&main_conn) {
+            let mut conn = match try_lock(&main_conn, Some(std::time::Duration::new(2, 0))) {
                 Ok(conn) => conn,
                 Err(err) => {
-                    sender.send(RefreshEvent {
-                        account_hash,
-                        mailbox_hash,
-                        kind: RefreshEventKind::Failure(err.clone()),
-                    });
+                    uid_store
+                        .sender
+                        .read()
+                        .unwrap()
+                        .as_ref()
+                        .unwrap()
+                        .send(RefreshEvent {
+                            account_hash,
+                            mailbox_hash,
+                            kind: RefreshEventKind::Failure(err.clone()),
+                        });
 
                     return;
                 }
@@ -369,17 +398,9 @@ impl MailBackend for ImapType {
                 .set_status
                 .send((thread.id(), "refresh".to_string()))
                 .unwrap();
-            watch::examine_updates(
-                account_hash,
-                &inbox,
-                &sender,
-                &mut conn,
-                &uid_store,
-                &work_context,
-                &tag_index,
-            )
-            .ok()
-            .take();
+            watch::examine_updates(account_hash, &inbox, &mut conn, &uid_store, &work_context)
+                .ok()
+                .take();
         };
         Ok(w.build(Box::new(closure)))
     }
@@ -389,11 +410,9 @@ impl MailBackend for ImapType {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
-        let mailboxes = self.mailboxes.clone();
-        let tag_index = self.tag_index.clone();
-        let conn = ImapConnection::new_connection(&self.server_conf, self.online.clone());
+        let conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
         let main_conn = self.connection.clone();
-        let is_online = self.online.clone();
+        *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
         let account_hash = {
             let mut hasher = DefaultHasher::new();
@@ -416,13 +435,9 @@ impl MailBackend for ImapType {
                     .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"));
                 let kit = ImapWatchKit {
                     conn,
-                    is_online,
                     main_conn,
                     uid_store,
-                    mailboxes,
-                    sender,
                     work_context,
-                    tag_index,
                     account_hash,
                 };
                 if has_idle {
@@ -436,7 +451,7 @@ impl MailBackend for ImapType {
 
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
         {
-            let mailboxes = self.mailboxes.read().unwrap();
+            let mailboxes = self.uid_store.mailboxes.read().unwrap();
             if !mailboxes.is_empty() {
                 return Ok(mailboxes
                     .iter()
@@ -444,8 +459,9 @@ impl MailBackend for ImapType {
                     .collect());
             }
         }
-        let mut mailboxes = self.mailboxes.write()?;
-        *mailboxes = ImapType::imap_mailboxes(&self.connection)?;
+        let new_mailboxes = ImapType::imap_mailboxes(&self.connection)?;
+        let mut mailboxes = self.uid_store.mailboxes.write()?;
+        *mailboxes = new_mailboxes;
         mailboxes.retain(|_, f| (self.is_subscribed)(f.path()));
         let keys = mailboxes.keys().cloned().collect::<HashSet<MailboxHash>>();
         let mut uid_lock = self.uid_store.uidvalidity.lock().unwrap();
@@ -465,18 +481,18 @@ impl MailBackend for ImapType {
         let (uid, mailbox_hash) = self.uid_store.hash_index.lock().unwrap()[&hash];
         Box::new(ImapOp::new(
             uid,
-            self.mailboxes.read().unwrap()[&mailbox_hash]
+            self.uid_store.mailboxes.read().unwrap()[&mailbox_hash]
                 .imap_path()
                 .to_string(),
+            mailbox_hash,
             self.connection.clone(),
             self.uid_store.clone(),
-            self.tag_index.clone(),
         ))
     }
 
     fn save(&self, bytes: &[u8], mailbox: &str, flags: Option<Flag>) -> Result<()> {
         let path = {
-            let mailboxes = self.mailboxes.read().unwrap();
+            let mailboxes = self.uid_store.mailboxes.read().unwrap();
 
             let f_result = mailboxes
                 .values()
@@ -499,7 +515,7 @@ impl MailBackend for ImapType {
                 )))?
         };
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection)?;
+        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(5, 0)))?;
         let flags = flags.unwrap_or(Flag::empty());
         conn.send_command(
             format!(
@@ -513,7 +529,7 @@ impl MailBackend for ImapType {
         // wait for "+ Ready for literal data" reply
         conn.wait_for_continuation_request()?;
         conn.send_literal(bytes)?;
-        conn.read_response(&mut response)?;
+        conn.read_response(&mut response, RequiredResponses::empty())?;
         Ok(())
     }
 
@@ -527,7 +543,7 @@ impl MailBackend for ImapType {
 
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         if *self.can_create_flags.lock().unwrap() {
-            Some(self.tag_index.clone())
+            Some(self.uid_store.tag_index.clone())
         } else {
             None
         }
@@ -551,7 +567,7 @@ impl MailBackend for ImapType {
          * decision is unpleasant for you.
          */
 
-        let mut mailboxes = self.mailboxes.write().unwrap();
+        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
         for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
             if path.starts_with(&root_mailbox.name) {
                 debug!("path starts with {:?}", &root_mailbox);
@@ -572,12 +588,12 @@ impl MailBackend for ImapType {
 
         let mut response = String::with_capacity(8 * 1024);
         {
-            let mut conn_lck = try_lock(&self.connection)?;
+            let mut conn_lck = try_lock(&self.connection, None)?;
 
             conn_lck.send_command(format!("CREATE \"{}\"", path,).as_bytes())?;
-            conn_lck.read_response(&mut response)?;
+            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
             conn_lck.send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())?;
-            conn_lck.read_response(&mut response)?;
+            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
         }
         let ret: Result<()> = ImapResponse::from(&response).into();
         ret?;
@@ -591,42 +607,25 @@ impl MailBackend for ImapType {
         &mut self,
         mailbox_hash: MailboxHash,
     ) -> Result<HashMap<MailboxHash, Mailbox>> {
-        let mut mailboxes = self.mailboxes.write().unwrap();
+        let mailboxes = self.uid_store.mailboxes.read().unwrap();
         let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.delete_mailbox {
             return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
         }
         let mut response = String::with_capacity(8 * 1024);
         {
-            let mut conn_lck = try_lock(&self.connection)?;
-            if !mailboxes[&mailbox_hash].no_select {
+            let mut conn_lck = try_lock(&self.connection, None)?;
+            if !mailboxes[&mailbox_hash].no_select && conn_lck.current_mailbox == Some(mailbox_hash)
+            {
                 /* make sure mailbox is not selected before it gets deleted, otherwise
                  * connection gets dropped by server */
-                if conn_lck
-                    .capabilities
-                    .iter()
-                    .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
-                {
-                    conn_lck.send_command(
-                        format!("UNSELECT \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
-                    )?;
-                    conn_lck.read_response(&mut response)?;
-                } else {
-                    conn_lck.send_command(
-                        format!("SELECT \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
-                    )?;
-                    conn_lck.read_response(&mut response)?;
-                    conn_lck.send_command(
-                        format!("EXAMINE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
-                    )?;
-                    conn_lck.read_response(&mut response)?;
-                }
+                conn_lck.unselect()?;
             }
             if mailboxes[&mailbox_hash].is_subscribed() {
                 conn_lck.send_command(
                     format!("UNSUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
                 )?;
-                conn_lck.read_response(&mut response)?;
+                conn_lck.read_response(&mut response, RequiredResponses::empty())?;
             }
 
             conn_lck.send_command(
@@ -636,24 +635,25 @@ impl MailBackend for ImapType {
                 ))
                 .as_bytes(),
             )?;
-            conn_lck.read_response(&mut response)?;
+            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
         }
         let ret: Result<()> = ImapResponse::from(&response).into();
         ret?;
+        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
         mailboxes.clear();
         drop(mailboxes);
         self.mailboxes().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
     }
 
     fn set_mailbox_subscription(&mut self, mailbox_hash: MailboxHash, new_val: bool) -> Result<()> {
-        let mut mailboxes = self.mailboxes.write().unwrap();
+        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
         if mailboxes[&mailbox_hash].is_subscribed() == new_val {
             return Ok(());
         }
 
         let mut response = String::with_capacity(8 * 1024);
         {
-            let mut conn_lck = try_lock(&self.connection)?;
+            let mut conn_lck = try_lock(&self.connection, None)?;
             if new_val {
                 conn_lck.send_command(
                     format!("SUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
@@ -663,7 +663,7 @@ impl MailBackend for ImapType {
                     format!("UNSUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
                 )?;
             }
-            conn_lck.read_response(&mut response)?;
+            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
         }
 
         let ret: Result<()> = ImapResponse::from(&response).into();
@@ -680,7 +680,7 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
         mut new_path: String,
     ) -> Result<Mailbox> {
-        let mut mailboxes = self.mailboxes.write().unwrap();
+        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
         let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.delete_mailbox {
             return Err(MeliError::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
@@ -693,7 +693,7 @@ impl MailBackend for ImapType {
             );
         }
         {
-            let mut conn_lck = try_lock(&self.connection)?;
+            let mut conn_lck = try_lock(&self.connection, None)?;
             conn_lck.send_command(
                 debug!(format!(
                     "RENAME \"{}\" \"{}\"",
@@ -702,7 +702,7 @@ impl MailBackend for ImapType {
                 ))
                 .as_bytes(),
             )?;
-            conn_lck.read_response(&mut response)?;
+            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
         }
         let new_hash = get_path_hash!(new_path.as_str());
         let ret: Result<()> = ImapResponse::from(&response).into();
@@ -711,7 +711,7 @@ impl MailBackend for ImapType {
         drop(mailboxes);
         self.mailboxes().map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
         Ok(BackendMailbox::clone(
-            &self.mailboxes.read().unwrap()[&new_hash],
+            &self.uid_store.mailboxes.read().unwrap()[&new_hash],
         ))
     }
 
@@ -720,7 +720,7 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
     ) -> Result<()> {
-        let mailboxes = self.mailboxes.write().unwrap();
+        let mailboxes = self.uid_store.mailboxes.write().unwrap();
         let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.change_permissions {
             return Err(MeliError::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
@@ -829,15 +829,11 @@ impl MailBackend for ImapType {
         let mut query_str = String::new();
         rec(&query, &mut query_str);
 
-        let mailboxes_lck = self.mailboxes.read()?;
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection)?;
-        conn.send_command(
-            format!("EXAMINE \"{}\"", mailboxes_lck[&mailbox_hash].imap_path()).as_bytes(),
-        )?;
-        conn.read_response(&mut response)?;
+        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
+        conn.examine_mailbox(mailbox_hash, &mut response)?;
         conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str).as_bytes())?;
-        conn.read_response(&mut response)?;
+        conn.read_response(&mut response, RequiredResponses::SEARCH)?;
         debug!(&response);
 
         let mut lines = response.lines();
@@ -901,11 +897,6 @@ impl ImapType {
             danger_accept_invalid_certs,
             protocol: ImapProtocol::IMAP,
         };
-        let online = Arc::new(Mutex::new((
-            Instant::now(),
-            Err(MeliError::new("Account is uninitialised.")),
-        )));
-        let connection = ImapConnection::new_connection(&server_conf, online.clone());
         let account_hash = {
             let mut hasher = DefaultHasher::new();
             hasher.write(s.name.as_bytes());
@@ -915,27 +906,26 @@ impl ImapType {
             account_hash,
             ..UIDStore::default()
         });
+        let connection = ImapConnection::new_connection(&server_conf, uid_store.clone());
 
         Ok(Box::new(ImapType {
             account_name: s.name().to_string(),
-            online,
             server_conf,
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
 
             can_create_flags: Arc::new(Mutex::new(false)),
-            tag_index: Arc::new(RwLock::new(Default::default())),
-            mailboxes: Arc::new(RwLock::new(Default::default())),
             connection: Arc::new(Mutex::new(connection)),
             uid_store,
         }))
     }
 
     pub fn shell(&mut self) {
-        let mut conn = ImapConnection::new_connection(&self.server_conf, self.online.clone());
+        let mut conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
         conn.connect().unwrap();
         let mut res = String::with_capacity(8 * 1024);
         conn.send_command(b"NOOP").unwrap();
-        conn.read_response(&mut res).unwrap();
+        conn.read_response(&mut res, RequiredResponses::empty())
+            .unwrap();
 
         let mut input = String::new();
         loop {
@@ -968,9 +958,9 @@ impl ImapType {
     ) -> Result<HashMap<MailboxHash, ImapMailbox>> {
         let mut mailboxes: HashMap<MailboxHash, ImapMailbox> = Default::default();
         let mut res = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&connection)?;
+        let mut conn = try_lock(&connection, Some(std::time::Duration::new(2, 0)))?;
         conn.send_command(b"LIST \"\" \"*\"")?;
-        conn.read_response(&mut res)?;
+        conn.read_response(&mut res, RequiredResponses::LIST_REQUIRED)?;
         debug!("out: {}", &res);
         let mut lines = res.lines();
         /* Remove "M__ OK .." line */
@@ -1010,7 +1000,7 @@ impl ImapType {
         }
         mailboxes.retain(|_, v| v.hash != 0);
         conn.send_command(b"LSUB \"\" \"*\"")?;
-        conn.read_response(&mut res)?;
+        conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)?;
         debug!("out: {}", &res);
         let mut lines = res.lines();
         /* Remove "M__ OK .." line */
@@ -1033,7 +1023,7 @@ impl ImapType {
     }
 
     pub fn capabilities(&self) -> Vec<String> {
-        try_lock(&self.connection)
+        try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))
             .map(|c| {
                 c.capabilities
                     .iter()

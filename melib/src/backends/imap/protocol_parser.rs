@@ -25,6 +25,98 @@ use crate::get_path_hash;
 use nom::{digit, is_digit, rest, IResult};
 use std::str::FromStr;
 
+bitflags! {
+    #[derive(Default, Serialize, Deserialize)]
+    pub struct RequiredResponses: u64 {
+        const CAPABILITY          = 0b0000_0000_0000_0001;
+        const BYE                 = 0b0000_0000_0000_0010;
+        const FLAGS               = 0b0000_0000_0000_0100;
+        const EXISTS              = 0b0000_0000_0000_1000;
+        const RECENT              = 0b0000_0000_0001_0000;
+        const UNSEEN              = 0b0000_0000_0010_0000;
+        const PERMANENTFLAGS      = 0b0000_0000_0100_0000;
+        const UIDNEXT             = 0b0000_0000_1000_0000;
+        const UIDVALIDITY         = 0b0000_0001_0000_0000;
+        const LIST                = 0b0000_0010_0000_0000;
+        const LSUB                = 0b0000_0100_0000_0000;
+        const STATUS              = 0b0000_1000_0000_0000;
+        const EXPUNGE             = 0b0001_0000_0000_0000;
+        const SEARCH              = 0b0010_0000_0000_0000;
+        const FETCH               = 0b0100_0000_0000_0000;
+        const CAPABILITY_REQUIRED = Self::CAPABILITY.bits;
+        const LOGOUT_REQUIRED     = Self::BYE.bits;
+        const SELECT_REQUIRED     = Self::FLAGS.bits | Self::EXISTS.bits | Self::RECENT.bits | Self::UNSEEN.bits | Self::PERMANENTFLAGS.bits | Self::UIDNEXT.bits | Self::UIDVALIDITY.bits;
+        const EXAMINE_REQUIRED    = Self::FLAGS.bits | Self::EXISTS.bits | Self::RECENT.bits | Self::UNSEEN.bits | Self::PERMANENTFLAGS.bits | Self::UIDNEXT.bits | Self::UIDVALIDITY.bits;
+        const LIST_REQUIRED       = Self::LIST.bits;
+        const LSUB_REQUIRED       = Self::LSUB.bits;
+        const FETCH_REQUIRED      = Self::FETCH.bits;
+        const STORE_REQUIRED      = Self::FETCH.bits;
+    }
+}
+
+impl RequiredResponses {
+    pub fn check(&self, line: &str) -> bool {
+        if !line.starts_with("* ") {
+            return false;
+        }
+        let line = &line["* ".len()..];
+        let mut ret = false;
+        if self.intersects(RequiredResponses::CAPABILITY) {
+            ret |= line.starts_with("CAPABILITY");
+        }
+        if self.intersects(RequiredResponses::BYE) {
+            ret |= line.starts_with("BYE");
+        }
+        if self.intersects(RequiredResponses::FLAGS) {
+            ret |= line.starts_with("FLAGS");
+        }
+        if self.intersects(RequiredResponses::EXISTS) {
+            ret |= line.ends_with("EXISTS\r\n");
+        }
+        if self.intersects(RequiredResponses::RECENT) {
+            ret |= line.ends_with("RECENT\r\n");
+        }
+        if self.intersects(RequiredResponses::UNSEEN) {
+            ret |= line.starts_with("UNSEEN");
+        }
+        if self.intersects(RequiredResponses::PERMANENTFLAGS) {
+            ret |= line.starts_with("PERMANENTFLAGS");
+        }
+        if self.intersects(RequiredResponses::UIDNEXT) {
+            ret |= line.starts_with("UIDNEXT");
+        }
+        if self.intersects(RequiredResponses::UIDVALIDITY) {
+            ret |= line.starts_with("UIDVALIDITY");
+        }
+        if self.intersects(RequiredResponses::LIST) {
+            ret |= line.starts_with("LIST");
+        }
+        if self.intersects(RequiredResponses::LSUB) {
+            ret |= line.starts_with("LSUB");
+        }
+        if self.intersects(RequiredResponses::STATUS) {
+            ret |= line.starts_with("STATUS");
+        }
+        if self.intersects(RequiredResponses::EXPUNGE) {
+            ret |= line.ends_with("EXPUNGE\r\n");
+        }
+        if self.intersects(RequiredResponses::SEARCH) {
+            ret |= line.starts_with("SEARCH");
+        }
+        if self.intersects(RequiredResponses::FETCH) {
+            let mut ptr = 0;
+            for i in 0..line.len() {
+                if !line.as_bytes()[i].is_ascii_digit() {
+                    ptr = i;
+                    break;
+                }
+            }
+            ret |= line[ptr..].trim_start().starts_with("FETCH");
+        }
+        ret
+    }
+}
+
 #[derive(Debug)]
 pub struct Alert(String);
 pub type ImapParseResult<'a, T> = Result<(&'a str, T, Option<Alert>)>;
@@ -649,6 +741,9 @@ pub enum UntaggedResponse {
     /// ```
     Recent(usize),
     Fetch(usize, (Flag, Vec<String>)),
+    Bye {
+        reason: String,
+    },
 }
 
 named!(
