@@ -31,78 +31,17 @@ use melib::{
     email::{Envelope, EnvelopeHash},
     log,
     thread::{SortField, SortOrder},
+    sqlite3::{self as melib_sqlite3, rusqlite::{self, params}},
     MeliError, Result, ERROR,
 };
-use rusqlite::{params, Connection};
+
 use smallvec::SmallVec;
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-pub fn db_path() -> Result<PathBuf> {
-    let data_dir =
-        xdg::BaseDirectories::with_prefix("meli").map_err(|e| MeliError::new(e.to_string()))?;
-    Ok(data_dir
-        .place_data_file("index.db")
-        .map_err(|e| MeliError::new(e.to_string()))?)
-}
-
-//#[inline(always)]
-//fn fts5_bareword(w: &str) -> Cow<str> {
-//    if w == "AND" || w == "OR" || w == "NOT" {
-//        Cow::from(w)
-//    } else {
-//        if !w.is_ascii() {
-//            Cow::from(format!("\"{}\"", escape_double_quote(w)))
-//        } else {
-//            for &b in w.as_bytes() {
-//                if !(b > 0x2f && b < 0x3a)
-//                    || !(b > 0x40 && b < 0x5b)
-//                    || !(b > 0x60 && b < 0x7b)
-//                    || b != 0x60
-//                    || b != 26
-//                {
-//                    return Cow::from(format!("\"{}\"", escape_double_quote(w)));
-//                }
-//            }
-//            Cow::from(w)
-//        }
-//    }
-//}
-//
-pub fn open_db() -> Result<Connection> {
-    let db_path = db_path()?;
-    if !db_path.exists() {
-        return Err(MeliError::new(
-            "Database hasn't been initialised. Run `reindex` command",
-        ));
-    }
-    Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))
-}
-
-pub fn open_or_create_db() -> Result<Connection> {
-    let db_path = db_path()?;
-    let mut set_mode = false;
-    if !db_path.exists() {
-        log(
-            format!("Creating index database in {}", db_path.display()),
-            melib::INFO,
-        );
-        set_mode = true;
-    }
-    let conn = Connection::open(&db_path).map_err(|e| MeliError::new(e.to_string()))?;
-    if set_mode {
-        use std::os::unix::fs::PermissionsExt;
-        let file = std::fs::File::open(&db_path)?;
-        let metadata = file.metadata()?;
-        let mut permissions = metadata.permissions();
-
-        permissions.set_mode(0o600); // Read/write for owner only.
-        file.set_permissions(permissions)?;
-    }
-
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS envelopes (
+const DB_NAME: &'static str = "index.db";
+const INIT_SCRIPT: &'static str = "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,
                     account_id       INTEGER REFERENCES accounts ON UPDATE CASCADE,
                     hash             BLOB NOT NULL UNIQUE,
@@ -164,19 +103,49 @@ END;
 CREATE TRIGGER IF NOT EXISTS envelopes_au AFTER UPDATE ON envelopes BEGIN
   INSERT INTO fts(fts, rowid, subject, body_text) VALUES('delete', old.id, old.subject, old.body_text);
   INSERT INTO fts(rowid, subject, body_text) VALUES (new.id, new.subject, new.body_text);
-END; ",
-    )
-    .map_err(|e| MeliError::new(e.to_string()))?;
+END; ";
 
-    Ok(conn)
+pub fn db_path() -> Result<PathBuf> {
+    melib_sqlite3::db_path(DB_NAME)
 }
 
+//#[inline(always)]
+//fn fts5_bareword(w: &str) -> Cow<str> {
+//    if w == "AND" || w == "OR" || w == "NOT" {
+//        Cow::from(w)
+//    } else {
+//        if !w.is_ascii() {
+//            Cow::from(format!("\"{}\"", escape_double_quote(w)))
+//        } else {
+//            for &b in w.as_bytes() {
+//                if !(b > 0x2f && b < 0x3a)
+//                    || !(b > 0x40 && b < 0x5b)
+//                    || !(b > 0x60 && b < 0x7b)
+//                    || b != 0x60
+//                    || b != 26
+//                {
+//                    return Cow::from(format!("\"{}\"", escape_double_quote(w)));
+//                }
+//            }
+//            Cow::from(w)
+//        }
+//    }
+//}
+//
+//
 pub fn insert(
     envelope: &Envelope,
     backend: &Arc<RwLock<Box<dyn MailBackend>>>,
     acc_name: &str,
 ) -> Result<()> {
-    let conn = open_db()?;
+    let db_path = melib_sqlite3::db_path(DB_NAME)?;
+    if !db_path.exists() {
+        return Err(MeliError::new(
+            "Database hasn't been initialised. Run `reindex` command",
+        ));
+    }
+
+    let conn = melib_sqlite3::open_db(db_path)?;
     let backend_lck = backend.read().unwrap();
     let op = backend_lck.operation(envelope.hash());
     let body = match envelope.body(op) {
@@ -257,7 +226,14 @@ pub fn insert(
 }
 
 pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
-    let conn = open_db()?;
+    let db_path = melib_sqlite3::db_path(DB_NAME)?;
+    if !db_path.exists() {
+        return Err(MeliError::new(
+            "Database hasn't been initialised. Run `reindex` command",
+        ));
+    }
+
+    let conn = melib_sqlite3::open_db(db_path)?;
     if let Err(err) = conn
         .execute(
             "DELETE FROM envelopes WHERE hash = ?",
@@ -310,7 +286,7 @@ pub fn index(context: &mut crate::state::Context, account_name: &str) -> Result<
                 account.backend.clone(),
             )
         };
-    let conn = open_or_create_db()?;
+    let conn = melib_sqlite3::open_or_create_db(DB_NAME, Some(INIT_SCRIPT))?;
     let work_context = context.work_controller().get_context();
     let env_hashes = acc_mutex
         .read()
@@ -421,7 +397,14 @@ pub fn search(
     term: &str,
     (sort_field, sort_order): (SortField, SortOrder),
 ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
-    let conn = open_db()?;
+    let db_path = melib_sqlite3::db_path(DB_NAME)?;
+    if !db_path.exists() {
+        return Err(MeliError::new(
+            "Database hasn't been initialised. Run `reindex` command",
+        ));
+    }
+
+    let conn = melib_sqlite3::open_db(db_path)?;
 
     let sort_field = match debug!(sort_field) {
         SortField::Subject => "subject",

@@ -44,7 +44,6 @@ bincode = "1.2.0"
 uuid = { version = "0.8.1", features = ["serde", "v4"] }
 unicode-segmentation = "1.2.1" # >:c
 libc = {version = "0.2.59", features = ["extra_traits",]}
-rusqlite = {version = "0.20.0", optional =true }
 rmp = "^0.8"
 rmpv = { version = "^0.4.2", features=["with-serde",] }
 rmp-serde = "^0.14.0"
@@ -64,7 +63,7 @@ members = ["melib", "testing", ]
 default = ["sqlite3", "notmuch"]
 notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
-sqlite3 = ["rusqlite"]
+sqlite3 = ["melib/sqlite3"]
 cli-docs = []
 
 # Print tracing logs as meli runs in stderr

@@ -116,6 +116,9 @@ pub use crate::thread::*;
 pub mod parsec;
 pub mod search;
 
+#[cfg(feature = "sqlite3")]
+pub mod sqlite3;
+
 #[macro_use]
 extern crate serde_derive;
 /* parser */
