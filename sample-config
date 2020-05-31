@@ -61,7 +61,7 @@
 #  "Sent" = {  query="from:username@server.tld from:username2@server.tld", subscribe = true }
 #
 #[pager]
-#filter = "/usr/bin/pygmentize"
+#filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"
 #pager_context = 0 # default, optional
 #headers_sticky = true # default, optional
 

@@ -1842,7 +1842,8 @@ pub mod ansi {
     use super::{Attr, Cell, CellBuffer, Color};
     /// Create a `CellBuffer` from a string slice containing ANSI escape codes.
     pub fn ansi_to_cellbuffer(s: &str) -> Option<CellBuffer> {
-        let mut buf: Vec<Cell> = Vec::with_capacity(2048);
+        let mut bufs: Vec<Vec<Cell>> = Vec::with_capacity(2048);
+        let mut row: Vec<Cell> = Vec::with_capacity(2048);
 
         enum State {
             Start,
@@ -1853,7 +1854,7 @@ pub mod ansi {
         use State::*;
 
         let mut rows = 0;
-        let mut cols = 0;
+        let mut max_cols = 0;
         let mut current_fg = Color::Default;
         let mut current_bg = Color::Default;
         let mut current_attrs = Attr::DEFAULT;
@@ -1863,7 +1864,11 @@ pub mod ansi {
             cur_cell = Cell::default();
             state = State::Start;
             let mut chars = l.chars().peekable();
-            cols = 0;
+            if rows > 0 {
+                max_cols = std::cmp::max(row.len(), max_cols);
+                bufs.push(row);
+                row = Vec::with_capacity(2048);
+            }
             rows += 1;
             'line_loop: loop {
                 let c = chars.next();
@@ -1882,10 +1887,8 @@ pub mod ansi {
                         cur_cell.set_fg(current_fg);
                         cur_cell.set_bg(current_bg);
                         cur_cell.set_attrs(current_attrs);
-                        buf.push(cur_cell);
+                        row.push(cur_cell);
                         cur_cell = Cell::default();
-
-                        cols += 1;
                     }
                     (Csi, 'm') => {
                         /* Reset styles */
@@ -1894,38 +1897,52 @@ pub mod ansi {
                         current_attrs = Attr::DEFAULT;
                         state = Start;
                     }
-                    (Csi, '0'..='8') if chars.peek() == Some(&'m') => {
-                        match chars.next() {
-                            Some('0') => {
+                    (Csi, '0') if chars.peek() == Some(&'0') => {
+                        current_attrs = Attr::DEFAULT;
+                        chars.next();
+                        let next = chars.next();
+                        if next == Some('m') {
+                            state = Start;
+                        } else if next != Some(';') {
+                            return None;
+                        }
+                    }
+                    (Csi, c @ '0'..='8') if chars.peek() == Some(&'m') => {
+                        chars.next();
+                        state = Start;
+                        match c {
+                            '0' => {
                                 //Reset all attributes
                                 current_fg = Color::Default;
                                 current_bg = Color::Default;
                                 current_attrs = Attr::DEFAULT;
-                                state = Start;
                             }
-                            Some('1') => {
+                            '1' => {
                                 current_attrs.set(Attr::BOLD, true);
                             }
-                            Some('2') => {
+                            '2' => {
                                 current_attrs.set(Attr::DIM, true);
                             }
-                            Some('3') => {
+                            '3' => {
                                 current_attrs.set(Attr::ITALICS, true);
                             }
-                            Some('4') => {
+                            '4' => {
                                 current_attrs.set(Attr::UNDERLINE, true);
                             }
-                            Some('5') => {
+                            '5' => {
                                 current_attrs.set(Attr::BLINK, true);
                             }
-                            Some('7') => {
+                            '7' => {
                                 current_attrs.set(Attr::REVERSE, true);
                             }
-                            Some('8') => {
+                            '8' => {
                                 current_attrs.set(Attr::HIDDEN, true);
                             }
                             _ => return None,
                         }
+                    }
+                    (Csi, '0') => {
+                        continue;
                     }
                     (Csi, '2') => {
                         match (chars.next(), chars.next()) {
@@ -1961,7 +1978,19 @@ pub mod ansi {
                                     /* Next arguments are 5;n or 2;r;g;b */
                                     continue;
                                 }
+                                chars.next();
                                 return None;
+                            }
+                            Some('9') => {
+                                current_fg = Color::Default;
+                                /* default foreground color */
+                                let next = chars.next();
+                                if next == Some('m') {
+                                    state = Start;
+                                } else if next != Some(';') {
+                                    return None;
+                                }
+                                continue;
                             }
                             Some(c) if c >= '0' && c < '8' => {
                                 current_fg = Color::from_byte(c as u8 - 0x30);
@@ -1984,6 +2013,17 @@ pub mod ansi {
                                 }
                                 return None;
                             }
+                            Some('9') => {
+                                /* default background color */
+                                current_bg = Color::Default;
+                                let next = chars.next();
+                                if next == Some('m') {
+                                    state = Start;
+                                } else if next != Some(';') {
+                                    return None;
+                                }
+                                continue;
+                            }
                             Some(c) if c >= '0' && c < '8' => {
                                 current_bg = Color::from_byte(c as u8 - 0x30);
                                 if chars.next() != Some('m') {
@@ -1993,6 +2033,44 @@ pub mod ansi {
                             }
                             _ => return None,
                         }
+                    }
+                    (Csi, '9') => {
+                        match chars.next() {
+                            Some('0') => current_fg = Color::Black,
+                            Some('1') => current_fg = Color::Red,
+                            Some('2') => current_fg = Color::Green,
+                            Some('3') => current_fg = Color::Yellow,
+                            Some('4') => current_fg = Color::Blue,
+                            Some('5') => current_fg = Color::Magenta,
+                            Some('6') => current_fg = Color::Cyan,
+                            Some('7') => current_fg = Color::White,
+                            _ => {},
+                        }
+                        let next = chars.next();
+                        if next != Some('m') {
+                            //debug!(next);
+                        }
+                        state = Start;
+                    }
+                    (Csi, '1') if chars.peek() == Some(&'0') => {
+                        chars.next();
+                        match chars.next() {
+                            Some('0') => current_bg = Color::Black,
+                            Some('1') => current_bg = Color::Red,
+                            Some('2') => current_bg = Color::Green,
+                            Some('3') => current_bg = Color::Yellow,
+                            Some('4') => current_bg = Color::Blue,
+                            Some('5') => current_bg = Color::Magenta,
+                            Some('6') => current_bg = Color::Cyan,
+                            Some('7') => current_bg = Color::White,
+                            _ => {},
+                        }
+                        let next = chars.next();
+                        if next != Some('m') {
+                            //debug!(next);
+                        }
+
+                        state = Start;
                     }
                     (SetFg, '5') => {
                         if chars.next() != Some(';') {
@@ -2098,13 +2176,32 @@ pub mod ansi {
                 }
             }
         }
-        if buf.len() != rows * cols {
-            debug!("rows: {} cols: {}, buf.len() = {}", rows, cols, buf.len());
+        max_cols = std::cmp::max(row.len(), max_cols);
+        bufs.push(row);
+        let mut buf: Vec<Cell> = Vec::with_capacity(max_cols * bufs.len());
+        for l in bufs {
+            let row_len = l.len();
+            buf.extend(l.into_iter());
+            if row_len < max_cols {
+                for _ in row_len..max_cols {
+                    buf.push(Cell::default());
+                }
+            }
+        }
+
+        if buf.len() != rows * max_cols {
+            debug!(
+                "BUG: rows: {} cols: {} = {}, but buf.len() = {}",
+                rows,
+                max_cols,
+                rows * max_cols,
+                buf.len()
+            );
         }
         Some(CellBuffer {
             buf,
             rows,
-            cols,
+            cols: max_cols,
             growable: false,
             ascii_drawing: false,
         })

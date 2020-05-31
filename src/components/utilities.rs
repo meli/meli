@@ -383,10 +383,11 @@ impl Pager {
             width = Some(pager_minimum_width);
         }
 
-        if let Some(bin) = pager_filter {
+        if let Some(content) = pager_filter.and_then(|bin| {
             use std::io::Write;
             use std::process::{Command, Stdio};
-            let mut filter_child = Command::new(bin)
+            let mut filter_child = Command::new("sh")
+                .args(&["-c", bin])
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .spawn()
@@ -405,8 +406,14 @@ impl Pager {
                     .stdout,
             )
             .to_string();
+            if text.is_empty() {
+                None
+            } else {
+                crate::terminal::ansi::ansi_to_cellbuffer(&text)
+            }
+        }) {
+            return Pager::from_buf(content, cursor_pos);
         }
-
         let content = {
             let lines: Vec<String> = if let Some(width) = width {
                 text.split_lines_reflow(reflow, Some(width.saturating_sub(2)))
@@ -482,6 +489,7 @@ impl Pager {
             width,
             dirty: true,
             content,
+            initialised: true,
             id: ComponentId::new_v4(),
             ..Default::default()
         }
@@ -524,7 +532,7 @@ impl Component for Pager {
             return;
         }
 
-        if !self.initialised {
+        if !self.initialised && !self.text.is_empty() {
             let mut width = width!(area);
             if width < self.minimum_width {
                 width = self.minimum_width;
