@@ -199,6 +199,12 @@ const DEFAULT_KEYS: &'static [&'static str] = &[
     "mail.listing.conversations.selected",
     "mail.view.headers",
     "mail.view.body",
+    "mail.view.thread.indentation.a",
+    "mail.view.thread.indentation.b",
+    "mail.view.thread.indentation.c",
+    "mail.view.thread.indentation.d",
+    "mail.view.thread.indentation.e",
+    "mail.view.thread.indentation.f",
     "mail.listing.attachment_flag",
     "mail.listing.thread_snooze_flag",
     "mail.listing.tag_default",
@@ -857,6 +863,12 @@ impl Default for Theme {
             }
         );
         add!("mail.view.body");
+        add!("mail.view.thread.indentation.a", light = { bg: Color::Byte(69) }, dark = { bg: Color::Byte(69) }); // CornflowerBlue
+        add!("mail.view.thread.indentation.b", light = { bg: Color::Byte(196) }, dark = { bg: Color::Byte(196) }); // Red1
+        add!("mail.view.thread.indentation.c", light = { bg: Color::Byte(175) }, dark = { bg: Color::Byte(175) }); // Pink3
+        add!("mail.view.thread.indentation.d", light = { bg: Color::Byte(220) }, dark = { bg: Color::Byte(220) }); // Gold1
+        add!("mail.view.thread.indentation.e", light = { bg: Color::Byte(172) }, dark = { bg: Color::Byte(172) }); // Orange3
+        add!("mail.view.thread.indentation.f", light = { bg: Color::Byte(072) }, dark = { bg: Color::Byte(072) }); // CadetBlue
 
         add!(
             "mail.listing.attachment_flag",

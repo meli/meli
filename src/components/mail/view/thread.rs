@@ -23,15 +23,6 @@ use super::*;
 use crate::components::utilities::PageMovement;
 use std::cmp;
 
-const INDENTATION_COLORS: &'static [u8] = &[
-    69,  // CornflowerBlue
-    196, // Red1
-    175, // Pink3
-    220, // Gold1
-    172, // Orange3
-    072, // CadetBlue
-];
-
 #[derive(Debug, Clone)]
 struct ThreadEntry {
     index: (usize, ThreadNodeHash, usize),
@@ -58,6 +49,7 @@ pub struct ThreadView {
     show_thread: bool,
     entries: Vec<ThreadEntry>,
     visible_entries: Vec<Vec<usize>>,
+    indentation_colors: [ThemeAttribute; 6],
 
     movement: Option<PageMovement>,
     dirty: bool,
@@ -91,6 +83,14 @@ impl ThreadView {
             new_cursor_pos: 0,
             dirty: true,
             id: ComponentId::new_v4(),
+            indentation_colors: [
+                crate::conf::value(context, "mail.view.thread.indentation.a"),
+                crate::conf::value(context, "mail.view.thread.indentation.b"),
+                crate::conf::value(context, "mail.view.thread.indentation.c"),
+                crate::conf::value(context, "mail.view.thread.indentation.d"),
+                crate::conf::value(context, "mail.view.thread.indentation.e"),
+                crate::conf::value(context, "mail.view.thread.indentation.f"),
+            ],
             ..Default::default()
         };
         view.initiate(expanded_hash, context);
@@ -306,12 +306,13 @@ impl ThreadView {
                 /* Box character drawing stuff */
                 let mut x = 0;
                 for i in 0..e.index.0 {
-                    let color = INDENTATION_COLORS[(i).wrapping_rem(INDENTATION_COLORS.len())];
+                    let att =
+                        self.indentation_colors[(i).wrapping_rem(self.indentation_colors.len())];
                     change_colors(
                         &mut content,
                         ((x, 2 * y), (x + 3, 2 * y + 1)),
-                        Color::Default,
-                        Color::Byte(color),
+                        att.fg,
+                        att.bg,
                     );
                     x += 4;
                 }
