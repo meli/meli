@@ -29,6 +29,8 @@ use crate::state::Context;
 use melib::text_processing::wcwidth;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use smallvec::SmallVec;
+use std::collections::{HashMap, HashSet};
 use std::convert::From;
 use std::fmt;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
@@ -63,6 +65,8 @@ pub struct CellBuffer {
     pub ascii_drawing: bool,
     /// If printing to this buffer and we run out of space, expand it.
     growable: bool,
+    tag_table: HashMap<u64, FormatTag>,
+    tag_associations: SmallVec<[(u64, (usize, usize)); 128]>,
 }
 
 impl fmt::Debug for CellBuffer {
@@ -97,6 +101,8 @@ impl CellBuffer {
             buf: vec![cell; cols * rows],
             growable: false,
             ascii_drawing: false,
+            tag_table: Default::default(),
+            tag_associations: SmallVec::new(),
         }
     }
 
@@ -107,6 +113,8 @@ impl CellBuffer {
             buf: vec![cell; cols * rows],
             growable: false,
             ascii_drawing: context.settings.terminal.ascii_drawing,
+            tag_table: Default::default(),
+            tag_associations: SmallVec::new(),
         }
     }
 
@@ -369,6 +377,50 @@ impl CellBuffer {
             }
         } else {
             RowIterator { row, col: 0..0 }
+        }
+    }
+
+    pub fn tag_associations(&self) -> SmallVec<[(usize, u64, bool); 128]> {
+        let mut ret: SmallVec<[(usize, u64, bool); 128]> = self.tag_associations.iter().fold(
+            SmallVec::new(),
+            |mut acc, (tag_hash, (start, end))| {
+                acc.push((*start, *tag_hash, true));
+                acc.push((*end, *tag_hash, false));
+                acc
+            },
+        );
+        ret.sort_by_key(|el| el.0);
+        ret
+    }
+
+    pub fn tag_table(&self) -> &HashMap<u64, FormatTag> {
+        &self.tag_table
+    }
+
+    pub fn tag_table_mut(&mut self) -> &mut HashMap<u64, FormatTag> {
+        &mut self.tag_table
+    }
+
+    pub fn insert_tag(&mut self, tag: FormatTag) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        tag.hash(&mut hasher);
+        let hash = hasher.finish();
+        self.tag_table.insert(hash, tag);
+        hash
+    }
+
+    pub fn set_tag(&mut self, tag: u64, start: (usize, usize), end: (usize, usize)) {
+        let start = self
+            .pos_to_index(start.0, start.1)
+            .unwrap_or(self.buf.len().saturating_sub(1));
+        let end = self
+            .pos_to_index(end.0, end.1)
+            .unwrap_or(self.buf.len().saturating_sub(1));
+        if start != end {
+            self.tag_associations.push((tag, (start, end)));
         }
     }
 }
@@ -662,7 +714,7 @@ impl Default for Cell {
 /// // Basic colors are also 8-bit colors (but not vice-versa).
 /// assert_eq!(red.as_byte(), fancy.as_byte())
 /// ```
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Hash, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Color {
     Black,
     Red,
@@ -1647,9 +1699,27 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
         return upper_left!(dest);
     }
 
+    let tag_associations = grid_src.tag_associations();
+    let start_idx = grid_src.pos_to_index(src_x, src_y).unwrap();
+    let mut tag_offset: usize = tag_associations
+        .binary_search_by(|probe| probe.0.cmp(&start_idx))
+        .unwrap_or_else(|i| i);
+    let mut stack: HashSet<u64> = HashSet::default();
     for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
         'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
+            let idx = grid_src.pos_to_index(src_x, src_y).unwrap();
+            while tag_offset < tag_associations.len() && tag_associations[tag_offset].0 <= idx {
+                if tag_associations[tag_offset].2 {
+                    stack.insert(tag_associations[tag_offset].1);
+                } else {
+                    stack.remove(&tag_associations[tag_offset].1);
+                }
+                tag_offset += 1;
+            }
             grid_dest[(x, y)] = grid_src[(src_x, src_y)];
+            for t in &stack {
+                grid_dest[(x, y)].attrs |= grid_src.tag_table()[&t].attrs;
+            }
             if src_x >= get_x(bottom_right!(src)) {
                 break 'for_x;
             }
@@ -2204,6 +2274,8 @@ pub mod ansi {
             cols: max_cols,
             growable: false,
             ascii_drawing: false,
+            tag_table: Default::default(),
+            tag_associations: smallvec::SmallVec::new(),
         })
     }
 }
@@ -2716,4 +2788,12 @@ fn test_cellbuffer_search() {
         }
         println!("");
     }
+}
+
+#[derive(Debug, Default, Copy, Hash, Clone, PartialEq, Eq)]
+pub struct FormatTag {
+    pub fg: Color,
+    pub bg: Color,
+    pub attrs: Attr,
+    pub priority: u8,
 }
