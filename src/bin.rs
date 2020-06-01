@@ -241,7 +241,7 @@ fn run_app() -> Result<()> {
                 return Ok(());
             }
             "--print-default-theme" => {
-                print!("{}", conf::Theme::default().key_to_string("dark", false));
+                print!("{}", conf::Themes::default().key_to_string("dark", false));
                 return Ok(());
             }
             "--print-documentation" => {

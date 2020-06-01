@@ -22,7 +22,7 @@
 //! Settings for terminal display
 
 use super::deserializers::non_empty_string;
-use super::Theme;
+use super::Themes;
 use super::ToggleFlag;
 
 /// Settings for terminal display
@@ -31,7 +31,7 @@ use super::ToggleFlag;
 pub struct TerminalSettings {
     /// light, dark
     pub theme: String,
-    pub themes: Theme,
+    pub themes: Themes,
     pub ascii_drawing: bool,
     pub use_color: ToggleFlag,
     #[serde(deserialize_with = "non_empty_string")]
@@ -42,7 +42,7 @@ impl Default for TerminalSettings {
     fn default() -> Self {
         TerminalSettings {
             theme: "dark".to_string(),
-            themes: Theme::default(),
+            themes: Themes::default(),
             ascii_drawing: false,
             use_color: ToggleFlag::InternalVal(true),
             window_title: Some("meli".to_string()),

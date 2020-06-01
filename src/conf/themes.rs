@@ -325,13 +325,13 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Theme {
+pub struct Themes {
     pub light: HashMap<Cow<'static, str>, ThemeAttributeInner>,
     pub dark: HashMap<Cow<'static, str>, ThemeAttributeInner>,
     pub other_themes: HashMap<String, HashMap<Cow<'static, str>, ThemeAttributeInner>>,
 }
 
-impl<'de> Deserialize<'de> for Theme {
+impl<'de> Deserialize<'de> for Themes {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -355,7 +355,7 @@ impl<'de> Deserialize<'de> for Theme {
             attrs: Option<ThemeValue<Attr>>,
         }
 
-        let mut ret = Theme::default();
+        let mut ret = Themes::default();
         let mut s = <ThemeOptions>::deserialize(deserializer)?;
         for tk in s.other_themes.keys() {
             ret.other_themes.insert(tk.clone(), ret.dark.clone());
@@ -415,7 +415,7 @@ impl<'de> Deserialize<'de> for Theme {
     }
 }
 
-impl Theme {
+impl Themes {
     fn validate_keys(
         name: &str,
         theme: &HashMap<Cow<'static, str>, ThemeAttributeInner>,
@@ -484,10 +484,10 @@ impl Theme {
     }
     pub fn validate(&self) -> Result<()> {
         let hash_set: HashSet<&'static str> = DEFAULT_KEYS.into_iter().map(|k| *k).collect();
-        Theme::validate_keys("light", &self.light, &hash_set)?;
-        Theme::validate_keys("dark", &self.dark, &hash_set)?;
+        Themes::validate_keys("light", &self.light, &hash_set)?;
+        Themes::validate_keys("dark", &self.dark, &hash_set)?;
         for (name, t) in self.other_themes.iter() {
-            Theme::validate_keys(name, t, &hash_set)?;
+            Themes::validate_keys(name, t, &hash_set)?;
         }
         if let Err(err) = is_cyclic(&self.light) {
             return Err(MeliError::new(format!(
@@ -563,8 +563,8 @@ impl Theme {
     }
 }
 
-impl Default for Theme {
-    fn default() -> Theme {
+impl Default for Themes {
+    fn default() -> Themes {
         let mut light = HashMap::default();
         let mut dark = HashMap::default();
         let other_themes = HashMap::default();
@@ -906,7 +906,7 @@ impl Default for Theme {
 
         add!("pager.highlight_search", light = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD });
         add!("pager.highlight_search_current", light = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD });
-        Theme {
+        Themes {
             light,
             dark,
             other_themes,
@@ -914,7 +914,7 @@ impl Default for Theme {
     }
 }
 
-impl Serialize for Theme {
+impl Serialize for Themes {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,

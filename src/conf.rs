@@ -150,7 +150,7 @@ pub struct MailUIConf {
     #[serde(default)]
     pub tags: TagsSettingsOverride,
     #[serde(default)]
-    pub theme: Option<Theme>,
+    pub themes: Option<Themes>,
     #[serde(default)]
     pub pgp: PGPSettingsOverride,
 }
@@ -386,11 +386,11 @@ impl FileSettings {
             }
         }
 
-        let Theme {
+        let Themes {
             light: default_light,
             dark: default_dark,
             ..
-        } = Theme::default();
+        } = Themes::default();
         for (k, v) in default_light.into_iter() {
             if !s.terminal.themes.light.contains_key(&k) {
                 s.terminal.themes.light.insert(k, v);
