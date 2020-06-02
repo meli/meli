@@ -65,7 +65,7 @@ pub fn fg_color(context: &Context, key: &'static str) -> Color {
             .get(t)
             .unwrap_or(&context.settings.terminal.themes.dark),
     };
-    unlink_fg(theme, &Cow::from(key))
+    unlink_fg(theme, &ColorField::Fg, &Cow::from(key))
 }
 
 #[inline(always)]
@@ -81,7 +81,7 @@ pub fn bg_color(context: &Context, key: &'static str) -> Color {
             .get(t)
             .unwrap_or(&context.settings.terminal.themes.dark),
     };
-    unlink_bg(theme, &Cow::from(key))
+    unlink_bg(theme, &ColorField::Bg, &Cow::from(key))
 }
 
 #[inline(always)]
@@ -106,8 +106,8 @@ fn unlink<'k, 't: 'k>(
     key: &'k Cow<'static, str>,
 ) -> ThemeAttribute {
     ThemeAttribute {
-        fg: unlink_fg(theme, key),
-        bg: unlink_bg(theme, key),
+        fg: unlink_fg(theme, &ColorField::Fg, key),
+        bg: unlink_bg(theme, &ColorField::Bg, key),
         attrs: unlink_attrs(theme, key),
     }
 }
@@ -115,12 +115,25 @@ fn unlink<'k, 't: 'k>(
 #[inline(always)]
 fn unlink_fg<'k, 't: 'k>(
     theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    mut field: &'k ColorField,
     mut key: &'k Cow<'static, str>,
 ) -> Color {
     loop {
-        match &theme[key].fg {
-            ThemeValue::Link(ref new_key) => key = new_key,
-            ThemeValue::Value(val) => return *val,
+        match field {
+            ColorField::LikeSelf | ColorField::Fg => match &theme[key].fg {
+                ThemeValue::Link(ref new_key, ref new_field) => {
+                    key = new_key;
+                    field = new_field
+                }
+                ThemeValue::Value(val) => return *val,
+            },
+            ColorField::Bg => match &theme[key].bg {
+                ThemeValue::Link(ref new_key, ref new_field) => {
+                    key = new_key;
+                    field = new_field
+                }
+                ThemeValue::Value(val) => return *val,
+            },
         }
     }
 }
@@ -128,12 +141,25 @@ fn unlink_fg<'k, 't: 'k>(
 #[inline(always)]
 fn unlink_bg<'k, 't: 'k>(
     theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    mut field: &'k ColorField,
     mut key: &'k Cow<'static, str>,
 ) -> Color {
     loop {
-        match &theme[key].bg {
-            ThemeValue::Link(ref new_key) => key = new_key,
-            ThemeValue::Value(val) => return *val,
+        match field {
+            ColorField::LikeSelf | ColorField::Bg => match &theme[key].bg {
+                ThemeValue::Link(ref new_key, ref new_field) => {
+                    key = new_key;
+                    field = new_field
+                }
+                ThemeValue::Value(val) => return *val,
+            },
+            ColorField::Fg => match &theme[key].fg {
+                ThemeValue::Link(ref new_key, ref new_field) => {
+                    key = new_key;
+                    field = new_field
+                }
+                ThemeValue::Value(val) => return *val,
+            },
         }
     }
 }
@@ -145,7 +171,7 @@ fn unlink_attrs<'k, 't: 'k>(
 ) -> Attr {
     loop {
         match &theme[key].attrs {
-            ThemeValue::Link(ref new_key) => key = new_key,
+            ThemeValue::Link(ref new_key, ()) => key = new_key,
             ThemeValue::Value(val) => return *val,
         }
     }
@@ -242,15 +268,44 @@ impl Default for ThemeAttributeInner {
 }
 
 #[derive(Debug, Clone)]
-/// Holds either an actual value or refers to the key name of the attribute that holds the value.
-pub enum ThemeValue<T> {
-    Value(T),
-    Link(Cow<'static, str>),
+pub enum ColorField {
+    // Like self, i.e. either Fg or Bg
+    LikeSelf,
+    Fg,
+    Bg,
 }
 
-impl<T> From<&'static str> for ThemeValue<T> {
+/// The field a ThemeValue::Link refers to.
+trait ThemeLink {
+    type LinkType;
+}
+
+/// A color value that's a link can either refer to .fg or .bg field
+impl ThemeLink for Color {
+    type LinkType = ColorField;
+}
+
+/// An attr value that's a link can only refer to an .attr field
+impl ThemeLink for Attr {
+    type LinkType = ();
+}
+
+#[derive(Debug, Clone)]
+/// Holds either an actual value or refers to the key name of the attribute that holds the value.
+enum ThemeValue<T: ThemeLink> {
+    Value(T),
+    Link(Cow<'static, str>, T::LinkType),
+}
+
+impl From<&'static str> for ThemeValue<Color> {
     fn from(from: &'static str) -> Self {
-        ThemeValue::Link(from.into())
+        ThemeValue::Link(from.into(), ColorField::LikeSelf)
+    }
+}
+
+impl From<&'static str> for ThemeValue<Attr> {
+    fn from(from: &'static str) -> Self {
+        ThemeValue::Link(from.into(), ())
     }
 }
 
@@ -287,7 +342,7 @@ impl<'de> Deserialize<'de> for ThemeValue<Attr> {
             if let Ok(c) = Attr::from_string_de::<'de, D, String>(s.clone()) {
                 Ok(ThemeValue::Value(c))
             } else {
-                Ok(ThemeValue::Link(s.into()))
+                Ok(ThemeValue::Link(s.into(), ()))
             }
         } else {
             Err(de::Error::custom("invalid theme attribute value"))
@@ -295,14 +350,32 @@ impl<'de> Deserialize<'de> for ThemeValue<Attr> {
     }
 }
 
-impl<T: Serialize> Serialize for ThemeValue<T> {
+impl Serialize for ThemeValue<Attr> {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         match self {
             ThemeValue::Value(s) => s.serialize(serializer),
-            ThemeValue::Link(s) => serializer.serialize_str(s.as_ref()),
+            ThemeValue::Link(s, ()) => serializer.serialize_str(s.as_ref()),
+        }
+    }
+}
+
+impl Serialize for ThemeValue<Color> {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            ThemeValue::Value(s) => s.serialize(serializer),
+            ThemeValue::Link(s, ColorField::LikeSelf) => serializer.serialize_str(s.as_ref()),
+            ThemeValue::Link(s, ColorField::Fg) => {
+                serializer.serialize_str(format!("{}.fg", s).as_ref())
+            }
+            ThemeValue::Link(s, ColorField::Bg) => {
+                serializer.serialize_str(format!("{}.bg", s).as_ref())
+            }
         }
     }
 }
@@ -315,8 +388,18 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
         if let Ok(s) = <String>::deserialize(deserializer) {
             if let Ok(c) = Color::from_string_de::<'de, D>(s.clone()) {
                 Ok(ThemeValue::Value(c))
+            } else if s.ends_with(".fg") {
+                Ok(ThemeValue::Link(
+                    s[..s.len() - 3].to_string().into(),
+                    ColorField::Fg,
+                ))
+            } else if s.ends_with(".bg") {
+                Ok(ThemeValue::Link(
+                    s[..s.len() - 3].to_string().into(),
+                    ColorField::Bg,
+                ))
             } else {
-                Ok(ThemeValue::Link(s.into()))
+                Ok(ThemeValue::Link(s.into(), ColorField::LikeSelf))
             }
         } else {
             Err(de::Error::custom("invalid theme color value"))
@@ -431,7 +514,7 @@ impl Themes {
                 }
             })
             .chain(theme.iter().filter_map(|(key, a)| {
-                if let ThemeValue::Link(ref r) = a.fg {
+                if let ThemeValue::Link(ref r, _) = a.fg {
                     if !hash_set.contains(&r.as_ref()) {
                         Some((Some(key), "fg link", r.as_ref()))
                     } else {
@@ -442,7 +525,7 @@ impl Themes {
                 }
             }))
             .chain(theme.iter().filter_map(|(key, a)| {
-                if let ThemeValue::Link(ref r) = a.bg {
+                if let ThemeValue::Link(ref r, _) = a.bg {
                     if !hash_set.contains(&r.as_ref()) {
                         Some((Some(key), "bg link", r.as_ref()))
                     } else {
@@ -453,7 +536,7 @@ impl Themes {
                 }
             }))
             .chain(theme.iter().filter_map(|(key, a)| {
-                if let ThemeValue::Link(ref r) = a.attrs {
+                if let ThemeValue::Link(ref r, _) = a.attrs {
                     if !hash_set.contains(&r.as_ref()) {
                         Some((Some(key), "attrs link", r.as_ref()))
                     } else {
@@ -526,8 +609,8 @@ impl Themes {
                     format!(
                         "\"{}\" = {{ fg = {}, bg = {}, attrs = {} }}\n",
                         k,
-                        toml::to_string(&unlink_fg(&theme, k)).unwrap(),
-                        toml::to_string(&unlink_bg(&theme, k)).unwrap(),
+                        toml::to_string(&unlink_fg(&theme, &ColorField::Fg, k)).unwrap(),
+                        toml::to_string(&unlink_bg(&theme, &ColorField::Bg, k)).unwrap(),
                         toml::to_string(&unlink_attrs(&theme, k)).unwrap(),
                     )
                     .chars(),
@@ -927,8 +1010,8 @@ impl Serialize for Themes {
             dark.insert(
                 k.clone(),
                 ThemeAttribute {
-                    fg: unlink_fg(&self.dark, k),
-                    bg: unlink_bg(&self.dark, k),
+                    fg: unlink_fg(&self.dark, &ColorField::Fg, k),
+                    bg: unlink_bg(&self.dark, &ColorField::Bg, k),
                     attrs: unlink_attrs(&self.dark, k),
                 },
             );
@@ -938,8 +1021,8 @@ impl Serialize for Themes {
             light.insert(
                 k.clone(),
                 ThemeAttribute {
-                    fg: unlink_fg(&self.light, k),
-                    bg: unlink_bg(&self.light, k),
+                    fg: unlink_fg(&self.light, &ColorField::Fg, k),
+                    bg: unlink_bg(&self.light, &ColorField::Bg, k),
                     attrs: unlink_attrs(&self.light, k),
                 },
             );
@@ -952,8 +1035,8 @@ impl Serialize for Themes {
                 new_map.insert(
                     k.clone(),
                     ThemeAttribute {
-                        fg: unlink_fg(&t, k),
-                        bg: unlink_bg(&t, k),
+                        fg: unlink_fg(&t, &ColorField::Fg, k),
+                        bg: unlink_bg(&t, &ColorField::Bg, k),
                         attrs: unlink_attrs(&t, k),
                     },
                 );
@@ -971,30 +1054,45 @@ impl Serialize for Themes {
 fn is_cyclic(
     theme: &HashMap<Cow<'static, str>, ThemeAttributeInner>,
 ) -> std::result::Result<(), String> {
+    #[derive(Hash, Copy, Clone, PartialEq, Eq)]
     enum Course {
         Fg,
         Bg,
         Attrs,
     }
     fn is_cyclic_util<'a>(
-        course: &Course,
+        course: Course,
         k: &'a Cow<'static, str>,
-        visited: &mut HashMap<&'a Cow<'static, str>, bool>,
-        stack: &mut HashMap<&'a Cow<'static, str>, bool>,
-        path: &mut SmallVec<[&'a Cow<'static, str>; 16]>,
+        visited: &mut HashMap<(&'a Cow<'static, str>, Course), bool>,
+        stack: &mut HashMap<(&'a Cow<'static, str>, Course), bool>,
+        path: &mut SmallVec<[(&'a Cow<'static, str>, Course); 16]>,
         theme: &'a HashMap<Cow<'static, str>, ThemeAttributeInner>,
     ) -> bool {
-        if !visited[k] {
-            visited.entry(k).and_modify(|e| *e = true);
-            stack.entry(k).and_modify(|e| *e = true);
+        if !visited[&(k, course)] {
+            visited.entry((k, course)).and_modify(|e| *e = true);
+            stack.entry((k, course)).and_modify(|e| *e = true);
 
             match course {
                 Course::Fg => match theme[k].fg {
-                    ThemeValue::Link(ref l) => {
-                        path.push(l);
-                        if !visited[l] && is_cyclic_util(course, l, visited, stack, path, theme) {
+                    ThemeValue::Link(ref l, ColorField::LikeSelf)
+                    | ThemeValue::Link(ref l, ColorField::Fg) => {
+                        path.push((l, Course::Fg));
+                        if !visited[&(l, Course::Fg)]
+                            && is_cyclic_util(course, l, visited, stack, path, theme)
+                        {
                             return true;
-                        } else if stack[l] {
+                        } else if stack[&(l, Course::Fg)] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    ThemeValue::Link(ref l, ColorField::Bg) => {
+                        path.push((l, Course::Bg));
+                        if !visited[&(l, Course::Bg)]
+                            && is_cyclic_util(Course::Bg, l, visited, stack, path, theme)
+                        {
+                            return true;
+                        } else if stack[&(l, Course::Bg)] {
                             return true;
                         }
                         path.pop();
@@ -1002,11 +1100,25 @@ fn is_cyclic(
                     _ => {}
                 },
                 Course::Bg => match theme[k].bg {
-                    ThemeValue::Link(ref l) => {
-                        path.push(l);
-                        if !visited[l] && is_cyclic_util(course, l, visited, stack, path, theme) {
+                    ThemeValue::Link(ref l, ColorField::LikeSelf)
+                    | ThemeValue::Link(ref l, ColorField::Bg) => {
+                        path.push((l, Course::Bg));
+                        if !visited[&(l, Course::Bg)]
+                            && is_cyclic_util(Course::Bg, l, visited, stack, path, theme)
+                        {
                             return true;
-                        } else if stack[l] {
+                        } else if stack[&(l, Course::Bg)] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    ThemeValue::Link(ref l, ColorField::Fg) => {
+                        path.push((l, Course::Fg));
+                        if !visited[&(l, Course::Fg)]
+                            && is_cyclic_util(Course::Fg, l, visited, stack, path, theme)
+                        {
+                            return true;
+                        } else if stack[&(l, Course::Fg)] {
                             return true;
                         }
                         path.pop();
@@ -1014,11 +1126,13 @@ fn is_cyclic(
                     _ => {}
                 },
                 Course::Attrs => match theme[k].attrs {
-                    ThemeValue::Link(ref l) => {
-                        path.push(l);
-                        if !visited[l] && is_cyclic_util(course, l, visited, stack, path, theme) {
+                    ThemeValue::Link(ref l, _) => {
+                        path.push((l, course));
+                        if !visited[&(l, course)]
+                            && is_cyclic_util(course, l, visited, stack, path, theme)
+                        {
                             return true;
-                        } else if stack[l] {
+                        } else if stack[&(l, course)] {
                             return true;
                         }
                         path.pop();
@@ -1027,27 +1141,39 @@ fn is_cyclic(
                 },
             }
         }
-        stack.entry(k).and_modify(|e| *e = false);
+        stack.entry((k, course)).and_modify(|e| *e = false);
         return false;
     }
 
     let mut path = SmallVec::new();
     let mut visited = theme
         .keys()
-        .map(|k| (k, false))
-        .collect::<HashMap<&Cow<'static, str>, bool>>();
+        .map(|k| {
+            std::iter::once(((k, Course::Fg), false))
+                .chain(std::iter::once(((k, Course::Bg), false)))
+                .chain(std::iter::once(((k, Course::Attrs), false)))
+        })
+        .flatten()
+        .collect::<HashMap<(&Cow<'static, str>, Course), bool>>();
 
-    let mut stack = theme
-        .keys()
-        .map(|k| (k, false))
-        .collect::<HashMap<&Cow<'static, str>, bool>>();
+    let mut stack = visited.clone();
     for k in theme.keys() {
-        for course in [Course::Fg, Course::Bg, Course::Attrs].iter() {
-            path.push(k);
+        for &course in [Course::Fg, Course::Bg, Course::Attrs].iter() {
+            path.push((k, course));
             if is_cyclic_util(course, k, &mut visited, &mut stack, &mut path, &theme) {
                 let path = path
                     .into_iter()
-                    .map(|k| k.to_string())
+                    .map(|(k, c)| {
+                        format!(
+                            "{}.{}",
+                            k,
+                            match c {
+                                Course::Fg => "fg",
+                                Course::Bg => "bg",
+                                Course::Attrs => "attrs",
+                            }
+                        )
+                    })
                     .collect::<Vec<String>>();
                 return Err(format!(
                     "{} {}",
