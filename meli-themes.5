@@ -56,8 +56,14 @@ A setting contains three fields: fg for foreground color, bg for background colo
 .sp
 .Dl \&"widget.key.label\&" = { fg = \&"Default\&", bg = \&"Default\&", attrs = \&"Default\&" }
 .sp
-Each field contains a value, and each value can either be a color/attribute, or a key name.
-In the latter case the setting's real value depends on the value of the key.
+Each field contains a value, and each value can either be a color/attribute, a link (key name) or a valid alias.
+An alias is a string starting with the \&"\&$\&" character and must be declared in advance in the
+.Ic color_aliases
+or
+.Ic attr_aliases
+fields of a theme.
+An alias' value can be any valid value, including links and other aliases, as long as they are valid.
+In the case of a link the setting's real value depends on the value of the referred key.
 This allows for defaults within a group of associated values.
 Cyclic references in a theme results in an error:
 .sp
@@ -76,10 +82,14 @@ theme = "dark"
 "mail.view.headers" = { fg = "30" }
 "mail.view.body" = {fg = "HotPink3", bg = "LightSalmon1"}
 # Linked value keys can be whatever key:
-"mail.listing.compact.unseen" = { bg = "mail.sidebar_highlighted_account" }
+"mail.listing.compact.even_unseen" = { bg = "mail.sidebar_highlighted_account" }
+# Linked color value keys can optionally refer to another field:
+"mail.listing.compact.odd_unseen" = { bg = "mail.sidebar_highlighted_account.fg" }
 .sp
 # define new theme. Undefined settings will inherit from the default "dark" theme.
 [terminal.themes."hunter2"]
+color_aliases= { "Jebediah" = "#b4da55" }
+"mail.listing.tag_default" = { fg = "$Jebediah" }
 "mail.view.headers" = { fg = "White", bg = "Black" }
 .Ed
 .Sh CUSTOM THEMES
@@ -154,60 +164,124 @@ is ignored.
 .sp
 In this mode, cursor locations (i.e. currently selected entries/items) will use the "reverse video" ANSI attribute to inverse the terminal's default foreground/background colors.
 .Sh VALID KEYS
-.TS
-allbox tab(:);
-lb
-l.
-key name
+.Bl -bullet  -compact
+.It
 theme_default
+.It
 status.bar
+.It
 status.notification
+.It
 tab.focused
+.It
 tab.unfocused
+.It
 tab.bar
+.It
+widgets.list.header
+.It
 widgets.form.label
+.It
 widgets.form.field
+.It
 widgets.form.highlighted
+.It
 widgets.options.highlighted
+.It
 mail.sidebar
+.It
 mail.sidebar_unread_count
+.It
 mail.sidebar_index
+.It
 mail.sidebar_highlighted
+.It
 mail.sidebar_highlighted_unread_count
+.It
 mail.sidebar_highlighted_index
+.It
 mail.sidebar_highlighted_account
+.It
 mail.sidebar_highlighted_account_unread_count
+.It
 mail.sidebar_highlighted_account_index
+.It
 mail.listing.compact.even
+.It
 mail.listing.compact.odd
-mail.listing.compact.unseen
-mail.listing.compact.selected
-mail.listing.compact.highlighted
+.It
+mail.listing.compact.even_unseen
+.It
+mail.listing.compact.odd_unseen
+.It
+mail.listing.compact.even_selected
+.It
+mail.listing.compact.odd_selected
+.It
+mail.listing.compact.even_highlighted
+.It
+mail.listing.compact.odd_highlighted
+.It
 mail.listing.plain.even
+.It
 mail.listing.plain.odd
-mail.listing.plain.unseen
-mail.listing.plain.selected
-mail.listing.plain.highlighted
-.TE
-.TS
-allbox tab(:);
-lb
-l.
-key name
+.It
+mail.listing.plain.even_unseen
+.It
+mail.listing.plain.odd_unseen
+.It
+mail.listing.plain.even_selected
+.It
+mail.listing.plain.odd_selected
+.It
+mail.listing.plain.even_highlighted
+.It
+mail.listing.plain.odd_highlighted
+.It
 mail.listing.conversations
+.It
 mail.listing.conversations.subject
+.It
 mail.listing.conversations.from
+.It
 mail.listing.conversations.date
+.It
 mail.listing.conversations.padding
+.It
 mail.listing.conversations.unseen
+.It
 mail.listing.conversations.unseen_padding
+.It
 mail.listing.conversations.highlighted
+.It
 mail.listing.conversations.selected
+.It
 mail.view.headers
+.It
 mail.view.body
+.It
+mail.view.thread.indentation.a
+.It
+mail.view.thread.indentation.b
+.It
+mail.view.thread.indentation.c
+.It
+mail.view.thread.indentation.d
+.It
+mail.view.thread.indentation.e
+.It
+mail.view.thread.indentation.f
+.It
 mail.listing.attachment_flag
+.It
 mail.listing.thread_snooze_flag
-.TE
+.It
+mail.listing.tag_default
+.It
+pager.highlight_search
+.It
+pager.highlight_search_current
+.El
 .Sh COLOR NAMES
 .TS
 allbox tab(:);
