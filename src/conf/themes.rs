@@ -122,12 +122,41 @@ fn unlink_fg<'k, 't: 'k>(
                     key = new_key;
                     field = new_field
                 }
+                ThemeValue::Alias(ref alias_ident) => {
+                    let mut alias_ident = alias_ident;
+                    'self_alias_loop: loop {
+                        match &theme.color_aliases[alias_ident.as_ref()] {
+                            ThemeValue::Link(ref new_key, ref new_field) => {
+                                key = new_key;
+                                field = new_field;
+                                break 'self_alias_loop;
+                            }
+                            ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                            ThemeValue::Value(val) => return *val,
+                        }
+                    }
+                }
+
                 ThemeValue::Value(val) => return *val,
             },
             ColorField::Bg => match &theme[key].bg {
                 ThemeValue::Link(ref new_key, ref new_field) => {
                     key = new_key;
                     field = new_field
+                }
+                ThemeValue::Alias(ref alias_ident) => {
+                    let mut alias_ident = alias_ident;
+                    'other_alias_loop: loop {
+                        match &theme.color_aliases[alias_ident.as_ref()] {
+                            ThemeValue::Link(ref new_key, ref new_field) => {
+                                key = new_key;
+                                field = new_field;
+                                break 'other_alias_loop;
+                            }
+                            ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                            ThemeValue::Value(val) => return *val,
+                        }
+                    }
                 }
                 ThemeValue::Value(val) => return *val,
             },
@@ -148,12 +177,40 @@ fn unlink_bg<'k, 't: 'k>(
                     key = new_key;
                     field = new_field
                 }
+                ThemeValue::Alias(ref alias_ident) => {
+                    let mut alias_ident = alias_ident;
+                    'self_alias_loop: loop {
+                        match &theme.color_aliases[alias_ident.as_ref()] {
+                            ThemeValue::Link(ref new_key, ref new_field) => {
+                                key = new_key;
+                                field = new_field;
+                                break 'self_alias_loop;
+                            }
+                            ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                            ThemeValue::Value(val) => return *val,
+                        }
+                    }
+                }
                 ThemeValue::Value(val) => return *val,
             },
             ColorField::Fg => match &theme[key].fg {
                 ThemeValue::Link(ref new_key, ref new_field) => {
                     key = new_key;
                     field = new_field
+                }
+                ThemeValue::Alias(ref alias_ident) => {
+                    let mut alias_ident = alias_ident;
+                    'other_alias_loop: loop {
+                        match &theme.color_aliases[alias_ident.as_ref()] {
+                            ThemeValue::Link(ref new_key, ref new_field) => {
+                                key = new_key;
+                                field = new_field;
+                                break 'other_alias_loop;
+                            }
+                            ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                            ThemeValue::Value(val) => return *val,
+                        }
+                    }
                 }
                 ThemeValue::Value(val) => return *val,
             },
@@ -166,6 +223,19 @@ fn unlink_attrs<'k, 't: 'k>(theme: &'t Theme, mut key: &'k Cow<'static, str>) ->
     loop {
         match &theme[key].attrs {
             ThemeValue::Link(ref new_key, ()) => key = new_key,
+            ThemeValue::Alias(ref alias_ident) => {
+                let mut alias_ident = alias_ident;
+                'alias_loop: loop {
+                    match &theme.attr_aliases[alias_ident.as_ref()] {
+                        ThemeValue::Link(ref new_key, ()) => {
+                            key = new_key;
+                            break 'alias_loop;
+                        }
+                        ThemeValue::Alias(ref new_alias_ident) => alias_ident = new_alias_ident,
+                        ThemeValue::Value(val) => return *val,
+                    }
+                }
+            }
             ThemeValue::Value(val) => return *val,
         }
     }
@@ -288,6 +358,7 @@ impl ThemeLink for Attr {
 /// Holds either an actual value or refers to the key name of the attribute that holds the value.
 enum ThemeValue<T: ThemeLink> {
     Value(T),
+    Alias(Cow<'static, str>),
     Link(Cow<'static, str>, T::LinkType),
 }
 
@@ -333,7 +404,9 @@ impl<'de> Deserialize<'de> for ThemeValue<Attr> {
         D: Deserializer<'de>,
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
-            if let Ok(c) = Attr::from_string_de::<'de, D, String>(s.clone()) {
+            if s.starts_with("$") {
+                Ok(ThemeValue::Alias(s[1..].to_string().into()))
+            } else if let Ok(c) = Attr::from_string_de::<'de, D, String>(s.clone()) {
                 Ok(ThemeValue::Value(c))
             } else {
                 Ok(ThemeValue::Link(s.into(), ()))
@@ -351,6 +424,7 @@ impl Serialize for ThemeValue<Attr> {
     {
         match self {
             ThemeValue::Value(s) => s.serialize(serializer),
+            ThemeValue::Alias(s) => format!("${}", s).serialize(serializer),
             ThemeValue::Link(s, ()) => serializer.serialize_str(s.as_ref()),
         }
     }
@@ -363,6 +437,7 @@ impl Serialize for ThemeValue<Color> {
     {
         match self {
             ThemeValue::Value(s) => s.serialize(serializer),
+            ThemeValue::Alias(s) => format!("${}", s).serialize(serializer),
             ThemeValue::Link(s, ColorField::LikeSelf) => serializer.serialize_str(s.as_ref()),
             ThemeValue::Link(s, ColorField::Fg) => {
                 serializer.serialize_str(format!("{}.fg", s).as_ref())
@@ -380,7 +455,9 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
         D: Deserializer<'de>,
     {
         if let Ok(s) = <String>::deserialize(deserializer) {
-            if let Ok(c) = Color::from_string_de::<'de, D>(s.clone()) {
+            if s.starts_with("$") {
+                Ok(ThemeValue::Alias(s[1..].to_string().into()))
+            } else if let Ok(c) = Color::from_string_de::<'de, D>(s.clone()) {
                 Ok(ThemeValue::Value(c))
             } else if s.ends_with(".fg") {
                 Ok(ThemeValue::Link(
@@ -410,6 +487,8 @@ pub struct Themes {
 
 #[derive(Debug, Clone)]
 pub struct Theme {
+    color_aliases: HashMap<Cow<'static, str>, ThemeValue<Color>>,
+    attr_aliases: HashMap<Cow<'static, str>, ThemeValue<Attr>>,
     pub keys: HashMap<Cow<'static, str>, ThemeAttributeInner>,
 }
 
@@ -443,6 +522,10 @@ impl<'de> Deserialize<'de> for Themes {
         }
         #[derive(Deserialize, Default)]
         struct ThemeOptions {
+            #[serde(default)]
+            color_aliases: HashMap<Cow<'static, str>, ThemeValue<Color>>,
+            #[serde(default)]
+            attr_aliases: HashMap<Cow<'static, str>, ThemeValue<Attr>>,
             #[serde(flatten, default)]
             keys: HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
         }
@@ -487,6 +570,8 @@ impl<'de> Deserialize<'de> for Themes {
                     .join(", ")
             )));
         }
+        ret.light.color_aliases = s.light.color_aliases;
+        ret.light.attr_aliases = s.light.attr_aliases;
         for (k, v) in ret.dark.iter_mut() {
             if let Some(mut att) = s.dark.keys.remove(k) {
                 if let Some(att) = att.fg.take() {
@@ -512,13 +597,12 @@ impl<'de> Deserialize<'de> for Themes {
                     .join(", ")
             )));
         }
+        ret.dark.color_aliases = s.dark.color_aliases;
+        ret.dark.attr_aliases = s.dark.attr_aliases;
         for (tk, t) in ret.other_themes.iter_mut() {
+            let mut theme = s.other_themes.remove(tk).unwrap();
             for (k, v) in t.iter_mut() {
-                if let Some(mut att) = s
-                    .other_themes
-                    .get_mut(tk)
-                    .and_then(|theme| theme.keys.remove(k))
-                {
+                if let Some(mut att) = theme.keys.remove(k) {
                     if let Some(att) = att.fg.take() {
                         v.fg = att;
                     }
@@ -530,11 +614,11 @@ impl<'de> Deserialize<'de> for Themes {
                     }
                 }
             }
-            if !s.other_themes[tk].keys.is_empty() {
+            if !theme.keys.is_empty() {
                 return Err(de::Error::custom(format!(
                     "{} theme contains unrecognized theme keywords: {}",
                     tk,
-                    s.other_themes[tk]
+                    theme
                         .keys
                         .keys()
                         .into_iter()
@@ -543,6 +627,8 @@ impl<'de> Deserialize<'de> for Themes {
                         .join(", ")
                 )));
             }
+            t.color_aliases = theme.color_aliases;
+            t.attr_aliases = theme.attr_aliases;
         }
         Ok(ret)
     }
@@ -554,15 +640,64 @@ impl Themes {
             .keys()
             .filter_map(|k| {
                 if !hash_set.contains(&k.as_ref()) {
-                    Some((None, "key", k.as_ref()))
+                    Some((None, "key", "invalid key", k.as_ref()))
                 } else {
                     None
                 }
             })
+            .chain(theme.color_aliases.iter().filter_map(|(key, a)| match a {
+                ThemeValue::Link(ref r, ref field) => {
+                    if !hash_set.contains(&r.as_ref()) {
+                        Some((
+                            Some(key),
+                            match field {
+                                ColorField::LikeSelf => "Color alias link",
+                                ColorField::Fg => "Color alias fg link",
+                                ColorField::Bg => "Color alias bg link",
+                            },
+                            "invalid key",
+                            r.as_ref(),
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                ThemeValue::Alias(ref ident) => {
+                    if !theme.color_aliases.contains_key(ident.as_ref()) {
+                        Some((Some(key), "alias", "nonexistant color alias", ident))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }))
+            .chain(theme.attr_aliases.iter().filter_map(|(key, a)| match a {
+                ThemeValue::Link(ref r, ()) => {
+                    if !hash_set.contains(&r.as_ref()) {
+                        Some((Some(key), "Attr alias link", "invalid key", r.as_ref()))
+                    } else {
+                        None
+                    }
+                }
+                ThemeValue::Alias(ref ident) => {
+                    if !theme.attr_aliases.contains_key(ident.as_ref()) {
+                        Some((Some(key), "alias", "nonexistant color alias", ident))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }))
             .chain(theme.iter().filter_map(|(key, a)| {
                 if let ThemeValue::Link(ref r, _) = a.fg {
                     if !hash_set.contains(&r.as_ref()) {
-                        Some((Some(key), "fg link", r.as_ref()))
+                        Some((Some(key), "fg link", "invalid key", r.as_ref()))
+                    } else {
+                        None
+                    }
+                } else if let ThemeValue::Alias(ref ident) = a.fg {
+                    if !theme.color_aliases.contains_key(ident.as_ref()) {
+                        Some((Some(key), "fg alias", "nonexistant color alias", ident))
                     } else {
                         None
                     }
@@ -573,7 +708,13 @@ impl Themes {
             .chain(theme.iter().filter_map(|(key, a)| {
                 if let ThemeValue::Link(ref r, _) = a.bg {
                     if !hash_set.contains(&r.as_ref()) {
-                        Some((Some(key), "bg link", r.as_ref()))
+                        Some((Some(key), "bg link", "invalid key", r.as_ref()))
+                    } else {
+                        None
+                    }
+                } else if let ThemeValue::Alias(ref ident) = a.bg {
+                    if !theme.color_aliases.contains_key(ident.as_ref()) {
+                        Some((Some(key), "bg alias", "nonexistant color alias", ident))
                     } else {
                         None
                     }
@@ -584,7 +725,18 @@ impl Themes {
             .chain(theme.iter().filter_map(|(key, a)| {
                 if let ThemeValue::Link(ref r, _) = a.attrs {
                     if !hash_set.contains(&r.as_ref()) {
-                        Some((Some(key), "attrs link", r.as_ref()))
+                        Some((Some(key), "attrs link", "invalid key", r.as_ref()))
+                    } else {
+                        None
+                    }
+                } else if let ThemeValue::Alias(ref ident) = a.attrs {
+                    if !theme.attr_aliases.contains_key(ident.as_ref()) {
+                        Some((
+                            Some(key),
+                            "attrs alias",
+                            "nonexistant text attribute alias",
+                            ident,
+                        ))
                     } else {
                         None
                     }
@@ -592,17 +744,17 @@ impl Themes {
                     None
                 }
             }))
-            .collect::<SmallVec<[(Option<_>, &'_ str, &'_ str); 128]>>();
+            .collect::<SmallVec<[(Option<_>, &'_ str, &'_ str, &'_ str); 128]>>();
 
         if !keys.is_empty() {
             return Err(format!(
-                "{} theme contains unrecognized theme keywords: {}",
+                "{} theme contains invalid data: {}",
                 name,
                 keys.into_iter()
-                    .map(|(key_opt, desc, link)| if let Some(key) = key_opt {
-                        format!("{} {}: \"{}\"", key, desc, link)
+                    .map(|(key_opt, desc, kind, link)| if let Some(key) = key_opt {
+                        format!("{} {}: {} \"{}\"", key, desc, kind, link)
                     } else {
-                        format!("{}: \"{}\"", desc, link)
+                        format!("{}: {} \"{}\"", desc, kind, link)
                     })
                     .collect::<SmallVec<[String; 128]>>()
                     .join(", ")
@@ -1036,8 +1188,16 @@ impl Default for Themes {
         add!("pager.highlight_search", light = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD });
         add!("pager.highlight_search_current", light = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD });
         Themes {
-            light: Theme { keys: light },
-            dark: Theme { keys: dark },
+            light: Theme {
+                keys: light,
+                attr_aliases: Default::default(),
+                color_aliases: Default::default(),
+            },
+            dark: Theme {
+                keys: dark,
+                attr_aliases: Default::default(),
+                color_aliases: Default::default(),
+            },
             other_themes,
         }
     }
@@ -1103,6 +1263,9 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
         Fg,
         Bg,
         Attrs,
+        ColorAliasFg,
+        ColorAliasBg,
+        AttrAlias,
     }
     fn is_cyclic_util<'a>(
         course: Course,
@@ -1141,6 +1304,24 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         }
                         path.pop();
                     }
+                    ThemeValue::Alias(ref ident) => {
+                        path.push((ident, Course::ColorAliasFg));
+                        if !visited[&(ident, Course::ColorAliasFg)]
+                            && is_cyclic_util(
+                                Course::ColorAliasFg,
+                                ident,
+                                visited,
+                                stack,
+                                path,
+                                theme,
+                            )
+                        {
+                            return true;
+                        } else if stack[&(ident, Course::ColorAliasFg)] {
+                            return true;
+                        }
+                        path.pop();
+                    }
                     _ => {}
                 },
                 Course::Bg => match theme[k].bg {
@@ -1167,6 +1348,24 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         }
                         path.pop();
                     }
+                    ThemeValue::Alias(ref ident) => {
+                        path.push((ident, Course::ColorAliasBg));
+                        if !visited[&(ident, Course::ColorAliasBg)]
+                            && is_cyclic_util(
+                                Course::ColorAliasBg,
+                                ident,
+                                visited,
+                                stack,
+                                path,
+                                theme,
+                            )
+                        {
+                            return true;
+                        } else if stack[&(ident, Course::ColorAliasBg)] {
+                            return true;
+                        }
+                        path.pop();
+                    }
                     _ => {}
                 },
                 Course::Attrs => match theme[k].attrs {
@@ -1177,6 +1376,76 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         {
                             return true;
                         } else if stack[&(l, course)] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    ThemeValue::Alias(ref ident) => {
+                        path.push((ident, Course::AttrAlias));
+                        if !visited[&(ident, Course::AttrAlias)]
+                            && is_cyclic_util(Course::AttrAlias, ident, visited, stack, path, theme)
+                        {
+                            return true;
+                        } else if stack[&(ident, Course::AttrAlias)] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    _ => {}
+                },
+                Course::ColorAliasFg | Course::ColorAliasBg => match &theme.color_aliases[k] {
+                    ThemeValue::Link(ref l, ref field) => {
+                        let course = match (course, field) {
+                            (Course::ColorAliasFg, ColorField::LikeSelf) => Course::Fg,
+                            (Course::ColorAliasBg, ColorField::LikeSelf) => Course::Bg,
+                            (_, ColorField::LikeSelf) => unsafe {
+                                std::hint::unreachable_unchecked()
+                            },
+                            (_, ColorField::Fg) => Course::Fg,
+                            (_, ColorField::Bg) => Course::Bg,
+                        };
+                        path.push((l, course));
+                        if !visited[&(l, course)]
+                            && is_cyclic_util(course, l, visited, stack, path, theme)
+                        {
+                            return true;
+                        } else if stack[&(l, course)] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    ThemeValue::Alias(ref ident) => {
+                        path.push((ident, course));
+                        if !visited[&(ident, course)]
+                            && is_cyclic_util(course, ident, visited, stack, path, theme)
+                        {
+                            return true;
+                        } else if stack[&(ident, course)] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    _ => {}
+                },
+                Course::AttrAlias => match &theme.attr_aliases[k] {
+                    ThemeValue::Link(ref l, ()) => {
+                        path.push((l, Course::Attrs));
+                        if !visited[&(l, Course::Attrs)]
+                            && is_cyclic_util(Course::Attrs, l, visited, stack, path, theme)
+                        {
+                            return true;
+                        } else if stack[&(l, Course::Attrs)] {
+                            return true;
+                        }
+                        path.pop();
+                    }
+                    ThemeValue::Alias(ref ident) => {
+                        path.push((ident, course));
+                        if !visited[&(ident, course)]
+                            && is_cyclic_util(course, ident, visited, stack, path, theme)
+                        {
+                            return true;
+                        } else if stack[&(ident, course)] {
                             return true;
                         }
                         path.pop();
@@ -1198,6 +1467,22 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 .chain(std::iter::once(((k, Course::Attrs), false)))
         })
         .flatten()
+        .chain(
+            theme
+                .color_aliases
+                .keys()
+                .map(|k| {
+                    std::iter::once(((k, Course::ColorAliasFg), false))
+                        .chain(std::iter::once(((k, Course::ColorAliasBg), false)))
+                })
+                .flatten(),
+        )
+        .chain(
+            theme
+                .attr_aliases
+                .keys()
+                .map(|k| ((k, Course::AttrAlias), false)),
+        )
         .collect::<HashMap<(&Cow<'static, str>, Course), bool>>();
 
     let mut stack = visited.clone();
@@ -1207,16 +1492,13 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
             if is_cyclic_util(course, k, &mut visited, &mut stack, &mut path, &theme) {
                 let path = path
                     .into_iter()
-                    .map(|(k, c)| {
-                        format!(
-                            "{}.{}",
-                            k,
-                            match c {
-                                Course::Fg => "fg",
-                                Course::Bg => "bg",
-                                Course::Attrs => "attrs",
-                            }
-                        )
+                    .map(|(k, c)| match c {
+                        Course::Fg => format!("{}.fg", k,),
+                        Course::Bg => format!("{}.fg", k,),
+                        Course::Attrs => format!("{}.attrs", k,),
+                        Course::ColorAliasFg => format!("(Color fg) ${}", k),
+                        Course::ColorAliasBg => format!("(Color bg) ${}", k),
+                        Course::AttrAlias => format!("(Attr) ${}", k),
                     })
                     .collect::<Vec<String>>();
                 return Err(format!(
@@ -1225,6 +1507,9 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                         Course::Fg => "fg: ",
                         Course::Bg => "bg: ",
                         Course::Attrs => "attrs: ",
+                        Course::ColorAliasFg => "color alias fg: ",
+                        Course::ColorAliasBg => "color alias bg: ",
+                        Course::AttrAlias => "attribute alias: ",
                     },
                     path.join(" -> ")
                 ));
@@ -1241,8 +1526,10 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
 
 #[test]
 fn test_theme_parsing() {
+    /* MUST SUCCEED: default themes should be valid */
     let def = Themes::default();
     assert!(def.validate().is_ok());
+    /* MUST SUCCEED: new user theme `hunter2`, theme `dark` has user redefinitions */
     const TEST_STR: &'static str = r##"[dark]
 "mail.listing.tag_default" = { fg = "White", bg = "HotPink3" }
 "mail.listing.attachment_flag" = { fg = "mail.listing.tag_default.bg" }
@@ -1277,15 +1564,74 @@ fn test_theme_parsing() {
         Color::Byte(15), // White
     );
     assert!(parsed.validate().is_ok());
+    /* MUST FAIL: theme `dark` contains a cycle */
     const HAS_CYCLE: &'static str = r##"[dark]
 "mail.listing.compact.even" = { fg = "mail.listing.compact.odd" }
 "mail.listing.compact.odd" = { fg = "mail.listing.compact.even" }
 "##;
     let parsed: Themes = toml::from_str(HAS_CYCLE).unwrap();
     assert!(parsed.validate().is_err());
+    /* MUST FAIL: theme `dark` contains an invalid key */
     const HAS_INVALID_KEYS: &'static str = r##"[dark]
 "asdfsafsa" = { fg = "Black" }
 "##;
     let parsed: std::result::Result<Themes, _> = toml::from_str(HAS_INVALID_KEYS);
     assert!(parsed.is_err());
+    /* MUST SUCCEED: alias $Jebediah resolves to a valid color */
+    const TEST_ALIAS_STR: &'static str = r##"[dark]
+color_aliases= { "Jebediah" = "#b4da55" }
+"mail.listing.tag_default" = { fg = "$Jebediah" }
+"##;
+    let parsed: Themes = toml::from_str(TEST_ALIAS_STR).unwrap();
+    assert!(parsed.validate().is_ok());
+    assert_eq!(
+        unlink_fg(
+            &parsed.dark,
+            &ColorField::Fg,
+            &Cow::from("mail.listing.tag_default")
+        ),
+        Color::Rgb(180, 218, 85)
+    );
+    /* MUST FAIL: Mispell color alias $Jebediah as $Jebedia */
+    const TEST_INVALID_ALIAS_STR: &'static str = r##"[dark]
+color_aliases= { "Jebediah" = "#b4da55" }
+"mail.listing.tag_default" = { fg = "$Jebedia" }
+"##;
+    let parsed: Themes = toml::from_str(TEST_INVALID_ALIAS_STR).unwrap();
+    assert!(parsed.validate().is_err());
+    /* MUST FAIL: Color alias $Jebediah is defined as itself */
+    const TEST_CYCLIC_ALIAS_STR: &'static str = r##"[dark]
+color_aliases= { "Jebediah" = "$Jebediah" }
+"mail.listing.tag_default" = { fg = "$Jebediah" }
+"##;
+    let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR).unwrap();
+    assert!(parsed.validate().is_err());
+    /* MUST FAIL: Attr alias $Jebediah is defined as itself */
+    const TEST_CYCLIC_ALIAS_ATTR_STR: &'static str = r##"[dark]
+attr_aliases= { "Jebediah" = "$Jebediah" }
+"mail.listing.tag_default" = { attrs = "$Jebediah" }
+"##;
+    let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_ATTR_STR).unwrap();
+    assert!(parsed.validate().is_err());
+    /* MUST FAIL: alias $Jebediah resolves to a cycle */
+    const TEST_CYCLIC_ALIAS_STR_2: &'static str = r##"[dark]
+color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default" }
+"mail.listing.tag_default" = { fg = "$Jebediah" }
+"##;
+    let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR_2).unwrap();
+    assert!(parsed.validate().is_err());
+    /* MUST SUCCEED: alias $Jebediah resolves to a key's field */
+    const TEST_CYCLIC_ALIAS_STR_3: &'static str = r##"[dark]
+color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default.bg" }
+"mail.listing.tag_default" = { fg = "$Jebediah", bg = "Black" }
+"##;
+    let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR_3).unwrap();
+    assert!(parsed.validate().is_ok());
+    /* MUST FAIL: alias $Jebediah resolves to an invalid key */
+    const TEST_INVALID_LINK_KEY_FIELD_STR: &'static str = r##"[dark]
+color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default.attrs" }
+"mail.listing.tag_default" = { fg = "$Jebediah", bg = "Black" }
+"##;
+    let parsed: Themes = toml::from_str(TEST_INVALID_LINK_KEY_FIELD_STR).unwrap();
+    assert!(parsed.validate().is_err());
 }
