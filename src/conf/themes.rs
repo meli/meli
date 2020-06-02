@@ -101,10 +101,7 @@ pub fn attrs(context: &Context, key: &'static str) -> Attr {
 }
 
 #[inline(always)]
-fn unlink<'k, 't: 'k>(
-    theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
-    key: &'k Cow<'static, str>,
-) -> ThemeAttribute {
+fn unlink<'k, 't: 'k>(theme: &'t Theme, key: &'k Cow<'static, str>) -> ThemeAttribute {
     ThemeAttribute {
         fg: unlink_fg(theme, &ColorField::Fg, key),
         bg: unlink_bg(theme, &ColorField::Bg, key),
@@ -114,7 +111,7 @@ fn unlink<'k, 't: 'k>(
 
 #[inline(always)]
 fn unlink_fg<'k, 't: 'k>(
-    theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    theme: &'t Theme,
     mut field: &'k ColorField,
     mut key: &'k Cow<'static, str>,
 ) -> Color {
@@ -140,7 +137,7 @@ fn unlink_fg<'k, 't: 'k>(
 
 #[inline(always)]
 fn unlink_bg<'k, 't: 'k>(
-    theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
+    theme: &'t Theme,
     mut field: &'k ColorField,
     mut key: &'k Cow<'static, str>,
 ) -> Color {
@@ -165,10 +162,7 @@ fn unlink_bg<'k, 't: 'k>(
 }
 
 #[inline(always)]
-fn unlink_attrs<'k, 't: 'k>(
-    theme: &'t HashMap<Cow<'static, str>, ThemeAttributeInner>,
-    mut key: &'k Cow<'static, str>,
-) -> Attr {
+fn unlink_attrs<'k, 't: 'k>(theme: &'t Theme, mut key: &'k Cow<'static, str>) -> Attr {
     loop {
         match &theme[key].attrs {
             ThemeValue::Link(ref new_key, ()) => key = new_key,
@@ -409,9 +403,28 @@ impl<'de> Deserialize<'de> for ThemeValue<Color> {
 
 #[derive(Debug, Clone)]
 pub struct Themes {
-    pub light: HashMap<Cow<'static, str>, ThemeAttributeInner>,
-    pub dark: HashMap<Cow<'static, str>, ThemeAttributeInner>,
-    pub other_themes: HashMap<String, HashMap<Cow<'static, str>, ThemeAttributeInner>>,
+    pub light: Theme,
+    pub dark: Theme,
+    pub other_themes: HashMap<String, Theme>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Theme {
+    pub keys: HashMap<Cow<'static, str>, ThemeAttributeInner>,
+}
+
+use std::ops::{Deref, DerefMut};
+impl Deref for Theme {
+    type Target = HashMap<Cow<'static, str>, ThemeAttributeInner>;
+    fn deref(&self) -> &Self::Target {
+        &self.keys
+    }
+}
+
+impl DerefMut for Theme {
+    fn deref_mut(&mut self) -> &mut HashMap<Cow<'static, str>, ThemeAttributeInner> {
+        &mut self.keys
+    }
 }
 
 impl<'de> Deserialize<'de> for Themes {
@@ -420,15 +433,20 @@ impl<'de> Deserialize<'de> for Themes {
         D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        struct ThemeOptions {
+        struct ThemesOptions {
             #[serde(default)]
-            light: HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
+            light: ThemeOptions,
             #[serde(default)]
-            dark: HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
+            dark: ThemeOptions,
             #[serde(flatten, default)]
-            other_themes: HashMap<String, HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>>,
+            other_themes: HashMap<String, ThemeOptions>,
         }
-        #[derive(Deserialize)]
+        #[derive(Deserialize, Default)]
+        struct ThemeOptions {
+            #[serde(flatten, default)]
+            keys: HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
+        }
+        #[derive(Deserialize, Default)]
         struct ThemeAttributeInnerOptions {
             #[serde(default)]
             fg: Option<ThemeValue<Color>>,
@@ -439,59 +457,91 @@ impl<'de> Deserialize<'de> for Themes {
         }
 
         let mut ret = Themes::default();
-        let mut s = <ThemeOptions>::deserialize(deserializer)?;
+        let mut s = <ThemesOptions>::deserialize(deserializer)?;
         for tk in s.other_themes.keys() {
             ret.other_themes.insert(tk.clone(), ret.dark.clone());
         }
 
         for (k, v) in ret.light.iter_mut() {
-            if let Some(att) = s.light.get_mut(k).and_then(|att| att.fg.take()) {
-                v.fg = att;
-            }
-            if let Some(att) = s.light.get_mut(k).and_then(|att| att.bg.take()) {
-                v.bg = att;
-            }
-            if let Some(att) = s.light.get_mut(k).and_then(|att| att.attrs.take()) {
-                v.attrs = att;
+            if let Some(mut att) = s.light.keys.remove(k) {
+                if let Some(att) = att.fg.take() {
+                    v.fg = att;
+                }
+                if let Some(att) = att.bg.take() {
+                    v.bg = att;
+                }
+                if let Some(att) = att.attrs.take() {
+                    v.attrs = att;
+                }
             }
         }
+        if !s.light.keys.is_empty() {
+            return Err(de::Error::custom(format!(
+                "light theme contains unrecognized theme keywords: {}",
+                s.light
+                    .keys
+                    .keys()
+                    .into_iter()
+                    .map(|k| k.as_ref())
+                    .collect::<SmallVec<[_; 128]>>()
+                    .join(", ")
+            )));
+        }
         for (k, v) in ret.dark.iter_mut() {
-            if let Some(att) = s.dark.get_mut(k).and_then(|att| att.fg.take()) {
-                v.fg = att;
+            if let Some(mut att) = s.dark.keys.remove(k) {
+                if let Some(att) = att.fg.take() {
+                    v.fg = att;
+                }
+                if let Some(att) = att.bg.take() {
+                    v.bg = att;
+                }
+                if let Some(att) = att.attrs.take() {
+                    v.attrs = att;
+                }
             }
-            if let Some(att) = s.dark.get_mut(k).and_then(|att| att.bg.take()) {
-                v.bg = att;
-            }
-            if let Some(att) = s.dark.get_mut(k).and_then(|att| att.attrs.take()) {
-                v.attrs = att;
-            }
+        }
+        if !s.dark.keys.is_empty() {
+            return Err(de::Error::custom(format!(
+                "dark theme contains unrecognized theme keywords: {}",
+                s.dark
+                    .keys
+                    .keys()
+                    .into_iter()
+                    .map(|k| k.as_ref())
+                    .collect::<SmallVec<[_; 128]>>()
+                    .join(", ")
+            )));
         }
         for (tk, t) in ret.other_themes.iter_mut() {
             for (k, v) in t.iter_mut() {
-                if let Some(att) = s
+                if let Some(mut att) = s
                     .other_themes
                     .get_mut(tk)
-                    .and_then(|theme| theme.get_mut(k))
-                    .and_then(|att| att.fg.take())
+                    .and_then(|theme| theme.keys.remove(k))
                 {
-                    v.fg = att;
+                    if let Some(att) = att.fg.take() {
+                        v.fg = att;
+                    }
+                    if let Some(att) = att.bg.take() {
+                        v.bg = att;
+                    }
+                    if let Some(att) = att.attrs.take() {
+                        v.attrs = att;
+                    }
                 }
-                if let Some(att) = s
-                    .other_themes
-                    .get_mut(tk)
-                    .and_then(|theme| theme.get_mut(k))
-                    .and_then(|att| att.bg.take())
-                {
-                    v.bg = att;
-                }
-                if let Some(att) = s
-                    .other_themes
-                    .get_mut(tk)
-                    .and_then(|theme| theme.get_mut(k))
-                    .and_then(|att| att.attrs.take())
-                {
-                    v.attrs = att;
-                }
+            }
+            if !s.other_themes[tk].keys.is_empty() {
+                return Err(de::Error::custom(format!(
+                    "{} theme contains unrecognized theme keywords: {}",
+                    tk,
+                    s.other_themes[tk]
+                        .keys
+                        .keys()
+                        .into_iter()
+                        .map(|k| k.as_ref())
+                        .collect::<SmallVec<[_; 128]>>()
+                        .join(", ")
+                )));
             }
         }
         Ok(ret)
@@ -499,11 +549,7 @@ impl<'de> Deserialize<'de> for Themes {
 }
 
 impl Themes {
-    fn validate_keys(
-        name: &str,
-        theme: &HashMap<Cow<'static, str>, ThemeAttributeInner>,
-        hash_set: &HashSet<&'static str>,
-    ) -> Result<()> {
+    fn validate_keys(name: &str, theme: &Theme, hash_set: &HashSet<&'static str>) -> Result<()> {
         let keys = theme
             .keys()
             .filter_map(|k| {
@@ -990,8 +1036,8 @@ impl Default for Themes {
         add!("pager.highlight_search", light = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(6) /* Teal */, attrs: Attr::BOLD });
         add!("pager.highlight_search_current", light = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD }, dark = { fg: Color::White, bg: Color::Byte(17) /* NavyBlue */, attrs: Attr::BOLD });
         Themes {
-            light,
-            dark,
+            light: Theme { keys: light },
+            dark: Theme { keys: dark },
             other_themes,
         }
     }
@@ -1051,9 +1097,7 @@ impl Serialize for Themes {
 }
 
 /* Check Theme linked values for cycles */
-fn is_cyclic(
-    theme: &HashMap<Cow<'static, str>, ThemeAttributeInner>,
-) -> std::result::Result<(), String> {
+fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
     #[derive(Hash, Copy, Clone, PartialEq, Eq)]
     enum Course {
         Fg,
@@ -1066,7 +1110,7 @@ fn is_cyclic(
         visited: &mut HashMap<(&'a Cow<'static, str>, Course), bool>,
         stack: &mut HashMap<(&'a Cow<'static, str>, Course), bool>,
         path: &mut SmallVec<[(&'a Cow<'static, str>, Course); 16]>,
-        theme: &'a HashMap<Cow<'static, str>, ThemeAttributeInner>,
+        theme: &'a Theme,
     ) -> bool {
         if !visited[&(k, course)] {
             visited.entry((k, course)).and_modify(|e| *e = true);
@@ -1193,4 +1237,55 @@ fn is_cyclic(
     }
 
     return Ok(());
+}
+
+#[test]
+fn test_theme_parsing() {
+    let def = Themes::default();
+    assert!(def.validate().is_ok());
+    const TEST_STR: &'static str = r##"[dark]
+"mail.listing.tag_default" = { fg = "White", bg = "HotPink3" }
+"mail.listing.attachment_flag" = { fg = "mail.listing.tag_default.bg" }
+"mail.view.headers" = { bg = "mail.listing.tag_default.fg" }
+
+["hunter2"]
+"mail.view.body" = { fg = "Black", bg = "White"}"##;
+    let parsed: Themes = toml::from_str(TEST_STR).unwrap();
+    assert!(parsed.other_themes.contains_key("hunter2"));
+    assert_eq!(
+        unlink_bg(
+            &parsed.dark,
+            &ColorField::Bg,
+            &Cow::from("mail.listing.tag_default")
+        ),
+        Color::Byte(132)
+    );
+    assert_eq!(
+        unlink_fg(
+            &parsed.dark,
+            &ColorField::Fg,
+            &Cow::from("mail.listing.attachment_flag")
+        ),
+        Color::Byte(132)
+    );
+    assert_eq!(
+        unlink_bg(
+            &parsed.dark,
+            &ColorField::Bg,
+            &Cow::from("mail.view.headers")
+        ),
+        Color::Byte(15), // White
+    );
+    assert!(parsed.validate().is_ok());
+    const HAS_CYCLE: &'static str = r##"[dark]
+"mail.listing.compact.even" = { fg = "mail.listing.compact.odd" }
+"mail.listing.compact.odd" = { fg = "mail.listing.compact.even" }
+"##;
+    let parsed: Themes = toml::from_str(HAS_CYCLE).unwrap();
+    assert!(parsed.validate().is_err());
+    const HAS_INVALID_KEYS: &'static str = r##"[dark]
+"asdfsafsa" = { fg = "Black" }
+"##;
+    let parsed: std::result::Result<Themes, _> = toml::from_str(HAS_INVALID_KEYS);
+    assert!(parsed.is_err());
 }

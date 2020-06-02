@@ -391,19 +391,19 @@ impl FileSettings {
             dark: default_dark,
             ..
         } = Themes::default();
-        for (k, v) in default_light.into_iter() {
+        for (k, v) in default_light.keys.into_iter() {
             if !s.terminal.themes.light.contains_key(&k) {
                 s.terminal.themes.light.insert(k, v);
             }
         }
         for theme in s.terminal.themes.other_themes.values_mut() {
-            for (k, v) in default_dark.clone().into_iter() {
+            for (k, v) in default_dark.keys.clone().into_iter() {
                 if !theme.contains_key(&k) {
                     theme.insert(k, v);
                 }
             }
         }
-        for (k, v) in default_dark.into_iter() {
+        for (k, v) in default_dark.keys.into_iter() {
             if !s.terminal.themes.dark.contains_key(&k) {
                 s.terminal.themes.dark.insert(k, v);
             }
