@@ -1718,7 +1718,15 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
             }
             grid_dest[(x, y)] = grid_src[(src_x, src_y)];
             for t in &stack {
-                grid_dest[(x, y)].attrs |= grid_src.tag_table()[&t].attrs;
+                if let Some(fg) = grid_src.tag_table()[&t].fg {
+                    grid_dest[(x, y)].set_fg(fg);
+                }
+                if let Some(bg) = grid_src.tag_table()[&t].bg {
+                    grid_dest[(x, y)].set_bg(bg);
+                }
+                if let Some(attrs) = grid_src.tag_table()[&t].attrs {
+                    grid_dest[(x, y)].attrs |= attrs;
+                }
             }
             if src_x >= get_x(bottom_right!(src)) {
                 break 'for_x;
@@ -2792,8 +2800,8 @@ fn test_cellbuffer_search() {
 
 #[derive(Debug, Default, Copy, Hash, Clone, PartialEq, Eq)]
 pub struct FormatTag {
-    pub fg: Color,
-    pub bg: Color,
-    pub attrs: Attr,
+    pub fg: Option<Color>,
+    pub bg: Option<Color>,
+    pub attrs: Option<Attr>,
     pub priority: u8,
 }

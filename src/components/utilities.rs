@@ -301,6 +301,7 @@ pub struct Pager {
     colors: ThemeAttribute,
     initialised: bool,
     content: CellBuffer,
+    text_lines: Vec<String>,
     movement: Option<PageMovement>,
     id: ComponentId,
 }
@@ -342,8 +343,9 @@ impl Pager {
         empty_cell.set_bg(self.colors.bg);
         let mut content = CellBuffer::new(width, height, empty_cell);
         content.set_ascii_drawing(ascii_drawing);
-        Pager::print_string(&mut content, lines, self.colors);
+        Pager::print_string(&mut content, &lines, self.colors);
         self.text = text.to_string();
+        self.text_lines = lines;
         self.content = content;
         self.height = height;
         self.width = width;
@@ -414,8 +416,9 @@ impl Pager {
         }) {
             return Pager::from_buf(content, cursor_pos);
         }
+        let lines: Vec<String>;
         let content = {
-            let lines: Vec<String> = if let Some(width) = width {
+            lines = if let Some(width) = width {
                 text.split_lines_reflow(reflow, Some(width.saturating_sub(2)))
             } else {
                 text.trim().split('\n').map(str::to_string).collect()
@@ -431,11 +434,12 @@ impl Pager {
             } else {
                 CellBuffer::new(width, height, empty_cell)
             };
-            Pager::print_string(&mut content, lines, colors);
+            Pager::print_string(&mut content, &lines, colors);
             content
         };
         Pager {
             text,
+            text_lines: lines,
             reflow,
             cursor: (0, cursor_pos.unwrap_or(0)),
             height: content.size().1,
@@ -466,9 +470,10 @@ impl Pager {
         empty_cell.set_bg(colors.bg);
         let mut content = CellBuffer::new(width, height, empty_cell);
 
-        Pager::print_string(&mut content, lines, colors);
+        Pager::print_string(&mut content, &lines, colors);
         Pager {
             text: text.to_string(),
+            text_lines: lines,
             cursor: (0, cursor_pos.unwrap_or(0)),
             height,
             width,
@@ -494,7 +499,7 @@ impl Pager {
             ..Default::default()
         }
     }
-    pub fn print_string(content: &mut CellBuffer, lines: Vec<String>, colors: ThemeAttribute) {
+    pub fn print_string(content: &mut CellBuffer, lines: &[String], colors: ThemeAttribute) {
         let width = content.size().0;
         debug!(colors);
         for (i, l) in lines.iter().enumerate() {
@@ -558,7 +563,24 @@ impl Component for Pager {
                     );
                 }
             }
-            Pager::print_string(&mut content, lines, self.colors);
+            Pager::print_string(&mut content, &lines, self.colors);
+            #[cfg(feature = "regexp")]
+            {
+                for text_formatter in crate::conf::text_format_regexps(
+                    context,
+                    "pager.envelope.body"
+                ) {
+                    let t = content.insert_tag(text_formatter.tag);
+                    for (i, l) in lines.iter().enumerate() {
+                        for _match in text_formatter.regexp.0.find_iter(l.as_bytes()) {
+                            if let Ok(_match) = _match {
+                                content.set_tag(t, (_match.start(), i), (_match.end(), i));
+                            }
+                        }
+                    }
+                }
+            }
+            self.text_lines = lines;
             if let Some(ref mut search) = self.search {
                 let results_attr = crate::conf::value(context, "pager.highlight_search");
                 let results_current_attr =

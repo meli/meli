@@ -489,7 +489,191 @@ pub struct Themes {
 pub struct Theme {
     color_aliases: HashMap<Cow<'static, str>, ThemeValue<Color>>,
     attr_aliases: HashMap<Cow<'static, str>, ThemeValue<Attr>>,
+    #[cfg(feature = "regexp")]
+    text_format_regexps: HashMap<Cow<'static, str>, SmallVec<[TextFormatterSetting; 32]>>,
     pub keys: HashMap<Cow<'static, str>, ThemeAttributeInner>,
+}
+
+#[cfg(feature = "regexp")]
+pub use regexp::text_format_regexps;
+#[cfg(feature = "regexp")]
+use regexp::*;
+
+#[cfg(feature = "regexp")]
+mod regexp {
+    use super::*;
+    use crate::terminal::FormatTag;
+
+    pub(super) const DEFAULT_TEXT_FORMATTER_KEYS: &'static [&'static str] =
+        &["pager.envelope.body", "listing.from", "listing.subject"];
+
+    #[derive(Clone)]
+    pub struct RegexpWrapper(pub pcre2::bytes::Regex);
+
+    #[derive(Debug, Clone)]
+    pub(super) struct TextFormatterSetting {
+        pub(super) regexp: RegexpWrapper,
+        pub(super) fg: Option<ThemeValue<Color>>,
+        pub(super) bg: Option<ThemeValue<Color>>,
+        pub(super) attrs: Option<ThemeValue<Attr>>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct TextFormatter<'r> {
+        pub regexp: &'r RegexpWrapper,
+        pub tag: FormatTag,
+    }
+
+    impl Default for RegexpWrapper {
+        fn default() -> Self {
+            Self(pcre2::bytes::Regex::new("").unwrap())
+        }
+    }
+
+    impl std::fmt::Debug for RegexpWrapper {
+        fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+            std::fmt::Debug::fmt(self.0.as_str(), fmt)
+        }
+    }
+
+    impl std::hash::Hash for RegexpWrapper {
+        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+            self.0.as_str().hash(state)
+        }
+    }
+
+    impl Eq for RegexpWrapper {}
+
+    impl PartialEq for RegexpWrapper {
+        fn eq(&self, other: &RegexpWrapper) -> bool {
+            self.0.as_str().eq(other.0.as_str())
+        }
+    }
+
+    impl RegexpWrapper {
+        pub(super) fn new(
+            pattern: &str,
+            caseless: bool,
+            dotall: bool,
+            extended: bool,
+            multi_line: bool,
+            ucp: bool,
+            jit_if_available: bool,
+        ) -> std::result::Result<Self, pcre2::Error> {
+            Ok(Self(unsafe {
+                pcre2::bytes::RegexBuilder::new()
+                    .caseless(caseless)
+                    .dotall(dotall)
+                    .extended(extended)
+                    .multi_line(multi_line)
+                    .ucp(ucp)
+                    .jit_if_available(jit_if_available)
+                    .disable_utf_check() // We only match on rust strings, which are guaranteed UTF8
+                    .build(pattern)?
+            }))
+        }
+    }
+
+    #[inline(always)]
+    pub fn text_format_regexps<'ctx>(
+        context: &'ctx Context,
+        key: &'static str,
+    ) -> SmallVec<[TextFormatter<'ctx>; 64]> {
+        let theme = match context.settings.terminal.theme.as_str() {
+            "light" => &context.settings.terminal.themes.light,
+            "dark" => &context.settings.terminal.themes.dark,
+            t => context
+                .settings
+                .terminal
+                .themes
+                .other_themes
+                .get(t)
+                .unwrap_or(&context.settings.terminal.themes.dark),
+        };
+        theme.text_format_regexps[&Cow::from(key)]
+            .iter()
+            .map(|v| TextFormatter {
+                regexp: &v.regexp,
+                tag: FormatTag {
+                    fg: v.fg.as_ref().map(|v| match v {
+                        ThemeValue::Link(ref key, ref field) => unlink_fg(theme, field, key),
+                        ThemeValue::Alias(ref alias_ident) => {
+                            let mut alias_ident = alias_ident;
+                            let ret;
+                            'fg_alias_loop: loop {
+                                match &theme.color_aliases[alias_ident.as_ref()] {
+                                    ThemeValue::Link(ref new_key, ref new_field) => {
+                                        ret = unlink_fg(theme, new_field, new_key);
+                                        break 'fg_alias_loop;
+                                    }
+
+                                    ThemeValue::Alias(ref new_alias_ident) => {
+                                        alias_ident = new_alias_ident
+                                    }
+                                    ThemeValue::Value(val) => {
+                                        ret = *val;
+                                        break 'fg_alias_loop;
+                                    }
+                                }
+                            }
+                            ret
+                        }
+                        ThemeValue::Value(val) => *val,
+                    }),
+                    bg: v.bg.as_ref().map(|v| match v {
+                        ThemeValue::Link(ref key, ref field) => unlink_bg(theme, field, key),
+                        ThemeValue::Alias(ref alias_ident) => {
+                            let mut alias_ident = alias_ident;
+                            let ret;
+                            'bg_alias_loop: loop {
+                                match &theme.color_aliases[alias_ident.as_ref()] {
+                                    ThemeValue::Link(ref new_key, ref new_field) => {
+                                        ret = unlink_bg(theme, new_field, new_key);
+                                        break 'bg_alias_loop;
+                                    }
+
+                                    ThemeValue::Alias(ref new_alias_ident) => {
+                                        alias_ident = new_alias_ident
+                                    }
+                                    ThemeValue::Value(val) => {
+                                        ret = *val;
+                                        break 'bg_alias_loop;
+                                    }
+                                }
+                            }
+                            ret
+                        }
+                        ThemeValue::Value(val) => *val,
+                    }),
+                    attrs: v.attrs.as_ref().map(|v| match v {
+                        ThemeValue::Link(ref key, ()) => unlink_attrs(theme, key),
+                        ThemeValue::Alias(ref alias_ident) => {
+                            let mut alias_ident = alias_ident;
+                            let ret;
+                            'attrs_alias_loop: loop {
+                                match &theme.attr_aliases[alias_ident.as_ref()] {
+                                    ThemeValue::Link(ref new_key, ()) => {
+                                        ret = unlink_attrs(theme, new_key);
+                                        break 'attrs_alias_loop;
+                                    }
+                                    ThemeValue::Alias(ref new_alias_ident) => {
+                                        alias_ident = new_alias_ident
+                                    }
+                                    ThemeValue::Value(val) => {
+                                        ret = *val;
+                                        break 'attrs_alias_loop;
+                                    }
+                                }
+                            }
+                            ret
+                        }
+                        ThemeValue::Value(val) => *val,
+                    }),
+                    priority: 0,
+                },
+            })
+            .collect()
+    }
 }
 
 use std::ops::{Deref, DerefMut};
@@ -511,6 +695,14 @@ impl<'de> Deserialize<'de> for Themes {
     where
         D: Deserializer<'de>,
     {
+        #[cfg(feature = "regexp")]
+        const fn false_val() -> bool {
+            false
+        }
+        #[cfg(feature = "regexp")]
+        const fn true_val() -> bool {
+            true
+        }
         #[derive(Deserialize)]
         struct ThemesOptions {
             #[serde(default)]
@@ -526,8 +718,29 @@ impl<'de> Deserialize<'de> for Themes {
             color_aliases: HashMap<Cow<'static, str>, ThemeValue<Color>>,
             #[serde(default)]
             attr_aliases: HashMap<Cow<'static, str>, ThemeValue<Attr>>,
+            #[cfg(feature = "regexp")]
+            #[serde(default)]
+            text_format_regexps: HashMap<Cow<'static, str>, HashMap<String, RegexpOptions>>,
             #[serde(flatten, default)]
             keys: HashMap<Cow<'static, str>, ThemeAttributeInnerOptions>,
+        }
+        #[cfg(feature = "regexp")]
+        #[derive(Deserialize, Default)]
+        struct RegexpOptions {
+            #[serde(default = "false_val")]
+            caseless: bool,
+            #[serde(default = "false_val")]
+            dotall: bool,
+            #[serde(default = "false_val")]
+            extended: bool,
+            #[serde(default = "false_val")]
+            multi_line: bool,
+            #[serde(default = "true_val")]
+            ucp: bool,
+            #[serde(default = "false_val")]
+            jit_if_available: bool,
+            #[serde(flatten)]
+            rest: ThemeAttributeInnerOptions,
         }
         #[derive(Deserialize, Default)]
         struct ThemeAttributeInnerOptions {
@@ -572,6 +785,34 @@ impl<'de> Deserialize<'de> for Themes {
         }
         ret.light.color_aliases = s.light.color_aliases;
         ret.light.attr_aliases = s.light.attr_aliases;
+        #[cfg(feature = "regexp")]
+        for (k, v) in s.light.text_format_regexps {
+            let mut acc = SmallVec::new();
+            for (rs, v) in v {
+                match RegexpWrapper::new(
+                    &rs,
+                    v.caseless,
+                    v.dotall,
+                    v.extended,
+                    v.multi_line,
+                    v.ucp,
+                    v.jit_if_available,
+                ) {
+                    Ok(regexp) => {
+                        acc.push(TextFormatterSetting {
+                            regexp,
+                            fg: v.rest.fg,
+                            bg: v.rest.bg,
+                            attrs: v.rest.attrs,
+                        });
+                    }
+                    Err(err) => {
+                        return Err(de::Error::custom(err.to_string()));
+                    }
+                }
+            }
+            ret.light.text_format_regexps.insert(k, acc);
+        }
         for (k, v) in ret.dark.iter_mut() {
             if let Some(mut att) = s.dark.keys.remove(k) {
                 if let Some(att) = att.fg.take() {
@@ -599,6 +840,34 @@ impl<'de> Deserialize<'de> for Themes {
         }
         ret.dark.color_aliases = s.dark.color_aliases;
         ret.dark.attr_aliases = s.dark.attr_aliases;
+        #[cfg(feature = "regexp")]
+        for (k, v) in s.dark.text_format_regexps {
+            let mut acc = SmallVec::new();
+            for (rs, v) in v {
+                match RegexpWrapper::new(
+                    &rs,
+                    v.caseless,
+                    v.dotall,
+                    v.extended,
+                    v.multi_line,
+                    v.ucp,
+                    v.jit_if_available,
+                ) {
+                    Ok(regexp) => {
+                        acc.push(TextFormatterSetting {
+                            regexp,
+                            fg: v.rest.fg,
+                            bg: v.rest.bg,
+                            attrs: v.rest.attrs,
+                        });
+                    }
+                    Err(err) => {
+                        return Err(de::Error::custom(err.to_string()));
+                    }
+                }
+            }
+            ret.dark.text_format_regexps.insert(k, acc);
+        }
         for (tk, t) in ret.other_themes.iter_mut() {
             let mut theme = s.other_themes.remove(tk).unwrap();
             for (k, v) in t.iter_mut() {
@@ -629,6 +898,34 @@ impl<'de> Deserialize<'de> for Themes {
             }
             t.color_aliases = theme.color_aliases;
             t.attr_aliases = theme.attr_aliases;
+            #[cfg(feature = "regexp")]
+            for (k, v) in theme.text_format_regexps {
+                let mut acc = SmallVec::new();
+                for (rs, v) in v {
+                    match RegexpWrapper::new(
+                        &rs,
+                        v.caseless,
+                        v.dotall,
+                        v.extended,
+                        v.multi_line,
+                        v.ucp,
+                        v.jit_if_available,
+                    ) {
+                        Ok(regexp) => {
+                            acc.push(TextFormatterSetting {
+                                regexp,
+                                fg: v.rest.fg,
+                                bg: v.rest.bg,
+                                attrs: v.rest.attrs,
+                            });
+                        }
+                        Err(err) => {
+                            return Err(de::Error::custom(err.to_string()));
+                        }
+                    }
+                }
+                t.text_format_regexps.insert(k, acc);
+            }
         }
         Ok(ret)
     }
@@ -636,7 +933,7 @@ impl<'de> Deserialize<'de> for Themes {
 
 impl Themes {
     fn validate_keys(name: &str, theme: &Theme, hash_set: &HashSet<&'static str>) -> Result<()> {
-        let keys = theme
+        let mut keys = theme
             .keys()
             .filter_map(|k| {
                 if !hash_set.contains(&k.as_ref()) {
@@ -745,6 +1042,85 @@ impl Themes {
                 }
             }))
             .collect::<SmallVec<[(Option<_>, &'_ str, &'_ str, &'_ str); 128]>>();
+        #[cfg(feature = "regexp")]
+        {
+            for (key, v) in &theme.text_format_regexps {
+                if !regexp::DEFAULT_TEXT_FORMATTER_KEYS.contains(&key.as_ref()) {
+                    keys.push((
+                        None,
+                        "key",
+                        "invalid key in `text_format_regexps`",
+                        key.as_ref(),
+                    ));
+                } else {
+                    for tfs in v {
+                        if let Some(fg) = &tfs.fg {
+                            if let ThemeValue::Link(ref r, _) = fg {
+                                if !hash_set.contains(&r.as_ref()) {
+                                    keys.push((
+                                        Some(key),
+                                        "fg link",
+                                        "invalid key in `text_format_regexps`",
+                                        r.as_ref(),
+                                    ));
+                                }
+                            } else if let ThemeValue::Alias(ref ident) = fg {
+                                if !theme.color_aliases.contains_key(ident.as_ref()) {
+                                    keys.push((
+                                        Some(key),
+                                        "fg alias",
+                                        "nonexistant color alias in `text_format_regexps`",
+                                        ident,
+                                    ));
+                                }
+                            }
+                        }
+                        if let Some(bg) = &tfs.bg {
+                            if let ThemeValue::Link(ref r, _) = bg {
+                                if !hash_set.contains(&r.as_ref()) {
+                                    keys.push((
+                                        Some(key),
+                                        "bg link",
+                                        "invalid key in `text_format_regexps`",
+                                        r.as_ref(),
+                                    ));
+                                }
+                            } else if let ThemeValue::Alias(ref ident) = bg {
+                                if !theme.color_aliases.contains_key(ident.as_ref()) {
+                                    keys.push((
+                                        Some(key),
+                                        "bg alias",
+                                        "nonexistant color alias in `text_format_regexps`",
+                                        ident,
+                                    ));
+                                }
+                            }
+                        }
+                        if let Some(attrs) = &tfs.attrs {
+                            if let ThemeValue::Link(ref r, _) = attrs {
+                                if !hash_set.contains(&r.as_ref()) {
+                                    keys.push((
+                                        Some(key),
+                                        "attrs link",
+                                        "invalid key in `text_format_regexps`",
+                                        r.as_ref(),
+                                    ));
+                                }
+                            } else if let ThemeValue::Alias(ref ident) = attrs {
+                                if !theme.attr_aliases.contains_key(ident.as_ref()) {
+                                    keys.push((
+                                        Some(key),
+                                        "attrs alias",
+                                        "nonexistant text attribute alias in `text_format_regexps`",
+                                        ident,
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         if !keys.is_empty() {
             return Err(format!(
@@ -1192,11 +1568,21 @@ impl Default for Themes {
                 keys: light,
                 attr_aliases: Default::default(),
                 color_aliases: Default::default(),
+                #[cfg(feature = "regexp")]
+                text_format_regexps: DEFAULT_TEXT_FORMATTER_KEYS
+                    .iter()
+                    .map(|&k| (k.into(), SmallVec::new()))
+                    .collect(),
             },
             dark: Theme {
                 keys: dark,
                 attr_aliases: Default::default(),
                 color_aliases: Default::default(),
+                #[cfg(feature = "regexp")]
+                text_format_regexps: DEFAULT_TEXT_FORMATTER_KEYS
+                    .iter()
+                    .map(|&k| (k.into(), SmallVec::new()))
+                    .collect(),
             },
             other_themes,
         }

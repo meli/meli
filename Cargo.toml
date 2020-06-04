@@ -49,7 +49,7 @@ rmpv = { version = "^0.4.2", features=["with-serde",] }
 rmp-serde = "^0.14.0"
 smallvec = { version = "1.1.0", features = ["serde", ] }
 bitflags = "1.0"
-
+pcre2 = { version = "0.2.3", optional = true }
 
 [profile.release]
 lto = true
@@ -60,10 +60,11 @@ debug = false
 members = ["melib", "testing", ]
 
 [features]
-default = ["sqlite3", "notmuch"]
+default = ["sqlite3", "notmuch", "regexp"]
 notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
 sqlite3 = ["melib/sqlite3"]
+regexp = ["pcre2"]
 cli-docs = []
 
 # Print tracing logs as meli runs in stderr
