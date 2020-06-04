@@ -88,8 +88,7 @@ pub fn encode_header(value: &str) -> String {
     {
         /* TODO: test this. If it works as fine as the one above, there's no need to keep the above
          * implementation.*/
-        let mut idx = 0;
-        for g in value.chars() {
+        for (i, g) in value.char_indices() {
             match (g.is_ascii(), is_current_window_ascii) {
                 (true, true) => {
                     ret.push(g);
@@ -99,23 +98,23 @@ pub fn encode_header(value: &str) -> String {
                      *
                      * Whitespaces inside encoded tokens must be greedily taken,
                      * instead of splitting each non-ascii word into separate encoded tokens. */
-                    if !g.is_whitespace() {
+                    if !g.is_whitespace() && value.is_char_boundary(i) {
                         ret.push_str(&format!(
                             "=?UTF-8?B?{}?=",
                             BASE64_MIME
-                                .encode(value[current_window_start..idx].as_bytes())
+                                .encode(value[current_window_start..i].as_bytes())
                                 .trim()
                         ));
-                        if idx != value.len() - 1 {
+                        if i != value.len() - 1 {
                             ret.push(' ');
                         }
                         is_current_window_ascii = true;
-                        current_window_start = idx;
+                        current_window_start = i;
                         ret.push(g);
                     }
                 }
                 (false, true) => {
-                    current_window_start = idx;
+                    current_window_start = i;
                     is_current_window_ascii = false;
                 }
                 /* RFC2047 recommends:
@@ -124,21 +123,22 @@ pub fn encode_header(value: &str) -> String {
                  * characters.'
                  * This is a rough compliance.
                  */
-                (false, false) if (((4 * (idx - current_window_start) / 3) + 3) & !3) > 33 => {
+                (false, false)
+                    if value.is_char_boundary(i) && value[current_window_start..i].len() > 76 =>
+                {
                     ret.push_str(&format!(
                         "=?UTF-8?B?{}?=",
                         BASE64_MIME
-                            .encode(value[current_window_start..idx].as_bytes())
+                            .encode(value[current_window_start..i].as_bytes())
                             .trim()
                     ));
-                    if idx != value.len() - 1 {
+                    if i != value.len() - 1 {
                         ret.push(' ');
                     }
-                    current_window_start = idx;
+                    current_window_start = i;
                 }
                 (false, false) => {}
             }
-            idx += std::mem::size_of::<char>();
         }
     }
     /* If the last part of the header value is encoded, it won't be pushed inside the previous for
