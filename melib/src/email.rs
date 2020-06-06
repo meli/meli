@@ -236,7 +236,13 @@ impl Envelope {
     pub fn hash(&self) -> EnvelopeHash {
         self.hash
     }
-    pub fn populate_headers(&mut self, bytes: &[u8]) -> Result<()> {
+    pub fn populate_headers(&mut self, mut bytes: &[u8]) -> Result<()> {
+        if bytes.starts_with(b"From ") {
+            /* Attempt to recover if message includes the mbox From label as first line */
+            if let Some(offset) = bytes.find(b"\n") {
+                bytes = &bytes[offset + 1..];
+            }
+        }
         let (headers, body) = match parser::mail(bytes).to_full_result() {
             Ok(v) => v,
             Err(e) => {
