@@ -238,7 +238,7 @@ impl Component for VSplit {
     }
 
     fn process_event(&mut self, event: &mut UIEvent, context: &mut Context) -> bool {
-        (self.left.process_event(event, context) || self.right.process_event(event, context))
+        self.left.process_event(event, context) || self.right.process_event(event, context)
     }
 
     fn is_dirty(&self) -> bool {
@@ -566,10 +566,9 @@ impl Component for Pager {
             Pager::print_string(&mut content, &lines, self.colors);
             #[cfg(feature = "regexp")]
             {
-                for text_formatter in crate::conf::text_format_regexps(
-                    context,
-                    "pager.envelope.body"
-                ) {
+                for text_formatter in
+                    crate::conf::text_format_regexps(context, "pager.envelope.body")
+                {
                     let t = content.insert_tag(text_formatter.tag);
                     for (i, l) in lines.iter().enumerate() {
                         for _match in text_formatter.regexp.0.find_iter(l.as_bytes()) {
@@ -1247,9 +1246,7 @@ impl Component for StatusBar {
                                 .replies
                                 .push_back(UIEvent::Command(self.ex_buffer.as_str().to_string()));
                         }
-                        if parse_command(&self.ex_buffer.as_str().as_bytes())
-                            .to_full_result()
-                            .is_ok()
+                        if parse_command(&self.ex_buffer.as_str().as_bytes()).is_ok()
                             && self.cmd_history.last().map(String::as_str)
                                 != Some(self.ex_buffer.as_str())
                         {

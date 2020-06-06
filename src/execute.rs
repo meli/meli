@@ -21,8 +21,19 @@
 
 /*! A parser module for user commands passed through the Execute mode.
 */
+use crate::melib::parser::BytesExt;
+use melib::nom::{
+    self,
+    branch::alt,
+    bytes::complete::{is_a, is_not, tag, take_until},
+    character::complete::{digit1, not_line_ending},
+    combinator::{map, map_res},
+    multi::separated_list,
+    sequence::{pair, preceded, separated_pair},
+    IResult,
+};
 pub use melib::thread::{SortField, SortOrder};
-use nom::{digit, not_line_ending, IResult};
+use melib::MeliError;
 use std;
 pub mod actions;
 use actions::MailboxOperation;
@@ -62,22 +73,22 @@ macro_rules! define_commands {
 
 pub fn quoted_argument(input: &[u8]) -> IResult<&[u8], &str> {
     if input.is_empty() {
-        return IResult::Error(nom::ErrorKind::Custom(0));
+        return Err(nom::Err::Error((input, nom::error::ErrorKind::Tag)));
     }
 
     if input[0] == b'"' {
         let mut i = 1;
         while i < input.len() {
             if input[i] == b'\"' && input[i - 1] != b'\\' {
-                return IResult::Done(&input[i + 1..], unsafe {
+                return Ok((&input[i + 1..], unsafe {
                     std::str::from_utf8_unchecked(&input[1..i])
-                });
+                }));
             }
             i += 1;
         }
-        return IResult::Error(nom::ErrorKind::Custom(0));
+        Err(nom::Err::Error((input, nom::error::ErrorKind::Tag)))
     } else {
-        return map_res!(input, is_not!(" "), std::str::from_utf8);
+        map_res(is_not(" "), std::str::from_utf8)(input)
     }
 }
 
@@ -212,143 +223,143 @@ pub enum Token {
     IndexValue,
 }
 
+fn eof(input: &[u8]) -> IResult<&[u8], ()> {
+    if input.is_empty() {
+        Ok((input, ()))
+    } else {
+        Err(nom::Err::Error((input, nom::error::ErrorKind::Tag)))
+    }
+}
+
 define_commands!([
                  { tags: ["set"],
                    desc: "set [seen/unseen], toggles message's Seen flag.",
                    tokens: &[One(Literal("set")), One(Alternatives(&[to_stream!(One(Literal("seen"))), to_stream!(One(Literal("unseen")))]))],
                    parser:
-                     ( named!(
-                             envelope_action<Action>,
-                             alt_complete!(
-                                 preceded!(
-                                     ws!(tag!("set")),
-                                     alt_complete!(
-                                         map!(ws!(tag!("seen")), |_| Listing(SetSeen))
-                                         | map!(ws!(tag!("unseen")), |_| Listing(SetUnseen))
-                                     )
-                                 ) | map!(preceded!(tag!("delete"), eof!()), |_| Listing(Delete))
-                                  | do_parse!(tag!("copyto")
-                                      >> is_a!(" ")
-                                      >> path: quoted_argument
-                                      >> ({ Listing(CopyTo(path.to_string())) }))
-                             )
-                     ); )
+                       (fn envelope_action<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                             alt((
+                                 preceded(
+                                     tag("set"),
+                                     alt((
+                                         map(tag("seen"), |_| Listing(SetSeen))
+                                         , map(tag("unseen"), |_| Listing(SetUnseen))
+                                     ))
+                                 ) , map(preceded(tag("delete"), eof), |_| Listing(Delete))
+                                  , |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      let (input, _) = tag("copyto")(input.trim())?;
+                                      let (input, _) = is_a(" ")(input)?;
+                                      let (input,path) =   quoted_argument(input)?;
+                                      Ok( (input, { Listing(CopyTo(path.to_string())) })) }
+                             ))(input)
+                     })
                  },
                  { tags: ["close"],
                    desc: "close non-sticky tabs",
                    tokens: &[One(Literal("close"))],
                    parser: (
-                       named!(close<Action>, map!(ws!(tag!("close")), |_| Tab(Close)));
+                       fn close(input: &[u8]) -> IResult<&[u8], Action> {
+                           map(tag("close"), |_| Tab(Close))(input.trim())
+                       }
                    )
                  },
                  { tags: ["go"],
                    desc: "go [n], switch to nth mailbox in this account",
                    tokens: &[One(Literal("goto")), One(IndexValue)],
                    parser: (
-                       named!(
-                           goto<Action>,
-                           preceded!(tag!("go "), map!(call!(usize_c), Action::ViewMailbox))
-                       );
+                       fn goto(input: &[u8]) -> IResult<&[u8], Action> {
+                           preceded(tag("go "), map(usize_c, Action::ViewMailbox))(input)
+                       }
                    )
                  },
                  { tags: ["subsort"],
                    desc: "subsort [date/subject] [asc/desc], sorts first level replies in threads.",
                    tokens: &[One(Literal("subsort")), One(Alternatives(&[to_stream!(One(Literal("date"))), to_stream!(One(Literal("subject")))])), One(Alternatives(&[to_stream!(One(Literal("asc"))), to_stream!(One(Literal("desc")))])) ],
                    parser: (
-                       named!(
-                           subsort<Action>,
-                           do_parse!(tag!("subsort ") >> p: pair!(sortfield, sortorder) >> (SubSort(p.0, p.1)))
-                       );
+                       fn subsort(input: &[u8]) -> IResult<&[u8], Action> {
+                           let (input, _) = tag("subsort ")(input)?;
+                           let (input, p)=pair(sortfield, sortorder)(input)?;
+                           Ok((input, SubSort(p.0, p.1)))
+                       }
                    )
                  },
                 { tags: ["sort"],
                   desc: "sort [date/subject] [asc/desc], sorts threads.",
                    tokens: &[One(Literal("sort")), One(Alternatives(&[to_stream!(One(Literal("date"))), to_stream!(One(Literal("subject")))])), One(Alternatives(&[to_stream!(One(Literal("asc"))), to_stream!(One(Literal("desc")))])) ],
                   parser: (
-                      named!(
-                          sort<Action>,
-                          do_parse!(
-                              tag!("sort ") >> p: separated_pair!(sortfield, tag!(" "), sortorder) >> (Sort(p.0, p.1))
-                          )
-                      );
-                  )
-                },
+                      fn sort(input: &[u8]) -> IResult<&[u8], Action> {
+                            let (input,_) = tag("sort ")(input)?;
+                            let (input, p)= separated_pair(sortfield, tag(" "), sortorder)(input)?;
+                           Ok((input, (Sort(p.0, p.1))))
+                      }
+                  )},
                 { tags: ["set", "set plain", "set threaded", "set compact"],
                   desc: "set [plain/threaded/compact/conversations], changes the mail listing view",
                   tokens: &[One(Literal("set")), One(Alternatives(&[to_stream!(One(Literal("plain"))), to_stream!(One(Literal("threaded"))), to_stream!(One(Literal("compact"))), to_stream!(One(Literal("conversations")))]))],
                   parser: (
-                      named!(
-                          toggle<Action>,
-                          preceded!(tag!("set "), alt_complete!(threaded | plain | compact | conversations))
-                      );
+                      fn toggle(input: &[u8]) -> IResult<&[u8], Action> {
+                          preceded(tag("set "), alt((threaded , plain , compact , conversations)))(input)
+                      }
                   )
                 },
                 { tags: ["toggle_thread_snooze"],
                   desc: "turn off new notifications for this thread",
                   tokens: &[One(Literal("toggle_thread_snooze"))],
                   parser: (
-                      named!(toggle_thread_snooze<Action>,
-                             map!(ws!(tag!("toggle_thread_snooze")), |_| ToggleThreadSnooze)
-                      );
+                      fn toggle_thread_snooze(input: &[u8]) -> IResult<&[u8], Action> {
+                          map(tag("toggle_thread_snooze"), |_| ToggleThreadSnooze)(input.trim())
+                      }
                   )
                 },
                 { tags: ["search"],
                   desc: "search <TERM>, searches list with given term",
                   tokens: &[One(Literal("search")), One(RestOfStringValue)],
                   parser:(
-                      named!(search<Action>,
-                             do_parse!(
-                                 ws!(tag!("search"))
-                                 >> string: map_res!(call!(not_line_ending), std::str::from_utf8)
-                                 >> (Listing(Search(String::from(string))))
-                             )
-                      );
+                      fn search(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("search")(input.trim())?;
+                          let (input, string) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+                          Ok((input, Listing(Search(String::from(string)))))
+                      }
                   )
                 },
                 { tags: ["list-archive", "list-post", "list-unsubscribe", "list-"],
                   desc: "list-[unsubscribe/post/archive]",
                   tokens: &[One(Alternatives(&[to_stream!(One(Literal("list-archive"))), to_stream!(One(Literal("list-post"))), to_stream!(One(Literal("list-unsubscribe")))]))],
                   parser: (
-                      named!(
-                          mailinglist<Action>,
-                          alt_complete!(
-                              map!(ws!(tag!("list-post")), |_| MailingListAction(ListPost))
-                              | map!(ws!(tag!("list-unsubscribe")), |_| MailingListAction(
+                      fn mailinglist(input: &[u8]) -> IResult<&[u8], Action> {
+                          alt((
+                              map(tag("list-post"), |_| MailingListAction(ListPost))
+                              , map(tag("list-unsubscribe"), |_| MailingListAction(
                                       ListUnsubscribe
                               ))
-                              | map!(ws!(tag!("list-archive")), |_| MailingListAction(
+                              , map(tag("list-archive"), |_| MailingListAction(
                                       ListArchive
                               ))
-                          )
-                      );
+                          ))(input.trim())
+                      }
                   )
                 },
                 { tags: ["setenv "],
                   desc: "setenv VAR=VALUE",
                   tokens: &[One(Literal("setenv")), OneOrMore(Seq(&[One(AlphanumericStringValue), One(Literal("=")), One(QuotedStringValue)]))],
                   parser: (
-                      named!( setenv<Action>,
-                              do_parse!(
-                                  ws!(tag!("setenv"))
-                                  >> key: map_res!(take_until1!("="), std::str::from_utf8)
-                                  >> ws!(tag!("="))
-                                  >> val: map_res!(call!(not_line_ending), std::str::from_utf8)
-                                  >> (SetEnv(key.to_string(), val.to_string()))
-                              )
-                      );
+                      fn setenv(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input,_ ) = tag("setenv")(input.trim())?;
+                          let (input, key) = map_res(take_until("="), std::str::from_utf8)(input)?;
+                          let (input, _) = tag("=")(input.trim())?;
+                          let (input, val)= map_res(not_line_ending, std::str::from_utf8)(input)?;
+                          Ok((input, SetEnv(key.to_string(), val.to_string())))
+                      }
                   )
                 },
                 { tags: ["printenv "],
                   desc: "printenv VAR",
                   tokens: &[],
                   parser:(
-                      named!( printenv<Action>,
-                              do_parse!(
-                                  ws!(tag!("env"))
-                                  >> key: map_res!(call!(not_line_ending), std::str::from_utf8)
-                                  >> (PrintEnv(key.to_string()))
-                              )
-                      );
+                      fn printenv(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("env")(input.ltrim())?;
+                          let (input, key) = map_res(not_line_ending, std::str::from_utf8)(input.trim())?;
+                          Ok((input, PrintEnv(key.to_string())))
+                      }
                   )
                 },
                 /* Pipe pager contents to binary */
@@ -356,270 +367,276 @@ define_commands!([
                   desc: "pipe EXECUTABLE ARGS",
                   tokens: &[One(Literal("pipe")), One(Filepath), ZeroOrMore(QuotedStringValue)],
                   parser:(
-                      named!( pipe<Action>,
-                              alt_complete!(
-                                  do_parse!(
-                                  ws!(tag!("pipe"))
-                                  >> bin: quoted_argument
-                                  >> is_a!(" ")
-                                  >> args: separated_list!(is_a!(" "), quoted_argument)
-                                  >> ({
-                                      View(Pipe(bin.to_string(), args.into_iter().map(String::from).collect::<Vec<String>>()))
-                                  })) | do_parse!(
-                                          ws!(tag!("pipe"))
-                                          >> bin: ws!(quoted_argument)
-                                          >> ({
+                      fn pipe<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                          alt((
+                                  |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      let (input, _ ) = tag("pipe")(input.trim())?;
+                                      let (input, bin) = quoted_argument(input)?;
+                                      let (input, _)= is_a(" ")(input)?;
+                                      let(input, args)= separated_list(is_a(" "), quoted_argument)(input)?;
+                                      Ok( (input, {
+                                          View(Pipe(bin.to_string(), args.into_iter().map(String::from).collect::<Vec<String>>()))
+                                      }))
+                                  },
+                                      |input: &'a [u8]| -> IResult<&'a [u8], Action> { 
+                                          let (input, _) = tag("pipe")(input.trim())?;
+                                          let (input, bin) = quoted_argument(input.trim())?;
+                                          Ok( (input, {
                                               View(Pipe(bin.to_string(), Vec::new()))
-                                          })
-                                  ))
-                      );
+                                          }))
+                                      }
+                          ))(input)
+                      }
                   )
                 },
                 { tags: ["add-attachment "],
                   desc: "add-attachment PATH",
                   tokens: &[One(Literal("add-attachment")), One(Filepath)],
                   parser:(
-                      named!( add_attachment<Action>,
-                              alt_complete!(
-                                   do_parse!(
-                                  ws!(tag!("add-attachment"))
-                                  >> ws!(tag!("<"))
-                                  >> cmd: quoted_argument
-                                  >> (Compose(AddAttachmentPipe(cmd.to_string()))))
-                                  | do_parse!(
-                                  ws!(tag!("add-attachment"))
-                                  >> path: quoted_argument
-                                  >> (Compose(AddAttachment(path.to_string()))))
-                              )
-                      );
+                      fn add_attachment<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                              alt((
+                                   |input: &'a [u8]| -> IResult<&'a [u8], Action>{
+                                let (input,_) = tag("add-attachment")(input.trim())?;
+                                  let (input, _) = tag("<")(input.trim())?;
+                                  let (input, cmd) =  quoted_argument(input)?;
+                                  Ok( (input, Compose(AddAttachmentPipe(cmd.to_string()))))}
+                                  , |input: &'a [u8]| -> IResult<&'a [u8], Action>{
+                                let (input,_) = tag("add-attachment")(input.trim())?;
+                                  let (input, path) =  quoted_argument(input)?;
+                                  Ok( (input, Compose(AddAttachment(path.to_string()))))}
+                              ))(input)
+                      }
                   )
                 },
                 { tags: ["remove-attachment "],
                   desc: "remove-attachment INDEX",
                   tokens: &[One(Literal("remove-attachment")), One(IndexValue)],
                   parser:(
-                      named!( remove_attachment<Action>,
-                              do_parse!(
-                                  ws!(tag!("remove-attachment"))
-                                  >> idx: map_res!(quoted_argument, usize::from_str)
-                                  >> (Compose(RemoveAttachment(idx)))
-                              )
-                      );
+                      fn remove_attachment(input: &[u8]) -> IResult<&[u8], Action> {
+                          let(input, _) = tag("remove-attachment")(input.trim())?;
+                          let (input, idx) =  map_res(quoted_argument, usize::from_str)(input)?;
+                          Ok( (input, Compose(RemoveAttachment(idx))))
+                      }
                   )
                 },
                 { tags: ["toggle sign "],
                   desc: "switch between sign/unsign for this draft",
                   tokens: &[One(Literal("toggle")), One(Literal("sign"))],
                   parser:(
-                      named!( toggle_sign<Action>,
-                              do_parse!(
-                                  ws!(tag!("toggle sign"))
-                                  >> (Compose(ToggleSign))
-                              )
-                      );
+                      fn toggle_sign(input: &[u8]) -> IResult<&[u8], Action> {
+                          let(input, _) = tag("toggle sign")(input.trim())?;
+                          Ok((input, Compose(ToggleSign)))
+                      }
                   )
                 },
                 { tags: ["create-mailbox "],
                   desc: "create-mailbox ACCOUNT MAILBOX_PATH",
                   tokens: &[One(Literal("create-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
-                      named!( create_mailbox<Action>,
-                              do_parse!(
-                                  ws!(tag!("create-mailbox"))
-                                  >> account: quoted_argument
-                                  >> is_a!(" ")
-                                  >> path: quoted_argument
-                                  >> (Mailbox(account.to_string(), MailboxOperation::Create(path.to_string())))
-                              )
-                      );
+                      fn create_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                          let(input, _) = tag("create-mailbox")(input.trim())?;
+                                  let (input, account) =  quoted_argument(input)?;
+                                  let (input, _) = is_a(" ")(input)?;
+                                  let (input, path) =  quoted_argument(input)?;
+                                  Ok( (input,Mailbox(account.to_string(), MailboxOperation::Create(path.to_string()))))
+                      }
                   )
                 },
                 { tags: ["subscribe-mailbox "],
                   desc: "subscribe-mailbox ACCOUNT MAILBOX_PATH",
                   tokens: &[One(Literal("subscribe-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
-                      named!( sub_mailbox<Action>,
-                              do_parse!(
-                                  ws!(tag!("subscribe-mailbox"))
-                                  >> account: quoted_argument
-                                  >> is_a!(" ")
-                                  >> path: quoted_argument
-                                  >> (Mailbox(account.to_string(), MailboxOperation::Subscribe(path.to_string())))
-                              )
-                      );
+                      fn sub_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                          let(input, _) = tag("subscribe-mailbox")(input.trim())?;
+                                  let (input, account) =  quoted_argument(input)?;
+                                  let (input, _) = is_a(" ")(input)?;
+                                  let (input, path) =  quoted_argument(input)?;
+                                   Ok((input,Mailbox(account.to_string(), MailboxOperation::Subscribe(path.to_string()))))
+                      }
                   )
                 },
                 { tags: ["unsubscribe-mailbox "],
                   desc: "unsubscribe-mailbox ACCOUNT MAILBOX_PATH",
                   tokens: &[One(Literal("unsubscribe-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
-                      named!( unsub_mailbox<Action>,
-                              do_parse!(
-                                  ws!(tag!("unsubscribe-mailbox"))
-                                  >> account: quoted_argument
-                                  >> is_a!(" ")
-                                  >> path: quoted_argument
-                                  >> (Mailbox(account.to_string(), MailboxOperation::Unsubscribe(path.to_string())))
-                              )
-                      );
+                      fn unsub_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                          let(input, _) = tag("unsubscribe-mailbox")(input.trim())?;
+                          let (input, account) =  quoted_argument(input)?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, path) =  quoted_argument(input)?;
+                          Ok((input, Mailbox(account.to_string(), MailboxOperation::Unsubscribe(path.to_string()))))
+                      }
                   )
                 },
                 { tags: ["rename-mailbox "],
                   desc: "rename-mailbox ACCOUNT MAILBOX_PATH_SRC MAILBOX_PATH_DEST",
                   tokens: &[One(Literal("rename-mailbox")), One(AccountName), One(MailboxPath), One(MailboxPath)],
                   parser:(
-                      named!( rename_mailbox<Action>,
-                              do_parse!(
-                                  ws!(tag!("rename-mailbox"))
-                                  >> account: quoted_argument
-                                  >> is_a!(" ")
-                                  >> src: quoted_argument
-                                  >> is_a!(" ")
-                                  >> dest: quoted_argument
-                                  >> (Mailbox(account.to_string(), MailboxOperation::Rename(src.to_string(), dest.to_string())))
-                              )
-                      );
+                      fn rename_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                          let(input, _) = tag("rename-mailbox")(input.trim())?;
+                                  let (input, account) =  quoted_argument(input)?;
+                                  let (input, _) = is_a(" ")(input)?;
+                                  let (input, src) =  quoted_argument(input)?;
+                                  let (input, _) = is_a(" ")(input)?;
+                                  let (input, dest) =  quoted_argument(input)?;
+                                   Ok((input, Mailbox(account.to_string(), MailboxOperation::Rename(src.to_string(), dest.to_string()))))
+                      }
                   )
                 },
                 { tags: ["delete-mailbox "],
                   desc: "delete-mailbox ACCOUNT MAILBOX_PATH",
                   tokens: &[One(Literal("delete-mailbox")), One(AccountName), One(MailboxPath)],
                   parser:(
-                      named!( delete_mailbox<Action>,
-                              do_parse!(
-                                  ws!(tag!("delete-mailbox"))
-                                  >> account: quoted_argument
-                                  >> is_a!(" ")
-                                  >> path: quoted_argument
-                                  >> (Mailbox(account.to_string(), MailboxOperation::Delete(path.to_string())))
-                              )
-                      );
+                      fn delete_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
+                          let(input, _) = tag("delete-mailbox")(input.trim())?;
+                          let (input, account) =  quoted_argument(input)?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, path) =  quoted_argument(input)?;
+                          Ok ((input, Mailbox(account.to_string(), MailboxOperation::Delete(path.to_string()))))
+                      }
                   )
                 },
                 { tags: ["reindex "],
                   desc: "reindex ACCOUNT, rebuild account cache in the background",
                   tokens: &[One(Literal("reindex")), One(AccountName)],
                   parser:(
-                      named!( reindex<Action>,
-                              do_parse!(
-                                  ws!(tag!("reindex"))
-                                  >> account: quoted_argument
-                                  >> (AccountAction(account.to_string(), ReIndex))
-                              )
-                      );
+                      fn reindex(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("reindex")(input.trim())?;
+                          let (input, account) =  quoted_argument(input)?;
+                          Ok( (input, AccountAction(account.to_string(), ReIndex)))
+                      }
                   )
                 },
                 { tags: ["open-in-tab"],
                   desc: "opens envelope view in new tab",
                   tokens: &[One(Literal("open-in-tab"))],
                   parser:(
-                      named!( open_in_new_tab<Action>,
-                              do_parse!(
-                                  ws!(tag!("open-in-tab"))
-                                  >> (Listing(OpenInNewTab))
-                              )
-                      );
+                      fn open_in_new_tab(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("open-in-tab")(input.trim())?;
+                          Ok((input, Listing(OpenInNewTab)))
+                      }
                   )
                 },
                 { tags: ["save-attachment "],
                   desc: "save-attachment INDEX PATH",
                   tokens: &[One(Literal("save-attachment")), One(IndexValue), One(Filepath)],
                   parser:(
-                      named!( save_attachment<Action>,
-                              do_parse!(
-                                  ws!(tag!("save-attachment"))
-                                  >> idx: map_res!(quoted_argument, usize::from_str)
-                                  >> path: ws!(quoted_argument)
-                                  >> (View(SaveAttachment(idx, path.to_string())))
-                              )
-                      );
+                      fn save_attachment(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("save-attachment")(input.trim())?;
+                          let (input, idx) =  map_res(quoted_argument, usize::from_str)(input)?;
+                          let (input, path) =  quoted_argument(input.trim())?;
+                          Ok((input, View(SaveAttachment(idx, path.to_string()))))
+                      }
                   )
                 },
                 { tags: ["tag", "tag add", "tag remove"],
                    desc: "tag [add/remove], edits message's tags.",
                    tokens: &[One(Literal("tag")), One(Alternatives(&[to_stream!(One(Literal("add"))), to_stream!(One(Literal("remove")))]))],
                    parser:
-                     ( named!(
-                             tag<Action>,
-                                 preceded!(
-                                     ws!(tag!("tag")),
-                                     alt_complete!(
-                                         do_parse!(
-                                         ws!(tag!("add"))
-                                         >> tag: ws!(quoted_argument)
-                                         >> (Listing(Tag(Add(tag.to_string())))))
-                                         | do_parse!(
-                                         ws!(tag!("remove"))
-                                         >> tag: ws!(quoted_argument)
-                                         >> (Listing(Tag(Remove(tag.to_string())))))
+                     ( fn _tag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                                 preceded(
+                                     tag("tag"),
+                                     alt((
+                                         |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                         let (input, _) = tag("add")(input.trim())?;
+                                         let (input, tag) = quoted_argument(input.trim())?;
+                                         Ok( (input, Listing(Tag(Add(tag.to_string())))))
+                                         }
+                                         ,
+                                         |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                         let (input, _) = tag("remove")(input.trim())?;
+                                         let (input, tag) = quoted_argument(input.trim())?;
+                                         Ok( (input, Listing(Tag(Remove(tag.to_string())))))
+                                         }
 
-                                     )
-                                 )
-                     ); )
+                                     ))
+                                 )(input.trim())
+                     })
                  }
 ]);
 
-named!(
-    usize_c<usize>,
-    map_res!(
-        map_res!(ws!(digit), std::str::from_utf8),
-        std::str::FromStr::from_str
-    )
-);
+fn usize_c(input: &[u8]) -> IResult<&[u8], usize> {
+    map_res(
+        map_res(digit1, std::str::from_utf8),
+        std::str::FromStr::from_str,
+    )(input.trim())
+}
 
-named!(
-    sortfield<SortField>,
-    map_res!(
-        map_res!(take_until_s!(" "), std::str::from_utf8),
-        std::str::FromStr::from_str
-    )
-);
+fn sortfield(input: &[u8]) -> IResult<&[u8], SortField> {
+    map_res(
+        map_res(take_until(" "), std::str::from_utf8),
+        std::str::FromStr::from_str,
+    )(input.trim())
+}
 
-named!(
-    sortorder<SortOrder>,
-    map_res!(
-        map_res!(call!(not_line_ending), std::str::from_utf8),
-        std::str::FromStr::from_str
-    )
-);
+fn sortorder(input: &[u8]) -> IResult<&[u8], SortOrder> {
+    map_res(
+        map_res(not_line_ending, std::str::from_utf8),
+        std::str::FromStr::from_str,
+    )(input)
+}
 
-named!(
-    threaded<Action>,
-    map!(ws!(tag!("threaded")), |_| Listing(SetThreaded))
-);
+fn threaded(input: &[u8]) -> IResult<&[u8], Action> {
+    map(tag("threaded"), |_| Listing(SetThreaded))(input.trim())
+}
 
-named!(
-    plain<Action>,
-    map!(ws!(tag!("plain")), |_| Listing(SetPlain))
-);
+fn plain(input: &[u8]) -> IResult<&[u8], Action> {
+    map(tag("plain"), |_| Listing(SetPlain))(input.trim())
+}
 
-named!(
-    compact<Action>,
-    map!(ws!(tag!("compact")), |_| Listing(SetCompact))
-);
+fn compact(input: &[u8]) -> IResult<&[u8], Action> {
+    map(tag("compact"), |_| Listing(SetCompact))(input.trim())
+}
 
-named!(
-    conversations<Action>,
-    map!(ws!(tag!("conversations")), |_| Listing(SetConversations))
-);
+fn conversations(input: &[u8]) -> IResult<&[u8], Action> {
+    map(tag("conversations"), |_| Listing(SetConversations))(input.trim())
+}
 
-named!(
-    listing_action<Action>,
-    alt_complete!(toggle | envelope_action | search | toggle_thread_snooze | open_in_new_tab | tag)
-);
+fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
+    alt((
+        toggle,
+        envelope_action,
+        search,
+        toggle_thread_snooze,
+        open_in_new_tab,
+        _tag,
+    ))(input)
+}
 
-named!(
-    compose_action<Action>,
-    alt_complete!(add_attachment | remove_attachment | toggle_sign)
-);
+fn compose_action(input: &[u8]) -> IResult<&[u8], Action> {
+    alt((add_attachment, remove_attachment, toggle_sign))(input)
+}
 
-named!(account_action<Action>, alt_complete!(reindex));
+fn account_action(input: &[u8]) -> IResult<&[u8], Action> {
+    reindex(input)
+}
 
-named!(view<Action>, alt_complete!(pipe | save_attachment));
+fn view(input: &[u8]) -> IResult<&[u8], Action> {
+    alt((pipe, save_attachment))(input)
+}
 
-named!(pub parse_command<Action>,
-       alt_complete!( goto | listing_action | sort | subsort | close | mailinglist | setenv | printenv | view | compose_action | create_mailbox | sub_mailbox | unsub_mailbox | delete_mailbox | rename_mailbox | account_action )
-);
+pub fn parse_command(input: &[u8]) -> Result<Action, MeliError> {
+    alt((
+        goto,
+        listing_action,
+        sort,
+        subsort,
+        close,
+        mailinglist,
+        setenv,
+        printenv,
+        view,
+        compose_action,
+        create_mailbox,
+        sub_mailbox,
+        unsub_mailbox,
+        delete_mailbox,
+        rename_mailbox,
+        account_action,
+    ))(input)
+    .map(|(_, v)| v)
+    .map_err(|err| err.into())
+}
 
 #[test]
 #[ignore]

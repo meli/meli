@@ -31,13 +31,9 @@ extern crate serde_derive;
 extern crate linkify;
 extern crate uuid;
 
-extern crate termion;
-
-#[macro_use]
-extern crate nom;
-
 extern crate serde_json;
 extern crate smallvec;
+extern crate termion;
 
 use melib::backends::imap::managesieve::new_managesieve_connection;
 use melib::Result;

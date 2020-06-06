@@ -37,14 +37,10 @@ extern crate serde_derive;
 extern crate linkify;
 extern crate uuid;
 
-extern crate termion;
-
-#[macro_use]
-extern crate nom;
-
 extern crate bitflags;
 extern crate serde_json;
 extern crate smallvec;
+extern crate termion;
 
 #[global_allocator]
 static GLOBAL: System = System;

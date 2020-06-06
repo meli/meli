@@ -36,7 +36,6 @@ serde_json = "1.0"
 toml = "0.5.3"
 linkify = "0.4.0"
 xdg-utils = "0.3.0"
-nom = "3.2.0"
 notify = "4.0.1" # >:c
 notify-rust = "^3" # >:c
 termion = "1.5.1"

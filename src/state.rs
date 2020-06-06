@@ -871,7 +871,7 @@ impl State {
         match event {
             // Command type is handled only by State.
             UIEvent::Command(cmd) => {
-                if let Ok(action) = parse_command(&cmd.as_bytes()).to_full_result() {
+                if let Ok(action) = parse_command(&cmd.as_bytes()) {
                     if action.needs_confirmation() {
                         self.overlay.push(Box::new(UIConfirmationDialog::new(
                             "You sure?",
