@@ -43,6 +43,41 @@ pub struct MeliError {
     pub source: Option<std::sync::Arc<dyn Error + Send + Sync + 'static>>,
 }
 
+pub trait IntoMeliError {
+    fn set_err_summary<M>(self, msg: M) -> MeliError
+    where
+        M: Into<Cow<'static, str>>;
+}
+
+pub trait ResultIntoMeliError<T> {
+    fn chain_err_summary<M, F>(self, msg_fn: F) -> Result<T>
+    where
+        F: Fn() -> M,
+        M: Into<Cow<'static, str>>;
+}
+
+impl<I: Into<MeliError>> IntoMeliError for I {
+    #[inline]
+    fn set_err_summary<M>(self, msg: M) -> MeliError
+    where
+        M: Into<Cow<'static, str>>,
+    {
+        let err: MeliError = self.into();
+        err.set_summary(msg)
+    }
+}
+
+impl<T, I: Into<MeliError>> ResultIntoMeliError<T> for std::result::Result<T, I> {
+    #[inline]
+    fn chain_err_summary<M, F>(self, msg_fn: F) -> Result<T>
+    where
+        F: Fn() -> M,
+        M: Into<Cow<'static, str>>,
+    {
+        self.map_err(|err| err.set_err_summary(msg_fn()))
+    }
+}
+
 impl MeliError {
     pub fn new<M>(msg: M) -> MeliError
     where

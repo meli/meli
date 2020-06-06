@@ -136,7 +136,7 @@ pub use crate::backends::{Backends, RefreshEvent, RefreshEventConsumer, SpecialU
 pub use crate::collection::*;
 pub use crate::conf::*;
 pub use crate::email::{Envelope, EnvelopeHash, Flag};
-pub use crate::error::{MeliError, Result};
+pub use crate::error::{IntoMeliError, MeliError, Result, ResultIntoMeliError};
 
 pub use crate::addressbook::*;
 
