@@ -162,9 +162,9 @@ fn test_encode_header() {
     );
     assert_eq!(
         &std::str::from_utf8(
-            &crate::email::parser::phrase(encode_header(&words).as_bytes(), false)
-                .to_full_result()
+            &crate::email::parser::encodings::phrase(encode_header(&words).as_bytes(), false)
                 .unwrap()
+                .1
         )
         .unwrap(),
         &words,
@@ -175,9 +175,9 @@ fn test_encode_header() {
     assert_eq!(
         r#"[internal] Νέος Οδηγός Συγγραφής"#,
         std::str::from_utf8(
-            &crate::email::parser::phrase(encode_header(&words_enc).as_bytes(), false)
-                .to_full_result()
+            &crate::email::parser::encodings::phrase(encode_header(&words_enc).as_bytes(), false)
                 .unwrap()
+                .1
         )
         .unwrap(),
     );
@@ -186,9 +186,9 @@ fn test_encode_header() {
     assert_eq!(
         "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
         std::str::from_utf8(
-            &crate::email::parser::phrase(encode_header(&words_enc).as_bytes(), false)
-                .to_full_result()
+            &crate::email::parser::encodings::phrase(encode_header(&words_enc).as_bytes(), false)
                 .unwrap()
+                .1
         )
         .unwrap(),
     );

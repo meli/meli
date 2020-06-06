@@ -23,48 +23,53 @@ use super::{ImapConnection, ImapProtocol, ImapServerConf, UIDStore};
 use crate::conf::AccountSettings;
 use crate::error::{MeliError, Result};
 use crate::get_conf_val;
-use nom::IResult;
+use nom::{
+    branch::alt, bytes::complete::tag, combinator::map, error::ErrorKind,
+    multi::separated_nonempty_list, sequence::separated_pair, IResult,
+};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-named!(
-    pub managesieve_capabilities<Vec<(&[u8], &[u8])>>,
-        do_parse!(
-            ret: separated_nonempty_list_complete!(tag!(b"\r\n"), alt_complete!(separated_pair!(quoted_raw, tag!(b" "), quoted_raw) | map!(quoted_raw, |q| (q, &b""[..]))))
-        >> opt!(tag!("\r\n"))
-        >> ({ ret })
-        )
-    );
+pub fn managesieve_capabilities(input: &[u8]) -> Result<Vec<(&[u8], &[u8])>> {
+    let (_, ret) = separated_nonempty_list(
+        tag(b"\r\n"),
+        alt((
+            separated_pair(quoted_raw, tag(b" "), quoted_raw),
+            map(quoted_raw, |q| (q, &b""[..])),
+        )),
+    )(input)?;
+    Ok(ret)
+}
 
 #[test]
 fn test_managesieve_capabilities() {
-    assert_eq!(managesieve_capabilities(b"\"IMPLEMENTATION\" \"Dovecot Pigeonhole\"\r\n\"SIEVE\" \"fileinto reject envelope encoded-character vacation subaddress comparator-i;ascii-numeric relational regex imap4flags copy include variables body enotify environment mailbox date index ihave duplicate mime foreverypart extracttext\"\r\n\"NOTIFY\" \"mailto\"\r\n\"SASL\" \"PLAIN\"\r\n\"STARTTLS\"\r\n\"VERSION\" \"1.0\"\r\n").to_full_result(), Ok(vec![
-(&b"IMPLEMENTATION"[..],&b"Dovecot Pigeonhole"[..]),
-(&b"SIEVE"[..],&b"fileinto reject envelope encoded-character vacation subaddress comparator-i;ascii-numeric relational regex imap4flags copy include variables body enotify environment mailbox date index ihave duplicate mime foreverypart extracttext"[..]),
-(&b"NOTIFY"[..],&b"mailto"[..]),
-(&b"SASL"[..],&b"PLAIN"[..]),
-(&b"STARTTLS"[..], &b""[..]),
-(&b"VERSION"[..],&b"1.0"[..])])
+    assert_eq!(managesieve_capabilities(b"\"IMPLEMENTATION\" \"Dovecot Pigeonhole\"\r\n\"SIEVE\" \"fileinto reject envelope encoded-character vacation subaddress comparator-i;ascii-numeric relational regex imap4flags copy include variables body enotify environment mailbox date index ihave duplicate mime foreverypart extracttext\"\r\n\"NOTIFY\" \"mailto\"\r\n\"SASL\" \"PLAIN\"\r\n\"STARTTLS\"\r\n\"VERSION\" \"1.0\"\r\n").unwrap(), vec![
+        (&b"IMPLEMENTATION"[..],&b"Dovecot Pigeonhole"[..]),
+        (&b"SIEVE"[..],&b"fileinto reject envelope encoded-character vacation subaddress comparator-i;ascii-numeric relational regex imap4flags copy include variables body enotify environment mailbox date index ihave duplicate mime foreverypart extracttext"[..]),
+        (&b"NOTIFY"[..],&b"mailto"[..]),
+        (&b"SASL"[..],&b"PLAIN"[..]),
+        (&b"STARTTLS"[..], &b""[..]),
+        (&b"VERSION"[..],&b"1.0"[..])]
 
-);
+    );
 }
 
 // Return a byte sequence surrounded by "s and decoded if necessary
 pub fn quoted_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
     if input.is_empty() || input[0] != b'"' {
-        return IResult::Error(nom::ErrorKind::Custom(0));
+        return Err(nom::Err::Error((input, ErrorKind::Tag)));
     }
 
     let mut i = 1;
     while i < input.len() {
         if input[i] == b'\"' && input[i - 1] != b'\\' {
-            return IResult::Done(&input[i + 1..], &input[1..i]);
+            return Ok((&input[i + 1..], &input[1..i]));
         }
         i += 1;
     }
 
-    return IResult::Error(nom::ErrorKind::Custom(0));
+    Err(nom::Err::Error((input, ErrorKind::Tag)))
 }
 
 pub trait ManageSieve {

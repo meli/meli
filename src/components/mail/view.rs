@@ -701,17 +701,16 @@ impl Component for MailView {
                             let mut ret = op
                                 .as_bytes()
                                 .and_then(|b| {
-                                    melib::email::parser::headers(b)
-                                        .to_full_result()
+                                    melib::email::parser::headers::headers(b)
+                                        .map(|(_, v)| v)
                                         .map_err(|err| err.into())
                                 })
                                 .and_then(|headers| {
                                     Ok(headers
                                         .into_iter()
                                         .map(|(h, v)| {
-                                            melib::email::parser::phrase(v, true)
-                                                .to_full_result()
-                                                .map(|v| {
+                                            melib::email::parser::encodings::phrase(v, true)
+                                                .map(|(_, v)| {
                                                     let mut h = h.to_vec();
                                                     h.push(b':');
                                                     h.push(b' ');
@@ -1106,8 +1105,8 @@ impl Component for MailView {
                                 let attachment_type = u.mime_type();
                                 let binary = query_default_app(&attachment_type);
                                 let mut name_opt = name.as_ref().and_then(|n| {
-                                    melib::email::parser::phrase(n.as_bytes(), false)
-                                        .to_full_result()
+                                    melib::email::parser::encodings::phrase(n.as_bytes(), false)
+                                        .map(|(_, v)| v)
                                         .ok()
                                         .and_then(|n| String::from_utf8(n).ok())
                                 });

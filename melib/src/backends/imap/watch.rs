@@ -271,7 +271,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         }
         *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
         match protocol_parser::untagged_responses(line.as_slice())
-            .to_full_result()
+            .map(|(_, v)| v)
             .map_err(MeliError::from)
         {
             Ok(Some(Recent(r))) => {
@@ -292,7 +292,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     conn.read_response(&mut response, RequiredResponses::SEARCH)
                 );
                 match protocol_parser::search_results_raw(response.as_bytes())
-                    .to_full_result()
+                    .map(|(_, v)| v)
                     .map_err(MeliError::from)
                 {
                     Ok(&[]) => {
@@ -529,7 +529,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     conn.read_response(&mut response, RequiredResponses::SEARCH)
                 );
                 match search_results(response.split_rn().next().unwrap_or("").as_bytes())
-                    .to_full_result()
+                    .map(|(_, v)| v)
                 {
                     Ok(mut v) => {
                         if let Some(uid) = v.pop() {
@@ -646,7 +646,7 @@ pub fn examine_updates(
                         conn.read_response(&mut response, RequiredResponses::SEARCH)
                     );
                     match protocol_parser::search_results_raw(response.as_bytes())
-                        .to_full_result()
+                        .map(|(_, v)| v)
                         .map_err(MeliError::from)
                     {
                         Ok(&[]) => {

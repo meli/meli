@@ -48,8 +48,8 @@ impl<'a> From<&'a [u8]> for ListAction<'a> {
 
 impl<'a> ListAction<'a> {
     pub fn parse_options_list(input: &'a [u8]) -> Option<SmallVec<[ListAction<'a>; 4]>> {
-        parser::angle_bracket_delimeted_list(input)
-            .map(|mut vec| {
+        parser::generic::angle_bracket_delimeted_list(input)
+            .map(|(_, mut vec)| {
                 /* Prefer email options first, since this _is_ a mail client after all and it's
                  * more automated */
                 vec.sort_unstable_by(|a, b| {
@@ -64,7 +64,6 @@ impl<'a> ListAction<'a> {
                     .map(|elem| ListAction::from(elem))
                     .collect::<SmallVec<[ListAction<'a>; 4]>>()
             })
-            .to_full_result()
             .ok()
     }
 }

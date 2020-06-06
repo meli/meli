@@ -533,11 +533,11 @@ impl MailBackend for ImapType {
         Ok(())
     }
 
-    fn as_any(&self) -> &dyn ::std::any::Any {
+    fn as_any(&self) -> &dyn::std::any::Any {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn ::std::any::Any {
+    fn as_any_mut(&mut self) -> &mut dyn::std::any::Any {
         self
     }
 
@@ -967,7 +967,7 @@ impl ImapType {
         lines.next_back();
         for l in lines.map(|l| l.trim()) {
             if let Ok(mut mailbox) =
-                protocol_parser::list_mailbox_result(l.as_bytes()).to_full_result()
+                protocol_parser::list_mailbox_result(l.as_bytes()).map(|(_, v)| v)
             {
                 if let Some(parent) = mailbox.parent {
                     if mailboxes.contains_key(&parent) {
@@ -1007,7 +1007,7 @@ impl ImapType {
         lines.next_back();
         for l in lines.map(|l| l.trim()) {
             if let Ok(subscription) =
-                protocol_parser::list_mailbox_result(l.as_bytes()).to_full_result()
+                protocol_parser::list_mailbox_result(l.as_bytes()).map(|(_, v)| v)
             {
                 if let Some(f) = mailboxes.get_mut(&subscription.hash()) {
                     if subscription.no_select {

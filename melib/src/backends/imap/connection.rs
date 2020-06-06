@@ -195,8 +195,8 @@ impl ImapStream {
             .ok_or_else(|| MeliError::new(""))
             .and_then(|res| {
                 protocol_parser::capabilities(res.as_bytes())
-                    .to_full_result()
                     .map_err(|_| MeliError::new(""))
+                    .map(|(_, v)| v)
             });
 
         if capabilities.is_err() {
@@ -241,8 +241,7 @@ impl ImapStream {
             for l in res.split_rn() {
                 if l.starts_with("* CAPABILITY") {
                     capabilities = protocol_parser::capabilities(l.as_bytes())
-                        .to_full_result()
-                        .map(|capabilities| {
+                        .map(|(_, capabilities)| {
                             HashSet::from_iter(capabilities.into_iter().map(|s: &[u8]| s.to_vec()))
                         })
                         .ok();
@@ -269,7 +268,7 @@ impl ImapStream {
             drop(capabilities);
             ret.send_command(b"CAPABILITY")?;
             ret.read_response(&mut res).unwrap();
-            let capabilities = protocol_parser::capabilities(res.as_bytes()).to_full_result()?;
+            let capabilities = protocol_parser::capabilities(res.as_bytes())?.1;
             let capabilities = HashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
             Ok((capabilities, ret))
         } else {

@@ -23,7 +23,8 @@ crossbeam = "0.7.2"
 data-encoding = "2.1.1"
 encoding = "0.2.33"
 memmap = { version = "0.5.2", optional = true }
-nom = "3.2.0"
+nom = { version = "5.1.1" }
+
 notify = { version = "4.0.1", optional = true }
 notify-rust = { version = "^3", optional = true }
 termion = "1.5.1"

@@ -197,9 +197,8 @@ impl Composer {
         if let Some(actions) = list_management::ListActions::detect(&parent_message) {
             if let Some(post) = actions.post {
                 if let list_management::ListAction::Email(list_post_addr) = post[0] {
-                    if let Ok(list_address) = melib::email::parser::mailto(list_post_addr)
-                        .to_full_result()
-                        .map(|m| m.address)
+                    if let Ok(list_address) = melib::email::parser::generic::mailto(list_post_addr)
+                        .map(|(_, m)| m.address)
                     {
                         let list_address_string = list_address.to_string();
                         ret.mode = ViewMode::SelectRecipients(UIDialog::new(

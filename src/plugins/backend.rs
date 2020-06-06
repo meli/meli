@@ -117,38 +117,43 @@ impl MailBackend for PluginBackend {
                                      }| {
                                         let mut env = melib::Envelope::new(hash);
                                         env.set_date(date.as_bytes());
-                                        if let Ok(d) = melib::email::parser::date(date.as_bytes()) {
+                                        if let Ok(d) =
+                                            melib::email::parser::generic::date(date.as_bytes())
+                                        {
                                             env.set_datetime(d);
                                         }
                                         env.set_message_id(message_id.as_bytes());
                                         let parse_result =
-                                            melib::email::parser::rfc2822address_list(
+                                            melib::email::parser::address::rfc2822address_list(
                                                 from.as_bytes(),
                                             );
-                                        if parse_result.is_done() {
-                                            let value = parse_result.to_full_result().unwrap();
+                                        if parse_result.is_ok() {
+                                            let value = parse_result.unwrap().1;
                                             env.set_from(value);
                                         }
                                         let parse_result =
-                                            melib::email::parser::rfc2822address_list(
+                                            melib::email::parser::address::rfc2822address_list(
                                                 to.as_bytes(),
                                             );
-                                        if parse_result.is_done() {
-                                            let value = parse_result.to_full_result().unwrap();
+                                        if parse_result.is_ok() {
+                                            let value = parse_result.unwrap().1;
                                             env.set_to(value);
                                         }
-                                        let parse_result =
-                                            melib::email::parser::phrase(subject.as_bytes(), false);
-                                        if parse_result.is_done() {
-                                            let value = parse_result.to_full_result().unwrap();
+                                        let parse_result = melib::email::parser::encodings::phrase(
+                                            subject.as_bytes(),
+                                            false,
+                                        );
+                                        if parse_result.is_ok() {
+                                            let value = parse_result.unwrap().1;
                                             env.set_subject(value);
                                         }
                                         if !references.is_empty() {
-                                            let parse_result = melib::email::parser::references(
-                                                references.as_bytes(),
-                                            );
-                                            if parse_result.is_done() {
-                                                for v in parse_result.to_full_result().unwrap() {
+                                            let parse_result =
+                                                melib::email::parser::address::references(
+                                                    references.as_bytes(),
+                                                );
+                                            if parse_result.is_ok() {
+                                                for v in parse_result.unwrap().1 {
                                                     env.push_references(v);
                                                 }
                                             }

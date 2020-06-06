@@ -62,7 +62,7 @@ impl ImapConnection {
 
         let mut response = String::with_capacity(8 * 1024);
         let untagged_response =
-            match super::protocol_parser::untagged_responses(line.as_bytes()).to_full_result() {
+            match super::protocol_parser::untagged_responses(line.as_bytes()).map(|(_, v)| v) {
                 Ok(None) | Err(_) => {
                     return Ok(false);
                 }
@@ -162,7 +162,7 @@ impl ImapConnection {
                     self.read_response(&mut response, RequiredResponses::SEARCH)
                 );
                 match super::protocol_parser::search_results_raw(response.as_bytes())
-                    .to_full_result()
+                    .map(|(_, v)| v)
                     .map_err(MeliError::from)
                 {
                     Ok(&[]) => {
@@ -267,7 +267,7 @@ impl ImapConnection {
                 match super::protocol_parser::search_results(
                     response.split_rn().next().unwrap_or("").as_bytes(),
                 )
-                .to_full_result()
+                .map(|(_, v)| v)
                 {
                     Ok(mut v) => {
                         if let Some(uid) = v.pop() {

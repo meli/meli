@@ -39,8 +39,8 @@ pub struct AttachmentBuilder {
 
 impl AttachmentBuilder {
     pub fn new(content: &[u8]) -> Self {
-        let (headers, body) = match parser::attachment(content).to_full_result() {
-            Ok(v) => v,
+        let (headers, body) = match parser::attachments::attachment(content) {
+            Ok((_, v)) => v,
             Err(_) => {
                 debug!("error in parsing attachment");
                 debug!("\n-------------------------------");
@@ -121,8 +121,8 @@ impl AttachmentBuilder {
     }
 
     pub fn set_content_type_from_bytes(&mut self, value: &[u8]) -> &mut Self {
-        match parser::content_type(value).to_full_result() {
-            Ok((ct, cst, params)) => {
+        match parser::attachments::content_type(value) {
+            Ok((_, (ct, cst, params))) => {
                 if ct.eq_ignore_ascii_case(b"multipart") {
                     let mut boundary = None;
                     for (n, v) in params {
@@ -185,10 +185,9 @@ impl AttachmentBuilder {
                     let mut name: Option<String> = None;
                     for (n, v) in params {
                         if n.eq_ignore_ascii_case(b"name") {
-                            if let Ok(v) = crate::email::parser::phrase(v.trim(), false)
-                                .to_full_result()
+                            if let Ok(v) = crate::email::parser::encodings::phrase(v.trim(), false)
                                 .as_ref()
-                                .and_then(|r| Ok(String::from_utf8_lossy(r).to_string()))
+                                .and_then(|(_, r)| Ok(String::from_utf8_lossy(r).to_string()))
                             {
                                 name = Some(v);
                             } else {
@@ -229,13 +228,13 @@ impl AttachmentBuilder {
             return Vec::new();
         }
 
-        match parser::parts(raw, boundary).to_full_result() {
-            Ok(attachments) => {
+        match parser::attachments::parts(raw, boundary) {
+            Ok((_, attachments)) => {
                 let mut vec = Vec::with_capacity(attachments.len());
                 for a in attachments {
                     let mut builder = AttachmentBuilder::default();
-                    let (headers, body) = match parser::attachment(&a).to_full_result() {
-                        Ok(v) => v,
+                    let (headers, body) = match parser::attachments::attachment(&a) {
+                        Ok((_, v)) => v,
                         Err(_) => {
                             debug!("error in parsing attachment");
                             debug!("\n-------------------------------");
@@ -420,8 +419,8 @@ impl Attachment {
 
         match self.content_type {
             ContentType::Multipart { ref boundary, .. } => {
-                match parser::multipart_parts(self.body(), boundary).to_full_result() {
-                    Ok(v) => v,
+                match parser::attachments::multipart_parts(self.body(), boundary) {
+                    Ok((_, v)) => v,
                     Err(e) => {
                         debug!("error in parsing attachment");
                         debug!("\n-------------------------------");
@@ -444,10 +443,12 @@ impl Attachment {
         }
         // FIXME: check if any part is multipart/mixed as well
 
-        match parser::multipart_parts(bytes, boundary).to_full_result() {
-            Ok(parts) => {
+        match parser::attachments::multipart_parts(bytes, boundary) {
+            Ok((_, parts)) => {
                 for p in parts {
-                    for (n, v) in crate::email::parser::HeaderIterator(p.display_bytes(bytes)) {
+                    for (n, v) in
+                        crate::email::parser::generic::HeaderIterator(p.display_bytes(bytes))
+                    {
                         if !n.eq_ignore_ascii_case(b"content-type") && !v.starts_with(b"text/") {
                             return true;
                         }
@@ -655,14 +656,14 @@ impl Attachment {
 
     pub fn parameters(&self) -> Vec<(&[u8], &[u8])> {
         let mut ret = Vec::new();
-        let (headers, _) = match parser::attachment(&self.raw).to_full_result() {
-            Ok(v) => v,
+        let (headers, _) = match parser::attachments::attachment(&self.raw) {
+            Ok((_, v)) => v,
             Err(_) => return ret,
         };
         for (name, value) in headers {
             if name.eq_ignore_ascii_case(b"content-type") {
-                match parser::content_type(value).to_full_result() {
-                    Ok((_, _, params)) => {
+                match parser::attachments::content_type(value) {
+                    Ok((_, (_, _, params))) => {
                         ret = params;
                     }
                     _ => {}
@@ -751,16 +752,18 @@ fn decode_helper<'a>(a: &'a Attachment, filter: &mut Option<Filter<'a>>) -> Vec<
             Ok(v) => v,
             _ => a.body().to_vec(),
         },
-        ContentTransferEncoding::QuotedPrintable => parser::quoted_printable_bytes(a.body())
-            .to_full_result()
-            .unwrap(),
+        ContentTransferEncoding::QuotedPrintable => {
+            parser::encodings::quoted_printable_bytes(a.body())
+                .unwrap()
+                .1
+        }
         ContentTransferEncoding::_7Bit
         | ContentTransferEncoding::_8Bit
         | ContentTransferEncoding::Other { .. } => a.body().to_vec(),
     };
 
     let mut ret = if a.content_type.is_text() {
-        if let Ok(v) = parser::decode_charset(&bytes, charset) {
+        if let Ok(v) = parser::encodings::decode_charset(&bytes, charset) {
             v.into_bytes()
         } else {
             a.body().to_vec()

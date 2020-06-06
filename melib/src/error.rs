@@ -32,8 +32,6 @@ use std::str;
 use std::string;
 use std::sync::Arc;
 
-use nom;
-
 pub type Result<T> = result::Result<T, MeliError>;
 
 #[derive(Debug, Clone)]
@@ -136,13 +134,6 @@ impl From<io::Error> for MeliError {
     #[inline]
     fn from(kind: io::Error) -> MeliError {
         MeliError::new(kind.to_string()).set_source(Some(Arc::new(kind)))
-    }
-}
-
-impl From<nom::IError> for MeliError {
-    #[inline]
-    fn from(kind: nom::IError) -> MeliError {
-        MeliError::new(format!("{:?}", kind))
     }
 }
 
@@ -259,5 +250,21 @@ impl From<String> for MeliError {
     #[inline]
     fn from(kind: String) -> MeliError {
         MeliError::new(kind)
+    }
+}
+
+impl From<nom::Err<(&[u8], nom::error::ErrorKind)>> for MeliError {
+    #[inline]
+    fn from(kind: nom::Err<(&[u8], nom::error::ErrorKind)>) -> MeliError {
+        MeliError::new("Parsing error")
+            .set_source(Some(Arc::new(MeliError::new(format!("{}", kind)))))
+    }
+}
+
+impl From<nom::Err<(&str, nom::error::ErrorKind)>> for MeliError {
+    #[inline]
+    fn from(kind: nom::Err<(&str, nom::error::ErrorKind)>) -> MeliError {
+        MeliError::new("Parsing error")
+            .set_source(Some(Arc::new(MeliError::new(format!("{}", kind)))))
     }
 }

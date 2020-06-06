@@ -1,7 +1,7 @@
 /*
  * meli - parser module
  *
- * Copyright 2017 Manos Pitsidianakis
+ * Copyright 2017 - 2020 Manos Pitsidianakis
  *
  * This file is part of meli.
  *
@@ -18,14 +18,19 @@
  * You should have received a copy of the GNU General Public License
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
-use super::*;
-use data_encoding::BASE64_MIME;
-use encoding::{DecoderTrap, Encoding};
-use nom::{is_hex_digit, le_u8};
-pub(super) use nom::{ErrorKind, IResult, Needed};
 
-use encoding::all::*;
-use std;
+use crate::error::{MeliError, Result, ResultIntoMeliError};
+use nom::{
+    branch::alt,
+    bytes::complete::{is_a, is_not, tag, take_until, take_while},
+    character::is_hex_digit,
+    combinator::peek,
+    error::ErrorKind,
+    multi::{many0, many1, separated_list, separated_nonempty_list},
+    number::complete::le_u8,
+    sequence::{delimited, preceded, separated_pair, terminated},
+    IResult,
+};
 
 macro_rules! is_ctl_or_space {
     ($var:ident) => {
@@ -121,969 +126,1038 @@ impl<'a, P: for<'r> FnMut(&'r u8) -> bool> BytesIterExt for std::slice::Split<'a
     }
 }
 
-fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
-    if input.len() < 3 {
-        IResult::Incomplete(Needed::Size(1))
-    } else if input[0] == b'=' && is_hex_digit(input[1]) && is_hex_digit(input[2]) {
-        let a = if input[1] < b':' {
-            input[1] - 48
-        } else if input[1] < b'[' {
-            input[1] - 55
+//fn parser(input: I) -> IResult<I, O, E>;
+pub fn mail(input: &[u8]) -> Result<(Vec<(&[u8], &[u8])>, &[u8])> {
+    let (rest, result) = separated_pair(
+        headers::headers,
+        alt((tag(b"\n"), tag(b"\r\n"))),
+        take_while(|_| true),
+    )(input)
+    .chain_err_summary(|| "Could not parse mail")?;
+
+    if !rest.is_empty() {
+        return Err(MeliError::new("Got leftover bytes after parsing mail"));
+    }
+
+    Ok(result)
+}
+
+pub mod generic {
+    use super::*;
+    pub fn angle_bracket_delimeted_list(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
+        separated_nonempty_list(is_a(","), delimited(tag("<"), take_until(">"), tag(">")))(
+            input.rtrim(),
+        )
+        //    separated_nonempty_list!(complete!(is_a!(",")), ws!(complete!(complete!(delimited!(tag!("<"), take_until1!(">"), tag!(">")))))));
+    }
+
+    pub fn date(input: &[u8]) -> Result<crate::datetime::UnixTimestamp> {
+        let (_, mut parsed_result) = encodings::phrase(&eat_comments(input), false)?;
+        if let Some(pos) = parsed_result.find(b"-0000") {
+            parsed_result[pos] = b'+';
+        }
+
+        crate::datetime::rfc822_to_timestamp(parsed_result.trim())
+    }
+
+    fn eat_comments(input: &[u8]) -> Vec<u8> {
+        let mut in_comment = false;
+        input
+            .iter()
+            .fold(Vec::with_capacity(input.len()), |mut acc, x| {
+                if *x == b'(' && !in_comment {
+                    in_comment = true;
+                    acc
+                } else if *x == b')' && in_comment {
+                    in_comment = false;
+                    acc
+                } else if in_comment {
+                    acc
+                } else {
+                    acc.push(*x);
+                    acc
+                }
+            })
+    }
+    use crate::email::address::Address;
+    use crate::email::mailto::Mailto;
+    pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
+        if !input.starts_with(b"mailto:") {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
+
+        input = &input[b"mailto:".len()..];
+
+        let end = input.iter().position(|e| *e == b'?').unwrap_or(input.len());
+        let address: Address;
+
+        if let Ok((_, addr)) = crate::email::parser::address::address(&input[..end]) {
+            address = addr;
+            input = if input[end..].is_empty() {
+                &input[end..]
+            } else {
+                &input[end + 1..]
+            };
         } else {
-            input[1] - 87
-        };
-        let b = if input[2] < b':' {
-            input[2] - 48
-        } else if input[2] < b'[' {
-            input[2] - 55
-        } else {
-            input[2] - 87
-        };
-        IResult::Done(&input[3..], a * 16 + b)
-    } else if input.starts_with(b"\r\n") {
-        IResult::Done(&input[2..], b'\n')
-    } else {
-        IResult::Error(error_code!(ErrorKind::Custom(43)))
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
+
+        let mut subject = None;
+        let mut cc = None;
+        let mut bcc = None;
+        let mut body = None;
+        while !input.is_empty() {
+            let tag = if let Some(tag_pos) = input.iter().position(|e| *e == b'=') {
+                let ret = &input[0..tag_pos];
+                input = &input[tag_pos + 1..];
+                ret
+            } else {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            };
+
+            let value_end = input.iter().position(|e| *e == b'&').unwrap_or(input.len());
+
+            let value = String::from_utf8_lossy(&input[..value_end]).to_string();
+            match tag {
+                b"subject" if subject.is_none() => {
+                    subject = Some(value);
+                }
+                b"cc" if cc.is_none() => {
+                    cc = Some(value);
+                }
+                b"bcc" if bcc.is_none() => {
+                    bcc = Some(value);
+                }
+                b"body" if body.is_none() => {
+                    /* FIXME:
+                     * Parse escaped characters properly.
+                     */
+                    body = Some(value.replace("%20", " ").replace("%0A", "\n"));
+                }
+                _ => {
+                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                }
+            }
+            if input[value_end..].is_empty() {
+                break;
+            }
+            input = &input[value_end + 1..];
+        }
+        Ok((
+            input,
+            Mailto {
+                address,
+                subject,
+                cc,
+                bcc,
+                body,
+            },
+        ))
+    }
+
+    pub struct HeaderIterator<'a>(pub &'a [u8]);
+
+    impl<'a> Iterator for HeaderIterator<'a> {
+        type Item = (&'a [u8], &'a [u8]);
+        fn next(&mut self) -> Option<(&'a [u8], &'a [u8])> {
+            if self.0.is_empty() {
+                return None;
+            }
+
+            match super::headers::header(self.0) {
+                Ok((rest, value)) => {
+                    self.0 = rest;
+                    Some(value)
+                }
+                _ => {
+                    self.0 = &[];
+                    None
+                }
+            }
+        }
     }
 }
 
-// Parser definition
+pub mod headers {
+    use super::*;
 
-/* A header can span multiple lines, eg:
- *
- * Received: from -------------------- (-------------------------)
- * 	by --------------------- (--------------------- [------------------]) (-----------------------)
- * 	with ESMTP id ------------ for <------------------->;
- * 	Tue,  5 Jan 2016 21:30:44 +0100 (CET)
- */
-
-fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    let input_len = input.len();
-    for (i, x) in input.iter().enumerate() {
-        if *x == b'\n'
-            && (((i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t')
-                || i + 1 == input_len)
-        {
-            return IResult::Done(&input[(i + 1)..], &input[0..i]);
-        } else if input[i..].starts_with(b"\r\n")
-            && (((i + 2) < input_len && input[i + 2] != b' ' && input[i + 2] != b'\t')
-                || i + 2 == input_len)
-        {
-            return IResult::Done(&input[(i + 2)..], &input[0..i]);
-        }
-    }
-    IResult::Incomplete(Needed::Unknown)
-}
-
-/* Parse a single header as a tuple */
-fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
-    if input.is_empty() {
-        return IResult::Incomplete(Needed::Unknown);
-    } else if input.starts_with(b"\n") || input.starts_with(b"\r\n") {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-    let mut ptr = 0;
-    let mut name: &[u8] = &input[0..0];
-    /* field-name  =  1*<any CHAR, excluding CTLs, SPACE, and ":"> */
-    for (i, x) in input.iter().enumerate() {
-        if *x == b':' {
-            name = &input[0..i];
-            ptr = i + 1;
-            break;
-        } else if is_ctl_or_space!(*x) {
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
-        }
-    }
-    if name.is_empty() {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-    if ptr >= input.len() {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
+    pub fn headers(input: &[u8]) -> IResult<&[u8], Vec<(&[u8], &[u8])>> {
+        many1(header)(input)
     }
 
-    if input[ptr] == b'\n' {
-        ptr += 1;
-        if ptr >= input.len() {
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
-        }
-    } else if input[ptr..].starts_with(b"\r\n") {
-        ptr += 2;
-        if ptr > input.len() {
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
-        }
+    pub fn header(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+        alt((header_without_val, header_with_val))(input)
     }
-    if ptr >= input.len() {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-    while input[ptr] == b' ' || input[ptr] == b'\t' {
-        ptr += 1;
-        if ptr >= input.len() {
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
-        }
-    }
-    match header_value(&input[ptr..]) {
-        IResult::Done(rest, value) => IResult::Done(rest, (name, value)),
-        IResult::Incomplete(needed) => IResult::Incomplete(needed),
-        IResult::Error(code) => IResult::Error(code),
-    }
-}
 
-fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
-    if input.is_empty() {
-        return IResult::Incomplete(Needed::Unknown);
-    } else if input.starts_with(b"\n") || input.starts_with(b"\r\n") {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-    let mut ptr = 0;
-    let mut name: &[u8] = &input[0..0];
-    let mut has_colon = false;
-    /* field-name  =  1*<any CHAR, excluding CTLs, SPACE, and ":"> */
-    for (i, x) in input.iter().enumerate() {
-        if input[i..].starts_with(b"\r\n") {
-            name = &input[0..i];
-            ptr = i + 2;
-            break;
-        } else if *x == b':' || *x == b'\n' {
-            name = &input[0..i];
+    pub fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+        if input.is_empty() {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        } else if input.starts_with(b"\n") || input.starts_with(b"\r\n") {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
+        let mut ptr = 0;
+        let mut name: &[u8] = &input[0..0];
+        let mut has_colon = false;
+        /* field-name  =  1*<any CHAR, excluding CTLs, SPACE, and ":"> */
+        for (i, x) in input.iter().enumerate() {
+            if input[i..].starts_with(b"\r\n") {
+                name = &input[0..i];
+                ptr = i + 2;
+                break;
+            } else if *x == b':' || *x == b'\n' {
+                name = &input[0..i];
+                has_colon = true;
+                ptr = i;
+                break;
+            } else if is_ctl_or_space!(*x) {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
+        }
+        if name.is_empty() || input.len() <= ptr {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
+        if input[ptr] == b':' {
+            ptr += 1;
             has_colon = true;
-            ptr = i;
-            break;
-        } else if is_ctl_or_space!(*x) {
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+            if ptr >= input.len() {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
         }
-    }
-    if name.is_empty() || input.len() <= ptr {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-    if input[ptr] == b':' {
-        ptr += 1;
-        has_colon = true;
-        if ptr >= input.len() {
-            return IResult::Incomplete(Needed::Unknown);
-        }
-    }
 
-    if !has_colon {
-        return IResult::Incomplete(Needed::Unknown);
-    }
+        if !has_colon {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
 
-    while input[ptr] == b' ' {
-        ptr += 1;
-        if ptr >= input.len() {
-            return IResult::Incomplete(Needed::Unknown);
+        while input[ptr] == b' ' {
+            ptr += 1;
+            if ptr >= input.len() {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
         }
-    }
-    if input[ptr..].starts_with(b"\n") {
-        ptr += 1;
-        if ptr >= input.len() {
-            return IResult::Incomplete(Needed::Unknown);
-        }
-        if input.len() > ptr && input[ptr] != b' ' && input[ptr] != b'\t' {
-            IResult::Done(&input[ptr..], (name, b""))
+        if input[ptr..].starts_with(b"\n") {
+            ptr += 1;
+            if ptr >= input.len() {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
+            if input.len() > ptr && input[ptr] != b' ' && input[ptr] != b'\t' {
+                Ok((&input[ptr..], (name, b"")))
+            } else {
+                Err(nom::Err::Error((input, ErrorKind::Tag)))
+            }
+        } else if input[ptr..].starts_with(b"\r\n") {
+            ptr += 2;
+            if ptr > input.len() {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
+            if input.len() > ptr && input[ptr] != b' ' && input[ptr] != b'\t' {
+                Ok((&input[ptr..], (name, b"")))
+            } else {
+                Err(nom::Err::Error((input, ErrorKind::Tag)))
+            }
         } else {
-            IResult::Error(error_code!(ErrorKind::Custom(43)))
-        }
-    } else if input[ptr..].starts_with(b"\r\n") {
-        ptr += 2;
-        if ptr > input.len() {
-            return IResult::Incomplete(Needed::Unknown);
-        }
-        if input.len() > ptr && input[ptr] != b' ' && input[ptr] != b'\t' {
-            IResult::Done(&input[ptr..], (name, b""))
-        } else {
-            IResult::Error(error_code!(ErrorKind::Custom(43)))
-        }
-    } else {
-        IResult::Error(error_code!(ErrorKind::Custom(43)))
-    }
-}
-
-named!(
-    header<(&[u8], &[u8])>,
-    alt_complete!(call!(header_without_val) | call!(header_with_val))
-);
-/* Parse all headers -> Vec<(&str, Vec<&str>)> */
-named!(pub headers<std::vec::Vec<(&[u8], &[u8])>>,
-       many1!(complete!(header)));
-
-pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    if input.is_empty() {
-        return IResult::Incomplete(Needed::Unknown);
-    }
-    for i in 0..input.len() {
-        if input[i..].starts_with(b"\n\n") {
-            return IResult::Done(&input[(i + 1)..], &input[0..=i]);
-        } else if input[i..].starts_with(b"\r\n\r\n") {
-            return IResult::Done(&input[(i + 2)..], &input[0..=i]);
+            Err(nom::Err::Error((input, ErrorKind::Tag)))
         }
     }
-    IResult::Error(error_code!(ErrorKind::Custom(43)))
-}
 
-named!(pub body_raw<&[u8]>,
-       do_parse!(
-           alt_complete!(take_until1!("\n\n") | take_until1!("\r\n\r\n")) >>
-           body: take_while!(call!(|_| true)) >>
-           ( { body } )));
-
-named!(pub mail<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
-       separated_pair!(headers, alt_complete!(tag!(b"\n") | tag!(b"\r\n")), take_while!(call!(|_| true))));
-
-named!(pub attachment<(std::vec::Vec<(&[u8], &[u8])>, &[u8])>,
-       do_parse!(
-       pair: separated_pair!(many0!(complete!(header)), alt_complete!(tag!(b"\n") | tag!(b"\r\n")), take_while!(call!(|_| true))) >>
-       ( { pair } )));
-
-/* Header parsers */
-
-/* Encoded words
- *"=?charset?encoding?encoded text?=".
- */
-fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
-    if input.is_empty() {
-        return IResult::Done(&[], Vec::with_capacity(0));
-    }
-    if input.len() < 5 {
-        return IResult::Incomplete(Needed::Unknown);
-    } else if input[0] != b'=' || input[1] != b'?' {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-    /* find end of Charset tag:
-     * =?charset?encoding?encoded text?=
-     * ---------^
+    /* A header can span multiple lines, eg:
+     *
+     * Received: from -------------------- (-------------------------)
+     * 	by --------------------- (--------------------- [------------------]) (-----------------------)
+     * 	with ESMTP id ------------ for <------------------->;
+     * 	Tue,  5 Jan 2016 21:30:44 +0100 (CET)
      */
-    let mut tag_end_idx = None;
-    for (idx, b) in input[2..].iter().enumerate() {
-        if *b == b'?' {
-            tag_end_idx = Some(idx + 2);
-            break;
+
+    pub fn header_value(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        let input_len = input.len();
+        for (i, x) in input.iter().enumerate() {
+            if *x == b'\n'
+                && (((i + 1) < input_len && input[i + 1] != b' ' && input[i + 1] != b'\t')
+                    || i + 1 == input_len)
+            {
+                return Ok((&input[(i + 1)..], &input[0..i]));
+            } else if input[i..].starts_with(b"\r\n")
+                && (((i + 2) < input_len && input[i + 2] != b' ' && input[i + 2] != b'\t')
+                    || i + 2 == input_len)
+            {
+                return Ok((&input[(i + 2)..], &input[0..i]));
+            }
         }
+        Err(nom::Err::Error((input, ErrorKind::Tag)))
     }
-    if tag_end_idx.is_none() {
-        return IResult::Error(error_code!(ErrorKind::Custom(42)));
-    }
-    let tag_end_idx = tag_end_idx.unwrap();
 
-    if tag_end_idx + 2 >= input.len() || input[2 + tag_end_idx] != b'?' {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-    /* See if input ends with "?=" and get ending index
-     * =?charset?encoding?encoded text?=
-     * -------------------------------^
-     */
-    let mut encoded_end_idx = None;
-    for i in (3 + tag_end_idx)..input.len() {
-        if input[i] == b'?' && i + 1 < input.len() && input[i + 1] == b'=' {
-            encoded_end_idx = Some(i);
-            break;
+    /* Parse a single header as a tuple */
+    pub fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+        if input.is_empty() {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        } else if input.starts_with(b"\n") || input.starts_with(b"\r\n") {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
         }
-    }
-    if encoded_end_idx.is_none() {
-        return IResult::Error(error_code!(ErrorKind::Custom(44)));
-    }
-    let encoded_end_idx = encoded_end_idx.unwrap();
-    let encoded_text = &input[3 + tag_end_idx..encoded_end_idx];
-
-    let s: Vec<u8> = match input[tag_end_idx + 1] {
-        b'b' | b'B' => match BASE64_MIME.decode(encoded_text) {
-            Ok(v) => v,
-            Err(_) => encoded_text.to_vec(),
-        },
-        b'q' | b'Q' => match quoted_printable_bytes_header(encoded_text) {
-            IResult::Done(b"", s) => s,
-            _ => return IResult::Error(error_code!(ErrorKind::Custom(45))),
-        },
-        _ => return IResult::Error(error_code!(ErrorKind::Custom(46))),
-    };
-
-    let charset = Charset::from(&input[2..tag_end_idx]);
-
-    if let Charset::UTF8 = charset {
-        IResult::Done(&input[encoded_end_idx + 2..], s)
-    } else {
-        match decode_charset(&s, charset) {
-            Ok(v) => IResult::Done(&input[encoded_end_idx + 2..], v.into_bytes()),
-            _ => IResult::Error(error_code!(ErrorKind::Custom(43))),
+        let mut ptr = 0;
+        let mut name: &[u8] = &input[0..0];
+        /* field-name  =  1*<any CHAR, excluding CTLs, SPACE, and ":"> */
+        for (i, x) in input.iter().enumerate() {
+            if *x == b':' {
+                name = &input[0..i];
+                ptr = i + 1;
+                break;
+            } else if is_ctl_or_space!(*x) {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
         }
+        if name.is_empty() {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
+        if ptr >= input.len() {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
+
+        if input[ptr] == b'\n' {
+            ptr += 1;
+            if ptr >= input.len() {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
+        } else if input[ptr..].starts_with(b"\r\n") {
+            ptr += 2;
+            if ptr > input.len() {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
+        }
+        if ptr >= input.len() {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
+        while input[ptr] == b' ' || input[ptr] == b'\t' {
+            ptr += 1;
+            if ptr >= input.len() {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
+        }
+        header_value(&input[ptr..]).map(|(rest, value)| (rest, (name, value)))
+    }
+
+    pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        if input.is_empty() {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
+        for i in 0..input.len() {
+            if input[i..].starts_with(b"\n\n") {
+                return Ok((&input[(i + 1)..], &input[0..=i]));
+            } else if input[i..].starts_with(b"\r\n\r\n") {
+                return Ok((&input[(i + 2)..], &input[0..=i]));
+            }
+        }
+        Err(nom::Err::Error((input, ErrorKind::Tag)))
     }
 }
 
-pub fn decode_charset(s: &[u8], charset: Charset) -> Result<String> {
-    match charset {
-        Charset::UTF8 | Charset::Ascii => Ok(String::from_utf8_lossy(s).to_string()),
-        Charset::ISO8859_1 => Ok(ISO_8859_1.decode(s, DecoderTrap::Strict)?),
-        Charset::ISO8859_2 => Ok(ISO_8859_2.decode(s, DecoderTrap::Strict)?),
-        Charset::ISO8859_7 => Ok(ISO_8859_7.decode(s, DecoderTrap::Strict)?),
-        Charset::ISO8859_15 => Ok(ISO_8859_15.decode(s, DecoderTrap::Strict)?),
-        Charset::GBK => Ok(GBK.decode(s, DecoderTrap::Strict)?),
-        Charset::Windows1250 => Ok(WINDOWS_1250.decode(s, DecoderTrap::Strict)?),
-        Charset::Windows1251 => Ok(WINDOWS_1251.decode(s, DecoderTrap::Strict)?),
-        Charset::Windows1252 => Ok(WINDOWS_1252.decode(s, DecoderTrap::Strict)?),
-        Charset::Windows1253 => Ok(WINDOWS_1253.decode(s, DecoderTrap::Strict)?),
-        // Unimplemented:
-        Charset::GB2312 => Ok(String::from_utf8_lossy(s).to_string()),
-        Charset::UTF16 => Ok(String::from_utf8_lossy(s).to_string()),
-        Charset::BIG5 => Ok(String::from_utf8_lossy(s).to_string()),
-        Charset::ISO2022JP => Ok(String::from_utf8_lossy(s).to_string()),
+pub mod attachments {
+    use super::*;
+    use crate::email::address::*;
+    pub fn attachment(input: &[u8]) -> IResult<&[u8], (std::vec::Vec<(&[u8], &[u8])>, &[u8])> {
+        separated_pair(
+            many0(headers::header),
+            alt((tag(b"\n"), tag(b"\r\n"))),
+            take_while(|_| true),
+        )(input)
     }
-}
 
-fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    if input.len() < 2 {
-        IResult::Incomplete(Needed::Size(1))
-    } else if input[0] == b'=' && input[1] == b'\n' {
-        IResult::Done(&input[2..], &input[0..2]) // `=\n` is an escaped space character.
-    } else if input.len() > 3 && input.starts_with(b"=\r\n") {
-        IResult::Done(&input[3..], &input[0..3]) // `=\r\n` is an escaped space character.
-    } else {
-        IResult::Error(error_code!(ErrorKind::Custom(43)))
-    }
-}
+    pub fn multipart_parts<'a>(
+        input: &'a [u8],
+        boundary: &[u8],
+    ) -> IResult<&'a [u8], Vec<StrBuilder>> {
+        let mut ret: Vec<_> = Vec::new();
+        let mut input = input;
+        let mut offset = 0;
+        loop {
+            let b_start = if let Some(v) = input.find(boundary) {
+                v
+            } else {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            };
 
-named!(
-    qp_underscore_header<u8>,
-    do_parse!(tag!(b"_") >> ({ 0x20 }))
-);
-
-// With MIME, headers in quoted printable format can contain underscores that represent spaces.
-// In non-header context, an underscore is just a plain underscore.
-named!(
-    pub quoted_printable_bytes_header<Vec<u8>>,
-    many0!(alt_complete!(
-        quoted_printable_byte | qp_underscore_header | le_u8
-    ))
-);
-
-// For atoms in Header values.
-named!(
-    pub quoted_printable_bytes<Vec<u8>>,
-    many0!(alt_complete!(
-        preceded!(quoted_printable_soft_break, quoted_printable_byte) |
-        preceded!(quoted_printable_soft_break, le_u8) | quoted_printable_byte | le_u8
-    ))
-);
-
-fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
-    if input.is_empty() || input.len() < 3 {
-        IResult::Incomplete(Needed::Size(1))
-    } else if !is_whitespace!(input[0]) {
-        let mut display_name = StrBuilder {
-            offset: 0,
-            length: 0,
-        };
-        let mut flag = false;
-        for (i, b) in input[0..].iter().enumerate() {
-            if *b == b'<' {
-                display_name.length = i.saturating_sub(1); // if i != 0 { i - 1 } else { 0 };
-                flag = true;
+            if b_start < 2 {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
+            offset += b_start - 2;
+            input = &input[b_start - 2..];
+            if &input[0..2] == b"--" {
+                offset += 2 + boundary.len();
+                input = &input[2 + boundary.len()..];
+                if input[0] == b'\n' {
+                    offset += 1;
+                    input = &input[1..];
+                } else if input[0..].starts_with(b"\r\n") {
+                    offset += 2;
+                    input = &input[2..];
+                } else {
+                    continue;
+                }
                 break;
             }
         }
-        if !flag {
-            let (rest, output) = match phrase(input, false) {
-                IResult::Done(rest, raw) => (rest, raw),
-                _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
-            };
-            if output.contains(&b'<') {
-                match display_addr(&output) {
-                    IResult::Done(_, address) => return IResult::Done(rest, address),
-                    _ => return IResult::Error(error_code!(ErrorKind::Custom(43))),
-                }
+
+        loop {
+            if input.len() < boundary.len() + 4 {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
             }
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
-        }
-        let mut end = input.len();
-        let mut at_flag = false;
-        let mut flag = false;
-        for (i, b) in input[display_name.length + 2..].iter().enumerate() {
-            match *b {
-                b'@' => at_flag = true,
-                b'>' => {
-                    end = i;
-                    flag = true;
+            if let Some(end) = input.find(boundary) {
+                if &input[end - 2..end] != b"--" {
+                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                }
+                ret.push(StrBuilder {
+                    offset,
+                    length: end - 2,
+                });
+                offset += end + boundary.len();
+                input = &input[end + boundary.len()..];
+                if input.len() < 2 || input[0] != b'\n' || &input[0..2] == b"--" {
                     break;
                 }
-                _ => {}
+                if input[0] == b'\n' {
+                    offset += 1;
+                    input = &input[1..];
+                } else if input[0..].starts_with(b"\r\n") {
+                    offset += 2;
+                    input = &input[2..];
+                }
+            } else {
+                ret.push(StrBuilder {
+                    offset,
+                    length: input.len(),
+                });
+                break;
             }
         }
-        if at_flag && flag {
-            match phrase(&input[0..end + display_name.length + 3], false) {
-                IResult::Error(e) => IResult::Error(e),
-                IResult::Incomplete(i) => IResult::Incomplete(i),
-                IResult::Done(_, raw) => {
-                    let display_name_end = raw.find(b"<").unwrap();
-                    display_name.length = { raw[0..display_name_end].trim().len() };
-                    let address_spec = if display_name_end == 0 {
-                        StrBuilder {
-                            offset: 1,
-                            length: end + 1,
-                        }
-                    } else {
-                        StrBuilder {
-                            offset: display_name_end + 1,
-                            length: end,
-                        }
-                    };
+        Ok((input, ret))
+    }
 
-                    if display_name.display(&raw).as_bytes().is_quoted() {
-                        display_name.offset += 1;
-                        display_name.length -= 2;
+    fn parts_f(boundary: &[u8]) -> impl Fn(&[u8]) -> IResult<&[u8], Vec<&[u8]>> + '_ {
+        move |input: &[u8]| -> IResult<&[u8], Vec<&[u8]>> {
+            let mut ret: Vec<&[u8]> = Vec::new();
+            let mut input = input;
+            loop {
+                let b_start = if let Some(v) = input.find(boundary) {
+                    v
+                } else {
+                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                };
+
+                if b_start < 2 {
+                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                }
+                input = &input[b_start - 2..];
+                if &input[0..2] == b"--" {
+                    input = &input[2 + boundary.len()..];
+                    if input[0] == b'\n' {
+                        input = &input[1..];
+                    } else if input[0..].starts_with(b"\r\n") {
+                        input = &input[2..];
+                    } else {
+                        continue;
                     }
-
-                    let rest_start = if input.len() > end + display_name.length + 2 {
-                        end + display_name.length + 3
-                    } else {
-                        end + display_name.length + 2
-                    };
-
-                    IResult::Done(
-                        input.get(rest_start..).unwrap_or_default(),
-                        Address::Mailbox(MailboxAddress {
-                            raw,
-                            display_name,
-                            address_spec,
-                        }),
-                    )
+                    break;
                 }
             }
-        } else {
-            IResult::Error(error_code!(ErrorKind::Custom(43)))
-        }
-    } else {
-        IResult::Error(error_code!(ErrorKind::Custom(43)))
-    }
-}
-
-fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
-    if input.is_empty() || input.len() < 3 {
-        IResult::Incomplete(Needed::Size(1))
-    } else if !is_whitespace!(input[0]) {
-        let mut end = input[1..].len();
-        let mut flag = false;
-        for (i, b) in input[1..].iter().enumerate() {
-            if *b == b'@' {
-                flag = true;
-            }
-            if is_whitespace!(*b) {
-                end = i;
-                break;
-            }
-        }
-        if flag {
-            IResult::Done(
-                &input[end..],
-                Address::Mailbox(MailboxAddress {
-                    raw: input[0..=end].into(),
-                    display_name: StrBuilder {
-                        offset: 0,
-                        length: 0,
-                    },
-                    address_spec: StrBuilder {
-                        offset: 0,
-                        length: input[0..=end].len(),
-                    },
-                }),
-            )
-        } else {
-            IResult::Error(error_code!(ErrorKind::Custom(43)))
-        }
-    } else {
-        IResult::Error(error_code!(ErrorKind::Custom(42)))
-    }
-}
-
-named!(
-    pub mailbox<Address>,
-    ws!(alt_complete!(display_addr | addr_spec))
-);
-named!(mailbox_list<Vec<Address>>, many0!(mailbox));
-
-/*
- * group of recipients eg. undisclosed-recipients;
- */
-fn group(input: &[u8]) -> IResult<&[u8], Address> {
-    let mut flag = false;
-    let mut dlength = 0;
-    for (i, b) in input.iter().enumerate() {
-        if *b == b':' {
-            flag = true;
-            dlength = i;
-            break;
-        }
-    }
-    if !flag {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-
-    match mailbox_list(&input[dlength..]) {
-        IResult::Error(e) => IResult::Error(e),
-        IResult::Done(rest, vec) => {
-            let size: usize =
-                (rest.as_ptr() as usize).wrapping_sub((&input[0..] as &[u8]).as_ptr() as usize);
-            IResult::Done(
-                rest,
-                Address::Group(GroupAddress {
-                    raw: input[0..size].into(),
-                    display_name: StrBuilder {
-                        offset: 0,
-                        length: dlength,
-                    },
-                    mailbox_list: vec,
-                }),
-            )
-        }
-        IResult::Incomplete(i) => IResult::Incomplete(i),
-    }
-}
-
-named!(pub address<Address>, ws!(alt_complete!(mailbox | group)));
-
-named!(pub rfc2822address_list<Vec<Address>>, ws!( separated_list!(is_a!(","), address)));
-
-named!(pub address_list<String>, ws!(do_parse!(
-        list: alt_complete!( encoded_word_list | ascii_token) >>
-        ( {
-            let list: Vec<&[u8]> = list.split(|c| *c == b',').collect();
-            let string_len = list.iter().fold(0, |mut acc, x| { acc+=x.trim().len(); acc }) + list.len() - 1;
-            let list_len = list.len();
-            let mut i = 0;
-            list.iter().fold(String::with_capacity(string_len),
-            |acc, x| {
-                let mut acc = acc + &String::from_utf8_lossy(x.replace(b"\n", b"").replace(b"\r", b"").replace(b"\t", b" ").trim());
-                if i != list_len - 1 {
-                    acc.push_str(" ");
-                    i+=1;
+            loop {
+                if input.len() < boundary.len() + 4 {
+                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
                 }
-                acc
-            })
-        } )
-
-       )));
-
-fn eat_comments(input: &[u8]) -> Vec<u8> {
-    let mut in_comment = false;
-    input
-        .iter()
-        .fold(Vec::with_capacity(input.len()), |mut acc, x| {
-            if *x == b'(' && !in_comment {
-                in_comment = true;
-                acc
-            } else if *x == b')' && in_comment {
-                in_comment = false;
-                acc
-            } else if in_comment {
-                acc
-            } else {
-                acc.push(*x);
-                acc
+                if let Some(end) = input.find(boundary) {
+                    if &input[end - 2..end] != b"--" {
+                        return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                    }
+                    ret.push(&input[0..end - 2]);
+                    input = &input[end + boundary.len()..];
+                    if input.len() < 2
+                        || (input[0] != b'\n' && &input[0..2] != b"\r\n")
+                        || &input[0..2] == b"--"
+                    {
+                        break;
+                    }
+                    if input[0] == b'\n' {
+                        input = &input[1..];
+                    } else if input[0..].starts_with(b"\r\n") {
+                        input = &input[2..];
+                    }
+                } else {
+                    ret.push(input);
+                    break;
+                }
             }
-        })
-}
-
-/*
- * Date should tokenize input and convert the tokens,
- * right now we expect input will have no extra spaces in between tokens
- *
- * We should use a custom parser here*/
-pub fn date(input: &[u8]) -> Result<UnixTimestamp> {
-    let mut parsed_result = phrase(&eat_comments(input), false).to_full_result()?;
-    if let Some(pos) = parsed_result.find(b"-0000") {
-        parsed_result[pos] = b'+';
-    }
-
-    crate::datetime::rfc822_to_timestamp(parsed_result.trim())
-}
-
-named!(pub message_id<&[u8]>,
-        complete!(delimited!(ws!(tag!("<")), take_until1!(">"), tag!(">")))
- );
-
-fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    let input_length = input.len();
-    if input.is_empty() {
-        IResult::Incomplete(Needed::Size(1))
-    } else if input_length == 2 || input[0] != b'<' {
-        IResult::Error(error_code!(ErrorKind::Custom(43)))
-    } else {
-        for (i, &x) in input.iter().take(input_length).enumerate().skip(1) {
-            if x == b'>' {
-                return IResult::Done(&input[i + 1..], &input[0..=i]);
-            }
-        }
-        IResult::Incomplete(Needed::Unknown)
-    }
-}
-
-named!(pub references<Vec<&[u8]>>, separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
-
-pub fn multipart_parts<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<StrBuilder>> {
-    let mut ret: Vec<_> = Vec::new();
-    let mut input = input;
-    let mut offset = 0;
-    loop {
-        let b_start = if let Some(v) = input.find(boundary) {
-            v
-        } else {
-            return IResult::Error(error_code!(ErrorKind::Custom(39)));
-        };
-
-        if b_start < 2 {
-            return IResult::Error(error_code!(ErrorKind::Custom(40)));
-        }
-        offset += b_start - 2;
-        input = &input[b_start - 2..];
-        if &input[0..2] == b"--" {
-            offset += 2 + boundary.len();
-            input = &input[2 + boundary.len()..];
-            if input[0] == b'\n' {
-                offset += 1;
-                input = &input[1..];
-            } else if input[0..].starts_with(b"\r\n") {
-                offset += 2;
-                input = &input[2..];
-            } else {
-                continue;
-            }
-            break;
+            Ok((input, ret))
         }
     }
 
-    loop {
-        if input.len() < boundary.len() + 4 {
-            return IResult::Error(error_code!(ErrorKind::Custom(41)));
-        }
-        if let Some(end) = input.find(boundary) {
-            if &input[end - 2..end] != b"--" {
-                return IResult::Error(error_code!(ErrorKind::Custom(42)));
-            }
-            ret.push(StrBuilder {
-                offset,
-                length: end - 2,
-            });
-            offset += end + boundary.len();
-            input = &input[end + boundary.len()..];
-            if input.len() < 2 || input[0] != b'\n' || &input[0..2] == b"--" {
-                break;
-            }
-            if input[0] == b'\n' {
-                offset += 1;
-                input = &input[1..];
-            } else if input[0..].starts_with(b"\r\n") {
-                offset += 2;
-                input = &input[2..];
-            }
-        } else {
-            ret.push(StrBuilder {
-                offset,
-                length: input.len(),
-            });
-            break;
-        }
-    }
-    IResult::Done(input, ret)
-}
-
-fn parts_f<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<&'a [u8]>> {
-    let mut ret: Vec<&[u8]> = Vec::new();
-    let mut input = input;
-    loop {
-        let b_start = if let Some(v) = input.find(boundary) {
-            v
-        } else {
-            return IResult::Error(error_code!(ErrorKind::Custom(39)));
-        };
-
-        if b_start < 2 {
-            return IResult::Error(error_code!(ErrorKind::Custom(40)));
-        }
-        input = &input[b_start - 2..];
-        if &input[0..2] == b"--" {
-            input = &input[2 + boundary.len()..];
-            if input[0] == b'\n' {
-                input = &input[1..];
-            } else if input[0..].starts_with(b"\r\n") {
-                input = &input[2..];
-            } else {
-                continue;
-            }
-            break;
-        }
-    }
-    loop {
-        if input.len() < boundary.len() + 4 {
-            return IResult::Error(error_code!(ErrorKind::Custom(41)));
-        }
-        if let Some(end) = input.find(boundary) {
-            if &input[end - 2..end] != b"--" {
-                return IResult::Error(error_code!(ErrorKind::Custom(42)));
-            }
-            ret.push(&input[0..end - 2]);
-            input = &input[end + boundary.len()..];
-            if input.len() < 2
-                || (input[0] != b'\n' && &input[0..2] != b"\r\n")
-                || &input[0..2] == b"--"
-            {
-                break;
-            }
-            if input[0] == b'\n' {
-                input = &input[1..];
-            } else if input[0..].starts_with(b"\r\n") {
-                input = &input[2..];
-            }
-        } else {
-            ret.push(input);
-            break;
-        }
-    }
-    IResult::Done(input, ret)
-}
-
-named_args!(pub parts<'a>(boundary: &'a [u8]) < Vec<&'this_is_probably_unique_i_hope_please [u8]> >,
+    pub fn parts<'a>(input: &'a [u8], boundary: &[u8]) -> IResult<&'a [u8], Vec<&'a [u8]>> {
+        alt((
+            parts_f(boundary),
+            |input: &'a [u8]| -> IResult<&'a [u8], Vec<&'a [u8]>> {
+                let (input, _) = take_until(&b"--"[..])(input)?;
+                let (input, _) = take_until(boundary)(input)?;
+                Ok((input, Vec::<&[u8]>::new()))
+            },
+        ))(input)
+        /*
             alt_complete!(call!(parts_f, boundary) | do_parse!(
                         take_until_and_consume!(&b"--"[..]) >>
                         take_until_and_consume!(boundary) >>
                         ( { Vec::<&[u8]>::new() } ))
                     ));
-
-/* Caution: values should be passed through phrase() */
-named!(
-    content_type_parameter<(&[u8], &[u8])>,
-    do_parse!(
-        tag!(";")
-            >> name: terminated!(ws!(take_until!("=")), tag!("="))
-            >> value:
-                ws!(alt_complete!(
-                    delimited!(tag!("\""), take_until!("\""), tag!("\"")) | is_not!(";")
-                ))
-            >> ({ (name, value) })
-    )
-);
-
-named!(pub content_type< (&[u8], &[u8], Vec<(&[u8], &[u8])>) >,
-       do_parse!(
-           _type: take_until!("/") >>
-           tag!("/") >>
-           _subtype: is_not!(";") >>
-           parameters: many0!(complete!(content_type_parameter)) >>
-           ( {
-               (_type, _subtype, parameters)
-           } )
-           ));
-
-named!(pub space, eat_separator!(&b" \t\r\n"[..]));
-named!(
-    encoded_word_list<Vec<u8>>,
-    ws!(do_parse!(
-        list: separated_nonempty_list!(call!(space), encoded_word)
-            >> ({
-                let list_len = list.iter().fold(0, |mut acc, x| {
-                    acc += x.len();
-                    acc
-                });
-                list.iter()
-                    .fold(Vec::with_capacity(list_len), |mut acc, x| {
-                        acc.append(&mut x.clone());
-                        acc
-                    })
-            })
-    ))
-);
-named!(
-    ascii_token<Vec<u8>>,
-    do_parse!(
-        word: alt_complete!(
-            terminated!(
-                take_until1!(" =?"),
-                peek!(preceded!(tag!(b" "), call!(encoded_word)))
-            ) | take_while!(call!(|_| true))
-        ) >> ({ word.into() })
-    )
-);
-
-pub fn phrase(input: &[u8], multiline: /* preserve newlines */ bool) -> IResult<&[u8], Vec<u8>> {
-    if input.is_empty() {
-        return IResult::Done(&[], Vec::with_capacity(0));
+        */
     }
 
-    let mut input = input.ltrim();
-    let mut acc: Vec<u8> = Vec::new();
-    let mut ptr = 0;
+    /* Caution: values should be passed through phrase() */
+    pub fn content_type_parameter(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+        let (input, _) = tag(";")(input)?;
+        let (input, name) = terminated(take_until("="), tag("="))(input.ltrim())?;
+        let (input, value) = alt((
+            delimited(tag("\""), take_until("\""), tag("\"")),
+            is_not(";"),
+        ))(input.ltrim())?;
 
-    while ptr < input.len() {
-        let mut flag = false;
-        // Check if word is encoded.
-        while let IResult::Done(rest, v) = encoded_word(&input[ptr..]) {
-            flag = true;
-            input = rest;
-            ptr = 0;
-            acc.extend(v);
+        Ok((input, (name, value)))
+    }
 
-            // consume whitespace
-            while ptr < input.len() && (is_whitespace!(input[ptr])) {
-                ptr += 1;
-            }
+    pub fn content_type(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8], Vec<(&[u8], &[u8])>)> {
+        let (input, _type) = take_until("/")(input)?;
+        let (input, _) = tag("/")(input)?;
+        let (input, _subtype) = is_not(";")(input)?;
+        let (input, parameters) = many0(content_type_parameter)(input)?;
+        Ok((input, (_type, _subtype, parameters)))
+        /*
+           do_parse!(
+               _type: take_until!("/") >>
+               tag!("/") >>
+               _subtype: is_not!(";") >>
+               parameters: many0!(complete!(content_type_parameter)) >>
+               ( {
+                   (_type, _subtype, parameters)
+               } )
+               ));
+        */
+    }
+}
 
-            if ptr >= input.len() {
+pub mod encodings {
+    use super::*;
+    use crate::email::attachment_types::Charset;
+    use data_encoding::BASE64_MIME;
+    use encoding::all::*;
+    use encoding::{DecoderTrap, Encoding};
+    pub fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
+        if input.len() < 3 {
+            Err(nom::Err::Error((input, ErrorKind::Tag)))
+        } else if input[0] == b'=' && is_hex_digit(input[1]) && is_hex_digit(input[2]) {
+            let a = if input[1] < b':' {
+                input[1] - 48
+            } else if input[1] < b'[' {
+                input[1] - 55
+            } else {
+                input[1] - 87
+            };
+            let b = if input[2] < b':' {
+                input[2] - 48
+            } else if input[2] < b'[' {
+                input[2] - 55
+            } else {
+                input[2] - 87
+            };
+            Ok((&input[3..], a * 16 + b))
+        } else if input.starts_with(b"\r\n") {
+            Ok((&input[2..], b'\n'))
+        } else {
+            Err(nom::Err::Error((input, ErrorKind::Tag)))
+        }
+    }
+
+    /* Encoded words
+     *"=?charset?encoding?encoded text?=".
+     */
+    fn encoded_word(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+        if input.is_empty() {
+            return Ok((&[], Vec::with_capacity(0)));
+        }
+        if input.len() < 5 {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        } else if input[0] != b'=' || input[1] != b'?' {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        }
+        /* find end of Charset tag:
+         * =?charset?encoding?encoded text?=
+         * ---------^
+         */
+        let mut tag_end_idx = None;
+        for (idx, b) in input[2..].iter().enumerate() {
+            if *b == b'?' {
+                tag_end_idx = Some(idx + 2);
                 break;
             }
         }
-        if flag && ptr < input.len() && ptr != 0 {
-            acc.push(b' ');
+        if tag_end_idx.is_none() {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
         }
-        let end = input[ptr..].find(b"=?");
+        let tag_end_idx = tag_end_idx.unwrap();
 
-        let end = end.unwrap_or_else(|| input.len() - ptr) + ptr;
-        let ascii_s = ptr;
-        let mut ascii_e = 0;
-
-        while ptr < end && !(is_whitespace!(input[ptr])) {
-            ptr += 1;
+        if tag_end_idx + 2 >= input.len() || input[2 + tag_end_idx] != b'?' {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
         }
-        if !multiline {
-            ascii_e = ptr;
+        /* See if input ends with "?=" and get ending index
+         * =?charset?encoding?encoded text?=
+         * -------------------------------^
+         */
+        let mut encoded_end_idx = None;
+        for i in (3 + tag_end_idx)..input.len() {
+            if input[i] == b'?' && i + 1 < input.len() && input[i + 1] == b'=' {
+                encoded_end_idx = Some(i);
+                break;
+            }
         }
-
-        while ptr < input.len() && (is_whitespace!(input[ptr])) {
-            ptr += 1;
+        if encoded_end_idx.is_none() {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
         }
-        if multiline {
-            ascii_e = ptr;
-        }
-        if ptr >= input.len() {
-            acc.extend(
-                ascii_token(&input[ascii_s..ascii_e])
-                    .to_full_result()
-                    .unwrap(),
-            );
-            break;
-        }
-        if ascii_s >= ascii_e {
-            /* We have the start of an encoded word but not the end, so parse it as ascii */
-            ascii_e = input[ascii_s..]
-                .find(b" ")
-                .unwrap_or_else(|| ascii_s + input[ascii_s..].len());
-            ptr = ascii_e;
-        }
-        if ascii_s >= ascii_e {
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
-        }
+        let encoded_end_idx = encoded_end_idx.unwrap();
+        let encoded_text = &input[3 + tag_end_idx..encoded_end_idx];
 
-        acc.extend(
-            ascii_token(&input[ascii_s..ascii_e])
-                .to_full_result()
-                .unwrap(),
-        );
-        if ptr != ascii_e {
-            acc.push(b' ');
-        }
-    }
-    IResult::Done(&input[ptr..], acc)
-}
-
-named!(pub angle_bracket_delimeted_list<Vec<&[u8]>>, separated_nonempty_list!(complete!(is_a!(",")), ws!(complete!(complete!(delimited!(tag!("<"), take_until1!(">"), tag!(">")))))));
-
-pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
-    if !input.starts_with(b"mailto:") {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-
-    input = &input[b"mailto:".len()..];
-
-    let end = input.iter().position(|e| *e == b'?').unwrap_or(input.len());
-    let address: Address;
-
-    if let IResult::Done(_, addr) = crate::email::parser::address(&input[..end]) {
-        address = addr;
-        input = if input[end..].is_empty() {
-            &input[end..]
-        } else {
-            &input[end + 1..]
-        };
-    } else {
-        return IResult::Error(error_code!(ErrorKind::Custom(43)));
-    }
-
-    let mut subject = None;
-    let mut cc = None;
-    let mut bcc = None;
-    let mut body = None;
-    while !input.is_empty() {
-        let tag = if let Some(tag_pos) = input.iter().position(|e| *e == b'=') {
-            let ret = &input[0..tag_pos];
-            input = &input[tag_pos + 1..];
-            ret
-        } else {
-            return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        let s: Vec<u8> = match input[tag_end_idx + 1] {
+            b'b' | b'B' => match BASE64_MIME.decode(encoded_text) {
+                Ok(v) => v,
+                Err(_) => encoded_text.to_vec(),
+            },
+            b'q' | b'Q' => match quoted_printable_bytes_header(encoded_text) {
+                Ok((b"", s)) => s,
+                _ => return Err(nom::Err::Error((input, ErrorKind::Tag))),
+            },
+            _ => return Err(nom::Err::Error((input, ErrorKind::Tag))),
         };
 
-        let value_end = input.iter().position(|e| *e == b'&').unwrap_or(input.len());
+        let charset = Charset::from(&input[2..tag_end_idx]);
 
-        let value = String::from_utf8_lossy(&input[..value_end]).to_string();
-        match tag {
-            b"subject" if subject.is_none() => {
-                subject = Some(value);
-            }
-            b"cc" if cc.is_none() => {
-                cc = Some(value);
-            }
-            b"bcc" if bcc.is_none() => {
-                bcc = Some(value);
-            }
-            b"body" if body.is_none() => {
-                /* FIXME:
-                 * Parse escaped characters properly.
-                 */
-                body = Some(value.replace("%20", " ").replace("%0A", "\n"));
-            }
-            _ => {
-                return IResult::Error(error_code!(ErrorKind::Custom(43)));
+        if let Charset::UTF8 = charset {
+            Ok((&input[encoded_end_idx + 2..], s))
+        } else {
+            match decode_charset(&s, charset) {
+                Ok(v) => Ok((&input[encoded_end_idx + 2..], v.into_bytes())),
+                _ => Err(nom::Err::Error((input, ErrorKind::Tag))),
             }
         }
-        if input[value_end..].is_empty() {
-            break;
-        }
-        input = &input[value_end + 1..];
     }
-    IResult::Done(
-        input,
-        Mailto {
-            address,
-            subject,
-            cc,
-            bcc,
-            body,
-        },
-    )
+
+    pub fn decode_charset(s: &[u8], charset: Charset) -> Result<String> {
+        match charset {
+            Charset::UTF8 | Charset::Ascii => Ok(String::from_utf8_lossy(s).to_string()),
+            Charset::ISO8859_1 => Ok(ISO_8859_1.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_2 => Ok(ISO_8859_2.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_7 => Ok(ISO_8859_7.decode(s, DecoderTrap::Strict)?),
+            Charset::ISO8859_15 => Ok(ISO_8859_15.decode(s, DecoderTrap::Strict)?),
+            Charset::GBK => Ok(GBK.decode(s, DecoderTrap::Strict)?),
+            Charset::Windows1250 => Ok(WINDOWS_1250.decode(s, DecoderTrap::Strict)?),
+            Charset::Windows1251 => Ok(WINDOWS_1251.decode(s, DecoderTrap::Strict)?),
+            Charset::Windows1252 => Ok(WINDOWS_1252.decode(s, DecoderTrap::Strict)?),
+            Charset::Windows1253 => Ok(WINDOWS_1253.decode(s, DecoderTrap::Strict)?),
+            // Unimplemented:
+            Charset::GB2312 => Ok(String::from_utf8_lossy(s).to_string()),
+            Charset::UTF16 => Ok(String::from_utf8_lossy(s).to_string()),
+            Charset::BIG5 => Ok(String::from_utf8_lossy(s).to_string()),
+            Charset::ISO2022JP => Ok(String::from_utf8_lossy(s).to_string()),
+        }
+    }
+
+    fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        if input.len() < 2 {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        } else if input[0] == b'=' && input[1] == b'\n' {
+            Ok((&input[2..], &input[0..2])) // `=\n` is an escaped space character.
+        } else if input.len() > 3 && input.starts_with(b"=\r\n") {
+            Ok((&input[3..], &input[0..3])) // `=\r\n` is an escaped space character.
+        } else {
+            Err(nom::Err::Error((input, ErrorKind::Tag)))
+        }
+    }
+
+    pub fn qp_underscore_header(input: &[u8]) -> IResult<&[u8], u8> {
+        let (rest, _) = tag(b"_")(input)?;
+        Ok((rest, 0x20))
+    }
+
+    // With MIME, headers in quoted printable format can contain underscores that represent spaces.
+    // In non-header context, an underscore is just a plain underscore.
+    pub fn quoted_printable_bytes_header(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+        many0(alt((quoted_printable_byte, qp_underscore_header, le_u8)))(input)
+    }
+
+    // For atoms in Header values.
+    pub fn quoted_printable_bytes(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+        many0(alt((
+            preceded(quoted_printable_soft_break, quoted_printable_byte),
+            preceded(quoted_printable_soft_break, le_u8),
+            quoted_printable_byte,
+            le_u8,
+        )))(input)
+    }
+
+    pub fn space(input: &[u8]) -> IResult<&[u8], ()> {
+        let (rest, _) =
+            take_while(|c: u8| c == b' ' || c == b'\t' || c == b'\r' || c == b'\n')(input)?;
+        Ok((rest, ()))
+        //eat_separator!());
+    }
+
+    pub fn encoded_word_list(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+        let (input, list) = separated_nonempty_list(space, encoded_word)(input)?;
+        let list_len = list.iter().fold(0, |mut acc, x| {
+            acc += x.len();
+            acc
+        });
+        Ok((
+            input,
+            list.iter()
+                .fold(Vec::with_capacity(list_len), |mut acc, x| {
+                    acc.append(&mut x.clone());
+                    acc
+                }),
+        ))
+    }
+
+    pub fn ascii_token(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+        // TODO take_until used to be take_until1, check if this works
+        let (input, word) = alt((
+            terminated(take_until(" =?"), peek(preceded(tag(b" "), encoded_word))),
+            take_while(|_| true),
+        ))(input)?;
+        Ok((input, word.to_vec()))
+        /*
+        do_parse!(
+            word: alt_complete!(
+                terminated!(
+                    take_until1!(" =?"),
+                    peek!(preceded!(tag!(b" "), call!(encoded_word)))
+                ) | take_while!(call!(|_| true))
+            ) >> ({ word.into() })
+        )
+            */
+    }
+
+    pub fn phrase(
+        input: &[u8],
+        multiline: /* preserve newlines */ bool,
+    ) -> IResult<&[u8], Vec<u8>> {
+        if input.is_empty() {
+            return Ok((&[], Vec::with_capacity(0)));
+        }
+
+        let mut input = input.ltrim();
+        let mut acc: Vec<u8> = Vec::new();
+        let mut ptr = 0;
+
+        while ptr < input.len() {
+            let mut flag = false;
+            // Check if word is encoded.
+            while let Ok((rest, v)) = encoded_word(&input[ptr..]) {
+                flag = true;
+                input = rest;
+                ptr = 0;
+                acc.extend(v);
+
+                // consume whitespace
+                while ptr < input.len() && (is_whitespace!(input[ptr])) {
+                    ptr += 1;
+                }
+
+                if ptr >= input.len() {
+                    break;
+                }
+            }
+            if flag && ptr < input.len() && ptr != 0 {
+                acc.push(b' ');
+            }
+            let end = input[ptr..].find(b"=?");
+
+            let end = end.unwrap_or_else(|| input.len() - ptr) + ptr;
+            let ascii_s = ptr;
+            let mut ascii_e = 0;
+
+            while ptr < end && !(is_whitespace!(input[ptr])) {
+                ptr += 1;
+            }
+            if !multiline {
+                ascii_e = ptr;
+            }
+
+            while ptr < input.len() && (is_whitespace!(input[ptr])) {
+                ptr += 1;
+            }
+            if multiline {
+                ascii_e = ptr;
+            }
+            if ptr >= input.len() {
+                acc.extend(ascii_token(&input[ascii_s..ascii_e])?.1);
+                break;
+            }
+            if ascii_s >= ascii_e {
+                /* We have the start of an encoded word but not the end, so parse it as ascii */
+                ascii_e = input[ascii_s..]
+                    .find(b" ")
+                    .unwrap_or_else(|| ascii_s + input[ascii_s..].len());
+                ptr = ascii_e;
+            }
+            if ascii_s >= ascii_e {
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
+
+            acc.extend(ascii_token(&input[ascii_s..ascii_e])?.1);
+            if ptr != ascii_e {
+                acc.push(b' ');
+            }
+        }
+        Ok((&input[ptr..], acc))
+    }
 }
 
-//alt_complete!(call!(header_without_val) | call!(header_with_val))
+pub mod address {
+    use super::*;
+    use crate::email::address::*;
+    pub fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
+        if input.is_empty() || input.len() < 3 {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        } else if !is_whitespace!(input[0]) {
+            let mut display_name = StrBuilder {
+                offset: 0,
+                length: 0,
+            };
+            let mut flag = false;
+            for (i, b) in input[0..].iter().enumerate() {
+                if *b == b'<' {
+                    display_name.length = i.saturating_sub(1); // if i != 0 { i - 1 } else { 0 };
+                    flag = true;
+                    break;
+                }
+            }
+            if !flag {
+                let (rest, output) = match super::encodings::phrase(input, false) {
+                    Ok(v) => v,
+                    _ => return Err(nom::Err::Error((input, ErrorKind::Tag))),
+                };
+                if output.contains(&b'<') {
+                    let (_, address) = match display_addr(&output) {
+                        Ok(v) => v,
+                        _ => return Err(nom::Err::Error((input, ErrorKind::Tag))),
+                    };
+                    return Ok((rest, address));
+                }
+                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            }
+            let mut end = input.len();
+            let mut at_flag = false;
+            let mut flag = false;
+            for (i, b) in input[display_name.length + 2..].iter().enumerate() {
+                match *b {
+                    b'@' => at_flag = true,
+                    b'>' => {
+                        end = i;
+                        flag = true;
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            if at_flag && flag {
+                let (_, raw) =
+                    super::encodings::phrase(&input[0..end + display_name.length + 3], false)?;
+                let display_name_end = raw.find(b"<").unwrap();
+                display_name.length = raw[0..display_name_end].trim().len();
+                let address_spec = if display_name_end == 0 {
+                    StrBuilder {
+                        offset: 1,
+                        length: end + 1,
+                    }
+                } else {
+                    StrBuilder {
+                        offset: display_name_end + 1,
+                        length: end,
+                    }
+                };
 
-pub struct HeaderIterator<'a>(pub &'a [u8]);
+                if display_name.display(&raw).as_bytes().is_quoted() {
+                    display_name.offset += 1;
+                    display_name.length -= 2;
+                }
 
-impl<'a> Iterator for HeaderIterator<'a> {
-    type Item = (&'a [u8], &'a [u8]);
-    fn next(&mut self) -> Option<(&'a [u8], &'a [u8])> {
-        if self.0.is_empty() {
-            return None;
+                let rest_start = if input.len() > end + display_name.length + 2 {
+                    end + display_name.length + 3
+                } else {
+                    end + display_name.length + 2
+                };
+
+                Ok((
+                    input.get(rest_start..).unwrap_or_default(),
+                    Address::Mailbox(MailboxAddress {
+                        raw,
+                        display_name,
+                        address_spec,
+                    }),
+                ))
+            } else {
+                Err(nom::Err::Error((input, ErrorKind::Tag)))
+            }
+        } else {
+            Err(nom::Err::Error((input, ErrorKind::Tag)))
+        }
+    }
+
+    fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
+        if input.is_empty() || input.len() < 3 {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        } else if !is_whitespace!(input[0]) {
+            let mut end = input[1..].len();
+            let mut flag = false;
+            for (i, b) in input[1..].iter().enumerate() {
+                if *b == b'@' {
+                    flag = true;
+                }
+                if is_whitespace!(*b) {
+                    end = i;
+                    break;
+                }
+            }
+            if flag {
+                Ok((
+                    &input[end..],
+                    Address::Mailbox(MailboxAddress {
+                        raw: input[0..=end].into(),
+                        display_name: StrBuilder {
+                            offset: 0,
+                            length: 0,
+                        },
+                        address_spec: StrBuilder {
+                            offset: 0,
+                            length: input[0..=end].len(),
+                        },
+                    }),
+                ))
+            } else {
+                Err(nom::Err::Error((input, ErrorKind::Tag)))
+            }
+        } else {
+            Err(nom::Err::Error((input, ErrorKind::Tag)))
+        }
+    }
+
+    pub fn mailbox(input: &[u8]) -> IResult<&[u8], Address> {
+        alt((display_addr, addr_spec))(input)
+        //ws!(alt_complete!(display_addr | addr_spec))
+    }
+
+    pub fn mailbox_list(input: &[u8]) -> IResult<&[u8], Vec<Address>> {
+        many0(mailbox)(input)
+        // many0!(mailbox));
+    }
+
+    /*
+     * group of recipients eg. undisclosed-recipients;
+     */
+    fn group(input: &[u8]) -> IResult<&[u8], Address> {
+        let mut flag = false;
+        let mut dlength = 0;
+        for (i, b) in input.iter().enumerate() {
+            if *b == b':' {
+                flag = true;
+                dlength = i;
+                break;
+            }
+        }
+        if !flag {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
         }
 
-        match header(self.0) {
-            IResult::Done(rest, value) => {
-                self.0 = rest;
-                Some(value)
+        let (rest, vec) = mailbox_list(&input[dlength..])?;
+        let size: usize =
+            (rest.as_ptr() as usize).wrapping_sub((&input[0..] as &[u8]).as_ptr() as usize);
+        Ok((
+            rest,
+            Address::Group(GroupAddress {
+                raw: input[0..size].into(),
+                display_name: StrBuilder {
+                    offset: 0,
+                    length: dlength,
+                },
+                mailbox_list: vec,
+            }),
+        ))
+    }
+
+    pub fn address(input: &[u8]) -> IResult<&[u8], Address> {
+        alt((mailbox, group))(input.ltrim())
+        // ws!(alt_complete!(mailbox | group))
+    }
+
+    pub fn rfc2822address_list(input: &[u8]) -> IResult<&[u8], Vec<Address>> {
+        separated_list(is_a(","), address)(input.ltrim())
+        // ws!( separated_list!(is_a!(","), address))
+    }
+
+    pub fn address_list(input: &[u8]) -> IResult<&[u8], String> {
+        let (input, list) = alt((
+            super::encodings::encoded_word_list,
+            super::encodings::ascii_token,
+        ))(input)?;
+        let list: Vec<&[u8]> = list.split(|c| *c == b',').collect();
+        let string_len = list.iter().fold(0, |mut acc, x| {
+            acc += x.trim().len();
+            acc
+        }) + list.len()
+            - 1;
+        let list_len = list.len();
+        let mut i = 0;
+        Ok((
+            input,
+            list.iter()
+                .fold(String::with_capacity(string_len), |acc, x| {
+                    let mut acc = acc
+                        + &String::from_utf8_lossy(
+                            x.replace(b"\n", b"")
+                                .replace(b"\r", b"")
+                                .replace(b"\t", b" ")
+                                .trim(),
+                        );
+                    if i != list_len - 1 {
+                        acc.push_str(" ");
+                        i += 1;
+                    }
+                    acc
+                }),
+        ))
+    }
+
+    pub fn message_id(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        delimited(tag("<"), take_until(">"), tag(">"))(input.ltrim())
+        //complete!(delimited!(ws!(tag!("<")), take_until1!(">"), tag!(">")))
+    }
+
+    fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
+        let input_length = input.len();
+        if input.is_empty() {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        } else if input_length == 2 || input[0] != b'<' {
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+        } else {
+            for (i, &x) in input.iter().take(input_length).enumerate().skip(1) {
+                if x == b'>' {
+                    return Ok((&input[i + 1..], &input[0..=i]));
+                }
             }
-            _ => {
-                self.0 = &[];
-                None
-            }
+            return Err(nom::Err::Error((input, ErrorKind::Tag)));
         }
+    }
+
+    pub fn references(input: &[u8]) -> IResult<&[u8], Vec<&[u8]>> {
+        separated_list(is_a(" \n\t\r"), message_id_peek)(input)
+        // separated_list!(complete!(is_a!(" \n\t\r")), message_id_peek));
     }
 }
 
 #[cfg(test)]
 mod tests {
-
-    use super::*;
+    use super::{address::*, encodings::*, generic::*, *};
+    use crate::email::address::*;
     use crate::make_address;
 
     #[test]
@@ -1091,33 +1165,33 @@ mod tests {
         let words = b"=?iso-8859-7?B?W215Y291cnNlcy5udHVhLmdyIC0gyvXs4fTp6t4g6uHpIMri4e306ere?=
      =?iso-8859-7?B?INb18+nq3l0gzd3hIMHt4erv3+358+c6IMzF0c/TIMHQz9TFy8XTzMHU?=
       =?iso-8859-7?B?2c0gwiDUzC4gysHNLiDFzsXUwdPH0yAyMDE3LTE4OiDTx8zFydnTxw==?=";
-        assert_eq!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" , std::str::from_utf8(&phrase(words.trim(), false).to_full_result().unwrap()).unwrap());
+        assert_eq!("[mycourses.ntua.gr - Κυματική και Κβαντική Φυσική] Νέα Ανακοίνωση: ΜΕΡΟΣ ΑΠΟΤΕΛΕΣΜΑΤΩΝ Β ΤΜ. ΚΑΝ. ΕΞΕΤΑΣΗΣ 2017-18: ΣΗΜΕΙΩΣΗ" , std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap());
         let words = b"=?UTF-8?Q?=CE=A0=CF=81=CF=8C=CF=83=CE=B8=CE=B5?= =?UTF-8?Q?=CF=84=CE=B7_=CE=B5=CE=BE=CE=B5=CF=84?= =?UTF-8?Q?=CE=B1=CF=83=CF=84=CE=B9=CE=BA=CE=AE?=";
         assert_eq!(
             "Πρόσθετη εξεταστική",
-            std::str::from_utf8(&phrase(words.trim(), false).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap()
         );
         let words = b"[Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=\n\t=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=\n\t=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
         assert_eq!(
             "[Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
-            std::str::from_utf8(&phrase(words.trim(), false).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap()
         );
         let words = b"Re: [Advcomparch] =?utf-8?b?zqPPhc68z4DOtc+BzrnPhs6/z4HOrCDPg861IGZs?=
 	=?utf-8?b?dXNoIM67z4zOs8+JIG1pc3ByZWRpY3Rpb24gzrrOsc+Ezqwgz4TOt869?=
 	=?utf-8?b?IM61zrrPhM6tzrvOtc+Dzrcgc3RvcmU=?=";
         assert_eq!(
             "Re: [Advcomparch] Συμπεριφορά σε flush λόγω misprediction κατά την εκτέλεση store",
-            std::str::from_utf8(&phrase(words.trim(), false).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words.trim(), false).unwrap().1).unwrap()
         );
         let words = b"sdf";
         assert_eq!(
             "sdf",
-            std::str::from_utf8(&phrase(words, false).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words, false).unwrap().1).unwrap()
         );
         let words = b"=?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?= =?iso-8859-7?q?_example_ru_n_=5Fsniper?=";
         assert_eq!(
             "Seg fault στην εκτέλεση του example ru n _sniper",
-            std::str::from_utf8(&phrase(words, false).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words, false).unwrap().1).unwrap()
         );
         let words = b"Re: [Advcomparch]
  =?iso-8859-7?b?U2VnIGZhdWx0IPP05+0g5er03evl8+cg9O/1?=
@@ -1125,31 +1199,28 @@ mod tests {
 
         assert_eq!(
             "Re: [Advcomparch] Seg fault στην εκτέλεση του example ru n _sniper",
-            std::str::from_utf8(&phrase(words, false).to_full_result().unwrap()).unwrap()
+            std::str::from_utf8(&phrase(words, false).unwrap().1).unwrap()
         );
 
         let words = r#"[internal] =?UTF-8?B?zp3Orc6/z4Igzp/OtM63zrPPjM+CIM6jz4XOs86zz4E=?=
  =?UTF-8?B?zrHPhs6uz4I=?="#;
         assert_eq!(
             "[internal] Νέος Οδηγός Συγγραφής",
-            std::str::from_utf8(&phrase(words.as_bytes(), false).to_full_result().unwrap())
-                .unwrap()
+            std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
         );
 
         let words = r#"=?UTF-8?Q?Re=3a_Climate_crisis_reality_check_=e2=80=93=c2=a0EcoHust?=
  =?UTF-8?Q?ler?="#;
         assert_eq!(
             "Re: Climate crisis reality check –\u{a0}EcoHustler",
-            std::str::from_utf8(&phrase(words.as_bytes(), false).to_full_result().unwrap())
-                .unwrap()
+            std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
         );
 
         let words = r#"Re: Climate crisis reality check =?windows-1250?B?lqBFY29IdXN0?=
  =?windows-1250?B?bGVy?="#;
         assert_eq!(
             "Re: Climate crisis reality check –\u{a0}EcoHustler",
-            std::str::from_utf8(&phrase(words.as_bytes(), false).to_full_result().unwrap())
-                .unwrap()
+            std::str::from_utf8(&phrase(words.as_bytes(), false).unwrap().1).unwrap()
         );
     }
 
@@ -1196,11 +1267,11 @@ mod tests {
         let mut buffer: Vec<u8> = Vec::new();
         let _ = std::fs::File::open("").unwrap().read_to_end(&mut buffer);
         let boundary = b"b1_4382d284f0c601a737bb32aaeda53160";
-        let (_, body) = match mail(&buffer).to_full_result() {
+        let (_, body) = match mail(&buffer) {
             Ok(v) => v,
             Err(_) => panic!(),
         };
-        let attachments = parts(body, boundary).to_full_result().unwrap();
+        let attachments = parts(body, boundary).unwrap().1;
         assert_eq!(attachments.len(), 4);
         let v: Vec<&str> = attachments
             .iter()
@@ -1275,9 +1346,8 @@ border=3D=220=22>
    </tr>"#;
         assert_eq!(
             quoted_printable_bytes(input.as_bytes())
-                .to_full_result()
                 .as_ref()
-                .map(|b| unsafe { std::str::from_utf8_unchecked(b) }),
+                .map(|(_, b)| unsafe { std::str::from_utf8_unchecked(b) }),
             Ok(r#"<!-- SEPARATOR  -->
    <tr>
     <td style="padding-left: 10px;padding-right: 10px;background-color: #f3f5fa;">

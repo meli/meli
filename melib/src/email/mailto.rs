@@ -54,7 +54,7 @@ impl TryFrom<&[u8]> for Mailto {
     type Error = String;
 
     fn try_from(value: &[u8]) -> std::result::Result<Self, Self::Error> {
-        let parse_res = super::parser::mailto(value).to_full_result();
+        let parse_res = super::parser::generic::mailto(value).map(|(_, v)| v);
         if parse_res.is_ok() {
             Ok(parse_res.unwrap())
         } else {
@@ -74,8 +74,8 @@ mod tests {
 
     #[test]
     fn test_mailto() {
-        let test_address = super::parser::address(b"info@example.com")
-            .to_full_result()
+        let test_address = super::parser::address::address(b"info@example.com")
+            .map(|(_, v)| v)
             .unwrap();
         let mailto = Mailto::try_from(&b"mailto:info@example.com?subject=email%20subject"[0..])
             .expect("Could not parse mailto link.");

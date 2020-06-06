@@ -38,7 +38,7 @@ use crate::get_path_hash;
 use crate::shellexpand::ShellExpandTrait;
 use libc;
 use memmap::{Mmap, Protection};
-use nom::{IResult, Needed};
+use nom::{self, error::ErrorKind, IResult};
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::collections::hash_map::{DefaultHasher, HashMap};
@@ -213,7 +213,7 @@ impl BackendOp for MboxOp {
             return flags;
         };
 
-        if let Ok(headers) = parser::headers_raw(contents.as_slice()).to_full_result() {
+        if let Ok((_, headers)) = parser::headers::headers_raw(contents.as_slice()) {
             if let Some(start) = headers.find(b"Status:") {
                 if let Some(end) = headers[start..].find(b"\n") {
                     let start = start + b"Status:".len();
@@ -275,7 +275,7 @@ pub fn mbox_parse(
     file_offset: usize,
 ) -> IResult<&[u8], Vec<Envelope>> {
     if input.is_empty() {
-        return IResult::Incomplete(Needed::Unknown);
+        return Err(nom::Err::Error((input, ErrorKind::Tag)));
     }
     let mut input = input;
     let mut offset = 0;
@@ -381,7 +381,7 @@ pub fn mbox_parse(
             break;
         }
     }
-    return IResult::Done(&[], envelopes);
+    return Ok((&[], envelopes));
 }
 
 /// Mbox backend
@@ -430,8 +430,8 @@ impl MailBackend for MboxType {
                 };
 
                 let payload = mbox_parse(index, contents.as_slice(), 0)
-                    .to_full_result()
-                    .map_err(|e| MeliError::from(e));
+                    .map_err(|e| MeliError::from(e))
+                    .map(|(_, v)| v);
                 {
                     let mut mailbox_lock = mailboxes.lock().unwrap();
                     mailbox_lock
@@ -516,13 +516,11 @@ impl MailBackend for MboxType {
                                 if contents
                                     .starts_with(mailbox_lock[&mailbox_hash].content.as_slice())
                                 {
-                                    if let Ok(envelopes) = mbox_parse(
+                                    if let Ok((_, envelopes)) = mbox_parse(
                                         index.clone(),
                                         &contents[mailbox_lock[&mailbox_hash].content.len()..],
                                         mailbox_lock[&mailbox_hash].content.len(),
-                                    )
-                                    .to_full_result()
-                                    {
+                                    ) {
                                         for env in envelopes {
                                             sender.send(RefreshEvent {
                                                 account_hash,
@@ -618,7 +616,7 @@ impl MailBackend for MboxType {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn as_any(&self) -> &dyn ::std::any::Any {
+    fn as_any(&self) -> &dyn::std::any::Any {
         self
     }
 }

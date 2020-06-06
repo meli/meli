@@ -88,7 +88,7 @@ impl str::FromStr for Draft {
             return Err(MeliError::new("Empty input in Draft::from_str"));
         }
 
-        let (headers, _) = parser::mail(s.as_bytes()).to_full_result()?;
+        let (headers, _) = parser::mail(s.as_bytes())?;
         let mut ret = Draft::default();
 
         for (k, v) in headers {
@@ -107,9 +107,7 @@ impl str::FromStr for Draft {
             }
         }
         if ret.headers.contains_key("From") && !ret.headers.contains_key("Message-ID") {
-            if let super::parser::IResult::Done(_, addr) =
-                super::parser::mailbox(ret.headers["From"].as_bytes())
-            {
+            if let Ok((_, addr)) = super::parser::address::mailbox(ret.headers["From"].as_bytes()) {
                 if let Some(fqdn) = addr.get_fqdn() {
                     if ret
                         .headers
@@ -256,8 +254,7 @@ impl Draft {
         let mut ret = String::new();
 
         if self.headers.contains_key("From") && !self.headers.contains_key("Message-ID") {
-            if let super::parser::IResult::Done(_, addr) =
-                super::parser::mailbox(self.headers["From"].as_bytes())
+            if let Ok((_, addr)) = super::parser::address::mailbox(self.headers["From"].as_bytes())
             {
                 if let Some(fqdn) = addr.get_fqdn() {
                     if self

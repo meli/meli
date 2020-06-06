@@ -33,6 +33,7 @@ mod attachment_types;
 pub mod attachments;
 pub use crate::attachments::*;
 mod address;
+//pub mod parser;
 pub mod parser;
 use crate::parser::BytesExt;
 pub use address::*;
@@ -243,7 +244,7 @@ impl Envelope {
                 bytes = &bytes[offset + 1..];
             }
         }
-        let (headers, body) = match parser::mail(bytes).to_full_result() {
+        let (headers, body) = match parser::mail(bytes) {
             Ok(v) => v,
             Err(e) => {
                 debug!("error in parsing mail\n{:?}\n", e);
@@ -257,51 +258,50 @@ impl Envelope {
             self.other_headers.insert(
                 String::from_utf8(name.to_vec())
                     .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into()),
-                parser::phrase(value, false)
-                    .to_full_result()
-                    .map(|value| {
+                parser::encodings::phrase(value, false)
+                    .map(|(_, value)| {
                         String::from_utf8(value)
                             .unwrap_or_else(|err| String::from_utf8_lossy(&err.into_bytes()).into())
                     })
                     .unwrap_or_else(|_| String::from_utf8_lossy(value).into()),
             );
             if name.eq_ignore_ascii_case(b"to") {
-                let parse_result = parser::rfc2822address_list(value);
-                if parse_result.is_done() {
-                    let value = parse_result.to_full_result().unwrap();
+                let parse_result = parser::address::rfc2822address_list(value);
+                if parse_result.is_ok() {
+                    let value = parse_result.unwrap().1;
                     self.set_to(value);
                 };
             } else if name.eq_ignore_ascii_case(b"cc") {
-                let parse_result = parser::rfc2822address_list(value);
-                if parse_result.is_done() {
-                    let value = parse_result.to_full_result().unwrap();
+                let parse_result = parser::address::rfc2822address_list(value);
+                if parse_result.is_ok() {
+                    let value = parse_result.unwrap().1;
                     self.set_cc(value);
                 };
             } else if name.eq_ignore_ascii_case(b"bcc") {
-                let parse_result = parser::rfc2822address_list(value);
-                if parse_result.is_done() {
-                    let value = parse_result.to_full_result().unwrap();
+                let parse_result = parser::address::rfc2822address_list(value);
+                if parse_result.is_ok() {
+                    let value = parse_result.unwrap().1;
                     self.set_bcc(value);
                 };
             } else if name.eq_ignore_ascii_case(b"from") {
-                let parse_result = parser::rfc2822address_list(value);
-                if parse_result.is_done() {
-                    let value = parse_result.to_full_result().unwrap();
+                let parse_result = parser::address::rfc2822address_list(value);
+                if parse_result.is_ok() {
+                    let value = parse_result.unwrap().1;
                     self.set_from(value);
                 }
             } else if name.eq_ignore_ascii_case(b"subject") {
-                let parse_result = parser::phrase(value.trim(), false);
-                if parse_result.is_done() {
-                    let value = parse_result.to_full_result().unwrap();
+                let parse_result = parser::encodings::phrase(value.trim(), false);
+                if parse_result.is_ok() {
+                    let value = parse_result.unwrap().1;
                     self.set_subject(value);
                 };
             } else if name.eq_ignore_ascii_case(b"message-id") {
                 self.set_message_id(value);
             } else if name.eq_ignore_ascii_case(b"references") {
                 {
-                    let parse_result = parser::references(value);
-                    if parse_result.is_done() {
-                        for v in parse_result.to_full_result().unwrap() {
+                    let parse_result = parser::address::references(value);
+                    if parse_result.is_ok() {
+                        for v in parse_result.unwrap().1 {
                             self.push_references(v);
                         }
                     }
@@ -311,16 +311,16 @@ impl Envelope {
                 self.set_in_reply_to(value);
                 in_reply_to = Some(value);
             } else if name.eq_ignore_ascii_case(b"date") {
-                let parse_result = parser::phrase(value, false);
-                if parse_result.is_done() {
-                    let value = parse_result.to_full_result().unwrap();
+                let parse_result = parser::encodings::phrase(value, false);
+                if parse_result.is_ok() {
+                    let value = parse_result.unwrap().1;
                     self.set_date(value.as_slice());
                 } else {
                     self.set_date(value);
                 }
             } else if name.eq_ignore_ascii_case(b"content-type") {
-                match parser::content_type(value).to_full_result() {
-                    Ok((ct, cst, ref params))
+                match parser::attachments::content_type(value) {
+                    Ok((_, (ct, cst, ref params)))
                         if ct.eq_ignore_ascii_case(b"multipart")
                             && cst.eq_ignore_ascii_case(b"mixed") =>
                     {
@@ -352,7 +352,7 @@ impl Envelope {
         if let Some(ref mut x) = in_reply_to {
             self.push_references(x);
         }
-        if let Ok(d) = parser::date(&self.date.as_bytes()) {
+        if let Ok(d) = parser::generic::date(&self.date.as_bytes()) {
             self.set_datetime(d);
         }
         if self.message_id.raw().is_empty() {
@@ -425,7 +425,7 @@ impl Envelope {
 
     /// Requests bytes from backend and thus can fail
     pub fn headers<'a>(&self, bytes: &'a [u8]) -> Result<Vec<(&'a str, &'a str)>> {
-        let ret = parser::headers(bytes).to_full_result()?;
+        let ret = parser::headers::headers(bytes)?.1;
         let len = ret.len();
         ret.into_iter()
             .try_fold(Vec::with_capacity(len), |mut acc, (a, b)| {
@@ -491,8 +491,8 @@ impl Envelope {
         self.to = new_val;
     }
     pub fn set_in_reply_to(&mut self, new_val: &[u8]) {
-        let slice = match parser::message_id(new_val).to_full_result() {
-            Ok(v) => v,
+        let slice = match parser::address::message_id(new_val) {
+            Ok(v) => v.1,
             Err(_) => {
                 self.in_reply_to = None;
                 return;
@@ -515,8 +515,8 @@ impl Envelope {
         self.subject = Some(new_val);
     }
     pub fn set_message_id(&mut self, new_val: &[u8]) {
-        match parser::message_id(new_val).to_full_result() {
-            Ok(slice) => {
+        match parser::address::message_id(new_val) {
+            Ok((_, slice)) => {
                 self.message_id = MessageID::new(new_val, slice);
             }
             Err(_) => {
@@ -525,8 +525,8 @@ impl Envelope {
         }
     }
     pub fn push_references(&mut self, new_val: &[u8]) {
-        let slice = match parser::message_id(new_val).to_full_result() {
-            Ok(v) => v,
+        let slice = match parser::address::message_id(new_val) {
+            Ok(v) => v.1,
             Err(e) => {
                 debug!(e);
                 return;

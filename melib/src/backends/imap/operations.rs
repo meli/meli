@@ -142,7 +142,7 @@ impl BackendOp for ImapOp {
                 response.lines().collect::<Vec<&str>>().len()
             );
             match protocol_parser::uid_fetch_flags_response(response.as_bytes())
-                .to_full_result()
+                .map(|(_, v)| v)
                 .map_err(MeliError::from)
             {
                 Ok(v) => {
@@ -181,7 +181,7 @@ impl BackendOp for ImapOp {
         conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)?;
         debug!(&response);
         match protocol_parser::uid_fetch_flags_response(response.as_bytes())
-            .to_full_result()
+            .map(|(_, v)| v)
             .map_err(MeliError::from)
         {
             Ok(v) => {
@@ -215,7 +215,7 @@ impl BackendOp for ImapOp {
         )?;
         conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)?;
         protocol_parser::uid_fetch_flags_response(response.as_bytes())
-            .to_full_result()
+            .map(|(_, v)| v)
             .map_err(MeliError::from)?;
         let hash = tag_hash!(tag);
         if value {

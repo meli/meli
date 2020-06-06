@@ -122,10 +122,9 @@ pub mod sqlite3;
 #[macro_use]
 extern crate serde_derive;
 /* parser */
-#[macro_use]
-extern crate nom;
 extern crate data_encoding;
 extern crate encoding;
+pub use nom;
 
 #[macro_use]
 extern crate bitflags;

@@ -231,7 +231,7 @@ impl std::fmt::Display for EmailAddress {
 impl std::convert::From<EmailObject> for crate::Envelope {
     fn from(mut t: EmailObject) -> crate::Envelope {
         let mut env = crate::Envelope::new(0);
-        if let Ok(d) = crate::email::parser::date(env.date_as_str().as_bytes()) {
+        if let Ok(d) = crate::email::parser::generic::date(env.date_as_str().as_bytes()) {
             env.set_datetime(d);
         }
         if let Some(ref mut sent_at) = t.sent_at {
@@ -249,9 +249,9 @@ impl std::convert::From<EmailObject> for crate::Envelope {
             env.push_references(in_reply_to[0].as_bytes());
         }
         if let Some(v) = t.headers.get("References") {
-            let parse_result = crate::email::parser::references(v.as_bytes());
-            if parse_result.is_done() {
-                for v in parse_result.to_full_result().unwrap() {
+            let parse_result = crate::email::parser::address::references(v.as_bytes());
+            if let Ok((_, v)) = parse_result {
+                for v in v {
                     env.push_references(v);
                 }
             }
@@ -259,7 +259,7 @@ impl std::convert::From<EmailObject> for crate::Envelope {
         }
         if let Some(v) = t.headers.get("Date") {
             env.set_date(v.as_bytes());
-            if let Ok(d) = crate::email::parser::date(v.as_bytes()) {
+            if let Ok(d) = crate::email::parser::generic::date(v.as_bytes()) {
                 env.set_datetime(d);
             }
         }
