@@ -232,6 +232,14 @@ impl From<nix::Error> for MeliError {
     }
 }
 
+#[cfg(feature = "sqlite3")]
+impl From<rusqlite::Error> for MeliError {
+    #[inline]
+    fn from(kind: rusqlite::Error) -> MeliError {
+        MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
+    }
+}
+
 impl From<libloading::Error> for MeliError {
     #[inline]
     fn from(kind: libloading::Error) -> MeliError {

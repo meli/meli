@@ -144,10 +144,11 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         }
     };
     let mailbox_hash = mailbox.hash();
+    let uidvalidity;
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
         conn,
-                        account_hash,
+        account_hash,
         mailbox_hash,
         work_context,
         thread_id,
@@ -160,6 +161,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         *prev_exists = match protocol_parser::select_response(&response) {
             Ok(ok) => {
                 {
+                    uidvalidity = ok.uidvalidity;
                     let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
                     if let Some(v) = uidvalidities.get_mut(&mailbox_hash) {
@@ -229,7 +231,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
             exit_on_error!(
                 iter.conn,
-                        account_hash,
+                account_hash,
                 mailbox_hash,
                 work_context,
                 thread_id,
@@ -283,7 +285,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 /* UID SEARCH RECENT */
                 exit_on_error!(
                     conn,
-                        account_hash,
+                    account_hash,
                     mailbox_hash,
                     work_context,
                     thread_id,
@@ -363,6 +365,14 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             }
                                             if !env.is_seen() {
                                                 *mailbox.unseen.lock().unwrap() += 1;
+                                            }
+                                            if uid_store.cache_headers {
+                                                cache::save_envelopes(
+                                                    account_hash,
+                                                    mailbox_hash,
+                                                    uidvalidity,
+                                                    &[(uid, &env)],
+                                                )?;
                                             }
 
                                             conn.add_refresh_event(RefreshEvent {
@@ -484,6 +494,15 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                     if !env.is_seen() {
                                         *mailbox.unseen.lock().unwrap() += 1;
                                     }
+                                    if uid_store.cache_headers {
+                                        cache::save_envelopes(
+                                            account_hash,
+                                            mailbox_hash,
+                                            uidvalidity,
+                                            &[(uid, &env)],
+                                        )?;
+                                    }
+
                                     conn.add_refresh_event(RefreshEvent {
                                         account_hash,
                                         mailbox_hash,
@@ -594,8 +613,10 @@ pub fn examine_updates(
         conn.examine_mailbox(mailbox_hash, &mut response)
     );
     *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
+    let uidvalidity;
     match protocol_parser::select_response(&response) {
         Ok(ok) => {
+            uidvalidity = ok.uidvalidity;
             debug!(&ok);
             {
                 let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
@@ -712,6 +733,15 @@ pub fn examine_updates(
                                             if !env.is_seen() {
                                                 *mailbox.unseen.lock().unwrap() += 1;
                                             }
+                                            if uid_store.cache_headers {
+                                                cache::save_envelopes(
+                                                    account_hash,
+                                                    mailbox_hash,
+                                                    uidvalidity,
+                                                    &[(uid, &env)],
+                                                )?;
+                                            }
+
                                             conn.add_refresh_event(RefreshEvent {
                                                 account_hash,
                                                 mailbox_hash,
@@ -791,6 +821,15 @@ pub fn examine_updates(
                                 if !env.is_seen() {
                                     *mailbox.unseen.lock().unwrap() += 1;
                                 }
+                                if uid_store.cache_headers {
+                                    cache::save_envelopes(
+                                        account_hash,
+                                        mailbox_hash,
+                                        uidvalidity,
+                                        &[(uid, &env)],
+                                    )?;
+                                }
+
                                 conn.add_refresh_event(RefreshEvent {
                                     account_hash,
                                     mailbox_hash,

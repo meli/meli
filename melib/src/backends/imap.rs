@@ -32,6 +32,7 @@ mod connection;
 pub use connection::*;
 mod watch;
 pub use watch::*;
+mod cache;
 pub mod managesieve;
 mod untagged;
 
@@ -122,6 +123,7 @@ macro_rules! get_conf_val {
 #[derive(Debug)]
 pub struct UIDStore {
     account_hash: AccountHash,
+    cache_headers: bool,
     uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     uid_index: Arc<Mutex<HashMap<UID, EnvelopeHash>>>,
@@ -139,6 +141,7 @@ impl Default for UIDStore {
     fn default() -> Self {
         UIDStore {
             account_hash: 0,
+            cache_headers: false,
             uidvalidity: Default::default(),
             hash_index: Default::default(),
             uid_index: Default::default(),
@@ -227,9 +230,55 @@ impl MailBackend for ImapType {
                 let _tx = tx.clone();
                 if let Err(err) = (move || {
                     let tx = _tx;
-                    let mut response = String::with_capacity(8 * 1024);
+                    let mut our_unseen = 0;
+                    let mut max_uid: cache::MaxUID = 0;
+                    let mut valid_hash_set: HashSet<EnvelopeHash> = HashSet::default();
+                    let cached_hash_set: HashSet<EnvelopeHash> =
+                        (|max_uid: &mut cache::MaxUID| -> Result<HashSet<EnvelopeHash>> {
+                            if !uid_store.cache_headers {
+                                return Ok(HashSet::default());
+                            }
+
+                            let uidvalidities = uid_store.uidvalidity.lock().unwrap();
+
+                            let v = if let Some(v) = uidvalidities.get(&mailbox_hash) {
+                                v
+                            } else {
+                                return Ok(HashSet::default());
+                            };
+                            let cached_envs: (cache::MaxUID, Vec<(UID, Envelope)>);
+                            cache::save_envelopes(uid_store.account_hash, mailbox_hash, *v, &[])?;
+                            cached_envs =
+                                cache::get_envelopes(uid_store.account_hash, mailbox_hash, *v)?;
+                            let (_max_uid, envelopes) = debug!(cached_envs);
+                            *max_uid = _max_uid;
+                            let ret = envelopes.iter().map(|(_, env)| env.hash()).collect();
+                            if !envelopes.is_empty() {
+                                let mut payload = vec![];
+                                for (uid, env) in envelopes {
+                                    if !env.flags().contains(Flag::SEEN) {
+                                        our_unseen += 1;
+                                    }
+                                    uid_store
+                                        .hash_index
+                                        .lock()
+                                        .unwrap()
+                                        .insert(env.hash(), (uid, mailbox_hash));
+                                    uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
+                                    payload.push(env);
+                                }
+                                debug!("sending cached payload for {}", mailbox_hash);
+
+                                *unseen.lock().unwrap() = our_unseen;
+                                tx.send(AsyncStatus::Payload(Ok(payload))).unwrap();
+                            }
+                            Ok(ret)
+                        })(&mut max_uid)
+                        .unwrap_or_default();
+
                     let mut conn = connection.lock()?;
                     debug!("locked for get {}", mailbox_path);
+                    let mut response = String::with_capacity(8 * 1024);
 
                     /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
                      * returns READ-ONLY for both cases) */
@@ -247,8 +296,15 @@ impl MailBackend for ImapType {
                         let v = uidvalidities
                             .entry(mailbox_hash)
                             .or_insert(examine_response.uidvalidity);
+                        if uid_store.cache_headers {
+                            let _ = cache::save_envelopes(
+                                uid_store.account_hash,
+                                mailbox_hash,
+                                examine_response.uidvalidity,
+                                &[],
+                            );
+                        }
                         *v = examine_response.uidvalidity;
-
                         let mut permissions = permissions.lock().unwrap();
                         permissions.create_messages = !examine_response.read_only;
                         permissions.remove_messages = !examine_response.read_only;
@@ -263,8 +319,8 @@ impl MailBackend for ImapType {
                     conn.examine_mailbox(mailbox_hash, &mut response)?;
 
                     let mut tag_lck = uid_store.tag_index.write().unwrap();
-                    let mut our_unseen = 0;
-                    while exists > 0 {
+
+                    while exists > max_uid {
                         let mut envelopes = vec![];
                         debug!("{} exists= {}", mailbox_hash, exists);
                         if exists == 1 {
@@ -274,7 +330,10 @@ impl MailBackend for ImapType {
                             conn.send_command(
                                 debug!(format!(
                                     "UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)",
-                                    std::cmp::max(exists.saturating_sub(500), 1),
+                                    std::cmp::max(
+                                        std::cmp::max(exists.saturating_sub(500), 1),
+                                        max_uid + 1
+                                    ),
                                     exists
                                 ))
                                 .as_bytes(),
@@ -300,6 +359,7 @@ impl MailBackend for ImapType {
                             h.write_usize(uid);
                             h.write(mailbox_path.as_bytes());
                             env.set_hash(h.finish());
+                            valid_hash_set.insert(env.hash());
                             if let Some((flags, keywords)) = flags {
                                 if !flags.contains(Flag::SEEN) {
                                     our_unseen += 1;
@@ -319,13 +379,37 @@ impl MailBackend for ImapType {
                                 .unwrap()
                                 .insert(env.hash(), (uid, mailbox_hash));
                             uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
-                            envelopes.push(env);
+                            envelopes.push((uid, env));
                         }
-                        exists = std::cmp::max(exists.saturating_sub(500), 1);
+                        exists =
+                            std::cmp::max(std::cmp::max(exists.saturating_sub(500), 1), max_uid);
                         debug!("sending payload for {}", mailbox_hash);
-
+                        if uid_store.cache_headers {
+                            cache::save_envelopes(
+                                uid_store.account_hash,
+                                mailbox_hash,
+                                examine_response.uidvalidity,
+                                &envelopes
+                                    .iter()
+                                    .map(|(uid, env)| (*uid, env))
+                                    .collect::<SmallVec<[(UID, &Envelope); 1024]>>(),
+                            )?;
+                        }
+                        for &env_hash in cached_hash_set.difference(&valid_hash_set) {
+                            conn.add_refresh_event(RefreshEvent {
+                                account_hash: uid_store.account_hash,
+                                mailbox_hash,
+                                kind: RefreshEventKind::Remove(env_hash),
+                            });
+                        }
                         *unseen.lock().unwrap() = our_unseen;
-                        tx.send(AsyncStatus::Payload(Ok(envelopes))).unwrap();
+                        let progress = envelopes.len();
+                        tx.send(AsyncStatus::Payload(Ok(envelopes
+                            .into_iter()
+                            .map(|(_, env)| env)
+                            .collect::<Vec<Envelope>>())))
+                            .unwrap();
+                        tx.send(AsyncStatus::ProgressReport(progress)).unwrap();
                         if exists == 1 {
                             break;
                         }
@@ -904,6 +988,7 @@ impl ImapType {
         };
         let uid_store: Arc<UIDStore> = Arc::new(UIDStore {
             account_hash,
+            cache_headers: get_conf_val!(s["X_header_caching"], false)?,
             ..UIDStore::default()
         });
         let connection = ImapConnection::new_connection(&server_conf, uid_store.clone());
@@ -1047,6 +1132,7 @@ impl ImapType {
         get_conf_val!(s["server_port"], 143)?;
         get_conf_val!(s["use_starttls"], false)?;
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
+        get_conf_val!(s["X_header_caching"], false)?;
         Ok(())
     }
 }
