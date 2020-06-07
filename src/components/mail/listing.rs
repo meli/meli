@@ -228,8 +228,17 @@ pub trait MailListingTrait: ListingTrait {
 
     fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]>;
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]>;
-    fn redraw_list(&mut self, _context: &Context, _items: Box<dyn Iterator<Item = ThreadHash>>) {
-        unimplemented!()
+    fn redraw_threads_list(
+        &mut self,
+        context: &Context,
+        items: Box<dyn Iterator<Item = ThreadHash>>,
+    );
+
+    fn redraw_envelope_list(
+        &mut self,
+        _context: &Context,
+        _items: Box<dyn Iterator<Item = EnvelopeHash>>,
+    ) {
     }
 
     /// Use `force` when there have been changes in the mailbox or account lists in `context`

@@ -176,8 +176,37 @@ impl MailListingTrait for PlainListing {
             .iter()
             .map(|h| (*h, env_lck[h].thread()))
             .collect();
+        let sort = self.sort;
+        self.local_collection.sort_by(|a, b| match sort {
+            (SortField::Date, SortOrder::Desc) => {
+                let ma = &env_lck[a];
+                let mb = &env_lck[b];
+                mb.date().cmp(&ma.date())
+            }
+            (SortField::Date, SortOrder::Asc) => {
+                let ma = &env_lck[a];
+                let mb = &env_lck[b];
+                ma.date().cmp(&mb.date())
+            }
+            (SortField::Subject, SortOrder::Desc) => {
+                let ma = &env_lck[a];
+                let mb = &env_lck[b];
+                ma.subject().cmp(&mb.subject())
+            }
+            (SortField::Subject, SortOrder::Asc) => {
+                let ma = &env_lck[a];
+                let mb = &env_lck[b];
+                mb.subject().cmp(&ma.subject())
+            }
+        });
+        for &env_hash in &self.local_collection {
+            self.all_envelopes.insert(env_hash);
+        }
+        let items = Box::new(self.local_collection.clone().into_iter())
+            as Box<dyn Iterator<Item = EnvelopeHash>>;
+
+        self.redraw_list(context, items);
         drop(env_lck);
-        self.redraw_list(context);
 
         if self.length > 0 {
             let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
@@ -188,6 +217,31 @@ impl MailListingTrait for PlainListing {
                 self.view = MailView::new(temp, None, None, context);
             }
         }
+    }
+
+    fn redraw_threads_list(
+        &mut self,
+        context: &Context,
+        items: Box<dyn Iterator<Item = ThreadHash>>,
+    ) {
+        let account = &context.accounts[self.cursor_pos.0];
+        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let roots = items
+            .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
+            .collect::<_>();
+        let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
+        let env_hash_iter = Box::new(
+            threads
+                .threads_group_iter(roots)
+                .filter_map(|(_, thread_node_hash, _)| {
+                    let thread_node = &thread_nodes[&thread_node_hash];
+
+                    thread_node.message()
+                })
+                .collect::<SmallVec<[EnvelopeHash; 2048]>>()
+                .into_iter(),
+        ) as Box<dyn Iterator<Item = EnvelopeHash>>;
+        self.redraw_list(context, env_hash_iter);
     }
 }
 
@@ -571,7 +625,11 @@ impl ListingTrait for PlainListing {
                     self.data_columns.columns[0] =
                         CellBuffer::new_with_context(0, 0, default_cell, context);
                 }
-                self.redraw_list(context);
+                self.redraw_list(
+                    context,
+                    Box::new(self.filtered_selection.clone().into_iter())
+                        as Box<dyn Iterator<Item = EnvelopeHash>>,
+                );
             }
             Err(e) => {
                 self.cursor_pos.2 = 0;
@@ -690,7 +748,7 @@ impl PlainListing {
         }
     }
 
-    fn redraw_list(&mut self, context: &Context) {
+    fn redraw_list(&mut self, context: &Context, iter: Box<dyn Iterator<Item = EnvelopeHash>>) {
         let account = &context.accounts[self.cursor_pos.0];
         let mailbox = &account[&self.cursor_pos.1];
 
@@ -700,40 +758,6 @@ impl PlainListing {
         let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0, 0);
 
-        let envelopes = account.collection.envelopes.read().unwrap();
-        let sort = self.sort;
-        self.local_collection.sort_by(|a, b| match sort {
-            (SortField::Date, SortOrder::Desc) => {
-                let ma = &envelopes[a];
-                let mb = &envelopes[b];
-                mb.date().cmp(&ma.date())
-            }
-            (SortField::Date, SortOrder::Asc) => {
-                let ma = &envelopes[a];
-                let mb = &envelopes[b];
-                ma.date().cmp(&mb.date())
-            }
-            (SortField::Subject, SortOrder::Desc) => {
-                let ma = &envelopes[a];
-                let mb = &envelopes[b];
-                ma.subject().cmp(&mb.subject())
-            }
-            (SortField::Subject, SortOrder::Asc) => {
-                let ma = &envelopes[a];
-                let mb = &envelopes[b];
-                mb.subject().cmp(&ma.subject())
-            }
-        });
-
-        let mut refresh_mailbox = false;
-        let iter = if self.filter_term.is_empty() {
-            refresh_mailbox = true;
-            Box::new(self.local_collection.iter().cloned())
-                as Box<dyn Iterator<Item = EnvelopeHash>>
-        } else {
-            Box::new(self.filtered_selection.iter().map(|h| *h))
-                as Box<dyn Iterator<Item = EnvelopeHash>>
-        };
         for i in iter {
             if !context.accounts[self.cursor_pos.0].contains_key(i) {
                 debug!("key = {}", i);
@@ -769,9 +793,6 @@ impl PlainListing {
                 entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
             ); /* tags + subject */
             rows.push(entry_strings);
-            if refresh_mailbox {
-                self.all_envelopes.insert(i);
-            }
 
             self.order.insert(i, self.length);
             self.selection.insert(i, false);

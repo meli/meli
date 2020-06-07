@@ -40,6 +40,18 @@ impl MailListingTrait for OfflineListing {
     }
 
     fn refresh_mailbox(&mut self, _context: &mut Context, _force: bool) {}
+    fn redraw_threads_list(
+        &mut self,
+        _context: &Context,
+        _items: Box<dyn Iterator<Item = ThreadHash>>,
+    ) {
+    }
+    fn redraw_envelope_list(
+        &mut self,
+        _context: &Context,
+        _items: Box<dyn Iterator<Item = EnvelopeHash>>,
+    ) {
+    }
 }
 
 impl ListingTrait for OfflineListing {

@@ -177,7 +177,7 @@ pub mod segment_tree {
 
     #[derive(Default, Debug, Clone)]
     pub struct SegmentTree {
-        array: SmallVec<[u8; 1024]>,
+        pub array: SmallVec<[u8; 1024]>,
         tree: SmallVec<[u8; 1024]>,
     }
 

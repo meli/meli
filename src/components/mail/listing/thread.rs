@@ -115,6 +115,25 @@ impl MailListingTrait for ThreadListing {
                 return;
             }
         }
+        let threads = &context.accounts[self.cursor_pos.0].collection.threads[&self.cursor_pos.1];
+        let mut roots = threads.roots();
+        threads.group_inner_sort_by(
+            &mut roots,
+            self.sort,
+            &context.accounts[self.cursor_pos.0].collection.envelopes,
+        );
+
+        self.redraw_threads_list(
+            context,
+            Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
+        );
+    }
+
+    fn redraw_threads_list(
+        &mut self,
+        context: &Context,
+        items: Box<dyn Iterator<Item = ThreadHash>>,
+    ) {
         let account = &context.accounts[self.cursor_pos.0];
         let threads = &account.collection.threads[&self.cursor_pos.1];
         self.length = 0;
@@ -146,10 +165,8 @@ impl MailListingTrait for ThreadListing {
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let mut thread_idx = 0; // needed for alternate thread colors
                                 /* Draw threaded view. */
-        let mut roots = threads.roots();
-        threads.group_inner_sort_by(&mut roots, self.sort, &account.collection.envelopes);
-        let roots = roots
-            .into_iter()
+
+        let roots = items
             .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
             .collect::<_>();
         let mut iter = threads.threads_group_iter(roots).peekable();

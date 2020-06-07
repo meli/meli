@@ -58,6 +58,8 @@ pub struct CompactListing {
     order: HashMap<ThreadHash, usize>,
     /// Cache current view.
     data_columns: DataColumns,
+    rows_drawn: SegmentTree,
+    rows: Vec<((usize, (ThreadHash, EnvelopeHash)), EntryStrings)>,
 
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
@@ -172,7 +174,7 @@ impl MailListingTrait for CompactListing {
             &context.accounts[self.cursor_pos.0].collection.envelopes,
         );
 
-        self.redraw_list(
+        self.redraw_threads_list(
             context,
             Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
         );
@@ -183,6 +185,167 @@ impl MailListingTrait for CompactListing {
             let thread = self.get_thread_under_cursor(self.cursor_pos.2);
 
             self.view = ThreadView::new(self.new_cursor_pos, thread, None, context);
+        }
+    }
+
+    fn redraw_threads_list(
+        &mut self,
+        context: &Context,
+        items: Box<dyn Iterator<Item = ThreadHash>>,
+    ) {
+        let account = &context.accounts[self.cursor_pos.0];
+
+        let threads = &account.collection.threads[&self.cursor_pos.1];
+        self.order.clear();
+        self.selection.clear();
+        self.length = 0;
+        let mut rows = Vec::with_capacity(1024);
+        let mut min_width = (0, 0, 0, 0, 0);
+        let mut row_widths: (
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+        ) = (
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+        );
+
+        for thread in items {
+            let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
+            let root_env_hash = thread_node.message().unwrap_or_else(|| {
+                let mut iter_ptr = thread_node.children()[0];
+                while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+                }
+                threads.thread_nodes()[&iter_ptr].message().unwrap()
+            });
+            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
+                debug!("key = {}", root_env_hash);
+                debug!(
+                    "name = {} {}",
+                    account[&self.cursor_pos.1].name(),
+                    context.accounts[self.cursor_pos.0].name()
+                );
+                debug!("{:#?}", context.accounts);
+
+                panic!();
+            }
+            let root_envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
+                .collection
+                .get_env(root_env_hash);
+            use melib::search::QueryTrait;
+            if let Some(filter_query) = mailbox_settings!(
+                context[self.cursor_pos.0][&self.cursor_pos.1]
+                    .listing
+                    .filter
+            )
+            .as_ref()
+            {
+                if !root_envelope.is_match(filter_query) {
+                    continue;
+                }
+            }
+
+            let entry_strings = self.make_entry_string(&root_envelope, context, threads, thread);
+            row_widths.1.push(
+                entry_strings
+                    .date
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            ); /* date */
+            row_widths.2.push(
+                entry_strings
+                    .from
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            ); /* from */
+            row_widths.3.push(
+                entry_strings
+                    .flag
+                    .grapheme_width()
+                    .try_into()
+                    .unwrap_or(255),
+            ); /* flags */
+            row_widths.4.push(
+                (entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width())
+                    .try_into()
+                    .unwrap_or(255),
+            );
+            min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
+            min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
+            min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
+            min_width.4 = cmp::max(
+                min_width.4,
+                entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
+            ); /* subject */
+            rows.push(((self.length, (thread, root_env_hash)), entry_strings));
+            self.all_threads.insert(thread);
+
+            self.order.insert(thread, self.length);
+            self.selection.insert(thread, false);
+            self.length += 1;
+        }
+
+        min_width.0 = self.length.saturating_sub(1).to_string().len();
+
+        let default_cell = {
+            let mut ret = Cell::with_char(' ');
+            ret.set_fg(self.color_cache.theme_default.fg)
+                .set_bg(self.color_cache.theme_default.bg)
+                .set_attrs(self.color_cache.theme_default.attrs);
+            ret
+        };
+        /* index column */
+        self.data_columns.columns[0] =
+            CellBuffer::new_with_context(min_width.0, rows.len(), default_cell, context);
+
+        /* date column */
+        self.data_columns.columns[1] =
+            CellBuffer::new_with_context(min_width.1, rows.len(), default_cell, context);
+        /* from column */
+        self.data_columns.columns[2] =
+            CellBuffer::new_with_context(min_width.2, rows.len(), default_cell, context);
+        self.data_columns.segment_tree[2] = row_widths.2.into();
+        /* flags column */
+        self.data_columns.columns[3] =
+            CellBuffer::new_with_context(min_width.3, rows.len(), default_cell, context);
+        /* subject column */
+        self.data_columns.columns[4] =
+            CellBuffer::new_with_context(min_width.4, rows.len(), default_cell, context);
+        self.data_columns.segment_tree[4] = row_widths.4.into();
+
+        self.rows = rows;
+        self.rows_drawn = SegmentTree::from(
+            std::iter::repeat(1)
+                .take(self.rows.len())
+                .collect::<SmallVec<_>>(),
+        );
+        debug_assert!(self.rows_drawn.array.len() == self.rows.len());
+        self.draw_rows(
+            context,
+            0,
+            std::cmp::min(80, self.rows.len().saturating_sub(1)),
+        );
+        if self.length == 0 && self.filter_term.is_empty() {
+            let message = format!("{} is empty", account[&self.cursor_pos.1].name());
+            self.data_columns.columns[0] =
+                CellBuffer::new_with_context(message.len(), self.length + 1, default_cell, context);
+            write_string_to_grid(
+                &message,
+                &mut self.data_columns.columns[0],
+                self.color_cache.theme_default.fg,
+                self.color_cache.theme_default.bg,
+                self.color_cache.theme_default.attrs,
+                ((0, 0), (MAX_COLS - 1, 0)),
+                None,
+            );
         }
     }
 }
@@ -366,6 +529,11 @@ impl ListingTrait for CompactListing {
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let top_idx = page_no * rows;
+        self.draw_rows(
+            context,
+            top_idx,
+            cmp::min(self.length.saturating_sub(1), top_idx + rows - 1),
+        );
 
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
@@ -601,7 +769,7 @@ impl ListingTrait for CompactListing {
                     self.data_columns.columns[0] =
                         CellBuffer::new_with_context(0, 0, default_cell, context);
                 }
-                self.redraw_list(
+                self.redraw_threads_list(
                     context,
                     Box::new(self.filtered_selection.clone().into_iter())
                         as Box<dyn Iterator<Item = ThreadHash>>,
@@ -669,6 +837,8 @@ impl CompactListing {
             selection: HashMap::default(),
             row_updates: SmallVec::new(),
             data_columns: DataColumns::default(),
+            rows_drawn: SegmentTree::default(),
+            rows: vec![],
             dirty: true,
             force_draw: true,
             unfocused: false,
@@ -741,291 +911,6 @@ impl CompactListing {
                 from: FromString(address_list!((e.from()) as comma_sep_list)),
                 tags: TagString(tags, colors),
             }
-        }
-    }
-
-    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadHash>>) {
-        let account = &context.accounts[self.cursor_pos.0];
-
-        let threads = &account.collection.threads[&self.cursor_pos.1];
-        self.order.clear();
-        self.selection.clear();
-        self.length = 0;
-        let mut rows = Vec::with_capacity(1024);
-        let mut min_width = (0, 0, 0, 0, 0);
-        let mut row_widths: (
-            SmallVec<[u8; 1024]>,
-            SmallVec<[u8; 1024]>,
-            SmallVec<[u8; 1024]>,
-            SmallVec<[u8; 1024]>,
-            SmallVec<[u8; 1024]>,
-        ) = (
-            SmallVec::new(),
-            SmallVec::new(),
-            SmallVec::new(),
-            SmallVec::new(),
-            SmallVec::new(),
-        );
-
-        for thread in items {
-            let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
-            let root_env_hash = thread_node.message().unwrap_or_else(|| {
-                let mut iter_ptr = thread_node.children()[0];
-                while threads.thread_nodes()[&iter_ptr].message().is_none() {
-                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
-                }
-                threads.thread_nodes()[&iter_ptr].message().unwrap()
-            });
-            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
-                debug!("key = {}", root_env_hash);
-                debug!(
-                    "name = {} {}",
-                    account[&self.cursor_pos.1].name(),
-                    context.accounts[self.cursor_pos.0].name()
-                );
-                debug!("{:#?}", context.accounts);
-
-                panic!();
-            }
-            let root_envelope: EnvelopeRef = context.accounts[self.cursor_pos.0]
-                .collection
-                .get_env(root_env_hash);
-            use melib::search::QueryTrait;
-            if let Some(filter_query) = mailbox_settings!(
-                context[self.cursor_pos.0][&self.cursor_pos.1]
-                    .listing
-                    .filter
-            )
-            .as_ref()
-            {
-                if !root_envelope.is_match(filter_query) {
-                    continue;
-                }
-            }
-
-            let entry_strings = self.make_entry_string(&root_envelope, context, threads, thread);
-            row_widths.1.push(
-                entry_strings
-                    .date
-                    .grapheme_width()
-                    .try_into()
-                    .unwrap_or(255),
-            ); /* date */
-            row_widths.2.push(
-                entry_strings
-                    .from
-                    .grapheme_width()
-                    .try_into()
-                    .unwrap_or(255),
-            ); /* from */
-            row_widths.3.push(
-                entry_strings
-                    .flag
-                    .grapheme_width()
-                    .try_into()
-                    .unwrap_or(255),
-            ); /* flags */
-            row_widths.4.push(
-                (entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width())
-                    .try_into()
-                    .unwrap_or(255),
-            );
-            min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
-            min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
-            min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
-            min_width.4 = cmp::max(
-                min_width.4,
-                entry_strings.subject.grapheme_width() + 1 + entry_strings.tags.grapheme_width(),
-            ); /* subject */
-            rows.push(((self.length, (thread, root_env_hash)), entry_strings));
-            self.all_threads.insert(thread);
-
-            self.order.insert(thread, self.length);
-            self.selection.insert(thread, false);
-            self.length += 1;
-        }
-
-        min_width.0 = self.length.saturating_sub(1).to_string().len();
-
-        let default_cell = {
-            let mut ret = Cell::with_char(' ');
-            ret.set_fg(self.color_cache.theme_default.fg)
-                .set_bg(self.color_cache.theme_default.bg)
-                .set_attrs(self.color_cache.theme_default.attrs);
-            ret
-        };
-        /* index column */
-        self.data_columns.columns[0] =
-            CellBuffer::new_with_context(min_width.0, rows.len(), default_cell, context);
-
-        /* date column */
-        self.data_columns.columns[1] =
-            CellBuffer::new_with_context(min_width.1, rows.len(), default_cell, context);
-        /* from column */
-        self.data_columns.columns[2] =
-            CellBuffer::new_with_context(min_width.2, rows.len(), default_cell, context);
-        self.data_columns.segment_tree[2] = row_widths.2.into();
-        /* flags column */
-        self.data_columns.columns[3] =
-            CellBuffer::new_with_context(min_width.3, rows.len(), default_cell, context);
-        /* subject column */
-        self.data_columns.columns[4] =
-            CellBuffer::new_with_context(min_width.4, rows.len(), default_cell, context);
-        self.data_columns.segment_tree[4] = row_widths.4.into();
-
-        for ((idx, (thread, root_env_hash)), strings) in rows {
-            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
-                //debug!("key = {}", root_env_hash);
-                //debug!(
-                //    "name = {} {}",
-                //    account[&self.cursor_pos.1].name(),
-                //    context.accounts[self.cursor_pos.0].name()
-                //);
-                //debug!("{:#?}", context.accounts);
-
-                panic!();
-            }
-            let thread = threads.thread_ref(thread);
-            let row_attr = if thread.unseen() > 0 {
-                if idx % 2 == 0 {
-                    self.color_cache.even_unseen
-                } else {
-                    self.color_cache.odd_unseen
-                }
-            } else if idx % 2 == 0 {
-                self.color_cache.even
-            } else {
-                self.color_cache.odd
-            };
-            let (x, _) = write_string_to_grid(
-                &idx.to_string(),
-                &mut self.data_columns.columns[0],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.0, idx)),
-                None,
-            );
-            for x in x..min_width.0 {
-                self.data_columns.columns[0][(x, idx)]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.date,
-                &mut self.data_columns.columns[1],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.1, idx)),
-                None,
-            );
-            for x in x..min_width.1 {
-                self.data_columns.columns[1][(x, idx)]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.from,
-                &mut self.data_columns.columns[2],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.2, idx)),
-                None,
-            );
-            for x in x..min_width.2 {
-                self.data_columns.columns[2][(x, idx)]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.flag,
-                &mut self.data_columns.columns[3],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.3, idx)),
-                None,
-            );
-            for x in x..min_width.3 {
-                self.data_columns.columns[3][(x, idx)]
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
-            let (x, _) = write_string_to_grid(
-                &strings.subject,
-                &mut self.data_columns.columns[4],
-                row_attr.fg,
-                row_attr.bg,
-                row_attr.attrs,
-                ((0, idx), (min_width.4, idx)),
-                None,
-            );
-            let x = {
-                let mut x = x + 1;
-                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                    let (_x, _) = write_string_to_grid(
-                        t,
-                        &mut self.data_columns.columns[4],
-                        self.color_cache.tag_default.fg,
-                        color,
-                        self.color_cache.tag_default.attrs,
-                        ((x + 1, idx), (min_width.4, idx)),
-                        None,
-                    );
-                    self.data_columns.columns[4][(x, idx)].set_bg(color);
-                    if _x < min_width.4 {
-                        self.data_columns.columns[4][(_x, idx)].set_bg(color);
-                        self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
-                    }
-                    for x in (x + 1).._x {
-                        self.data_columns.columns[4][(x, idx)].set_keep_fg(true);
-                        self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
-                    }
-                    self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
-                    x = _x + 1;
-                }
-                x
-            };
-            for x in x..min_width.4 {
-                self.data_columns.columns[4][(x, idx)]
-                    .set_ch(' ')
-                    .set_bg(row_attr.bg)
-                    .set_attrs(row_attr.attrs);
-            }
-            match (thread.snoozed(), thread.has_attachments()) {
-                (true, true) => {
-                    self.data_columns.columns[3][(0, idx)]
-                        .set_fg(self.color_cache.attachment_flag.fg);
-                    self.data_columns.columns[3][(2, idx)]
-                        .set_fg(self.color_cache.thread_snooze_flag.fg);
-                }
-                (true, false) => {
-                    self.data_columns.columns[3][(0, idx)]
-                        .set_fg(self.color_cache.thread_snooze_flag.fg);
-                }
-                (false, true) => {
-                    self.data_columns.columns[3][(0, idx)]
-                        .set_fg(self.color_cache.attachment_flag.fg);
-                }
-                (false, false) => {}
-            }
-        }
-        if self.length == 0 && self.filter_term.is_empty() {
-            let message = format!("{} is empty", account[&self.cursor_pos.1].name());
-            self.data_columns.columns[0] =
-                CellBuffer::new_with_context(message.len(), self.length + 1, default_cell, context);
-            write_string_to_grid(
-                &message,
-                &mut self.data_columns.columns[0],
-                self.color_cache.theme_default.fg,
-                self.color_cache.theme_default.bg,
-                self.color_cache.theme_default.attrs,
-                ((0, 0), (MAX_COLS - 1, 0)),
-                None,
-            );
         }
     }
 
@@ -1181,6 +1066,213 @@ impl CompactListing {
                 }
                 (false, true) => {
                     columns[3][(0, idx)].set_fg(self.color_cache.attachment_flag.fg);
+                }
+                (false, false) => {}
+            }
+        }
+    }
+
+    fn draw_rows(&mut self, context: &Context, start: usize, end: usize) {
+        if self.length == 0 {
+            return;
+        }
+        debug_assert!(end >= start);
+        if self.rows_drawn.get_max(start, end) == 0 {
+            //debug!("not drawing {}-{}", start, end);
+            return;
+        }
+        //debug!("drawing {}-{}", start, end);
+        for i in start..=end {
+            self.rows_drawn.update(i, 0);
+        }
+        let min_width = (
+            self.data_columns.columns[0].size().0,
+            self.data_columns.columns[1].size().0,
+            self.data_columns.columns[2].size().0,
+            self.data_columns.columns[3].size().0,
+            self.data_columns.columns[4].size().0,
+        );
+        let account = &context.accounts[self.cursor_pos.0];
+
+        let threads = &account.collection.threads[&self.cursor_pos.1];
+
+        for ((idx, (thread, root_env_hash)), strings) in
+            self.rows.iter().skip(start).take(end - start + 1)
+        {
+            let idx = *idx;
+            if !context.accounts[self.cursor_pos.0].contains_key(*root_env_hash) {
+                //debug!("key = {}", root_env_hash);
+                //debug!(
+                //    "name = {} {}",
+                //    account[&self.cursor_pos.1].name(),
+                //    context.accounts[self.cursor_pos.0].name()
+                //);
+                //debug!("{:#?}", context.accounts);
+
+                panic!();
+            }
+            let thread = threads.thread_ref(*thread);
+            let row_attr = if thread.unseen() > 0 {
+                if idx % 2 == 0 {
+                    self.color_cache.even_unseen
+                } else {
+                    self.color_cache.odd_unseen
+                }
+            } else if idx % 2 == 0 {
+                self.color_cache.even
+            } else {
+                self.color_cache.odd
+            };
+            let (x, _) = write_string_to_grid(
+                &idx.to_string(),
+                &mut self.data_columns.columns[0],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.0, idx)),
+                None,
+            );
+            for x in x..min_width.0 {
+                self.data_columns.columns[0][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.date,
+                &mut self.data_columns.columns[1],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.1, idx)),
+                None,
+            );
+            for x in x..min_width.1 {
+                self.data_columns.columns[1][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.from,
+                &mut self.data_columns.columns[2],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.2, idx)),
+                None,
+            );
+            #[cfg(feature = "regexp")]
+            {
+                for text_formatter in
+                    debug!(crate::conf::text_format_regexps(context, "listing.from"))
+                {
+                    let t = self.data_columns.columns[2].insert_tag(text_formatter.tag);
+                    for _match in text_formatter.regexp.0.find_iter(strings.from.as_bytes()) {
+                        if let Ok(_match) = _match {
+                            self.data_columns.columns[2].set_tag(
+                                t,
+                                (_match.start(), idx),
+                                (_match.end(), idx),
+                            );
+                        }
+                    }
+                }
+            }
+            for x in x..min_width.2 {
+                self.data_columns.columns[2][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.flag,
+                &mut self.data_columns.columns[3],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.3, idx)),
+                None,
+            );
+            for x in x..min_width.3 {
+                self.data_columns.columns[3][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.subject,
+                &mut self.data_columns.columns[4],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.4, idx)),
+                None,
+            );
+            #[cfg(feature = "regexp")]
+            {
+                for text_formatter in
+                    debug!(crate::conf::text_format_regexps(context, "listing.subject"))
+                {
+                    let t = self.data_columns.columns[4].insert_tag(text_formatter.tag);
+                    for _match in text_formatter
+                        .regexp
+                        .0
+                        .find_iter(strings.subject.as_bytes())
+                    {
+                        if let Ok(_match) = _match {
+                            self.data_columns.columns[4].set_tag(
+                                t,
+                                (_match.start(), idx),
+                                (_match.end(), idx),
+                            );
+                        }
+                    }
+                }
+            }
+            let x = {
+                let mut x = x + 1;
+                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                    let (_x, _) = write_string_to_grid(
+                        t,
+                        &mut self.data_columns.columns[4],
+                        self.color_cache.tag_default.fg,
+                        color,
+                        self.color_cache.tag_default.attrs,
+                        ((x + 1, idx), (min_width.4, idx)),
+                        None,
+                    );
+                    self.data_columns.columns[4][(x, idx)].set_bg(color);
+                    if _x < min_width.4 {
+                        self.data_columns.columns[4][(_x, idx)].set_bg(color);
+                        self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
+                    }
+                    for x in (x + 1).._x {
+                        self.data_columns.columns[4][(x, idx)].set_keep_fg(true);
+                        self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                    }
+                    self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                    x = _x + 1;
+                }
+                x
+            };
+            for x in x..min_width.4 {
+                self.data_columns.columns[4][(x, idx)]
+                    .set_ch(' ')
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            match (thread.snoozed(), thread.has_attachments()) {
+                (true, true) => {
+                    self.data_columns.columns[3][(0, idx)]
+                        .set_fg(self.color_cache.attachment_flag.fg);
+                    self.data_columns.columns[3][(2, idx)]
+                        .set_fg(self.color_cache.thread_snooze_flag.fg);
+                }
+                (true, false) => {
+                    self.data_columns.columns[3][(0, idx)]
+                        .set_fg(self.color_cache.thread_snooze_flag.fg);
+                }
+                (false, true) => {
+                    self.data_columns.columns[3][(0, idx)]
+                        .set_fg(self.color_cache.attachment_flag.fg);
                 }
                 (false, false) => {}
             }

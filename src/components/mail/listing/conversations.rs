@@ -155,7 +155,7 @@ impl MailListingTrait for ConversationsListing {
             &context.accounts[self.cursor_pos.0].collection.envelopes,
         );
 
-        self.redraw_list(
+        self.redraw_threads_list(
             context,
             Box::new(roots.into_iter()) as Box<dyn Iterator<Item = ThreadHash>>,
         );
@@ -167,6 +167,242 @@ impl MailListingTrait for ConversationsListing {
             let thread_group = self.get_thread_under_cursor(self.cursor_pos.2);
 
             self.view = ThreadView::new(self.new_cursor_pos, thread_group, None, context);
+        }
+    }
+
+    fn redraw_threads_list(
+        &mut self,
+        context: &Context,
+        items: Box<dyn Iterator<Item = ThreadHash>>,
+    ) {
+        let account = &context.accounts[self.cursor_pos.0];
+
+        let threads = &account.collection.threads[&self.cursor_pos.1];
+        self.order.clear();
+        self.selection.clear();
+        self.length = 0;
+        let mut rows = Vec::with_capacity(1024);
+        let mut max_entry_columns = 0;
+
+        let mut from_address_list = Vec::new();
+        let mut from_address_set: std::collections::HashSet<Vec<u8>> =
+            std::collections::HashSet::new();
+        'items_for_loop: for thread in items {
+            let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
+            let root_env_hash = if let Some(h) = thread_node.message().or_else(|| {
+                if thread_node.children().is_empty() {
+                    return None;
+                }
+                let mut iter_ptr = thread_node.children()[0];
+                while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    if threads.thread_nodes()[&iter_ptr].children().is_empty() {
+                        return None;
+                    }
+                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
+                }
+                threads.thread_nodes()[&iter_ptr].message()
+            }) {
+                h
+            } else {
+                continue 'items_for_loop;
+            };
+            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
+                debug!("key = {}", root_env_hash);
+                debug!(
+                    "name = {} {}",
+                    account[&self.cursor_pos.1].name(),
+                    context.accounts[self.cursor_pos.0].name()
+                );
+                debug!("{:#?}", context.accounts);
+
+                panic!();
+            }
+            from_address_list.clear();
+            from_address_set.clear();
+            for (_, h) in threads.thread_group_iter(thread) {
+                let env_hash = threads.thread_nodes()[&h].message().unwrap();
+
+                let envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
+                    .collection
+                    .get_env(env_hash);
+                for addr in envelope.from().iter() {
+                    if from_address_set.contains(addr.raw()) {
+                        continue;
+                    }
+                    from_address_set.insert(addr.raw().to_vec());
+                    from_address_list.push(addr.clone());
+                }
+            }
+            let root_envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
+                .collection
+                .get_env(root_env_hash);
+            use melib::search::QueryTrait;
+            if let Some(filter_query) = mailbox_settings!(
+                context[self.cursor_pos.0][&self.cursor_pos.1]
+                    .listing
+                    .filter
+            )
+            .as_ref()
+            {
+                if !root_envelope.is_match(filter_query) {
+                    continue;
+                }
+            }
+
+            let strings =
+                self.make_entry_string(root_envelope, context, &from_address_list, threads, thread);
+            max_entry_columns = std::cmp::max(
+                max_entry_columns,
+                strings.flag.len()
+                    + 3
+                    + strings.subject.grapheme_width()
+                    + 1
+                    + strings.tags.grapheme_width(),
+            );
+            max_entry_columns = std::cmp::max(
+                max_entry_columns,
+                strings.date.len() + 1 + strings.from.grapheme_width(),
+            );
+            rows.push(((self.length, (thread, root_env_hash)), strings));
+            self.all_threads.insert(thread);
+
+            self.order.insert(thread, self.length);
+            self.selection.insert(thread, false);
+            self.length += 1;
+        }
+
+        let width = max_entry_columns;
+        self.content =
+            CellBuffer::new_with_context(width, 4 * rows.len(), Cell::with_char(' '), context);
+
+        let padding_fg = self.color_cache.padding.fg;
+
+        for ((idx, (thread, root_env_hash)), strings) in rows {
+            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
+                panic!();
+            }
+            let thread = threads.thread_ref(thread);
+            let fg_color = if thread.unseen() > 0 {
+                self.color_cache.unseen.fg
+            } else {
+                self.color_cache.theme_default.fg
+            };
+            let bg_color = if thread.unseen() > 0 {
+                self.color_cache.unseen.bg
+            } else {
+                self.color_cache.theme_default.bg
+            };
+            /* draw flags */
+            let (x, _) = write_string_to_grid(
+                &strings.flag,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                Attr::DEFAULT,
+                ((0, 3 * idx), (width - 1, 3 * idx)),
+                None,
+            );
+            for x in x..(x + 3) {
+                self.content[(x, 3 * idx)].set_bg(bg_color);
+            }
+            /* draw subject */
+            let (mut x, _) = write_string_to_grid(
+                &strings.subject,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                Attr::BOLD,
+                ((x, 3 * idx), (width - 1, 3 * idx)),
+                None,
+            );
+            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                let (_x, _) = write_string_to_grid(
+                    t,
+                    &mut self.content,
+                    self.color_cache.tag_default.fg,
+                    color,
+                    self.color_cache.tag_default.attrs,
+                    ((x + 1, 3 * idx), (width - 1, 3 * idx)),
+                    None,
+                );
+                self.content[(x, 3 * idx)].set_bg(color);
+                if _x < width {
+                    self.content[(_x, 3 * idx)].set_bg(color).set_keep_bg(true);
+                }
+                for x in (x + 1).._x {
+                    self.content[(x, 3 * idx)]
+                        .set_keep_fg(true)
+                        .set_keep_bg(true);
+                }
+                self.content[(x, 3 * idx)].set_keep_bg(true);
+                x = _x + 1;
+            }
+            for x in x..width {
+                self.content[(x, 3 * idx)]
+                    .set_ch(' ')
+                    .set_fg(fg_color)
+                    .set_bg(bg_color);
+            }
+            /* Next line, draw date */
+            let (x, _) = write_string_to_grid(
+                &strings.date,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                Attr::DEFAULT,
+                ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
+                None,
+            );
+            for x in x..(x + 4) {
+                self.content[(x, 3 * idx + 1)]
+                    .set_ch('▁')
+                    .set_fg(fg_color)
+                    .set_bg(bg_color);
+            }
+            /* draw from */
+            let (x, _) = write_string_to_grid(
+                &strings.from,
+                &mut self.content,
+                fg_color,
+                bg_color,
+                Attr::DEFAULT,
+                ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
+                None,
+            );
+
+            for x in x..width {
+                self.content[(x, 3 * idx + 1)]
+                    .set_ch('▁')
+                    .set_fg(fg_color)
+                    .set_bg(bg_color);
+            }
+            for x in 0..width {
+                self.content[(x, 3 * idx + 2)]
+                    .set_ch('▓')
+                    .set_fg(padding_fg)
+                    .set_bg(bg_color);
+            }
+        }
+        if self.length == 0 && self.filter_term.is_empty() {
+            let default_cell = {
+                let mut ret = Cell::with_char(' ');
+                ret.set_fg(self.color_cache.theme_default.fg)
+                    .set_bg(self.color_cache.theme_default.bg)
+                    .set_attrs(self.color_cache.theme_default.attrs);
+                ret
+            };
+            let message = format!("{} is empty", account[&self.cursor_pos.1].name());
+            self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+            write_string_to_grid(
+                &message,
+                &mut self.content,
+                self.color_cache.theme_default.fg,
+                self.color_cache.theme_default.bg,
+                self.color_cache.theme_default.attrs,
+                ((0, 0), (message.len() - 1, 0)),
+                None,
+            );
         }
     }
 }
@@ -508,7 +744,7 @@ impl ListingTrait for ConversationsListing {
                     };
                     self.content = CellBuffer::new_with_context(0, 0, default_cell, context);
                 }
-                self.redraw_list(
+                self.redraw_threads_list(
                     context,
                     Box::new(self.filtered_selection.clone().into_iter())
                         as Box<dyn Iterator<Item = ThreadHash>>,
@@ -649,228 +885,6 @@ impl ConversationsListing {
                 from: FromString(address_list!((from) as comma_sep_list)),
                 tags: TagString(tags, colors),
             }
-        }
-    }
-
-    fn redraw_list(&mut self, context: &Context, items: Box<dyn Iterator<Item = ThreadHash>>) {
-        let account = &context.accounts[self.cursor_pos.0];
-
-        let threads = &account.collection.threads[&self.cursor_pos.1];
-        self.order.clear();
-        self.selection.clear();
-        self.length = 0;
-        let mut rows = Vec::with_capacity(1024);
-        let mut max_entry_columns = 0;
-
-        let mut from_address_list = Vec::new();
-        let mut from_address_set: std::collections::HashSet<Vec<u8>> =
-            std::collections::HashSet::new();
-        for thread in items {
-            let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
-            let root_env_hash = thread_node.message().unwrap_or_else(|| {
-                let mut iter_ptr = thread_node.children()[0];
-                while threads.thread_nodes()[&iter_ptr].message().is_none() {
-                    iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
-                }
-                threads.thread_nodes()[&iter_ptr].message().unwrap()
-            });
-            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
-                debug!("key = {}", root_env_hash);
-                debug!(
-                    "name = {} {}",
-                    account[&self.cursor_pos.1].name(),
-                    context.accounts[self.cursor_pos.0].name()
-                );
-                debug!("{:#?}", context.accounts);
-
-                panic!();
-            }
-            from_address_list.clear();
-            from_address_set.clear();
-            for (_, h) in threads.thread_group_iter(thread) {
-                let env_hash = threads.thread_nodes()[&h].message().unwrap();
-
-                let envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
-                    .collection
-                    .get_env(env_hash);
-                for addr in envelope.from().iter() {
-                    if from_address_set.contains(addr.raw()) {
-                        continue;
-                    }
-                    from_address_set.insert(addr.raw().to_vec());
-                    from_address_list.push(addr.clone());
-                }
-            }
-            let root_envelope: &EnvelopeRef = &context.accounts[self.cursor_pos.0]
-                .collection
-                .get_env(root_env_hash);
-            use melib::search::QueryTrait;
-            if let Some(filter_query) = mailbox_settings!(
-                context[self.cursor_pos.0][&self.cursor_pos.1]
-                    .listing
-                    .filter
-            )
-            .as_ref()
-            {
-                if !root_envelope.is_match(filter_query) {
-                    continue;
-                }
-            }
-
-            let strings =
-                self.make_entry_string(root_envelope, context, &from_address_list, threads, thread);
-            max_entry_columns = std::cmp::max(
-                max_entry_columns,
-                strings.flag.len()
-                    + 3
-                    + strings.subject.grapheme_width()
-                    + 1
-                    + strings.tags.grapheme_width(),
-            );
-            max_entry_columns = std::cmp::max(
-                max_entry_columns,
-                strings.date.len() + 1 + strings.from.grapheme_width(),
-            );
-            rows.push(((self.length, (thread, root_env_hash)), strings));
-            self.all_threads.insert(thread);
-
-            self.order.insert(thread, self.length);
-            self.selection.insert(thread, false);
-            self.length += 1;
-        }
-
-        let width = max_entry_columns;
-        self.content =
-            CellBuffer::new_with_context(width, 4 * rows.len(), Cell::with_char(' '), context);
-
-        let padding_fg = self.color_cache.padding.fg;
-
-        for ((idx, (thread, root_env_hash)), strings) in rows {
-            if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
-                panic!();
-            }
-            let thread = threads.thread_ref(thread);
-            let fg_color = if thread.unseen() > 0 {
-                self.color_cache.unseen.fg
-            } else {
-                self.color_cache.theme_default.fg
-            };
-            let bg_color = if thread.unseen() > 0 {
-                self.color_cache.unseen.bg
-            } else {
-                self.color_cache.theme_default.bg
-            };
-            /* draw flags */
-            let (x, _) = write_string_to_grid(
-                &strings.flag,
-                &mut self.content,
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
-                ((0, 3 * idx), (width - 1, 3 * idx)),
-                None,
-            );
-            for x in x..(x + 3) {
-                self.content[(x, 3 * idx)].set_bg(bg_color);
-            }
-            /* draw subject */
-            let (mut x, _) = write_string_to_grid(
-                &strings.subject,
-                &mut self.content,
-                fg_color,
-                bg_color,
-                Attr::BOLD,
-                ((x, 3 * idx), (width - 1, 3 * idx)),
-                None,
-            );
-            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let (_x, _) = write_string_to_grid(
-                    t,
-                    &mut self.content,
-                    self.color_cache.tag_default.fg,
-                    color,
-                    self.color_cache.tag_default.attrs,
-                    ((x + 1, 3 * idx), (width - 1, 3 * idx)),
-                    None,
-                );
-                self.content[(x, 3 * idx)].set_bg(color);
-                if _x < width {
-                    self.content[(_x, 3 * idx)].set_bg(color).set_keep_bg(true);
-                }
-                for x in (x + 1).._x {
-                    self.content[(x, 3 * idx)]
-                        .set_keep_fg(true)
-                        .set_keep_bg(true);
-                }
-                self.content[(x, 3 * idx)].set_keep_bg(true);
-                x = _x + 1;
-            }
-            for x in x..width {
-                self.content[(x, 3 * idx)]
-                    .set_ch(' ')
-                    .set_fg(fg_color)
-                    .set_bg(bg_color);
-            }
-            /* Next line, draw date */
-            let (x, _) = write_string_to_grid(
-                &strings.date,
-                &mut self.content,
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
-                ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
-                None,
-            );
-            for x in x..(x + 4) {
-                self.content[(x, 3 * idx + 1)]
-                    .set_ch('▁')
-                    .set_fg(fg_color)
-                    .set_bg(bg_color);
-            }
-            /* draw from */
-            let (x, _) = write_string_to_grid(
-                &strings.from,
-                &mut self.content,
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
-                ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
-                None,
-            );
-
-            for x in x..width {
-                self.content[(x, 3 * idx + 1)]
-                    .set_ch('▁')
-                    .set_fg(fg_color)
-                    .set_bg(bg_color);
-            }
-            for x in 0..width {
-                self.content[(x, 3 * idx + 2)]
-                    .set_ch('▓')
-                    .set_fg(padding_fg)
-                    .set_bg(bg_color);
-            }
-        }
-        if self.length == 0 && self.filter_term.is_empty() {
-            let default_cell = {
-                let mut ret = Cell::with_char(' ');
-                ret.set_fg(self.color_cache.theme_default.fg)
-                    .set_bg(self.color_cache.theme_default.bg)
-                    .set_attrs(self.color_cache.theme_default.attrs);
-                ret
-            };
-            let message = format!("{} is empty", account[&self.cursor_pos.1].name());
-            self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
-            write_string_to_grid(
-                &message,
-                &mut self.content,
-                self.color_cache.theme_default.fg,
-                self.color_cache.theme_default.bg,
-                self.color_cache.theme_default.attrs,
-                ((0, 0), (message.len() - 1, 0)),
-                None,
-            );
         }
     }
 
