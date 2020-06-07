@@ -27,28 +27,26 @@
 .Nm
 .Op Fl -help | h
 .Op Fl -version | v
-.Op Fl -create-config Op Ar path
-.Op Fl -test-config Op Ar path
 .Op Fl -config Ar path
-.Op Fl -print-default-theme
-.Op Fl -print-loaded-themes
 .Bl -tag -width flag -offset indent
 .It Fl -help | h
 Show help message and exit.
 .It Fl -version | v
 Show version and exit.
-.It Fl -create-config Op Ar path
+.It Fl -config Ar path
+Start meli with given configuration file.
+.It Cm create-config Op Ar path
 Create configuration file in
 .Pa path
 if given, or at
 .Pa $XDG_CONFIG_HOME/meli/config.toml
-.It Fl -test-config Op Ar path
+.It Cm test-config Op Ar path
 Test a configuration file for syntax issues or missing options.
-.It Fl -config Ar path
-Start meli with given configuration file.
-.It Fl -print-default-theme
+.It Cm man Op Ar page
+Print documentation page and exit (Piping to a pager is recommended.)
+.It Cm print-default-theme
 Print default theme keys and values in TOML syntax, to be used as a blueprint.
-.It Fl -print-loaded-themes
+.It Cm print-loaded-themes
 Print all loaded themes in TOML syntax.
 .El
 .Sh DESCRIPTION

@@ -29,7 +29,7 @@
 
 use std::alloc::System;
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 extern crate notify_rust;
 extern crate xdg_utils;
 #[macro_use]
@@ -86,8 +86,6 @@ pub mod plugins;
 use nix;
 use std::os::raw::c_int;
 
-use xdg;
-
 fn notify(
     signals: &[c_int],
     sender: crossbeam::channel::Sender<ThreadEvent>,
@@ -143,29 +141,75 @@ fn notify(
     Ok(r)
 }
 
-macro_rules! error_and_exit {
-    ($($err:expr),*) => {{
-            return Err(MeliError::new(format!($($err),*)));
-    }}
+fn parse_manpage(src: &str) -> Result<ManPages> {
+    match src {
+        "" | "meli" | "main" => Ok(ManPages::Main),
+        "meli.conf" | "conf" | "config" | "configuration" => Ok(ManPages::Conf),
+        "meli-themes" | "themes" | "theming" | "theme" => Ok(ManPages::Themes),
+        _ => Err(MeliError::new(format!(
+            "Invalid documentation page: {}",
+            src
+        ))),
+    }
 }
 
+use structopt::StructOpt;
+
+#[derive(Debug)]
+/// Choose manpage
 enum ManPages {
+    /// meli(1)
     Main = 0,
+    /// meli.conf(5)
     Conf = 1,
+    /// meli-themes(5)
     Themes = 2,
 }
 
-struct CommandLineArguments {
-    print_manpage: Option<ManPages>,
-    create_config: Option<String>,
-    test_config: Option<String>,
-    config: Option<String>,
-    help: bool,
-    version: bool,
+#[derive(Debug, StructOpt)]
+#[structopt(name = "meli", about = "terminal mail client", version_short = "v")]
+struct Opt {
+    /// use specified configuration file
+    #[structopt(short, long, parse(from_os_str))]
+    config: Option<PathBuf>,
+
+    #[structopt(subcommand)]
+    subcommand: Option<SubCommand>,
+}
+
+#[derive(Debug, StructOpt)]
+enum SubCommand {
+    /// print default theme in full to stdout and exit.
+    PrintDefaultTheme,
+    /// print loaded themes in full to stdout and exit.
+    PrintLoadedThemes,
+    /// create a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config.toml
+    #[structopt(display_order = 1)]
+    CreateConfig {
+        #[structopt(value_name = "NEW_CONFIG_PATH", parse(from_os_str))]
+        path: Option<PathBuf>,
+    },
+    /// test a configuration file for syntax issues or missing options.
+    #[structopt(display_order = 2)]
+    TestConfig {
+        #[structopt(value_name = "CONFIG_PATH", parse(from_os_str))]
+        path: Option<PathBuf>,
+    },
+    #[structopt(visible_alias="docs", aliases=&["docs", "manpage", "manpages"])]
+    #[structopt(display_order = 3)]
+    /// print documentation page and exit (Piping to a pager is recommended.).
+    Man(ManOpt),
+}
+
+#[derive(Debug, StructOpt)]
+struct ManOpt {
+    #[structopt(default_value = "meli", possible_values=&["meli", "conf", "themes"], value_name="PAGE", parse(try_from_str = parse_manpage))]
+    page: ManPages,
 }
 
 fn main() {
-    ::std::process::exit(match run_app() {
+    let opt = Opt::from_args();
+    ::std::process::exit(match run_app(opt) {
         Ok(()) => 0,
         Err(err) => {
             eprintln!("{}", err);
@@ -174,184 +218,39 @@ fn main() {
     });
 }
 
-fn run_app() -> Result<()> {
-    enum CommandLineFlags {
-        PrintManPage,
-        CreateConfig,
-        TestConfig,
-        Config,
+fn run_app(opt: Opt) -> Result<()> {
+    if let Some(config_location) = opt.config.as_ref() {
+        std::env::set_var("MELI_CONFIG", config_location);
     }
-    use CommandLineFlags::*;
-    let mut prev: Option<CommandLineFlags> = None;
-    let mut args = CommandLineArguments {
-        print_manpage: None,
-        create_config: None,
-        test_config: None,
-        config: None,
-        help: false,
-        version: false,
-    };
 
-    for i in std::env::args().skip(1) {
-        match i.as_str() {
-            "--test-config" => match prev {
-                None => prev = Some(TestConfig),
-                Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
-                Some(Config) => error_and_exit!("invalid value for flag `--config`"),
-                Some(TestConfig) => error_and_exit!("invalid value for flag `--test-config`"),
-                Some(PrintManPage) => {
-                    error_and_exit!("invalid value for flag `--print-documentation`")
-                }
-            },
-            "--create-config" => match prev {
-                None => prev = Some(CreateConfig),
-                Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
-                Some(TestConfig) => error_and_exit!("invalid value for flag `--test-config`"),
-                Some(Config) => error_and_exit!("invalid value for flag `--config`"),
-                Some(PrintManPage) => {
-                    error_and_exit!("invalid value for flag `--print-documentation`")
-                }
-            },
-            "--config" | "-c" => match prev {
-                None => prev = Some(Config),
-                Some(CreateConfig) if args.create_config.is_none() => {
-                    args.config = Some(String::new());
-                    prev = Some(Config);
-                }
-                Some(CreateConfig) => error_and_exit!("invalid value for flag `--create-config`"),
-                Some(Config) => error_and_exit!("invalid value for flag `--config`"),
-                Some(TestConfig) => error_and_exit!("invalid value for flag `--test-config`"),
-                Some(PrintManPage) => {
-                    error_and_exit!("invalid value for flag `--print-documentation`")
-                }
-            },
-            "--help" | "-h" => {
-                args.help = true;
-            }
-            "--version" | "-v" => {
-                args.version = true;
-            }
-            "--print-loaded-themes" => {
-                let s = conf::FileSettings::new()?;
-                print!("{}", s.terminal.themes.to_string());
-                return Ok(());
-            }
-            "--print-default-theme" => {
-                print!("{}", conf::Themes::default().key_to_string("dark", false));
-                return Ok(());
-            }
-            "--print-documentation" => {
-                if args.print_manpage.is_some() {
-                    error_and_exit!("Multiple invocations of --print-documentation");
-                }
-                prev = Some(PrintManPage);
-                args.print_manpage = Some(ManPages::Main);
-            }
-            e => match prev {
-                None => error_and_exit!("error: value without command {}", e),
-                Some(CreateConfig) if args.create_config.is_none() => {
-                    args.create_config = Some(i);
-                    prev = None;
-                }
-                Some(Config) if args.config.is_none() => {
-                    args.config = Some(i);
-                    prev = None;
-                }
-                Some(TestConfig) if args.test_config.is_none() => {
-                    args.test_config = Some(i);
-                    prev = None;
-                }
-                Some(PrintManPage) => {
-                    match e {
-                        "meli" | "main" => { /* This is the default */ }
-                        "meli.conf" | "conf" | "config" | "configuration" => {
-                            args.print_manpage = Some(ManPages::Conf);
-                        }
-                        "meli-themes" | "themes" | "theming" | "theme" => {
-                            args.print_manpage = Some(ManPages::Themes);
-                        }
-                        _ => error_and_exit!("Invalid documentation page: {}", e),
-                    }
-                }
-                Some(TestConfig) => error_and_exit!("Duplicate value for flag `--test-config`"),
-                Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
-                Some(Config) => error_and_exit!("Duplicate value for flag `--config`"),
-            },
+    match opt.subcommand {
+        Some(SubCommand::TestConfig { path }) => {
+            let config_path = if let Some(path) = path {
+                path
+            } else {
+                crate::conf::get_config_file()?
+            };
+            conf::FileSettings::validate(config_path)?;
+            return Ok(());
         }
-    }
-
-    if args.help {
-        println!("usage:\tmeli [--config PATH|-c PATH]");
-        println!("\tmeli --help");
-        println!("\tmeli --version");
-        println!("");
-        println!("Other options:");
-        println!("\t--help, -h\t\tshow this message and exit");
-        println!("\t--version, -v\t\tprint version and exit");
-        println!("\t--create-config[ PATH]\tcreate a sample configuration file with available configuration options. If PATH is not specified, meli will try to create it in $XDG_CONFIG_HOME/meli/config.toml");
-        println!(
-            "\t--test-config PATH\ttest a configuration file for syntax issues or missing options."
-        );
-        println!("\t--config PATH, -c PATH\tuse specified configuration file");
-        println!("\t--print-loaded-themes\tprint loaded themes in full to stdout and exit.");
-        println!("\t--print-default-theme\tprint default theme in full to stdout and exit.");
+        Some(SubCommand::CreateConfig { path }) => {
+            let config_path = if let Some(path) = path {
+                path
+            } else {
+                crate::conf::get_config_file()?
+            };
+            if config_path.exists() {
+                return Err(MeliError::new(format!(
+                    "File `{}` already exists.\nMaybe you meant to specify another path?",
+                    config_path.display()
+                )));
+            }
+            conf::create_config_file(&config_path)?;
+            return Ok(());
+        }
         #[cfg(feature = "cli-docs")]
-        {
-            println!("\t--print-documentation [meli conf themes]\n\t\t\t\tprint documentation page and exit (Piping to a pager is recommended.).");
-        }
-        return Ok(());
-    }
-
-    if args.version {
-        println!("meli {}", option_env!("CARGO_PKG_VERSION").unwrap_or("0.0"));
-        return Ok(());
-    }
-
-    match prev {
-        None => {}
-        Some(CreateConfig) if args.create_config.is_none() => args.create_config = Some("".into()),
-        Some(CreateConfig) => error_and_exit!("Duplicate value for flag `--create-config`"),
-        Some(Config) => error_and_exit!("error: flag without value: `--config`"),
-        Some(TestConfig) => error_and_exit!("error: flag without value: `--test-config`"),
-        Some(PrintManPage) => {}
-    };
-
-    if (args.print_manpage.is_some()
-        ^ args.test_config.is_some()
-        ^ args.create_config.is_some()
-        ^ args.config.is_some())
-        && !(args.print_manpage.is_some()
-            || args.test_config.is_some()
-            || args.create_config.is_some()
-            || args.config.is_some())
-    {
-        error_and_exit!("error: illegal command-line flag combination");
-    }
-
-    if let Some(config_path) = args.test_config.as_ref() {
-        conf::FileSettings::validate(config_path)?;
-        return Ok(());
-    } else if let Some(config_path) = args.create_config.as_mut() {
-        let config_path: PathBuf = if config_path.is_empty() {
-            let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").unwrap();
-            xdg_dirs.place_config_file("config.toml").map_err(|e| {
-                MeliError::new(format!(
-                    "Cannot create configuration directory in {}:\n{}",
-                    xdg_dirs.get_config_home().display(),
-                    e
-                ))
-            })?
-        } else {
-            Path::new(config_path).to_path_buf()
-        };
-        if config_path.exists() {
-            return Err(MeliError::new(format!("File `{}` already exists.\nMaybe you meant to specify another path with --create-config=PATH", config_path.display())));
-        }
-        conf::create_config_file(&config_path)?;
-        return Ok(());
-    } else if let Some(_page) = args.print_manpage {
-        #[cfg(feature = "cli-docs")]
-        {
+        Some(SubCommand::Man(manopt)) => {
+            let _page = manopt.page;
             const MANPAGES: [&'static str; 3] = [
                 include_str!(concat!(env!("OUT_DIR"), "/meli.txt")),
                 include_str!(concat!(env!("OUT_DIR"), "/meli.conf.txt")),
@@ -361,13 +260,19 @@ fn run_app() -> Result<()> {
             return Ok(());
         }
         #[cfg(not(feature = "cli-docs"))]
-        {
-            error_and_exit!("error: this version of meli was not build with embedded documentation. You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery");
+        Some(SubCommand::Man(_manopt)) => {
+            return Err(MeliError::new("error: this version of meli was not build with embedded documentation. You might have it installed as manpages (eg `man meli`), otherwise check https://meli.delivery"));
         }
-    }
-
-    if let Some(config_location) = args.config.as_ref() {
-        std::env::set_var("MELI_CONFIG", config_location);
+        Some(SubCommand::PrintLoadedThemes) => {
+            let s = conf::FileSettings::new()?;
+            print!("{}", s.terminal.themes.to_string());
+            return Ok(());
+        }
+        Some(SubCommand::PrintDefaultTheme) => {
+            print!("{}", conf::Themes::default().key_to_string("dark", false));
+            return Ok(());
+        }
+        None => {}
     }
 
     /* Create a channel to communicate with other threads. The main process is the sole receiver.

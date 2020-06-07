@@ -313,17 +313,30 @@ pub struct Settings {
     pub log: LogSettings,
 }
 
+pub fn get_config_file() -> Result<PathBuf> {
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("meli").map_err(|err| {
+        MeliError::new(format!(
+            "Could not detect XDG directories for user: {}",
+            err
+        ))
+        .set_source(Some(std::sync::Arc::new(Box::new(err))))
+    })?;
+    match env::var("MELI_CONFIG") {
+        Ok(path) => Ok(PathBuf::from(path)),
+        Err(_) => Ok(xdg_dirs
+            .place_config_file("config.toml")
+            .chain_err_summary(|| {
+                format!(
+                    "Cannot create configuration directory in {}",
+                    xdg_dirs.get_config_home().display()
+                )
+            })?),
+    }
+}
+
 impl FileSettings {
     pub fn new() -> Result<FileSettings> {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix("meli");
-        let config_path = match env::var("MELI_CONFIG") {
-            Ok(path) => PathBuf::from(path),
-            Err(_) => xdg_dirs
-                .as_ref()
-                .unwrap()
-                .place_config_file("config.toml")
-                .expect("cannot create configuration directory"),
-        };
+        let config_path = get_config_file()?;
         if !config_path.exists() {
             println!(
                 "No configuration found. Would you like to generate one in {}? [Y/n]",
@@ -359,18 +372,15 @@ impl FileSettings {
             }
         }
 
-        let path = config_path
-            .to_str()
-            .expect("Configuration file path was not valid UTF-8");
-        FileSettings::validate(path)
+        FileSettings::validate(config_path)
     }
 
-    pub fn validate(path: &str) -> Result<Self> {
-        let s = pp::pp(path)?;
+    pub fn validate(path: PathBuf) -> Result<Self> {
+        let s = pp::pp(&path)?;
         let mut s: FileSettings = toml::from_str(&s).map_err(|e| {
             MeliError::new(format!(
                 "{}:\nConfig file contains errors: {}",
-                path,
+                path.display(),
                 e.to_string()
             ))
         })?;
