@@ -571,10 +571,8 @@ impl Component for Pager {
                 {
                     let t = content.insert_tag(text_formatter.tag);
                     for (i, l) in lines.iter().enumerate() {
-                        for _match in text_formatter.regexp.0.find_iter(l.as_bytes()) {
-                            if let Ok(_match) = _match {
-                                content.set_tag(t, (_match.start(), i), (_match.end(), i));
-                            }
+                        for (start, end) in text_formatter.regexp.find_iter(l) {
+                            content.set_tag(t, (start, i), (end, i));
                         }
                     }
                 }

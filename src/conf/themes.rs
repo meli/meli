@@ -516,6 +516,7 @@ mod regexp {
         pub(super) fg: Option<ThemeValue<Color>>,
         pub(super) bg: Option<ThemeValue<Color>>,
         pub(super) attrs: Option<ThemeValue<Attr>>,
+        pub(super) priority: u8,
     }
 
     #[derive(Debug, Clone)]
@@ -571,6 +572,57 @@ mod regexp {
                     .disable_utf_check() // We only match on rust strings, which are guaranteed UTF8
                     .build(pattern)?
             }))
+        }
+
+        pub fn find_iter<'w, 's>(&'w self, s: &'s str) -> FindIter<'w, 's> {
+            FindIter {
+                pcre_iter: self.0.find_iter(s.as_bytes()),
+                char_indices: s.char_indices(),
+                char_offset: 0,
+            }
+        }
+    }
+
+    pub struct FindIter<'r, 's> {
+        pcre_iter: pcre2::bytes::Matches<'r, 's>,
+        char_indices: std::str::CharIndices<'s>,
+        char_offset: usize,
+    }
+
+    impl<'r, 's> Iterator for FindIter<'r, 's> {
+        type Item = (usize, usize);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            loop {
+                let next_byte_offset = self.pcre_iter.next();
+                if next_byte_offset.is_none() {
+                    return None;
+                }
+                let next_byte_offset = next_byte_offset.unwrap();
+                if next_byte_offset.is_err() {
+                    continue;
+                }
+                let next_byte_offset = next_byte_offset.unwrap();
+
+                while next_byte_offset.start() < self.char_indices.next().unwrap().0 {
+                    self.char_offset += 1;
+                }
+                let start = self.char_offset;
+
+                while next_byte_offset.end()
+                    >= self
+                        .char_indices
+                        .next()
+                        .map(|(v, _)| v)
+                        .unwrap_or(next_byte_offset.end())
+                        + 1
+                {
+                    self.char_offset += 1;
+                }
+                let end = self.char_offset + 1;
+
+                return Some((start, end));
+            }
         }
     }
 
@@ -669,7 +721,7 @@ mod regexp {
                         }
                         ThemeValue::Value(val) => *val,
                     }),
-                    priority: 0,
+                    priority: v.priority,
                 },
             })
             .collect()
@@ -739,6 +791,8 @@ impl<'de> Deserialize<'de> for Themes {
             ucp: bool,
             #[serde(default = "false_val")]
             jit_if_available: bool,
+            #[serde(default)]
+            priority: u8,
             #[serde(flatten)]
             rest: ThemeAttributeInnerOptions,
         }
@@ -804,6 +858,7 @@ impl<'de> Deserialize<'de> for Themes {
                             fg: v.rest.fg,
                             bg: v.rest.bg,
                             attrs: v.rest.attrs,
+                            priority: v.priority,
                         });
                     }
                     Err(err) => {
@@ -859,6 +914,7 @@ impl<'de> Deserialize<'de> for Themes {
                             fg: v.rest.fg,
                             bg: v.rest.bg,
                             attrs: v.rest.attrs,
+                            priority: v.priority,
                         });
                     }
                     Err(err) => {
@@ -917,6 +973,7 @@ impl<'de> Deserialize<'de> for Themes {
                                 fg: v.rest.fg,
                                 bg: v.rest.bg,
                                 attrs: v.rest.attrs,
+                                priority: v.priority,
                             });
                         }
                         Err(err) => {

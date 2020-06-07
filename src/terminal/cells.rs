@@ -1717,9 +1717,11 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
         .binary_search_by(|probe| probe.0.cmp(&start_idx))
         .unwrap_or_else(|i| i);
     let mut stack: HashSet<u64> = HashSet::default();
+    let mut sorted_stack: SmallVec<[u64; 64]> = SmallVec::new();
     for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
         'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
             let idx = grid_src.pos_to_index(src_x, src_y).unwrap();
+            let resort_stack = tag_offset < tag_associations.len() && tag_associations[tag_offset].0 <= idx;
             while tag_offset < tag_associations.len() && tag_associations[tag_offset].0 <= idx {
                 if tag_associations[tag_offset].2 {
                     stack.insert(tag_associations[tag_offset].1);
@@ -1728,8 +1730,13 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
                 }
                 tag_offset += 1;
             }
+            if resort_stack {
+                sorted_stack.clear();
+                sorted_stack.extend(stack.iter().cloned());
+                sorted_stack.sort_by_key(|h| grid_src.tag_table()[h].priority);
+            }
             grid_dest[(x, y)] = grid_src[(src_x, src_y)];
-            for t in &stack {
+            for t in &sorted_stack {
                 if let Some(fg) = grid_src.tag_table()[&t].fg {
                     grid_dest[(x, y)].set_fg(fg).set_keep_fg(true);
                 }
