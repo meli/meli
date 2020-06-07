@@ -492,6 +492,7 @@ pub struct Cell {
     attrs: Attr,
     keep_fg: bool,
     keep_bg: bool,
+    keep_attrs: bool,
 }
 
 impl Cell {
@@ -515,6 +516,7 @@ impl Cell {
             empty: false,
             keep_fg: false,
             keep_bg: false,
+            keep_attrs: false,
         }
     }
 
@@ -575,6 +577,7 @@ impl Cell {
         self.ch = newch;
         self.keep_fg = false;
         self.keep_bg = false;
+        self.keep_attrs = false;
         self
     }
 
@@ -643,7 +646,9 @@ impl Cell {
     }
 
     pub fn set_attrs(&mut self, newattrs: Attr) -> &mut Cell {
-        self.attrs = newattrs;
+        if !self.keep_attrs {
+            self.attrs = newattrs;
+        }
         self
     }
 
@@ -669,6 +674,13 @@ impl Cell {
     /// until the character content of the cell is changed.
     pub fn set_keep_bg(&mut self, new_val: bool) -> &mut Cell {
         self.keep_bg = new_val;
+        self
+    }
+
+    /// Sets `keep_attrs` field. If true, the text attributes will not be altered if attempted so
+    /// until the character content of the cell is changed.
+    pub fn set_keep_attrs(&mut self, new_val: bool) -> &mut Cell {
+        self.keep_attrs = new_val;
         self
     }
 }
@@ -1719,13 +1731,14 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
             grid_dest[(x, y)] = grid_src[(src_x, src_y)];
             for t in &stack {
                 if let Some(fg) = grid_src.tag_table()[&t].fg {
-                    grid_dest[(x, y)].set_fg(fg);
+                    grid_dest[(x, y)].set_fg(fg).set_keep_fg(true);
                 }
                 if let Some(bg) = grid_src.tag_table()[&t].bg {
-                    grid_dest[(x, y)].set_bg(bg);
+                    grid_dest[(x, y)].set_bg(bg).set_keep_bg(true);
                 }
                 if let Some(attrs) = grid_src.tag_table()[&t].attrs {
                     grid_dest[(x, y)].attrs |= attrs;
+                    grid_dest[(x, y)].set_keep_attrs(true);
                 }
             }
             if src_x >= get_x(bottom_right!(src)) {

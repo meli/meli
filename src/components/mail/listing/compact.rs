@@ -1038,12 +1038,13 @@ impl CompactListing {
                         columns[4][c].set_bg(color);
                     }
                     for c in columns[4].row_iter(_x..(_x + 1), idx) {
-                        columns[4][c].set_bg(color);
-                        columns[4][c].set_keep_bg(true);
+                        columns[4][c].set_bg(color).set_keep_bg(true);
                     }
                     for c in columns[4].row_iter((x + 1)..(_x + 1), idx) {
-                        columns[4][c].set_keep_fg(true);
-                        columns[4][c].set_keep_bg(true);
+                        columns[4][c]
+                            .set_keep_fg(true)
+                            .set_keep_bg(true)
+                            .set_keep_attrs(true);
                     }
                     for c in columns[4].row_iter(x..(x + 1), idx) {
                         columns[4][c].set_keep_bg(true);
@@ -1241,12 +1242,15 @@ impl CompactListing {
                     );
                     self.data_columns.columns[4][(x, idx)].set_bg(color);
                     if _x < min_width.4 {
-                        self.data_columns.columns[4][(_x, idx)].set_bg(color);
-                        self.data_columns.columns[4][(_x, idx)].set_keep_bg(true);
+                        self.data_columns.columns[4][(_x, idx)]
+                            .set_bg(color)
+                            .set_keep_bg(true);
                     }
                     for x in (x + 1).._x {
-                        self.data_columns.columns[4][(x, idx)].set_keep_fg(true);
-                        self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                        self.data_columns.columns[4][(x, idx)]
+                            .set_keep_fg(true)
+                            .set_keep_bg(true)
+                            .set_keep_attrs(true);
                     }
                     self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
                     x = _x + 1;
