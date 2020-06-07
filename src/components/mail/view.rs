@@ -93,6 +93,7 @@ pub struct MailView {
     initialised: bool,
     mode: ViewMode,
     expand_headers: bool,
+    attachment_tree: String,
     headers_no: usize,
     headers_cursor: usize,
     force_draw_headers: bool,
@@ -109,6 +110,7 @@ impl Clone for MailView {
             cmd_buf: String::with_capacity(4),
             pager: self.pager.clone(),
             mode: ViewMode::Normal,
+            attachment_tree: self.attachment_tree.clone(),
             ..*self
         }
     }
@@ -137,6 +139,7 @@ impl MailView {
             initialised: false,
             mode: ViewMode::Normal,
             expand_headers: false,
+            attachment_tree: String::new(),
 
             headers_no: 5,
             headers_cursor: 0,
@@ -151,11 +154,12 @@ impl MailView {
 
     /// Returns the string to be displayed in the Viewer
     fn attachment_to_text<'closure, 's: 'closure, 'context: 's>(
-        &'s self,
+        &'s mut self,
         body: &'context Attachment,
         context: &'context mut Context,
     ) -> String {
         let finder = LinkFinder::new();
+        let coordinates = self.coordinates;
         let body_text = String::from_utf8_lossy(&decode_rec(
             body,
             Some(Box::new(move |a: &'closure Attachment, v: &mut Vec<u8>| {
@@ -163,12 +167,9 @@ impl MailView {
                     use std::io::Write;
 
                     /* FIXME: duplication with view/html.rs */
-                    if let Some(filter_invocation) = mailbox_settings!(
-                        context[self.coordinates.0][&self.coordinates.1]
-                            .pager
-                            .html_filter
-                    )
-                    .as_ref()
+                    if let Some(filter_invocation) =
+                        mailbox_settings!(context[coordinates.0][&coordinates.1].pager.html_filter)
+                            .as_ref()
                     {
                         let command_obj = Command::new("sh")
                             .args(&["-c", filter_invocation])
@@ -239,75 +240,21 @@ impl MailView {
             })),
         ))
         .into_owned();
+        if body.count_attachments() > 1 {
+            self.attachment_tree.clear();
+            attachment_tree(
+                (&mut 0, (0, &body)),
+                &mut SmallVec::new(),
+                false,
+                &mut self.attachment_tree,
+            );
+        }
         match self.mode {
             ViewMode::Normal
             | ViewMode::Subview
             | ViewMode::ContactSelector(_)
             | ViewMode::Source(Source::Decoded) => {
-                let mut t = body_text.to_string();
-                t.push('\n');
-                if body.count_attachments() > 1 {
-                    fn attachment_tree(
-                        (idx, (depth, att)): (&mut usize, (usize, &Attachment)),
-                        branches: &mut SmallVec<[bool; 8]>,
-                        has_sibling: bool,
-                        s: &mut String,
-                    ) {
-                        s.extend(format!("\n[{}]", idx).chars());
-                        for &b in branches.iter() {
-                            if b {
-                                s.push('|');
-                            } else {
-                                s.push(' ');
-                            }
-                            s.push(' ');
-                        }
-                        if depth > 0 {
-                            if has_sibling {
-                                s.push('|');
-                            } else {
-                                s.push(' ');
-                            }
-                            s.push_str("\\_ ");
-                        } else {
-                            if has_sibling {
-                                s.push('|');
-                                s.push('\\');
-                            } else {
-                                s.push(' ');
-                            }
-                            s.push(' ');
-                        }
-
-                        s.extend(att.to_string().chars());
-                        match att.content_type {
-                            ContentType::Multipart {
-                                parts: ref sub_att_vec,
-                                ..
-                            } => {
-                                let mut iter = (0..sub_att_vec.len()).peekable();
-                                if has_sibling {
-                                    branches.push(true);
-                                } else {
-                                    branches.push(false);
-                                }
-                                while let Some(i) = iter.next() {
-                                    *idx += 1;
-                                    attachment_tree(
-                                        (idx, (depth + 1, &sub_att_vec[i])),
-                                        branches,
-                                        !(iter.peek() == None),
-                                        s,
-                                    );
-                                }
-                                branches.pop();
-                            }
-                            _ => {}
-                        }
-                    }
-                    attachment_tree((&mut 0, (0, &body)), &mut SmallVec::new(), false, &mut t);
-                }
-                t
+                format!("{}\n\n{}", body_text, self.attachment_tree)
             }
             ViewMode::Source(Source::Raw) => String::from_utf8_lossy(body.body()).into_owned(),
             ViewMode::Url => {
@@ -324,16 +271,8 @@ impl MailView {
                     };
                     t.insert_str(l.start() + offset, &format!("[{}]", lidx));
                 }
-                if body.count_attachments() > 1 {
-                    t = body
-                        .attachments()
-                        .iter()
-                        .enumerate()
-                        .fold(t, |mut s, (idx, a)| {
-                            s.push_str(&format!("[{}] {}\n\n", idx, a));
-                            s
-                        });
-                }
+                t.push_str("\n\n");
+                t.push_str(&self.attachment_tree);
                 t
             }
             ViewMode::Attachment(aidx) => {
@@ -1595,5 +1534,64 @@ impl Component for MailView {
         context
             .replies
             .push_back(UIEvent::Action(Tab(Kill(self.id))));
+    }
+}
+
+fn attachment_tree(
+    (idx, (depth, att)): (&mut usize, (usize, &Attachment)),
+    branches: &mut SmallVec<[bool; 8]>,
+    has_sibling: bool,
+    s: &mut String,
+) {
+    s.extend(format!("\n[{}]", idx).chars());
+    for &b in branches.iter() {
+        if b {
+            s.push('|');
+        } else {
+            s.push(' ');
+        }
+        s.push(' ');
+    }
+    if depth > 0 {
+        if has_sibling {
+            s.push('|');
+        } else {
+            s.push(' ');
+        }
+        s.push_str("\\_ ");
+    } else {
+        if has_sibling {
+            s.push('|');
+            s.push('\\');
+        } else {
+            s.push(' ');
+        }
+        s.push(' ');
+    }
+
+    s.extend(att.to_string().chars());
+    match att.content_type {
+        ContentType::Multipart {
+            parts: ref sub_att_vec,
+            ..
+        } => {
+            let mut iter = (0..sub_att_vec.len()).peekable();
+            if has_sibling {
+                branches.push(true);
+            } else {
+                branches.push(false);
+            }
+            while let Some(i) = iter.next() {
+                *idx += 1;
+                attachment_tree(
+                    (idx, (depth + 1, &sub_att_vec[i])),
+                    branches,
+                    !(iter.peek() == None),
+                    s,
+                );
+            }
+            branches.pop();
+        }
+        _ => {}
     }
 }
