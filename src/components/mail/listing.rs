@@ -143,7 +143,8 @@ pub trait MailListingTrait: ListingTrait {
         thread_hash: ThreadHash,
         a: &ListingAction,
     ) {
-        let account = &mut context.accounts[self.coordinates().0];
+        let account_pos = self.coordinates().0;
+        let account = &mut context.accounts[account_pos];
         let mut envs_to_set: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
         let mailbox_hash = self.coordinates().1;
         for (_, h) in account.collection.threads[&mailbox_hash].thread_group_iter(thread_hash) {
@@ -154,6 +155,7 @@ pub trait MailListingTrait: ListingTrait {
             );
         }
         for env_hash in envs_to_set {
+            let account = &mut context.accounts[self.coordinates().0];
             let mut op = account.operation(env_hash);
             let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
             match a {
@@ -173,7 +175,7 @@ pub trait MailListingTrait: ListingTrait {
                 }
                 ListingAction::Delete => {
                     drop(envelope);
-                    if let Err(err) = account.delete(env_hash) {
+                    if let Err(err) = account.delete(env_hash, mailbox_hash) {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not delete.".to_string()),
                             err.to_string(),
@@ -185,12 +187,99 @@ pub trait MailListingTrait: ListingTrait {
                 }
                 ListingAction::CopyTo(ref mailbox_path) => {
                     drop(envelope);
-                    if let Err(err) = op
-                        .as_bytes()
-                        .and_then(|bytes| account.save(bytes, mailbox_path, None))
+                    if let Err(err) =
+                        account
+                            .mailbox_by_path(mailbox_path)
+                            .and_then(|mailbox_hash| {
+                                op.as_bytes()
+                                    .and_then(|bytes| account.save(bytes, mailbox_hash, None))
+                            })
                     {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not copy.".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        return;
+                    }
+                    continue;
+                }
+                ListingAction::CopyToOtherAccount(ref account_name, ref mailbox_path) => {
+                    drop(envelope);
+                    if let Err(err) = op.as_bytes().map(|b| b.to_vec()).and_then(|bytes| {
+                        let account_pos = context
+                            .accounts
+                            .iter()
+                            .position(|el| el.name() == account_name)
+                            .ok_or_else(|| {
+                                MeliError::new(format!(
+                                    "`{}` is not a valid account name",
+                                    account_name
+                                ))
+                            })?;
+                        let account = &mut context.accounts[account_pos];
+                        let mailbox_hash = account.mailbox_by_path(mailbox_path)?;
+                        account.save(&bytes, mailbox_hash, None)
+                    }) {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not copy.".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        return;
+                    }
+                    continue;
+                }
+                ListingAction::MoveTo(ref mailbox_path) => {
+                    drop(envelope);
+                    if let Err(err) =
+                        account
+                            .mailbox_by_path(mailbox_path)
+                            .and_then(|mailbox_hash| {
+                                op.as_bytes()
+                                    .and_then(|bytes| account.save(bytes, mailbox_hash, None))
+                            })
+                    {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not copy.".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        return;
+                    }
+                    continue;
+                }
+                ListingAction::MoveToOtherAccount(ref account_name, ref mailbox_path) => {
+                    drop(envelope);
+                    if let Err(err) = op
+                        .as_bytes()
+                        .map(|b| b.to_vec())
+                        .and_then(|bytes| {
+                            let account_pos = context
+                                .accounts
+                                .iter()
+                                .position(|el| el.name() == account_name)
+                                .ok_or_else(|| {
+                                    MeliError::new(format!(
+                                        "`{}` is not a valid account name",
+                                        account_name
+                                    ))
+                                })?;
+                            let account = &mut context.accounts[account_pos];
+                            let mailbox_hash = account.mailbox_by_path(mailbox_path)?;
+                            account.save(&bytes, mailbox_hash, None)
+                        })
+                        .and_then(|()| {
+                            let account = &mut context.accounts[account_pos];
+                            account
+                                .delete(env_hash, mailbox_hash)
+                                .chain_err_summary(|| {
+                                    "Envelope was copied but removal from original account failed"
+                                })
+                        })
+                    {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not move.".to_string()),
                             err.to_string(),
                             Some(NotificationType::ERROR),
                         ));

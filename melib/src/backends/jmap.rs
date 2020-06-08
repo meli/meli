@@ -262,8 +262,8 @@ impl MailBackend for JmapType {
         ))
     }
 
-    fn save(&self, _bytes: &[u8], _mailbox: &str, _flags: Option<Flag>) -> Result<()> {
-        Ok(())
+    fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn as_any(&self) -> &dyn::std::any::Any {

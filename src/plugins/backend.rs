@@ -213,7 +213,7 @@ impl MailBackend for PluginBackend {
         })
     }
 
-    fn save(&self, _bytes: &[u8], _mailbox: &str, _flags: Option<Flag>) -> Result<()> {
+    fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
     fn create_mailbox(

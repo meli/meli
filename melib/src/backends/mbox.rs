@@ -612,7 +612,7 @@ impl MailBackend for MboxType {
         Box::new(MboxOp::new(hash, self.path.as_path(), offset, length))
     }
 
-    fn save(&self, _bytes: &[u8], _mailbox: &str, _flags: Option<Flag>) -> Result<()> {
+    fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }
 

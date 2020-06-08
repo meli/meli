@@ -26,8 +26,8 @@
 use super::{AccountConf, FileMailboxConf};
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
-    BackendOp, Backends, MailBackend, Mailbox, MailboxHash, NotifyFn, ReadOnlyOp, RefreshEvent,
-    RefreshEventConsumer, RefreshEventKind, SpecialUsageMailbox,
+    AccountHash, BackendOp, Backends, MailBackend, Mailbox, MailboxHash, NotifyFn, ReadOnlyOp,
+    RefreshEvent, RefreshEventConsumer, RefreshEventKind, SpecialUsageMailbox,
 };
 use melib::email::*;
 use melib::error::{MeliError, Result};
@@ -113,6 +113,7 @@ impl MailboxEntry {
 pub struct Account {
     pub index: usize,
     name: String,
+    hash: AccountHash,
     pub is_online: bool,
     pub(crate) mailbox_entries: HashMap<MailboxHash, MailboxEntry>,
     pub(crate) mailboxes_order: Vec<MailboxHash>,
@@ -187,6 +188,7 @@ pub struct MailboxNode {
 impl Account {
     pub fn new(
         index: usize,
+        hash: AccountHash,
         name: String,
         mut settings: AccountConf,
         map: &Backends,
@@ -232,6 +234,7 @@ impl Account {
 
         Ok(Account {
             index,
+            hash,
             name,
             is_online: false,
             mailbox_entries: Default::default(),
@@ -931,24 +934,27 @@ impl Account {
         Ok(())
     }
 
-    pub fn save(&self, bytes: &[u8], mailbox: &str, flags: Option<Flag>) -> Result<()> {
+    pub fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {
         if self.settings.account.read_only() {
             return Err(MeliError::new(format!(
                 "Account {} is read-only.",
                 self.name.as_str()
             )));
         }
-        self.backend.write().unwrap().save(bytes, mailbox, flags)
+        self.backend
+            .write()
+            .unwrap()
+            .save(bytes, mailbox_hash, flags)
     }
 
-    pub fn delete(&self, env_hash: EnvelopeHash) -> Result<()> {
+    pub fn delete(&self, env_hash: EnvelopeHash, mailbox_hash: MailboxHash) -> Result<()> {
         if self.settings.account.read_only() {
             return Err(MeliError::new(format!(
                 "Account {} is read-only.",
                 self.name.as_str()
             )));
         }
-        self.backend.write().unwrap().delete(env_hash)
+        self.backend.write().unwrap().delete(env_hash, mailbox_hash)
     }
 
     pub fn contains_key(&self, h: EnvelopeHash) -> bool {
@@ -1044,15 +1050,7 @@ impl Account {
                 if self.mailbox_entries.len() == 1 {
                     return Err(MeliError::new("Cannot delete only mailbox."));
                 }
-                let mailbox_hash = if let Some((mailbox_hash, _)) = self
-                    .mailbox_entries
-                    .iter()
-                    .find(|(_, f)| f.ref_mailbox.path() == path)
-                {
-                    *mailbox_hash
-                } else {
-                    return Err(MeliError::new("Mailbox with that path not found."));
-                };
+                let mailbox_hash = self.mailbox_by_path(&path)?;
                 let mut mailboxes = self.backend.write().unwrap().delete_mailbox(mailbox_hash)?;
                 self.sender
                     .send(ThreadEvent::UIEvent(UIEvent::MailboxDelete((
@@ -1070,14 +1068,9 @@ impl Account {
                     self.sent_mailbox = None;
                 }
                 self.collection.threads.remove(&mailbox_hash);
+                let deleted_mailbox = self.mailbox_entries.remove(&mailbox_hash).unwrap();
                 /* if deleted mailbox had parent, we need to update its children field */
-                if let Some(parent_hash) = self
-                    .mailbox_entries
-                    .remove(&mailbox_hash)
-                    .unwrap()
-                    .ref_mailbox
-                    .parent()
-                {
+                if let Some(parent_hash) = deleted_mailbox.ref_mailbox.parent() {
                     self.mailbox_entries
                         .entry(parent_hash)
                         .and_modify(|parent| {
@@ -1094,18 +1087,13 @@ impl Account {
 
                 // FIXME remove from settings as well
 
-                Ok(format!("'`{}` has been deleted.", &path))
+                Ok(format!(
+                    "'`{}` has been deleted.",
+                    &deleted_mailbox.ref_mailbox.path()
+                ))
             }
             MailboxOperation::Subscribe(path) => {
-                let mailbox_hash = if let Some((mailbox_hash, _)) = self
-                    .mailbox_entries
-                    .iter()
-                    .find(|(_, f)| f.ref_mailbox.path() == path)
-                {
-                    *mailbox_hash
-                } else {
-                    return Err(MeliError::new("Mailbox with that path not found."));
-                };
+                let mailbox_hash = self.mailbox_by_path(&path)?;
                 self.backend
                     .write()
                     .unwrap()
@@ -1118,15 +1106,7 @@ impl Account {
                 Ok(format!("'`{}` has been subscribed.", &path))
             }
             MailboxOperation::Unsubscribe(path) => {
-                let mailbox_hash = if let Some((mailbox_hash, _)) = self
-                    .mailbox_entries
-                    .iter()
-                    .find(|(_, f)| f.ref_mailbox.path() == path)
-                {
-                    *mailbox_hash
-                } else {
-                    return Err(MeliError::new("Mailbox with that path not found."));
-                };
+                let mailbox_hash = self.mailbox_by_path(&path)?;
                 self.backend
                     .write()
                     .unwrap()
@@ -1143,13 +1123,13 @@ impl Account {
         }
     }
 
-    pub fn special_use_mailbox(&self, special_use: SpecialUsageMailbox) -> Option<&str> {
+    pub fn special_use_mailbox(&self, special_use: SpecialUsageMailbox) -> Option<MailboxHash> {
         let ret = self
             .mailbox_entries
             .iter()
             .find(|(_, f)| f.conf.mailbox_conf().usage == Some(special_use));
         if let Some(ret) = ret.as_ref() {
-            Some(ret.1.name())
+            Some(ret.1.ref_mailbox.hash())
         } else {
             None
         }
@@ -1235,6 +1215,18 @@ impl Account {
                 }
             }
             Ok(ret)
+        }
+    }
+
+    pub fn mailbox_by_path(&self, path: &str) -> Result<MailboxHash> {
+        if let Some((mailbox_hash, _)) = self
+            .mailbox_entries
+            .iter()
+            .find(|(_, f)| f.ref_mailbox.path() == path)
+        {
+            Ok(*mailbox_hash)
+        } else {
+            Err(MeliError::new("Mailbox with that path not found."))
         }
     }
 }

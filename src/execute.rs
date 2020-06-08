@@ -236,22 +236,67 @@ define_commands!([
                    desc: "set [seen/unseen], toggles message's Seen flag.",
                    tokens: &[One(Literal("set")), One(Alternatives(&[to_stream!(One(Literal("seen"))), to_stream!(One(Literal("unseen")))]))],
                    parser:
-                       (fn envelope_action<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
-                             alt((
+                       (fn seen_flag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
                                  preceded(
                                      tag("set"),
                                      alt((
-                                         map(tag("seen"), |_| Listing(SetSeen))
-                                         , map(tag("unseen"), |_| Listing(SetUnseen))
+                                         map(tag("seen"), |_| Listing(SetSeen)),
+                                         map(tag("unseen"), |_| Listing(SetUnseen))
                                      ))
-                                 ) , map(preceded(tag("delete"), eof), |_| Listing(Delete))
-                                  , |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                 )(input)
+                       }
+                     )
+                 },
+                 { tags: ["delete"],
+                   desc: "delete message",
+                   tokens: &[One(Literal("delete"))],
+                   parser: (
+                       fn delete_message<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                           map(preceded(tag("delete"), eof), |_| Listing(Delete))(input)
+                       }
+                   )
+                 },
+                 { tags: ["copyto", "moveto"],
+                   desc: "copy/move message",
+                   tokens: &[One(Alternatives(&[to_stream!(One(Literal("copyto"))), to_stream!(One(Literal("moveto")))])), ZeroOrOne(AccountName), One(MailboxPath)],
+                   parser: (
+                       fn copymove<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
+                             alt((
+                                 |input: &'a [u8]| -> IResult<&'a [u8], Action> {
                                       let (input, _) = tag("copyto")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
-                                      let (input,path) =   quoted_argument(input)?;
-                                      Ok( (input, { Listing(CopyTo(path.to_string())) })) }
+                                      let (input, path) =  quoted_argument(input)?;
+                                      let (input, _) = eof(input)?;
+                                      Ok( (input, { Listing(CopyTo(path.to_string())) }))
+                                 },
+                                 |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      let (input, _) = tag("copyto")(input.trim())?;
+                                      let (input, _) = is_a(" ")(input)?;
+                                      let (input, account) =  quoted_argument(input)?;
+                                      let (input, _) = is_a(" ")(input)?;
+                                      let (input, path) =  quoted_argument(input)?;
+                                      let (input, _) = eof(input)?;
+                                      Ok( (input, { Listing(CopyToOtherAccount(account.to_string(), path.to_string())) }))
+                                 },
+                                 |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      let (input, _) = tag("moveto")(input.trim())?;
+                                      let (input, _) = is_a(" ")(input)?;
+                                      let (input, path) =  quoted_argument(input)?;
+                                      let (input, _) = eof(input)?;
+                                      Ok( (input, { Listing(MoveTo(path.to_string())) }))
+                                 },
+                                 |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      let (input, _) = tag("moveto")(input.trim())?;
+                                      let (input, _) = is_a(" ")(input)?;
+                                      let (input, account) =  quoted_argument(input)?;
+                                      let (input, _) = is_a(" ")(input)?;
+                                      let (input, path) =  quoted_argument(input)?;
+                                      let (input, _) = eof(input)?;
+                                      Ok( (input, { Listing(MoveToOtherAccount(account.to_string(), path.to_string())) }))
+                                 }
                              ))(input)
-                     })
+                       }
+                   )
                  },
                  { tags: ["close"],
                    desc: "close non-sticky tabs",
@@ -595,7 +640,9 @@ fn conversations(input: &[u8]) -> IResult<&[u8], Action> {
 fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
     alt((
         toggle,
-        envelope_action,
+        seen_flag,
+        delete_message,
+        copymove,
         search,
         toggle_thread_snooze,
         open_in_new_tab,

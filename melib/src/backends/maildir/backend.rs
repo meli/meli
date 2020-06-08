@@ -656,17 +656,8 @@ impl MailBackend for MaildirType {
         ))
     }
 
-    fn save(&self, bytes: &[u8], mailbox: &str, flags: Option<Flag>) -> Result<()> {
-        for f in self.mailboxes.values() {
-            if f.name == mailbox || f.path.to_str().unwrap() == mailbox {
-                return MaildirType::save_to_mailbox(f.fs_path.clone(), bytes, flags);
-            }
-        }
-
-        Err(MeliError::new(format!(
-            "'{}' is not a valid mailbox.",
-            mailbox
-        )))
+    fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {
+        MaildirType::save_to_mailbox(self.mailboxes[&mailbox_hash].fs_path.clone(), bytes, flags)
     }
 
     fn as_any(&self) -> &dyn::std::any::Any {

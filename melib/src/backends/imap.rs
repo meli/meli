@@ -574,29 +574,22 @@ impl MailBackend for ImapType {
         ))
     }
 
-    fn save(&self, bytes: &[u8], mailbox: &str, flags: Option<Flag>) -> Result<()> {
+    fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {
         let path = {
             let mailboxes = self.uid_store.mailboxes.read().unwrap();
 
-            let f_result = mailboxes
-                .values()
-                .find(|v| v.path == mailbox || v.name == mailbox);
-            if f_result
-                .map(|f| !f.permissions.lock().unwrap().create_messages)
-                .unwrap_or(false)
-            {
+            let mailbox = mailboxes.get(&mailbox_hash).ok_or(MeliError::new(format!(
+                "Mailbox with hash {} not found.",
+                mailbox_hash
+            )))?;
+            if !mailbox.permissions.lock().unwrap().create_messages {
                 return Err(MeliError::new(format!(
                     "You are not allowed to create messages in mailbox {}",
-                    mailbox
+                    mailbox.path()
                 )));
             }
 
-            f_result
-                .map(|v| v.imap_path().to_string())
-                .ok_or(MeliError::new(format!(
-                    "Mailbox with name {} not found.",
-                    mailbox
-                )))?
+            mailbox.imap_path().to_string()
         };
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(5, 0)))?;

@@ -255,6 +255,7 @@ impl State {
                     account_hashes.insert(account_hash, index);
                     Account::new(
                         index,
+                        account_hash,
                         n.to_string(),
                         a_s.clone(),
                         &backends,
