@@ -508,12 +508,10 @@ impl Account {
                 RefreshEventKind::NewFlags(env_hash, (flags, tags)) => {
                     let mut envelopes = self.collection.envelopes.write().unwrap();
                     envelopes.entry(env_hash).and_modify(|entry| {
-                        for f in tags {
-                            let hash = tag_hash!(f);
-                            if !entry.labels().contains(&hash) {
-                                entry.labels_mut().push(hash);
-                            }
-                        }
+                        entry.labels_mut().clear();
+                        entry
+                            .labels_mut()
+                            .extend(tags.into_iter().map(|h| tag_hash!(h)));
                         entry.set_flags(flags);
                     });
                     #[cfg(feature = "sqlite3")]
