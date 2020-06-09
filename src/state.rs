@@ -143,6 +143,9 @@ impl Context {
                 replies.push_back(UIEvent::AccountStatusChange(account_pos));
             }
         }
+        if ret.is_ok() != was_online {
+            replies.push_back(UIEvent::AccountStatusChange(account_pos));
+        }
         ret
     }
 
