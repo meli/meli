@@ -147,9 +147,9 @@ impl Collection {
         old_hash: EnvelopeHash,
         new_hash: EnvelopeHash,
         mailbox_hash: MailboxHash,
-    ) {
+    ) -> bool {
         if !self.envelopes.write().unwrap().contains_key(&old_hash) {
-            return;
+            return false;
         }
         let mut envelope = self.envelopes.write().unwrap().remove(&old_hash).unwrap();
         self.mailboxes.entry(mailbox_hash).and_modify(|m| {
@@ -168,7 +168,7 @@ impl Collection {
                 .update_envelope(&self.envelopes, old_hash, new_hash)
                 .is_ok()
             {
-                return;
+                return true;
             }
         }
         /* envelope is not in threads, so insert it */
@@ -184,6 +184,7 @@ impl Collection {
                 .ok()
                 .take();
         }
+        true
     }
 
     /// Merge new mailbox to collection and update threads.

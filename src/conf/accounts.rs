@@ -535,7 +535,9 @@ impl Account {
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {
                     debug!("rename {} to {}", old_hash, new_hash);
-                    self.collection.rename(old_hash, new_hash, mailbox_hash);
+                    if !self.collection.rename(old_hash, new_hash, mailbox_hash) {
+                        return Some(EnvelopeRename(old_hash, new_hash));
+                    }
                     #[cfg(feature = "sqlite3")]
                     {
                         let envelopes = self.collection.envelopes.read();
