@@ -781,9 +781,7 @@ mod pp {
                 let mut p = Path::new(sub_path).expand();
                  if p.is_relative() {
                     /* We checked that path is ok above so we can do unwrap here */
-                    debug!(path);
                     let prefix = path.parent().unwrap();
-                    debug!(prefix);
                     p = prefix.join(p)
                 }
 
