@@ -232,7 +232,7 @@ impl Component for EnvelopeView {
             if self.mode == ViewMode::Raw {
                 clear_area(grid, area, crate::conf::value(context, "theme_default"));
                 context.dirty_areas.push_back(area);
-                get_y(upper_left) - 1
+                get_y(upper_left).saturating_sub(1)
             } else {
                 let (x, y) = write_string_to_grid(
                     &format!("Date: {}", envelope.date_as_str()),
