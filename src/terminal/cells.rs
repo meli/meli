@@ -30,7 +30,7 @@ use melib::text_processing::wcwidth;
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::convert::From;
 use std::fmt;
 use std::ops::{Deref, DerefMut, Index, IndexMut};
@@ -1716,34 +1716,27 @@ pub fn copy_area(grid_dest: &mut CellBuffer, grid_src: &CellBuffer, dest: Area, 
     let mut tag_offset: usize = tag_associations
         .binary_search_by(|probe| probe.0.cmp(&start_idx))
         .unwrap_or_else(|i| i);
-    let mut stack: HashSet<u64> = HashSet::default();
-    let mut sorted_stack: SmallVec<[u64; 64]> = SmallVec::new();
+    let mut stack: std::collections::BTreeSet<&FormatTag> = std::collections::BTreeSet::default();
     for y in get_y(upper_left!(dest))..=get_y(bottom_right!(dest)) {
         'for_x: for x in get_x(upper_left!(dest))..=get_x(bottom_right!(dest)) {
             let idx = grid_src.pos_to_index(src_x, src_y).unwrap();
-            let resort_stack = tag_offset < tag_associations.len() && tag_associations[tag_offset].0 <= idx;
             while tag_offset < tag_associations.len() && tag_associations[tag_offset].0 <= idx {
                 if tag_associations[tag_offset].2 {
-                    stack.insert(tag_associations[tag_offset].1);
+                    stack.insert(&grid_src.tag_table()[&tag_associations[tag_offset].1]);
                 } else {
-                    stack.remove(&tag_associations[tag_offset].1);
+                    stack.remove(&grid_src.tag_table()[&tag_associations[tag_offset].1]);
                 }
                 tag_offset += 1;
             }
-            if resort_stack {
-                sorted_stack.clear();
-                sorted_stack.extend(stack.iter().cloned());
-                sorted_stack.sort_by_key(|h| grid_src.tag_table()[h].priority);
-            }
             grid_dest[(x, y)] = grid_src[(src_x, src_y)];
-            for t in &sorted_stack {
-                if let Some(fg) = grid_src.tag_table()[&t].fg {
+            for t in &stack {
+                if let Some(fg) = t.fg {
                     grid_dest[(x, y)].set_fg(fg).set_keep_fg(true);
                 }
-                if let Some(bg) = grid_src.tag_table()[&t].bg {
+                if let Some(bg) = t.bg {
                     grid_dest[(x, y)].set_bg(bg).set_keep_bg(true);
                 }
-                if let Some(attrs) = grid_src.tag_table()[&t].attrs {
+                if let Some(attrs) = t.attrs {
                     grid_dest[(x, y)].attrs |= attrs;
                     grid_dest[(x, y)].set_keep_attrs(true);
                 }
@@ -2824,4 +2817,16 @@ pub struct FormatTag {
     pub bg: Option<Color>,
     pub attrs: Option<Attr>,
     pub priority: u8,
+}
+
+impl core::cmp::Ord for FormatTag {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.priority.cmp(&other.priority)
+    }
+}
+
+impl core::cmp::PartialOrd for FormatTag {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(&other))
+    }
 }
