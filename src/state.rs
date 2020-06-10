@@ -207,7 +207,11 @@ impl Drop for State {
 }
 
 impl State {
-    pub fn new(sender: Sender<ThreadEvent>, receiver: Receiver<ThreadEvent>) -> Result<Self> {
+    pub fn new(
+        settings: Option<Settings>,
+        sender: Sender<ThreadEvent>,
+        receiver: Receiver<ThreadEvent>,
+    ) -> Result<Self> {
         /*
          * Create async channel to block the input-thread if we need to fork and stop it from reading
          * stdin, see get_events() for details
@@ -216,7 +220,11 @@ impl State {
         let input_thread_pipe = nix::unistd::pipe()
             .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send + Sync + 'static>)?;
         let mut backends = Backends::new();
-        let settings = Settings::new()?;
+        let settings = if let Some(settings) = settings {
+            settings
+        } else {
+            Settings::new()?
+        };
         let mut plugin_manager = PluginManager::new();
         for (_, p) in settings.plugins.clone() {
             if crate::plugins::PluginKind::Backend == p.kind() {

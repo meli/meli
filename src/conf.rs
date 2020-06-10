@@ -499,6 +499,30 @@ impl Settings {
             log: fs.log,
         })
     }
+
+    pub fn without_accounts() -> Result<Settings> {
+        let fs = FileSettings::new()?;
+        if let Some(ref log_path) = fs.log.log_file {
+            melib::change_log_dest(log_path.into());
+        }
+        if fs.log.maximum_level != melib::LoggingLevel::default() {
+            melib::change_log_level(fs.log.maximum_level);
+        }
+
+        Ok(Settings {
+            accounts: HashMap::new(),
+            pager: fs.pager,
+            listing: fs.listing,
+            notifications: fs.notifications,
+            shortcuts: fs.shortcuts,
+            tags: fs.tags,
+            composing: fs.composing,
+            pgp: fs.pgp,
+            terminal: fs.terminal,
+            plugins: fs.plugins,
+            log: fs.log,
+        })
+    }
 }
 
 #[derive(Copy, Debug, Clone, Hash, PartialEq)]

@@ -199,6 +199,12 @@ enum SubCommand {
     #[structopt(display_order = 3)]
     /// print documentation page and exit (Piping to a pager is recommended.).
     Man(ManOpt),
+
+    /// View mail from input file.
+    View {
+        #[structopt(value_name = "INPUT", parse(from_os_str))]
+        path: PathBuf,
+    },
 }
 
 #[derive(Debug, StructOpt)]
@@ -272,6 +278,19 @@ fn run_app(opt: Opt) -> Result<()> {
             print!("{}", conf::Themes::default().key_to_string("dark", false));
             return Ok(());
         }
+        Some(SubCommand::View { ref path }) => {
+            if !path.exists() {
+                return Err(MeliError::new(format!(
+                    "`{}` is not a valid path",
+                    path.display()
+                )));
+            } else if !path.is_file() {
+                return Err(MeliError::new(format!(
+                    "`{}` is a directory",
+                    path.display()
+                )));
+            }
+        }
         None => {}
     }
 
@@ -289,26 +308,40 @@ fn run_app(opt: Opt) -> Result<()> {
     let signal_recvr = notify(signals, sender.clone())?;
 
     /* Create the application State. */
-    let mut state = State::new(sender, receiver.clone())?;
+    let mut state;
 
-    let window = Box::new(Tabbed::new(
-        vec![
-            Box::new(listing::Listing::new(&mut state.context)),
-            Box::new(ContactList::new(&state.context)),
-            Box::new(StatusPanel::new(crate::conf::value(
-                &state.context,
-                "theme_default",
-            ))),
-        ],
-        &state.context,
-    ));
+    if let Some(SubCommand::View { path }) = opt.subcommand {
+        let bytes = std::fs::read(&path)
+            .chain_err_summary(|| format!("Could not read from `{}`", path.display()))?;
+        let wrapper = EnvelopeWrapper::new(bytes)
+            .chain_err_summary(|| format!("Could not parse `{}`", path.display()))?;
+        state = State::new(
+            Some(Settings::without_accounts().unwrap_or_default()),
+            sender,
+            receiver.clone(),
+        )?;
+        state.register_component(Box::new(EnvelopeView::new(wrapper, None, None, 0)));
+    } else {
+        state = State::new(None, sender, receiver.clone())?;
+        let window = Box::new(Tabbed::new(
+            vec![
+                Box::new(listing::Listing::new(&mut state.context)),
+                Box::new(ContactList::new(&state.context)),
+                Box::new(StatusPanel::new(crate::conf::value(
+                    &state.context,
+                    "theme_default",
+                ))),
+            ],
+            &state.context,
+        ));
 
-    let status_bar = Box::new(StatusBar::new(window));
-    state.register_component(status_bar);
+        let status_bar = Box::new(StatusBar::new(window));
+        state.register_component(status_bar);
 
-    let xdg_notifications = Box::new(components::notifications::XDGNotifications::new());
-    state.register_component(xdg_notifications);
-    state.register_component(Box::new(components::notifications::NotificationFilter {}));
+        let xdg_notifications = Box::new(components::notifications::XDGNotifications::new());
+        state.register_component(xdg_notifications);
+        state.register_component(Box::new(components::notifications::NotificationFilter {}));
+    }
 
     /* Keep track of the input mode. See UIMode for details */
     'main: loop {
