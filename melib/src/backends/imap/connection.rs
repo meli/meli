@@ -639,6 +639,7 @@ impl Iterator for ImapBlockingConnection {
     fn next(&mut self) -> Option<Self::Item> {
         self.result.drain(0..self.prev_res_length);
         self.prev_res_length = 0;
+        let mut prev_failure = None;
         let ImapBlockingConnection {
             ref mut prev_res_length,
             ref mut result,
@@ -660,12 +661,23 @@ impl Iterator for ImapBlockingConnection {
                         *prev_res_length = pos + b"\r\n".len();
                         return Some(result[0..*prev_res_length].to_vec());
                     }
+                    prev_failure = None;
                 }
                 Err(e)
                     if e.kind() == std::io::ErrorKind::WouldBlock
                         || e.kind() == std::io::ErrorKind::Interrupted =>
                 {
                     debug!(&e);
+                    if let Some(prev_failure) = prev_failure.as_ref() {
+                        if Instant::now().duration_since(*prev_failure)
+                            >= std::time::Duration::new(60 * 5, 0)
+                        {
+                            *err = Some(e.to_string());
+                            return None;
+                        }
+                    } else {
+                        prev_failure = Some(Instant::now());
+                    }
                     continue;
                 }
                 Err(e) => {

@@ -174,7 +174,7 @@ pub(self) fn try_lock<T>(
     dur: Option<std::time::Duration>,
 ) -> Result<std::sync::MutexGuard<T>> {
     let now = Instant::now();
-    while Instant::now().duration_since(now) <= dur.unwrap_or(std::time::Duration::from_millis(150))
+    while Instant::now().duration_since(now) <= dur.unwrap_or(std::time::Duration::from_millis(100))
     {
         if let Ok(guard) = connection.try_lock() {
             return Ok(guard);
@@ -188,19 +188,23 @@ impl MailBackend for ImapType {
         //if let Ok(mut g) = try_lock(&self.connection, None) {
         //    let _ = g.connect();
         //}
-        try_lock(&self.uid_store.is_online, None)?.1.clone()
+        try_lock(
+            &self.uid_store.is_online,
+            Some(std::time::Duration::from_millis(12)),
+        )?
+        .1
+        .clone()
     }
 
     fn connect(&mut self) {
-        if self.is_online().is_err() {
-            if Instant::now().duration_since(self.uid_store.is_online.lock().unwrap().0)
-                >= std::time::Duration::new(2, 0)
-            {
-                if let Ok(mut g) = try_lock(&self.connection, None) {
+        let connection = self.connection.clone();
+        let _ = std::thread::Builder::new()
+            .name(format!("{} connecting", self.account_name.as_str(),))
+            .spawn(move || {
+                if let Ok(mut g) = try_lock(&connection, None) {
                     let _ = g.connect();
                 }
-            }
-        }
+            });
     }
 
     fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
