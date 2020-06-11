@@ -148,8 +148,10 @@ impl BackendOp for ImapOp {
                 Ok(v) => {
                     if v.len() != 1 {
                         debug!("responses len is {}", v.len());
+                        debug!(response);
                         /* TODO: Trigger cache invalidation here. */
-                        panic!(format!("message with UID {} was not found", self.uid));
+                        debug!(format!("message with UID {} was not found", self.uid));
+                        return Flag::default();
                     }
                     let (uid, (flags, _)) = v[0];
                     assert_eq!(uid, self.uid);
