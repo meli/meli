@@ -389,8 +389,10 @@ impl MailBackend for ImapType {
                                 .insert((mailbox_hash, uid), env.hash());
                             envelopes.push((uid, env));
                         }
-                        exists =
-                            std::cmp::max(std::cmp::max(exists.saturating_sub(500), 1), max_uid);
+                        exists = std::cmp::max(
+                            std::cmp::max(exists.saturating_sub(500), 1),
+                            max_uid + 1,
+                        );
                         debug!("sending payload for {}", mailbox_hash);
                         if uid_store.cache_headers {
                             cache::save_envelopes(
