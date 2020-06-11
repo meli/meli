@@ -50,6 +50,7 @@ smallvec = { version = "1.1.0", features = ["serde", ] }
 bitflags = "1.0"
 pcre2 = { version = "0.2.3", optional = true }
 structopt = { version = "0.3.14", default-features = false }
+svg_crate = { version = "0.8.0", optional = true, package = "svg" }
 
 
 [profile.release]
@@ -67,6 +68,7 @@ jmap = ["melib/jmap_backend",]
 sqlite3 = ["melib/sqlite3"]
 regexp = ["pcre2"]
 cli-docs = []
+svgscreenshot = ["svg_crate"]
 
 # Print tracing logs as meli runs in stderr
 # enable for debug tracing logs: build with --features=debug-tracing

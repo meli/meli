@@ -40,6 +40,9 @@ pub use self::utilities::*;
 pub mod contacts;
 pub use crate::contacts::*;
 
+#[cfg(feature = "svgscreenshot")]
+pub mod svg;
+
 use std::fmt;
 use std::fmt::{Debug, Display};
 
