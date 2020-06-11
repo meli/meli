@@ -382,8 +382,8 @@ fn run_app(opt: Opt) -> Result<()> {
                             state.render();
                             state.redraw();
                             if state.mode == UIMode::Embed {
-                            state.rcv_event(UIEvent::EmbedInput(raw_input));
-                            state.redraw();
+                                state.rcv_event(UIEvent::EmbedInput(raw_input));
+                                state.redraw();
                             }
                         },
                         ThreadEvent::Input((k, r)) => {

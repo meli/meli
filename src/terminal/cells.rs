@@ -2135,7 +2135,7 @@ pub mod ansi {
                             Some('5') => current_fg = Color::Magenta,
                             Some('6') => current_fg = Color::Cyan,
                             Some('7') => current_fg = Color::White,
-                            _ => {},
+                            _ => {}
                         }
                         let next = chars.next();
                         if next != Some('m') {
@@ -2154,7 +2154,7 @@ pub mod ansi {
                             Some('5') => current_bg = Color::Magenta,
                             Some('6') => current_bg = Color::Cyan,
                             Some('7') => current_bg = Color::White,
-                            _ => {},
+                            _ => {}
                         }
                         let next = chars.next();
                         if next != Some('m') {
