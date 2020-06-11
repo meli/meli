@@ -26,7 +26,6 @@ use std::sync::{Arc, Mutex};
 
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
-    pub account_hash: AccountHash,
     pub conn: ImapConnection,
     pub main_conn: Arc<Mutex<ImapConnection>>,
     pub uid_store: Arc<UIDStore>,
@@ -34,7 +33,7 @@ pub struct ImapWatchKit {
 }
 
 macro_rules! exit_on_error {
-    ($conn:expr, $account_hash:ident, $mailbox_hash:ident, $work_context:ident, $thread_id:ident, $($result:expr)+) => {
+    ($conn:expr, $mailbox_hash:ident, $work_context:ident, $thread_id:ident, $($result:expr)+) => {
         $(if let Err(e) = $result {
             *$conn.uid_store.is_online.lock().unwrap() = (
             Instant::now(),
@@ -43,8 +42,9 @@ macro_rules! exit_on_error {
             debug!("failure: {}", e.to_string());
             $work_context.set_status.send(($thread_id, e.to_string())).unwrap();
             $work_context.finished.send($thread_id).unwrap();
+            let account_hash = $conn.uid_store.account_hash;
             $conn.add_refresh_event(RefreshEvent {
-                account_hash: $account_hash,
+                account_hash,
                 mailbox_hash: $mailbox_hash,
                 kind: RefreshEventKind::Failure(e.clone()),
             });
@@ -60,7 +60,6 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
         main_conn,
         uid_store,
         work_context,
-        account_hash,
     } = kit;
     loop {
         if super::try_lock(&uid_store.is_online, Some(std::time::Duration::new(10, 0)))?
@@ -89,7 +88,7 @@ pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
                     format!("examining `{}` for updates...", mailbox.path()),
                 ))
                 .unwrap();
-            examine_updates(account_hash, mailbox, &mut conn, &uid_store, &work_context)?;
+            examine_updates(mailbox, &mut conn, &uid_store, &work_context)?;
         }
         let mut main_conn = super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
         main_conn.send_command(b"NOOP")?;
@@ -106,7 +105,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         main_conn,
         uid_store,
         work_context,
-        account_hash,
     } = kit;
     loop {
         if super::try_lock(&uid_store.is_online, Some(std::time::Duration::new(10, 0)))?
@@ -136,7 +134,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 .send((thread_id, err.to_string()))
                 .unwrap();
             conn.add_refresh_event(RefreshEvent {
-                account_hash,
+                account_hash: uid_store.account_hash,
                 mailbox_hash: 0,
                 kind: RefreshEventKind::Failure(err.clone()),
             });
@@ -148,7 +146,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
         conn,
-        account_hash,
         mailbox_hash,
         work_context,
         thread_id,
@@ -167,7 +164,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     if let Some(v) = uidvalidities.get_mut(&mailbox_hash) {
                         if *v != ok.uidvalidity {
                             conn.add_refresh_event(RefreshEvent {
-                                account_hash,
+                                account_hash: uid_store.account_hash,
                                 mailbox_hash,
                                 kind: RefreshEventKind::Rescan,
                             });
@@ -181,12 +178,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         }
                     } else {
                         conn.add_refresh_event(RefreshEvent {
-                            account_hash,
+                            account_hash: uid_store.account_hash,
                             mailbox_hash,
                             kind: RefreshEventKind::Rescan,
                         });
                         conn.add_refresh_event(RefreshEvent {
-                            account_hash,
+                            account_hash: uid_store.account_hash,
                             mailbox_hash,
                             kind: RefreshEventKind::Failure(MeliError::new(format!(
                                 "Unknown mailbox: {} {}",
@@ -207,7 +204,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     }
     exit_on_error!(
         conn,
-        account_hash,
         mailbox_hash,
         work_context,
         thread_id,
@@ -231,7 +227,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
             exit_on_error!(
                 iter.conn,
-                account_hash,
                 mailbox_hash,
                 work_context,
                 thread_id,
@@ -258,11 +253,10 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     .unwrap();
                 exit_on_error!(
                     conn,
-                    account_hash,
                     mailbox_hash,
                     work_context,
                     thread_id,
-                    examine_updates(account_hash, mailbox, &mut conn, &uid_store, &work_context,)
+                    examine_updates(mailbox, &mut conn, &uid_store, &work_context,)
                 );
             }
             work_context
@@ -285,7 +279,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 /* UID SEARCH RECENT */
                 exit_on_error!(
                     conn,
-                    account_hash,
                     mailbox_hash,
                     work_context,
                     thread_id,
@@ -303,7 +296,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     Ok(v) => {
                         exit_on_error!(
                             conn,
-                        account_hash,
                             mailbox_hash,
                             work_context,
                             thread_id,
@@ -373,7 +365,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             }
                                             if uid_store.cache_headers {
                                                 cache::save_envelopes(
-                                                    account_hash,
+                                                    uid_store.account_hash,
                                                     mailbox_hash,
                                                     uidvalidity,
                                                     &[(uid, &env)],
@@ -381,7 +373,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             }
 
                                             conn.add_refresh_event(RefreshEvent {
-                                                account_hash,
+                                                account_hash: uid_store.account_hash,
                                                 mailbox_hash,
                                                 kind: Create(Box::new(env)),
                                             });
@@ -435,7 +427,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 if n > *prev_exists {
                     exit_on_error!(
                         conn,
-                        account_hash,
                         mailbox_hash,
                         work_context,
                         thread_id,
@@ -510,7 +501,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                     }
                                     if uid_store.cache_headers {
                                         cache::save_envelopes(
-                                            account_hash,
+                                            uid_store.account_hash,
                                             mailbox_hash,
                                             uidvalidity,
                                             &[(uid, &env)],
@@ -518,7 +509,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                     }
 
                                     conn.add_refresh_event(RefreshEvent {
-                                        account_hash,
+                                        account_hash: uid_store.account_hash,
                                         mailbox_hash,
                                         kind: Create(Box::new(env)),
                                     });
@@ -547,7 +538,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 debug!("fetch {} {:?}", msg_seq, flags);
                 exit_on_error!(
                     conn,
-                    account_hash,
                     mailbox_hash,
                     work_context,
                     thread_id,
@@ -573,7 +563,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                 .get(&(mailbox_hash, uid))
                             {
                                 conn.add_refresh_event(RefreshEvent {
-                                    account_hash,
+                                    account_hash: uid_store.account_hash,
                                     mailbox_hash,
                                     kind: NewFlags(*env_hash, flags),
                                 });
@@ -602,7 +592,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         .unwrap();
     work_context.finished.send(thread_id).unwrap();
     main_conn.lock().unwrap().add_refresh_event(RefreshEvent {
-        account_hash,
+        account_hash: uid_store.account_hash,
         mailbox_hash,
         kind: RefreshEventKind::Failure(MeliError::new(format!(
             "IDLE connection dropped: {}",
@@ -613,7 +603,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
 }
 
 pub fn examine_updates(
-    account_hash: AccountHash,
     mailbox: &ImapMailbox,
     conn: &mut ImapConnection,
     uid_store: &Arc<UIDStore>,
@@ -625,7 +614,6 @@ pub fn examine_updates(
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
         conn,
-        account_hash,
         mailbox_hash,
         work_context,
         thread_id,
@@ -643,7 +631,7 @@ pub fn examine_updates(
                 if let Some(v) = uidvalidities.get_mut(&mailbox_hash) {
                     if *v != ok.uidvalidity {
                         conn.add_refresh_event(RefreshEvent {
-                            account_hash,
+                            account_hash: uid_store.account_hash,
                             mailbox_hash,
                             kind: RefreshEventKind::Rescan,
                         });
@@ -656,12 +644,12 @@ pub fn examine_updates(
                     }
                 } else {
                     conn.add_refresh_event(RefreshEvent {
-                        account_hash,
+                        account_hash: uid_store.account_hash,
                         mailbox_hash,
                         kind: RefreshEventKind::Rescan,
                     });
                     conn.add_refresh_event(RefreshEvent {
-                        account_hash,
+                        account_hash: uid_store.account_hash,
                         mailbox_hash,
                         kind: RefreshEventKind::Failure(MeliError::new(format!(
                             "Unknown mailbox: {} {}",
@@ -678,7 +666,6 @@ pub fn examine_updates(
                     /* UID SEARCH RECENT */
                     exit_on_error!(
                         conn,
-                        account_hash,
                         mailbox_hash,
                         work_context,
                         thread_id,
@@ -695,7 +682,6 @@ pub fn examine_updates(
                         Ok(v) => {
                             exit_on_error!(
                                 conn,
-                                account_hash,
                                 mailbox_hash,
                                 work_context,
                                 thread_id,
@@ -759,7 +745,7 @@ pub fn examine_updates(
                                             }
                                             if uid_store.cache_headers {
                                                 cache::save_envelopes(
-                                                    account_hash,
+                                                    uid_store.account_hash,
                                                     mailbox_hash,
                                                     uidvalidity,
                                                     &[(uid, &env)],
@@ -767,7 +753,7 @@ pub fn examine_updates(
                                             }
 
                                             conn.add_refresh_event(RefreshEvent {
-                                                account_hash,
+                                                account_hash: uid_store.account_hash,
                                                 mailbox_hash,
                                                 kind: Create(Box::new(env)),
                                             });
@@ -794,7 +780,6 @@ pub fn examine_updates(
                 debug!("exists {}", n);
                 exit_on_error!(
                     conn,
-                    account_hash,
                     mailbox_hash,
                     work_context,
                     thread_id,
@@ -856,7 +841,7 @@ pub fn examine_updates(
                                 }
                                 if uid_store.cache_headers {
                                     cache::save_envelopes(
-                                        account_hash,
+                                        uid_store.account_hash,
                                         mailbox_hash,
                                         uidvalidity,
                                         &[(uid, &env)],
@@ -864,7 +849,7 @@ pub fn examine_updates(
                                 }
 
                                 conn.add_refresh_event(RefreshEvent {
-                                    account_hash,
+                                    account_hash: uid_store.account_hash,
                                     mailbox_hash,
                                     kind: Create(Box::new(env)),
                                 });

@@ -454,11 +454,6 @@ impl MailBackend for ImapType {
         *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
         let account_name = self.account_name.clone();
-        let account_hash = {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(self.account_name.as_bytes());
-            hasher.finish()
-        };
         let w = AsyncBuilder::new();
         let closure = move |work_context: WorkContext| {
             let thread = std::thread::current();
@@ -472,7 +467,7 @@ impl MailBackend for ImapType {
                         .as_ref()
                         .unwrap()
                         .send(RefreshEvent {
-                            account_hash,
+                            account_hash: uid_store.account_hash,
                             mailbox_hash,
                             kind: RefreshEventKind::Failure(err.clone()),
                         });
@@ -492,7 +487,7 @@ impl MailBackend for ImapType {
                 .set_status
                 .send((thread.id(), "refresh".to_string()))
                 .unwrap();
-            watch::examine_updates(account_hash, &inbox, &mut conn, &uid_store, &work_context)
+            watch::examine_updates(&inbox, &mut conn, &uid_store, &work_context)
                 .ok()
                 .take();
         };
@@ -508,11 +503,6 @@ impl MailBackend for ImapType {
         let main_conn = self.connection.clone();
         *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
-        let account_hash = {
-            let mut hasher = DefaultHasher::new();
-            hasher.write(self.account_name.as_bytes());
-            hasher.finish()
-        };
         let handle = std::thread::Builder::new()
             .name(format!("{} imap connection", self.account_name.as_str(),))
             .spawn(move || {
@@ -532,7 +522,6 @@ impl MailBackend for ImapType {
                     main_conn,
                     uid_store,
                     work_context,
-                    account_hash,
                 };
                 if has_idle {
                     idle(kit).ok().take();
