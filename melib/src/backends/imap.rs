@@ -126,7 +126,7 @@ pub struct UIDStore {
     cache_headers: bool,
     uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
-    uid_index: Arc<Mutex<HashMap<UID, EnvelopeHash>>>,
+    uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
 
     byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
@@ -264,7 +264,11 @@ impl MailBackend for ImapType {
                                         .lock()
                                         .unwrap()
                                         .insert(env.hash(), (uid, mailbox_hash));
-                                    uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
+                                    uid_store
+                                        .uid_index
+                                        .lock()
+                                        .unwrap()
+                                        .insert((mailbox_hash, uid), env.hash());
                                     payload.push(env);
                                 }
                                 debug!("sending cached payload for {}", mailbox_hash);
@@ -378,7 +382,11 @@ impl MailBackend for ImapType {
                                 .lock()
                                 .unwrap()
                                 .insert(env.hash(), (uid, mailbox_hash));
-                            uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
+                            uid_store
+                                .uid_index
+                                .lock()
+                                .unwrap()
+                                .insert((mailbox_hash, uid), env.hash());
                             envelopes.push((uid, env));
                         }
                         exists =
@@ -924,7 +932,7 @@ impl MailBackend for ImapType {
                         .split_whitespace()
                         .map(usize::from_str)
                         .filter_map(std::result::Result::ok)
-                        .filter_map(|uid| uid_index.get(&uid))
+                        .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
                         .map(|env_hash_ref| *env_hash_ref),
                 ));
             }

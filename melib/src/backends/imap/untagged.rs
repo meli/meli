@@ -100,7 +100,13 @@ impl ImapConnection {
                                 uid, flags, body, ..
                             } in v
                             {
-                                if self.uid_store.uid_index.lock().unwrap().contains_key(&uid) {
+                                if self
+                                    .uid_store
+                                    .uid_index
+                                    .lock()
+                                    .unwrap()
+                                    .contains_key(&(mailbox_hash, uid))
+                                {
                                     continue 'fetch_responses;
                                 }
                                 if let Ok(mut env) = Envelope::from_bytes(
@@ -116,7 +122,7 @@ impl ImapConnection {
                                         .uid_index
                                         .lock()
                                         .unwrap()
-                                        .insert(uid, env.hash());
+                                        .insert((mailbox_hash, uid), env.hash());
                                     if let Some((_, keywords)) = flags {
                                         let mut tag_lck = self.uid_store.tag_index.write().unwrap();
                                         for f in keywords {
@@ -185,7 +191,12 @@ impl ImapConnection {
                                 } in v
                                 {
                                     *mailbox.exists.lock().unwrap() += 1;
-                                    if !self.uid_store.uid_index.lock().unwrap().contains_key(&uid)
+                                    if !self
+                                        .uid_store
+                                        .uid_index
+                                        .lock()
+                                        .unwrap()
+                                        .contains_key(&(mailbox_hash, uid))
                                     {
                                         if let Ok(mut env) = Envelope::from_bytes(
                                             body.unwrap(),
@@ -200,7 +211,7 @@ impl ImapConnection {
                                                 .uid_index
                                                 .lock()
                                                 .unwrap()
-                                                .insert(uid, env.hash());
+                                                .insert((mailbox_hash, uid), env.hash());
                                             debug!(
                                                 "Create event {} {} {}",
                                                 env.hash(),
@@ -271,8 +282,12 @@ impl ImapConnection {
                 {
                     Ok(mut v) => {
                         if let Some(uid) = v.pop() {
-                            if let Some(env_hash) =
-                                self.uid_store.uid_index.lock().unwrap().get(&uid)
+                            if let Some(env_hash) = self
+                                .uid_store
+                                .uid_index
+                                .lock()
+                                .unwrap()
+                                .get(&(mailbox_hash, uid))
                             {
                                 self.uid_store
                                     .refresh_events

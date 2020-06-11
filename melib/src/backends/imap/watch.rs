@@ -331,7 +331,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         .unwrap();
                                     ctr += 1;
                                     *mailbox.exists.lock().unwrap() += 1;
-                                    if !uid_store.uid_index.lock().unwrap().contains_key(&uid) {
+                                    if !uid_store
+                                        .uid_index
+                                        .lock()
+                                        .unwrap()
+                                        .contains_key(&(mailbox_hash, uid))
+                                    {
                                         if let Ok(mut env) = Envelope::from_bytes(
                                             body.unwrap(),
                                             flags.as_ref().map(|&(f, _)| f),
@@ -345,7 +350,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                                 .uid_index
                                                 .lock()
                                                 .unwrap()
-                                                .insert(uid, env.hash());
+                                                .insert((mailbox_hash, uid), env.hash());
                                             debug!(
                                                 "Create event {} {} {}",
                                                 env.hash(),
@@ -460,7 +465,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         format!("parsing {}/{} envelopes..", ctr, len),
                                     ))
                                     .unwrap();
-                                if uid_store.uid_index.lock().unwrap().contains_key(&uid) {
+                                if uid_store
+                                    .uid_index
+                                    .lock()
+                                    .unwrap()
+                                    .contains_key(&(mailbox_hash, uid))
+                                {
                                     ctr += 1;
                                     continue 'fetch_responses_b;
                                 }
@@ -474,7 +484,11 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         .lock()
                                         .unwrap()
                                         .insert(env.hash(), (uid, mailbox_hash));
-                                    uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
+                                    uid_store
+                                        .uid_index
+                                        .lock()
+                                        .unwrap()
+                                        .insert((mailbox_hash, uid), env.hash());
                                     if let Some((_, keywords)) = flags {
                                         let mut tag_lck = uid_store.tag_index.write().unwrap();
                                         for f in keywords {
@@ -552,7 +566,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 {
                     Ok(mut v) => {
                         if let Some(uid) = v.pop() {
-                            if let Some(env_hash) = uid_store.uid_index.lock().unwrap().get(&uid) {
+                            if let Some(env_hash) = uid_store
+                                .uid_index
+                                .lock()
+                                .unwrap()
+                                .get(&(mailbox_hash, uid))
+                            {
                                 conn.add_refresh_event(RefreshEvent {
                                     account_hash,
                                     mailbox_hash,
@@ -696,7 +715,12 @@ pub fn examine_updates(
                                         ..
                                     } in v
                                     {
-                                        if uid_store.uid_index.lock().unwrap().contains_key(&uid) {
+                                        if uid_store
+                                            .uid_index
+                                            .lock()
+                                            .unwrap()
+                                            .contains_key(&(mailbox_hash, uid))
+                                        {
                                             continue 'fetch_responses_c;
                                         }
                                         if let Ok(mut env) = Envelope::from_bytes(
@@ -712,7 +736,7 @@ pub fn examine_updates(
                                                 .uid_index
                                                 .lock()
                                                 .unwrap()
-                                                .insert(uid, env.hash());
+                                                .insert((mailbox_hash, uid), env.hash());
                                             debug!(
                                                 "Create event {} {} {}",
                                                 env.hash(),
@@ -790,7 +814,12 @@ pub fn examine_updates(
                             uid, flags, body, ..
                         } in v
                         {
-                            if uid_store.uid_index.lock().unwrap().contains_key(&uid) {
+                            if uid_store
+                                .uid_index
+                                .lock()
+                                .unwrap()
+                                .contains_key(&(mailbox_hash, uid))
+                            {
                                 continue 'fetch_responses_a;
                             }
                             if let Ok(mut env) =
@@ -801,7 +830,11 @@ pub fn examine_updates(
                                     .lock()
                                     .unwrap()
                                     .insert(env.hash(), (uid, mailbox_hash));
-                                uid_store.uid_index.lock().unwrap().insert(uid, env.hash());
+                                uid_store
+                                    .uid_index
+                                    .lock()
+                                    .unwrap()
+                                    .insert((mailbox_hash, uid), env.hash());
                                 if let Some((_, keywords)) = flags {
                                     let mut tag_lck = uid_store.tag_index.write().unwrap();
                                     for f in keywords {
