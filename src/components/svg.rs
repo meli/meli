@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 use super::*;
+use std::collections::BTreeMap;
 use std::io::Write;
 
 #[derive(Debug)]
@@ -57,7 +58,7 @@ impl Component for SVGScreenshotFilter {
          * - The entire background is a big rectangle.
          * - Every text piece with unified foreground color is a text element inserted into the
          * `definitions` field of the svg, and then `use`ed as a reference
-         * - Every background piece (a slice of unified backgrund color) is a rectangle element
+         * - Every background piece (a slice of unified background color) is a rectangle element
          * inserted along with the `use` elements
          *
          * Each row is arbritarily set at 17px high, and each character cell is 8 pixels wide.
@@ -67,9 +68,22 @@ impl Component for SVGScreenshotFilter {
         let mut definitions = Definitions::new();
         let mut rows_group = Group::new();
         let mut text = String::with_capacity(width);
+        /* Before creating text node out of `text` variable, escape what's necessary */
+        let mut escaped_text = String::with_capacity(width);
+
+        /* keep a map with used colors and write a stylesheet when we're done */
+        let mut classes: BTreeMap<(u8, u8, u8), usize> = BTreeMap::new();
         for (row_idx, row) in grid.bounds_iter(((0, 0), (width, height))).enumerate() {
             text.clear();
-            let mut row_group = Group::new().set("id", format!("g{}", row_idx + 1));
+            escaped_text.clear();
+            /* Each row is a <g> group element, consisting of text elements */
+            let mut row_group = Group::new().set("id", format!("{:x}", row_idx + 1));
+            /* Keep track of colors and attributes.
+             * - Whenever the foreground color changes, emit a text element with the accumulated
+             * text in the specific foreground color.
+             * - Whenever the backgrund color changes, emit a rectangle element filled with the
+             * specific background color.
+             */
             let mut cur_fg = Color::Default;
             let mut cur_bg = Color::Default;
             let mut cur_attrs = Attr::DEFAULT;
@@ -78,30 +92,43 @@ impl Component for SVGScreenshotFilter {
             let mut prev_x_bg = 0;
             for (x, c) in row.enumerate() {
                 if cur_bg != grid[c].bg() || cur_fg != grid[c].fg() || cur_attrs != grid[c].attrs()
+                //|| (grid[c].ch() == ' ' && !is_start)
                 {
                     if cur_bg != Color::Default {
                         let mut rect = Rectangle::new()
                             .set("x", prev_x_bg * 8)
                             .set("y", 17 * row_idx)
                             .set("width", (x - prev_x_bg) * 8 + 1)
-                            .set("bgname", format!("{:?}", cur_bg))
+                            //.set("bgname", format!("{:?}", cur_bg))
                             .set("height", 18);
                         match cur_bg {
                             Color::Rgb(r, g, b) => {
-                                rect = rect
-                                    .set("fill", format!("#{:02x}{:02x}{:02x}", r, g, b).as_str());
+                                let class = if classes.contains_key(&(r, g, b)) {
+                                    classes[&(r, g, b)]
+                                } else {
+                                    let classes_size = classes.len();
+                                    classes.insert((r, g, b), classes_size);
+                                    classes_size
+                                };
+                                rect = rect.set("class", format!("f{:x}", class).as_str());
                             }
                             Color::Default => {
                                 unreachable!();
                             }
                             c if c.as_byte() < 16 => {
-                                rect = rect.set("class", format!("color{}", c.as_byte()).as_str());
+                                rect = rect.set("class", format!("c{}", c.as_byte()).as_str());
                             }
                             c => {
                                 let c = c.as_byte();
                                 let (r, g, b) = XTERM_COLORS[c as usize];
-                                rect = rect
-                                    .set("fill", format!("#{:02x}{:02x}{:02x}", r, g, b).as_str());
+                                let class = if classes.contains_key(&(r, g, b)) {
+                                    classes[&(r, g, b)]
+                                } else {
+                                    let classes_size = classes.len();
+                                    classes.insert((r, g, b), classes_size);
+                                    classes_size
+                                };
+                                rect = rect.set("class", format!("f{:x}", class).as_str());
                             }
                         }
                         rows_group = rows_group.add(rect);
@@ -109,12 +136,22 @@ impl Component for SVGScreenshotFilter {
                     prev_x_bg = x;
                     cur_bg = grid[c].bg();
                     if !text.is_empty() {
-                        let text_length = text.split_graphemes().len();
+                        let text_length = text.grapheme_width();
+                        for c in text.chars() {
+                            match c {
+                                '"' => escaped_text.push_str("&quot;"),
+                                '&' => escaped_text.push_str("&amp;"),
+                                '\'' => escaped_text.push_str("&apos;"),
+                                '<' => escaped_text.push_str("&lt;"),
+                                '>' => escaped_text.push_str("&gt;"),
+                                c => escaped_text.push(c),
+                            }
+                        }
                         let mut text_el = Text::new()
-                            .add(TextNode::new(&text))
+                            .add(TextNode::new(&escaped_text))
                             .set("x", prev_x_fg * 8)
-                            .set("textLength", text_length * 8)
-                            .set("fgname", format!("{:?}", cur_fg));
+                            .set("textLength", text_length * 8);
+                        /*.set("fgname", format!("{:?}", cur_fg));*/
                         if cur_attrs.intersects(Attr::BOLD) {
                             text_el = text_el.set("font-weight", "bold");
                         }
@@ -132,39 +169,47 @@ impl Component for SVGScreenshotFilter {
                         }
                         match cur_fg {
                             Color::Default if cur_attrs.intersects(Attr::REVERSE) => {
-                                text_el = text_el.set("class", "background");
+                                text_el = text_el.set("class", "b");
                             }
                             Color::Default => {
-                                text_el = text_el.set("class", "foreground");
+                                text_el = text_el.set("class", "f");
                             }
                             Color::Rgb(r, g, b) => {
-                                text_el = text_el
-                                    .set("fill", format!("#{:02x}{:02x}{:02x}", r, g, b).as_str());
+                                let class = if classes.contains_key(&(r, g, b)) {
+                                    classes[&(r, g, b)]
+                                } else {
+                                    let classes_size = classes.len();
+                                    classes.insert((r, g, b), classes_size);
+                                    classes_size
+                                };
+                                text_el = text_el.set("class", format!("f{:x}", class).as_str());
                             }
                             c if c.as_byte() < 16 => {
                                 text_el =
-                                    text_el.set("class", format!("color{}", c.as_byte()).as_str());
+                                    text_el.set("class", format!("c{}", c.as_byte()).as_str());
                             }
                             c => {
                                 let c = c.as_byte();
                                 let (r, g, b) = XTERM_COLORS[c as usize];
-                                text_el = text_el
-                                    .set("fill", format!("#{:02x}{:02x}{:02x}", r, g, b).as_str());
+                                let class = if classes.contains_key(&(r, g, b)) {
+                                    classes[&(r, g, b)]
+                                } else {
+                                    let classes_size = classes.len();
+                                    classes.insert((r, g, b), classes_size);
+                                    classes_size
+                                };
+                                text_el = text_el.set("class", format!("f{:x}", class).as_str());
                             }
                         };
                         row_group = row_group.add(text_el);
                         text.clear();
+                        escaped_text.clear();
                     }
                     prev_x_fg = x;
                     cur_fg = grid[c].fg();
                     cur_attrs = grid[c].attrs();
                 }
                 match grid[c].ch() {
-                    '"' => text.push_str("&quot;"),
-                    '&' => text.push_str("&amp;"),
-                    '\'' => text.push_str("&apos;"),
-                    '<' => text.push_str("&lt;"),
-                    '>' => text.push_str("&gt;"),
                     ' ' if is_start => {
                         prev_x_fg = x + 1;
                     }
@@ -174,38 +219,63 @@ impl Component for SVGScreenshotFilter {
                     is_start = false;
                 }
             }
+            /* Append last elements of the row if any */
             if cur_bg != Color::Default {
                 let mut rect = Rectangle::new()
                     .set("x", prev_x_bg * 8)
                     .set("y", 17 * row_idx)
                     .set("width", (width - prev_x_bg) * 8 + 1)
-                    .set("bgname", format!("{:?}", cur_bg))
+                    //.set("bgname", format!("{:?}", cur_bg))
                     .set("height", 18);
                 match cur_bg {
                     Color::Rgb(r, g, b) => {
-                        rect = rect.set("fill", format!("#{:02x}{:02x}{:02x}", r, g, b).as_str());
+                        let class = if classes.contains_key(&(r, g, b)) {
+                            classes[&(r, g, b)]
+                        } else {
+                            let classes_size = classes.len();
+                            classes.insert((r, g, b), classes_size);
+                            classes_size
+                        };
+                        rect = rect.set("class", format!("f{:x}", class).as_str());
                     }
                     Color::Default => {
                         unreachable!();
                     }
                     c if c.as_byte() < 16 => {
-                        rect = rect.set("class", format!("color{}", c.as_byte()).as_str());
+                        rect = rect.set("class", format!("c{}", c.as_byte()).as_str());
                     }
                     c => {
                         let c = c.as_byte();
                         let (r, g, b) = XTERM_COLORS[c as usize];
-                        rect = rect.set("fill", format!("#{:02x}{:02x}{:02x}", r, g, b).as_str());
+                        let class = if classes.contains_key(&(r, g, b)) {
+                            classes[&(r, g, b)]
+                        } else {
+                            let classes_size = classes.len();
+                            classes.insert((r, g, b), classes_size);
+                            classes_size
+                        };
+                        rect = rect.set("class", format!("f{:x}", class).as_str());
                     }
                 }
                 rows_group = rows_group.add(rect);
             }
             if !text.is_empty() {
-                let text_length = text.split_graphemes().len();
+                let text_length = text.grapheme_width();
+                for c in text.chars() {
+                    match c {
+                        '"' => escaped_text.push_str("&quot;"),
+                        '&' => escaped_text.push_str("&amp;"),
+                        '\'' => escaped_text.push_str("&apos;"),
+                        '<' => escaped_text.push_str("&lt;"),
+                        '>' => escaped_text.push_str("&gt;"),
+                        c => escaped_text.push(c),
+                    }
+                }
                 let mut text_el = Text::new()
-                    .add(TextNode::new(&text))
+                    .add(TextNode::new(&escaped_text))
                     .set("x", prev_x_fg * 8)
-                    .set("textLength", text_length * 8)
-                    .set("fgname", format!("{:?}", cur_fg));
+                    .set("textLength", text_length * 8);
+                /*.set("fgname", format!("{:?}", cur_fg));*/
                 if cur_attrs.intersects(Attr::BOLD) {
                     text_el = text_el.set("font-weight", "bold");
                 }
@@ -223,56 +293,68 @@ impl Component for SVGScreenshotFilter {
                 }
                 match cur_fg {
                     Color::Default if cur_attrs.intersects(Attr::REVERSE) => {
-                        text_el = text_el.set("class", "background");
+                        text_el = text_el.set("class", "b");
                     }
                     Color::Default => {
-                        text_el = text_el.set("class", "foreground");
+                        text_el = text_el.set("class", "f");
                     }
                     Color::Rgb(r, g, b) => {
-                        text_el =
-                            text_el.set("fill", format!("#{:02x}{:02x}{:02x}", r, g, b).as_str());
+                        let class = if classes.contains_key(&(r, g, b)) {
+                            classes[&(r, g, b)]
+                        } else {
+                            let classes_size = classes.len();
+                            classes.insert((r, g, b), classes_size);
+                            classes_size
+                        };
+                        text_el = text_el.set("class", format!("f{:x}", class).as_str());
                     }
                     c if c.as_byte() < 16 => {
-                        text_el = text_el.set("class", format!("color{}", c.as_byte()).as_str());
+                        text_el = text_el.set("class", format!("c{}", c.as_byte()).as_str());
                     }
                     c => {
                         let c = c.as_byte();
                         let (r, g, b) = XTERM_COLORS[c as usize];
-                        text_el =
-                            text_el.set("fill", format!("#{:02x}{:02x}{:02x}", r, g, b).as_str());
+                        let class = if classes.contains_key(&(r, g, b)) {
+                            classes[&(r, g, b)]
+                        } else {
+                            let classes_size = classes.len();
+                            classes.insert((r, g, b), classes_size);
+                            classes_size
+                        };
+                        text_el = text_el.set("class", format!("f{:x}", class).as_str());
                     }
                 }
                 row_group = row_group.add(text_el);
                 text.clear();
+                escaped_text.clear();
             }
             definitions = definitions.add(row_group);
             rows_group = rows_group.add(
                 Use::new()
-                    .set("xlink:href", format!("#g{}", row_idx + 1))
+                    .set("xlink:href", format!("#{:x}", row_idx + 1))
                     .set("y", 17 * row_idx),
             );
+        }
+        let mut style_string = CSS_STYLE.to_string();
+        for ((r, g, b), name) in classes {
+            style_string
+                .extend(format!(".f{:x}{{fill:#{:02x}{:02x}{:02x};}}", name, r, g, b).chars());
         }
         let document = Document::new()
             .set("viewBox", (0, 0, width * 8, height * 17 + 2))
             .set("width", width * 8)
             .set("height", height * 17 + 2)
-            .add(
-                Definitions::new().add(
-                    Style::new(CSS_STYLE)
-                        .set("id", "generated-style")
-                        .set("type", "text/css"),
-                ),
-            )
+            .add(Definitions::new().add(Style::new(&style_string).set("type", "text/css")))
             .add(
                 Document::new()
-                    .set("id", "terminal")
+                    .set("id", "t")
                     .set("preserveAspectRatio", "xMidYMin slice")
                     .set("viewBox", (0, 0, width * 8, height * 17))
                     .set("width", width * 8)
                     .set("height", height * 17)
                     .add(
                         Rectangle::new()
-                            .set("class", "background")
+                            .set("class", "b")
                             .set("height", "100%")
                             .set("width", "100%")
                             .set("x", 0)
@@ -355,35 +437,7 @@ impl Component for SVGScreenshotFilter {
     fn set_id(&mut self, _id: ComponentId) {}
 }
 
-const CSS_STYLE: &'static str = r#"#terminal {
-    font-family: 'DejaVu Sans Mono', monospace;
-    font-style: normal;
-    font-size: 14px;
-}
-
-text {
-    dominant-baseline: text-before-edge;
-    white-space: pre;
-}
-/* The colors defined below are the default 16 colors used for rendering text of the terminal. Adjust them as needed.  xterm colors based on https://en.wikipedia.org/wiki/ANSI_escape_code#Colors */
-.foreground {fill: #e5e5e5;}
-.background {fill: #000000;}
-.color0 {fill: #000000;}
-.color1 {fill: #cd0000;}
-.color2 {fill: #00cd00;}
-.color3 {fill: #cdcd00;}
-.color4 {fill: #0000ee;}
-.color5 {fill: #cd00cd;}
-.color6 {fill: #00cdcd;}
-.color7 {fill: #e5e5e5;}
-.color8 {fill: #7f7f7f;}
-.color9 {fill: #ff0000;}
-.color10 {fill: #00ff00;}
-.color11 {fill: #ffff00;}
-.color12 {fill: #5c5cff;}
-.color13 {fill: #ff00ff;}
-.color14 {fill: #00ffff;}
-.color15 {fill: #ffffff;}"#;
+const CSS_STYLE: &'static str = r#"#t{font-family:'DejaVu Sans Mono',monospace;font-style:normal;font-size:14px;} text {dominant-baseline: text-before-edge; white-space: pre;} .f{fill:#e5e5e5;} .b{fill:#000;} .c0 {fill:#000;} .c1 {fill:#cd0000;} .c2 {fill:#00cd00;} .c3 {fill:#cdcd00;} .c4 {fill:#00e;} .c5 {fill:#cd00cd;} .c6 {fill:#00cdcd;} .c7 {fill:#e5e5e5;} .c8 {fill:#7f7f7f;} .c9 {fill:#f00;} .c10 {fill:#0f0;} .c11 {fill:#ff0;} .c12 {fill:#5c5cff;} .c13 {fill:#f0f;} .c14 {fill:#0ff;} .c15 {fill:#fff;}"#;
 
 const XTERM_COLORS: &'static [(u8, u8, u8)] = &[
     /*0*/ (0, 0, 0),
