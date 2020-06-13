@@ -117,7 +117,7 @@ macro_rules! override_def {
         $(#[$outer])*
         pub struct $override_name {
             $(
-                $(#[$fouter])*
+                #[serde(default = "crate::conf::default_vals::none")]
                 pub $fname : Option<$ft>
             ),*
         }
