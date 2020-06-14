@@ -124,7 +124,9 @@ impl TokenStream {
                     }
                     Seq(_s) => {}
                     RestOfStringValue => {}
-                    IndexValue
+                    AttachmentIndexValue
+                    | MailboxIndexValue
+                    | IndexValue
                     | Filepath
                     | AccountName
                     | MailboxPath
@@ -169,7 +171,9 @@ impl TokenStream {
                     tokens.push((*s, *t.inner()));
                     return tokens;
                 }
-                IndexValue
+                AttachmentIndexValue
+                | MailboxIndexValue
+                | IndexValue
                 | Filepath
                 | AccountName
                 | MailboxPath
@@ -179,8 +183,8 @@ impl TokenStream {
                     while ptr + 1 < s.len() && !s.as_bytes()[ptr].is_ascii_whitespace() {
                         ptr += 1;
                     }
-                    tokens.push((&s[..ptr], *t.inner()));
-                    *s = &s[ptr..];
+                    tokens.push((&s[..ptr + 1], *t.inner()));
+                    *s = &s[ptr + 1..];
                 }
             }
         }
@@ -220,6 +224,8 @@ pub enum Token {
     QuotedStringValue,
     RestOfStringValue,
     AlphanumericStringValue,
+    AttachmentIndexValue,
+    MailboxIndexValue,
     IndexValue,
 }
 
@@ -305,7 +311,7 @@ define_commands!([
                  },
                  { tags: ["go"],
                    desc: "go [n], switch to nth mailbox in this account",
-                   tokens: &[One(Literal("goto")), One(IndexValue)],
+                   tokens: &[One(Literal("goto")), One(MailboxIndexValue)],
                    parser: (
                        fn goto(input: &[u8]) -> IResult<&[u8], Action> {
                            let (input, _) = tag("go")(input)?;
@@ -494,6 +500,7 @@ define_commands!([
                   parser:(
                       fn create_mailbox(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("create-mailbox")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input)?;
@@ -583,7 +590,7 @@ define_commands!([
                 },
                 { tags: ["save-attachment "],
                   desc: "save-attachment INDEX PATH",
-                  tokens: &[One(Literal("save-attachment")), One(IndexValue), One(Filepath)],
+                  tokens: &[One(Literal("save-attachment")), One(AttachmentIndexValue), One(Filepath)],
                   parser:(
                       fn save_attachment(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("save-attachment")(input.trim())?;
@@ -749,9 +756,21 @@ fn test_parser() {
 
 /// Get command suggestions for input
 pub fn command_completion_suggestions(input: &str) -> Vec<String> {
+    use crate::melib::ShellExpandTrait;
     let mut sugg = Default::default();
     for (_tags, _desc, tokens) in COMMAND_COMPLETION.iter() {
         let _m = tokens.matches(&mut &(*input), &mut sugg);
+        if _m.is_empty() {
+            continue;
+        }
+        if let Some((s, Filepath)) = _m.last() {
+            let p = std::path::Path::new(s);
+            sugg.extend(
+                p.complete(true)
+                    .into_iter()
+                    .map(|m| m.into()),
+            );
+        }
     }
     sugg.into_iter()
         .map(|s| {

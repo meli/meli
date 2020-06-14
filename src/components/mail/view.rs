@@ -1233,7 +1233,69 @@ impl Component for MailView {
                 use std::io::Write;
                 let account = &mut context.accounts[self.coordinates.0];
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-                let op = account.operation(envelope.hash());
+                let mut op = account.operation(envelope.hash());
+
+                if a_i == 0 {
+                    let mut path = std::path::Path::new(path).to_path_buf();
+                    // Save entire message as eml
+                    if path.is_dir() {
+                        path.push(format!("{}.eml", envelope.message_id_display()));
+                    }
+                    let bytes = match op.as_bytes() {
+                        Ok(b) => b,
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Failed to open e-mail".to_string()),
+                                err.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            log(
+                                format!(
+                                    "Failed to open envelope {}: {}",
+                                    envelope.message_id_display(),
+                                    err.to_string()
+                                ),
+                                ERROR,
+                            );
+                            return true;
+                        }
+                    };
+                    let mut f = match std::fs::File::create(&path) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some(format!("Failed to create file at {}", path.display())),
+                                err.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            log(
+                                format!(
+                                    "Failed to create file at {}: {}",
+                                    path.display(),
+                                    err.to_string()
+                                ),
+                                ERROR,
+                            );
+                            return true;
+                        }
+                        Ok(f) => f,
+                    };
+                    use std::os::unix::fs::PermissionsExt;
+                    let metadata = f.metadata().unwrap();
+                    let mut permissions = metadata.permissions();
+
+                    permissions.set_mode(0o600); // Read/write for owner only.
+                    f.set_permissions(permissions).unwrap();
+
+                    f.write_all(bytes).unwrap();
+                    f.flush().unwrap();
+                    context.replies.push_back(UIEvent::Notification(
+                        None,
+                        format!("Saved at {}", &path.display()),
+                        Some(NotificationType::INFO),
+                    ));
+
+                    return true;
+                }
 
                 let attachments = match envelope.body(op) {
                     Ok(body) => body.attachments(),

@@ -121,6 +121,13 @@ See
 for the location of the mailcap files and
 .Xr mailcap 5
 for their syntax.
+You can save individual attachments with the
+.Cm save-attachment Ar INDEX Ar path-to-file
+where
+.Ar INDEX
+is the attachment's index in the listing.
+If the zeroth index is provided, the entire message is saved.
+If the path provided is a directory, the message is saved as an eml file with its filename set to the messages message-id.
 .Sh SEARCH
 Each e-mail storage backend has its default search method.
 .Em IMAP
