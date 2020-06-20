@@ -29,8 +29,93 @@ use nom::{
     multi::{many0, many1, separated_list, separated_nonempty_list},
     number::complete::le_u8,
     sequence::{delimited, preceded, separated_pair, terminated},
-    IResult,
 };
+use std::borrow::Cow;
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct ParsingError<I> {
+    input: I,
+    error: Cow<'static, str>,
+}
+
+pub type IResult<I, O, E = ParsingError<I>> = std::result::Result<(I, O), nom::Err<E>>;
+
+impl<'i> ParsingError<&'i str> {
+    pub fn as_bytes(self) -> ParsingError<&'i [u8]> {
+        ParsingError {
+            input: self.input.as_bytes(),
+            error: self.error,
+        }
+    }
+}
+
+impl<'i> From<(&'i [u8], &'static str)> for ParsingError<&'i [u8]> {
+    fn from((input, error): (&'i [u8], &'static str)) -> Self {
+        Self {
+            input,
+            error: error.into(),
+        }
+    }
+}
+
+impl<I> nom::error::ParseError<I> for ParsingError<I> {
+    fn from_error_kind(input: I, kind: ErrorKind) -> Self {
+        Self {
+            input,
+            error: kind.description().to_string().into(),
+        }
+    }
+
+    fn append(input: I, kind: ErrorKind, other: Self) -> Self {
+        Self {
+            input,
+            error: format!("{}, {}", kind.description(), other.error).into(),
+        }
+    }
+}
+
+impl<'i> From<ParsingError<&'i [u8]>> for MeliError {
+    fn from(val: ParsingError<&'i [u8]>) -> MeliError {
+        MeliError::new("Parsing error").set_summary(format!(
+            r#"In input: "{}...",
+Error: {}"#,
+            String::from_utf8_lossy(val.input)
+                .chars()
+                .take(30)
+                .collect::<String>(),
+            val.error
+        ))
+    }
+}
+
+impl<'i> From<ParsingError<&'i str>> for MeliError {
+    fn from(val: ParsingError<&'i str>) -> MeliError {
+        MeliError::new("Parsing error").set_summary(format!(
+            r#"In input: "{}...",
+Error: {}"#,
+            val.input.chars().take(30).collect::<String>(),
+            val.error
+        ))
+    }
+}
+
+impl<'i> From<nom::Err<ParsingError<&'i [u8]>>> for MeliError {
+    fn from(val: nom::Err<ParsingError<&'i [u8]>>) -> MeliError {
+        match val {
+            nom::Err::Incomplete(_) => MeliError::new("Parsing Error: Incomplete"),
+            nom::Err::Error(err) | nom::Err::Failure(err) => err.into(),
+        }
+    }
+}
+
+impl<'i> From<nom::Err<ParsingError<&'i str>>> for MeliError {
+    fn from(val: nom::Err<ParsingError<&'i str>>) -> MeliError {
+        match val {
+            nom::Err::Incomplete(_) => MeliError::new("Parsing Error: Incomplete"),
+            nom::Err::Error(err) | nom::Err::Failure(err) => err.into(),
+        }
+    }
+}
 
 macro_rules! is_ctl_or_space {
     ($var:ident) => {
@@ -183,7 +268,9 @@ pub mod generic {
     use crate::email::mailto::Mailto;
     pub fn mailto(mut input: &[u8]) -> IResult<&[u8], Mailto> {
         if !input.starts_with(b"mailto:") {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error(
+                (input, "mailto(): input doesn't start with `mailto:`").into(),
+            ));
         }
 
         input = &input[b"mailto:".len()..];
@@ -199,7 +286,9 @@ pub mod generic {
                 &input[end + 1..]
             };
         } else {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error(
+                (input, "mailto(): address not found in input").into(),
+            ));
         }
 
         let mut subject = None;
@@ -212,7 +301,9 @@ pub mod generic {
                 input = &input[tag_pos + 1..];
                 ret
             } else {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error(
+                    (input, "mailto(): extra characters found in input").into(),
+                ));
             };
 
             let value_end = input.iter().position(|e| *e == b'&').unwrap_or(input.len());
@@ -235,7 +326,9 @@ pub mod generic {
                     body = Some(value.replace("%20", " ").replace("%0A", "\n"));
                 }
                 _ => {
-                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                    return Err(nom::Err::Error(
+                        (input, "mailto(): unknown tag in input").into(),
+                    ));
                 }
             }
             if input[value_end..].is_empty() {
@@ -291,9 +384,17 @@ pub mod headers {
 
     pub fn header_without_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
         if input.is_empty() {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error(
+                (input, "header_without_val(): input is empty").into(),
+            ));
         } else if input.starts_with(b"\n") || input.starts_with(b"\r\n") {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error(
+                (
+                    input,
+                    "header_without_val(): input starts with folding whitespace",
+                )
+                    .into(),
+            ));
         }
         let mut ptr = 0;
         let mut name: &[u8] = &input[0..0];
@@ -310,52 +411,97 @@ pub mod headers {
                 ptr = i;
                 break;
             } else if is_ctl_or_space!(*x) {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((
+                    input,
+                    r#"header_without_val(): field-name should contain "any CHAR, excluding CTLs, SPACE, and ":""#,
+                ).into()));
             }
         }
         if name.is_empty() || input.len() <= ptr {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error(
+                (input, "header_without_val(): not enough input").into(),
+            ));
         }
         if input[ptr] == b':' {
             ptr += 1;
             has_colon = true;
             if ptr >= input.len() {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error(
+                    (input, "header_without_val(): EOF after colon").into(),
+                ));
             }
         }
 
         if !has_colon {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error(
+                (input, "header_without_val(): no colon found").into(),
+            ));
         }
 
         while input[ptr] == b' ' {
             ptr += 1;
             if ptr >= input.len() {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error(
+                    (
+                        input,
+                        "header_without_val(): expected start of next field, found EOF",
+                    )
+                        .into(),
+                ));
             }
         }
         if input[ptr..].starts_with(b"\n") {
             ptr += 1;
             if ptr >= input.len() {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error(
+                    (
+                        input,
+                        "header_without_val(): expected folding whitespace, found EOF",
+                    )
+                        .into(),
+                ));
             }
             if input.len() > ptr && input[ptr] != b' ' && input[ptr] != b'\t' {
                 Ok((&input[ptr..], (name, b"")))
             } else {
-                Err(nom::Err::Error((input, ErrorKind::Tag)))
+                Err(nom::Err::Error(
+                    (
+                        input,
+                        "header_without_val(): expected folding whitespace, found EOF",
+                    )
+                        .into(),
+                ))
             }
         } else if input[ptr..].starts_with(b"\r\n") {
             ptr += 2;
             if ptr > input.len() {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error(
+                    (
+                        input,
+                        "header_without_val(): expected folding whitespace, found EOF",
+                    )
+                        .into(),
+                ));
             }
             if input.len() > ptr && input[ptr] != b' ' && input[ptr] != b'\t' {
                 Ok((&input[ptr..], (name, b"")))
             } else {
-                Err(nom::Err::Error((input, ErrorKind::Tag)))
+                Err(nom::Err::Error(
+                    (
+                        &input[ptr..],
+                        "header_without_val(): expected folding whitespace, found EOF",
+                    )
+                        .into(),
+                ))
             }
         } else {
-            Err(nom::Err::Error((input, ErrorKind::Tag)))
+            Err(nom::Err::Error(
+                (
+                    &input[ptr..],
+                    "header_without_val(): expected folding whitespace (newline)",
+                )
+                    .into(),
+            ))
         }
     }
 
@@ -382,15 +528,25 @@ pub mod headers {
                 return Ok((&input[(i + 2)..], &input[0..i]));
             }
         }
-        Err(nom::Err::Error((input, ErrorKind::Tag)))
+        Err(nom::Err::Error(
+            (
+                input,
+                "header_value(): expected new line after header value",
+            )
+                .into(),
+        ))
     }
 
     /* Parse a single header as a tuple */
     pub fn header_with_val(input: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
         if input.is_empty() {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error(
+                (input, "header_with_val(): empty input").into(),
+            ));
         } else if input.starts_with(b"\n") || input.starts_with(b"\r\n") {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error(
+                (input, "header_with_val(): field name starts with new line").into(),
+            ));
         }
         let mut ptr = 0;
         let mut name: &[u8] = &input[0..0];
@@ -401,34 +557,34 @@ pub mod headers {
                 ptr = i + 1;
                 break;
             } else if is_ctl_or_space!(*x) {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((input, "FIXME").into()));
             }
         }
         if name.is_empty() {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
         if ptr >= input.len() {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
 
         if input[ptr] == b'\n' {
             ptr += 1;
             if ptr >= input.len() {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((input, "FIXME").into()));
             }
         } else if input[ptr..].starts_with(b"\r\n") {
             ptr += 2;
             if ptr > input.len() {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((input, "FIXME").into()));
             }
         }
         if ptr >= input.len() {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
         while input[ptr] == b' ' || input[ptr] == b'\t' {
             ptr += 1;
             if ptr >= input.len() {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((input, "FIXME").into()));
             }
         }
         header_value(&input[ptr..]).map(|(rest, value)| (rest, (name, value)))
@@ -436,7 +592,7 @@ pub mod headers {
 
     pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
         if input.is_empty() {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
         for i in 0..input.len() {
             if input[i..].starts_with(b"\n\n") {
@@ -445,7 +601,7 @@ pub mod headers {
                 return Ok((&input[(i + 2)..], &input[0..=i]));
             }
         }
-        Err(nom::Err::Error((input, ErrorKind::Tag)))
+        Err(nom::Err::Error((input, "FIXME").into()))
     }
 }
 
@@ -471,11 +627,11 @@ pub mod attachments {
             let b_start = if let Some(v) = input.find(boundary) {
                 v
             } else {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((input, "FIXME").into()));
             };
 
             if b_start < 2 {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((input, "FIXME").into()));
             }
             offset += b_start - 2;
             input = &input[b_start - 2..];
@@ -497,11 +653,11 @@ pub mod attachments {
 
         loop {
             if input.len() < boundary.len() + 4 {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((input, "FIXME").into()));
             }
             if let Some(end) = input.find(boundary) {
                 if &input[end - 2..end] != b"--" {
-                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                    return Err(nom::Err::Error((input, "FIXME").into()));
                 }
                 ret.push(StrBuilder {
                     offset,
@@ -538,11 +694,11 @@ pub mod attachments {
                 let b_start = if let Some(v) = input.find(boundary) {
                     v
                 } else {
-                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                    return Err(nom::Err::Error((input, "FIXME").into()));
                 };
 
                 if b_start < 2 {
-                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                    return Err(nom::Err::Error((input, "FIXME").into()));
                 }
                 input = &input[b_start - 2..];
                 if &input[0..2] == b"--" {
@@ -559,11 +715,11 @@ pub mod attachments {
             }
             loop {
                 if input.len() < boundary.len() + 4 {
-                    return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                    return Err(nom::Err::Error((input, "FIXME").into()));
                 }
                 if let Some(end) = input.find(boundary) {
                     if &input[end - 2..end] != b"--" {
-                        return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                        return Err(nom::Err::Error((input, "FIXME").into()));
                     }
                     ret.push(&input[0..end - 2]);
                     input = &input[end + boundary.len()..];
@@ -645,7 +801,7 @@ pub mod encodings {
     use encoding::{DecoderTrap, Encoding};
     pub fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
         if input.len() < 3 {
-            Err(nom::Err::Error((input, ErrorKind::Tag)))
+            Err(nom::Err::Error((input, "FIXME").into()))
         } else if input[0] == b'=' && is_hex_digit(input[1]) && is_hex_digit(input[2]) {
             let a = if input[1] < b':' {
                 input[1] - 48
@@ -665,7 +821,7 @@ pub mod encodings {
         } else if input.starts_with(b"\r\n") {
             Ok((&input[2..], b'\n'))
         } else {
-            Err(nom::Err::Error((input, ErrorKind::Tag)))
+            Err(nom::Err::Error((input, "FIXME").into()))
         }
     }
 
@@ -677,9 +833,9 @@ pub mod encodings {
             return Ok((&[], Vec::with_capacity(0)));
         }
         if input.len() < 5 {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         } else if input[0] != b'=' || input[1] != b'?' {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
         /* find end of Charset tag:
          * =?charset?encoding?encoded text?=
@@ -693,12 +849,12 @@ pub mod encodings {
             }
         }
         if tag_end_idx.is_none() {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
         let tag_end_idx = tag_end_idx.unwrap();
 
         if tag_end_idx + 2 >= input.len() || input[2 + tag_end_idx] != b'?' {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
         /* See if input ends with "?=" and get ending index
          * =?charset?encoding?encoded text?=
@@ -712,7 +868,7 @@ pub mod encodings {
             }
         }
         if encoded_end_idx.is_none() {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
         let encoded_end_idx = encoded_end_idx.unwrap();
         let encoded_text = &input[3 + tag_end_idx..encoded_end_idx];
@@ -724,9 +880,9 @@ pub mod encodings {
             },
             b'q' | b'Q' => match quoted_printable_bytes_header(encoded_text) {
                 Ok((b"", s)) => s,
-                _ => return Err(nom::Err::Error((input, ErrorKind::Tag))),
+                _ => return Err(nom::Err::Error((input, "FIXME").into())),
             },
-            _ => return Err(nom::Err::Error((input, ErrorKind::Tag))),
+            _ => return Err(nom::Err::Error((input, "FIXME").into())),
         };
 
         let charset = Charset::from(&input[2..tag_end_idx]);
@@ -736,7 +892,7 @@ pub mod encodings {
         } else {
             match decode_charset(&s, charset) {
                 Ok(v) => Ok((&input[encoded_end_idx + 2..], v.into_bytes())),
-                _ => Err(nom::Err::Error((input, ErrorKind::Tag))),
+                _ => Err(nom::Err::Error((input, "FIXME").into())),
             }
         }
     }
@@ -763,13 +919,13 @@ pub mod encodings {
 
     fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
         if input.len() < 2 {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         } else if input[0] == b'=' && input[1] == b'\n' {
             Ok((&input[2..], &input[0..2])) // `=\n` is an escaped space character.
         } else if input.len() > 3 && input.starts_with(b"=\r\n") {
             Ok((&input[3..], &input[0..3])) // `=\r\n` is an escaped space character.
         } else {
-            Err(nom::Err::Error((input, ErrorKind::Tag)))
+            Err(nom::Err::Error((input, "FIXME").into()))
         }
     }
 
@@ -900,7 +1056,7 @@ pub mod encodings {
                 ptr = ascii_e;
             }
             if ascii_s >= ascii_e {
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((input, "FIXME").into()));
             }
 
             acc.extend(ascii_token(&input[ascii_s..ascii_e])?.1);
@@ -917,7 +1073,7 @@ pub mod address {
     use crate::email::address::*;
     pub fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
         if input.is_empty() || input.len() < 3 {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         } else if !is_whitespace!(input[0]) {
             let mut display_name = StrBuilder {
                 offset: 0,
@@ -934,16 +1090,16 @@ pub mod address {
             if !flag {
                 let (rest, output) = match super::encodings::phrase(input, false) {
                     Ok(v) => v,
-                    _ => return Err(nom::Err::Error((input, ErrorKind::Tag))),
+                    _ => return Err(nom::Err::Error((input, "FIXME").into())),
                 };
                 if output.contains(&b'<') {
                     let (_, address) = match display_addr(&output) {
                         Ok(v) => v,
-                        _ => return Err(nom::Err::Error((input, ErrorKind::Tag))),
+                        _ => return Err(nom::Err::Error((input, "FIXME").into())),
                     };
                     return Ok((rest, address));
                 }
-                return Err(nom::Err::Error((input, ErrorKind::Tag)));
+                return Err(nom::Err::Error((input, "FIXME").into()));
             }
             let mut end = input.len();
             let mut at_flag = false;
@@ -996,16 +1152,16 @@ pub mod address {
                     }),
                 ))
             } else {
-                Err(nom::Err::Error((input, ErrorKind::Tag)))
+                Err(nom::Err::Error((input, "FIXME").into()))
             }
         } else {
-            Err(nom::Err::Error((input, ErrorKind::Tag)))
+            Err(nom::Err::Error((input, "FIXME").into()))
         }
     }
 
     fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
         if input.is_empty() || input.len() < 3 {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         } else if !is_whitespace!(input[0]) {
             let mut end = input[1..].len();
             let mut flag = false;
@@ -1034,10 +1190,10 @@ pub mod address {
                     }),
                 ))
             } else {
-                Err(nom::Err::Error((input, ErrorKind::Tag)))
+                Err(nom::Err::Error((input, "FIXME").into()))
             }
         } else {
-            Err(nom::Err::Error((input, ErrorKind::Tag)))
+            Err(nom::Err::Error((input, "FIXME").into()))
         }
     }
 
@@ -1065,7 +1221,7 @@ pub mod address {
             }
         }
         if !flag {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
 
         let (rest, vec) = mailbox_list(&input[dlength..])?;
@@ -1135,16 +1291,16 @@ pub mod address {
     fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
         let input_length = input.len();
         if input.is_empty() {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         } else if input_length == 2 || input[0] != b'<' {
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         } else {
             for (i, &x) in input.iter().take(input_length).enumerate().skip(1) {
                 if x == b'>' {
                     return Ok((&input[i + 1..], &input[0..=i]));
                 }
             }
-            return Err(nom::Err::Error((input, ErrorKind::Tag)));
+            return Err(nom::Err::Error((input, "FIXME").into()));
         }
     }
 

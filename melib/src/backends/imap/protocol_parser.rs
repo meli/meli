@@ -20,7 +20,7 @@
  */
 
 use super::*;
-use crate::email::parser::BytesExt;
+use crate::email::parser::{BytesExt, IResult};
 use crate::get_path_hash;
 use nom::{
     branch::{alt, permutation},
@@ -30,7 +30,6 @@ use nom::{
     combinator::{map, map_res, opt, rest},
     multi::{length_data, many0, many1, separated_list, separated_nonempty_list},
     sequence::{delimited, preceded},
-    IResult,
 };
 use std::str::FromStr;
 
@@ -1121,9 +1120,11 @@ pub fn byte_flags(input: &[u8]) -> IResult<&[u8], (Flag, Vec<String>)> {
     let i = unsafe { std::str::from_utf8_unchecked(input) };
     match flags(i) {
         Ok((rest, ret)) => Ok((rest.as_bytes(), ret)),
-        Err(nom::Err::Error((_, err))) => Err(nom::Err::Error((input, err))),
-        Err(nom::Err::Failure((_, err))) => Err(nom::Err::Error((input, err))),
-        Err(nom::Err::Incomplete(_)) => Err(nom::Err::Error((input, nom::error::ErrorKind::Tag))),
+        Err(nom::Err::Error(err)) => Err(nom::Err::Error(err.as_bytes())),
+        Err(nom::Err::Failure(err)) => Err(nom::Err::Error(err.as_bytes())),
+        Err(nom::Err::Incomplete(_)) => {
+            Err(nom::Err::Error((input, "byte_flags(): incomplete").into()))
+        }
     }
 }
 
@@ -1386,7 +1387,7 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         };
     }
     if input.is_empty() || input[0] != b'"' {
-        return Err(nom::Err::Error((input, nom::error::ErrorKind::Tag)));
+        return Err(nom::Err::Error((input, "quoted(): EOF").into()));
     }
 
     let mut i = 1;
@@ -1400,7 +1401,9 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         i += 1;
     }
 
-    return Err(nom::Err::Error((input, nom::error::ErrorKind::Tag)));
+    return Err(nom::Err::Error(
+        (input, "quoted(): not a quoted phrase").into(),
+    ));
 }
 
 pub fn quoted_or_nil(input: &[u8]) -> IResult<&[u8], Option<Vec<u8>>> {
