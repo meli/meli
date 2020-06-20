@@ -405,9 +405,13 @@ pub mod headers {
                 name = &input[0..i];
                 ptr = i + 2;
                 break;
-            } else if *x == b':' || *x == b'\n' {
+            } else if *x == b':' {
                 name = &input[0..i];
                 has_colon = true;
+                ptr = i;
+                break;
+            } else if *x == b'\n' {
+                name = &input[0..i];
                 ptr = i;
                 break;
             } else if is_ctl_or_space!(*x) {
