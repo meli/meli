@@ -38,7 +38,11 @@ use crate::get_path_hash;
 use crate::shellexpand::ShellExpandTrait;
 use libc;
 use memmap::{Mmap, Protection};
+use nom::bytes::complete::tag;
+use nom::character::complete::digit1;
+use nom::combinator::map_res;
 use nom::{self, error::ErrorKind, IResult};
+
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use std::collections::hash_map::{DefaultHasher, HashMap};
@@ -48,6 +52,7 @@ use std::io::BufReader;
 use std::io::Read;
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -269,117 +274,382 @@ impl BackendOp for MboxOp {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum MboxReader {
+    MboxO,
+    MboxRd,
+    MboxCl,
+    MboxCl2,
+}
+
+impl Default for MboxReader {
+    fn default() -> Self {
+        Self::MboxCl2
+    }
+}
+
+macro_rules! find_From__line {
+    ($input:expr) => {{
+        //debug!("find_From__line invocation");
+        let input = $input;
+        let mut ptr = 0;
+        let mut found = None;
+        while ptr < input.len() {
+            // Find next From_ candidate line.
+            const TAG: &'static [u8] = b"\n\nFrom ";
+            if let Some(end) = input[ptr..].find(TAG) {
+                // This candidate is a valid From_ if it ends in a new line and the next line is
+                // a header.
+                if let Some(line_end) = input[ptr + end + TAG.len()..].find(b"\n") {
+                    if crate::email::parser::headers::header(
+                        &input[ptr + end + TAG.len() + line_end + 1..],
+                    )
+                    .is_ok()
+                    {
+                        found = Some(ptr + end);
+                        break;
+                    } else {
+                        /* Ignore invalid From_ line. */
+                        ptr += end + TAG.len() + line_end;
+                    }
+                } else {
+                    /* Ignore invalid From_ line. */
+                    ptr += end + TAG.len();
+                }
+            } else {
+                found = Some(input.len());
+                break;
+            }
+        }
+        found
+    }};
+}
+
+impl MboxReader {
+    fn parse<'i>(&self, input: &'i [u8]) -> IResult<&'i [u8], Envelope> {
+        let orig_input = input;
+        let mut input = input;
+        match self {
+            Self::MboxO => {
+                let next_offset: Option<(usize, usize)> = find_From__line!(input)
+                    .and_then(|end| input.find(b"\n").and_then(|start| Some((start + 1, end))));
+
+                if let Some((start, len)) = next_offset {
+                    match Envelope::from_bytes(&input[start..len], None) {
+                        Ok(mut env) => {
+                            let mut flags = Flag::empty();
+                            if env.other_headers().contains_key("Status") {
+                                if env.other_headers()["Status"].contains("F") {
+                                    flags.set(Flag::FLAGGED, true);
+                                }
+                                if env.other_headers()["Status"].contains("A") {
+                                    flags.set(Flag::REPLIED, true);
+                                }
+                                if env.other_headers()["Status"].contains("R") {
+                                    flags.set(Flag::SEEN, true);
+                                }
+                                if env.other_headers()["Status"].contains("D") {
+                                    flags.set(Flag::TRASHED, true);
+                                }
+                            }
+                            if env.other_headers().contains_key("X-Status") {
+                                if env.other_headers()["X-Status"].contains("F") {
+                                    flags.set(Flag::FLAGGED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("A") {
+                                    flags.set(Flag::REPLIED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("R") {
+                                    flags.set(Flag::SEEN, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("D") {
+                                    flags.set(Flag::TRASHED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("T") {
+                                    flags.set(Flag::DRAFT, true);
+                                }
+                            }
+                            env.set_flags(flags);
+                            if len == input.len() {
+                                Ok((&[], env))
+                            } else {
+                                input = &input[len + 2..];
+                                Ok((input, env))
+                            }
+                        }
+                        Err(err) => {
+                            debug!("Could not parse mail {:?}", err);
+                            Err(nom::Err::Error((input, ErrorKind::Tag)))
+                        }
+                    }
+                } else {
+                    let start: Offset = input.find(b"\n").map(|v| v + 1).unwrap_or(0);
+                    match Envelope::from_bytes(&input[start..], None) {
+                        Ok(mut env) => {
+                            let mut flags = Flag::empty();
+                            if env.other_headers().contains_key("Status") {
+                                if env.other_headers()["Status"].contains("F") {
+                                    flags.set(Flag::FLAGGED, true);
+                                }
+                                if env.other_headers()["Status"].contains("A") {
+                                    flags.set(Flag::REPLIED, true);
+                                }
+                                if env.other_headers()["Status"].contains("R") {
+                                    flags.set(Flag::SEEN, true);
+                                }
+                                if env.other_headers()["Status"].contains("D") {
+                                    flags.set(Flag::TRASHED, true);
+                                }
+                            }
+                            if env.other_headers().contains_key("X-Status") {
+                                if env.other_headers()["X-Status"].contains("F") {
+                                    flags.set(Flag::FLAGGED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("A") {
+                                    flags.set(Flag::REPLIED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("R") {
+                                    flags.set(Flag::SEEN, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("D") {
+                                    flags.set(Flag::TRASHED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("T") {
+                                    flags.set(Flag::DRAFT, true);
+                                }
+                            }
+                            env.set_flags(flags);
+                            Ok((&[], env))
+                        }
+                        Err(err) => {
+                            debug!("Could not parse mail at {:?}", err);
+                            Err(nom::Err::Error((input, ErrorKind::Tag)))
+                        }
+                    }
+                }
+            }
+            Self::MboxRd => {
+                let next_offset: Option<(usize, usize)> = find_From__line!(input)
+                    .and_then(|end| input.find(b"\n").and_then(|start| Some((start + 1, end))));
+
+                if let Some((start, len)) = next_offset {
+                    match Envelope::from_bytes(&input[start..len], None) {
+                        Ok(mut env) => {
+                            let mut flags = Flag::empty();
+                            if env.other_headers().contains_key("Status") {
+                                if env.other_headers()["Status"].contains("F") {
+                                    flags.set(Flag::FLAGGED, true);
+                                }
+                                if env.other_headers()["Status"].contains("A") {
+                                    flags.set(Flag::REPLIED, true);
+                                }
+                                if env.other_headers()["Status"].contains("R") {
+                                    flags.set(Flag::SEEN, true);
+                                }
+                                if env.other_headers()["Status"].contains("D") {
+                                    flags.set(Flag::TRASHED, true);
+                                }
+                            }
+                            if env.other_headers().contains_key("X-Status") {
+                                if env.other_headers()["X-Status"].contains("F") {
+                                    flags.set(Flag::FLAGGED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("A") {
+                                    flags.set(Flag::REPLIED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("R") {
+                                    flags.set(Flag::SEEN, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("D") {
+                                    flags.set(Flag::TRASHED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("T") {
+                                    flags.set(Flag::DRAFT, true);
+                                }
+                            }
+                            env.set_flags(flags);
+                            if len == input.len() {
+                                Ok((&[], env))
+                            } else {
+                                input = &input[len + 2..];
+                                Ok((input, env))
+                            }
+                        }
+                        Err(err) => {
+                            debug!("Could not parse mail {:?}", err);
+                            Err(nom::Err::Error((input, ErrorKind::Tag)))
+                        }
+                    }
+                } else {
+                    let start: Offset = input.find(b"\n").map(|v| v + 1).unwrap_or(0);
+                    match Envelope::from_bytes(&input[start..], None) {
+                        Ok(mut env) => {
+                            let mut flags = Flag::empty();
+                            if env.other_headers().contains_key("Status") {
+                                if env.other_headers()["Status"].contains("F") {
+                                    flags.set(Flag::FLAGGED, true);
+                                }
+                                if env.other_headers()["Status"].contains("A") {
+                                    flags.set(Flag::REPLIED, true);
+                                }
+                                if env.other_headers()["Status"].contains("R") {
+                                    flags.set(Flag::SEEN, true);
+                                }
+                                if env.other_headers()["Status"].contains("D") {
+                                    flags.set(Flag::TRASHED, true);
+                                }
+                            }
+                            if env.other_headers().contains_key("X-Status") {
+                                if env.other_headers()["X-Status"].contains("F") {
+                                    flags.set(Flag::FLAGGED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("A") {
+                                    flags.set(Flag::REPLIED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("R") {
+                                    flags.set(Flag::SEEN, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("D") {
+                                    flags.set(Flag::TRASHED, true);
+                                }
+                                if env.other_headers()["X-Status"].contains("T") {
+                                    flags.set(Flag::DRAFT, true);
+                                }
+                            }
+                            env.set_flags(flags);
+                            Ok((&[], env))
+                        }
+                        Err(err) => {
+                            debug!("Could not parse mail {:?}", err);
+                            Err(nom::Err::Error((input, ErrorKind::Tag)))
+                        }
+                    }
+                }
+            }
+            Self::MboxCl | Self::MboxCl2 => {
+                let start: Offset = input.find(b"\n").map(|v| v + 1).unwrap_or(0);
+                input = &input[start..];
+                let headers_end: usize = input.find(b"\n\n").unwrap_or(input.len());
+                let content_length = if let Some(v) = input[..headers_end].find(b"Content-Length: ")
+                {
+                    v
+                } else {
+                    // Is not MboxCl{,2}
+                    return Self::MboxRd.parse(orig_input);
+                };
+                let (_input, _) = if let Ok(s) = tag::<_, &[u8], (&[u8], nom::error::ErrorKind)>(
+                    "Content-Length:",
+                )(&input[content_length..])
+                {
+                    s
+                } else {
+                    return Self::MboxRd.parse(orig_input);
+                };
+                let (_input, bytes) = if let Ok(s) =
+                    map_res::<&[u8], _, _, (&[u8], nom::error::ErrorKind), _, _, _>(
+                        digit1,
+                        |s: &[u8]| String::from_utf8_lossy(s).parse::<usize>(),
+                    )(_input.ltrim())
+                {
+                    s
+                } else {
+                    return Self::MboxRd.parse(orig_input);
+                };
+
+                match Envelope::from_bytes(&input[..headers_end + bytes], None) {
+                    Ok(mut env) => {
+                        let mut flags = Flag::empty();
+                        if env.other_headers().contains_key("Status") {
+                            if env.other_headers()["Status"].contains("F") {
+                                flags.set(Flag::FLAGGED, true);
+                            }
+                            if env.other_headers()["Status"].contains("A") {
+                                flags.set(Flag::REPLIED, true);
+                            }
+                            if env.other_headers()["Status"].contains("R") {
+                                flags.set(Flag::SEEN, true);
+                            }
+                            if env.other_headers()["Status"].contains("D") {
+                                flags.set(Flag::TRASHED, true);
+                            }
+                        }
+                        if env.other_headers().contains_key("X-Status") {
+                            if env.other_headers()["X-Status"].contains("F") {
+                                flags.set(Flag::FLAGGED, true);
+                            }
+                            if env.other_headers()["X-Status"].contains("A") {
+                                flags.set(Flag::REPLIED, true);
+                            }
+                            if env.other_headers()["X-Status"].contains("R") {
+                                flags.set(Flag::SEEN, true);
+                            }
+                            if env.other_headers()["X-Status"].contains("D") {
+                                flags.set(Flag::TRASHED, true);
+                            }
+                            if env.other_headers()["X-Status"].contains("T") {
+                                flags.set(Flag::DRAFT, true);
+                            }
+                        }
+                        env.set_flags(flags);
+                        if headers_end + 2 + bytes >= input.len() {
+                            Ok((&[], env))
+                        } else {
+                            input = &input[headers_end + 3 + bytes..];
+                            Ok((input, env))
+                        }
+                    }
+                    Err(_err) => {
+                        return Self::MboxRd.parse(orig_input);
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn mbox_parse(
     index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
     input: &[u8],
     file_offset: usize,
+    reader: Option<MboxReader>,
 ) -> IResult<&[u8], Vec<Envelope>> {
     if input.is_empty() {
         return Err(nom::Err::Error((input, ErrorKind::Tag)));
     }
-    let mut input = input;
     let mut offset = 0;
     let mut index = index.lock().unwrap();
     let mut envelopes = Vec::with_capacity(32);
-    while !input.is_empty() {
-        let next_offset: Option<(usize, usize)> = input
-            .find(b"\n\nFrom ")
-            .and_then(|end| input.find(b"\n").and_then(|start| Some((start + 1, end))));
 
-        if let Some((start, len)) = next_offset {
-            match Envelope::from_bytes(&input[start..len], None) {
-                Ok(mut env) => {
-                    let mut flags = Flag::empty();
-                    if env.other_headers().contains_key("Status") {
-                        if env.other_headers()["Status"].contains("F") {
-                            flags.set(Flag::FLAGGED, true);
-                        }
-                        if env.other_headers()["Status"].contains("A") {
-                            flags.set(Flag::REPLIED, true);
-                        }
-                        if env.other_headers()["Status"].contains("R") {
-                            flags.set(Flag::SEEN, true);
-                        }
-                        if env.other_headers()["Status"].contains("D") {
-                            flags.set(Flag::TRASHED, true);
-                        }
+    let reader = reader.unwrap_or(MboxReader::MboxCl2);
+    while !input[offset + file_offset..].is_empty() {
+        let (next_input, env) = match reader.parse(&input[offset + file_offset..]) {
+            Ok(v) => v,
+            Err(e) => {
+                // Try to recover from this error by finding a new candidate From_ line
+                if let Some(next_offset) = find_From__line!(&input[offset + file_offset..]) {
+                    offset += next_offset;
+                    if offset != input.len() {
+                        // If we are not at EOF, we will be at this point
+                        //    "\n\nFrom ..."
+                        //     ↑
+                        // So, skip those two newlines.
+                        offset += 2;
                     }
-                    if env.other_headers().contains_key("X-Status") {
-                        if env.other_headers()["X-Status"].contains("F") {
-                            flags.set(Flag::FLAGGED, true);
-                        }
-                        if env.other_headers()["X-Status"].contains("A") {
-                            flags.set(Flag::REPLIED, true);
-                        }
-                        if env.other_headers()["X-Status"].contains("R") {
-                            flags.set(Flag::SEEN, true);
-                        }
-                        if env.other_headers()["X-Status"].contains("D") {
-                            flags.set(Flag::TRASHED, true);
-                        }
-                        if env.other_headers()["X-Status"].contains("T") {
-                            flags.set(Flag::DRAFT, true);
-                        }
-                    }
-                    env.set_flags(flags);
-                    index.insert(env.hash(), (offset + file_offset + start, len - start));
-                    envelopes.push(env);
+                } else {
+                    Err(e)?;
                 }
-                Err(_) => {
-                    debug!("Could not parse mail at byte offset {}", offset);
-                }
+                continue;
             }
-            offset += len + 2;
-            input = &input[len + 2..];
-        } else {
-            let start: Offset = input.find(b"\n").map(|v| v + 1).unwrap_or(0);
-            match Envelope::from_bytes(&input[start..], None) {
-                Ok(mut env) => {
-                    let mut flags = Flag::empty();
-                    if env.other_headers().contains_key("Status") {
-                        if env.other_headers()["Status"].contains("F") {
-                            flags.set(Flag::FLAGGED, true);
-                        }
-                        if env.other_headers()["Status"].contains("A") {
-                            flags.set(Flag::REPLIED, true);
-                        }
-                        if env.other_headers()["Status"].contains("R") {
-                            flags.set(Flag::SEEN, true);
-                        }
-                        if env.other_headers()["Status"].contains("D") {
-                            flags.set(Flag::TRASHED, true);
-                        }
-                    }
-                    if env.other_headers().contains_key("X-Status") {
-                        if env.other_headers()["X-Status"].contains("F") {
-                            flags.set(Flag::FLAGGED, true);
-                        }
-                        if env.other_headers()["X-Status"].contains("A") {
-                            flags.set(Flag::REPLIED, true);
-                        }
-                        if env.other_headers()["X-Status"].contains("R") {
-                            flags.set(Flag::SEEN, true);
-                        }
-                        if env.other_headers()["X-Status"].contains("D") {
-                            flags.set(Flag::TRASHED, true);
-                        }
-                        if env.other_headers()["X-Status"].contains("T") {
-                            flags.set(Flag::DRAFT, true);
-                        }
-                    }
-                    env.set_flags(flags);
-                    index.insert(
-                        env.hash(),
-                        (offset + file_offset + start, input.len() - start),
-                    );
-                    envelopes.push(env);
-                }
-                Err(_) => {
-                    debug!("Could not parse mail at byte offset {}", offset);
-                }
-            }
-            break;
-        }
+        };
+        let start: Offset = input[offset + file_offset..]
+            .find(b"\n")
+            .map(|v| v + 1)
+            .unwrap_or(0);
+        let len = input.len() - next_input.len() - offset - file_offset - start;
+        index.insert(env.hash(), (offset + file_offset + start, len));
+        offset += len + start;
+
+        envelopes.push(env);
     }
     return Ok((&[], envelopes));
 }
@@ -391,12 +661,14 @@ pub struct MboxType {
     path: PathBuf,
     index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
     mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
+    prefer_mbox_type: Option<MboxReader>,
 }
 
 impl MailBackend for MboxType {
     fn is_online(&self) -> Result<()> {
         Ok(())
     }
+
     fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let handle = {
@@ -405,6 +677,7 @@ impl MailBackend for MboxType {
             let mailbox_path = mailbox.path().to_string();
             let mailbox_hash = mailbox.hash();
             let mailboxes = self.mailboxes.clone();
+            let prefer_mbox_type = self.prefer_mbox_type.clone();
             let closure = move |_work_context| {
                 let tx = tx.clone();
                 let index = index.clone();
@@ -429,7 +702,7 @@ impl MailBackend for MboxType {
                     return;
                 };
 
-                let payload = mbox_parse(index, contents.as_slice(), 0)
+                let payload = mbox_parse(index, contents.as_slice(), 0, prefer_mbox_type)
                     .map_err(|e| MeliError::from(e))
                     .map(|(_, v)| v);
                 {
@@ -470,6 +743,7 @@ impl MailBackend for MboxType {
         };
         let index = self.index.clone();
         let mailboxes = self.mailboxes.clone();
+        let prefer_mbox_type = self.prefer_mbox_type.clone();
         let handle = std::thread::Builder::new()
             .name(format!("watching {}", self.account_name,))
             .spawn(move || {
@@ -520,6 +794,7 @@ impl MailBackend for MboxType {
                                         index.clone(),
                                         &contents[mailbox_lock[&mailbox_hash].content.len()..],
                                         mailbox_lock[&mailbox_hash].content.len(),
+                                        prefer_mbox_type,
                                     ) {
                                         for env in envelopes {
                                             sender.send(RefreshEvent {
@@ -621,6 +896,34 @@ impl MailBackend for MboxType {
     }
 }
 
+macro_rules! get_conf_val {
+    ($s:ident[$var:literal]) => {
+        $s.extra.get($var).ok_or_else(|| {
+            MeliError::new(format!(
+                "Configuration error ({}): mbox backend requires the field `{}` set",
+                $s.name.as_str(),
+                $var
+            ))
+        })
+    };
+    ($s:ident[$var:literal], $default:expr) => {
+        $s.extra
+            .get($var)
+            .map(|v| {
+                <_>::from_str(v).map_err(|e| {
+                    MeliError::new(format!(
+                        "Configuration error ({}): Invalid value for field `{}`: {}\n{}",
+                        $s.name.as_str(),
+                        $var,
+                        v,
+                        e
+                    ))
+                })
+            })
+            .unwrap_or_else(|| Ok($default))
+    };
+}
+
 impl MboxType {
     pub fn new(
         s: &AccountSettings,
@@ -634,9 +937,24 @@ impl MboxType {
                 s.name()
             )));
         }
+        let prefer_mbox_type: String = get_conf_val!(s["prefer_mbox_type"], "auto".to_string())?;
         let ret = MboxType {
             account_name: s.name().to_string(),
             path,
+            prefer_mbox_type: match prefer_mbox_type.as_str() {
+                "auto" => None,
+                "mboxo" => Some(MboxReader::MboxO),
+                "mboxrd" => Some(MboxReader::MboxRd),
+                "mboxcl" => Some(MboxReader::MboxCl),
+                "mboxcl2" => Some(MboxReader::MboxCl2),
+                _ => {
+                    return Err(MeliError::new(format!(
+                        "{} invalid `prefer_mbox_type` value: `{}`",
+                        s.name(),
+                        prefer_mbox_type,
+                    )))
+                }
+            },
             ..Default::default()
         };
         let name: String = ret
@@ -720,6 +1038,9 @@ impl MboxType {
                 s.name()
             )));
         }
+        let prefer_mbox_type: Result<String> =
+            get_conf_val!(s["prefer_mbox_type"], "auto".to_string());
+        prefer_mbox_type?;
         Ok(())
     }
 }

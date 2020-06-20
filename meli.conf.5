@@ -236,6 +236,27 @@ example:
 .\" default value
 .Pq Em false
 .El
+.Sh mbox only
+mbox specific options are:
+.Bl -tag -width 36n
+.It Ic prefer_mbox_type Ar String
+(optional) prefer specific mbox format reader for each message. Default is mboxcl2 format. If the preferred format fails, the message is retried with mboxrd and then if it fails again there's a recover attempt, which discards the invalid message.
+Valid values are:
+.Bl -bullet -compact
+.It
+.Ar auto
+.It
+.Ar mboxo
+.It
+.Ar mboxrd
+.It
+.Ar mboxcl
+.It
+.Ar mboxcl2
+.El
+.\" default value
+.Pq Em auto
+.El
 .Sh mailboxes
 .Bl -tag -width 36n
 .It Ic alias Ar String

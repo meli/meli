@@ -10,6 +10,10 @@ name = "emailparse"
 path = "src/email_parse.rs"
 
 [[bin]]
+name = "mboxparse"
+path = "src/mboxparse.rs"
+
+[[bin]]
 name = "imapconn"
 path = "src/imap_conn.rs"
 
