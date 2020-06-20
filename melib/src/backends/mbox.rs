@@ -84,6 +84,7 @@ struct MboxMailbox {
     hash: MailboxHash,
     name: String,
     path: PathBuf,
+    fs_path: PathBuf,
     content: Vec<u8>,
     children: Vec<MailboxHash>,
     parent: Option<MailboxHash>,
@@ -92,6 +93,7 @@ struct MboxMailbox {
     permissions: MailboxPermissions,
     pub total: Arc<Mutex<usize>>,
     pub unseen: Arc<Mutex<usize>>,
+    index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
 }
 
 impl BackendMailbox for MboxMailbox {
@@ -117,6 +119,7 @@ impl BackendMailbox for MboxMailbox {
             hash: self.hash,
             name: self.name.clone(),
             path: self.path.clone(),
+            fs_path: self.fs_path.clone(),
             content: self.content.clone(),
             children: self.children.clone(),
             usage: self.usage.clone(),
@@ -125,6 +128,7 @@ impl BackendMailbox for MboxMailbox {
             permissions: self.permissions,
             unseen: self.unseen.clone(),
             total: self.total.clone(),
+            index: self.index.clone(),
         })
     }
 
@@ -659,7 +663,7 @@ pub fn mbox_parse(
 pub struct MboxType {
     account_name: String,
     path: PathBuf,
-    index: Arc<Mutex<HashMap<EnvelopeHash, (Offset, Length)>>>,
+    mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     mailboxes: Arc<Mutex<HashMap<MailboxHash, MboxMailbox>>>,
     prefer_mbox_type: Option<MboxReader>,
 }
@@ -673,14 +677,13 @@ impl MailBackend for MboxType {
         let mut w = AsyncBuilder::new();
         let handle = {
             let tx = w.tx();
-            let index = self.index.clone();
-            let mailbox_path = mailbox.path().to_string();
             let mailbox_hash = mailbox.hash();
+            let mailbox_index = self.mailbox_index.clone();
             let mailboxes = self.mailboxes.clone();
+            let mailbox_path = mailboxes.lock().unwrap()[&mailbox_hash].fs_path.clone();
             let prefer_mbox_type = self.prefer_mbox_type.clone();
             let closure = move |_work_context| {
                 let tx = tx.clone();
-                let index = index.clone();
                 let file = match std::fs::OpenOptions::new()
                     .read(true)
                     .write(true)
@@ -702,9 +705,18 @@ impl MailBackend for MboxType {
                     return;
                 };
 
+                let mailboxes_lck = mailboxes.lock().unwrap();
+                let mut mailbox_index_lck = mailbox_index.lock().unwrap();
+                let index = mailboxes_lck[&mailbox_hash].index.clone();
+                drop(mailboxes_lck);
                 let payload = mbox_parse(index, contents.as_slice(), 0, prefer_mbox_type)
                     .map_err(|e| MeliError::from(e))
-                    .map(|(_, v)| v);
+                    .map(|(_, v)| {
+                        for v in v.iter() {
+                            mailbox_index_lck.insert(v.hash(), mailbox_hash);
+                        }
+                        v
+                    });
                 {
                     let mut mailbox_lock = mailboxes.lock().unwrap();
                     mailbox_lock
@@ -731,17 +743,16 @@ impl MailBackend for MboxType {
             .map_err(MeliError::new)?;
         for f in self.mailboxes.lock().unwrap().values() {
             watcher
-                .watch(&f.path, RecursiveMode::Recursive)
+                .watch(&f.fs_path, RecursiveMode::Recursive)
                 .map_err(|e| e.to_string())
                 .map_err(MeliError::new)?;
-            debug!("watching {:?}", f.path.as_path());
+            debug!("watching {:?}", f.fs_path.as_path());
         }
         let account_hash = {
             let mut hasher = DefaultHasher::new();
             hasher.write(self.account_name.as_bytes());
             hasher.finish()
         };
-        let index = self.index.clone();
         let mailboxes = self.mailboxes.clone();
         let prefer_mbox_type = self.prefer_mbox_type.clone();
         let handle = std::thread::Builder::new()
@@ -750,7 +761,6 @@ impl MailBackend for MboxType {
                 // Move `watcher` in the closure's scope so that it doesn't get dropped.
                 let _watcher = watcher;
                 let _work_context = work_context;
-                let index = index;
                 let mailboxes = mailboxes;
                 loop {
                     match rx.recv() {
@@ -791,7 +801,7 @@ impl MailBackend for MboxType {
                                     .starts_with(mailbox_lock[&mailbox_hash].content.as_slice())
                                 {
                                     if let Ok((_, envelopes)) = mbox_parse(
-                                        index.clone(),
+                                        mailbox_lock[&mailbox_hash].index.clone(),
                                         &contents[mailbox_lock[&mailbox_hash].content.len()..],
                                         mailbox_lock[&mailbox_hash].content.len(),
                                         prefer_mbox_type,
@@ -822,7 +832,7 @@ impl MailBackend for MboxType {
                                     .lock()
                                     .unwrap()
                                     .values()
-                                    .any(|f| &f.path == &pathbuf)
+                                    .any(|f| &f.fs_path == &pathbuf)
                                 {
                                     let mailbox_hash = get_path_hash!(&pathbuf);
                                     sender.send(RefreshEvent {
@@ -837,7 +847,12 @@ impl MailBackend for MboxType {
                                 }
                             }
                             DebouncedEvent::Rename(src, dest) => {
-                                if mailboxes.lock().unwrap().values().any(|f| &f.path == &src) {
+                                if mailboxes
+                                    .lock()
+                                    .unwrap()
+                                    .values()
+                                    .any(|f| &f.fs_path == &src)
+                                {
                                     let mailbox_hash = get_path_hash!(&src);
                                     sender.send(RefreshEvent {
                                         account_hash,
@@ -879,12 +894,20 @@ impl MailBackend for MboxType {
             .map(|(h, f)| (*h, f.clone() as Mailbox))
             .collect())
     }
-    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
+    fn operation(&self, env_hash: EnvelopeHash) -> Box<dyn BackendOp> {
+        let mailbox_hash = self.mailbox_index.lock().unwrap()[&env_hash];
+        let mailboxes_lck = self.mailboxes.lock().unwrap();
         let (offset, length) = {
-            let index = self.index.lock().unwrap();
-            index[&hash]
+            let index = mailboxes_lck[&mailbox_hash].index.lock().unwrap();
+            index[&env_hash]
         };
-        Box::new(MboxOp::new(hash, self.path.as_path(), offset, length))
+        let mailbox_path = mailboxes_lck[&mailbox_hash].fs_path.clone();
+        Box::new(MboxOp::new(
+            env_hash,
+            mailbox_path.as_path(),
+            offset,
+            length,
+        ))
     }
 
     fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {
@@ -974,7 +997,8 @@ impl MboxType {
             hash,
             MboxMailbox {
                 hash,
-                path: ret.path.clone(),
+                path: name.clone().into(),
+                fs_path: ret.path.clone(),
                 name,
                 content: Vec::new(),
                 children: Vec::new(),
@@ -993,39 +1017,60 @@ impl MboxType {
                 },
                 unseen: Arc::new(Mutex::new(0)),
                 total: Arc::new(Mutex::new(0)),
+                index: Default::default(),
             },
         );
-        /*
         /* Look for other mailboxes */
-        let parent_mailbox = Path::new(path).parent().unwrap();
-        let read_dir = std::fs::read_dir(parent_mailbox);
-        if read_dir.is_ok() {
-            for f in read_dir.unwrap() {
-                if f.is_err() {
-                    continue;
+        for (k, f) in s.mailboxes.iter() {
+            if let Some(path_str) = f.extra.get("path") {
+                let hash = get_path_hash!(path_str);
+                let pathbuf: PathBuf = path_str.into();
+                if !pathbuf.exists() || pathbuf.is_dir() {
+                    return Err(MeliError::new(format!(
+                        "mbox mailbox configuration entry \"{}\" path value {} is not a file.",
+                        k, path_str
+                    )));
                 }
-                let f = f.unwrap().path();
-                if f.is_file() && f != path {
-                    let name: String = f
-                        .file_name()
-                        .map(|f| f.to_string_lossy().into())
-                        .unwrap_or(String::new());
-                    let hash = get_path_hash!(f);
-                    ret.mailboxes.lock().unwrap().insert(
+                let read_only = if let Ok(metadata) = std::fs::metadata(&pathbuf) {
+                    metadata.permissions().readonly()
+                } else {
+                    true
+                };
+
+                ret.mailboxes.lock().unwrap().insert(
+                    hash,
+                    MboxMailbox {
                         hash,
-                        MboxMailbox {
-                            hash,
-                            path: f,
-                            name,
-                            content: Vec::new(),
-                            children: Vec::new(),
-                            parent: None,
+                        name: k.to_string(),
+                        fs_path: pathbuf,
+                        path: k.into(),
+                        content: Vec::new(),
+                        children: Vec::new(),
+                        parent: None,
+                        usage: Arc::new(RwLock::new(f.usage.unwrap_or_default())),
+                        is_subscribed: f.subscribe.is_true(),
+                        permissions: MailboxPermissions {
+                            create_messages: !read_only,
+                            remove_messages: !read_only,
+                            set_flags: !read_only,
+                            create_child: !read_only,
+                            rename_messages: !read_only,
+                            delete_messages: !read_only,
+                            delete_mailbox: !read_only,
+                            change_permissions: false,
                         },
-                    );
-                }
+                        unseen: Arc::new(Mutex::new(0)),
+                        total: Arc::new(Mutex::new(0)),
+                        index: Default::default(),
+                    },
+                );
+            } else {
+                return Err(MeliError::new(format!(
+                    "mbox mailbox configuration entry \"{}\" should have a \"path\" value set pointing to an mbox file.",
+                    k
+                )));
             }
         }
-        */
         Ok(Box::new(ret))
     }
 

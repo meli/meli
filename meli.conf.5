@@ -257,6 +257,17 @@ Valid values are:
 .\" default value
 .Pq Em auto
 .El
+to set multiple mailboxes, you have to explicitly state the mailboxes you want in the
+.Ic mailboxes
+field and set the
+.Ar path
+property to each of them.
+Example:
+.Bd -literal
+[accounts.mbox]
+format = "mbox"
+mailboxes."Python mailing list" = { path = "~/.mail/python.mbox", subscribe = true, autoload = true }
+.Ed
 .Sh mailboxes
 .Bl -tag -width 36n
 .It Ic alias Ar String
