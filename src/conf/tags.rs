@@ -21,22 +21,18 @@
 
 //! E-mail tag configuration and {de,}serializing.
 
-use crate::override_def;
 use crate::terminal::Color;
 use serde::{Deserialize, Deserializer};
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::hash::Hasher;
 
-override_def!(
-    TagsSettingsOverride,
-    #[derive(Debug, Deserialize, Clone, Serialize)]
-    pub struct TagsSettings {
-        #[serde(default, deserialize_with = "tag_color_de")]
-        colors: HashMap<u64, Color>,
-        #[serde(default, deserialize_with = "tag_set_de", alias = "ignore-tags")]
-        ignore_tags: HashSet<u64>,
-    }
-);
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct TagsSettings {
+    #[serde(default, deserialize_with = "tag_color_de")]
+    pub colors: HashMap<u64, Color>,
+    #[serde(default, deserialize_with = "tag_set_de", alias = "ignore-tags")]
+    pub ignore_tags: HashSet<u64>,
+}
 
 impl Default for TagsSettings {
     fn default() -> Self {

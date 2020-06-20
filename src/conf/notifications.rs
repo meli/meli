@@ -20,28 +20,24 @@
  */
 
 use super::default_vals::{internal_value_false, none};
-use crate::override_def;
 
-override_def!(
-    NotificationsSettingsOverride,
-    /// Settings for the notifications function.
-    #[derive(Debug, Serialize, Deserialize, Clone)]
-    pub struct NotificationsSettings {
-        /// A command to pipe notifications through
-        /// Default: None
-        #[serde(default = "none")]
-        script: Option<String>,
-        /// A file location which has its size changed when new mail arrives (max 128 bytes). Can be
-        /// used to trigger new mail notifications eg with `xbiff(1)`
-        /// Default: None
-        #[serde(default = "none", alias = "xbiff-file-path")]
-        xbiff_file_path: Option<String>,
-        #[serde(default = "internal_value_false", alias = "play-sound")]
-        play_sound: super::ToggleFlag,
-        #[serde(default = "none", alias = "sound-file")]
-        sound_file: Option<String>,
-    }
-);
+/// Settings for the notifications function.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NotificationsSettings {
+    /// A command to pipe notifications through
+    /// Default: None
+    #[serde(default = "none")]
+    pub script: Option<String>,
+    /// A file location which has its size changed when new mail arrives (max 128 bytes). Can be
+    /// used to trigger new mail notifications eg with `xbiff(1)`
+    /// Default: None
+    #[serde(default = "none", alias = "xbiff-file-path")]
+    pub xbiff_file_path: Option<String>,
+    #[serde(default = "internal_value_false", alias = "play-sound")]
+    pub play_sound: super::ToggleFlag,
+    #[serde(default = "none", alias = "sound-file")]
+    pub sound_file: Option<String>,
+}
 
 impl Default for NotificationsSettings {
     fn default() -> Self {

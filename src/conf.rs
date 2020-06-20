@@ -26,6 +26,12 @@ extern crate serde;
 extern crate toml;
 extern crate xdg;
 
+use crate::conf::deserializers::non_empty_string;
+use crate::terminal::Color;
+use melib::search::Query;
+use std::collections::HashSet;
+mod overrides;
+pub use overrides::*;
 pub mod composing;
 pub mod notifications;
 pub mod pager;
@@ -46,10 +52,10 @@ pub use self::shortcuts::*;
 pub use self::tags::*;
 
 use self::default_vals::*;
-use self::listing::{ListingSettings, ListingSettingsOverride};
-use self::notifications::{NotificationsSettings, NotificationsSettingsOverride};
+use self::listing::ListingSettings;
+use self::notifications::NotificationsSettings;
 use self::terminal::TerminalSettings;
-use crate::pager::{PagerSettings, PagerSettingsOverride};
+use crate::pager::PagerSettings;
 use crate::plugins::Plugin;
 use melib::conf::{AccountSettings, MailboxConf, ToggleFlag};
 use melib::error::*;
@@ -99,38 +105,6 @@ macro_rules! mailbox_settings {
                 .as_ref())
             .unwrap_or(&$context.settings.$setting.$field)
     }};
-}
-
-#[macro_export]
-macro_rules! override_def {
-    ($override_name:ident,
-       $(#[$outer:meta])*
-      pub struct $name:ident { $( $(#[$fouter:meta])* $fname:ident : $ft:ty),*,
-      }) => {
-        $(#[$outer])*
-        pub struct $name {
-            $(
-                $(#[$fouter])*
-                pub $fname : $ft
-            ),*
-        }
-        $(#[$outer])*
-        pub struct $override_name {
-            $(
-                #[serde(default = "crate::conf::default_vals::none")]
-                pub $fname : Option<$ft>
-            ),*
-        }
-        impl Default for $override_name {
-            fn default() -> Self {
-                $override_name {
-                    $(
-                        $fname : None
-                    ),*
-                }
-            }
-        }
-    }
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

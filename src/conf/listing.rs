@@ -20,38 +20,34 @@
  */
 
 use super::{default_vals::*, IndexStyle};
-use crate::override_def;
 use melib::search::Query;
 
-override_def!(
-    ListingSettingsOverride,
-    /// Settings for mail listings
-    #[derive(Debug, Deserialize, Clone, Serialize)]
-    pub struct ListingSettings {
-        /// Number of context lines when going to next page.
-        /// Default: 0
-        #[serde(default = "zero_val", alias = "context-lines")]
-        context_lines: usize,
+/// Settings for mail listings
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct ListingSettings {
+    /// Number of context lines when going to next page.
+    /// Default: 0
+    #[serde(default = "zero_val", alias = "context-lines")]
+    pub context_lines: usize,
 
-        /// Datetime formatting passed verbatim to strftime(3).
-        /// Default: %Y-%m-%d %T
-        #[serde(default = "none", alias = "datetime-fmt")]
-        datetime_fmt: Option<String>,
+    /// Datetime formatting passed verbatim to strftime(3).
+    /// Default: %Y-%m-%d %T
+    #[serde(default = "none", alias = "datetime-fmt")]
+    pub datetime_fmt: Option<String>,
 
-        /// Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
-        /// Default: true
-        #[serde(default = "true_val", alias = "recent-dates")]
-        recent_dates: bool,
+    /// Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
+    /// Default: true
+    #[serde(default = "true_val", alias = "recent-dates")]
+    pub recent_dates: bool,
 
-        /// Show only envelopes that match this query
-        /// Default: None
-        #[serde(default = "none")]
-        filter: Option<Query>,
+    /// Show only envelopes that match this query
+    /// Default: None
+    #[serde(default = "none")]
+    pub filter: Option<Query>,
 
-        #[serde(default, alias = "index-style")]
-        index_style: IndexStyle,
-    }
-);
+    #[serde(default, alias = "index-style")]
+    pub index_style: IndexStyle,
+}
 
 impl Default for ListingSettings {
     fn default() -> Self {
