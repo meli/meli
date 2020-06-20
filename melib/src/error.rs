@@ -92,7 +92,11 @@ impl MeliError {
     where
         M: Into<Cow<'static, str>>,
     {
-        self.summary = Some(summary.into());
+        if let Some(old_summary) = self.summary.take() {
+            self.summary = Some(format!("{}. {}", old_summary, summary.into()).into());
+        } else {
+            self.summary = Some(summary.into());
+        }
         self
     }
 
@@ -115,12 +119,6 @@ impl fmt::Display for MeliError {
             write!(f, "\nCaused by: {}", source)?;
         }
         Ok(ret)
-    }
-}
-
-impl Into<String> for MeliError {
-    fn into(self) -> String {
-        self.details.into()
     }
 }
 
