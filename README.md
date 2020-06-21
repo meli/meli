@@ -62,7 +62,18 @@ While the project is in early development, meli will only be developed for the
 linux kernel and respected linux distributions. Support for more UNIX-like OSes
 is on the roadmap.
 
-# Building in Debian
+## Features
+
+Some functionality is held behind "feature gates", or compile-time flags. The following list explains each feature's purpose:
+
+- `notmuch` provides support for using a notmuch database as a mail backend
+- `jmap` provides support for connecting to a jmap server and use it as a mail backend
+- `sqlite3` provides support for builting fast search indexes in local sqlite3 databases
+- `cli-docs` includes the manpage documentation compiled by either `mandoc` or `man` binary to plain text in `meli`'s command line. Embedded documentation can be viewed with the subcommand `meli man [PAGE]`
+- `svgscreenshot` provides support for taking screenshots of the current view of meli and saving it as SVG files. Its only purpose is taking screenshots for the official meli webpage.
+- `debug-tracing` enables various trace debug logs from various places around the meli code base. The trace log is printed in `stderr`.
+
+## Building in Debian
 
 Building with Debian's packaged cargo might require the installation of these
 two packages: `librust-openssl-sys-dev librust-libdbus-sys-dev`
