@@ -153,33 +153,42 @@ use super::*;
         }
     }
 
-    /*
-    let mut rustfmt = Command::new("rustfmt")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to execute rustfmt");
+    let rustfmt_closure = move |output_file: &mut File, output_string: &str| {
+        let mut rustfmt = Command::new("rustfmt")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|err| format!("failed to execute rustfmt {}", err))?;
 
-    {
-        // limited borrow of stdin
-        let stdin = rustfmt
-            .stdin
-            .as_mut()
-            .expect("failed to get rustfmt stdin");
-        stdin
-            .write_all(output_string.as_bytes())
-            .expect("failed to write to rustfmit stdin");
+        {
+            // limited borrow of stdin
+            let stdin = rustfmt
+                .stdin
+                .as_mut()
+                .ok_or("failed to get rustfmt stdin")?;
+            stdin
+                .write_all(output_string.as_bytes())
+                .map_err(|err| format!("failed to write to rustfmt stdin {}", err))?;
+        }
+
+        let output = rustfmt
+            .wait_with_output()
+            .map_err(|err| format!("failed to wait on rustfmt child {}", err))?;
+        if !output.stderr.is_empty() {
+            return Err(format!(
+                "rustfmt invocation replied with: `{}`",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        output_file
+            .write_all(&output.stdout)
+            .expect("failed to write to src/conf/overrides.rs");
+        Ok(())
+    };
+    if let Err(err) = rustfmt_closure(&mut output_file, &output_string) {
+        println!("Tried rustfmt on overrides module, got error: {}", err);
+        output_file.write_all(output_string.as_bytes()).unwrap();
     }
-
-    let output = rustfmt
-        .wait_with_output()
-        .expect("failed to wait on rustfmt child");
-    if !output.stderr.is_empty() {
-        panic!(format!("{}", String::from_utf8_lossy(&output.stderr)));
-    }
-
-    output_file.write_all(&output.stdout).unwrap();
-    */
-    output_file.write_all(output_string.as_bytes()).unwrap();
 }
