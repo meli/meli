@@ -76,7 +76,7 @@ impl AccountSettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MailboxConf {
     pub alias: Option<String>,
-    #[serde(default = "true_val")]
+    #[serde(default = "false_val")]
     pub autoload: bool,
     #[serde(default)]
     pub subscribe: ToggleFlag,
@@ -92,7 +92,7 @@ impl Default for MailboxConf {
     fn default() -> Self {
         MailboxConf {
             alias: None,
-            autoload: true,
+            autoload: false,
             subscribe: ToggleFlag::Unset,
             ignore: ToggleFlag::Unset,
             usage: None,
@@ -107,8 +107,8 @@ impl MailboxConf {
     }
 }
 
-pub(in crate::conf) fn true_val() -> bool {
-    true
+pub(in crate::conf) fn false_val() -> bool {
+    false
 }
 
 pub(in crate::conf) fn none<T>() -> Option<T> {
