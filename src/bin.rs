@@ -126,12 +126,10 @@ fn notify(
                 .unwrap_or(false)
             {
                 let value = buf[0];
-                sender
-                    .send_timeout(
-                        ThreadEvent::UIEvent(UIEvent::Timer(value)),
-                        Duration::from_millis(500),
-                    )
-                    .unwrap();
+                let _ = sender.send_timeout(
+                    ThreadEvent::UIEvent(UIEvent::Timer(value)),
+                    Duration::from_millis(2000),
+                );
             }
 
             std::thread::sleep(std::time::Duration::from_millis(100));
