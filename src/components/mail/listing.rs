@@ -1461,9 +1461,9 @@ impl Listing {
         self.set_dirty(true);
         context
             .replies
-            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(debug!(
+            .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
                 self.get_status(context)
-            ))));
+            )));
         self.menu_cursor_pos = self.cursor_pos;
     }
 }

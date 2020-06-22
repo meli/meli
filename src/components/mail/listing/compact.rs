@@ -1163,9 +1163,7 @@ impl CompactListing {
             );
             #[cfg(feature = "regexp")]
             {
-                for text_formatter in
-                    debug!(crate::conf::text_format_regexps(context, "listing.from"))
-                {
+                for text_formatter in crate::conf::text_format_regexps(context, "listing.from") {
                     let t = self.data_columns.columns[2].insert_tag(text_formatter.tag);
                     for (start, end) in text_formatter.regexp.find_iter(strings.from.as_str()) {
                         self.data_columns.columns[2].set_tag(t, (start, idx), (end, idx));
@@ -1202,9 +1200,7 @@ impl CompactListing {
             );
             #[cfg(feature = "regexp")]
             {
-                for text_formatter in
-                    debug!(crate::conf::text_format_regexps(context, "listing.subject"))
-                {
+                for text_formatter in crate::conf::text_format_regexps(context, "listing.subject") {
                     let t = self.data_columns.columns[4].insert_tag(text_formatter.tag);
                     for (start, end) in text_formatter.regexp.find_iter(strings.subject.as_str()) {
                         self.data_columns.columns[4].set_tag(t, (start, idx), (end, idx));

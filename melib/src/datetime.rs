@@ -228,7 +228,7 @@ where
                 };
 
                 if let Ok(idx) = TIMEZONE_ABBR.binary_search_by(|probe| probe.0.cmp(rest)) {
-                    let (hr_offset, min_offset) = debug!(TIMEZONE_ABBR[idx]).1;
+                    let (hr_offset, min_offset) = TIMEZONE_ABBR[idx].1;
                     (hr_offset as i64) * 60 * 60 + (min_offset as i64) * 60
                 } else {
                     0
