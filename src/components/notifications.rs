@@ -44,7 +44,7 @@ impl fmt::Display for XDGNotifications {
 impl XDGNotifications {
     pub fn new() -> Self {
         XDGNotifications {
-            rate_limit: RateLimit::new(3, 1000),
+            rate_limit: RateLimit::new(1000, 1000),
         }
     }
 }
