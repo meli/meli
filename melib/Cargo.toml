@@ -26,8 +26,6 @@ memmap = { version = "0.5.2", optional = true }
 nom = { version = "5.1.1" }
 
 notify = { version = "4.0.1", optional = true }
-notify-rust = { version = "^3", optional = true }
-termion = "1.5.1"
 xdg = "2.1.0"
 native-tls = { version ="0.2.3", optional=true }
 serde = { version = "1.0.71", features = ["rc", ] }
@@ -51,8 +49,8 @@ default = ["unicode_algorithms", "imap_backend", "maildir_backend", "mbox_backen
 debug-tracing = []
 unicode_algorithms = ["unicode-segmentation"]
 imap_backend = ["native-tls"]
-maildir_backend = ["notify", "notify-rust", "memmap"]
-mbox_backend = ["notify", "notify-rust", "memmap"]
+maildir_backend = ["notify", "memmap"]
+mbox_backend = ["notify", "memmap"]
 notmuch_backend = []
 jmap_backend = ["reqwest", "serde_json" ]
 vcard = []
