@@ -312,7 +312,6 @@ impl MailBackend for ImapType {
                         "mailbox: {} examine_response: {:?}",
                         mailbox_path, examine_response
                     );
-                    let mut exists: usize = examine_response.uidnext - 1;
                     {
                         let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
 
@@ -336,8 +335,14 @@ impl MailBackend for ImapType {
                         permissions.delete_messages = !examine_response.read_only;
                         permissions.delete_messages = !examine_response.read_only;
                         let mut mailbox_exists = mailbox_exists.lock().unwrap();
-                        *mailbox_exists = exists;
+                        *mailbox_exists = examine_response.exists;
                     }
+                    if examine_response.exists == 0 {
+                        tx.send(AsyncStatus::Payload(Ok(Vec::new()))).unwrap();
+                        tx.send(AsyncStatus::Finished).unwrap();
+                        return Ok(());
+                    }
+                    let mut exists: usize = examine_response.exists;
                     /* reselecting the same mailbox with EXAMINE prevents expunging it */
                     conn.examine_mailbox(mailbox_hash, &mut response)?;
 
