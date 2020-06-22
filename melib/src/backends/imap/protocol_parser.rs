@@ -21,6 +21,7 @@
 
 use super::*;
 use crate::email::parser::{BytesExt, IResult};
+use crate::error::ResultIntoMeliError;
 use crate::get_path_hash;
 use nom::{
     branch::{alt, permutation},
@@ -242,8 +243,10 @@ impl Into<Result<()>> for ImapResponse {
             Self::No(ResponseCode::Alert(msg)) | Self::Bad(ResponseCode::Alert(msg)) => {
                 Err(MeliError::new(msg))
             }
-            Self::No(_) => Err(MeliError::new("IMAP NO Response.")),
-            Self::Bad(_) => Err(MeliError::new("IMAP BAD Response.")),
+            Self::No(err) => Err(MeliError::new(format!("{:?}", err)))
+                .chain_err_summary(|| "IMAP NO Response.".to_string()),
+            Self::Bad(err) => Err(MeliError::new(format!("{:?}", err)))
+                .chain_err_summary(|| "IMAP BAD Response.".to_string()),
         }
     }
 }

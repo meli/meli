@@ -44,7 +44,7 @@ use crate::backends::{AccountHash, MailboxHash};
 use crate::backends::{BackendMailbox, MailBackend, Mailbox, RefreshEventConsumer};
 use crate::conf::AccountSettings;
 use crate::email::*;
-use crate::error::{MeliError, Result};
+use crate::error::{MeliError, Result, ResultIntoMeliError};
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
@@ -251,9 +251,15 @@ impl MailBackend for ImapType {
                                 return Ok(HashSet::default());
                             };
                             let cached_envs: (cache::MaxUID, Vec<(UID, Envelope)>);
-                            cache::save_envelopes(uid_store.account_hash, mailbox_hash, *v, &[])?;
+                            cache::save_envelopes(uid_store.account_hash, mailbox_hash, *v, &[])
+                                .chain_err_summary(|| {
+                                    "Could not save envelopes in cache in get()"
+                                })?;
                             cached_envs =
-                                cache::get_envelopes(uid_store.account_hash, mailbox_hash, *v)?;
+                                cache::get_envelopes(uid_store.account_hash, mailbox_hash, *v)
+                                    .chain_err_summary(|| {
+                                        "Could not get envelopes in cache in get()"
+                                    })?;
                             let (_max_uid, envelopes) = debug!(cached_envs);
                             *max_uid = _max_uid;
                             let ret = envelopes.iter().map(|(_, env)| env.hash()).collect();
@@ -290,8 +296,17 @@ impl MailBackend for ImapType {
 
                     /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
                      * returns READ-ONLY for both cases) */
-                    conn.select_mailbox(mailbox_hash, &mut response)?;
-                    let examine_response = protocol_parser::select_response(&response)?;
+                    conn.select_mailbox(mailbox_hash, &mut response)
+                        .chain_err_summary(|| {
+                            format!("Could not select mailbox {}", mailbox_path)
+                        })?;
+                    let examine_response = protocol_parser::select_response(&response)
+                        .chain_err_summary(|| {
+                            format!(
+                                "Could not parse select response for mailbox {}",
+                                mailbox_path
+                            )
+                        })?;
                     *can_create_flags.lock().unwrap() = examine_response.can_create_flags;
                     debug!(
                         "mailbox: {} examine_response: {:?}",
@@ -347,7 +362,13 @@ impl MailBackend for ImapType {
                                 .as_bytes(),
                             )?
                         };
-                        conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)?;
+                        conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                            .chain_err_summary(|| {
+                                format!(
+                                    "Could not parse fetch response for mailbox {}",
+                                    mailbox_path
+                                )
+                            })?;
                         debug!(
                             "fetch response is {} bytes and {} lines",
                             response.len(),
@@ -407,7 +428,13 @@ impl MailBackend for ImapType {
                                     .iter()
                                     .map(|(uid, env)| (*uid, env))
                                     .collect::<SmallVec<[(UID, &Envelope); 1024]>>(),
-                            )?;
+                            )
+                            .chain_err_summary(|| {
+                                format!(
+                                    "Could not save envelopes in cache for mailbox {}",
+                                    mailbox_path
+                                )
+                            })?;
                         }
                         for &env_hash in cached_hash_set.difference(&valid_hash_set) {
                             conn.add_refresh_event(RefreshEvent {
