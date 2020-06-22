@@ -253,13 +253,13 @@ impl Account {
         })
     }
 
-    fn init(&mut self) {
+    fn init(&mut self) -> Result<()> {
         let mut ref_mailboxes: HashMap<MailboxHash, Mailbox> =
             match self.backend.read().unwrap().mailboxes() {
                 Ok(f) => f,
                 Err(err) => {
                     debug!(&err);
-                    return;
+                    return Err(err);
                 }
             };
         let mut mailbox_entries: HashMap<MailboxHash, MailboxEntry> =
@@ -402,6 +402,7 @@ impl Account {
         self.mailbox_entries = mailbox_entries;
         self.tree = tree;
         self.sent_mailbox = sent_mailbox;
+        Ok(())
     }
 
     fn new_worker(
@@ -1144,7 +1145,7 @@ impl Account {
 
         let ret = self.backend.read().unwrap().is_online();
         if ret.is_ok() != self.is_online && ret.is_ok() {
-            self.init();
+            self.init()?;
         }
         self.is_online = ret.is_ok();
         if !self.is_online {
