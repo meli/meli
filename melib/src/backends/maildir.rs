@@ -23,6 +23,10 @@
 mod backend;
 pub use self::backend::*;
 
+mod stream;
+pub use stream::*;
+
+pub use futures::stream::Stream;
 use crate::backends::*;
 use crate::email::{Envelope, Flag};
 use crate::error::{MeliError, Result};

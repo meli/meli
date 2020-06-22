@@ -33,6 +33,8 @@ macro_rules! tag_hash {
 
 #[cfg(feature = "imap_backend")]
 pub mod imap;
+//#[cfg(feature = "imap_backend")]
+//pub mod imap2;
 #[cfg(feature = "maildir_backend")]
 pub mod maildir;
 #[cfg(feature = "mbox_backend")]
@@ -63,6 +65,8 @@ use std::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
+
+pub use futures::stream::Stream;
 
 use std;
 use std::collections::HashMap;
@@ -284,6 +288,12 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online(&self) -> Result<()>;
     fn connect(&mut self) {}
     fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>>;
+    fn get_async(
+        &mut self,
+        mailbox: &Mailbox,
+    ) -> Result<Box<dyn Stream<Item = Result<Vec<Envelope>>>>> {
+        Err(MeliError::new("Unimplemented."))
+    }
     fn refresh(
         &mut self,
         _mailbox_hash: MailboxHash,

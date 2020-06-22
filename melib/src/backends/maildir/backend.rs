@@ -24,6 +24,7 @@ use super::{
     RefreshEventConsumer, RefreshEventKind::*,
 };
 use super::{MaildirMailbox, MaildirOp};
+use futures::prelude::Stream;
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
@@ -159,7 +160,7 @@ pub(super) fn get_file_hash(file: &Path) -> EnvelopeHash {
     hasher.finish()
 }
 
-fn move_to_cur(p: PathBuf) -> Result<PathBuf> {
+pub fn move_to_cur(p: PathBuf) -> Result<PathBuf> {
     let mut new = p.clone();
     let file_name = p.to_string_lossy();
     let slash_pos = file_name.bytes().rposition(|c| c == b'/').unwrap() + 1;
@@ -192,6 +193,19 @@ impl MailBackend for MaildirType {
     fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
         self.multicore(4, mailbox)
     }
+
+    fn get_async(&mut self, mailbox: &Mailbox) -> Result<Box<dyn Stream<Item = Result<Vec<Envelope>>>>> {
+        let mailbox: &MaildirMailbox = &self.mailboxes[&self.owned_mailbox_idx(mailbox)];
+        let mailbox_hash = mailbox.hash();
+        let unseen = mailbox.unseen.clone();
+        let total = mailbox.total.clone();
+        let mut path: PathBuf = mailbox.fs_path().into();
+        let root_path = self.path.to_path_buf();
+        let map = self.hash_indexes.clone();
+        let mailbox_index = self.mailbox_index.clone();
+        super::stream::MaildirStream::new(&self.name, mailbox_hash, unseen, total, path, root_path, map, mailbox_index)
+    }
+
     fn refresh(
         &mut self,
         mailbox_hash: MailboxHash,
