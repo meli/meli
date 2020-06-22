@@ -1343,6 +1343,7 @@ pub fn envelope_addresses<'a>(input: &'a [u8]) -> IResult<&'a [u8], Option<Vec<A
             let (input, _) = tag(")")(input)?;
             Ok((input, Some(envelopes)))
         },
+        map(tag("\"\""), |_| None),
     ))(input)
     /*
            alt_complete!(map!(tag!("NIL"), |_| None) |
@@ -1366,24 +1367,43 @@ pub fn envelope_address(input: &[u8]) -> IResult<&[u8], Address> {
     let (input, _) = alt((quoted, map(tag("NIL"), |_| Vec::new())))(input)?;
     let (input, _) = is_a("\r\n\t ")(input)?;
     let (input, mailbox_name) = alt((quoted, map(tag("NIL"), |_| Vec::new())))(input)?;
-    let (input, _) = is_a("\r\n\t ")(input)?;
-    let (input, host_name) = alt((quoted, map(tag("NIL"), |_| Vec::new())))(input)?;
+    let (input, host_name) = opt(preceded(
+        is_a("\r\n\t "),
+        alt((quoted, map(tag("NIL"), |_| Vec::new()))),
+    ))(input)?;
     Ok((
         input,
         Address::Mailbox(MailboxAddress {
-            raw: format!(
-                "{}{}<{}@{}>",
-                to_str!(&name),
-                if name.is_empty() { "" } else { " " },
-                to_str!(&mailbox_name),
-                to_str!(&host_name)
-            )
-            .into_bytes(),
+            raw: if let Some(host_name) = host_name.as_ref() {
+                format!(
+                    "{}{}<{}@{}>",
+                    to_str!(&name),
+                    if name.is_empty() { "" } else { " " },
+                    to_str!(&mailbox_name),
+                    to_str!(&host_name)
+                )
+                .into_bytes()
+            } else {
+                format!(
+                    "{}{}{}",
+                    to_str!(&name),
+                    if name.is_empty() { "" } else { " " },
+                    to_str!(&mailbox_name),
+                )
+                .into_bytes()
+            },
             display_name: str_builder!(0, name.len()),
-            address_spec: str_builder!(
-                if name.is_empty() { 1 } else { name.len() + 2 },
-                mailbox_name.len() + host_name.len() + 1
-            ),
+            address_spec: if let Some(host_name) = host_name.as_ref() {
+                str_builder!(
+                    if name.is_empty() { 1 } else { name.len() + 2 },
+                    mailbox_name.len() + host_name.len() + 1
+                )
+            } else {
+                str_builder!(
+                    if name.is_empty() { 0 } else { name.len() + 1 },
+                    mailbox_name.len()
+                )
+            },
         }),
     ))
     /*
