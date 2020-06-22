@@ -139,7 +139,7 @@ pub enum ResponseCode {
     Alert(String),
 
     ///Optionally followed by a parenthesized list of charsets.  A SEARCH failed because the given charset is not supported by this implementation.  If the optional list of charsets is given, this lists the charsets that are supported by this implementation.
-    Badcharset,
+    Badcharset(Option<String>),
 
     /// Followed by a list of capabilities.  This can appear in the initial OK or PREAUTH response to transmit an initial capabilities list.  This makes it unnecessary for a client to send a separate CAPABILITY command if it recognizes this response.
     Capability,
@@ -148,7 +148,7 @@ pub enum ResponseCode {
     Parse(String),
 
     /// Followed by a parenthesized list of flags, indicates which of the known flags the client can change permanently.  Any flags that are in the FLAGS untagged response, but not the PERMANENTFLAGS list, can not be set permanently.  If the client attempts to STORE a flag that is not in the PERMANENTFLAGS list, the server will either ignore the change or store the state change for the remainder of the current session only.  The PERMANENTFLAGS list can also include the special flag \*, which indicates that it is possible to create new keywords by attempting to store those flags in the mailbox.
-    Permanentflags,
+    Permanentflags(String),
 
     /// The mailbox is selected read-only, or its access while selected has changed from read-write to read-only.
     ReadOnly,
@@ -165,20 +165,43 @@ pub enum ResponseCode {
     Uidvalidity(UID),
     /// Followed by a decimal number, indicates the number of the first message without the \Seen flag set.
     Unseen(usize),
+}
 
-    None,
+impl std::fmt::Display for ResponseCode {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use ResponseCode::*;
+        match self {
+    Alert(s)=> write!(fmt, "ALERT: {}", s),
+    Badcharset(None)=> write!(fmt, "Given charset is not supported by this server."),
+    Badcharset(Some(s))=> write!(fmt, "Given charset is not supported by this server. Supported ones are: {}", s),
+    Capability => write!(fmt, "Capability response"),
+    Parse(s) => write!(fmt, "Server error in parsing message headers: {}", s),
+    Permanentflags(s) => write!(fmt, "Mailbox supports these flags: {}", s),
+    ReadOnly=> write!(fmt, "This mailbox is selected read-only."),
+ReadWrite => write!(fmt, "This mailbox is selected with read-write permissions."),
+    Trycreate => write!(fmt, "Failed to operate on the target mailbox because it doesn't exist. Try creating it first."),
+    Uidnext(uid) => write!(fmt, "Next UID value is {}", uid),
+    Uidvalidity(uid) => write!(fmt, "Next UIDVALIDITY value is {}", uid),
+    Unseen(uid) => write!(fmt, "First message without the \\Seen flag is {}", uid),
+        }
+    }
 }
 
 impl ResponseCode {
     fn from(val: &str) -> ResponseCode {
         use ResponseCode::*;
         if !val.starts_with("[") {
-            return None;
+            let msg = val.trim();
+            return Alert(msg.to_string());
         }
 
         let val = &val[1..];
         if val.starts_with("BADCHARSET") {
-            Badcharset
+            let charsets = val
+                .as_bytes()
+                .find(b"(")
+                .map(|pos| val[pos + 1..].trim().to_string());
+            Badcharset(charsets)
         } else if val.starts_with("READONLY") {
             ReadOnly
         } else if val.starts_with("READWRITE") {
