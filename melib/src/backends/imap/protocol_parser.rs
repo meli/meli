@@ -661,17 +661,30 @@ pub fn uid_fetch_responses(mut input: &str) -> ImapParseResult<Vec<UidFetchRespo
     let mut ret = Vec::new();
     let mut alert: Option<Alert> = None;
 
-    while let Ok((rest, el, el_alert)) = uid_fetch_response(input) {
-        if let Some(el_alert) = el_alert {
-            match &mut alert {
-                Some(Alert(ref mut alert)) => {
-                    alert.extend(el_alert.0.chars());
+    while let next_response = uid_fetch_response(input) {
+        match next_response {
+            Ok((rest, el, el_alert)) => {
+                if let Some(el_alert) = el_alert {
+                    match &mut alert {
+                        Some(Alert(ref mut alert)) => {
+                            alert.extend(el_alert.0.chars());
+                        }
+                        a @ None => *a = Some(el_alert),
+                    }
                 }
-                a @ None => *a = Some(el_alert),
+                input = rest;
+                ret.push(el);
+                if !input.starts_with("* ") {
+                    break;
+                }
+            }
+            Err(err) => {
+                return Err(MeliError::new(format!(
+                    "Unexpected input while parsing UID FETCH responses: `{:.40}`, {}",
+                    input, err
+                )));
             }
         }
-        input = rest;
-        ret.push(el);
     }
 
     if !input.is_empty() && ret.is_empty() {
