@@ -74,7 +74,32 @@ impl ImapConnection {
                     (std::time::Instant::now(), Err(reason.into()));
             }
             UntaggedResponse::Expunge(n) => {
-                debug!("expunge {}", n);
+                let deleted_uid = self
+                    .uid_store
+                    .msn_index
+                    .lock()
+                    .unwrap()
+                    .entry(mailbox_hash)
+                    .or_default()
+                    .remove(n);
+                debug!("expunge {}, UID = {}", n, deleted_uid);
+                let deleted_hash: crate::email::EnvelopeHash = self
+                    .uid_store
+                    .uid_index
+                    .lock()
+                    .unwrap()
+                    .remove(&(mailbox_hash, deleted_uid))
+                    .unwrap();
+                self.uid_store
+                    .hash_index
+                    .lock()
+                    .unwrap()
+                    .remove(&deleted_hash);
+                self.add_refresh_event(RefreshEvent {
+                    account_hash: self.uid_store.account_hash,
+                    mailbox_hash,
+                    kind: Remove(deleted_hash),
+                });
             }
             UntaggedResponse::Exists(n) => {
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers

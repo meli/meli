@@ -127,6 +127,7 @@ pub struct UIDStore {
     uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
+    msn_index: Arc<Mutex<HashMap<MailboxHash, Vec<UID>>>>,
 
     byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
@@ -145,6 +146,7 @@ impl Default for UIDStore {
             uidvalidity: Default::default(),
             hash_index: Default::default(),
             uid_index: Default::default(),
+            msn_index: Default::default(),
             byte_cache: Default::default(),
             mailboxes: Arc::new(RwLock::new(Default::default())),
             tag_index: Arc::new(RwLock::new(Default::default())),
@@ -414,6 +416,7 @@ impl MailBackend for ImapType {
                         debug!("responses len is {}", v.len());
                         for UidFetchResponse {
                             uid,
+                            message_sequence_number,
                             flags,
                             envelope,
                             ..
@@ -438,6 +441,13 @@ impl MailBackend for ImapType {
                                     env.labels_mut().push(hash);
                                 }
                             }
+                            uid_store
+                                .msn_index
+                                .lock()
+                                .unwrap()
+                                .entry(mailbox_hash)
+                                .or_default()
+                                .insert(message_sequence_number - 1, uid);
                             uid_store
                                 .hash_index
                                 .lock()

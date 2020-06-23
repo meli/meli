@@ -400,11 +400,37 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 }
             }
             Ok(Some(Expunge(n))) => {
+                // The EXPUNGE response reports that the specified message sequence
+                // number has been permanently removed from the mailbox. The message
+                // sequence number for each successive message in the mailbox is
+                // immediately decremented by 1, and this decrement is reflected in
+                // message sequence numbers in subsequent responses (including other
+                // untagged EXPUNGE responses).
+                let mut conn = super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
                 work_context
                     .set_status
                     .send((thread_id, format!("got `{} EXPUNGED` notification", n)))
                     .unwrap();
-                debug!("expunge {}", n);
+                let deleted_uid = uid_store
+                    .msn_index
+                    .lock()
+                    .unwrap()
+                    .entry(mailbox_hash)
+                    .or_default()
+                    .remove(n);
+                debug!("expunge {}, UID = {}", n, deleted_uid);
+                let deleted_hash: EnvelopeHash = uid_store
+                    .uid_index
+                    .lock()
+                    .unwrap()
+                    .remove(&(mailbox_hash, deleted_uid))
+                    .unwrap();
+                uid_store.hash_index.lock().unwrap().remove(&deleted_hash);
+                conn.add_refresh_event(RefreshEvent {
+                    account_hash: uid_store.account_hash,
+                    mailbox_hash,
+                    kind: Remove(deleted_hash),
+                });
             }
             Ok(Some(Exists(n))) => {
                 let mut conn = super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;

@@ -595,6 +595,30 @@ impl ImapConnection {
             self.uid_store.refresh_events.lock().unwrap().push(ev);
         }
     }
+
+    pub fn create_uid_msn_cache(&mut self, mailbox_hash: MailboxHash, low: usize) -> Result<()> {
+        debug_assert!(low > 0);
+        let mut response = String::new();
+        if self
+            .current_mailbox
+            .map(|h| h != mailbox_hash)
+            .unwrap_or(true)
+        {
+            self.examine_mailbox(mailbox_hash, &mut response)?;
+        }
+        self.send_command(format!("UID SEARCH {}:*", low).as_bytes())?;
+        self.read_response(&mut response, RequiredResponses::SEARCH)?;
+        debug!("uid search response {:?}", &response);
+        let mut msn_index_lck = self.uid_store.msn_index.lock().unwrap();
+        let msn_index = msn_index_lck.entry(mailbox_hash).or_default();
+        let _ = msn_index.drain(low - 1..);
+        msn_index.extend(
+            debug!(protocol_parser::search_results(response.as_bytes()))?
+                .1
+                .into_iter(),
+        );
+        Ok(())
+    }
 }
 
 pub struct ImapBlockingConnection {

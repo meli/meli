@@ -421,6 +421,7 @@ pub fn my_flags(input: &[u8]) -> IResult<&[u8], Flag> {
 #[derive(Debug)]
 pub struct UidFetchResponse<'a> {
     pub uid: UID,
+    pub message_sequence_number: usize,
     pub flags: Option<(Flag, Vec<String>)>,
     pub body: Option<&'a [u8]>,
     pub envelope: Option<Envelope>,
@@ -471,7 +472,18 @@ pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> 
         };
     }
 
-    while (input.as_bytes()[i] as char).is_numeric() {
+    let mut ret = UidFetchResponse {
+        uid: 0,
+        message_sequence_number: 0,
+        flags: None,
+        body: None,
+        envelope: None,
+    };
+
+    while input.as_bytes()[i].is_ascii_digit() {
+        let b: u8 = input.as_bytes()[i] - 0x30;
+        ret.message_sequence_number *= 10;
+        ret.message_sequence_number += b as usize;
         i += 1;
         bounds!();
     }
@@ -479,13 +491,6 @@ pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> 
     eat_whitespace!();
     should_start_with!(input[i..], "FETCH (");
     i += "FETCH (".len();
-
-    let mut ret = UidFetchResponse {
-        uid: 0,
-        flags: None,
-        body: None,
-        envelope: None,
-    };
     let mut has_attachments = false;
     while i < input.len() {
         eat_whitespace!(break);
