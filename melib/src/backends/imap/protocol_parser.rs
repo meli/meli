@@ -346,7 +346,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
     let (input, _) = tag(b") ")(input)?;
     let (input, separator) = delimited(tag(b"\""), take(1_u32), tag(b"\""))(input)?;
     let (input, _) = take(1_u32)(input)?;
-    let (input, path) = alt((delimited(tag("\""), is_not("\""), tag("\"")), rest))(input)?;
+    let (input, path) = mailbox_token(input)?;
     Ok((
         input,
         ({
@@ -366,7 +366,8 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
                     let _ = f.set_special_usage(SpecialUsageMailbox::Drafts);
                 }
             }
-            f.imap_path = String::from_utf8_lossy(path).into();
+            f.is_subscribed = path == "INBOX";
+            f.imap_path = path.into();
             f.hash = get_path_hash!(&f.imap_path);
             f.path = if separator == b'/' {
                 f.imap_path.clone()
@@ -385,51 +386,6 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
             debug!(f)
         }),
     ))
-    /*
-    do_parse!(
-        ws!(alt_complete!(tag!("* LIST (") | tag!("* LSUB (")))
-            >> properties: take_until!(&b")"[0..])
-            >> tag!(b") ")
-            >> separator: delimited!(tag!(b"\""), take!(1), tag!(b"\""))
-            >> take!(1)
-            >> path: alt_complete!(delimited!(tag!("\""), is_not!("\""), tag!("\"")) | call!(rest))
-            >> ({
-                let separator: u8 = separator[0];
-                let mut f = ImapMailbox::default();
-                f.no_select = false;
-                f.is_subscribed = false;
-                for p in properties.split(|&b| b == b' ') {
-                    use crate::backends::SpecialUsageMailbox;
-                    if p.eq_ignore_ascii_case(b"\\NoSelect") {
-                        f.no_select = true;
-                    } else if p.eq_ignore_ascii_case(b"\\Sent") {
-                        let _ = f.set_special_usage(SpecialUsageMailbox::Sent);
-                    } else if p.eq_ignore_ascii_case(b"\\Junk") {
-                        let _ = f.set_special_usage(SpecialUsageMailbox::Trash);
-                    } else if p.eq_ignore_ascii_case(b"\\Drafts") {
-                        let _ = f.set_special_usage(SpecialUsageMailbox::Drafts);
-                    }
-                }
-                f.imap_path = String::from_utf8_lossy(path).into();
-                f.hash = get_path_hash!(&f.imap_path);
-                f.path = if separator == b'/' {
-                    f.imap_path.clone()
-                } else {
-                    f.imap_path.replace(separator as char, "/")
-                };
-                f.name = if let Some(pos) = f.imap_path.as_bytes().iter().rposition(|&c| c == separator) {
-                    f.parent = Some(get_path_hash!(&f.imap_path[..pos]));
-                    f.imap_path[pos + 1..].to_string()
-                } else {
-                    f.imap_path.clone()
-                };
-                f.separator = separator;
-
-                debug!(f)
-            })
-    )
-        */
-    
 }
 
 pub fn my_flags(input: &[u8]) -> IResult<&[u8], Flag> {
@@ -460,41 +416,6 @@ pub fn my_flags(input: &[u8]) -> IResult<&[u8], Flag> {
         }
     }
     Ok((input, ret))
-
-    /*
-        my_flags<Flag>,
-        do_parse!(
-            flags: separated_list!(tag!(" "), preceded!(tag!("\\"), is_not!(")")))
-                >> ({
-                    let mut ret = Flag::default();
-                    for f in flags {
-                        match f {
-                            b"Answered" => {
-                                ret.set(Flag::REPLIED, true);
-                            }
-                            b"Flagged" => {
-                                ret.set(Flag::FLAGGED, true);
-                            }
-                            b"Deleted" => {
-                                ret.set(Flag::TRASHED, true);
-                            }
-                            b"Seen" => {
-                                ret.set(Flag::SEEN, true);
-                            }
-                            b"Draft" => {
-                                ret.set(Flag::DRAFT, true);
-                            }
-                            f => {
-                                debug!("unknown Flag token value: {}", unsafe {
-                                    std::str::from_utf8_unchecked(f)
-                                });
-                            }
-                        }
-                    }
-                    ret
-                })
-        )
-    */
 }
 
 #[derive(Debug)]
@@ -763,23 +684,13 @@ pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], Vec<(usize, (Fla
         let (input, uid_flags) = permutation((
             preceded(
                 tag("UID "),
-                map_res(digit1, |s| {
-                    usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
-                }),
+                map_res(digit1, |s| usize::from_str(to_str!(s))),
             ),
             preceded(tag("FLAGS "), delimited(tag("("), byte_flags, tag(")"))),
         ))(input.ltrim())?;
         let (input, _) = tag(")\r\n")(input)?;
         Ok((input, (uid_flags.0, uid_flags.1)))
     })(input)
-
-    /*
-                >> uid_flags: permutation!(preceded!(ws!(tag!("UID ")), map_res!(digit1, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) })), preceded!(ws!(tag!("FLAGS ")), delimited!(tag!("("), byte_flags, tag!(")"))))
-                >> tag!(")\r\n")
-                >> ((uid_flags.0, uid_flags.1))
-            )
-        )
-    */
 }
 
 macro_rules! flags_to_imap_list {
@@ -913,9 +824,7 @@ pub enum UntaggedResponse {
 
 pub fn untagged_responses(input: &[u8]) -> IResult<&[u8], Option<UntaggedResponse>> {
     let (input, _) = tag("* ")(input)?;
-    let (input, num) = map_res(digit1, |s| {
-        usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
-    })(input)?;
+    let (input, num) = map_res(digit1, |s| usize::from_str(to_str!(s)))(input)?;
     let (input, _) = tag(" ")(input)?;
     let (input, _tag) = take_until("\r\n")(input)?;
     let (input, _) = tag("\r\n")(input)?;
@@ -926,49 +835,25 @@ pub fn untagged_responses(input: &[u8]) -> IResult<&[u8], Option<UntaggedRespons
             b"EXISTS" => Some(Exists(num)),
             b"RECENT" => Some(Recent(num)),
             _ if _tag.starts_with(b"FETCH ") => {
-                flags(unsafe { std::str::from_utf8_unchecked(&_tag[b"FETCH (FLAGS (".len()..]) })
-                    .map(|(_, flags)| Fetch(num, flags))
-                    .map_err(|err| {
-                        debug!(
-                            "untagged_response malformed fetch: {} {}",
-                            unsafe { std::str::from_utf8_unchecked(_tag) },
-                            err
-                        )
-                    })
-                    .ok()
+                let f = flags(unsafe {
+                    std::str::from_utf8_unchecked(&_tag[b"FETCH (FLAGS (".len()..])
+                })
+                .map(|(_, flags)| Fetch(num, flags));
+                if let Err(ref err) = f {
+                    debug!(
+                        "untagged_response malformed fetch: {} {}",
+                        unsafe { std::str::from_utf8_unchecked(_tag) },
+                        err
+                    )
+                }
+                f.ok()
             }
             _ => {
-                debug!("unknown untagged_response: {}", unsafe {
-                    std::str::from_utf8_unchecked(_tag)
-                });
+                debug!("unknown untagged_response: {}", to_str!(_tag));
                 None
             }
         }
     }))
-    /*
-        pub untagged_responses<>,
-        do_parse!(
-            tag!("* ")
-            >> num: map_res!(digit1, |s| { usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) })
-            >> tag!(" ")
-            >> tag: take_until!("\r\n")
-            >> tag!("\r\n")
-            >> ({
-                use UntaggedResponse::*;
-                match tag {
-                    b"EXPUNGE" => Some(Expunge(num)),
-                    b"EXISTS" => Some(Exists(num)),
-                    b"RECENT" => Some(Recent(num)),
-                    _ if tag.starts_with(b"FETCH ") => flags(
-    unsafe { std::str::from_utf8_unchecked(&tag[b"FETCH (FLAGS (".len()..]) }).map(|flags| Fetch(num, flags)).map_err(|err| debug!("untagged_response malformed fetch: {}", unsafe { std::str::from_utf8_unchecked(tag) })).ok(),
-                    _ => {
-                        debug!("unknown untagged_response: {}", unsafe { std::str::from_utf8_unchecked(tag) });
-                        None
-                    }
-                }
-            })
-        )
-            */
 }
 
 pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<usize>> {
@@ -989,13 +874,6 @@ pub fn search_results<'a>(input: &'a [u8]) -> IResult<&'a [u8], Vec<usize>> {
             Ok((input, vec![]))
         },
     ))(input)
-    /*
-    alt_complete!(do_parse!( tag!("* SEARCH ")
-                            >> list: separated_nonempty_list_complete!(tag!(b" "), map_res!(is_not!(" \r\n"), |s: &[u8]| {  usize::from_str(unsafe { std::str::from_utf8_unchecked(s) }) }))
-                            >> tag!("\r\n")
-                            >> ({ list })) |
-    do_parse!(tag!("* SEARCH\r\n") >> ({ Vec::new() })))
-    */
 }
 
 pub fn search_results_raw<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
@@ -1011,15 +889,6 @@ pub fn search_results_raw<'a>(input: &'a [u8]) -> IResult<&'a [u8], &'a [u8]> {
             Ok((input, &b""[0..]))
         },
     ))(input)
-    /*
-        pub search_results_raw<&[u8]>,
-        alt_complete!(do_parse!( tag!("* SEARCH ")
-                                >> list: take_until!("\r\n")
-                                >> tag!("\r\n")
-                                >> ({ list })) |
-        do_parse!(tag!("* SEARCH\r\n") >> ({ &b""[0..] })))
-    );
-            */
 }
 
 #[test]
@@ -1531,4 +1400,56 @@ pub fn uid_fetch_envelopes_response(
 
 pub fn bodystructure_has_attachments(input: &[u8]) -> bool {
     input.rfind(b" \"mixed\" ").is_some() || input.rfind(b" \"MIXED\" ").is_some()
+}
+
+// mailbox = "INBOX" / astring
+//           ; INBOX is case-insensitive. All case variants of
+//           ; INBOX (e.g., "iNbOx") MUST be interpreted as INBOX
+//           ; not as an astring. An astring which consists of
+//           ; the case-insensitive sequence "I" "N" "B" "O" "X"
+//           ; is considered to be INBOX and not an astring.
+//           ; Refer to section 5.1 for further
+//           ; semantic details of mailbox names.
+pub fn mailbox_token<'i>(input: &'i [u8]) -> IResult<&'i [u8], &'i str> {
+    let (input, astring) = astring_token(input)?;
+    if astring.eq_ignore_ascii_case(b"INBOX") {
+        return Ok((input, "INBOX"));
+    }
+    Ok((input, to_str!(astring)))
+}
+
+// astring = 1*ASTRING-CHAR / string
+fn astring_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    alt((string_token, astring_char_tokens))(input)
+}
+
+// string = quoted / literal
+fn string_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    if let Ok((r, o)) = literal(input) {
+        return Ok((r, o));
+    }
+    if input.is_empty() || input[0] != b'"' {
+        return Err(nom::Err::Error((input, "string_token(): EOF").into()));
+    }
+
+    let mut i = 1;
+    while i < input.len() {
+        if input[i] == b'\"' && input[i - 1] != b'\\' {
+            return Ok((&input[i + 1..], &input[1..i]));
+        }
+        i += 1;
+    }
+
+    return Err(nom::Err::Error(
+        (input, "string_token(): not a quoted phrase").into(),
+    ));
+}
+
+// ASTRING-CHAR = ATOM-CHAR / resp-specials
+// atom = 1*ATOM-CHAR
+// ATOM-CHAR = <any CHAR except atom-specials>
+// atom-specials = "(" / ")" / "{" / SP / CTL / list-wildcards / quoted-specials / resp-specials
+fn astring_char_tokens(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    // FIXME
+    is_not(" ")(input)
 }
