@@ -410,6 +410,7 @@ impl ImapConnection {
             }
         }
         if self.stream.is_ok() {
+            self.uid_store.is_online.lock().unwrap().0 = Instant::now();
             return Ok(());
         }
         let new_stream = ImapStream::new_connection(&self.server_conf);
@@ -503,6 +504,7 @@ impl ImapConnection {
         }
         if let Ok(ref mut stream) = self.stream {
             if let Ok(_) = action(stream) {
+                self.uid_store.is_online.lock().unwrap().0 = Instant::now();
                 return Ok(());
             }
         }
