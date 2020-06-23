@@ -42,7 +42,7 @@ impl ImapConnection {
                         Err(err.clone()),
                     );
                     debug!("failure: {}", err.to_string());
-                    self.uid_store.refresh_events.lock().unwrap().push(RefreshEvent {
+                    self.add_refresh_event(RefreshEvent {
                         account_hash: self.uid_store.account_hash,
                         mailbox_hash: $mailbox_hash,
                         kind: RefreshEventKind::Failure(err.clone()),
@@ -167,13 +167,11 @@ impl ImapConnection {
                                     if !env.is_seen() {
                                         *mailbox.unseen.lock().unwrap() += 1;
                                     }
-                                    self.uid_store.refresh_events.lock().unwrap().push(
-                                        RefreshEvent {
-                                            account_hash: self.uid_store.account_hash,
-                                            mailbox_hash,
-                                            kind: Create(Box::new(env)),
-                                        },
-                                    );
+                                    self.add_refresh_event(RefreshEvent {
+                                        account_hash: self.uid_store.account_hash,
+                                        mailbox_hash,
+                                        kind: Create(Box::new(env)),
+                                    });
                                 }
                             }
                         }
@@ -258,13 +256,11 @@ impl ImapConnection {
                                                 *mailbox.unseen.lock().unwrap() += 1;
                                             }
 
-                                            self.uid_store.refresh_events.lock().unwrap().push(
-                                                RefreshEvent {
-                                                    account_hash: self.uid_store.account_hash,
-                                                    mailbox_hash,
-                                                    kind: Create(Box::new(env)),
-                                                },
-                                            );
+                                            self.add_refresh_event(RefreshEvent {
+                                                account_hash: self.uid_store.account_hash,
+                                                mailbox_hash,
+                                                kind: Create(Box::new(env)),
+                                            });
                                         }
                                     }
                                 }
@@ -307,23 +303,16 @@ impl ImapConnection {
                 {
                     Ok(mut v) => {
                         if let Some(uid) = v.pop() {
-                            if let Some(env_hash) = self
-                                .uid_store
-                                .uid_index
-                                .lock()
-                                .unwrap()
-                                .get(&(mailbox_hash, uid))
-                            {
-                                self.uid_store
-                                    .refresh_events
-                                    .lock()
-                                    .unwrap()
-                                    .push(RefreshEvent {
-                                        account_hash: self.uid_store.account_hash,
-                                        mailbox_hash,
-                                        kind: NewFlags(*env_hash, flags),
-                                    });
-                            }
+                            let lck = self.uid_store.uid_index.lock().unwrap();
+                            let env_hash = lck.get(&(mailbox_hash, uid)).map(|&h| h);
+                            drop(lck);
+                            if let Some(env_hash) = env_hash {
+                                self.add_refresh_event(RefreshEvent {
+                                    account_hash: self.uid_store.account_hash,
+                                    mailbox_hash,
+                                    kind: NewFlags(env_hash, flags),
+                                });
+                            };
                         }
                     }
                     Err(e) => {
