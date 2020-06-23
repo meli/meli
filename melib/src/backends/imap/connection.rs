@@ -440,24 +440,35 @@ impl ImapConnection {
         match self.server_conf.protocol {
             ImapProtocol::IMAP => {
                 let r: ImapResponse = ImapResponse::from(&response);
-                if let ImapResponse::Bye(ref response_code) = r {
-                    self.stream = Err(MeliError::new(format!(
-                        "Offline: received BYE: {:?}",
-                        response_code
-                    )));
-                    ret.push_str(&response);
-                } else {
-                    /*debug!(
-                        "check every line for required_responses: {:#?}",
-                        &required_responses
-                    );*/
-                    for l in response.split_rn() {
-                        /*debug!("check line: {}", &l);*/
-                        if required_responses.check(l) || !self.process_untagged(l)? {
-                            ret.push_str(l);
-                        }
+                match r {
+                    ImapResponse::Bye(ref response_code) => {
+                        self.stream = Err(MeliError::new(format!(
+                            "Offline: received BYE: {:?}",
+                            response_code
+                        )));
+                        ret.push_str(&response);
                     }
-                    //ret.push_str(&response);
+                    ImapResponse::No(ref response_code) => {
+                        debug!("Received NO response: {:?} {:?}", response_code, response);
+                        ret.push_str(&response);
+                    }
+                    ImapResponse::Bad(ref response_code) => {
+                        debug!("Received BAD response: {:?} {:?}", response_code, response);
+                        ret.push_str(&response);
+                    }
+                    _ => {
+                        /*debug!(
+                            "check every line for required_responses: {:#?}",
+                            &required_responses
+                        );*/
+                        for l in response.split_rn() {
+                            /*debug!("check line: {}", &l);*/
+                            if required_responses.check(l) || !self.process_untagged(l)? {
+                                ret.push_str(l);
+                            }
+                        }
+                        //ret.push_str(&response);
+                    }
                 }
                 r.into()
             }
