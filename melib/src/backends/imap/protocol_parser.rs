@@ -28,7 +28,7 @@ use nom::{
     bytes::complete::{is_a, is_not, tag, take, take_until, take_while},
     character::complete::digit1,
     character::is_digit,
-    combinator::{map, map_res, opt, rest},
+    combinator::{map, map_res, opt},
     multi::{length_data, many0, many1, separated_list, separated_nonempty_list},
     sequence::{delimited, preceded},
 };
@@ -605,7 +605,8 @@ pub fn uid_fetch_responses(mut input: &str) -> ImapParseResult<Vec<UidFetchRespo
     let mut ret = Vec::new();
     let mut alert: Option<Alert> = None;
 
-    while let next_response = uid_fetch_response(input) {
+    loop {
+        let next_response = uid_fetch_response(input);
         match next_response {
             Ok((rest, el, el_alert)) => {
                 if let Some(el_alert) = el_alert {
