@@ -314,10 +314,11 @@ impl Component for MailView {
                 (envelope.hash(), envelope.is_seen())
             };
             if !is_seen {
-                let op = account.operation(hash);
-                let mut envelope: EnvelopeRefMut =
-                    account.collection.get_env_mut(self.coordinates.2);
-                if let Err(e) = envelope.set_seen(op) {
+                if let Err(e) = account.operation(hash).and_then(|op| {
+                    let mut envelope: EnvelopeRefMut =
+                        account.collection.get_env_mut(self.coordinates.2);
+                    envelope.set_seen(op)
+                }) {
                     context
                         .replies
                         .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(format!(
@@ -553,8 +554,10 @@ impl Component for MailView {
             let body = {
                 let account = &mut context.accounts[self.coordinates.0];
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-                let op = account.operation(envelope.hash());
-                match envelope.body(op) {
+                match account
+                    .operation(envelope.hash())
+                    .and_then(|op| envelope.body(op))
+                {
                     Ok(body) => body,
                     Err(e) => {
                         clear_area(
@@ -630,7 +633,17 @@ impl Component for MailView {
                     let text = {
                         let account = &context.accounts[self.coordinates.0];
                         let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-                        let mut op = account.operation(envelope.hash());
+                        let mut op = match account.operation(envelope.hash()) {
+                            Ok(op) => op,
+                            Err(err) => {
+                                context.replies.push_back(UIEvent::Notification(
+                                    Some("Failed to open e-mail".to_string()),
+                                    err.to_string(),
+                                    Some(NotificationType::ERROR),
+                                ));
+                                return;
+                            }
+                        };
                         if source == Source::Raw {
                             op.as_bytes()
                                 .map(|v| String::from_utf8_lossy(v).into_owned())
@@ -924,9 +937,10 @@ impl Component for MailView {
                 {
                     let account = &mut context.accounts[self.coordinates.0];
                     let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-                    let op = account.operation(envelope.hash());
-
-                    let attachments = match envelope.body(op) {
+                    let attachments = match account
+                        .operation(envelope.hash())
+                        .and_then(|op| envelope.body(op))
+                    {
                         Ok(body) => body.attachments(),
                         Err(e) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -983,9 +997,11 @@ impl Component for MailView {
                 {
                     let account = &mut context.accounts[self.coordinates.0];
                     let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-                    let op = account.operation(envelope.hash());
 
-                    let attachments = match envelope.body(op) {
+                    let attachments = match account
+                        .operation(envelope.hash())
+                        .and_then(|op| envelope.body(op))
+                    {
                         Ok(body) => body.attachments(),
                         Err(e) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -1163,8 +1179,10 @@ impl Component for MailView {
                     let account = &mut context.accounts[self.coordinates.0];
                     let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
                     let finder = LinkFinder::new();
-                    let op = account.operation(envelope.hash());
-                    let t = match envelope.body(op) {
+                    let t = match account
+                        .operation(envelope.hash())
+                        .and_then(|op| envelope.body(op))
+                    {
                         Ok(body) => body.text().to_string(),
                         Err(e) => {
                             context.replies.push_back(UIEvent::Notification(
@@ -1233,7 +1251,25 @@ impl Component for MailView {
                 use std::io::Write;
                 let account = &mut context.accounts[self.coordinates.0];
                 let envelope: EnvelopeRef = account.collection.get_env(self.coordinates.2);
-                let mut op = account.operation(envelope.hash());
+                let mut op = match account.operation(envelope.hash()) {
+                    Ok(b) => b,
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Failed to open e-mail".to_string()),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                        log(
+                            format!(
+                                "Failed to open envelope {}: {}",
+                                envelope.message_id_display(),
+                                err.to_string()
+                            ),
+                            ERROR,
+                        );
+                        return true;
+                    }
+                };
 
                 if a_i == 0 {
                     let mut path = std::path::Path::new(path).to_path_buf();

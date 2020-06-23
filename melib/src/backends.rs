@@ -297,7 +297,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId>;
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>>;
-    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp>;
+    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>>;
 
     fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()>;
     fn delete(&self, _env_hash: EnvelopeHash, _mailbox_hash: MailboxHash) -> Result<()> {

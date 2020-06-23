@@ -215,15 +215,25 @@ impl MailListingTrait for CompactListing {
             SmallVec::new(),
         );
 
-        for thread in items {
+        'items_for_loop: for thread in items {
             let thread_node = &threads.thread_nodes()[&threads.thread_ref(thread).root()];
-            let root_env_hash = thread_node.message().unwrap_or_else(|| {
+            let root_env_hash = if let Some(h) = thread_node.message().or_else(|| {
+                if thread_node.children().is_empty() {
+                    return None;
+                }
                 let mut iter_ptr = thread_node.children()[0];
                 while threads.thread_nodes()[&iter_ptr].message().is_none() {
+                    if threads.thread_nodes()[&iter_ptr].children().is_empty() {
+                        return None;
+                    }
                     iter_ptr = threads.thread_nodes()[&iter_ptr].children()[0];
                 }
-                threads.thread_nodes()[&iter_ptr].message().unwrap()
-            });
+                threads.thread_nodes()[&iter_ptr].message()
+            }) {
+                h
+            } else {
+                continue 'items_for_loop;
+            };
             if !context.accounts[self.cursor_pos.0].contains_key(root_env_hash) {
                 debug!("key = {}", root_env_hash);
                 debug!(

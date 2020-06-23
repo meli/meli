@@ -648,12 +648,12 @@ impl MailBackend for MaildirType {
         Ok(handle.thread().id())
     }
 
-    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
-        Box::new(MaildirOp::new(
+    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
+        Ok(Box::new(MaildirOp::new(
             hash,
             self.hash_indexes.clone(),
             self.mailbox_index.lock().unwrap()[&hash],
-        ))
+        )))
     }
 
     fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {

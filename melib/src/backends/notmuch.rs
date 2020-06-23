@@ -599,17 +599,20 @@ impl MailBackend for NotmuchDb {
             .map(|(k, f)| (*k, BackendMailbox::clone(f)))
             .collect())
     }
-    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
-        Box::new(NotmuchOp {
-            database: Arc::new(
-                Self::new_connection(self.path.as_path(), self.lib.clone(), true).unwrap(),
-            ),
+
+    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
+        Ok(Box::new(NotmuchOp {
+            database: Arc::new(Self::new_connection(
+                self.path.as_path(),
+                self.lib.clone(),
+                true,
+            )?),
             lib: self.lib.clone(),
             hash,
             index: self.index.clone(),
             bytes: None,
             tag_index: self.tag_index.clone(),
-        })
+        }))
     }
 
     fn save(&self, bytes: &[u8], _mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {
@@ -621,7 +624,7 @@ impl MailBackend for NotmuchDb {
         crate::backends::MaildirType::save_to_mailbox(path, bytes, flags)
     }
 
-    fn as_any(&self) -> &dyn ::std::any::Any {
+    fn as_any(&self) -> &dyn::std::any::Any {
         self
     }
 

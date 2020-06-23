@@ -997,29 +997,23 @@ impl PlainListing {
     fn perform_action(&mut self, context: &mut Context, env_hash: EnvelopeHash, a: &ListingAction) {
         let account = &mut context.accounts[self.cursor_pos.0];
         let hash = account.collection.get_env(env_hash).hash();
-        let op = account.operation(hash);
-        let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
-        match a {
-            ListingAction::SetSeen => {
-                if let Err(e) = envelope.set_seen(op) {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                            e.to_string(),
-                        )));
+        if let Err(e) = account.operation(hash).and_then(|op| {
+            let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
+            match a {
+                ListingAction::SetSeen => envelope.set_seen(op),
+                ListingAction::SetUnseen => envelope.set_unseen(op),
+                ListingAction::Delete => {
+                    /* do nothing */
+                    Ok(())
                 }
+                _ => unreachable!(),
             }
-            ListingAction::SetUnseen => {
-                if let Err(e) = envelope.set_unseen(op) {
-                    context
-                        .replies
-                        .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                            e.to_string(),
-                        )));
-                }
-            }
-            ListingAction::Delete => { /* do nothing */ }
-            _ => unreachable!(),
+        }) {
+            context
+                .replies
+                .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                    e.to_string(),
+                )));
         }
         self.row_updates.push(env_hash);
     }

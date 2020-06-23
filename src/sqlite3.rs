@@ -147,8 +147,7 @@ pub fn insert(
 
     let conn = melib_sqlite3::open_db(db_path)?;
     let backend_lck = backend.read().unwrap();
-    let op = backend_lck.operation(envelope.hash());
-    let body = match envelope.body(op) {
+    let body = match backend_lck.operation(envelope.hash()).and_then(|op| envelope.body(op)) {
         Ok(body) => body.text(),
         Err(err) => {
             debug!(
@@ -332,8 +331,7 @@ pub fn index(context: &mut crate::state::Context, account_name: &str) -> Result<
                 let backend_lck = backend_mutex.read().unwrap();
                 for env_hash in chunk {
                     if let Some(e) = envelopes_lck.get(&env_hash) {
-                        let op = backend_lck.operation(e.hash());
-                        let body = match e.body(op) {
+                        let body = match backend_lck.operation(e.hash()).and_then(|op| e.body(op)) {
                             Ok(body) => body.text(),
                             Err(err) => {
                                 debug!("{}",

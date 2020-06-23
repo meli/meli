@@ -156,7 +156,16 @@ pub trait MailListingTrait: ListingTrait {
         }
         for env_hash in envs_to_set {
             let account = &mut context.accounts[self.coordinates().0];
-            let mut op = account.operation(env_hash);
+            let mut op =
+                match account.operation(env_hash) {
+                    Ok(op) => op,
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                        continue;
+                    }
+                };
             let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
             match a {
                 ListingAction::SetSeen => {
@@ -1462,7 +1471,7 @@ impl Listing {
         context
             .replies
             .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(
-                self.get_status(context)
+                self.get_status(context),
             )));
         self.menu_cursor_pos = self.cursor_pos;
     }

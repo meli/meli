@@ -963,13 +963,13 @@ impl Account {
     pub fn contains_key(&self, h: EnvelopeHash) -> bool {
         self.collection.contains_key(&h)
     }
-    pub fn operation(&self, h: EnvelopeHash) -> Box<dyn BackendOp> {
-        let operation = self.backend.read().unwrap().operation(h);
-        if self.settings.account.read_only() {
+    pub fn operation(&self, h: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
+        let operation = self.backend.read().unwrap().operation(h)?;
+        Ok(if self.settings.account.read_only() {
             ReadOnlyOp::new(operation)
         } else {
             operation
-        }
+        })
     }
 
     pub fn thread(&self, h: ThreadNodeHash, f: MailboxHash) -> &ThreadNode {
@@ -1209,7 +1209,11 @@ impl Account {
                     ret.push(env_hash);
                     continue;
                 }
-                let op = self.operation(env_hash);
+                let op = if let Ok(op) = self.operation(env_hash) {
+                    op
+                } else {
+                    continue;
+                };
                 let body = envelope.body(op)?;
                 let decoded = decode_rec(&body, None);
                 let body_text = String::from_utf8_lossy(&decoded);

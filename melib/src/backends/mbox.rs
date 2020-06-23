@@ -894,7 +894,8 @@ impl MailBackend for MboxType {
             .map(|(h, f)| (*h, f.clone() as Mailbox))
             .collect())
     }
-    fn operation(&self, env_hash: EnvelopeHash) -> Box<dyn BackendOp> {
+
+    fn operation(&self, env_hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
         let mailbox_hash = self.mailbox_index.lock().unwrap()[&env_hash];
         let mailboxes_lck = self.mailboxes.lock().unwrap();
         let (offset, length) = {
@@ -902,12 +903,12 @@ impl MailBackend for MboxType {
             index[&env_hash]
         };
         let mailbox_path = mailboxes_lck[&mailbox_hash].fs_path.clone();
-        Box::new(MboxOp::new(
+        Ok(Box::new(MboxOp::new(
             env_hash,
             mailbox_path.as_path(),
             offset,
             length,
-        ))
+        )))
     }
 
     fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {

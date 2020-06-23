@@ -204,13 +204,13 @@ impl MailBackend for PluginBackend {
         Ok(ret)
     }
 
-    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
-        Box::new(PluginOp {
+    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
+        Ok(Box::new(PluginOp {
             hash,
             channel: self.channel.clone(),
             tag_index: self.tag_index.clone(),
             bytes: None,
-        })
+        }))
     }
 
     fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {

@@ -254,12 +254,12 @@ impl MailBackend for JmapType {
             .collect())
     }
 
-    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
-        Box::new(JmapOp::new(
+    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
+        Ok(Box::new(JmapOp::new(
             hash,
             self.connection.clone(),
             self.store.clone(),
-        ))
+        )))
     }
 
     fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {

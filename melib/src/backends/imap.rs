@@ -625,9 +625,17 @@ impl MailBackend for ImapType {
             .collect())
     }
 
-    fn operation(&self, hash: EnvelopeHash) -> Box<dyn BackendOp> {
-        let (uid, mailbox_hash) = self.uid_store.hash_index.lock().unwrap()[&hash];
-        Box::new(ImapOp::new(
+    fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
+        let (uid, mailbox_hash) = if let Some(v) =
+            self.uid_store.hash_index.lock().unwrap().get(&hash)
+        {
+            *v
+        } else {
+            return Err(MeliError::new(
+                    "Message not found in local cache, it might have been deleted before you requested it."
+                ));
+        };
+        Ok(Box::new(ImapOp::new(
             uid,
             self.uid_store.mailboxes.read().unwrap()[&mailbox_hash]
                 .imap_path()
@@ -635,7 +643,7 @@ impl MailBackend for ImapType {
             mailbox_hash,
             self.connection.clone(),
             self.uid_store.clone(),
-        ))
+        )))
     }
 
     fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {

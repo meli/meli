@@ -173,7 +173,7 @@ impl Composer {
 
     pub fn edit(account_pos: usize, h: EnvelopeHash, context: &Context) -> Result<Self> {
         let mut ret = Composer::default();
-        let op = context.accounts[account_pos].operation(h);
+        let op = context.accounts[account_pos].operation(h)?;
         let envelope: EnvelopeRef = context.accounts[account_pos].collection.get_env(h);
 
         ret.draft = Draft::edit(&envelope, op)?;
@@ -185,7 +185,7 @@ impl Composer {
     pub fn with_context(
         coordinates: (usize, MailboxHash),
         msg: EnvelopeHash,
-        context: &Context,
+        context: &mut Context,
     ) -> Self {
         let account = &context.accounts[coordinates.0];
         let mut ret = Composer::default();
@@ -230,10 +230,19 @@ impl Composer {
             }
         }
 
-        let mut op = account.operation(msg);
-        let parent_bytes = op.as_bytes();
-
-        ret.draft = Draft::new_reply(&parent_message, parent_bytes.unwrap());
+        match account.operation(msg) {
+            Err(err) => {
+                context.replies.push_back(UIEvent::Notification(
+                    None,
+                    err.to_string(),
+                    Some(NotificationType::ERROR),
+                ));
+            }
+            Ok(mut op) => {
+                let parent_bytes = op.as_bytes();
+                ret.draft = Draft::new_reply(&parent_message, parent_bytes.unwrap());
+            }
+        }
         let subject = parent_message.subject();
         ret.draft.headers_mut().insert(
             "Subject".into(),
