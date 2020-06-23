@@ -369,9 +369,6 @@ impl ImapStream {
 
     pub fn send_literal(&mut self, data: &[u8]) -> Result<()> {
         self.stream.write_all(data)?;
-        if !data.ends_with(b"\r\n") {
-            self.stream.write_all(b"\r\n")?;
-        }
         self.stream.write_all(b"\r\n")?;
         Ok(())
     }
