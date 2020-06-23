@@ -300,7 +300,7 @@ impl MailBackend for ImapType {
                         .chain_err_summary(|| {
                             format!("Could not select mailbox {}", mailbox_path)
                         })?;
-                    let examine_response = protocol_parser::select_response(&response)
+                    let mut examine_response = protocol_parser::select_response(&response)
                         .chain_err_summary(|| {
                             format!(
                                 "Could not parse select response for mailbox {}",
@@ -345,6 +345,24 @@ impl MailBackend for ImapType {
                     let mut exists: usize = examine_response.exists;
                     /* reselecting the same mailbox with EXAMINE prevents expunging it */
                     conn.examine_mailbox(mailbox_hash, &mut response)?;
+                    if examine_response.uidnext == 0 {
+                        /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
+                        conn.send_command(
+                            format!("STATUS \"{}\" (UIDNEXT)", mailbox_path).as_bytes(),
+                        )?;
+                        conn.read_response(&mut response, RequiredResponses::STATUS)?;
+                        let (_, status) = protocol_parser::status_response(response.as_bytes())?;
+                        if let Some(uidnext) = status.uidnext {
+                            if uidnext == 0 {
+                                return Err(MeliError::new(
+                                    "IMAP server error: zero UIDNEXt with nonzero exists.",
+                                ));
+                            }
+                            examine_response.uidnext = uidnext;
+                        } else {
+                            return Err(MeliError::new("IMAP server did not reply with UIDNEXT"));
+                        }
+                    }
 
                     let mut tag_lck = uid_store.tag_index.write().unwrap();
 

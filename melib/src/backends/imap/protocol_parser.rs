@@ -1402,6 +1402,66 @@ pub fn bodystructure_has_attachments(input: &[u8]) -> bool {
     input.rfind(b" \"mixed\" ").is_some() || input.rfind(b" \"MIXED\" ").is_some()
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct StatusResponse {
+    pub messages: Option<usize>,
+    pub recent: Option<usize>,
+    pub uidnext: Option<usize>,
+    pub uidvalidity: Option<usize>,
+    pub unseen: Option<usize>,
+}
+
+// status = "STATUS" SP mailbox SP "(" status-att *(SP status-att) ")"
+// status-att = "MESSAGES" / "RECENT" / "UIDNEXT" / "UIDVALIDITY" / "UNSEEN"
+pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
+    let (input, _) = tag("* STATUS ")(input)?;
+    let (input, _) = take_until(" (")(input)?;
+    let (input, _) = tag(" (")(input)?;
+    let (input, result) = permutation((
+        opt(preceded(
+            tag("MESSAGES "),
+            map_res(digit1, |s| {
+                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+            }),
+        )),
+        opt(preceded(
+            tag("RECENT "),
+            map_res(digit1, |s| {
+                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+            }),
+        )),
+        opt(preceded(
+            tag("UIDNEXT "),
+            map_res(digit1, |s| {
+                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+            }),
+        )),
+        opt(preceded(
+            tag("UIDVALIDITY "),
+            map_res(digit1, |s| {
+                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+            }),
+        )),
+        opt(preceded(
+            tag("UNSEEN "),
+            map_res(digit1, |s| {
+                usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
+            }),
+        )),
+    ))(input)?;
+    let (input, _) = tag(")\r\n")(input)?;
+    Ok((
+        input,
+        StatusResponse {
+            messages: result.0,
+            recent: result.1,
+            uidnext: result.2,
+            uidvalidity: result.3,
+            unseen: result.4,
+        },
+    ))
+}
+
 // mailbox = "INBOX" / astring
 //           ; INBOX is case-insensitive. All case variants of
 //           ; INBOX (e.g., "iNbOx") MUST be interpreted as INBOX
