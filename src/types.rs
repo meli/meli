@@ -39,7 +39,7 @@ use super::execute::Action;
 use super::terminal::*;
 
 use melib::backends::{AccountHash, MailboxHash};
-use melib::{EnvelopeHash, RefreshEvent};
+use melib::{EnvelopeHash, RefreshEvent, ThreadHash};
 use nix::unistd::Pid;
 use std;
 use std::fmt;
@@ -119,7 +119,7 @@ pub enum UIEvent {
     RefreshEvent(Box<RefreshEvent>),
     EnvelopeUpdate(EnvelopeHash),
     EnvelopeRename(EnvelopeHash, EnvelopeHash), // old_hash, new_hash
-    EnvelopeRemove(EnvelopeHash),
+    EnvelopeRemove(EnvelopeHash, ThreadHash),
     Contacts(ContactEvent),
     Compose(ComposeEvent),
     FinishedUIDialog(crate::components::ComponentId, UIMessage),

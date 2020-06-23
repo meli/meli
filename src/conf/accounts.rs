@@ -629,25 +629,30 @@ impl Account {
                         Some(crate::types::NotificationType::NewMail),
                     ));
                 }
-                RefreshEventKind::Remove(envelope_hash) => {
+                RefreshEventKind::Remove(env_hash) => {
+                    let thread_hash = {
+                        let thread_hash = self.collection.get_env(env_hash).thread();
+                        self.collection.threads[&mailbox_hash]
+                            .find_group(self.collection.threads[&mailbox_hash][&thread_hash].group)
+                    };
                     #[cfg(feature = "sqlite3")]
                     {
                         let envelopes = self.collection.envelopes.read();
                         let envelopes = envelopes.unwrap();
-                        if let Err(err) = crate::sqlite3::remove(envelope_hash) {
+                        if let Err(err) = crate::sqlite3::remove(env_hash) {
                             melib::log(
                                 format!(
                                     "Failed to remove envelope {} [{}] in cache: {}",
-                                    &envelopes[&envelope_hash].message_id_display(),
-                                    envelope_hash,
+                                    &envelopes[&env_hash].message_id_display(),
+                                    env_hash,
                                     err.to_string()
                                 ),
                                 melib::ERROR,
                             );
                         }
                     }
-                    self.collection.remove(envelope_hash, mailbox_hash);
-                    return Some(EnvelopeRemove(envelope_hash));
+                    self.collection.remove(env_hash, mailbox_hash);
+                    return Some(EnvelopeRemove(env_hash, thread_hash));
                 }
                 RefreshEventKind::Rescan => {
                     let handle = Account::new_worker(
