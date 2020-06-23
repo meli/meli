@@ -530,6 +530,8 @@ impl Account {
                             );
                         }
                     }
+                    drop(envelopes);
+                    self.collection.update_flags(env_hash, mailbox_hash);
                     return Some(EnvelopeUpdate(env_hash));
                 }
                 RefreshEventKind::Rename(old_hash, new_hash) => {

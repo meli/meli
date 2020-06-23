@@ -351,6 +351,43 @@ impl Collection {
         }
     }
 
+    pub fn update_flags(&mut self, env_hash: EnvelopeHash, mailbox_hash: MailboxHash) {
+        if self
+            .sent_mailbox
+            .map(|f| f == mailbox_hash)
+            .unwrap_or(false)
+        {
+            for (_, t) in self.threads.iter_mut() {
+                t.update_envelope(&self.envelopes, env_hash, env_hash)
+                    .unwrap_or(());
+            }
+        }
+        {
+            if self
+                .threads
+                .entry(mailbox_hash)
+                .or_default()
+                .update_envelope(&self.envelopes, env_hash, env_hash)
+                .is_ok()
+            {
+                return;
+            }
+        }
+        /* envelope is not in threads, so insert it */
+        self.threads
+            .entry(mailbox_hash)
+            .or_default()
+            .insert(&mut self.envelopes, env_hash);
+        for (h, t) in self.threads.iter_mut() {
+            if *h == mailbox_hash {
+                continue;
+            }
+            t.update_envelope(&self.envelopes, env_hash, env_hash)
+                .ok()
+                .take();
+        }
+    }
+
     pub fn insert(&mut self, envelope: Envelope, mailbox_hash: MailboxHash) -> bool {
         let hash = envelope.hash();
         if self.message_ids.contains_key(envelope.message_id().raw()) {
