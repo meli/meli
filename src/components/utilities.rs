@@ -1864,7 +1864,14 @@ impl Component for Tabbed {
             }
             _ => {}
         }
-        self.children[self.cursor_pos].process_event(event, context)
+        let c = self.cursor_pos;
+        self.children[c].process_event(event, context)
+            || self.children.iter_mut().enumerate().any(|(idx, child)| {
+                if idx == c {
+                    return false;
+                }
+                child.process_event(event, context)
+            })
     }
     fn is_dirty(&self) -> bool {
         self.dirty || self.children[self.cursor_pos].is_dirty()
