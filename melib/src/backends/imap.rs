@@ -235,10 +235,9 @@ impl MailBackend for ImapType {
                 if let Err(err) = (move || {
                     let tx = _tx;
                     let mut our_unseen = 0;
-                    let mut max_uid: cache::MaxUID = 0;
                     let mut valid_hash_set: HashSet<EnvelopeHash> = HashSet::default();
                     let cached_hash_set: HashSet<EnvelopeHash> =
-                        (|max_uid: &mut cache::MaxUID| -> Result<HashSet<EnvelopeHash>> {
+                        (|| -> Result<HashSet<EnvelopeHash>> {
                             if !uid_store.cache_headers {
                                 return Ok(HashSet::default());
                             }
@@ -261,7 +260,6 @@ impl MailBackend for ImapType {
                                         "Could not get envelopes in cache in get()"
                                     })?;
                             let (_max_uid, envelopes) = debug!(cached_envs);
-                            *max_uid = _max_uid;
                             let ret = envelopes.iter().map(|(_, env)| env.hash()).collect();
                             if !envelopes.is_empty() {
                                 let mut payload = vec![];
@@ -287,7 +285,7 @@ impl MailBackend for ImapType {
                                 tx.send(AsyncStatus::Payload(Ok(payload))).unwrap();
                             }
                             Ok(ret)
-                        })(&mut max_uid)
+                        })()
                         .unwrap_or_default();
 
                     let mut conn = connection.lock()?;
@@ -338,11 +336,25 @@ impl MailBackend for ImapType {
                         *mailbox_exists = examine_response.exists;
                     }
                     if examine_response.exists == 0 {
+                        if uid_store.cache_headers {
+                            for &env_hash in &cached_hash_set {
+                                conn.add_refresh_event(RefreshEvent {
+                                    account_hash: uid_store.account_hash,
+                                    mailbox_hash,
+                                    kind: RefreshEventKind::Remove(env_hash),
+                                });
+                            }
+                            let _ = cache::save_envelopes(
+                                uid_store.account_hash,
+                                mailbox_hash,
+                                examine_response.uidvalidity,
+                                &[],
+                            );
+                        }
                         tx.send(AsyncStatus::Payload(Ok(Vec::new()))).unwrap();
                         tx.send(AsyncStatus::Finished).unwrap();
                         return Ok(());
                     }
-                    let mut exists: usize = examine_response.exists;
                     /* reselecting the same mailbox with EXAMINE prevents expunging it */
                     conn.examine_mailbox(mailbox_hash, &mut response)?;
                     if examine_response.uidnext == 0 {
@@ -363,13 +375,14 @@ impl MailBackend for ImapType {
                             return Err(MeliError::new("IMAP server did not reply with UIDNEXT"));
                         }
                     }
+                    let mut max_uid_left: usize = examine_response.uidnext - 1;
 
                     let mut tag_lck = uid_store.tag_index.write().unwrap();
 
-                    while exists > max_uid {
+                    while max_uid_left > 0 {
                         let mut envelopes = vec![];
-                        debug!("{} exists= {}", mailbox_hash, exists);
-                        if exists == 1 {
+                        debug!("{} max_uid_left= {}", mailbox_hash, max_uid_left);
+                        if max_uid_left == 1 {
                             debug!("UID FETCH 1 (UID FLAGS ENVELOPE BODYSTRUCTURE)");
                             conn.send_command(b"UID FETCH 1 (UID FLAGS ENVELOPE BODYSTRUCTURE)")?;
                         } else {
@@ -377,10 +390,10 @@ impl MailBackend for ImapType {
                                 debug!(format!(
                                     "UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)",
                                     std::cmp::max(
-                                        std::cmp::max(exists.saturating_sub(500), 1),
-                                        max_uid + 1
+                                        std::cmp::max(max_uid_left.saturating_sub(500), 1),
+                                        1
                                     ),
-                                    exists
+                                    max_uid_left
                                 ))
                                 .as_bytes(),
                             )?
@@ -437,10 +450,8 @@ impl MailBackend for ImapType {
                                 .insert((mailbox_hash, uid), env.hash());
                             envelopes.push((uid, env));
                         }
-                        exists = std::cmp::max(
-                            std::cmp::max(exists.saturating_sub(500), 1),
-                            max_uid + 1,
-                        );
+                        max_uid_left =
+                            std::cmp::max(std::cmp::max(max_uid_left.saturating_sub(500), 1), 1);
                         debug!("sending payload for {}", mailbox_hash);
                         if uid_store.cache_headers {
                             cache::save_envelopes(
@@ -474,7 +485,7 @@ impl MailBackend for ImapType {
                             .collect::<Vec<Envelope>>())))
                             .unwrap();
                         tx.send(AsyncStatus::ProgressReport(progress)).unwrap();
-                        if exists == 1 {
+                        if max_uid_left == 1 {
                             break;
                         }
                     }
