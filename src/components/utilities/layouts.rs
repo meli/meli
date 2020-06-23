@@ -184,7 +184,7 @@ impl Component for VSplit {
                 .map(Cell::ch)
                 .unwrap_or_else(|| ' ');
             if let HORZ_BOUNDARY = c {
-                grid[(mid, get_y(upper_left) - 1)].set_ch(LIGHT_DOWN_AND_HORIZONTAL);
+                grid[(mid, get_y(upper_left) - 1)].set_ch(_LIGHT_DOWN_AND_HORIZONTAL);
             }
         }
 
@@ -200,7 +200,7 @@ impl Component for VSplit {
                     .map(Cell::ch)
                     .unwrap_or_else(|| ' ');
                 if let HORZ_BOUNDARY = c {
-                    grid[(mid, get_y(bottom_right) + 1)].set_ch(LIGHT_UP_AND_HORIZONTAL);
+                    grid[(mid, get_y(bottom_right) + 1)].set_ch(_LIGHT_UP_AND_HORIZONTAL);
                 }
             }
             context

@@ -2372,28 +2372,16 @@ impl RowIterator {
 pub use boundaries::create_box;
 pub mod boundaries {
     use super::*;
-    /// The upper and lower boundary char.
     pub(crate) const HORZ_BOUNDARY: char = '─';
-    /// The left and right boundary char.
     pub(crate) const VERT_BOUNDARY: char = '│';
-
-    /// The top-left corner
     pub(crate) const _TOP_LEFT_CORNER: char = '┌';
-    /// The top-right corner
     pub(crate) const _TOP_RIGHT_CORNER: char = '┐';
-    /// The bottom-left corner
     pub(crate) const _BOTTOM_LEFT_CORNER: char = '└';
-    /// The bottom-right corner
     pub(crate) const _BOTTOM_RIGHT_CORNER: char = '┘';
-
     pub(crate) const LIGHT_VERTICAL_AND_RIGHT: char = '├';
-
     pub(crate) const _LIGHT_VERTICAL_AND_LEFT: char = '┤';
-
-    pub(crate) const LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
-
-    pub(crate) const LIGHT_UP_AND_HORIZONTAL: char = '┴';
-
+    pub(crate) const _LIGHT_DOWN_AND_HORIZONTAL: char = '┬';
+    pub(crate) const _LIGHT_UP_AND_HORIZONTAL: char = '┴';
     pub(crate) const _DOUBLE_DOWN_AND_RIGHT: char = '╔';
     pub(crate) const _DOUBLE_DOWN_AND_LEFT: char = '╗';
     pub(crate) const _DOUBLE_UP_AND_LEFT: char = '╝';
