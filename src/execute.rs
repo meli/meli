@@ -482,6 +482,17 @@ define_commands!([
                       }
                   )
                 },
+                { tags: ["save-draft"],
+                  desc: "save draft",
+                  tokens: &[One(Literal("save-draft"))],
+                  parser:(
+                      fn save_draft(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("save-draft")(input.trim())?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, Compose(SaveDraft)))
+                      }
+                  )
+                },
                 { tags: ["toggle sign "],
                   desc: "switch between sign/unsign for this draft",
                   tokens: &[One(Literal("toggle")), One(Literal("sign"))],
@@ -678,7 +689,7 @@ fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
 }
 
 fn compose_action(input: &[u8]) -> IResult<&[u8], Action> {
-    alt((add_attachment, remove_attachment, toggle_sign))(input)
+    alt((add_attachment, remove_attachment, toggle_sign, save_draft))(input)
 }
 
 fn account_action(input: &[u8]) -> IResult<&[u8], Action> {

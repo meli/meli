@@ -896,8 +896,8 @@ impl Account {
         bytes: &[u8],
         mailbox_type: SpecialUsageMailbox,
         flags: Flag,
-    ) -> Result<()> {
-        let mut failure = true;
+    ) -> Result<MailboxHash> {
+        let mut saved_at: Option<MailboxHash> = None;
         for mailbox in &[
             self.special_use_mailbox(mailbox_type),
             self.special_use_mailbox(SpecialUsageMailbox::Inbox),
@@ -918,12 +918,14 @@ impl Account {
                     melib::ERROR,
                 );
             } else {
-                failure = false;
+                saved_at = Some(mailbox);
                 break;
             }
         }
 
-        if failure {
+        if let Some(mailbox_hash) = saved_at {
+            Ok(mailbox_hash)
+        } else {
             let file = crate::types::create_temp_file(bytes, None, None, false);
             debug!("message saved in {}", file.path.display());
             melib::log(
@@ -939,7 +941,6 @@ impl Account {
             ))
             .set_summary("Could not save in any mailbox"));
         }
-        Ok(())
     }
 
     pub fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {

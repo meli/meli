@@ -83,6 +83,7 @@ pub enum ComposeAction {
     AddAttachment(String),
     AddAttachmentPipe(String),
     RemoveAttachment(usize),
+    SaveDraft,
     ToggleSign,
 }
 

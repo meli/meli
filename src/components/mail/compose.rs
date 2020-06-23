@@ -1070,6 +1070,16 @@ impl Component for Composer {
                         self.dirty = true;
                         return true;
                     }
+                    Action::Compose(ComposeAction::SaveDraft) => {
+                        save_draft(
+                            self.draft.clone().finalise().unwrap().as_bytes(),
+                            context,
+                            SpecialUsageMailbox::Drafts,
+                            Flag::SEEN | Flag::DRAFT,
+                            self.account_cursor,
+                        );
+                        return true;
+                    }
                     Action::Compose(ComposeAction::ToggleSign) => {
                         let is_true = self.sign_mail.is_true();
                         self.sign_mail = ToggleFlag::from(!is_true);
@@ -1338,14 +1348,25 @@ pub fn save_draft(
     flags: Flag,
     account_cursor: usize,
 ) {
-    if let Err(MeliError {
-        summary, details, ..
-    }) = context.accounts[account_cursor].save_special(bytes, mailbox_type, flags)
-    {
-        context.replies.push_back(UIEvent::Notification(
-            summary.map(|s| s.into()),
-            details.into(),
-            Some(NotificationType::ERROR),
-        ));
+    match context.accounts[account_cursor].save_special(bytes, mailbox_type, flags) {
+        Err(MeliError {
+            summary, details, ..
+        }) => {
+            context.replies.push_back(UIEvent::Notification(
+                summary.map(|s| s.into()),
+                details.into(),
+                Some(NotificationType::ERROR),
+            ));
+        }
+        Ok(mailbox_hash) => {
+            context.replies.push_back(UIEvent::Notification(
+                Some("Draft saved".into()),
+                format!(
+                    "Draft saved in `{}`",
+                    &context.accounts[account_cursor].mailbox_entries[&mailbox_hash].name
+                ),
+                Some(NotificationType::INFO),
+            ));
+        }
     }
 }
