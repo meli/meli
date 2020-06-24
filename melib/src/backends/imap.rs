@@ -46,7 +46,7 @@ use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result, ResultIntoMeliError};
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hash::Hasher;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
@@ -236,7 +236,7 @@ impl MailBackend for ImapType {
                 let _tx = tx.clone();
                 if let Err(err) = (move || {
                     let tx = _tx;
-                    let mut our_unseen = 0;
+                    let mut our_unseen: BTreeSet<EnvelopeHash> = Default::default();
                     let mut valid_hash_set: HashSet<EnvelopeHash> = HashSet::default();
                     let cached_hash_set: HashSet<EnvelopeHash> =
                         (|| -> Result<HashSet<EnvelopeHash>> {
@@ -266,8 +266,8 @@ impl MailBackend for ImapType {
                             if !envelopes.is_empty() {
                                 let mut payload = vec![];
                                 for (uid, env) in envelopes {
-                                    if !env.flags().contains(Flag::SEEN) {
-                                        our_unseen += 1;
+                                    if !env.is_seen() {
+                                        our_unseen.insert(env.hash());
                                     }
                                     uid_store
                                         .hash_index
@@ -283,7 +283,7 @@ impl MailBackend for ImapType {
                                 }
                                 debug!("sending cached payload for {}", mailbox_hash);
 
-                                *unseen.lock().unwrap() = our_unseen;
+                                unseen.lock().unwrap().insert_set(our_unseen.clone());
                                 tx.send(AsyncStatus::Payload(Ok(payload))).unwrap();
                             }
                             Ok(ret)
@@ -334,8 +334,10 @@ impl MailBackend for ImapType {
                         permissions.rename_messages = !examine_response.read_only;
                         permissions.delete_messages = !examine_response.read_only;
                         permissions.delete_messages = !examine_response.read_only;
-                        let mut mailbox_exists = mailbox_exists.lock().unwrap();
-                        *mailbox_exists = examine_response.exists;
+                        mailbox_exists
+                            .lock()
+                            .unwrap()
+                            .set_not_yet_seen(examine_response.exists);
                     }
                     if examine_response.exists == 0 {
                         if uid_store.cache_headers {
@@ -429,8 +431,8 @@ impl MailBackend for ImapType {
                             env.set_hash(h.finish());
                             valid_hash_set.insert(env.hash());
                             if let Some((flags, keywords)) = flags {
-                                if !flags.contains(Flag::SEEN) {
-                                    our_unseen += 1;
+                                if !flags.intersects(Flag::SEEN) {
+                                    our_unseen.insert(env.hash());
                                 }
                                 env.set_flags(flags);
                                 for f in keywords {
@@ -487,8 +489,14 @@ impl MailBackend for ImapType {
                                 kind: RefreshEventKind::Remove(env_hash),
                             });
                         }
-                        *unseen.lock().unwrap() = our_unseen;
                         let progress = envelopes.len();
+                        unseen
+                            .lock()
+                            .unwrap()
+                            .insert_set(our_unseen.iter().cloned().collect());
+                        mailbox_exists.lock().unwrap().insert_existing_set(
+                            envelopes.iter().map(|(_, env)| env.hash()).collect::<_>(),
+                        );
                         tx.send(AsyncStatus::Payload(Ok(envelopes
                             .into_iter()
                             .map(|(_, env)| env)

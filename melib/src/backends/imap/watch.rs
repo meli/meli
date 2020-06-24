@@ -155,7 +155,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     debug!("select response {}", &response);
     {
         let mut prev_exists = mailbox.exists.lock().unwrap();
-        *prev_exists = match protocol_parser::select_response(&response) {
+        match protocol_parser::select_response(&response) {
             Ok(ok) => {
                 {
                     uidvalidity = ok.uidvalidity;
@@ -168,7 +168,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                 mailbox_hash,
                                 kind: RefreshEventKind::Rescan,
                             });
-                            *prev_exists = 0;
+                            prev_exists.clear();
                             /*
                             uid_store.uid_index.lock().unwrap().clear();
                             uid_store.hash_index.lock().unwrap().clear();
@@ -194,7 +194,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                     }
                 }
                 debug!(&ok);
-                ok.exists
             }
             Err(e) => {
                 debug!("{:?}", e);
@@ -322,7 +321,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         ))
                                         .unwrap();
                                     ctr += 1;
-                                    *mailbox.exists.lock().unwrap() += 1;
                                     if !uid_store
                                         .uid_index
                                         .lock()
@@ -361,7 +359,11 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                                 }
                                             }
                                             if !env.is_seen() {
-                                                *mailbox.unseen.lock().unwrap() += 1;
+                                                mailbox
+                                                    .unseen
+                                                    .lock()
+                                                    .unwrap()
+                                                    .insert_new(env.hash());
                                             }
                                             if uid_store.cache_headers {
                                                 cache::save_envelopes(
@@ -371,6 +373,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                                     &[(uid, &env)],
                                                 )?;
                                             }
+                                            mailbox.exists.lock().unwrap().insert_new(env.hash());
 
                                             conn.add_refresh_event(RefreshEvent {
                                                 account_hash: uid_store.account_hash,
@@ -445,12 +448,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         format!(
                             "got `{} EXISTS` notification (EXISTS was previously {} for {}",
                             n,
-                            *prev_exists,
+                            prev_exists.len(),
                             mailbox.path()
                         ),
                     ))
                     .unwrap();
-                if n > *prev_exists {
+                if n > prev_exists.len() {
                     exit_on_error!(
                         conn,
                         mailbox_hash,
@@ -460,7 +463,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         conn.send_command(
                             &[
                             b"FETCH",
-                            format!("{}:{}", *prev_exists + 1, n).as_bytes(),
+                            format!("{}:{}", prev_exists.len() + 1, n).as_bytes(),
                             b"(UID FLAGS RFC822)",
                             ]
                             .join(&b' '),
@@ -523,7 +526,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         mailbox.path(),
                                     );
                                     if !env.is_seen() {
-                                        *mailbox.unseen.lock().unwrap() += 1;
+                                        mailbox.unseen.lock().unwrap().insert_new(env.hash());
                                     }
                                     if uid_store.cache_headers {
                                         cache::save_envelopes(
@@ -533,6 +536,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             &[(uid, &env)],
                                         )?;
                                     }
+                                    prev_exists.insert_new(env.hash());
 
                                     conn.add_refresh_event(RefreshEvent {
                                         account_hash: uid_store.account_hash,
@@ -550,10 +554,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                             debug!(e);
                         }
                     }
-
-                    *prev_exists = n;
-                } else if n < *prev_exists {
-                    *prev_exists = n;
                 }
             }
             Ok(Some(Fetch(msg_seq, flags))) => {
@@ -588,6 +588,11 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                 .unwrap()
                                 .get(&(mailbox_hash, uid))
                             {
+                                if !flags.0.intersects(crate::email::Flag::SEEN) {
+                                    mailbox.unseen.lock().unwrap().insert_new(*env_hash);
+                                } else {
+                                    mailbox.unseen.lock().unwrap().remove(*env_hash);
+                                }
                                 conn.add_refresh_event(RefreshEvent {
                                     account_hash: uid_store.account_hash,
                                     mailbox_hash,
@@ -767,7 +772,11 @@ pub fn examine_updates(
                                                 }
                                             }
                                             if !env.is_seen() {
-                                                *mailbox.unseen.lock().unwrap() += 1;
+                                                mailbox
+                                                    .unseen
+                                                    .lock()
+                                                    .unwrap()
+                                                    .insert_new(env.hash());
                                             }
                                             if uid_store.cache_headers {
                                                 cache::save_envelopes(
@@ -777,6 +786,7 @@ pub fn examine_updates(
                                                     &[(uid, &env)],
                                                 )?;
                                             }
+                                            prev_exists.insert_new(env.hash());
 
                                             conn.add_refresh_event(RefreshEvent {
                                                 account_hash: uid_store.account_hash,
@@ -800,7 +810,7 @@ pub fn examine_updates(
                         }
                     }
                 }
-            } else if n > *prev_exists {
+            } else if n > prev_exists.len() {
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
                  * */
                 debug!("exists {}", n);
@@ -812,7 +822,7 @@ pub fn examine_updates(
                     conn.send_command(
                         &[
                         b"FETCH",
-                        format!("{}:{}", *prev_exists + 1, n).as_bytes(),
+                        format!("{}:{}", prev_exists.len() + 1, n).as_bytes(),
                         b"(UID FLAGS RFC822)",
                         ]
                         .join(&b' '),
@@ -863,7 +873,7 @@ pub fn examine_updates(
                                     mailbox.path(),
                                 );
                                 if !env.is_seen() {
-                                    *mailbox.unseen.lock().unwrap() += 1;
+                                    mailbox.unseen.lock().unwrap().insert_new(env.hash());
                                 }
                                 if uid_store.cache_headers {
                                     cache::save_envelopes(
@@ -873,6 +883,7 @@ pub fn examine_updates(
                                         &[(uid, &env)],
                                     )?;
                                 }
+                                prev_exists.insert_new(env.hash());
 
                                 conn.add_refresh_event(RefreshEvent {
                                     account_hash: uid_store.account_hash,
@@ -886,10 +897,6 @@ pub fn examine_updates(
                         debug!(e);
                     }
                 }
-
-                *prev_exists = n;
-            } else if n < *prev_exists {
-                *prev_exists = n;
             }
         }
         Err(e) => {

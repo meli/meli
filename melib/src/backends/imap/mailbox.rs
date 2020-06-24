@@ -21,8 +21,77 @@
 use crate::backends::{
     BackendMailbox, Mailbox, MailboxHash, MailboxPermissions, SpecialUsageMailbox,
 };
+use crate::email::EnvelopeHash;
 use crate::error::*;
+use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, RwLock};
+
+#[derive(Debug, Default, Clone)]
+pub struct LazyCountSet {
+    not_yet_seen: usize,
+    set: BTreeSet<EnvelopeHash>,
+}
+
+impl LazyCountSet {
+    pub fn set_not_yet_seen(&mut self, new_val: usize) {
+        self.not_yet_seen = new_val;
+    }
+
+    pub fn insert_existing(&mut self, new_val: EnvelopeHash) -> bool {
+        if self.not_yet_seen == 0 {
+            false
+        } else {
+            self.not_yet_seen -= 1;
+            self.set.insert(new_val);
+            true
+        }
+    }
+
+    pub fn insert_existing_set(&mut self, set: BTreeSet<EnvelopeHash>) -> bool {
+        debug!("insert_existing_set {:?}", &set);
+        if self.not_yet_seen < set.len() {
+            false
+        } else {
+            self.not_yet_seen -= set.len();
+            self.set.extend(set.into_iter());
+            true
+        }
+    }
+
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.set.len() + self.not_yet_seen
+    }
+
+    #[inline(always)]
+    pub fn clear(&mut self) {
+        self.set.clear();
+        self.not_yet_seen = 0;
+    }
+
+    pub fn insert_new(&mut self, new_val: EnvelopeHash) {
+        self.set.insert(new_val);
+    }
+
+    pub fn insert_set(&mut self, set: BTreeSet<EnvelopeHash>) {
+        debug!("insert__set {:?}", &set);
+        self.set.extend(set.into_iter());
+    }
+
+    pub fn remove(&mut self, new_val: EnvelopeHash) -> bool {
+        self.set.remove(&new_val)
+    }
+}
+
+#[test]
+fn test_lazy_count_set() {
+    let mut new = LazyCountSet::default();
+    new.set_not_yet_seen(10);
+    for i in 0..10 {
+        assert!(new.insert_existing(i));
+    }
+    assert!(!new.insert_existing(10));
+}
 
 #[derive(Debug, Default, Clone)]
 pub struct ImapMailbox {
@@ -38,8 +107,8 @@ pub struct ImapMailbox {
     pub is_subscribed: bool,
 
     pub permissions: Arc<Mutex<MailboxPermissions>>,
-    pub exists: Arc<Mutex<usize>>,
-    pub unseen: Arc<Mutex<usize>>,
+    pub exists: Arc<Mutex<LazyCountSet>>,
+    pub unseen: Arc<Mutex<LazyCountSet>>,
 }
 
 impl ImapMailbox {
@@ -98,6 +167,6 @@ impl BackendMailbox for ImapMailbox {
     }
 
     fn count(&self) -> Result<(usize, usize)> {
-        Ok((*self.unseen.lock()?, *self.exists.lock()?))
+        Ok((self.unseen.lock()?.len(), self.exists.lock()?.len()))
     }
 }

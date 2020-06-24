@@ -106,13 +106,13 @@ impl ImapConnection {
                  * */
                 let mut prev_exists = mailbox.exists.lock().unwrap();
                 debug!("exists {}", n);
-                if n > *prev_exists {
+                if n > prev_exists.len() {
                     try_fail!(
                         mailbox_hash,
                         self.send_command(
                             &[
                             b"FETCH",
-                            format!("{}:{}", *prev_exists + 1, n).as_bytes(),
+                            format!("{}:{}", prev_exists.len() + 1, n).as_bytes(),
                             b"(UID FLAGS RFC822)",
                             ]
                             .join(&b' '),
@@ -165,8 +165,9 @@ impl ImapConnection {
                                         mailbox.path(),
                                     );
                                     if !env.is_seen() {
-                                        *mailbox.unseen.lock().unwrap() += 1;
+                                        mailbox.unseen.lock().unwrap().insert_new(env.hash());
                                     }
+                                    prev_exists.insert_new(env.hash());
                                     self.add_refresh_event(RefreshEvent {
                                         account_hash: self.uid_store.account_hash,
                                         mailbox_hash,
@@ -179,9 +180,6 @@ impl ImapConnection {
                             debug!(e);
                         }
                     }
-                    *prev_exists = n;
-                } else if n < *prev_exists {
-                    *prev_exists = n;
                 }
             }
             UntaggedResponse::Recent(_) => {
@@ -213,7 +211,6 @@ impl ImapConnection {
                                     uid, flags, body, ..
                                 } in v
                                 {
-                                    *mailbox.exists.lock().unwrap() += 1;
                                     if !self
                                         .uid_store
                                         .uid_index
@@ -253,9 +250,14 @@ impl ImapConnection {
                                                 }
                                             }
                                             if !env.is_seen() {
-                                                *mailbox.unseen.lock().unwrap() += 1;
+                                                mailbox
+                                                    .unseen
+                                                    .lock()
+                                                    .unwrap()
+                                                    .insert_new(env.hash());
                                             }
 
+                                            mailbox.exists.lock().unwrap().insert_new(env.hash());
                                             self.add_refresh_event(RefreshEvent {
                                                 account_hash: self.uid_store.account_hash,
                                                 mailbox_hash,
@@ -307,6 +309,11 @@ impl ImapConnection {
                             let env_hash = lck.get(&(mailbox_hash, uid)).map(|&h| h);
                             drop(lck);
                             if let Some(env_hash) = env_hash {
+                                if !flags.0.intersects(crate::email::Flag::SEEN) {
+                                    mailbox.unseen.lock().unwrap().insert_new(env_hash);
+                                } else {
+                                    mailbox.unseen.lock().unwrap().remove(env_hash);
+                                }
                                 self.add_refresh_event(RefreshEvent {
                                     account_hash: self.uid_store.account_hash,
                                     mailbox_hash,
