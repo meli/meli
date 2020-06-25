@@ -58,6 +58,15 @@ impl<'i> From<(&'i [u8], &'static str)> for ParsingError<&'i [u8]> {
     }
 }
 
+impl<'i> From<(&'i [u8], String)> for ParsingError<&'i [u8]> {
+    fn from((input, error): (&'i [u8], String)) -> Self {
+        Self {
+            input,
+            error: error.into(),
+        }
+    }
+}
+
 impl<I> nom::error::ParseError<I> for ParsingError<I> {
     fn from_error_kind(input: I, kind: ErrorKind) -> Self {
         Self {
@@ -561,34 +570,52 @@ pub mod headers {
                 ptr = i + 1;
                 break;
             } else if is_ctl_or_space!(*x) {
-                return Err(nom::Err::Error((input, "FIXME").into()));
+                return Err(nom::Err::Error(
+                    (
+                        &input[i..],
+                        format!("header_with_val(): invalid character: {:?}", *x as char),
+                    )
+                        .into(),
+                ));
             }
         }
         if name.is_empty() {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "header_with_val(): found empty header name ").into(),
+            ));
         }
         if ptr >= input.len() {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "header_with_val(): found EOF").into(),
+            ));
         }
 
         if input[ptr] == b'\n' {
             ptr += 1;
             if ptr >= input.len() {
-                return Err(nom::Err::Error((input, "FIXME").into()));
+                return Err(nom::Err::Error(
+                    (input, "header_with_val(): found EOF").into(),
+                ));
             }
         } else if input[ptr..].starts_with(b"\r\n") {
             ptr += 2;
             if ptr > input.len() {
-                return Err(nom::Err::Error((input, "FIXME").into()));
+                return Err(nom::Err::Error(
+                    (input, "header_with_val(): found EOF").into(),
+                ));
             }
         }
         if ptr >= input.len() {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "header_with_val(): found EOF").into(),
+            ));
         }
         while input[ptr] == b' ' || input[ptr] == b'\t' {
             ptr += 1;
             if ptr >= input.len() {
-                return Err(nom::Err::Error((input, "FIXME").into()));
+                return Err(nom::Err::Error(
+                    (input, "header_with_val(): found EOF").into(),
+                ));
             }
         }
         header_value(&input[ptr..]).map(|(rest, value)| (rest, (name, value)))
@@ -596,7 +623,9 @@ pub mod headers {
 
     pub fn headers_raw(input: &[u8]) -> IResult<&[u8], &[u8]> {
         if input.is_empty() {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, format!("headers_raw(): input is empty",)).into(),
+            ));
         }
         for i in 0..input.len() {
             if input[i..].starts_with(b"\n\n") {
@@ -605,7 +634,9 @@ pub mod headers {
                 return Ok((&input[(i + 2)..], &input[0..=i]));
             }
         }
-        Err(nom::Err::Error((input, "FIXME").into()))
+        Err(nom::Err::Error(
+            (input, "headers_raw(): got EOF while looking for new line").into(),
+        ))
     }
 }
 
@@ -631,11 +662,15 @@ pub mod attachments {
             let b_start = if let Some(v) = input.find(boundary) {
                 v
             } else {
-                return Err(nom::Err::Error((input, "FIXME").into()));
+                return Err(nom::Err::Error(
+                    (input, "multipart_parts(): could not find starting boundary").into(),
+                ));
             };
 
             if b_start < 2 {
-                return Err(nom::Err::Error((input, "FIXME").into()));
+                return Err(nom::Err::Error(
+                    (input, "multipart_parts(): malformed boundary").into(),
+                ));
             }
             offset += b_start - 2;
             input = &input[b_start - 2..];
@@ -657,11 +692,15 @@ pub mod attachments {
 
         loop {
             if input.len() < boundary.len() + 4 {
-                return Err(nom::Err::Error((input, "FIXME").into()));
+                return Err(nom::Err::Error(
+                    (input, "multipart_parts(): found EOF").into(),
+                ));
             }
             if let Some(end) = input.find(boundary) {
                 if &input[end - 2..end] != b"--" {
-                    return Err(nom::Err::Error((input, "FIXME").into()));
+                    return Err(nom::Err::Error(
+                        (input, "multipart_parts(): malformed boundary").into(),
+                    ));
                 }
                 ret.push(StrBuilder {
                     offset,
@@ -698,11 +737,15 @@ pub mod attachments {
                 let b_start = if let Some(v) = input.find(boundary) {
                     v
                 } else {
-                    return Err(nom::Err::Error((input, "FIXME").into()));
+                    return Err(nom::Err::Error(
+                        (input, "parts_f(): could not find starting boundary").into(),
+                    ));
                 };
 
                 if b_start < 2 {
-                    return Err(nom::Err::Error((input, "FIXME").into()));
+                    return Err(nom::Err::Error(
+                        (input, "parts_f(): malformed boundary").into(),
+                    ));
                 }
                 input = &input[b_start - 2..];
                 if &input[0..2] == b"--" {
@@ -719,11 +762,11 @@ pub mod attachments {
             }
             loop {
                 if input.len() < boundary.len() + 4 {
-                    return Err(nom::Err::Error((input, "FIXME").into()));
+                    return Err(nom::Err::Error((input, "parts_f(): found EOF").into()));
                 }
                 if let Some(end) = input.find(boundary) {
                     if &input[end - 2..end] != b"--" {
-                        return Err(nom::Err::Error((input, "FIXME").into()));
+                        return Err(nom::Err::Error((input, "parts_f(): found EOF").into()));
                     }
                     ret.push(&input[0..end - 2]);
                     input = &input[end + boundary.len()..];
@@ -805,7 +848,13 @@ pub mod encodings {
     use encoding::{DecoderTrap, Encoding};
     pub fn quoted_printable_byte(input: &[u8]) -> IResult<&[u8], u8> {
         if input.len() < 3 {
-            Err(nom::Err::Error((input, "FIXME").into()))
+            Err(nom::Err::Error(
+                (
+                    input,
+                    "quoted_printable_byte(): input too short to be quoted_printable",
+                )
+                    .into(),
+            ))
         } else if input[0] == b'=' && is_hex_digit(input[1]) && is_hex_digit(input[2]) {
             let a = if input[1] < b':' {
                 input[1] - 48
@@ -825,7 +874,9 @@ pub mod encodings {
         } else if input.starts_with(b"\r\n") {
             Ok((&input[2..], b'\n'))
         } else {
-            Err(nom::Err::Error((input, "FIXME").into()))
+            Err(nom::Err::Error(
+                (input, "quoted_printable_byte(): invalid input").into(),
+            ))
         }
     }
 
@@ -837,9 +888,13 @@ pub mod encodings {
             return Ok((&[], Vec::with_capacity(0)));
         }
         if input.len() < 5 {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "encoded_word(): input too short to be encoded_word").into(),
+            ));
         } else if input[0] != b'=' || input[1] != b'?' {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "encoded_word(): invalid input").into(),
+            ));
         }
         /* find end of Charset tag:
          * =?charset?encoding?encoded text?=
@@ -853,12 +908,16 @@ pub mod encodings {
             }
         }
         if tag_end_idx.is_none() {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "encoded_word(): expected end tag").into(),
+            ));
         }
         let tag_end_idx = tag_end_idx.unwrap();
 
         if tag_end_idx + 2 >= input.len() || input[2 + tag_end_idx] != b'?' {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "encoded_word(): expected valid end tag").into(),
+            ));
         }
         /* See if input ends with "?=" and get ending index
          * =?charset?encoding?encoded text?=
@@ -872,7 +931,9 @@ pub mod encodings {
             }
         }
         if encoded_end_idx.is_none() {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "encoded_word(): expected input after end tag").into(),
+            ));
         }
         let encoded_end_idx = encoded_end_idx.unwrap();
         let encoded_text = &input[3 + tag_end_idx..encoded_end_idx];
@@ -884,9 +945,17 @@ pub mod encodings {
             },
             b'q' | b'Q' => match quoted_printable_bytes_header(encoded_text) {
                 Ok((b"", s)) => s,
-                _ => return Err(nom::Err::Error((input, "FIXME").into())),
+                _ => {
+                    return Err(nom::Err::Error(
+                        (input, "encoded_word(): invalid quoted_printable").into(),
+                    ))
+                }
             },
-            _ => return Err(nom::Err::Error((input, "FIXME").into())),
+            _ => {
+                return Err(nom::Err::Error(
+                    (input, "encoded_word(): expected 'b|q'").into(),
+                ))
+            }
         };
 
         let charset = Charset::from(&input[2..tag_end_idx]);
@@ -896,7 +965,13 @@ pub mod encodings {
         } else {
             match decode_charset(&s, charset) {
                 Ok(v) => Ok((&input[encoded_end_idx + 2..], v.into_bytes())),
-                _ => Err(nom::Err::Error((input, "FIXME").into())),
+                _ => Err(nom::Err::Error(
+                    (
+                        input,
+                        format!("encoded_word(): unknown charset {:?}", charset),
+                    )
+                        .into(),
+                )),
             }
         }
     }
@@ -923,13 +998,17 @@ pub mod encodings {
 
     fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
         if input.len() < 2 {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "quoted_printable_soft_break(): found EOF").into(),
+            ));
         } else if input[0] == b'=' && input[1] == b'\n' {
             Ok((&input[2..], &input[0..2])) // `=\n` is an escaped space character.
         } else if input.len() > 3 && input.starts_with(b"=\r\n") {
             Ok((&input[3..], &input[0..3])) // `=\r\n` is an escaped space character.
         } else {
-            Err(nom::Err::Error((input, "FIXME").into()))
+            Err(nom::Err::Error(
+                (input, "quoted_printable_soft_break(): invalid input").into(),
+            ))
         }
     }
 
@@ -1060,7 +1139,9 @@ pub mod encodings {
                 ptr = ascii_e;
             }
             if ascii_s >= ascii_e {
-                return Err(nom::Err::Error((input, "FIXME").into()));
+                return Err(nom::Err::Error(
+                    (input, "phrase(): start of an encoded word but no end").into(),
+                ));
             }
 
             acc.extend(ascii_token(&input[ascii_s..ascii_e])?.1);
@@ -1077,7 +1158,7 @@ pub mod address {
     use crate::email::address::*;
     pub fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
         if input.is_empty() || input.len() < 3 {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error((input, "display_addr(): EOF").into()));
         } else if !is_whitespace!(input[0]) {
             let mut display_name = StrBuilder {
                 offset: 0,
@@ -1094,16 +1175,26 @@ pub mod address {
             if !flag {
                 let (rest, output) = match super::encodings::phrase(input, false) {
                     Ok(v) => v,
-                    _ => return Err(nom::Err::Error((input, "FIXME").into())),
+                    _ => {
+                        return Err(nom::Err::Error(
+                            (input, "display_addr(): no '<' found").into(),
+                        ))
+                    }
                 };
                 if output.contains(&b'<') {
                     let (_, address) = match display_addr(&output) {
                         Ok(v) => v,
-                        _ => return Err(nom::Err::Error((input, "FIXME").into())),
+                        _ => {
+                            return Err(nom::Err::Error(
+                                (input, "display_addr(): invalid input").into(),
+                            ))
+                        }
                     };
                     return Ok((rest, address));
                 }
-                return Err(nom::Err::Error((input, "FIXME").into()));
+                return Err(nom::Err::Error(
+                    (input, "display_addr(): invalid input").into(),
+                ));
             }
             let mut end = input.len();
             let mut at_flag = false;
@@ -1156,16 +1247,20 @@ pub mod address {
                     }),
                 ))
             } else {
-                Err(nom::Err::Error((input, "FIXME").into()))
+                Err(nom::Err::Error(
+                    (input, "display_addr(): did not find both '@' and '>'").into(),
+                ))
             }
         } else {
-            Err(nom::Err::Error((input, "FIXME").into()))
+            Err(nom::Err::Error(
+                (input, "display_addr(): unexpected whitespace").into(),
+            ))
         }
     }
 
     fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
         if input.is_empty() || input.len() < 3 {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error((input, "addr_spec(): found EOF").into()));
         } else if !is_whitespace!(input[0]) {
             let mut end = input[1..].len();
             let mut flag = false;
@@ -1194,10 +1289,12 @@ pub mod address {
                     }),
                 ))
             } else {
-                Err(nom::Err::Error((input, "FIXME").into()))
+                Err(nom::Err::Error((input, "addr_spec(): expected '@'").into()))
             }
         } else {
-            Err(nom::Err::Error((input, "FIXME").into()))
+            Err(nom::Err::Error(
+                (input, "addr_spec(): unexpected whitespace").into(),
+            ))
         }
     }
 
@@ -1218,14 +1315,16 @@ pub mod address {
         let mut flag = false;
         let mut dlength = 0;
         for (i, b) in input.iter().enumerate() {
-            if *b == b':' {
+            if *b == b';' {
                 flag = true;
                 dlength = i;
                 break;
             }
         }
         if !flag {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "group(): expected to find ';'").into(),
+            ));
         }
 
         let (rest, vec) = mailbox_list(&input[dlength..])?;
@@ -1295,16 +1394,22 @@ pub mod address {
     fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
         let input_length = input.len();
         if input.is_empty() {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "message_id_peek(): found EOF").into(),
+            ));
         } else if input_length == 2 || input[0] != b'<' {
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "message_id_peek(): expected '<'").into(),
+            ));
         } else {
             for (i, &x) in input.iter().take(input_length).enumerate().skip(1) {
                 if x == b'>' {
                     return Ok((&input[i + 1..], &input[0..=i]));
                 }
             }
-            return Err(nom::Err::Error((input, "FIXME").into()));
+            return Err(nom::Err::Error(
+                (input, "message_id_peek(): expected closing '>'").into(),
+            ));
         }
     }
 
