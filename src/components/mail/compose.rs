@@ -1360,9 +1360,9 @@ pub fn save_draft(
         }
         Ok(mailbox_hash) => {
             context.replies.push_back(UIEvent::Notification(
-                Some("Draft saved".into()),
+                Some("Message saved".into()),
                 format!(
-                    "Draft saved in `{}`",
+                    "Message saved in `{}`",
                     &context.accounts[account_cursor].mailbox_entries[&mailbox_hash].name
                 ),
                 Some(NotificationType::INFO),
