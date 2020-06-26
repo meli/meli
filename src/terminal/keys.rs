@@ -175,10 +175,11 @@ pub fn get_events(
         select! {
             default => {
                 if stdin_fd.revents().is_some() {
-                    if let Some(c) = stdin_iter.next(){
+                    'stdin_while: while let Some(c) = stdin_iter.next(){
                         match (c, &mut input_mode) {
                             (Ok((TermionEvent::Key(k), bytes)), InputMode::Normal) => {
                                 closure((Key::from(k), bytes));
+                                continue 'poll_while;
                             }
                             (
                                 Ok((TermionEvent::Key(TermionKey::Char(k)), ref mut bytes)), InputMode::Paste(ref mut buf),
@@ -186,9 +187,11 @@ pub fn get_events(
                                 paste_buf.push(k);
                                 let bytes = std::mem::replace(bytes, Vec::new());
                                 buf.extend(bytes.into_iter());
+                                continue 'stdin_while;
                             }
                             (Ok((TermionEvent::Unsupported(ref k), _)), _) if k.as_slice() == BRACKET_PASTE_START => {
                                 input_mode = InputMode::Paste(Vec::new());
+                                continue 'stdin_while;
                             }
                             (Ok((TermionEvent::Unsupported(ref k), _)), InputMode::Paste(ref mut buf))
                                 if k.as_slice() == BRACKET_PASTE_END =>
@@ -198,8 +201,11 @@ pub fn get_events(
                                     let ret = Key::from(&paste_buf);
                                     paste_buf.clear();
                                     closure((ret, buf));
+                                    continue 'poll_while;
                                 }
-                            _ => {} // Mouse events or errors.
+                            _ => {
+                                continue 'poll_while;
+                            } // Mouse events or errors.
                         }
                     }
                 }
