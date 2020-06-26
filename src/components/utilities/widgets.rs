@@ -989,3 +989,102 @@ impl ScrollBar {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct ProgressSpinner {
+    timer: crate::timer::PosixTimer,
+    stage: usize,
+    kind: usize,
+    dirty: bool,
+    id: ComponentId,
+}
+
+impl ProgressSpinner {
+    const KINDS: &'static [&'static [&'static str]] = &[
+        &["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
+        &["⣀", "⣄", "⣤", "⣦", "⣶", "⣷", "⣿"],
+        &["⣀", "⣄", "⣆", "⣇", "⣧", "⣷", "⣿"],
+        &["○", "◔", "◐", "◕", "⬤"],
+        &["□", "◱", "◧", "▣", "■"],
+        &["□", "◱", "▨", "▩", "■"],
+        &["□", "◱", "▥", "▦", "■"],
+        &["░", "▒", "▓", "█"],
+        &["░", "█"],
+        &["⬜", "⬛"],
+        &["▱", "▰"],
+        &["▭", "◼"],
+        &["▯", "▮"],
+        &["◯", "⬤"],
+        &["⚪", "⚫"],
+    ];
+
+    pub fn new(kind: usize) -> Self {
+        let timer = crate::timer::PosixTimer::new_with_signal(
+            std::time::Duration::from_millis(50),
+            std::time::Duration::from_millis(500),
+            nix::sys::signal::Signal::SIGALRM,
+        )
+        .unwrap();
+        ProgressSpinner {
+            timer,
+            stage: 0,
+            kind: kind % Self::KINDS.len(),
+            dirty: true,
+            id: ComponentId::new_v4(),
+        }
+    }
+}
+
+impl fmt::Display for ProgressSpinner {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "progress bar")
+    }
+}
+
+impl Component for ProgressSpinner {
+    fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if self.dirty {
+            let theme_attr = crate::conf::value(context, "theme_default");
+            clear_area(grid, area, theme_attr);
+            let stage = self.stage;
+            self.stage = (self.stage + 1).wrapping_rem(Self::KINDS[self.kind].len());
+            write_string_to_grid(
+                Self::KINDS[self.kind][stage],
+                grid,
+                theme_attr.fg,
+                theme_attr.bg,
+                theme_attr.attrs,
+                area,
+                None,
+            );
+            context.dirty_areas.push_back(area);
+            self.dirty = false;
+        }
+    }
+
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+        match event {
+            UIEvent::Timer(id) if *id == self.timer.si_value => {
+                self.dirty = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn set_dirty(&mut self, new_val: bool) {
+        self.dirty = new_val;
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    fn id(&self) -> ComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ComponentId) {
+        self.id = id;
+    }
+}
