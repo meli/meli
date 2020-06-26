@@ -24,6 +24,7 @@
  */
 
 use super::{AccountConf, FileMailboxConf};
+use crate::jobs1::JobExecutor;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
     AccountHash, BackendOp, Backends, MailBackend, Mailbox, MailboxHash, NotifyFn, ReadOnlyOp,
@@ -41,6 +42,7 @@ use std::collections::{HashMap, HashSet};
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use crate::{StatusEvent, ThreadEvent};
 use crossbeam::Sender;
+pub use futures::stream::Stream;
 use std::collections::VecDeque;
 use std::fs;
 use std::io;
@@ -193,6 +195,7 @@ impl Account {
         mut settings: AccountConf,
         map: &Backends,
         work_context: WorkContext,
+        job_executor: &JobExecutor,
         sender: Sender<ThreadEvent>,
         notify_fn: NotifyFn,
     ) -> Result<Self> {

@@ -36,6 +36,7 @@ mod helpers;
 pub use self::helpers::*;
 
 use super::execute::Action;
+use super::jobs1::JobId;
 use super::terminal::*;
 
 use melib::backends::{AccountHash, MailboxHash};
@@ -68,6 +69,7 @@ pub enum ThreadEvent {
     /// A thread has updated some of its information
     Pulse,
     //Decode { _ }, // For gpg2 signature check
+    JobFinished(JobId),
 }
 
 impl From<RefreshEvent> for ThreadEvent {
