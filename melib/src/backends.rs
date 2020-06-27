@@ -33,6 +33,8 @@ macro_rules! tag_hash {
 
 #[cfg(feature = "imap_backend")]
 pub mod imap;
+#[cfg(feature = "imap_backend")]
+pub mod imap_async;
 //#[cfg(feature = "imap_backend")]
 //pub mod imap2;
 #[cfg(feature = "maildir_backend")]
@@ -66,7 +68,9 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
+use core::pin::Pin;
 pub use futures::stream::Stream;
+use std::future::Future;
 
 use std;
 use std::collections::HashMap;
@@ -144,6 +148,13 @@ impl Backends {
                 Backend {
                     create_fn: Box::new(|| Box::new(|f, i| ImapType::new(f, i))),
                     validate_conf_fn: Box::new(ImapType::validate_config),
+                },
+            );
+            b.register(
+                "imap_async".to_string(),
+                Backend {
+                    create_fn: Box::new(|| Box::new(|f, i| imap_async::ImapType::new(f, i))),
+                    validate_conf_fn: Box::new(imap_async::ImapType::validate_config),
                 },
             );
         }
@@ -286,12 +297,17 @@ impl NotifyFn {
 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online(&self) -> Result<()>;
+    fn is_online_async(
+        &self,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>> {
+        Err(MeliError::new("Unimplemented."))
+    }
     fn connect(&mut self) {}
     fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>>;
     fn get_async(
         &mut self,
         mailbox: &Mailbox,
-    ) -> Result<Box<dyn Stream<Item = Result<Vec<Envelope>>>>> {
+    ) -> Result<Pin<Box<dyn Future<Output = Result<Vec<Envelope>>> + Send + 'static>>> {
         Err(MeliError::new("Unimplemented."))
     }
     fn refresh(
@@ -299,6 +315,13 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         _mailbox_hash: MailboxHash,
         _sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
+        Err(MeliError::new("Unimplemented."))
+    }
+    fn refresh_async(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _sender: RefreshEventConsumer,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>> {
         Err(MeliError::new("Unimplemented."))
     }
     fn watch(

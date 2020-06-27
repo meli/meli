@@ -24,7 +24,7 @@
  */
 
 use super::{AccountConf, FileMailboxConf};
-use crate::jobs1::JobExecutor;
+use crate::jobs1::{JobExecutor, JobId};
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
     AccountHash, BackendOp, Backends, MailBackend, Mailbox, MailboxHash, NotifyFn, ReadOnlyOp,
@@ -42,6 +42,7 @@ use std::collections::{HashMap, HashSet};
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
 use crate::{StatusEvent, ThreadEvent};
 use crossbeam::Sender;
+use futures::channel::oneshot;
 pub use futures::stream::Stream;
 use std::collections::VecDeque;
 use std::fs;
@@ -127,9 +128,19 @@ pub struct Account {
     pub(crate) settings: AccountConf,
     pub(crate) backend: Arc<RwLock<Box<dyn MailBackend>>>,
 
+    job_executor: Arc<JobExecutor>,
+    active_jobs: HashMap<JobId, JobRequest>,
     sender: Sender<ThreadEvent>,
     event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
     notify_fn: Arc<NotifyFn>,
+}
+
+#[derive(Debug)]
+enum JobRequest {
+    Mailboxes(oneshot::Receiver<Result<HashMap<MailboxHash, Mailbox>>>),
+    Get(MailboxHash, oneshot::Receiver<Result<Vec<Envelope>>>),
+    IsOnline(oneshot::Receiver<Result<()>>),
+    Refresh(oneshot::Receiver<Result<()>>),
 }
 
 impl Drop for Account {
@@ -195,7 +206,7 @@ impl Account {
         mut settings: AccountConf,
         map: &Backends,
         work_context: WorkContext,
-        job_executor: &JobExecutor,
+        job_executor: Arc<JobExecutor>,
         sender: Sender<ThreadEvent>,
         notify_fn: NotifyFn,
     ) -> Result<Self> {
@@ -235,6 +246,14 @@ impl Account {
             settings.conf.cache_type = crate::conf::CacheType::None;
         }
 
+        let mut active_jobs = HashMap::default();
+        if settings.conf.is_async {
+            if let Ok(mailboxes_job) = backend.mailboxes_async() {
+                let (rcvr, job_id) = job_executor.spawn_specialized(mailboxes_job);
+                active_jobs.insert(job_id, JobRequest::Mailboxes(rcvr));
+            }
+        }
+
         Ok(Account {
             index,
             hash,
@@ -251,20 +270,18 @@ impl Account {
             backend: Arc::new(RwLock::new(backend)),
             notify_fn,
             sender,
-
+            job_executor,
+            active_jobs,
             event_queue: VecDeque::with_capacity(8),
         })
     }
 
-    fn init(&mut self) -> Result<()> {
-        let mut ref_mailboxes: HashMap<MailboxHash, Mailbox> =
-            match self.backend.read().unwrap().mailboxes() {
-                Ok(f) => f,
-                Err(err) => {
-                    debug!(&err);
-                    return Err(err);
-                }
-            };
+    fn init(&mut self, ref_mailboxes: Option<HashMap<MailboxHash, Mailbox>>) -> Result<()> {
+        let mut ref_mailboxes: HashMap<MailboxHash, Mailbox> = if let Some(v) = ref_mailboxes {
+            v
+        } else {
+            self.backend.read().unwrap().mailboxes()?
+        };
         let mut mailbox_entries: HashMap<MailboxHash, MailboxEntry> =
             HashMap::with_capacity_and_hasher(ref_mailboxes.len(), Default::default());
         let mut mailboxes_order: Vec<MailboxHash> = Vec::with_capacity(ref_mailboxes.len());
@@ -389,12 +406,19 @@ impl Account {
             mailbox_entries.entry(*h).and_modify(|entry| {
                 if entry.conf.mailbox_conf.autoload {
                     entry.status = MailboxStatus::Parsing(0, 0);
-                    entry.worker = Account::new_worker(
-                        f.clone(),
-                        &mut self.backend,
-                        &self.work_context,
-                        self.notify_fn.clone(),
-                    );
+                    if self.settings.conf.is_async {
+                        if let Ok(mailbox_job) = self.backend.write().unwrap().get_async(&f) {
+                            let (rcvr, job_id) = self.job_executor.spawn_specialized(mailbox_job);
+                            self.active_jobs.insert(job_id, JobRequest::Get(*h, rcvr));
+                        }
+                    } else {
+                        entry.worker = Account::new_worker(
+                            f.clone(),
+                            &mut self.backend,
+                            &self.work_context,
+                            self.notify_fn.clone(),
+                        );
+                    }
                 }
             });
             self.collection.new_mailbox(*h);
@@ -799,17 +823,30 @@ impl Account {
                             Ok(())
                         }
                         MailboxStatus::None => {
-                            let handle = Account::new_worker(
-                                self.mailbox_entries[&mailbox_hash].ref_mailbox.clone(),
-                                &mut self.backend,
-                                &self.work_context,
-                                self.notify_fn.clone(),
-                            );
-                            self.mailbox_entries
-                                .entry(mailbox_hash)
-                                .and_modify(|entry| {
-                                    entry.worker = handle;
-                                });
+                            if self.settings.conf.is_async {
+                                if let Ok(mailbox_job) =
+                                    self.backend.write().unwrap().get_async(
+                                        &&self.mailbox_entries[&mailbox_hash].ref_mailbox,
+                                    )
+                                {
+                                    let (rcvr, job_id) =
+                                        self.job_executor.spawn_specialized(mailbox_job);
+                                    self.active_jobs
+                                        .insert(job_id, JobRequest::Get(mailbox_hash, rcvr));
+                                }
+                            } else {
+                                let handle = Account::new_worker(
+                                    self.mailbox_entries[&mailbox_hash].ref_mailbox.clone(),
+                                    &mut self.backend,
+                                    &self.work_context,
+                                    self.notify_fn.clone(),
+                                );
+                                self.mailbox_entries
+                                    .entry(mailbox_hash)
+                                    .and_modify(|entry| {
+                                        entry.worker = handle;
+                                    });
+                            }
                             self.collection.new_mailbox(mailbox_hash);
                             Err(0)
                         }
@@ -1154,16 +1191,34 @@ impl Account {
             self.backend.write().unwrap().connect();
         }
 
-        let ret = self.backend.read().unwrap().is_online();
-        if ret.is_ok() != self.is_online && ret.is_ok() {
-            self.init()?;
+        if self.settings.conf.is_async {
+            if self.is_online {
+                return Ok(());
+            }
+            if !self.active_jobs.values().any(|j| {
+                if let JobRequest::IsOnline(_) = j {
+                    true
+                } else {
+                    false
+                }
+            }) {
+                if let Ok(online_job) = self.backend.read().unwrap().is_online_async() {
+                    let (rcvr, job_id) = self.job_executor.spawn_specialized(online_job);
+                    self.active_jobs.insert(job_id, JobRequest::IsOnline(rcvr));
+                }
+            }
+            return self.backend.read().unwrap().is_online();
+        } else {
+            let ret = self.backend.read().unwrap().is_online();
+            if ret.is_ok() != self.is_online && ret.is_ok() {
+                //self.init()?;
+            }
+            self.is_online = ret.is_ok();
+            if !self.is_online {
+                self.backend.write().unwrap().connect();
+            }
+            ret
         }
-        self.is_online = ret.is_ok();
-        if !self.is_online {
-            self.backend.write().unwrap().connect();
-        }
-
-        ret
     }
 
     pub fn search(
@@ -1243,6 +1298,88 @@ impl Account {
             Ok(*mailbox_hash)
         } else {
             Err(MeliError::new("Mailbox with that path not found."))
+        }
+    }
+
+    pub fn process_event(&mut self, job_id: &JobId) -> bool {
+        if debug!(self.active_jobs.contains_key(job_id)) {
+            match debug!(self.active_jobs.remove(job_id)).unwrap() {
+                JobRequest::Mailboxes(mut chan) => {
+                    if let Some(mailboxes) = debug!(chan.try_recv()).unwrap() {
+                        if mailboxes.is_err()
+                            || debug!(self.init(Some(mailboxes.unwrap()))).is_err()
+                        {
+                            if let Ok(mailboxes_job) =
+                                self.backend.read().unwrap().mailboxes_async()
+                            {
+                                let (rcvr, job_id) =
+                                    self.job_executor.spawn_specialized(mailboxes_job);
+                                self.active_jobs.insert(job_id, JobRequest::Mailboxes(rcvr));
+                            }
+                        }
+                    }
+                }
+                JobRequest::Get(mailbox_hash, mut chan) => {
+                    let payload = debug!(chan.try_recv()).unwrap().unwrap();
+                    debug!("got payload in status for {}", mailbox_hash);
+                    if payload.is_err() {
+                        self.mailbox_entries
+                            .entry(mailbox_hash)
+                            .and_modify(|entry| {
+                                entry.status = MailboxStatus::Failed(payload.unwrap_err());
+                            });
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
+                            .unwrap();
+                        return true;
+                    }
+                    let envelopes = payload
+                        .unwrap()
+                        .into_iter()
+                        .map(|e| (e.hash(), e))
+                        .collect::<HashMap<EnvelopeHash, Envelope>>();
+                    if let Some(updated_mailboxes) =
+                        self.collection
+                            .merge(envelopes, mailbox_hash, self.sent_mailbox)
+                    {
+                        for f in updated_mailboxes {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
+                                .unwrap();
+                        }
+                    }
+                    self.sender
+                        .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
+                        .unwrap();
+                    self.mailbox_entries
+                        .entry(mailbox_hash)
+                        .and_modify(|entry| {
+                            entry.status = MailboxStatus::Available;
+                            entry.worker = None;
+                        });
+                    self.sender
+                        .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
+                            self.index,
+                            mailbox_hash,
+                        ))))
+                        .unwrap();
+                }
+                JobRequest::IsOnline(mut chan) => {
+                    let is_online = debug!(chan.try_recv()).unwrap();
+                    if is_online.is_some() {
+                        self.is_online = true;
+                    } else {
+                        if let Ok(online_job) = self.backend.read().unwrap().is_online_async() {
+                            let (rcvr, job_id) = self.job_executor.spawn_specialized(online_job);
+                            self.active_jobs.insert(job_id, JobRequest::IsOnline(rcvr));
+                        }
+                    }
+                }
+                _ => {}
+            }
+            true
+        } else {
+            false
         }
     }
 }

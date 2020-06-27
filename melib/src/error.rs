@@ -171,9 +171,11 @@ impl<T> From<std::sync::PoisonError<T>> for MeliError {
 }
 
 #[cfg(feature = "imap_backend")]
-impl From<native_tls::HandshakeError<std::net::TcpStream>> for MeliError {
+impl<T: Sync + Send + 'static + core::fmt::Debug> From<native_tls::HandshakeError<T>>
+    for MeliError
+{
     #[inline]
-    fn from(kind: native_tls::HandshakeError<std::net::TcpStream>) -> MeliError {
+    fn from(kind: native_tls::HandshakeError<T>) -> MeliError {
         MeliError::new(format!("{}", kind)).set_source(Some(Arc::new(kind)))
     }
 }

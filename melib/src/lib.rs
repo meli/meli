@@ -113,6 +113,7 @@ pub mod error;
 pub mod thread;
 pub use crate::email::*;
 pub use crate::thread::*;
+pub mod connections;
 pub mod parsec;
 pub mod search;
 
@@ -130,6 +131,8 @@ pub use nom;
 extern crate bitflags;
 extern crate uuid;
 pub use smallvec;
+
+pub use smol;
 
 pub use crate::backends::{Backends, RefreshEvent, RefreshEventConsumer, SpecialUsageMailbox};
 pub use crate::collection::*;

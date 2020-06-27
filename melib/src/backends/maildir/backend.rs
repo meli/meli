@@ -24,7 +24,6 @@ use super::{
     RefreshEventConsumer, RefreshEventKind::*,
 };
 use super::{MaildirMailbox, MaildirOp};
-use futures::prelude::Stream;
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
@@ -194,7 +193,12 @@ impl MailBackend for MaildirType {
         self.multicore(4, mailbox)
     }
 
-    fn get_async(&mut self, mailbox: &Mailbox) -> Result<Box<dyn Stream<Item = Result<Vec<Envelope>>>>> {
+    /*
+    fn get_async(
+        &mut self,
+        mailbox: &Mailbox,
+    ) -> Result<core::pin::Pin<Box<dyn Future<Output = Result<Vec<Envelope>>> + Send + 'static>>>
+    {
         let mailbox: &MaildirMailbox = &self.mailboxes[&self.owned_mailbox_idx(mailbox)];
         let mailbox_hash = mailbox.hash();
         let unseen = mailbox.unseen.clone();
@@ -205,6 +209,7 @@ impl MailBackend for MaildirType {
         let mailbox_index = self.mailbox_index.clone();
         super::stream::MaildirStream::new(&self.name, mailbox_hash, unseen, total, path, root_path, map, mailbox_index)
     }
+    */
 
     fn refresh(
         &mut self,

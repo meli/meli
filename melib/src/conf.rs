@@ -35,6 +35,7 @@ pub struct AccountSettings {
     pub mailboxes: HashMap<String, MailboxConf>,
     #[serde(default)]
     pub manual_refresh: bool,
+    pub is_async: bool,
     #[serde(flatten)]
     pub extra: HashMap<String, String>,
 }

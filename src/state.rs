@@ -39,6 +39,7 @@ use std::collections::HashMap;
 use std::env;
 use std::io::Write;
 use std::os::unix::io::RawFd;
+use std::sync::Arc;
 use std::thread;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
@@ -96,7 +97,7 @@ pub struct Context {
     receiver: Receiver<ThreadEvent>,
     input: InputHandler,
     work_controller: WorkController,
-    job_executor: JobExecutor,
+    job_executor: Arc<JobExecutor>,
     pub children: Vec<std::process::Child>,
     pub plugin_manager: PluginManager,
 
@@ -246,7 +247,7 @@ impl State {
 
         let mut account_hashes = HashMap::with_capacity_and_hasher(1, Default::default());
         let work_controller = WorkController::new(sender.clone());
-        let job_executor = JobExecutor::new(sender.clone());
+        let job_executor = Arc::new(JobExecutor::new(sender.clone()));
         let accounts: Vec<Account> = {
             let mut file_accs = settings
                 .accounts
@@ -274,7 +275,7 @@ impl State {
                         a_s.clone(),
                         &backends,
                         work_controller.get_context(),
-                        &job_executor,
+                        job_executor.clone(),
                         sender.clone(),
                         NotifyFn::new(Box::new(move |f: MailboxHash| {
                             sender
@@ -360,10 +361,10 @@ impl State {
         debug!("inserting mailbox hashes:");
         for i in 0..s.context.accounts.len() {
             if s.context.is_online(i).is_ok() && s.context.accounts[i].is_empty() {
-                return Err(MeliError::new(format!(
-                    "Account {} has no mailboxes configured.",
-                    s.context.accounts[i].name()
-                )));
+                //return Err(MeliError::new(format!(
+                //    "Account {} has no mailboxes configured.",
+                //    s.context.accounts[i].name()
+                //)));
             }
         }
         s.context.restore_input();

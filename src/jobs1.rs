@@ -19,36 +19,35 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use melib::smol;
 use std::future::Future;
 use std::panic::catch_unwind;
-use std::time::Duration;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::thread;
+use std::time::Duration;
 use uuid::Uuid;
 
+use crate::types::ThreadEvent;
 use crossbeam::channel;
 use crossbeam::deque::{Injector, Steal, Stealer, Worker};
-use std::iter;
+use crossbeam::sync::{Parker, Unparker};
 use crossbeam::Sender;
-use crate::types::ThreadEvent;
 use futures::channel::oneshot;
-use crossbeam::sync::{Unparker, Parker};
+use once_cell::sync::Lazy;
+use std::iter;
 
 type AsyncTask = async_task::Task<()>;
 
-fn find_task<T>(
-    local: &Worker<T>,
-    global: &Injector<T>,
-    stealers: &[Stealer<T>],
-) -> Option<T> {
+fn find_task<T>(local: &Worker<T>, global: &Injector<T>, stealers: &[Stealer<T>]) -> Option<T> {
     // Pop a task from the local queue, if not empty.
     local.pop().or_else(|| {
         // Otherwise, we need to look for a task elsewhere.
         iter::repeat_with(|| {
             // Try stealing a batch of tasks from the global queue.
-            global.steal_batch_and_pop(local)
+            global
+                .steal_batch_and_pop(local)
                 // Or try stealing a task from one of the other threads.
                 .or_else(|| stealers.iter().map(|s| s.steal()).collect())
         })
@@ -94,6 +93,7 @@ pub struct MeliTask {
     id: JobId,
 }
 
+#[derive(Debug)]
 pub struct JobExecutor {
     active_jobs: Vec<JobId>,
     global_queue: Arc<Injector<MeliTask>>,
@@ -103,52 +103,51 @@ pub struct JobExecutor {
 }
 
 impl JobExecutor {
-/// A queue that holds scheduled tasks.
+    /// A queue that holds scheduled tasks.
     pub fn new(sender: Sender<ThreadEvent>) -> Self {
-    // Create a queue.
+        // Create a queue.
         let mut ret = JobExecutor {
             active_jobs: vec![],
             global_queue: Arc::new(Injector::new()),
             workers: vec![],
-            parkers:  vec![],
+            parkers: vec![],
             sender,
         };
         let mut workers = vec![];
-    for _ in 0..num_cpus::get().max(1) {
-        let new_worker = Worker::new_fifo();
-        ret.workers.push(new_worker.stealer());
-        let p = Parker::new();
-ret.parkers.push(p.unparker().clone());
-        workers.push((new_worker, p));
-    }
+        for _ in 0..num_cpus::get().max(1) {
+            let new_worker = Worker::new_fifo();
+            ret.workers.push(new_worker.stealer());
+            let p = Parker::new();
+            ret.parkers.push(p.unparker().clone());
+            workers.push((new_worker, p));
+        }
 
-
-    
-    // Spawn executor threads the first time the queue is created.
-    for (i, (local, parker)) in workers.into_iter().enumerate() {
-        let sender = ret.sender.clone();
-        let global = ret.global_queue.clone();
-        let stealers = ret.workers.clone();
+        // Reactor thread
         thread::Builder::new()
-            .name(format!("meli executor thread {}", i))
-        .spawn(move || {
-            loop {
-                parker.park_timeout(Duration::from_millis(100));
-                let task = find_task(&local, &global, stealers.as_slice());
-                if let Some(meli_task) = task {
-                    let MeliTask { task, id} = meli_task;
-                    debug!("Worker {} got task {:?}", i,id);
-                    if let Ok(false) = catch_unwind(|| task.run()) {
-                        debug!("Worker {} got result {:?}", i,id);
-                        sender.send(ThreadEvent::JobFinished(id)).unwrap();
-                    } else {
-                        debug!("Worker {} rescheduled {:?}", i,id);
+            .name("meli-reactor".to_string())
+            .spawn(move || {
+                smol::run(futures::future::pending::<()>());
+            });
+
+        // Spawn executor threads the first time the queue is created.
+        for (i, (local, parker)) in workers.into_iter().enumerate() {
+            let sender = ret.sender.clone();
+            let global = ret.global_queue.clone();
+            let stealers = ret.workers.clone();
+            thread::Builder::new()
+                .name(format!("meli-executor-{}", i))
+                .spawn(move || loop {
+                    parker.park_timeout(Duration::from_millis(100));
+                    let task = find_task(&local, &global, stealers.as_slice());
+                    if let Some(meli_task) = task {
+                        let MeliTask { task, id } = meli_task;
+                        debug!("Worker {} got task {:?}", i, id);
+                        let res = catch_unwind(|| task.run());
+                        debug!("Worker {} got result {:?}", i, id);
                     }
-                }
-            }
-        });
-    }
-    ret
+                });
+        }
+        ret
     }
     /// Spawns a future on the executor.
     pub fn spawn<F>(&self, future: F) -> JoinHandle
@@ -157,45 +156,61 @@ ret.parkers.push(p.unparker().clone());
     {
         let job_id = JobId::new();
         let _job_id = job_id.clone();
+        let __job_id = job_id.clone();
+        let finished_sender = self.sender.clone();
         let injector = self.global_queue.clone();
         // Create a task and schedule it for execution.
-        let (task, handle) = async_task::spawn(async {
-            let _ = future.await;
-        }, move |task| injector.push(MeliTask { task, id: _job_id }), ());
+        let (task, handle) = async_task::spawn(
+            async move {
+                let _ = future.await;
+                finished_sender
+                    .send(ThreadEvent::JobFinished(__job_id))
+                    .unwrap();
+            },
+            move |task| injector.push(MeliTask { task, id: _job_id }),
+            (),
+        );
         task.schedule();
         for unparker in self.parkers.iter() {
-        unparker.unpark();
+            unparker.unpark();
         }
 
         // Return a join handle that retrieves the output of the future.
         JoinHandle(handle)
     }
 
-///// Spawns a future on the executor.
-pub fn spawn_specialized<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JobId)
-where
-    F: Future<Output = R> + Send + 'static,
-    R: Send + 'static,
-{
-    let (sender, receiver) = oneshot::channel();
+    ///// Spawns a future on the executor.
+    pub fn spawn_specialized<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JobId)
+    where
+        F: Future<Output = R> + Send + 'static,
+        R: Send + core::fmt::Debug + 'static,
+    {
+        let (sender, receiver) = oneshot::channel();
+        let finished_sender = self.sender.clone();
         let job_id = JobId::new();
         let _job_id = job_id.clone();
+        let __job_id = job_id.clone();
         let injector = self.global_queue.clone();
         // Create a task and schedule it for execution.
-        let (task, handle) = async_task::spawn(async {
-            let res = future.await;
-            sender.send(res);
-        }, move |task| injector.push(MeliTask { task, id: _job_id }), ());
+        let (task, handle) = async_task::spawn(
+            async move {
+                let res = future.await;
+                sender.send(res).unwrap();
+                finished_sender
+                    .send(ThreadEvent::JobFinished(__job_id))
+                    .unwrap();
+            },
+            move |task| injector.push(MeliTask { task, id: _job_id }),
+            (),
+        );
         task.schedule();
         for unparker in self.parkers.iter() {
-        unparker.unpark();
+            unparker.unpark();
         }
 
         (receiver, job_id)
+    }
 }
-
-}
-
 
 ///// Spawns a future on the executor.
 //fn spawn<F, R>(future: F) -> JoinHandle<R>
@@ -212,7 +227,7 @@ where
 //}
 
 /// Awaits the output of a spawned future.
-pub struct JoinHandle( async_task::JoinHandle<(), ()>);
+pub struct JoinHandle(async_task::JoinHandle<(), ()>);
 
 impl Future for JoinHandle {
     type Output = ();

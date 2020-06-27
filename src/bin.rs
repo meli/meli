@@ -466,6 +466,11 @@ fn run_app(opt: Opt) -> Result<()> {
                         },
                         ThreadEvent::JobFinished(id) => {
                             debug!("Job finished {}", id);
+                            for account in state.context.accounts.iter_mut() {
+                                if account.process_event(&id) {
+                                    break;
+                                }
+                            }
                             //state.new_thread(id, name);
                         },
                     }
