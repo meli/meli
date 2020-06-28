@@ -19,6 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
+use melib::error::Result;
 use melib::smol;
 use std::future::Future;
 use std::panic::catch_unwind;
@@ -34,7 +35,7 @@ use crossbeam::channel;
 use crossbeam::deque::{Injector, Steal, Stealer, Worker};
 use crossbeam::sync::{Parker, Unparker};
 use crossbeam::Sender;
-use futures::channel::oneshot;
+pub use futures::channel::oneshot;
 use once_cell::sync::Lazy;
 use std::iter;
 
@@ -151,9 +152,9 @@ impl JobExecutor {
         ret
     }
     /// Spawns a future on the executor.
-    pub fn spawn<F>(&self, future: F) -> JoinHandle
+    pub fn spawn<F>(&self, future: F) -> (JoinHandle, JobId)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: Future<Output = Result<()>> + Send + 'static,
     {
         let job_id = JobId::new();
         let _job_id = job_id.clone();
@@ -163,10 +164,11 @@ impl JobExecutor {
         // Create a task and schedule it for execution.
         let (task, handle) = async_task::spawn(
             async move {
-                let _ = future.await;
+                let r = future.await;
                 finished_sender
                     .send(ThreadEvent::JobFinished(__job_id))
                     .unwrap();
+                r
             },
             move |task| injector.push(MeliTask { task, id: _job_id }),
             (),
@@ -177,7 +179,7 @@ impl JobExecutor {
         }
 
         // Return a join handle that retrieves the output of the future.
-        JoinHandle(handle)
+        (JoinHandle(handle), job_id)
     }
 
     ///// Spawns a future on the executor.
@@ -227,11 +229,12 @@ impl JobExecutor {
 //    JoinHandle(handle)
 //}
 
+#[derive(Debug)]
 /// Awaits the output of a spawned future.
-pub struct JoinHandle(async_task::JoinHandle<(), ()>);
+pub struct JoinHandle(pub async_task::JoinHandle<Result<()>, ()>);
 
 impl Future for JoinHandle {
-    type Output = ();
+    type Output = Result<()>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match Pin::new(&mut self.0).poll(cx) {

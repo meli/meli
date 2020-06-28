@@ -22,6 +22,7 @@
 use super::EntryStrings;
 use super::*;
 use crate::components::utilities::PageMovement;
+use crate::jobs1::{oneshot, JobId, JoinHandle};
 use std::cmp;
 use std::iter::FromIterator;
 
@@ -74,6 +75,7 @@ pub struct PlainListing {
     _row_updates: SmallVec<[ThreadHash; 8]>,
     color_cache: ColorCache,
 
+    active_jobs: HashMap<JobId, oneshot::Receiver<Result<()>>>,
     movement: Option<PageMovement>,
     id: ComponentId,
 }
@@ -701,6 +703,7 @@ impl PlainListing {
             unfocused: false,
             view: MailView::default(),
             color_cache: ColorCache::default(),
+            active_jobs: HashMap::default(),
 
             movement: None,
             id: ComponentId::new_v4(),
@@ -997,23 +1000,29 @@ impl PlainListing {
     fn perform_action(&mut self, context: &mut Context, env_hash: EnvelopeHash, a: &ListingAction) {
         let account = &mut context.accounts[self.cursor_pos.0];
         let hash = account.collection.get_env(env_hash).hash();
-        if let Err(e) = account.operation(hash).and_then(|op| {
+        match account.operation(hash).and_then(|op| {
             let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
             match a {
                 ListingAction::SetSeen => envelope.set_seen(op),
                 ListingAction::SetUnseen => envelope.set_unseen(op),
                 ListingAction::Delete => {
                     /* do nothing */
-                    Ok(())
+                    Err(MeliError::new("Delete is unimplemented"))
                 }
                 _ => unreachable!(),
             }
         }) {
-            context
-                .replies
-                .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
-                    e.to_string(),
-                )));
+            Err(e) => {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                        e.to_string(),
+                    )));
+            }
+            Ok(fut) => {
+                let (handle, job_id) = account.job_executor.spawn_specialized(fut);
+                self.active_jobs.insert(job_id, handle);
+            }
         }
         self.row_updates.push(env_hash);
     }

@@ -147,7 +147,21 @@ enum JobRequest {
         )>,
     ),
     IsOnline(oneshot::Receiver<Result<()>>),
-    Refresh(oneshot::Receiver<Result<()>>),
+    Refresh(MailboxHash, oneshot::Receiver<Result<()>>),
+    SetFlags(EnvelopeHash, oneshot::Receiver<Result<()>>),
+    SaveMessage(MailboxHash, oneshot::Receiver<Result<()>>),
+    DeleteMessage(EnvelopeHash, oneshot::Receiver<Result<()>>),
+    CreateMailbox(oneshot::Receiver<Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)>>),
+    DeleteMailbox(oneshot::Receiver<Result<HashMap<MailboxHash, Mailbox>>>),
+    //RenameMailbox,
+    Search(
+        crate::search::Query,
+        Option<MailboxHash>,
+        oneshot::Receiver<Result<SmallVec<[EnvelopeHash; 512]>>>,
+    ),
+    SetMailboxPermissions(MailboxHash, oneshot::Receiver<Result<()>>),
+    SetMailboxSubscription(MailboxHash, oneshot::Receiver<Result<()>>),
+    Watch(JoinHandle),
 }
 
 impl core::fmt::Debug for JobRequest {
@@ -156,8 +170,21 @@ impl core::fmt::Debug for JobRequest {
             JobRequest::Mailboxes(_) => write!(f, "{}", "JobRequest::Mailboxes"),
             JobRequest::Get(hash, _) => write!(f, "JobRequest::Get({})", hash),
             JobRequest::IsOnline(_) => write!(f, "{}", "JobRequest::IsOnline"),
-
-            JobRequest::Refresh(_) => write!(f, "{}", "JobRequest::Refresh"),
+            JobRequest::Refresh(_, _) => write!(f, "{}", "JobRequest::Refresh"),
+            JobRequest::SetFlags(_, _) => write!(f, "{}", "JobRequest::SetFlags"),
+            JobRequest::SaveMessage(_, _) => write!(f, "{}", "JobRequest::SaveMessage"),
+            JobRequest::DeleteMessage(_, _) => write!(f, "{}", "JobRequest::DeleteMessage"),
+            JobRequest::CreateMailbox(_) => write!(f, "{}", "JobRequest::CreateMailbox"),
+            JobRequest::DeleteMailbox(_) => write!(f, "{}", "JobRequest::DeleteMailbox"),
+            //JobRequest::RenameMailbox,
+            JobRequest::Search(_, _, _) => write!(f, "{}", "JobRequest::Search"),
+            JobRequest::SetMailboxPermissions(_, _) => {
+                write!(f, "{}", "JobRequest::SetMailboxPermissions")
+            }
+            JobRequest::SetMailboxSubscription(_, _) => {
+                write!(f, "{}", "JobRequest::SetMailboxSubscription")
+            }
+            JobRequest::Watch(_) => write!(f, "{}", "JobRequest::Watch"),
         }
     }
 }
@@ -756,13 +783,20 @@ impl Account {
                 .unwrap();
             return Ok(());
         }
-
         let sender_ = self.sender.clone();
         let r = RefreshEventConsumer::new(Box::new(move |r| {
             sender_.send(ThreadEvent::from(r)).unwrap();
         }));
-        let mut h = self.backend.write().unwrap().refresh(mailbox_hash, r)?;
-        self.work_context.new_work.send(h.work().unwrap()).unwrap();
+        if self.settings.conf.is_async {
+            if let Ok(refresh_job) = self.backend.write().unwrap().refresh_async(mailbox_hash, r) {
+                let (rcvr, job_id) = self.job_executor.spawn_specialized(refresh_job);
+                self.active_jobs
+                    .insert(job_id, JobRequest::Refresh(mailbox_hash, rcvr));
+            }
+        } else {
+            let mut h = self.backend.write().unwrap().refresh(mailbox_hash, r)?;
+            self.work_context.new_work.send(h.work().unwrap()).unwrap();
+        }
         Ok(())
     }
     pub fn watch(&self) {
@@ -1426,7 +1460,181 @@ impl Account {
                         self.active_jobs.insert(job_id, JobRequest::IsOnline(rcvr));
                     }
                 }
-                _ => {}
+                JobRequest::Refresh(mailbox_hash, mut chan) => {
+                    let r = debug!(chan.try_recv()).unwrap();
+                    if r.is_some() && r.unwrap().is_ok() {
+                        self.is_online = true;
+                    }
+                }
+                JobRequest::Refresh(_, mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    if let Some(Err(err)) = r {
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                Some(format!("{} refresh exited with error", &self.name)),
+                                err.to_string(),
+                                Some(crate::types::NotificationType::ERROR),
+                            )))
+                            .expect("Could not send event on main channel");
+                    }
+                }
+                JobRequest::SetFlags(_, mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    if let Some(Err(err)) = r {
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                Some(format!("{}: could not set flag", &self.name)),
+                                err.to_string(),
+                                Some(crate::types::NotificationType::ERROR),
+                            )))
+                            .expect("Could not send event on main channel");
+                    }
+                }
+                JobRequest::SaveMessage(_, mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    if let Some(Err(err)) = r {
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                Some(format!("{}: could not save message", &self.name)),
+                                err.to_string(),
+                                Some(crate::types::NotificationType::ERROR),
+                            )))
+                            .expect("Could not send event on main channel");
+                    }
+                }
+                JobRequest::DeleteMessage(_, mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    if let Some(Err(err)) = r {
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                Some(format!("{}: could not delete message", &self.name)),
+                                err.to_string(),
+                                Some(crate::types::NotificationType::ERROR),
+                            )))
+                            .expect("Could not send event on main channel");
+                    }
+                }
+                JobRequest::CreateMailbox(mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    if let Some(r) = r {
+                        self.sender
+                            .send(match r {
+                                Err(err) => ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!("{}: could not create mailbox", &self.name)),
+                                    err.to_string(),
+                                    Some(crate::types::NotificationType::ERROR),
+                                )),
+                                Ok(_) => ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!("Mailbox successfully created.")),
+                                    String::new(),
+                                    Some(crate::types::NotificationType::INFO),
+                                )),
+                            })
+                            .expect("Could not send event on main channel");
+                    }
+                }
+                JobRequest::DeleteMailbox(mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    match r {
+                        Some(Err(err)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!("{}: could not delete mailbox", &self.name)),
+                                    err.to_string(),
+                                    Some(crate::types::NotificationType::ERROR),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
+                        Some(Ok(_)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!("{}: mailbox deleted successfully", &self.name)),
+                                    String::new(),
+                                    Some(crate::types::NotificationType::INFO),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
+                        None => {}
+                    }
+                }
+                //JobRequest::RenameMailbox,
+                JobRequest::Search(_, _, mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    match r {
+                        Some(Err(err)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!("{}: could not perform search", &self.name)),
+                                    err.to_string(),
+                                    Some(crate::types::NotificationType::ERROR),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
+                        Some(Ok(v)) => unimplemented!(),
+                        None => {}
+                    }
+                }
+                JobRequest::SetMailboxPermissions(_, mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    match r {
+                        Some(Err(err)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!(
+                                        "{}: could not set mailbox permissions",
+                                        &self.name
+                                    )),
+                                    err.to_string(),
+                                    Some(crate::types::NotificationType::ERROR),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
+                        Some(Ok(_)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!(
+                                        "{}: mailbox permissions set successfully",
+                                        &self.name
+                                    )),
+                                    String::new(),
+                                    Some(crate::types::NotificationType::INFO),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
+                        None => {}
+                    }
+                }
+                JobRequest::SetMailboxSubscription(_, mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    match r {
+                        Some(Err(err)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!(
+                                        "{}: could not set mailbox subscription",
+                                        &self.name
+                                    )),
+                                    err.to_string(),
+                                    Some(crate::types::NotificationType::ERROR),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
+                        Some(Ok(_)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!(
+                                        "{}: mailbox subscription set successfully",
+                                        &self.name
+                                    )),
+                                    String::new(),
+                                    Some(crate::types::NotificationType::INFO),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
+                        None => {}
+                    }
+                }
+                JobRequest::Watch(_) => {}
             }
             true
         } else {
