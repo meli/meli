@@ -307,7 +307,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn get_async(
         &mut self,
         mailbox: &Mailbox,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<Vec<Envelope>>> + Send + 'static>>> {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
         Err(MeliError::new("Unimplemented."))
     }
     fn refresh(

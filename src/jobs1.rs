@@ -127,11 +127,11 @@ impl JobExecutor {
             .name("meli-reactor".to_string())
             .spawn(move || {
                 smol::run(futures::future::pending::<()>());
-            });
+            })
+            .unwrap();
 
         // Spawn executor threads the first time the queue is created.
         for (i, (local, parker)) in workers.into_iter().enumerate() {
-            let sender = ret.sender.clone();
             let global = ret.global_queue.clone();
             let stealers = ret.workers.clone();
             thread::Builder::new()
@@ -142,10 +142,11 @@ impl JobExecutor {
                     if let Some(meli_task) = task {
                         let MeliTask { task, id } = meli_task;
                         debug!("Worker {} got task {:?}", i, id);
-                        let res = catch_unwind(|| task.run());
+                        let _ = catch_unwind(|| task.run());
                         debug!("Worker {} got result {:?}", i, id);
                     }
-                });
+                })
+                .unwrap();
         }
         ret
     }
@@ -183,7 +184,7 @@ impl JobExecutor {
     pub fn spawn_specialized<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JobId)
     where
         F: Future<Output = R> + Send + 'static,
-        R: Send + core::fmt::Debug + 'static,
+        R: Send + 'static,
     {
         let (sender, receiver) = oneshot::channel();
         let finished_sender = self.sender.clone();
@@ -192,10 +193,10 @@ impl JobExecutor {
         let __job_id = job_id.clone();
         let injector = self.global_queue.clone();
         // Create a task and schedule it for execution.
-        let (task, handle) = async_task::spawn(
+        let (task, _) = async_task::spawn(
             async move {
                 let res = future.await;
-                sender.send(res).unwrap();
+                let _ = sender.send(res);
                 finished_sender
                     .send(ThreadEvent::JobFinished(__job_id))
                     .unwrap();

@@ -44,11 +44,13 @@ use crate::{StatusEvent, ThreadEvent};
 use crossbeam::Sender;
 use futures::channel::oneshot;
 pub use futures::stream::Stream;
+use futures::stream::StreamExt;
 use std::collections::VecDeque;
 use std::fs;
 use std::io;
 use std::ops::{Index, IndexMut};
 use std::os::unix::fs::PermissionsExt;
+use std::pin::Pin;
 use std::result;
 use std::sync::{Arc, RwLock};
 
@@ -135,12 +137,29 @@ pub struct Account {
     notify_fn: Arc<NotifyFn>,
 }
 
-#[derive(Debug)]
 enum JobRequest {
     Mailboxes(oneshot::Receiver<Result<HashMap<MailboxHash, Mailbox>>>),
-    Get(MailboxHash, oneshot::Receiver<Result<Vec<Envelope>>>),
+    Get(
+        MailboxHash,
+        oneshot::Receiver<(
+            Option<Result<Vec<Envelope>>>,
+            Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>,
+        )>,
+    ),
     IsOnline(oneshot::Receiver<Result<()>>),
     Refresh(oneshot::Receiver<Result<()>>),
+}
+
+impl core::fmt::Debug for JobRequest {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match self {
+            JobRequest::Mailboxes(_) => write!(f, "{}", "JobRequest::Mailboxes"),
+            JobRequest::Get(hash, _) => write!(f, "JobRequest::Get({})", hash),
+            JobRequest::IsOnline(_) => write!(f, "{}", "JobRequest::IsOnline"),
+
+            JobRequest::Refresh(_) => write!(f, "{}", "JobRequest::Refresh"),
+        }
+    }
 }
 
 impl Drop for Account {
@@ -248,6 +267,10 @@ impl Account {
 
         let mut active_jobs = HashMap::default();
         if settings.conf.is_async {
+            if let Ok(online_job) = backend.is_online_async() {
+                let (rcvr, job_id) = job_executor.spawn_specialized(online_job);
+                active_jobs.insert(job_id, JobRequest::IsOnline(rcvr));
+            }
             if let Ok(mailboxes_job) = backend.mailboxes_async() {
                 let (rcvr, job_id) = job_executor.spawn_specialized(mailboxes_job);
                 active_jobs.insert(job_id, JobRequest::Mailboxes(rcvr));
@@ -408,6 +431,7 @@ impl Account {
                     entry.status = MailboxStatus::Parsing(0, 0);
                     if self.settings.conf.is_async {
                         if let Ok(mailbox_job) = self.backend.write().unwrap().get_async(&f) {
+                            let mailbox_job = mailbox_job.into_future();
                             let (rcvr, job_id) = self.job_executor.spawn_specialized(mailbox_job);
                             self.active_jobs.insert(job_id, JobRequest::Get(*h, rcvr));
                         }
@@ -829,6 +853,7 @@ impl Account {
                                         &&self.mailbox_entries[&mailbox_hash].ref_mailbox,
                                     )
                                 {
+                                    let mailbox_job = mailbox_job.into_future();
                                     let (rcvr, job_id) =
                                         self.job_executor.spawn_specialized(mailbox_job);
                                     self.active_jobs
@@ -1320,8 +1345,30 @@ impl Account {
                     }
                 }
                 JobRequest::Get(mailbox_hash, mut chan) => {
-                    let payload = debug!(chan.try_recv()).unwrap().unwrap();
+                    let (payload, rest): (Option<Result<Vec<Envelope>>>, _) =
+                        chan.try_recv().unwrap().unwrap();
                     debug!("got payload in status for {}", mailbox_hash);
+                    if payload.is_none() {
+                        debug!("finished in status for {}", mailbox_hash);
+                        self.mailbox_entries
+                            .entry(mailbox_hash)
+                            .and_modify(|entry| {
+                                entry.status = MailboxStatus::Available;
+                                entry.worker = None;
+                            });
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
+                                self.index,
+                                mailbox_hash,
+                            ))))
+                            .unwrap();
+                        return true;
+                    }
+
+                    let (rcvr, job_id) = self.job_executor.spawn_specialized(rest.into_future());
+                    self.active_jobs
+                        .insert(job_id, JobRequest::Get(mailbox_hash, rcvr));
+                    let payload = payload.unwrap();
                     if payload.is_err() {
                         self.mailbox_entries
                             .entry(mailbox_hash)
@@ -1329,7 +1376,10 @@ impl Account {
                                 entry.status = MailboxStatus::Failed(payload.unwrap_err());
                             });
                         self.sender
-                            .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
+                            .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
+                                self.index,
+                                mailbox_hash,
+                            ))))
                             .unwrap();
                         return true;
                     }
@@ -1344,19 +1394,12 @@ impl Account {
                     {
                         for f in updated_mailboxes {
                             self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(f)))
+                                .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
+                                    self.index, f,
+                                ))))
                                 .unwrap();
                         }
                     }
-                    self.sender
-                        .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
-                        .unwrap();
-                    self.mailbox_entries
-                        .entry(mailbox_hash)
-                        .and_modify(|entry| {
-                            entry.status = MailboxStatus::Available;
-                            entry.worker = None;
-                        });
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((
                             self.index,
@@ -1367,12 +1410,20 @@ impl Account {
                 JobRequest::IsOnline(mut chan) => {
                     let is_online = debug!(chan.try_recv()).unwrap();
                     if is_online.is_some() {
-                        self.is_online = true;
-                    } else {
-                        if let Ok(online_job) = self.backend.read().unwrap().is_online_async() {
-                            let (rcvr, job_id) = self.job_executor.spawn_specialized(online_job);
-                            self.active_jobs.insert(job_id, JobRequest::IsOnline(rcvr));
+                        let is_online = is_online.unwrap();
+                        if is_online.is_ok() {
+                            self.is_online = true;
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                                    self.index,
+                                )))
+                                .unwrap();
+                            return true;
                         }
+                    }
+                    if let Ok(online_job) = self.backend.read().unwrap().is_online_async() {
+                        let (rcvr, job_id) = self.job_executor.spawn_specialized(online_job);
+                        self.active_jobs.insert(job_id, JobRequest::IsOnline(rcvr));
                     }
                 }
                 _ => {}

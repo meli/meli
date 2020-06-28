@@ -148,14 +148,15 @@ impl ImapStream {
             }
 
             {
+                // FIXME: This is blocking
                 let socket = socket.into_inner()?;
-                let mut conn_result = debug!(connector.connect(path, socket));
+                let mut conn_result = connector.connect(path, socket);
                 if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
                     conn_result
                 {
                     let mut midhandshake_stream = Some(midhandshake_stream);
                     loop {
-                        match debug!(midhandshake_stream.take().unwrap().handshake()) {
+                        match midhandshake_stream.take().unwrap().handshake() {
                             Ok(r) => {
                                 conn_result = Ok(r);
                                 break;
