@@ -101,9 +101,9 @@ impl<'a> BackendOp for MaildirOp {
         Ok(unsafe { self.slice.as_ref().unwrap().as_slice() })
     }
 
-    fn fetch_flags(&self) -> Flag {
+    fn fetch_flags(&self) -> Result<Flag> {
         let path = self.path();
-        path.flags()
+        Ok(path.flags())
     }
 
     fn set_flag(&mut self, envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
@@ -114,7 +114,7 @@ impl<'a> BackendOp for MaildirOp {
             .ok_or_else(|| MeliError::new(format!("Invalid email filename: {:?}", self)))?
             + 3;
         let mut new_name: String = path[..idx].to_string();
-        let mut flags = self.fetch_flags();
+        let mut flags = self.fetch_flags()?;
         flags.set(f, value);
 
         if !(flags & Flag::DRAFT).is_empty() {

@@ -225,7 +225,7 @@ impl MailBackend for PluginBackend {
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
         self.tag_index.clone()
     }
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
 }
@@ -314,10 +314,8 @@ impl BackendOp for PluginOp {
         }
     }
 
-    fn fetch_flags(&self) -> Flag {
-        let flag = Flag::default();
-
-        flag
+    fn fetch_flags(&self) -> Result<Flag> {
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn set_flag(&mut self, __envelope: &mut Envelope, _f: Flag, _value: bool) -> Result<()> {

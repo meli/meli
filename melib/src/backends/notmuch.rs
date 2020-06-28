@@ -624,7 +624,7 @@ impl MailBackend for NotmuchDb {
         crate::backends::MaildirType::save_to_mailbox(path, bytes, flags)
     }
 
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
 
@@ -667,7 +667,7 @@ impl BackendOp for NotmuchOp {
         Ok(self.bytes.as_ref().unwrap().as_bytes())
     }
 
-    fn fetch_flags(&self) -> Flag {
+    fn fetch_flags(&self) -> Result<Flag> {
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let index_lck = self.index.write().unwrap();
         unsafe {
@@ -678,11 +678,11 @@ impl BackendOp for NotmuchOp {
             )
         };
         let (flags, _tags) = TagIterator::new(self.lib.clone(), message).collect_flags_and_tags();
-        flags
+        Ok(flags)
     }
 
     fn set_flag(&mut self, envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
-        let mut flags = self.fetch_flags();
+        let mut flags = self.fetch_flags()?;
         flags.set(f, value);
         envelope.set_flags(flags);
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();

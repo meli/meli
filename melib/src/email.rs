@@ -225,7 +225,7 @@ impl Envelope {
     }
     pub fn from_token(mut operation: Box<dyn BackendOp>, hash: EnvelopeHash) -> Option<Envelope> {
         let mut e = Envelope::new(hash);
-        e.flags = operation.fetch_flags();
+        e.flags = operation.fetch_flags().unwrap_or_default();
         if let Ok(bytes) = operation.as_bytes() {
             let res = e.populate_headers(bytes).ok();
             if res.is_some() {

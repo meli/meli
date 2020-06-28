@@ -109,63 +109,48 @@ impl BackendOp for ImapOp {
         Ok(self.bytes.as_ref().unwrap().as_bytes())
     }
 
-    fn fetch_flags(&self) -> Flag {
-        macro_rules! or_return_default {
-            ($expr:expr) => {
-                match $expr {
-                    Ok(ok) => ok,
-                    Err(_) => return Default::default(),
-                }
-            };
-        }
+    fn fetch_flags(&self) -> Result<Flag> {
         if self.flags.get().is_some() {
-            return self.flags.get().unwrap();
+            return Ok(self.flags.get().unwrap());
         }
-        let mut bytes_cache = or_return_default!(self.uid_store.byte_cache.lock());
+        let mut bytes_cache = self.uid_store.byte_cache.lock()?;
         let cache = bytes_cache.entry(self.uid).or_default();
         if cache.flags.is_some() {
             self.flags.set(cache.flags);
         } else {
             let mut response = String::with_capacity(8 * 1024);
-            let mut conn = or_return_default!(try_lock(
-                &self.connection,
-                Some(std::time::Duration::new(2, 0))
-            ));
-            or_return_default!(conn.examine_mailbox(self.mailbox_hash, &mut response, false));
-            or_return_default!(
-                conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())
-            );
-            or_return_default!(conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED));
+            let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
+            conn.examine_mailbox(self.mailbox_hash, &mut response, false)?;
+            conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())?;
+            conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)?;
             debug!(
                 "fetch response is {} bytes and {} lines",
                 response.len(),
                 response.lines().collect::<Vec<&str>>().len()
             );
-            match protocol_parser::uid_fetch_flags_response(response.as_bytes())
+            let v = protocol_parser::uid_fetch_flags_response(response.as_bytes())
                 .map(|(_, v)| v)
-                .map_err(MeliError::from)
-            {
-                Ok(v) => {
-                    if v.len() != 1 {
-                        debug!("responses len is {}", v.len());
-                        debug!(response);
-                        /* TODO: Trigger cache invalidation here. */
-                        debug!(format!("message with UID {} was not found", self.uid));
-                        return Flag::default();
-                    }
-                    let (uid, (flags, _)) = v[0];
-                    assert_eq!(uid, self.uid);
-                    cache.flags = Some(flags);
-                    self.flags.set(Some(flags));
-                }
-                Err(e) => or_return_default!(Err(e)),
+                .map_err(MeliError::from)?;
+            if v.len() != 1 {
+                debug!("responses len is {}", v.len());
+                debug!(&response);
+                /* TODO: Trigger cache invalidation here. */
+                debug!(format!("message with UID {} was not found", self.uid));
+                return Err(
+                    MeliError::new(format!("Invalid/unexpected response: {:?}", response))
+                        .set_summary(format!("message with UID {} was not found?", self.uid)),
+                );
             }
+            let (uid, (flags, _)) = v[0];
+            assert_eq!(uid, self.uid);
+            cache.flags = Some(flags);
+            self.flags.set(Some(flags));
         }
-        self.flags.get().unwrap()
+        Ok(self.flags.get().unwrap())
     }
 
     fn set_flag(&mut self, _envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
-        let mut flags = self.fetch_flags();
+        let mut flags = self.fetch_flags()?;
         flags.set(f, value);
 
         let mut response = String::with_capacity(8 * 1024);

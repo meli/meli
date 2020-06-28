@@ -97,8 +97,8 @@ impl BackendOp for JmapOp {
         Ok(&self.bytes.as_ref().unwrap().as_bytes())
     }
 
-    fn fetch_flags(&self) -> Flag {
-        Flag::default()
+    fn fetch_flags(&self) -> Result<Flag> {
+        Ok(Flag::default())
     }
 
     fn set_flag(&mut self, _envelope: &mut Envelope, _f: Flag, _value: bool) -> Result<()> {

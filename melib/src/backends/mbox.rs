@@ -201,72 +201,60 @@ impl BackendOp for MboxOp {
         })
     }
 
-    fn fetch_flags(&self) -> Flag {
+    fn fetch_flags(&self) -> Result<Flag> {
         let mut flags = Flag::empty();
-        let file = match std::fs::OpenOptions::new()
+        let file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .open(&self.path)
-        {
-            Ok(f) => f,
-            Err(e) => {
-                debug!(e);
-                return flags;
-            }
-        };
+            .open(&self.path)?;
         get_rw_lock_blocking(&file);
         let mut buf_reader = BufReader::new(file);
         let mut contents = Vec::new();
-        if let Err(e) = buf_reader.read_to_end(&mut contents) {
-            debug!(e);
-            return flags;
-        };
-
-        if let Ok((_, headers)) = parser::headers::headers_raw(contents.as_slice()) {
-            if let Some(start) = headers.find(b"Status:") {
-                if let Some(end) = headers[start..].find(b"\n") {
-                    let start = start + b"Status:".len();
-                    let status = headers[start..start + end].trim();
-                    if status.contains(&b'F') {
-                        flags.set(Flag::FLAGGED, true);
-                    }
-                    if status.contains(&b'A') {
-                        flags.set(Flag::REPLIED, true);
-                    }
-                    if status.contains(&b'R') {
-                        flags.set(Flag::SEEN, true);
-                    }
-                    if status.contains(&b'D') {
-                        flags.set(Flag::TRASHED, true);
-                    }
-                    if status.contains(&b'T') {
-                        flags.set(Flag::DRAFT, true);
-                    }
+        buf_reader.read_to_end(&mut contents)?;
+        let (_, headers) = parser::headers::headers_raw(contents.as_slice())?;
+        if let Some(start) = headers.find(b"Status:") {
+            if let Some(end) = headers[start..].find(b"\n") {
+                let start = start + b"Status:".len();
+                let status = headers[start..start + end].trim();
+                if status.contains(&b'F') {
+                    flags.set(Flag::FLAGGED, true);
                 }
-            }
-            if let Some(start) = headers.find(b"X-Status:") {
-                let start = start + b"X-Status:".len();
-                if let Some(end) = headers[start..].find(b"\n") {
-                    let status = headers[start..start + end].trim();
-                    if status.contains(&b'F') {
-                        flags.set(Flag::FLAGGED, true);
-                    }
-                    if status.contains(&b'A') {
-                        flags.set(Flag::REPLIED, true);
-                    }
-                    if status.contains(&b'R') {
-                        flags.set(Flag::SEEN, true);
-                    }
-                    if status.contains(&b'D') {
-                        flags.set(Flag::TRASHED, true);
-                    }
-                    if status.contains(&b'T') {
-                        flags.set(Flag::DRAFT, true);
-                    }
+                if status.contains(&b'A') {
+                    flags.set(Flag::REPLIED, true);
+                }
+                if status.contains(&b'R') {
+                    flags.set(Flag::SEEN, true);
+                }
+                if status.contains(&b'D') {
+                    flags.set(Flag::TRASHED, true);
+                }
+                if status.contains(&b'T') {
+                    flags.set(Flag::DRAFT, true);
                 }
             }
         }
-        flags
+        if let Some(start) = headers.find(b"X-Status:") {
+            let start = start + b"X-Status:".len();
+            if let Some(end) = headers[start..].find(b"\n") {
+                let status = headers[start..start + end].trim();
+                if status.contains(&b'F') {
+                    flags.set(Flag::FLAGGED, true);
+                }
+                if status.contains(&b'A') {
+                    flags.set(Flag::REPLIED, true);
+                }
+                if status.contains(&b'R') {
+                    flags.set(Flag::SEEN, true);
+                }
+                if status.contains(&b'D') {
+                    flags.set(Flag::TRASHED, true);
+                }
+                if status.contains(&b'T') {
+                    flags.set(Flag::DRAFT, true);
+                }
+            }
+        }
+        Ok(flags)
     }
 
     fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag, _value: bool) -> Result<()> {
@@ -915,7 +903,7 @@ impl MailBackend for MboxType {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
 }
