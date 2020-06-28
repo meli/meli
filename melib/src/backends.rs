@@ -68,9 +68,9 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
-use core::pin::Pin;
 pub use futures::stream::Stream;
 use std::future::Future;
+pub use std::pin::Pin;
 
 use std;
 use std::collections::HashMap;
@@ -330,6 +330,11 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId>;
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>>;
+    fn mailboxes_async(
+        &self,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<HashMap<MailboxHash, Mailbox>>> + Send>>> {
+        Err(MeliError::new("Unimplemented."))
+    }
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>>;
 
     fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()>;
@@ -427,8 +432,16 @@ pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn description(&self) -> String;
     fn as_bytes(&mut self) -> Result<&[u8]>;
     fn fetch_flags(&self) -> Result<Flag>;
-    fn set_flag(&mut self, envelope: &mut Envelope, flag: Flag, value: bool) -> Result<()>;
-    fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()>;
+    fn set_flag(
+        &mut self,
+        flag: Flag,
+        value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>>;
+    fn set_tag(
+        &mut self,
+        tag: String,
+        value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>>;
 }
 
 /// Wrapper for BackendOps that are to be set read-only.
@@ -456,10 +469,18 @@ impl BackendOp for ReadOnlyOp {
     fn fetch_flags(&self) -> Result<Flag> {
         self.op.fetch_flags()
     }
-    fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag, _value: bool) -> Result<()> {
+    fn set_flag(
+        &mut self,
+        _flag: Flag,
+        _value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         Err(MeliError::new("read-only set."))
     }
-    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
+    fn set_tag(
+        &mut self,
+        _tag: String,
+        _value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         Err(MeliError::new("read-only set."))
     }
 }

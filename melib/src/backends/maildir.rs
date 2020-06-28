@@ -26,11 +26,11 @@ pub use self::backend::*;
 mod stream;
 pub use stream::*;
 
-pub use futures::stream::Stream;
 use crate::backends::*;
-use crate::email::{Envelope, Flag};
+use crate::email::Flag;
 use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
+pub use futures::stream::Stream;
 
 use memmap::{Mmap, Protection};
 use std::collections::hash_map::DefaultHasher;
@@ -106,49 +106,61 @@ impl<'a> BackendOp for MaildirOp {
         Ok(path.flags())
     }
 
-    fn set_flag(&mut self, envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
-        let path = self.path();
-        let path = path.to_str().unwrap(); // Assume UTF-8 validity
-        let idx: usize = path
-            .rfind(":2,")
-            .ok_or_else(|| MeliError::new(format!("Invalid email filename: {:?}", self)))?
-            + 3;
-        let mut new_name: String = path[..idx].to_string();
+    fn set_flag(
+        &mut self,
+        f: Flag,
+        value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         let mut flags = self.fetch_flags()?;
-        flags.set(f, value);
-
-        if !(flags & Flag::DRAFT).is_empty() {
-            new_name.push('D');
-        }
-        if !(flags & Flag::FLAGGED).is_empty() {
-            new_name.push('F');
-        }
-        if !(flags & Flag::PASSED).is_empty() {
-            new_name.push('P');
-        }
-        if !(flags & Flag::REPLIED).is_empty() {
-            new_name.push('R');
-        }
-        if !(flags & Flag::SEEN).is_empty() {
-            new_name.push('S');
-        }
-        if !(flags & Flag::TRASHED).is_empty() {
-            new_name.push('T');
-        }
-        let old_hash = envelope.hash();
-        let new_name: PathBuf = new_name.into();
+        let old_hash = self.hash;
+        let mailbox_hash = self.mailbox_hash;
         let hash_index = self.hash_index.clone();
-        let mut map = hash_index.lock().unwrap();
-        let map = map.entry(self.mailbox_hash).or_default();
-        map.entry(old_hash).or_default().modified = Some(PathMod::Path(new_name.clone()));
+        let path = self.path();
+        Ok(Box::pin(async move {
+            let path = path;
+            let path = path.to_str().unwrap(); // Assume UTF-8 validity
+            let idx: usize = path
+                .rfind(":2,")
+                .ok_or_else(|| MeliError::new(format!("Invalid email filename: {:?}", path)))?
+                + 3;
+            let mut new_name: String = path[..idx].to_string();
+            flags.set(f, value);
 
-        debug!("renaming {:?} to {:?}", path, new_name);
-        fs::rename(&path, &new_name)?;
-        debug!("success in rename");
-        Ok(())
+            if !(flags & Flag::DRAFT).is_empty() {
+                new_name.push('D');
+            }
+            if !(flags & Flag::FLAGGED).is_empty() {
+                new_name.push('F');
+            }
+            if !(flags & Flag::PASSED).is_empty() {
+                new_name.push('P');
+            }
+            if !(flags & Flag::REPLIED).is_empty() {
+                new_name.push('R');
+            }
+            if !(flags & Flag::SEEN).is_empty() {
+                new_name.push('S');
+            }
+            if !(flags & Flag::TRASHED).is_empty() {
+                new_name.push('T');
+            }
+            let new_name: PathBuf = new_name.into();
+            let mut map = hash_index.lock().unwrap();
+            let map = map.entry(mailbox_hash).or_default();
+            map.entry(old_hash).or_default().modified = Some(PathMod::Path(new_name.clone()));
+
+            debug!("renaming {:?} to {:?}", path, new_name);
+            fs::rename(&path, &new_name)?;
+            debug!("success in rename");
+            Ok(())
+        }))
     }
 
-    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
+    fn set_tag(
+        &mut self,
+        _tag: String,
+        _value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         Err(MeliError::new("Maildir doesn't support tags."))
     }
 }

@@ -21,13 +21,13 @@
 
 use super::*;
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
-use melib::backends::MailboxHash;
-use melib::backends::{Backend, BackendOp, Backends, MailBackend, Mailbox, RefreshEventConsumer};
+use melib::backends::*;
 use melib::conf::AccountSettings;
 use melib::email::{Envelope, EnvelopeHash, Flag};
 use melib::error::{MeliError, Result};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::{Arc, Mutex, RwLock};
 
 // TODO replace with melib::Envelope after simplifying melib::Envelope's
@@ -318,11 +318,19 @@ impl BackendOp for PluginOp {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn set_flag(&mut self, __envelope: &mut Envelope, _f: Flag, _value: bool) -> Result<()> {
+    fn set_flag(
+        &mut self,
+        _f: Flag,
+        _value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
+    fn set_tag(
+        &mut self,
+        _tag: String,
+        _value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         Err(MeliError::new("Unimplemented."))
     }
 }

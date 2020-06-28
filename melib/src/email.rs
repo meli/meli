@@ -49,8 +49,10 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
+use std::future::Future;
 use std::hash::Hasher;
 use std::option::Option;
+use std::pin::Pin;
 use std::str;
 use std::string::String;
 
@@ -605,9 +607,9 @@ impl Envelope {
         f: Flag,
         value: bool,
         mut operation: Box<dyn BackendOp>,
-    ) -> Result<()> {
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         self.flags.set(f, value);
-        operation.set_flag(self, f, value)
+        operation.set_flag(f, value)
     }
     pub fn set_flags(&mut self, f: Flag) {
         self.flags = f;
@@ -615,18 +617,24 @@ impl Envelope {
     pub fn flags(&self) -> Flag {
         self.flags
     }
-    pub fn set_seen(&mut self, operation: Box<dyn BackendOp>) -> Result<()> {
+    pub fn set_seen(
+        &mut self,
+        operation: Box<dyn BackendOp>,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         if !self.flags.contains(Flag::SEEN) {
             self.set_flag(Flag::SEEN, true, operation)
         } else {
-            Ok(())
+            Ok(Box::pin(async { Ok(()) }))
         }
     }
-    pub fn set_unseen(&mut self, operation: Box<dyn BackendOp>) -> Result<()> {
+    pub fn set_unseen(
+        &mut self,
+        operation: Box<dyn BackendOp>,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         if self.flags.contains(Flag::SEEN) {
             self.set_flag(Flag::SEEN, false, operation)
         } else {
-            Ok(())
+            Ok(Box::pin(async { Ok(()) }))
         }
     }
     pub fn is_seen(&self) -> bool {

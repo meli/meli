@@ -164,7 +164,7 @@ impl BackendOp for ImapOp {
         self.flags.get().unwrap()
     }
 
-    fn set_flag(&mut self, _envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
+    fn set_flag(&mut self, f: Flag, value: bool) -> Result<()> {
         let mut flags = self.fetch_flags();
         flags.set(f, value);
 
@@ -202,7 +202,7 @@ impl BackendOp for ImapOp {
         Ok(())
     }
 
-    fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()> {
+    fn set_tag(&mut self, tag: String, value: bool) -> Result<()> {
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
         conn.select_mailbox(self.mailbox_hash, &mut response)?;

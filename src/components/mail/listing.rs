@@ -168,48 +168,56 @@ pub trait MailListingTrait: ListingTrait {
                 };
             let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
             match a {
-                ListingAction::SetSeen => {
-                    if let Err(e) = envelope.set_seen(op) {
+                ListingAction::SetSeen => match envelope.set_seen(op) {
+                    Err(e) => {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(e.to_string()),
                         ));
                     }
-                }
-                ListingAction::SetUnseen => {
-                    if let Err(e) = envelope.set_unseen(op) {
+                    Ok(fut) => {
+                        //accout.job_executor.spawn_specialized(fut);
+                    }
+                },
+                ListingAction::SetUnseen => match envelope.set_unseen(op) {
+                    Err(e) => {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(e.to_string()),
                         ));
                     }
-                }
+                    Ok(fut) => {}
+                },
                 ListingAction::Delete => {
                     drop(envelope);
-                    if let Err(err) = account.delete(env_hash, mailbox_hash) {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not delete.".to_string()),
-                            err.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                        return;
+                    match account.delete(env_hash, mailbox_hash) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Could not delete.".to_string()),
+                                err.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            return;
+                        }
+                        Ok(fut) => {}
                     }
                     continue;
                 }
                 ListingAction::CopyTo(ref mailbox_path) => {
                     drop(envelope);
-                    if let Err(err) =
-                        account
-                            .mailbox_by_path(mailbox_path)
-                            .and_then(|mailbox_hash| {
-                                op.as_bytes()
-                                    .and_then(|bytes| account.save(bytes, mailbox_hash, None))
-                            })
-                    {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not copy.".to_string()),
-                            err.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                        return;
+                    match account
+                        .mailbox_by_path(mailbox_path)
+                        .and_then(|mailbox_hash| {
+                            op.as_bytes()
+                                .and_then(|bytes| account.save(bytes, mailbox_hash, None))
+                        }) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Could not copy.".to_string()),
+                                err.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            return;
+                        }
+                        Ok(fut) => {}
                     }
                     continue;
                 }
@@ -297,7 +305,7 @@ pub trait MailListingTrait: ListingTrait {
                     continue;
                 }
                 ListingAction::Tag(Remove(ref tag_str)) => {
-                    if let Err(err) = op.set_tag(&mut envelope, tag_str.to_string(), false) {
+                    if let Err(err) = op.set_tag(tag_str.to_string(), false) {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not set tag.".to_string()),
                             err.to_string(),
@@ -307,7 +315,7 @@ pub trait MailListingTrait: ListingTrait {
                     }
                 }
                 ListingAction::Tag(Add(ref tag_str)) => {
-                    if let Err(err) = op.set_tag(&mut envelope, tag_str.to_string(), true) {
+                    if let Err(err) = op.set_tag(tag_str.to_string(), true) {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not set tag.".to_string()),
                             err.to_string(),

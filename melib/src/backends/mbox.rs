@@ -24,12 +24,7 @@
  */
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
-use crate::backends::BackendOp;
-use crate::backends::MailboxHash;
-use crate::backends::{
-    BackendMailbox, MailBackend, Mailbox, MailboxPermissions, RefreshEvent, RefreshEventConsumer,
-    RefreshEventKind, SpecialUsageMailbox,
-};
+use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::parser::BytesExt;
 use crate::email::*;
@@ -257,11 +252,19 @@ impl BackendOp for MboxOp {
         Ok(flags)
     }
 
-    fn set_flag(&mut self, _envelope: &mut Envelope, _flag: Flag, _value: bool) -> Result<()> {
-        Ok(())
+    fn set_flag(
+        &mut self,
+        _flag: Flag,
+        _value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+        Err(MeliError::new("Unimplemented."))
     }
 
-    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
+    fn set_tag(
+        &mut self,
+        _tag: String,
+        _value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         Err(MeliError::new("mbox doesn't support tags."))
     }
 }

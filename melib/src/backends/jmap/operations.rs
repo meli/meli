@@ -21,7 +21,7 @@
 
 use super::*;
 
-use crate::backends::BackendOp;
+use crate::backends::*;
 use crate::error::Result;
 use std::cell::Cell;
 use std::sync::{Arc, RwLock};
@@ -101,11 +101,19 @@ impl BackendOp for JmapOp {
         Ok(Flag::default())
     }
 
-    fn set_flag(&mut self, _envelope: &mut Envelope, _f: Flag, _value: bool) -> Result<()> {
-        Ok(())
+    fn set_flag(
+        &mut self,
+        _f: Flag,
+        _value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+        Err(MeliError::new("Unimplemented"))
     }
 
-    fn set_tag(&mut self, _envelope: &mut Envelope, _tag: String, _value: bool) -> Result<()> {
-        Ok(())
+    fn set_tag(
+        &mut self,
+        _tag: String,
+        _value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+        Err(MeliError::new("Unimplemented"))
     }
 }

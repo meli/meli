@@ -20,11 +20,7 @@
  */
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
-use crate::backends::MailboxHash;
-use crate::backends::{
-    BackendMailbox, BackendOp, MailBackend, Mailbox, MailboxPermissions, RefreshEventConsumer,
-    SpecialUsageMailbox,
-};
+use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{MeliError, Result};
@@ -407,7 +403,7 @@ impl MailBackend for NotmuchDb {
         _work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
         extern crate notify;
-        use crate::backends::{RefreshEvent, RefreshEventKind::*};
+        use crate::backends::RefreshEventKind::*;
         use notify::{watcher, RecursiveMode, Watcher};
         let (tx, rx) = std::sync::mpsc::channel();
         let mut watcher = watcher(tx, std::time::Duration::from_secs(2)).unwrap();
@@ -621,7 +617,7 @@ impl MailBackend for NotmuchDb {
             .as_ref()
             .unwrap_or(&self.path)
             .to_path_buf();
-        crate::backends::MaildirType::save_to_mailbox(path, bytes, flags)
+        MaildirType::save_to_mailbox(path, bytes, flags)
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {
@@ -681,10 +677,13 @@ impl BackendOp for NotmuchOp {
         Ok(flags)
     }
 
-    fn set_flag(&mut self, envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
+    fn set_flag(
+        &mut self,
+        f: Flag,
+        value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         let mut flags = self.fetch_flags()?;
         flags.set(f, value);
-        envelope.set_flags(flags);
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let mut index_lck = self.index.write().unwrap();
         unsafe {
@@ -713,7 +712,7 @@ impl BackendOp for NotmuchOp {
         macro_rules! add_tag {
             ($l:literal) => {{
                 if tags.contains(unsafe { &cstr!($l) }) {
-                    return Ok(());
+                    return Ok(Box::pin(async { Ok(()) }));
                 }
                 if let Err(err) = try_call!(
                     self.lib,
@@ -728,7 +727,7 @@ impl BackendOp for NotmuchOp {
         macro_rules! remove_tag {
             ($l:literal) => {{
                 if !tags.contains(unsafe { &cstr!($l) }) {
-                    return Ok(());
+                    return Ok(Box::pin(async { Ok(()) }));
                 }
                 if let Err(err) = try_call!(
                     self.lib,
@@ -771,10 +770,14 @@ impl BackendOp for NotmuchOp {
             *p = c_str.into();
         }
 
-        Ok(())
+        Ok(Box::pin(async { Ok(()) }))
     }
 
-    fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()> {
+    fn set_tag(
+        &mut self,
+        tag: String,
+        value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let index_lck = self.index.read().unwrap();
         unsafe {
@@ -817,17 +820,7 @@ impl BackendOp for NotmuchOp {
         if value {
             self.tag_index.write().unwrap().insert(hash, tag);
         }
-        if !envelope.labels().iter().any(|&h_| h_ == hash) {
-            if value {
-                envelope.labels_mut().push(hash);
-            }
-        }
-        if !value {
-            if let Some(pos) = envelope.labels().iter().position(|&h_| h_ == hash) {
-                envelope.labels_mut().remove(pos);
-            }
-        }
-        Ok(())
+        Ok(Box::pin(async { Ok(()) }))
     }
 }
 

@@ -21,7 +21,7 @@
 
 use super::*;
 
-use crate::backends::BackendOp;
+use crate::backends::*;
 use crate::email::*;
 use crate::error::{MeliError, Result};
 use std::cell::Cell;
@@ -98,7 +98,6 @@ impl BackendOp for ImapOp {
                 let mut bytes_cache = self.uid_store.byte_cache.lock()?;
                 let cache = bytes_cache.entry(self.uid).or_default();
                 if let Some((flags, _)) = flags {
-                    self.flags.set(Some(flags));
                     cache.flags = Some(flags);
                 }
                 cache.bytes =
@@ -149,77 +148,87 @@ impl BackendOp for ImapOp {
         Ok(self.flags.get().unwrap())
     }
 
-    fn set_flag(&mut self, _envelope: &mut Envelope, f: Flag, value: bool) -> Result<()> {
+    fn set_flag(
+        &mut self,
+        f: Flag,
+        value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         let mut flags = self.fetch_flags()?;
         flags.set(f, value);
+        let connection = self.connection.clone();
+        let mailbox_hash = self.mailbox_hash;
+        let uid = self.uid;
+        let uid_store = self.uid_store.clone();
 
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-        conn.select_mailbox(self.mailbox_hash, &mut response, false)?;
-        debug!(&response);
-        conn.send_command(
-            format!(
-                "UID STORE {} FLAGS.SILENT ({})",
-                self.uid,
-                flags_to_imap_list!(flags)
-            )
-            .as_bytes(),
-        )?;
-        conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)?;
-        debug!(&response);
-        match protocol_parser::uid_fetch_flags_response(response.as_bytes())
-            .map(|(_, v)| v)
-            .map_err(MeliError::from)
-        {
-            Ok(v) => {
-                if v.len() == 1 {
-                    debug!("responses len is {}", v.len());
-                    let (uid, (flags, _)) = v[0];
-                    assert_eq!(uid, self.uid);
-                    self.flags.set(Some(flags));
+        Ok(Box::pin(async move {
+            let mut conn = try_lock(&connection, Some(std::time::Duration::new(2, 0)))?;
+            conn.select_mailbox(mailbox_hash, &mut response, false)?;
+            debug!(&response);
+            conn.send_command(
+                format!(
+                    "UID STORE {} FLAGS.SILENT ({})",
+                    uid,
+                    flags_to_imap_list!(flags)
+                )
+                .as_bytes(),
+            )?;
+            conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)?;
+            debug!(&response);
+            match protocol_parser::uid_fetch_flags_response(response.as_bytes())
+                .map(|(_, v)| v)
+                .map_err(MeliError::from)
+            {
+                Ok(v) => {
+                    if v.len() == 1 {
+                        debug!("responses len is {}", v.len());
+                        let (uid, (flags, _)) = v[0];
+                        assert_eq!(uid, uid);
+                    }
                 }
+                Err(e) => Err(e)?,
             }
-            Err(e) => Err(e)?,
-        }
-        let mut bytes_cache = self.uid_store.byte_cache.lock()?;
-        let cache = bytes_cache.entry(self.uid).or_default();
-        cache.flags = Some(flags);
-        Ok(())
+            let mut bytes_cache = uid_store.byte_cache.lock()?;
+            let cache = bytes_cache.entry(uid).or_default();
+            cache.flags = Some(flags);
+            Ok(())
+        }))
     }
 
-    fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()> {
+    fn set_tag(
+        &mut self,
+        tag: String,
+        value: bool,
+    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
         let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-        conn.select_mailbox(self.mailbox_hash, &mut response, false)?;
-        conn.send_command(
-            format!(
-                "UID STORE {} {}FLAGS.SILENT ({})",
-                self.uid,
-                if value { "+" } else { "-" },
-                &tag
-            )
-            .as_bytes(),
-        )?;
-        conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)?;
-        protocol_parser::uid_fetch_flags_response(response.as_bytes())
-            .map(|(_, v)| v)
-            .map_err(MeliError::from)?;
-        let hash = tag_hash!(tag);
-        if value {
-            self.uid_store.tag_index.write().unwrap().insert(hash, tag);
-        } else {
-            self.uid_store.tag_index.write().unwrap().remove(&hash);
-        }
-        if !envelope.labels().iter().any(|&h_| h_ == hash) {
+        let connection = self.connection.clone();
+        let mailbox_hash = self.mailbox_hash;
+        let uid = self.uid;
+        let uid_store = self.uid_store.clone();
+
+        Ok(Box::pin(async move {
+            let mut conn = try_lock(&connection, Some(std::time::Duration::new(2, 0)))?;
+            conn.select_mailbox(mailbox_hash, &mut response, false)?;
+            conn.send_command(
+                format!(
+                    "UID STORE {} {}FLAGS.SILENT ({})",
+                    uid,
+                    if value { "+" } else { "-" },
+                    &tag
+                )
+                .as_bytes(),
+            )?;
+            conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)?;
+            protocol_parser::uid_fetch_flags_response(response.as_bytes())
+                .map(|(_, v)| v)
+                .map_err(MeliError::from)?;
+            let hash = tag_hash!(tag);
             if value {
-                envelope.labels_mut().push(hash);
+                uid_store.tag_index.write().unwrap().insert(hash, tag);
+            } else {
+                uid_store.tag_index.write().unwrap().remove(&hash);
             }
-        }
-        if !value {
-            if let Some(pos) = envelope.labels().iter().position(|&h_| h_ == hash) {
-                envelope.labels_mut().remove(pos);
-            }
-        }
-        Ok(())
+            Ok(())
+        }))
     }
 }
