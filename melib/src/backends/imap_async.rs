@@ -26,8 +26,8 @@ mod protocol_parser;
 pub use protocol_parser::{UntaggedResponse::*, *};
 mod mailbox;
 pub use mailbox::*;
-//mod operations;
-//pub use operations::*;
+mod operations;
+pub use operations::*;
 mod connection;
 pub use connection::*;
 mod watch;
@@ -195,7 +195,7 @@ impl MailBackend for ImapType {
             loop {
                 let res = get_hlpr(&connection, mailbox_hash,&cached_hash_set, &can_create_flags, &mut our_unseen, &mut valid_hash_set, &uid_store, &mut max_uid).await?;
                 yield res;
-                if max_uid == Some(1) {
+                if max_uid == Some(1) || max_uid == Some(0) {
                     return;
                 }
 
@@ -789,8 +789,6 @@ impl MailBackend for ImapType {
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
-        unimplemented!()
-        /*
         let (uid, mailbox_hash) = if let Some(v) =
             self.uid_store.hash_index.lock().unwrap().get(&hash)
         {
@@ -809,7 +807,6 @@ impl MailBackend for ImapType {
             self.connection.clone(),
             self.uid_store.clone(),
         )))
-            */
     }
 
     fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {
@@ -1639,15 +1636,13 @@ async fn get_hlpr(
         }
         if examine_response.exists == 0 {
             if uid_store.cache_headers {
-                /*
-                for &env_hash in &cached_hash_set {
+                for &env_hash in cached_hash_set {
                     conn.add_refresh_event(RefreshEvent {
                         account_hash: uid_store.account_hash,
                         mailbox_hash,
                         kind: RefreshEventKind::Remove(env_hash),
                     });
                 }
-                */
                 let _ = cache::save_envelopes(
                     uid_store.account_hash,
                     mailbox_hash,
@@ -1713,7 +1708,6 @@ async fn get_hlpr(
                     mailbox_path
                 )
             })?;
-        drop(conn);
         debug!(
             "fetch response is {} bytes and {} lines",
             response.len(),
@@ -1778,11 +1772,10 @@ async fn get_hlpr(
         debug!("sending payload for {}", mailbox_hash);
         if uid_store.cache_headers {
             //FIXME
-            /*
             cache::save_envelopes(
                 uid_store.account_hash,
                 mailbox_hash,
-                examine_response.uidvalidity,
+                uid_store.uidvalidity.lock().unwrap()[&mailbox_hash],
                 &envelopes
                     .iter()
                     .map(|(uid, env)| (*uid, env))
@@ -1794,9 +1787,7 @@ async fn get_hlpr(
                     mailbox_path
                 )
             })?;
-            */
         }
-        /*
         for &env_hash in cached_hash_set.difference(&valid_hash_set) {
             conn.add_refresh_event(RefreshEvent {
                 account_hash: uid_store.account_hash,
@@ -1804,7 +1795,7 @@ async fn get_hlpr(
                 kind: RefreshEventKind::Remove(env_hash),
             });
         }
-        */
+        drop(conn);
         unseen
             .lock()
             .unwrap()
