@@ -702,7 +702,8 @@ impl MailBackend for ImapType {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
-        Err(MeliError::new("Unimplemented."))
+        Ok(std::thread::current().id())
+        //Err(MeliError::new("Unimplemented."))
         //unimplemented!()
         /*
         let conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
@@ -1807,9 +1808,13 @@ async fn get_hlpr(
             .insert_existing_set(envelopes.iter().map(|(_, env)| env.hash()).collect::<_>());
         payload.extend(envelopes.into_iter().map(|(_, env)| env));
     }
-    *max_uid = Some(std::cmp::max(
-        std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1),
-        1,
-    ));
+    *max_uid = if max_uid_left == 1 {
+        Some(0)
+    } else {
+        Some(std::cmp::max(
+            std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1),
+            1,
+        ))
+    };
     Ok(payload)
 }
