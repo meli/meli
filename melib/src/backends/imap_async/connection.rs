@@ -24,8 +24,6 @@ use crate::backends::MailboxHash;
 use crate::connections::Connection;
 use crate::email::parser::BytesExt;
 use crate::error::*;
-use std::io::Read;
-use std::io::Write;
 extern crate native_tls;
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
@@ -52,13 +50,26 @@ pub struct ImapStream {
     protocol: ImapProtocol,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum MailboxSelection {
+    None,
+    Select(MailboxHash),
+    Examine(MailboxHash),
+}
+
+impl MailboxSelection {
+    pub fn take(&mut self) -> Self {
+        std::mem::replace(self, MailboxSelection::None)
+    }
+}
+
 #[derive(Debug)]
 pub struct ImapConnection {
     pub stream: Result<ImapStream>,
     pub server_conf: ImapServerConf,
     pub capabilities: Capabilities,
     pub uid_store: Arc<UIDStore>,
-    pub current_mailbox: Option<MailboxHash>,
+    pub current_mailbox: MailboxSelection,
 }
 
 impl Drop for ImapStream {
@@ -427,7 +438,7 @@ impl ImapConnection {
             server_conf: server_conf.clone(),
             capabilities: Capabilities::default(),
             uid_store,
-            current_mailbox: None,
+            current_mailbox: MailboxSelection::None,
         }
     }
 
@@ -545,44 +556,15 @@ impl ImapConnection {
         Ok(())
     }
 
-    /*
-    pub fn try_send(
-        &mut self,
-        mut action: impl FnMut(&mut ImapStream) -> Result<()>,
-    ) -> Result<()> {
-        if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
-            if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
-                *status = Err(MeliError::new("Connection timed out"));
-                self.stream = Err(MeliError::new("Connection timed out"));
-            }
-        }
-        if let Ok(ref mut stream) = self.stream {
-            if let Ok(_) = action(stream).await {
-                self.uid_store.is_online.lock().unwrap().0 = Instant::now();
-                return Ok(());
-            }
-        }
-        let new_stream = ImapStream::new_connection(&self.server_conf).await;
-        if new_stream.is_err() {
-            *self.uid_store.is_online.lock().unwrap() = (
-                Instant::now(),
-                Err(new_stream.as_ref().unwrap_err().clone()),
-            );
-        } else {
-            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
-        }
-        let (capabilities, stream) = new_stream?;
-        self.stream = Ok(stream);
-        self.capabilities = capabilities;
-        Err(MeliError::new("Connection timed out"))
-    }
-    */
-
     pub async fn select_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
         ret: &mut String,
+        force: bool,
     ) -> Result<()> {
+        if !force && self.current_mailbox == MailboxSelection::Select(mailbox_hash) {
+            return Ok(());
+        }
         self.send_command(
             format!(
                 "SELECT \"{}\"",
@@ -594,7 +576,7 @@ impl ImapConnection {
         self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
             .await?;
         debug!("select response {}", ret);
-        self.current_mailbox = Some(mailbox_hash);
+        self.current_mailbox = MailboxSelection::Select(mailbox_hash);
         Ok(())
     }
 
@@ -602,7 +584,11 @@ impl ImapConnection {
         &mut self,
         mailbox_hash: MailboxHash,
         ret: &mut String,
+        force: bool,
     ) -> Result<()> {
+        if !force && self.current_mailbox == MailboxSelection::Examine(mailbox_hash) {
+            return Ok(());
+        }
         self.send_command(
             format!(
                 "EXAMINE \"{}\"",
@@ -614,12 +600,14 @@ impl ImapConnection {
         self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
             .await?;
         debug!("examine response {}", ret);
-        self.current_mailbox = Some(mailbox_hash);
+        self.current_mailbox = MailboxSelection::Examine(mailbox_hash);
         Ok(())
     }
 
     pub async fn unselect(&mut self) -> Result<()> {
-        if let Some(mailbox_hash) = self.current_mailbox.take() {
+        match self.current_mailbox.take() {
+            MailboxSelection::Examine(mailbox_hash) |
+            MailboxSelection::Select(mailbox_hash) => {
             let mut response = String::with_capacity(8 * 1024);
             if self
                 .capabilities
@@ -635,9 +623,11 @@ impl ImapConnection {
                  * reselecting the same mailbox with EXAMINE command)[..]
                  */
                 
-                self.select_mailbox(mailbox_hash, &mut response).await?;
-                self.examine_mailbox(mailbox_hash, &mut response).await?;
+                self.select_mailbox(mailbox_hash, &mut response, true).await?;
+                self.examine_mailbox(mailbox_hash, &mut response, true).await?;
             }
+        },
+        MailboxSelection::None => {},
         }
         Ok(())
     }
@@ -660,13 +650,8 @@ impl ImapConnection {
     ) -> Result<()> {
         debug_assert!(low > 0);
         let mut response = String::new();
-        if self
-            .current_mailbox
-            .map(|h| h != mailbox_hash)
-            .unwrap_or(true)
-        {
-            self.examine_mailbox(mailbox_hash, &mut response).await?;
-        }
+        self.examine_mailbox(mailbox_hash, &mut response, false)
+            .await?;
         self.send_command(format!("UID SEARCH {}:*", low).as_bytes())
             .await?;
         self.read_response(&mut response, RequiredResponses::SEARCH)

@@ -219,7 +219,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     conn,
                     mailbox_hash,
                     thread_id,
-                    conn.examine_mailbox(mailbox_hash, &mut response).await
+                    conn.examine_mailbox(mailbox_hash, &mut response, false).await
                     conn.send_command(b"UID SEARCH RECENT").await
                     conn.read_response(&mut response, RequiredResponses::SEARCH).await
                 );
@@ -368,7 +368,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                         conn,
                         mailbox_hash,
                         thread_id,
-                        conn.examine_mailbox(mailbox_hash, &mut response).await
+                        conn.examine_mailbox(mailbox_hash, &mut response, false).await
                         conn.send_command(
                             &[
                             b"FETCH",
@@ -464,7 +464,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     conn,
                     mailbox_hash,
                     thread_id,
-                    conn.examine_mailbox(mailbox_hash, &mut response).await
+                    conn.examine_mailbox(mailbox_hash, &mut response, false).await
                     conn.send_command(
                         &[
                         b"UID SEARCH ",
@@ -533,7 +533,8 @@ pub async fn examine_updates(
         conn,
         mailbox_hash,
         thread_id,
-        conn.examine_mailbox(mailbox_hash, &mut response).await
+        conn.examine_mailbox(mailbox_hash, &mut response, true)
+            .await
     );
     *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
     let uidvalidity;

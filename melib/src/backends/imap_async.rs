@@ -1480,7 +1480,7 @@ async fn get_initial_max_uid(
     conn.create_uid_msn_cache(mailbox_hash, 1).await?;
     /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
      * returns READ-ONLY for both cases) */
-    conn.select_mailbox(mailbox_hash, &mut response)
+    conn.select_mailbox(mailbox_hash, &mut response, true)
         .await
         .chain_err_summary(|| format!("Could not select mailbox {}", mailbox_path))?;
     let mut examine_response =
@@ -1541,7 +1541,8 @@ async fn get_initial_max_uid(
         return Ok(0);
     }
     /* reselecting the same mailbox with EXAMINE prevents expunging it */
-    conn.examine_mailbox(mailbox_hash, &mut response).await?;
+    conn.examine_mailbox(mailbox_hash, &mut response, false)
+        .await?;
     if examine_response.uidnext == 0 {
         /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
         conn.send_command(format!("STATUS \"{}\" (UIDNEXT)", mailbox_path).as_bytes())
@@ -1592,7 +1593,7 @@ async fn get_hlpr(
         conn.create_uid_msn_cache(mailbox_hash, 1).await?;
         /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
          * returns READ-ONLY for both cases) */
-        conn.select_mailbox(mailbox_hash, &mut response)
+        conn.select_mailbox(mailbox_hash, &mut response, true)
             .await
             .chain_err_summary(|| format!("Could not select mailbox {}", mailbox_path))?;
         let mut examine_response =
@@ -1654,7 +1655,8 @@ async fn get_hlpr(
             return Ok(Vec::new());
         }
         /* reselecting the same mailbox with EXAMINE prevents expunging it */
-        conn.examine_mailbox(mailbox_hash, &mut response).await?;
+        conn.examine_mailbox(mailbox_hash, &mut response, true)
+            .await?;
         if examine_response.uidnext == 0 {
             /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
             conn.send_command(format!("STATUS \"{}\" (UIDNEXT)", mailbox_path).as_bytes())
@@ -1676,12 +1678,11 @@ async fn get_hlpr(
         *max_uid = Some(examine_response.uidnext - 1);
         examine_response.uidnext - 1
     };
-    let chunk_size = 200;
+    let chunk_size = 600;
 
     let mut payload = vec![];
-    if conn.current_mailbox != Some(mailbox_hash) {
-        conn.examine_mailbox(mailbox_hash, &mut response).await?;
-    }
+    conn.examine_mailbox(mailbox_hash, &mut response, false)
+        .await?;
     if max_uid_left > 0 {
         let mut envelopes = vec![];
         debug!("{} max_uid_left= {}", mailbox_hash, max_uid_left);

@@ -81,7 +81,7 @@ impl BackendOp for ImapOp {
                     let mut response = String::with_capacity(8 * 1024);
                     {
                         let mut conn = self.connection.lock().await;
-                        conn.examine_mailbox(self.mailbox_hash, &mut response)
+                        conn.examine_mailbox(self.mailbox_hash, &mut response, false)
                             .await?;
                         conn.send_command(
                             format!("UID FETCH {} (FLAGS RFC822)", self.uid).as_bytes(),
@@ -129,7 +129,7 @@ impl BackendOp for ImapOp {
             futures::executor::block_on(async {
                 let mut response = String::with_capacity(8 * 1024);
                 let mut conn = self.connection.lock().await;
-                conn.examine_mailbox(self.mailbox_hash, &mut response)
+                conn.examine_mailbox(self.mailbox_hash, &mut response, false)
                     .await?;
                 conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())
                     .await?;
@@ -179,7 +179,8 @@ impl BackendOp for ImapOp {
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
-            conn.select_mailbox(mailbox_hash, &mut response).await?;
+            conn.select_mailbox(mailbox_hash, &mut response, false)
+                .await?;
             debug!(&response);
             conn.send_command(
                 format!(
@@ -225,7 +226,8 @@ impl BackendOp for ImapOp {
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
             let mut conn = connection.lock().await;
-            conn.select_mailbox(mailbox_hash, &mut response).await?;
+            conn.select_mailbox(mailbox_hash, &mut response, false)
+                .await?;
             conn.send_command(
                 format!(
                     "UID STORE {} {}FLAGS.SILENT ({})",
