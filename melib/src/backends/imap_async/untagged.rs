@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::ImapConnection;
+use super::{ImapConnection, MailboxSelection};
 use crate::backends::imap_async::protocol_parser::{
     ImapLineSplit, RequiredResponses, UidFetchResponse, UntaggedResponse,
 };
@@ -33,7 +33,7 @@ use crate::error::*;
 use std::time::Instant;
 
 impl ImapConnection {
-    pub fn process_untagged(&mut self, line: &str) -> Result<bool> {
+    pub async fn process_untagged(&mut self, line: &str) -> Result<bool> {
         macro_rules! try_fail {
             ($mailbox_hash: expr, $($result:expr)+) => {
                 $(if let Err(err) = $result {
@@ -52,10 +52,9 @@ impl ImapConnection {
             };
         }
         //FIXME
-        let mailbox_hash = if let Some(mailbox_hash) = self.current_mailbox {
-            mailbox_hash
-        } else {
-            return Ok(false);
+        let mailbox_hash = match self.current_mailbox {
+            MailboxSelection::Select(h) | MailboxSelection::Examine(h) => h,
+            MailboxSelection::None => return Ok(false),
         };
         let mailbox =
             std::clone::Clone::clone(&self.uid_store.mailboxes.read().unwrap()[&mailbox_hash]);
@@ -104,20 +103,19 @@ impl ImapConnection {
             UntaggedResponse::Exists(n) => {
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
                  * */
-                let mut prev_exists = mailbox.exists.lock().unwrap();
                 debug!("exists {}", n);
-                if n > prev_exists.len() {
+                if n > mailbox.exists.lock().unwrap().len() {
                     try_fail!(
                         mailbox_hash,
                         self.send_command(
                             &[
                             b"FETCH",
-                            format!("{}:{}", prev_exists.len() + 1, n).as_bytes(),
+                            format!("{}:{}", mailbox.exists.lock().unwrap().len() + 1, n).as_bytes(),
                             b"(UID FLAGS RFC822)",
                             ]
                             .join(&b' '),
-                        )
-                        self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                        ).await
+                        self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
                     );
                     match super::protocol_parser::uid_fetch_responses(&response) {
                         Ok((_, v, _)) => {
@@ -167,7 +165,7 @@ impl ImapConnection {
                                     if !env.is_seen() {
                                         mailbox.unseen.lock().unwrap().insert_new(env.hash());
                                     }
-                                    prev_exists.insert_new(env.hash());
+                                    mailbox.exists.lock().unwrap().insert_new(env.hash());
                                     self.add_refresh_event(RefreshEvent {
                                         account_hash: self.uid_store.account_hash,
                                         mailbox_hash,
@@ -185,8 +183,8 @@ impl ImapConnection {
             UntaggedResponse::Recent(_) => {
                 try_fail!(
                     mailbox_hash,
-                    self.send_command(b"UID SEARCH RECENT")
-                    self.read_response(&mut response, RequiredResponses::SEARCH)
+                    self.send_command(b"UID SEARCH RECENT").await
+                    self.read_response(&mut response, RequiredResponses::SEARCH).await
                 );
                 match super::protocol_parser::search_results_raw(response.as_bytes())
                     .map(|(_, v)| v)
@@ -201,8 +199,8 @@ impl ImapConnection {
                             self.send_command(
                                 &[b"UID FETCH", v, b"(FLAGS RFC822)"]
                                 .join(&b' '),
-                                )
-                            self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                                ).await
+                            self.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
                         );
                         debug!(&response);
                         match super::protocol_parser::uid_fetch_responses(&response) {
@@ -294,8 +292,8 @@ impl ImapConnection {
                     format!("{}", msg_seq).as_bytes(),
                     ]
                     .join(&b' '),
-                )
-                        self.read_response(&mut response, RequiredResponses::SEARCH)
+                ).await
+                        self.read_response(&mut response, RequiredResponses::SEARCH).await
                     );
                 debug!(&response);
                 match super::protocol_parser::search_results(

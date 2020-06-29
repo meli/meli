@@ -24,7 +24,7 @@
  */
 
 use super::{AccountConf, FileMailboxConf};
-use crate::jobs1::{JobExecutor, JobId};
+use crate::jobs1::{JobExecutor, JobId, JoinHandle};
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
     AccountHash, BackendOp, Backends, MailBackend, Mailbox, MailboxHash, NotifyFn, ReadOnlyOp,
@@ -130,7 +130,7 @@ pub struct Account {
     pub(crate) settings: AccountConf,
     pub(crate) backend: Arc<RwLock<Box<dyn MailBackend>>>,
 
-    job_executor: Arc<JobExecutor>,
+    pub job_executor: Arc<JobExecutor>,
     active_jobs: HashMap<JobId, JobRequest>,
     sender: Sender<ThreadEvent>,
     event_queue: VecDeque<(MailboxHash, RefreshEvent)>,

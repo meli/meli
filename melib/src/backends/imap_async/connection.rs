@@ -29,8 +29,10 @@ use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
 pub use smol::Async as AsyncWrapper;
 use std::collections::HashSet;
+use std::future::Future;
 use std::iter::FromIterator;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -82,7 +84,6 @@ impl ImapStream {
     pub async fn new_connection(
         server_conf: &ImapServerConf,
     ) -> Result<(Capabilities, ImapStream)> {
-        use std::io::prelude::*;
         use std::net::TcpStream;
         let path = &server_conf.server_hostname;
         debug!("ImapStream::new_connection");
@@ -468,56 +469,57 @@ impl ImapConnection {
         Ok(())
     }
 
-    pub async fn read_response(
-        &mut self,
-        ret: &mut String,
+    pub fn read_response<'a>(
+        &'a mut self,
+        ret: &'a mut String,
         required_responses: RequiredResponses,
-    ) -> Result<()> {
-        let mut response = String::new();
-        ret.clear();
-        self.stream.as_mut()?.read_response(&mut response).await?;
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            let mut response = String::new();
+            ret.clear();
+            self.stream.as_mut()?.read_response(&mut response).await?;
 
-        match self.server_conf.protocol {
-            ImapProtocol::IMAP => {
-                let r: ImapResponse = ImapResponse::from(&response);
-                match r {
-                    ImapResponse::Bye(ref response_code) => {
-                        self.stream = Err(MeliError::new(format!(
-                            "Offline: received BYE: {:?}",
-                            response_code
-                        )));
-                        ret.push_str(&response);
-                    }
-                    ImapResponse::No(ref response_code) => {
-                        debug!("Received NO response: {:?} {:?}", response_code, response);
-                        ret.push_str(&response);
-                    }
-                    ImapResponse::Bad(ref response_code) => {
-                        debug!("Received BAD response: {:?} {:?}", response_code, response);
-                        ret.push_str(&response);
-                    }
-                    _ => {
-                        /*debug!(
-                            "check every line for required_responses: {:#?}",
-                            &required_responses
-                        );*/
-                        for l in response.split_rn() {
-                            /*debug!("check line: {}", &l);*/
-                            //if required_responses.check(l) || !self.process_untagged(l)? {
-                            //    ret.push_str(l);
-                            //}
-                            ret.push_str(l);
+            match self.server_conf.protocol {
+                ImapProtocol::IMAP => {
+                    let r: ImapResponse = ImapResponse::from(&response);
+                    match r {
+                        ImapResponse::Bye(ref response_code) => {
+                            self.stream = Err(MeliError::new(format!(
+                                "Offline: received BYE: {:?}",
+                                response_code
+                            )));
+                            ret.push_str(&response);
                         }
-                        //ret.push_str(&response);
+                        ImapResponse::No(ref response_code) => {
+                            debug!("Received NO response: {:?} {:?}", response_code, response);
+                            ret.push_str(&response);
+                        }
+                        ImapResponse::Bad(ref response_code) => {
+                            debug!("Received BAD response: {:?} {:?}", response_code, response);
+                            ret.push_str(&response);
+                        }
+                        _ => {
+                            /*debug!(
+                                "check every line for required_responses: {:#?}",
+                                &required_responses
+                            );*/
+                            for l in response.split_rn() {
+                                /*debug!("check line: {}", &l);*/
+                                if required_responses.check(l) || !self.process_untagged(l).await? {
+                                    ret.push_str(l);
+                                }
+                                ret.push_str(l);
+                            }
+                        }
                     }
+                    r.into()
                 }
-                r.into()
+                ImapProtocol::ManageSieve => {
+                    ret.push_str(&response);
+                    Ok(())
+                }
             }
-            ImapProtocol::ManageSieve => {
-                ret.push_str(&response);
-                Ok(())
-            }
-        }
+        })
     }
 
     pub async fn read_lines(&mut self, ret: &mut String, termination_string: String) -> Result<()> {
@@ -607,7 +609,7 @@ impl ImapConnection {
     pub async fn unselect(&mut self) -> Result<()> {
         match self.current_mailbox.take() {
             MailboxSelection::Examine(mailbox_hash) |
-            MailboxSelection::Select(mailbox_hash) => {
+            MailboxSelection::Select(mailbox_hash) =>{
             let mut response = String::with_capacity(8 * 1024);
             if self
                 .capabilities
@@ -678,7 +680,7 @@ pub struct ImapBlockingConnection {
 }
 
 impl From<ImapConnection> for ImapBlockingConnection {
-    fn from(mut conn: ImapConnection) -> Self {
+    fn from(_conn: ImapConnection) -> Self {
         unimplemented!()
         /*
         conn.set_nonblocking(false)

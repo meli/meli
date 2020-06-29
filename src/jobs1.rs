@@ -36,7 +36,6 @@ use crossbeam::deque::{Injector, Steal, Stealer, Worker};
 use crossbeam::sync::{Parker, Unparker};
 use crossbeam::Sender;
 pub use futures::channel::oneshot;
-use once_cell::sync::Lazy;
 use std::iter;
 
 type AsyncTask = async_task::Task<()>;

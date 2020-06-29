@@ -276,3 +276,10 @@ impl From<nom::Err<(&str, nom::error::ErrorKind)>> for MeliError {
             .set_source(Some(Arc::new(MeliError::new(format!("{}", kind)))))
     }
 }
+
+impl<'a> From<&'a mut MeliError> for MeliError {
+    #[inline]
+    fn from(kind: &'a mut MeliError) -> MeliError {
+        kind.clone()
+    }
+}

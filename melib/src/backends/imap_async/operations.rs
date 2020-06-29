@@ -25,7 +25,7 @@ use crate::backends::*;
 use crate::email::*;
 use crate::error::{MeliError, Result};
 use std::cell::Cell;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// `BackendOp` implementor for Imap
 #[derive(Debug, Clone)]

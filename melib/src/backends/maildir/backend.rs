@@ -19,12 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::{
-    BackendMailbox, BackendOp, MailBackend, Mailbox, MailboxHash, MaildirPathTrait, RefreshEvent,
-    RefreshEventConsumer, RefreshEventKind::*,
-};
-use super::{MaildirMailbox, MaildirOp};
+use super::{MaildirMailbox, MaildirOp, MaildirPathTrait};
 use crate::async_workers::*;
+use crate::backends::{RefreshEventKind::*, *};
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{MeliError, Result};
@@ -202,7 +199,7 @@ impl MailBackend for MaildirType {
         let mailbox_hash = mailbox.hash();
         let unseen = mailbox.unseen.clone();
         let total = mailbox.total.clone();
-        let mut path: PathBuf = mailbox.fs_path().into();
+        let path: PathBuf = mailbox.fs_path().into();
         let root_path = self.path.to_path_buf();
         let map = self.hash_indexes.clone();
         let mailbox_index = self.mailbox_index.clone();

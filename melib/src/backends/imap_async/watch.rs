@@ -22,7 +22,7 @@ use super::*;
 use crate::backends::SpecialUsageMailbox;
 use crate::email::parser::BytesExt;
 use crate::email::parser::BytesIterExt;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
@@ -32,7 +32,7 @@ pub struct ImapWatchKit {
 }
 
 macro_rules! exit_on_error {
-    ($conn:expr, $mailbox_hash:ident, $thread_id:ident, $($result:expr)+) => {
+    ($conn:expr, $mailbox_hash:ident, $($result:expr)+) => {
         $(if let Err(e) = $result {
             *$conn.uid_store.is_online.lock().unwrap() = (
             Instant::now(),
@@ -59,7 +59,6 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
     } = kit;
     conn.connect().await?;
     let mut response = String::with_capacity(8 * 1024);
-    let thread_id: std::thread::ThreadId = std::thread::current().id();
     loop {
         let mailboxes = uid_store.mailboxes.read()?;
         for mailbox in mailboxes.values() {
@@ -83,7 +82,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         uid_store,
     } = kit;
     conn.connect().await?;
-    let thread_id: std::thread::ThreadId = std::thread::current().id();
     let mailbox: ImapMailbox = match uid_store
         .mailboxes
         .read()
@@ -110,7 +108,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     exit_on_error!(
         conn,
         mailbox_hash,
-        thread_id,
         conn.send_command(format!("SELECT \"{}\"", mailbox.imap_path()).as_bytes())
             .await
         conn.read_response(&mut response, RequiredResponses::SELECT_REQUIRED)
@@ -165,12 +162,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             }
         };
     }
-    exit_on_error!(
-        conn,
-        mailbox_hash,
-        thread_id,
-        conn.send_command(b"IDLE").await
-    );
+    exit_on_error!(conn, mailbox_hash, conn.send_command(b"IDLE").await);
     let mut iter = ImapBlockingConnection::from(conn);
     let mut beat = std::time::Instant::now();
     let mut watch = std::time::Instant::now();
@@ -185,7 +177,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             exit_on_error!(
                 iter.conn,
                 mailbox_hash,
-                thread_id,
                 iter.conn.send_raw(b"DONE").await
                 iter.conn.read_response(&mut response, RequiredResponses::empty()).await
                 iter.conn.send_command(b"IDLE").await
@@ -201,7 +192,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                 exit_on_error!(
                     conn,
                     mailbox_hash,
-                    thread_id,
                     examine_updates(mailbox, &mut conn, &uid_store).await
                 );
             }
@@ -218,7 +208,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                 exit_on_error!(
                     conn,
                     mailbox_hash,
-                    thread_id,
                     conn.examine_mailbox(mailbox_hash, &mut response, false).await
                     conn.send_command(b"UID SEARCH RECENT").await
                     conn.read_response(&mut response, RequiredResponses::SEARCH).await
@@ -234,7 +223,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                         exit_on_error!(
                             conn,
                             mailbox_hash,
-                            thread_id,
                             conn.send_command(
                                 &[&b"UID FETCH"[..], &v.trim().split(|b| b == &b' ').join(b','), &b"(FLAGS RFC822)"[..]]
                                 .join(&b' '),
@@ -244,13 +232,10 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                         debug!(&response);
                         match protocol_parser::uid_fetch_responses(&response) {
                             Ok((_, v, _)) => {
-                                let len = v.len();
-                                let mut ctr = 0;
                                 for UidFetchResponse {
                                     uid, flags, body, ..
                                 } in v
                                 {
-                                    ctr += 1;
                                     if !uid_store
                                         .uid_index
                                         .lock()
@@ -367,7 +352,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     exit_on_error!(
                         conn,
                         mailbox_hash,
-                        thread_id,
                         conn.examine_mailbox(mailbox_hash, &mut response, false).await
                         conn.send_command(
                             &[
@@ -381,8 +365,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                     );
                     match protocol_parser::uid_fetch_responses(&response) {
                         Ok((_, v, _)) => {
-                            let len = v.len();
-                            let mut ctr = 0;
                             'fetch_responses_b: for UidFetchResponse {
                                 uid, flags, body, ..
                             } in v
@@ -393,14 +375,12 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                                     .unwrap()
                                     .contains_key(&(mailbox_hash, uid))
                                 {
-                                    ctr += 1;
                                     continue 'fetch_responses_b;
                                 }
                                 if let Ok(mut env) = Envelope::from_bytes(
                                     body.unwrap(),
                                     flags.as_ref().map(|&(f, _)| f),
                                 ) {
-                                    ctr += 1;
                                     uid_store
                                         .hash_index
                                         .lock()
@@ -463,7 +443,6 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                 exit_on_error!(
                     conn,
                     mailbox_hash,
-                    thread_id,
                     conn.examine_mailbox(mailbox_hash, &mut response, false).await
                     conn.send_command(
                         &[
@@ -532,7 +511,6 @@ pub async fn examine_updates(
     exit_on_error!(
         conn,
         mailbox_hash,
-        thread_id,
         conn.examine_mailbox(mailbox_hash, &mut response, true)
             .await
     );
@@ -583,7 +561,6 @@ pub async fn examine_updates(
                     exit_on_error!(
                         conn,
                         mailbox_hash,
-                        thread_id,
                         conn.send_command(b"UID SEARCH RECENT").await
                         conn.read_response(&mut response, RequiredResponses::SEARCH).await
                     );
@@ -598,7 +575,6 @@ pub async fn examine_updates(
                             exit_on_error!(
                                 conn,
                                 mailbox_hash,
-                                thread_id,
                                 conn.send_command(
                                 &[&b"UID FETCH"[..], &v.trim().split(|b| b == &b' ').join(b','), &b"(FLAGS RFC822)"[..]]
                                     .join(&b' '),
@@ -701,7 +677,6 @@ pub async fn examine_updates(
                 exit_on_error!(
                     conn,
                     mailbox_hash,
-                    thread_id,
                     conn.send_command(
                         &[
                         b"FETCH",
