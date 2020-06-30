@@ -22,6 +22,7 @@
 use super::EntryStrings;
 use super::*;
 use crate::components::utilities::PageMovement;
+use crate::jobs1::{oneshot, JobId};
 use std::cmp;
 use std::convert::TryInto;
 use std::iter::FromIterator;
@@ -61,6 +62,11 @@ pub struct CompactListing {
     rows_drawn: SegmentTree,
     rows: Vec<((usize, (ThreadHash, EnvelopeHash)), EntryStrings)>,
 
+    search_job: Option<(
+        String,
+        oneshot::Receiver<Result<SmallVec<[EnvelopeHash; 512]>>>,
+        JobId,
+    )>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
@@ -724,21 +730,22 @@ impl ListingTrait for CompactListing {
         context.dirty_areas.push_back(area);
     }
 
-    fn filter(&mut self, filter_term: &str, context: &Context) {
-        if filter_term.is_empty() {
-            return;
-        }
-
+    fn filter(
+        &mut self,
+        filter_term: String,
+        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        context: &Context,
+    ) {
         self.order.clear();
         self.selection.clear();
         self.length = 0;
         self.filtered_selection.clear();
         self.filtered_order.clear();
-        self.filter_term = filter_term.to_string();
+        self.filter_term = filter_term;
         self.row_updates.clear();
 
         let account = &context.accounts[self.cursor_pos.0];
-        match account.search(&self.filter_term, self.sort, self.cursor_pos.1) {
+        match results {
             Ok(results) => {
                 let threads = &account.collection.threads[&self.cursor_pos.1];
                 for env_hash in results {
@@ -841,6 +848,7 @@ impl CompactListing {
             subsort: (SortField::Date, SortOrder::Desc),
             all_threads: HashSet::default(),
             order: HashMap::default(),
+            search_job: None,
             filter_term: String::new(),
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
@@ -1520,8 +1528,41 @@ impl Component for CompactListing {
                 return true;
             }
             UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused => {
-                self.filter(filter_term, context);
-                self.dirty = true;
+                match context.accounts[self.cursor_pos.0].search(
+                    filter_term,
+                    self.sort,
+                    self.cursor_pos.1,
+                ) {
+                    Ok(job) => {
+                        let (chan, job_id) = context.accounts[self.cursor_pos.0]
+                            .job_executor
+                            .spawn_specialized(job);
+                        context.accounts[self.cursor_pos.0]
+                            .active_jobs
+                            .insert(job_id.clone(), crate::conf::accounts::JobRequest::Search);
+                        self.search_job = Some((filter_term.to_string(), chan, job_id));
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not perform search".to_string()),
+                            err.to_string(),
+                            Some(crate::types::NotificationType::ERROR),
+                        ));
+                    }
+                };
+                self.set_dirty(true);
+            }
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self
+                    .search_job
+                    .as_ref()
+                    .map(|(_, _, j)| j == job_id)
+                    .unwrap_or(false) =>
+            {
+                let (filter_term, mut rcvr, job_id) = self.search_job.take().unwrap();
+                let results = rcvr.try_recv().unwrap().unwrap();
+                self.filter(filter_term, results, context);
+                self.set_dirty(true);
             }
             _ => {}
         }

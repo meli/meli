@@ -687,54 +687,88 @@ impl ListingTrait for ConversationsListing {
         context.dirty_areas.push_back(area);
     }
 
-    fn filter(&mut self, filter_term: &str, context: &Context) {
-        if filter_term.is_empty() {
-            return;
-        }
+    fn filter(
+        &mut self,
+        filter_term: String,
+        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        context: &Context,
+    ) {
+        /*
+            if filter_term.is_empty() {
+                return;
+            }
 
-        self.order.clear();
-        self.selection.clear();
-        self.length = 0;
-        self.filtered_selection.clear();
-        self.filtered_order.clear();
-        self.filter_term = filter_term.to_string();
-        self.row_updates.clear();
-        for v in self.selection.values_mut() {
-            *v = false;
-        }
+            self.order.clear();
+            self.selection.clear();
+            self.length = 0;
+            self.filtered_selection.clear();
+            self.filtered_order.clear();
+            self.filter_term = filter_term.to_string();
+            self.row_updates.clear();
+            for v in self.selection.values_mut() {
+                *v = false;
+            }
 
-        let account = &context.accounts[self.cursor_pos.0];
-        match account.search(&self.filter_term, self.sort, self.cursor_pos.1) {
-            Ok(results) => {
-                let threads = &account.collection.threads[&self.cursor_pos.1];
-                for env_hash in results {
-                    if !account.collection.contains_key(&env_hash) {
-                        continue;
+            let account = &context.accounts[self.cursor_pos.0];
+            match account.search(&self.filter_term, self.sort, self.cursor_pos.1) {
+                Ok(results) => {
+                    /*
+                    let threads = &account.collection.threads[&self.cursor_pos.1];
+                    for env_hash in results {
+                        if !account.collection.contains_key(&env_hash) {
+                            continue;
+                        }
+                        let env_thread_node_hash = account.collection.get_env(env_hash).thread();
+                        if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                            continue;
+                        }
+                        let thread =
+                            threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+                        if self.filtered_order.contains_key(&thread) {
+                            continue;
+                        }
+                        if self.all_threads.contains(&thread) {
+                            self.filtered_selection.push(thread);
+                            self.filtered_order
+                                .insert(thread, self.filtered_selection.len() - 1);
+                        }
                     }
-                    let env_thread_node_hash = account.collection.get_env(env_hash).thread();
-                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
-                        continue;
+                    if !self.filtered_selection.is_empty() {
+                        threads.group_inner_sort_by(
+                            &mut self.filtered_selection,
+                            self.sort,
+                            &context.accounts[self.cursor_pos.0].collection.envelopes,
+                        );
+                        self.new_cursor_pos.2 =
+                            std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+                    } else {
+                        let default_cell = {
+                            let mut ret = Cell::with_char(' ');
+                            ret.set_fg(self.color_cache.theme_default.fg)
+                                .set_bg(self.color_cache.theme_default.bg)
+                                .set_attrs(self.color_cache.theme_default.attrs);
+                            ret
+                        };
+                        self.content = CellBuffer::new_with_context(0, 0, default_cell, context);
                     }
-                    let thread =
-                        threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
-                    if self.filtered_order.contains_key(&thread) {
-                        continue;
-                    }
-                    if self.all_threads.contains(&thread) {
-                        self.filtered_selection.push(thread);
-                        self.filtered_order
-                            .insert(thread, self.filtered_selection.len() - 1);
-                    }
-                }
-                if !self.filtered_selection.is_empty() {
-                    threads.group_inner_sort_by(
-                        &mut self.filtered_selection,
-                        self.sort,
-                        &context.accounts[self.cursor_pos.0].collection.envelopes,
+                    self.redraw_threads_list(
+                        context,
+                        Box::new(self.filtered_selection.clone().into_iter())
+                            as Box<dyn Iterator<Item = ThreadHash>>,
                     );
-                    self.new_cursor_pos.2 =
-                        std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
-                } else {
+                    */
+                }
+                Err(e) => {
+                    self.cursor_pos.2 = 0;
+                    self.new_cursor_pos.2 = 0;
+                    let message = format!(
+                        "Encountered an error while searching for `{}`: {}.",
+                        self.filter_term, e
+                    );
+                    log(
+                        format!("Failed to search for term {}: {}", self.filter_term, e),
+                        ERROR,
+                    );
                     let default_cell = {
                         let mut ret = Cell::with_char(' ');
                         ret.set_fg(self.color_cache.theme_default.fg)
@@ -742,45 +776,20 @@ impl ListingTrait for ConversationsListing {
                             .set_attrs(self.color_cache.theme_default.attrs);
                         ret
                     };
-                    self.content = CellBuffer::new_with_context(0, 0, default_cell, context);
+                    self.content =
+                        CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+                    write_string_to_grid(
+                        &message,
+                        &mut self.content,
+                        self.color_cache.theme_default.fg,
+                        self.color_cache.theme_default.bg,
+                        self.color_cache.theme_default.attrs,
+                        ((0, 0), (message.len() - 1, 0)),
+                        None,
+                    );
                 }
-                self.redraw_threads_list(
-                    context,
-                    Box::new(self.filtered_selection.clone().into_iter())
-                        as Box<dyn Iterator<Item = ThreadHash>>,
-                );
             }
-            Err(e) => {
-                self.cursor_pos.2 = 0;
-                self.new_cursor_pos.2 = 0;
-                let message = format!(
-                    "Encountered an error while searching for `{}`: {}.",
-                    self.filter_term, e
-                );
-                log(
-                    format!("Failed to search for term {}: {}", self.filter_term, e),
-                    ERROR,
-                );
-                let default_cell = {
-                    let mut ret = Cell::with_char(' ');
-                    ret.set_fg(self.color_cache.theme_default.fg)
-                        .set_bg(self.color_cache.theme_default.bg)
-                        .set_attrs(self.color_cache.theme_default.attrs);
-                    ret
-                };
-                self.content =
-                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
-                write_string_to_grid(
-                    &message,
-                    &mut self.content,
-                    self.color_cache.theme_default.fg,
-                    self.color_cache.theme_default.bg,
-                    self.color_cache.theme_default.attrs,
-                    ((0, 0), (message.len() - 1, 0)),
-                    None,
-                );
-            }
-        }
+        */
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
@@ -1336,7 +1345,7 @@ impl Component for ConversationsListing {
             }
             UIEvent::Action(ref action) => match action {
                 Action::Listing(Search(ref filter_term)) if !self.unfocused => {
-                    self.filter(filter_term, context);
+                    //self.filter(filter_term, context);
                     self.dirty = true;
                     return true;
                 }

@@ -902,7 +902,12 @@ impl MailBackend for MboxType {
         )))
     }
 
-    fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {
+    fn save(
+        &self,
+        _bytes: Vec<u8>,
+        _mailbox_hash: MailboxHash,
+        _flags: Option<Flag>,
+    ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 

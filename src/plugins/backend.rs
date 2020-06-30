@@ -213,13 +213,18 @@ impl MailBackend for PluginBackend {
         }))
     }
 
-    fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {
+    fn save(
+        &self,
+        _bytes: Vec<u8>,
+        _mailbox_hash: MailboxHash,
+        _flags: Option<Flag>,
+    ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
     fn create_mailbox(
         &mut self,
         _name: String,
-    ) -> Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
+    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         Err(MeliError::new("Unimplemented."))
     }
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {

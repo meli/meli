@@ -178,12 +178,20 @@ impl MailBackend for MaildirType {
         Ok(())
     }
 
+    fn is_online_async(&self) -> ResultFuture<()> {
+        Ok(Box::pin(async { Ok(()) }))
+    }
+
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
         Ok(self
             .mailboxes
             .iter()
             .map(|(h, f)| (*h, BackendMailbox::clone(f)))
             .collect())
+    }
+    fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+        let res = self.mailboxes();
+        Ok(Box::pin(async { res }))
     }
 
     fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
@@ -670,18 +678,26 @@ impl MailBackend for MaildirType {
         )))
     }
 
-    fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {
-        MaildirType::save_to_mailbox(self.mailboxes[&mailbox_hash].fs_path.clone(), bytes, flags)
+    fn save(
+        &self,
+        bytes: Vec<u8>,
+        mailbox_hash: MailboxHash,
+        flags: Option<Flag>,
+    ) -> ResultFuture<()> {
+        let path = self.mailboxes[&mailbox_hash].fs_path.clone();
+        Ok(Box::pin(async move {
+            MaildirType::save_to_mailbox(path, bytes, flags)
+        }))
     }
 
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
 
     fn create_mailbox(
         &mut self,
         new_path: String,
-    ) -> Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
+    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         let mut path = self.path.clone();
         path.push(&new_path);
         if !path.starts_with(&self.path) {
@@ -720,21 +736,30 @@ impl MailBackend for MaildirType {
         };
 
         self.mailboxes.insert(mailbox_hash, new_mailbox);
-        Ok((mailbox_hash, self.mailboxes()?))
+        let ret = Ok((mailbox_hash, self.mailboxes()?));
+        Ok(Box::pin(async { ret }))
     }
 
     fn delete_mailbox(
         &mut self,
         _mailbox_hash: MailboxHash,
-    ) -> Result<HashMap<MailboxHash, Mailbox>> {
+    ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn set_mailbox_subscription(&mut self, _mailbox_hash: MailboxHash, _val: bool) -> Result<()> {
+    fn set_mailbox_subscription(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _val: bool,
+    ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn rename_mailbox(&mut self, _mailbox_hash: MailboxHash, _new_path: String) -> Result<Mailbox> {
+    fn rename_mailbox(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _new_path: String,
+    ) -> ResultFuture<Mailbox> {
         Err(MeliError::new("Unimplemented."))
     }
 
@@ -742,7 +767,7 @@ impl MailBackend for MaildirType {
         &mut self,
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
-    ) -> Result<()> {
+    ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 }
@@ -1084,7 +1109,7 @@ impl MaildirType {
         w.build(handle)
     }
 
-    pub fn save_to_mailbox(mut path: PathBuf, bytes: &[u8], flags: Option<Flag>) -> Result<()> {
+    pub fn save_to_mailbox(mut path: PathBuf, bytes: Vec<u8>, flags: Option<Flag>) -> Result<()> {
         for d in &["cur", "new", "tmp"] {
             path.push(d);
             if !path.is_dir() {
@@ -1149,7 +1174,7 @@ impl MaildirType {
         file.set_permissions(permissions)?;
 
         let mut writer = io::BufWriter::new(file);
-        writer.write_all(bytes).unwrap();
+        writer.write_all(&bytes).unwrap();
         return Ok(());
     }
 

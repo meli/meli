@@ -30,6 +30,7 @@ pub use self::widgets::*;
 mod layouts;
 pub use self::layouts::*;
 
+use crate::jobs1::JobId;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy)]
@@ -636,6 +637,8 @@ pub struct StatusBar {
     height: usize,
     dirty: bool,
     id: ComponentId,
+    progress_spinner: ProgressSpinner,
+    in_progress_jobs: HashSet<JobId>,
 
     auto_complete: AutoComplete,
     cmd_history: Vec<String>,
@@ -661,7 +664,8 @@ impl StatusBar {
             height: 1,
             id: ComponentId::new_v4(),
             auto_complete: AutoComplete::new(Vec::new()),
-
+            progress_spinner: ProgressSpinner::new(3),
+            in_progress_jobs: HashSet::default(),
             cmd_history: crate::execute::history::old_cmd_history(),
         }
     }
@@ -754,6 +758,17 @@ impl Component for StatusBar {
             ),
             context,
         );
+
+        if self.progress_spinner.is_dirty() {
+            self.progress_spinner.draw(
+                grid,
+                (
+                    (get_x(bottom_right).saturating_sub(1), get_y(bottom_right)),
+                    bottom_right,
+                ),
+                context,
+            );
+        }
 
         if self.mode != UIMode::Execute && !self.is_dirty() {
             return;
@@ -1148,12 +1163,30 @@ impl Component for StatusBar {
                 self.status = format!("{} | {}", self.mode, std::mem::replace(s, String::new()));
                 self.dirty = true;
             }
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)) => {
+                self.in_progress_jobs.remove(job_id);
+                if self.in_progress_jobs.is_empty() {
+                    self.progress_spinner.stop();
+                    self.set_dirty(true);
+                }
+            }
+            UIEvent::StatusEvent(StatusEvent::NewJob(ref job_id)) => {
+                if self.in_progress_jobs.is_empty() {
+                    self.progress_spinner.start();
+                }
+                self.in_progress_jobs.insert(job_id.clone());
+            }
+            UIEvent::Timer(_) => {
+                if self.progress_spinner.process_event(event, context) {
+                    return true;
+                }
+            }
             _ => {}
         }
         false
     }
     fn is_dirty(&self) -> bool {
-        self.dirty || self.container.is_dirty()
+        self.dirty || self.container.is_dirty() || self.progress_spinner.is_dirty()
     }
     fn set_dirty(&mut self, value: bool) {
         self.dirty = value;

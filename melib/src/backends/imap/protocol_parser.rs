@@ -355,7 +355,6 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
             f.no_select = false;
             f.is_subscribed = false;
             for p in properties.split(|&b| b == b' ') {
-                use crate::backends::SpecialUsageMailbox;
                 if p.eq_ignore_ascii_case(b"\\NoSelect") {
                     f.no_select = true;
                 } else if p.eq_ignore_ascii_case(b"\\Sent") {

@@ -356,7 +356,13 @@ pub trait ListingTrait: Component {
     fn set_coordinates(&mut self, _: (usize, MailboxHash));
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context);
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context);
-    fn filter(&mut self, _filter_term: &str, _context: &Context) {}
+    fn filter(
+        &mut self,
+        _filter_term: String,
+        _results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        _context: &Context,
+    ) {
+    }
     fn set_movement(&mut self, mvm: PageMovement);
 }
 

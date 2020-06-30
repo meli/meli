@@ -37,11 +37,10 @@ pub mod managesieve;
 mod untagged;
 
 use crate::async_workers::{Async, WorkContext};
-use crate::backends::BackendOp;
-use crate::backends::RefreshEvent;
-use crate::backends::RefreshEventKind::{self, *};
-use crate::backends::{AccountHash, MailboxHash};
-use crate::backends::{BackendMailbox, MailBackend, Mailbox, RefreshEventConsumer};
+use crate::backends::{
+    RefreshEventKind::{self, *},
+    *,
+};
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result, ResultIntoMeliError};
@@ -204,7 +203,7 @@ impl MailBackend for ImapType {
         &mut self,
         mailbox_hash: MailboxHash,
         sender: RefreshEventConsumer,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>> {
+    ) -> ResultFuture<()> {
         let inbox = self
             .uid_store
             .mailboxes
@@ -223,11 +222,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn mailboxes_async(
-        &self,
-    ) -> Result<
-        core::pin::Pin<Box<dyn Future<Output = Result<HashMap<MailboxHash, Mailbox>>> + Send>>,
-    > {
+    fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
@@ -279,9 +274,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn is_online_async(
-        &self,
-    ) -> Result<core::pin::Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+    fn is_online_async(&self) -> ResultFuture<()> {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             debug!("INSIDE is_online_async()");
@@ -392,7 +385,12 @@ impl MailBackend for ImapType {
         )))
     }
 
-    fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {
+    fn save(
+        &self,
+        _bytes: Vec<u8>,
+        _mailbox_hash: MailboxHash,
+        _flags: Option<Flag>,
+    ) -> ResultFuture<()> {
         unimplemented!()
         /*
         let path = {
@@ -450,7 +448,7 @@ impl MailBackend for ImapType {
     fn create_mailbox(
         &mut self,
         _path: String,
-    ) -> Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
+    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         unimplemented!()
         /*
         /* Must transform path to something the IMAP server will accept
@@ -507,7 +505,7 @@ impl MailBackend for ImapType {
     fn delete_mailbox(
         &mut self,
         _mailbox_hash: MailboxHash,
-    ) -> Result<HashMap<MailboxHash, Mailbox>> {
+    ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         unimplemented!()
         /*
         let mailboxes = self.uid_store.mailboxes.read().unwrap();
@@ -553,7 +551,7 @@ impl MailBackend for ImapType {
         &mut self,
         _mailbox_hash: MailboxHash,
         _new_val: bool,
-    ) -> Result<()> {
+    ) -> ResultFuture<()> {
         unimplemented!()
         /*
         let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
@@ -586,7 +584,11 @@ impl MailBackend for ImapType {
         */
     }
 
-    fn rename_mailbox(&mut self, _mailbox_hash: MailboxHash, _new_path: String) -> Result<Mailbox> {
+    fn rename_mailbox(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _new_path: String,
+    ) -> ResultFuture<Mailbox> {
         unimplemented!()
         /*
         let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
@@ -629,7 +631,7 @@ impl MailBackend for ImapType {
         &mut self,
         _mailbox_hash: MailboxHash,
         _val: crate::backends::MailboxPermissions,
-    ) -> Result<()> {
+    ) -> ResultFuture<()> {
         unimplemented!()
         /*
         let mailboxes = self.uid_store.mailboxes.write().unwrap();
@@ -644,11 +646,9 @@ impl MailBackend for ImapType {
 
     fn search(
         &self,
-        _query: crate::search::Query,
-        _mailbox_hash: Option<MailboxHash>,
-    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
-        unimplemented!()
-        /*
+        query: crate::search::Query,
+        mailbox_hash: Option<MailboxHash>,
+    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         if mailbox_hash.is_none() {
             return Err(MeliError::new(
                 "Cannot search without specifying mailbox on IMAP",
@@ -743,32 +743,38 @@ impl MailBackend for ImapType {
         }
         let mut query_str = String::new();
         rec(&query, &mut query_str);
+        let connection = self.connection.clone();
+        let uid_store = self.uid_store.clone();
 
-        let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-        conn.examine_mailbox(mailbox_hash, &mut response)?;
-        conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str).as_bytes())?;
-        conn.read_response(&mut response, RequiredResponses::SEARCH)?;
-        debug!(&response);
+        Ok(Box::pin(async move {
+            let mut response = String::with_capacity(8 * 1024);
+            let mut conn = connection.lock().await;
+            conn.examine_mailbox(mailbox_hash, &mut response, false)
+                .await?;
+            conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str).as_bytes())
+                .await?;
+            conn.read_response(&mut response, RequiredResponses::SEARCH)
+                .await?;
+            debug!(&response);
 
-        let mut lines = response.lines();
-        for l in lines.by_ref() {
-            if l.starts_with("* SEARCH") {
-                use std::iter::FromIterator;
-                let uid_index = self.uid_store.uid_index.lock()?;
-                return Ok(SmallVec::from_iter(
-                    l["* SEARCH".len()..]
-                        .trim()
-                        .split_whitespace()
-                        .map(usize::from_str)
-                        .filter_map(std::result::Result::ok)
-                        .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
-                        .map(|env_hash_ref| *env_hash_ref),
-                ));
+            let mut lines = response.lines();
+            for l in lines.by_ref() {
+                if l.starts_with("* SEARCH") {
+                    use std::iter::FromIterator;
+                    let uid_index = uid_store.uid_index.lock()?;
+                    return Ok(SmallVec::from_iter(
+                        l["* SEARCH".len()..]
+                            .trim()
+                            .split_whitespace()
+                            .map(usize::from_str)
+                            .filter_map(std::result::Result::ok)
+                            .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
+                            .map(|env_hash_ref| *env_hash_ref),
+                    ));
+                }
             }
-        }
-        Err(MeliError::new(response))
-            */
+            Err(MeliError::new(response))
+        }))
     }
 }
 
@@ -1206,6 +1212,7 @@ async fn get_hlpr(
             h.write_usize(uid);
             h.write(mailbox_path.as_bytes());
             env.set_hash(h.finish());
+            /*
             debug!(
                 "env hash {} {} UID = {} MSN = {}",
                 env.hash(),
@@ -1213,6 +1220,7 @@ async fn get_hlpr(
                 uid,
                 message_sequence_number
             );
+            */
             valid_hash_set.insert(env.hash());
             let mut tag_lck = uid_store.tag_index.write().unwrap();
             if let Some((flags, keywords)) = flags {
@@ -1273,7 +1281,6 @@ async fn get_hlpr(
                 kind: RefreshEventKind::Remove(env_hash),
             });
         }
-        drop(conn);
         unseen
             .lock()
             .unwrap()
@@ -1282,9 +1289,10 @@ async fn get_hlpr(
             .lock()
             .unwrap()
             .insert_existing_set(envelopes.iter().map(|(_, env)| env.hash()).collect::<_>());
+        drop(conn);
         payload.extend(envelopes.into_iter().map(|(_, env)| env));
     }
-    *max_uid = if max_uid_left == 1 {
+    *max_uid = if max_uid_left <= 1 {
         Some(0)
     } else {
         Some(std::cmp::max(

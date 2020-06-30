@@ -53,6 +53,8 @@ pub enum StatusEvent {
     BufClear,
     BufSet(String),
     UpdateStatus(String),
+    NewJob(JobId),
+    JobFinished(JobId),
 }
 
 /// `ThreadEvent` encapsulates all of the possible values we need to transfer between our threads

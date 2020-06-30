@@ -581,42 +581,77 @@ impl ListingTrait for PlainListing {
         context.dirty_areas.push_back(area);
     }
 
-    fn filter(&mut self, filter_term: &str, context: &Context) {
-        if filter_term.is_empty() {
-            return;
-        }
+    fn filter(
+        &mut self,
+        filter_term: String,
+        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        context: &Context,
+    ) {
+        /*
+            if filter_term.is_empty() {
+                return;
+            }
 
-        self.order.clear();
-        self.selection.clear();
-        self.length = 0;
-        self.filtered_selection.clear();
-        self.filtered_order.clear();
-        self.filter_term = filter_term.to_string();
-        self.row_updates.clear();
-        for v in self.selection.values_mut() {
-            *v = false;
-        }
+            self.order.clear();
+            self.selection.clear();
+            self.length = 0;
+            self.filtered_selection.clear();
+            self.filtered_order.clear();
+            self.filter_term = filter_term.to_string();
+            self.row_updates.clear();
+            for v in self.selection.values_mut() {
+                *v = false;
+            }
 
-        let account = &context.accounts[self.cursor_pos.0];
-        match account.search(&self.filter_term, self.sort, self.cursor_pos.1) {
-            Ok(results) => {
-                for env_hash in results {
-                    if !account.collection.contains_key(&env_hash) {
-                        continue;
+            let account = &context.accounts[self.cursor_pos.0];
+            match account.search(&self.filter_term, self.sort, self.cursor_pos.1) {
+                Ok(results) => {
+                    /*
+                    for env_hash in results {
+                        if !account.collection.contains_key(&env_hash) {
+                            continue;
+                        }
+                        if self.filtered_order.contains_key(&env_hash) {
+                            continue;
+                        }
+                        if self.all_envelopes.contains(&env_hash) {
+                            self.filtered_selection.push(env_hash);
+                            self.filtered_order
+                                .insert(env_hash, self.filtered_selection.len() - 1);
+                        }
                     }
-                    if self.filtered_order.contains_key(&env_hash) {
-                        continue;
+                    if !self.filtered_selection.is_empty() {
+                        self.new_cursor_pos.2 =
+                            std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+                    } else {
+                        let default_cell = {
+                            let mut ret = Cell::with_char(' ');
+                            ret.set_fg(self.color_cache.theme_default.fg)
+                                .set_bg(self.color_cache.theme_default.bg)
+                                .set_attrs(self.color_cache.theme_default.attrs);
+                            ret
+                        };
+                        self.data_columns.columns[0] =
+                            CellBuffer::new_with_context(0, 0, default_cell, context);
                     }
-                    if self.all_envelopes.contains(&env_hash) {
-                        self.filtered_selection.push(env_hash);
-                        self.filtered_order
-                            .insert(env_hash, self.filtered_selection.len() - 1);
-                    }
+                    self.redraw_list(
+                        context,
+                        Box::new(self.filtered_selection.clone().into_iter())
+                            as Box<dyn Iterator<Item = EnvelopeHash>>,
+                    );
+                    */
                 }
-                if !self.filtered_selection.is_empty() {
-                    self.new_cursor_pos.2 =
-                        std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
-                } else {
+                Err(e) => {
+                    self.cursor_pos.2 = 0;
+                    self.new_cursor_pos.2 = 0;
+                    let message = format!(
+                        "Encountered an error while searching for `{}`: {}.",
+                        &self.filter_term, e
+                    );
+                    log(
+                        format!("Failed to search for term {}: {}", &self.filter_term, e),
+                        ERROR,
+                    );
                     let default_cell = {
                         let mut ret = Cell::with_char(' ');
                         ret.set_fg(self.color_cache.theme_default.fg)
@@ -625,45 +660,19 @@ impl ListingTrait for PlainListing {
                         ret
                     };
                     self.data_columns.columns[0] =
-                        CellBuffer::new_with_context(0, 0, default_cell, context);
+                        CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+                    write_string_to_grid(
+                        &message,
+                        &mut self.data_columns.columns[0],
+                        self.color_cache.theme_default.fg,
+                        self.color_cache.theme_default.bg,
+                        self.color_cache.theme_default.attrs,
+                        ((0, 0), (message.len() - 1, 0)),
+                        None,
+                    );
                 }
-                self.redraw_list(
-                    context,
-                    Box::new(self.filtered_selection.clone().into_iter())
-                        as Box<dyn Iterator<Item = EnvelopeHash>>,
-                );
             }
-            Err(e) => {
-                self.cursor_pos.2 = 0;
-                self.new_cursor_pos.2 = 0;
-                let message = format!(
-                    "Encountered an error while searching for `{}`: {}.",
-                    &self.filter_term, e
-                );
-                log(
-                    format!("Failed to search for term {}: {}", &self.filter_term, e),
-                    ERROR,
-                );
-                let default_cell = {
-                    let mut ret = Cell::with_char(' ');
-                    ret.set_fg(self.color_cache.theme_default.fg)
-                        .set_bg(self.color_cache.theme_default.bg)
-                        .set_attrs(self.color_cache.theme_default.attrs);
-                    ret
-                };
-                self.data_columns.columns[0] =
-                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
-                write_string_to_grid(
-                    &message,
-                    &mut self.data_columns.columns[0],
-                    self.color_cache.theme_default.fg,
-                    self.color_cache.theme_default.bg,
-                    self.color_cache.theme_default.attrs,
-                    ((0, 0), (message.len() - 1, 0)),
-                    None,
-                );
-            }
-        }
+        */
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
@@ -1267,7 +1276,7 @@ impl Component for PlainListing {
                 return true;
             }
             UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused => {
-                self.filter(filter_term, context);
+                //self.filter(filter_term, context);
                 self.dirty = true;
             }
             _ => {}

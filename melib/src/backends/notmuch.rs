@@ -611,13 +611,19 @@ impl MailBackend for NotmuchDb {
         }))
     }
 
-    fn save(&self, bytes: &[u8], _mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {
+    fn save(
+        &self,
+        bytes: Vec<u8>,
+        _mailbox_hash: MailboxHash,
+        flags: Option<Flag>,
+    ) -> ResultFuture<()> {
         let path = self
             .save_messages_to
             .as_ref()
             .unwrap_or(&self.path)
             .to_path_buf();
-        MaildirType::save_to_mailbox(path, bytes, flags)
+        MaildirType::save_to_mailbox(path, bytes, flags)?;
+        Ok(Box::pin(async { Ok(()) }))
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {

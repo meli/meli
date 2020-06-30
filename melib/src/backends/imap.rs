@@ -37,11 +37,10 @@ pub mod managesieve;
 mod untagged;
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
-use crate::backends::BackendOp;
-use crate::backends::RefreshEvent;
-use crate::backends::RefreshEventKind::{self, *};
-use crate::backends::{AccountHash, MailboxHash};
-use crate::backends::{BackendMailbox, MailBackend, Mailbox, RefreshEventConsumer};
+use crate::backends::{
+    RefreshEventKind::{self, *},
+    *,
+};
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result, ResultIntoMeliError};
@@ -665,7 +664,12 @@ impl MailBackend for ImapType {
         )))
     }
 
-    fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()> {
+    fn save(
+        &self,
+        bytes: Vec<u8>,
+        mailbox_hash: MailboxHash,
+        flags: Option<Flag>,
+    ) -> ResultFuture<()> {
         let path = {
             let mailboxes = self.uid_store.mailboxes.read().unwrap();
 
@@ -696,16 +700,16 @@ impl MailBackend for ImapType {
         )?;
         // wait for "+ Ready for literal data" reply
         conn.wait_for_continuation_request()?;
-        conn.send_literal(bytes)?;
+        conn.send_literal(&bytes)?;
         conn.read_response(&mut response, RequiredResponses::empty())?;
-        Ok(())
+        Ok(Box::pin(async { Ok(()) }))
     }
 
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn::std::any::Any {
+    fn as_any_mut(&mut self) -> &mut dyn ::std::any::Any {
         self
     }
 
@@ -720,7 +724,7 @@ impl MailBackend for ImapType {
     fn create_mailbox(
         &mut self,
         mut path: String,
-    ) -> Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
+    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         /* Must transform path to something the IMAP server will accept
          *
          * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
@@ -768,13 +772,15 @@ impl MailBackend for ImapType {
         let new_hash = get_path_hash!(path.as_str());
         mailboxes.clear();
         drop(mailboxes);
-        Ok((new_hash, self.mailboxes().map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?))
+        let ret =
+            Ok((new_hash, self.mailboxes().map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?));
+        Ok(Box::pin(async { ret }))
     }
 
     fn delete_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
-    ) -> Result<HashMap<MailboxHash, Mailbox>> {
+    ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         let mailboxes = self.uid_store.mailboxes.read().unwrap();
         let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.delete_mailbox {
@@ -812,13 +818,19 @@ impl MailBackend for ImapType {
         let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
         mailboxes.clear();
         drop(mailboxes);
-        self.mailboxes().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
+        let res = self.mailboxes().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into());
+
+        Ok(Box::pin(async { res }))
     }
 
-    fn set_mailbox_subscription(&mut self, mailbox_hash: MailboxHash, new_val: bool) -> Result<()> {
+    fn set_mailbox_subscription(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        new_val: bool,
+    ) -> ResultFuture<()> {
         let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
         if mailboxes[&mailbox_hash].is_subscribed() == new_val {
-            return Ok(());
+            return Ok(Box::pin(async { Ok(()) }));
         }
 
         let mut response = String::with_capacity(8 * 1024);
@@ -842,14 +854,14 @@ impl MailBackend for ImapType {
                 let _ = entry.set_is_subscribed(new_val);
             });
         }
-        ret
+        Ok(Box::pin(async { ret }))
     }
 
     fn rename_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
         mut new_path: String,
-    ) -> Result<Mailbox> {
+    ) -> ResultFuture<Mailbox> {
         let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
         let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.delete_mailbox {
@@ -880,30 +892,31 @@ impl MailBackend for ImapType {
         mailboxes.clear();
         drop(mailboxes);
         self.mailboxes().map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
-        Ok(BackendMailbox::clone(
+
+        let ret = Ok(BackendMailbox::clone(
             &self.uid_store.mailboxes.read().unwrap()[&new_hash],
-        ))
+        ));
+        Ok(Box::pin(async { ret }))
     }
 
     fn set_mailbox_permissions(
         &mut self,
         mailbox_hash: MailboxHash,
-        _val: crate::backends::MailboxPermissions,
-    ) -> Result<()> {
+        _val: MailboxPermissions,
+    ) -> ResultFuture<()> {
         let mailboxes = self.uid_store.mailboxes.write().unwrap();
         let permissions = mailboxes[&mailbox_hash].permissions();
         if !permissions.change_permissions {
             return Err(MeliError::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
         }
-
-        Err(MeliError::new("Unimplemented."))
+        Ok(Box::pin(async { Err(MeliError::new("Unimplemented.")) }))
     }
 
     fn search(
         &self,
         query: crate::search::Query,
         mailbox_hash: Option<MailboxHash>,
-    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
+    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         if mailbox_hash.is_none() {
             return Err(MeliError::new(
                 "Cannot search without specifying mailbox on IMAP",
@@ -1011,7 +1024,7 @@ impl MailBackend for ImapType {
             if l.starts_with("* SEARCH") {
                 use std::iter::FromIterator;
                 let uid_index = self.uid_store.uid_index.lock()?;
-                return Ok(SmallVec::from_iter(
+                let ret = Ok(SmallVec::from_iter(
                     l["* SEARCH".len()..]
                         .trim()
                         .split_whitespace()
@@ -1020,6 +1033,7 @@ impl MailBackend for ImapType {
                         .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
                         .map(|env_hash_ref| *env_hash_ref),
                 ));
+                return Ok(Box::pin(async { ret }));
             }
         }
         Err(MeliError::new(response))

@@ -115,13 +115,15 @@ pub mod timer {
         }
 
         /// Sets value without arming timer
-        pub fn set_value(&mut self, value: Duration) {
+        pub fn set_value(&mut self, value: Duration) -> &mut Self {
             self.value = value;
+            self
         }
 
         /// Sets interval without arming timer
-        pub fn set_interval(&mut self, interval: Duration) {
+        pub fn set_interval(&mut self, interval: Duration) -> &mut Self {
             self.interval = interval;
+            self
         }
 
         pub fn new_with_signal(

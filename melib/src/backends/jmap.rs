@@ -20,9 +20,7 @@
  */
 
 use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
-use crate::backends::BackendOp;
-use crate::backends::MailboxHash;
-use crate::backends::{BackendMailbox, MailBackend, Mailbox, RefreshEventConsumer};
+use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result};
@@ -262,11 +260,16 @@ impl MailBackend for JmapType {
         )))
     }
 
-    fn save(&self, _bytes: &[u8], _mailbox_hash: MailboxHash, _flags: Option<Flag>) -> Result<()> {
+    fn save(
+        &self,
+        _bytes: Vec<u8>,
+        _mailbox_hash: MailboxHash,
+        _flags: Option<Flag>,
+    ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn as_any(&self) -> &dyn::std::any::Any {
+    fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
 

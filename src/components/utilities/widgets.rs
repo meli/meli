@@ -992,6 +992,8 @@ impl ScrollBar {
 
 #[derive(Debug)]
 pub struct ProgressSpinner {
+    //total_work: usize,
+    //finished: usize,
     timer: crate::timer::PosixTimer,
     stage: usize,
     kind: usize,
@@ -1018,10 +1020,13 @@ impl ProgressSpinner {
         &["⚪", "⚫"],
     ];
 
+    const INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+    const VALUE: std::time::Duration = std::time::Duration::from_millis(500);
+
     pub fn new(kind: usize) -> Self {
         let timer = crate::timer::PosixTimer::new_with_signal(
-            std::time::Duration::from_millis(50),
-            std::time::Duration::from_millis(500),
+            std::time::Duration::from_millis(0),
+            std::time::Duration::from_millis(0),
             nix::sys::signal::Signal::SIGALRM,
         )
         .unwrap();
@@ -1032,6 +1037,20 @@ impl ProgressSpinner {
             dirty: true,
             id: ComponentId::new_v4(),
         }
+    }
+
+    pub fn start(&mut self) {
+        self.timer
+            .set_interval(Self::INTERVAL)
+            .set_value(Self::VALUE)
+            .rearm()
+    }
+
+    pub fn stop(&mut self) {
+        self.timer
+            .set_interval(std::time::Duration::from_millis(0))
+            .set_value(std::time::Duration::from_millis(0))
+            .rearm()
     }
 }
 

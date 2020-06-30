@@ -508,7 +508,6 @@ impl ImapConnection {
                                 if required_responses.check(l) || !self.process_untagged(l).await? {
                                     ret.push_str(l);
                                 }
-                                ret.push_str(l);
                             }
                         }
                     }

@@ -295,11 +295,11 @@ impl NotifyFn {
     }
 }
 
+pub type ResultFuture<T> = Result<Pin<Box<dyn Future<Output = Result<T>> + Send + 'static>>>;
+
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online(&self) -> Result<()>;
-    fn is_online_async(
-        &self,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>> {
+    fn is_online_async(&self) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
     fn connect(&mut self) {}
@@ -321,7 +321,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         &mut self,
         _mailbox_hash: MailboxHash,
         _sender: RefreshEventConsumer,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send + 'static>>> {
+    ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
     fn watch(
@@ -330,15 +330,18 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId>;
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>>;
-    fn mailboxes_async(
-        &self,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<HashMap<MailboxHash, Mailbox>>> + Send>>> {
+    fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))
     }
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>>;
 
-    fn save(&self, bytes: &[u8], mailbox_hash: MailboxHash, flags: Option<Flag>) -> Result<()>;
-    fn delete(&self, _env_hash: EnvelopeHash, _mailbox_hash: MailboxHash) -> Result<()> {
+    fn save(
+        &self,
+        bytes: Vec<u8>,
+        mailbox_hash: MailboxHash,
+        flags: Option<Flag>,
+    ) -> ResultFuture<()>;
+    fn delete(&self, _env_hash: EnvelopeHash, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
     fn tags(&self) -> Option<Arc<RwLock<BTreeMap<u64, String>>>> {
@@ -353,22 +356,30 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn create_mailbox(
         &mut self,
         _path: String,
-    ) -> Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
+    ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
         Err(MeliError::new("Unimplemented."))
     }
 
     fn delete_mailbox(
         &mut self,
         _mailbox_hash: MailboxHash,
-    ) -> Result<HashMap<MailboxHash, Mailbox>> {
+    ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn set_mailbox_subscription(&mut self, _mailbox_hash: MailboxHash, _val: bool) -> Result<()> {
+    fn set_mailbox_subscription(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _val: bool,
+    ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 
-    fn rename_mailbox(&mut self, _mailbox_hash: MailboxHash, _new_path: String) -> Result<Mailbox> {
+    fn rename_mailbox(
+        &mut self,
+        _mailbox_hash: MailboxHash,
+        _new_path: String,
+    ) -> ResultFuture<Mailbox> {
         Err(MeliError::new("Unimplemented."))
     }
 
@@ -376,7 +387,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         &mut self,
         _mailbox_hash: MailboxHash,
         _val: MailboxPermissions,
-    ) -> Result<()> {
+    ) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
 
@@ -384,7 +395,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         &self,
         _query: crate::search::Query,
         _mailbox_hash: Option<MailboxHash>,
-    ) -> Result<SmallVec<[EnvelopeHash; 512]>> {
+    ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         Err(MeliError::new("Unimplemented."))
     }
 }
@@ -469,18 +480,10 @@ impl BackendOp for ReadOnlyOp {
     fn fetch_flags(&self) -> Result<Flag> {
         self.op.fetch_flags()
     }
-    fn set_flag(
-        &mut self,
-        _flag: Flag,
-        _value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+    fn set_flag(&mut self, _flag: Flag, _value: bool) -> ResultFuture<()> {
         Err(MeliError::new("read-only set."))
     }
-    fn set_tag(
-        &mut self,
-        _tag: String,
-        _value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+    fn set_tag(&mut self, _tag: String, _value: bool) -> ResultFuture<()> {
         Err(MeliError::new("read-only set."))
     }
 }
