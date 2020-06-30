@@ -646,10 +646,6 @@ struct NotmuchOp {
 }
 
 impl BackendOp for NotmuchOp {
-    fn description(&self) -> String {
-        String::new()
-    }
-
     fn as_bytes(&mut self) -> Result<&[u8]> {
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let index_lck = self.index.write().unwrap();

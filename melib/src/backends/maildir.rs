@@ -90,9 +90,6 @@ impl MaildirOp {
 }
 
 impl<'a> BackendOp for MaildirOp {
-    fn description(&self) -> String {
-        format!("Path of file: {}", self.path().display())
-    }
     fn as_bytes(&mut self) -> Result<&[u8]> {
         if self.slice.is_none() {
             self.slice = Some(Mmap::open_path(self.path(), Protection::Read)?);

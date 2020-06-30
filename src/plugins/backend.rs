@@ -297,10 +297,6 @@ struct PluginOp {
 }
 
 impl BackendOp for PluginOp {
-    fn description(&self) -> String {
-        String::new()
-    }
-
     fn as_bytes(&mut self) -> Result<&[u8]> {
         if let Some(ref bytes) = self.bytes {
             return Ok(bytes.as_bytes());

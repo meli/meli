@@ -425,9 +425,6 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 /// struct FooOp {}
 ///
 /// impl BackendOp for FooOp {
-///     fn description(&self) -> String {
-///         "Foobar".to_string()
-///     }
 ///     fn as_bytes(&mut self) -> Result<&[u8]> {
 ///         unimplemented!()
 ///     }
@@ -437,10 +434,8 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 /// }
 ///
 /// let operation = Box::new(FooOp {});
-/// assert_eq!("Foobar", &operation.description());
 /// ```
 pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
-    fn description(&self) -> String;
     fn as_bytes(&mut self) -> Result<&[u8]>;
     fn fetch_flags(&self) -> Result<Flag>;
     fn set_flag(
@@ -471,9 +466,6 @@ impl ReadOnlyOp {
 }
 
 impl BackendOp for ReadOnlyOp {
-    fn description(&self) -> String {
-        format!("read-only: {}", self.op.description())
-    }
     fn as_bytes(&mut self) -> Result<&[u8]> {
         self.op.as_bytes()
     }

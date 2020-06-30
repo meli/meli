@@ -64,10 +64,6 @@ impl ImapOp {
 }
 
 impl BackendOp for ImapOp {
-    fn description(&self) -> String {
-        format!("Message in mailbox: {}", &self.mailbox_path)
-    }
-
     fn as_bytes(&mut self) -> Result<&[u8]> {
         if self.bytes.is_none() {
             let mut bytes_cache = self.uid_store.byte_cache.lock()?;

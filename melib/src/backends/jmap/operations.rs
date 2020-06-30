@@ -57,13 +57,6 @@ impl JmapOp {
 }
 
 impl BackendOp for JmapOp {
-    fn description(&self) -> String {
-        self.store
-            .try_read()
-            .and_then(|store_lck| Ok(store_lck.id_store[&self.hash].clone()))
-            .unwrap_or(String::new())
-    }
-
     fn as_bytes(&mut self) -> Result<&[u8]> {
         if self.bytes.is_none() {
             let mut store_lck = self.store.write().unwrap();
