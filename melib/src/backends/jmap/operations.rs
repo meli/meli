@@ -21,7 +21,6 @@
 
 use super::*;
 
-use crate::backends::*;
 use crate::error::Result;
 use std::cell::Cell;
 use std::sync::{Arc, RwLock};
@@ -90,23 +89,15 @@ impl BackendOp for JmapOp {
         Ok(&self.bytes.as_ref().unwrap().as_bytes())
     }
 
-    fn fetch_flags(&self) -> Result<Flag> {
-        Ok(Flag::default())
+    fn fetch_flags(&self) -> ResultFuture<Flag> {
+        Ok(Box::pin(async { Ok(Flag::default()) }))
     }
 
-    fn set_flag(
-        &mut self,
-        _f: Flag,
-        _value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+    fn set_flag(&mut self, _f: Flag, _value: bool) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented"))
     }
 
-    fn set_tag(
-        &mut self,
-        _tag: String,
-        _value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+    fn set_tag(&mut self, _tag: String, _value: bool) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented"))
     }
 }

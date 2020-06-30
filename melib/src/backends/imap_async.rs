@@ -387,46 +387,49 @@ impl MailBackend for ImapType {
 
     fn save(
         &self,
-        _bytes: Vec<u8>,
-        _mailbox_hash: MailboxHash,
-        _flags: Option<Flag>,
+        bytes: Vec<u8>,
+        mailbox_hash: MailboxHash,
+        flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        unimplemented!()
-        /*
-        let path = {
-            let mailboxes = self.uid_store.mailboxes.read().unwrap();
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let path = {
+                let mailboxes = uid_store.mailboxes.read().unwrap();
 
-            let mailbox = mailboxes.get(&mailbox_hash).ok_or(MeliError::new(format!(
-                "Mailbox with hash {} not found.",
-                mailbox_hash
-            )))?;
-            if !mailbox.permissions.lock().unwrap().create_messages {
-                return Err(MeliError::new(format!(
-                    "You are not allowed to create messages in mailbox {}",
-                    mailbox.path()
-                )));
-            }
+                let mailbox = mailboxes.get(&mailbox_hash).ok_or(MeliError::new(format!(
+                    "Mailbox with hash {} not found.",
+                    mailbox_hash
+                )))?;
+                if !mailbox.permissions.lock().unwrap().create_messages {
+                    return Err(MeliError::new(format!(
+                        "You are not allowed to create messages in mailbox {}",
+                        mailbox.path()
+                    )));
+                }
 
-            mailbox.imap_path().to_string()
-        };
-        let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(5, 0)))?;
-        let flags = flags.unwrap_or(Flag::empty());
-        conn.send_command(
-            format!(
-                "APPEND \"{}\" ({}) {{{}}}",
-                &path,
-                flags_to_imap_list!(flags),
-                bytes.len()
+                mailbox.imap_path().to_string()
+            };
+            let mut response = String::with_capacity(8 * 1024);
+            let mut conn = connection.lock().await;
+            let flags = flags.unwrap_or(Flag::empty());
+            conn.send_command(
+                format!(
+                    "APPEND \"{}\" ({}) {{{}}}",
+                    &path,
+                    flags_to_imap_list!(flags),
+                    bytes.len()
+                )
+                .as_bytes(),
             )
-            .as_bytes(),
-        )?;
-        // wait for "+ Ready for literal data" reply
-        conn.wait_for_continuation_request()?;
-        conn.send_literal(bytes)?;
-        conn.read_response(&mut response, RequiredResponses::empty())?;
-        Ok(())
-            */
+            .await?;
+            // wait for "+ Ready for literal data" reply
+            conn.wait_for_continuation_request().await?;
+            conn.send_literal(&bytes).await?;
+            conn.read_response(&mut response, RequiredResponses::empty())
+                .await?;
+            Ok(())
+        }))
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {
@@ -447,201 +450,237 @@ impl MailBackend for ImapType {
 
     fn create_mailbox(
         &mut self,
-        _path: String,
+        mut path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        unimplemented!()
-        /*
-        /* Must transform path to something the IMAP server will accept
-         *
-         * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
-         * must use this delimeter to indicate children of this mailbox.
-         *
-         * A new root mailbox should have the default delimeter, which can be found out by issuing
-         * an empty LIST command as described in RFC3501:
-         * C: A101 LIST "" ""
-         * S: * LIST (\Noselect) "/" ""
-         *
-         * The default delimiter for us is '/' just like UNIX paths. I apologise if this
-         * decision is unpleasant for you.
-         */
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        let new_mailbox_fut = self.mailboxes_async();
+        Ok(Box::pin(async move {
+            /* Must transform path to something the IMAP server will accept
+             *
+             * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
+             * must use this delimeter to indicate children of this mailbox.
+             *
+             * A new root mailbox should have the default delimeter, which can be found out by issuing
+             * an empty LIST command as described in RFC3501:
+             * C: A101 LIST "" ""
+             * S: * LIST (\Noselect) "/" ""
+             *
+             * The default delimiter for us is '/' just like UNIX paths. I apologise if this
+             * decision is unpleasant for you.
+             */
 
-        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
-        for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
-            if path.starts_with(&root_mailbox.name) {
-                debug!("path starts with {:?}", &root_mailbox);
-                path = path.replace(
-                    '/',
-                    (root_mailbox.separator as char).encode_utf8(&mut [0; 4]),
-                );
-                break;
+            {
+                let mailboxes = uid_store.mailboxes.write().unwrap();
+                for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
+                    if path.starts_with(&root_mailbox.name) {
+                        debug!("path starts with {:?}", &root_mailbox);
+                        path = path.replace(
+                            '/',
+                            (root_mailbox.separator as char).encode_utf8(&mut [0; 4]),
+                        );
+                        break;
+                    }
+                }
+
+                if mailboxes.values().any(|f| f.path == path) {
+                    return Err(MeliError::new(format!(
+                        "Mailbox named `{}` already exists.",
+                        path,
+                    )));
+                }
             }
-        }
 
-        if mailboxes.values().any(|f| f.path == path) {
-            return Err(MeliError::new(format!(
-                "Mailbox named `{}` in account `{}` already exists.",
-                path, self.account_name,
-            )));
-        }
+            let mut response = String::with_capacity(8 * 1024);
+            {
+                let mut conn_lck = connection.lock().await;
 
-        let mut response = String::with_capacity(8 * 1024);
-        {
-            let mut conn_lck = try_lock(&self.connection, None)?;
-
-            conn_lck.send_command(format!("CREATE \"{}\"", path,).as_bytes())?;
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-            conn_lck.send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())?;
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-        }
-        let ret: Result<()> = ImapResponse::from(&response).into();
-        ret?;
-        let new_hash = get_path_hash!(path.as_str());
-        mailboxes.clear();
-        drop(mailboxes);
-        Ok((new_hash, self.mailboxes().map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?))
-            */
+                conn_lck
+                    .send_command(format!("CREATE \"{}\"", path,).as_bytes())
+                    .await?;
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+                conn_lck
+                    .send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())
+                    .await?;
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+            }
+            let ret: Result<()> = ImapResponse::from(&response).into();
+            ret?;
+            let new_hash = get_path_hash!(path.as_str());
+            uid_store.mailboxes.write().unwrap().clear();
+            Ok((new_hash, new_mailbox_fut?.await.map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?))
+        }))
     }
 
     fn delete_mailbox(
         &mut self,
-        _mailbox_hash: MailboxHash,
+        mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        unimplemented!()
-        /*
-        let mailboxes = self.uid_store.mailboxes.read().unwrap();
-        let permissions = mailboxes[&mailbox_hash].permissions();
-        if !permissions.delete_mailbox {
-            return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
-        }
-        let mut response = String::with_capacity(8 * 1024);
-        {
-            let mut conn_lck = try_lock(&self.connection, None)?;
-            if !mailboxes[&mailbox_hash].no_select && conn_lck.current_mailbox == Some(mailbox_hash)
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        let new_mailbox_fut = self.mailboxes_async();
+        Ok(Box::pin(async move {
+            let imap_path: String;
+            let no_select: bool;
+            let is_subscribed: bool;
             {
-                /* make sure mailbox is not selected before it gets deleted, otherwise
-                 * connection gets dropped by server */
-                conn_lck.unselect()?;
+                let mailboxes = uid_store.mailboxes.read().unwrap();
+                no_select = mailboxes[&mailbox_hash].no_select;
+                is_subscribed = mailboxes[&mailbox_hash].is_subscribed();
+                imap_path = mailboxes[&mailbox_hash].imap_path().to_string();
+                let permissions = mailboxes[&mailbox_hash].permissions();
+                if !permissions.delete_mailbox {
+                    return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                }
             }
-            if mailboxes[&mailbox_hash].is_subscribed() {
-                conn_lck.send_command(
-                    format!("UNSUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
-                )?;
-                conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-            }
+            let mut response = String::with_capacity(8 * 1024);
+            {
+                let mut conn_lck = connection.lock().await;
+                if !no_select
+                    && (conn_lck.current_mailbox == MailboxSelection::Examine(mailbox_hash)
+                        || conn_lck.current_mailbox == MailboxSelection::Select(mailbox_hash))
+                {
+                    /* make sure mailbox is not selected before it gets deleted, otherwise
+                     * connection gets dropped by server */
+                    conn_lck.unselect().await?;
+                }
+                if is_subscribed {
+                    conn_lck
+                        .send_command(format!("UNSUBSCRIBE \"{}\"", &imap_path).as_bytes())
+                        .await?;
+                    conn_lck
+                        .read_response(&mut response, RequiredResponses::empty())
+                        .await?;
+                }
 
-            conn_lck.send_command(
-                debug!(format!(
-                    "DELETE \"{}\"",
-                    mailboxes[&mailbox_hash].imap_path()
-                ))
-                .as_bytes(),
-            )?;
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-        }
-        let ret: Result<()> = ImapResponse::from(&response).into();
-        ret?;
-        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
-        mailboxes.clear();
-        drop(mailboxes);
-        self.mailboxes().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
-            */
+                conn_lck
+                    .send_command(debug!(format!("DELETE \"{}\"", &imap_path,)).as_bytes())
+                    .await?;
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+            }
+            let ret: Result<()> = ImapResponse::from(&response).into();
+            ret?;
+            uid_store.mailboxes.write().unwrap().clear();
+            new_mailbox_fut?.await.map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
+        }))
     }
 
     fn set_mailbox_subscription(
         &mut self,
-        _mailbox_hash: MailboxHash,
-        _new_val: bool,
+        mailbox_hash: MailboxHash,
+        new_val: bool,
     ) -> ResultFuture<()> {
-        unimplemented!()
-        /*
-        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
-        if mailboxes[&mailbox_hash].is_subscribed() == new_val {
-            return Ok(());
-        }
-
-        let mut response = String::with_capacity(8 * 1024);
-        {
-            let mut conn_lck = try_lock(&self.connection, None)?;
-            if new_val {
-                conn_lck.send_command(
-                    format!("SUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
-                )?;
-            } else {
-                conn_lck.send_command(
-                    format!("UNSUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
-                )?;
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let command: String;
+            {
+                let mailboxes = uid_store.mailboxes.write().unwrap();
+                if mailboxes[&mailbox_hash].is_subscribed() == new_val {
+                    return Ok(());
+                }
+                command = format!("SUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path());
             }
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-        }
 
-        let ret: Result<()> = ImapResponse::from(&response).into();
-        if ret.is_ok() {
-            mailboxes.entry(mailbox_hash).and_modify(|entry| {
-                let _ = entry.set_is_subscribed(new_val);
-            });
-        }
-        ret
-        */
+            let mut response = String::with_capacity(8 * 1024);
+            {
+                let mut conn_lck = connection.lock().await;
+                if new_val {
+                    conn_lck.send_command(command.as_bytes()).await?;
+                } else {
+                    conn_lck
+                        .send_command(format!("UN{}", command).as_bytes())
+                        .await?;
+                }
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+            }
+
+            let ret: Result<()> = ImapResponse::from(&response).into();
+            if ret.is_ok() {
+                uid_store
+                    .mailboxes
+                    .write()
+                    .unwrap()
+                    .entry(mailbox_hash)
+                    .and_modify(|entry| {
+                        let _ = entry.set_is_subscribed(new_val);
+                    });
+            }
+            ret
+        }))
     }
 
     fn rename_mailbox(
         &mut self,
-        _mailbox_hash: MailboxHash,
-        _new_path: String,
+        mailbox_hash: MailboxHash,
+        mut new_path: String,
     ) -> ResultFuture<Mailbox> {
-        unimplemented!()
-        /*
-        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
-        let permissions = mailboxes[&mailbox_hash].permissions();
-        if !permissions.delete_mailbox {
-            return Err(MeliError::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
-        }
-        let mut response = String::with_capacity(8 * 1024);
-        if mailboxes[&mailbox_hash].separator != b'/' {
-            new_path = new_path.replace(
-                '/',
-                (mailboxes[&mailbox_hash].separator as char).encode_utf8(&mut [0; 4]),
-            );
-        }
-        {
-            let mut conn_lck = try_lock(&self.connection, None)?;
-            conn_lck.send_command(
-                debug!(format!(
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        let new_mailbox_fut = self.mailboxes_async();
+        Ok(Box::pin(async move {
+            let command: String;
+            let mut response = String::with_capacity(8 * 1024);
+            {
+                let mailboxes = uid_store.mailboxes.write().unwrap();
+                let permissions = mailboxes[&mailbox_hash].permissions();
+                if !permissions.delete_mailbox {
+                    return Err(MeliError::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                }
+                if mailboxes[&mailbox_hash].separator != b'/' {
+                    new_path = new_path.replace(
+                        '/',
+                        (mailboxes[&mailbox_hash].separator as char).encode_utf8(&mut [0; 4]),
+                    );
+                }
+                command = format!(
                     "RENAME \"{}\" \"{}\"",
                     mailboxes[&mailbox_hash].imap_path(),
                     new_path
-                ))
-                .as_bytes(),
-            )?;
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-        }
-        let new_hash = get_path_hash!(new_path.as_str());
-        let ret: Result<()> = ImapResponse::from(&response).into();
-        ret?;
-        mailboxes.clear();
-        drop(mailboxes);
-        self.mailboxes().map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
-        Ok(BackendMailbox::clone(
-            &self.uid_store.mailboxes.read().unwrap()[&new_hash],
-        ))
-        */
+                );
+            }
+            {
+                let mut conn_lck = connection.lock().await;
+                conn_lck.send_command(debug!(command).as_bytes()).await?;
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+            }
+            let new_hash = get_path_hash!(new_path.as_str());
+            let ret: Result<()> = ImapResponse::from(&response).into();
+            ret?;
+            uid_store.mailboxes.write().unwrap().clear();
+            new_mailbox_fut?.await.map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
+            Ok(BackendMailbox::clone(
+                &uid_store.mailboxes.read().unwrap()[&new_hash],
+            ))
+        }))
     }
 
     fn set_mailbox_permissions(
         &mut self,
-        _mailbox_hash: MailboxHash,
-        _val: crate::backends::MailboxPermissions,
+        mailbox_hash: MailboxHash,
+        val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        unimplemented!()
-        /*
-        let mailboxes = self.uid_store.mailboxes.write().unwrap();
-        let permissions = mailboxes[&mailbox_hash].permissions();
-        if !permissions.change_permissions {
-            return Err(MeliError::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
-        }
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mailboxes = uid_store.mailboxes.write().unwrap();
+            let permissions = mailboxes[&mailbox_hash].permissions();
+            if !permissions.change_permissions {
+                return Err(MeliError::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+            }
 
-        Err(MeliError::new("Unimplemented."))
-        */
+            Err(MeliError::new("Unimplemented."))
+        }))
     }
 
     fn search(
@@ -951,20 +990,6 @@ impl ImapType {
             }
         }
         Ok(debug!(mailboxes))
-    }
-
-    pub fn capabilities(&self) -> Vec<String> {
-        vec![]
-        /*
-        try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))
-            .map(|c| {
-                c.capabilities
-                    .iter()
-                    .map(|c| String::from_utf8_lossy(c).into())
-                    .collect::<Vec<String>>()
-            })
-            .unwrap_or_default()
-            */
     }
 
     pub fn validate_config(s: &AccountSettings) -> Result<()> {

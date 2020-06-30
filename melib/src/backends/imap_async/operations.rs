@@ -24,7 +24,6 @@ use super::*;
 use crate::backends::*;
 use crate::email::*;
 use crate::error::{MeliError, Result};
-use std::cell::Cell;
 use std::sync::Arc;
 
 /// `BackendOp` implementor for Imap
@@ -36,7 +35,7 @@ pub struct ImapOp {
     body: Option<String>,
     mailbox_path: String,
     mailbox_hash: MailboxHash,
-    flags: Cell<Option<Flag>>,
+    flags: Arc<FutureMutex<Option<Flag>>>,
     connection: Arc<FutureMutex<ImapConnection>>,
     uid_store: Arc<UIDStore>,
 }
@@ -57,7 +56,7 @@ impl ImapOp {
             body: None,
             mailbox_path,
             mailbox_hash,
-            flags: Cell::new(None),
+            flags: Arc::new(FutureMutex::new(None)),
             uid_store,
         }
     }
@@ -99,7 +98,7 @@ impl BackendOp for ImapOp {
                     let mut bytes_cache = self.uid_store.byte_cache.lock()?;
                     let cache = bytes_cache.entry(self.uid).or_default();
                     if let Some((flags, _)) = flags {
-                        self.flags.set(Some(flags));
+                        //self.flags.set(Some(flags));
                         cache.flags = Some(flags);
                     }
                     cache.bytes =
@@ -113,21 +112,28 @@ impl BackendOp for ImapOp {
         Ok(self.bytes.as_ref().unwrap().as_bytes())
     }
 
-    fn fetch_flags(&self) -> Result<Flag> {
-        if self.flags.get().is_some() {
-            return Ok(self.flags.get().unwrap());
-        }
-        let mut bytes_cache = self.uid_store.byte_cache.lock()?;
-        let cache = bytes_cache.entry(self.uid).or_default();
-        if cache.flags.is_some() {
-            self.flags.set(cache.flags);
-        } else {
-            futures::executor::block_on(async {
-                let mut response = String::with_capacity(8 * 1024);
-                let mut conn = self.connection.lock().await;
-                conn.examine_mailbox(self.mailbox_hash, &mut response, false)
+    fn fetch_flags(&self) -> ResultFuture<Flag> {
+        let mut response = String::with_capacity(8 * 1024);
+        let connection = self.connection.clone();
+        let mailbox_hash = self.mailbox_hash;
+        let uid = self.uid;
+        let uid_store = self.uid_store.clone();
+        let flags = self.flags.clone();
+
+        Ok(Box::pin(async move {
+            if let Some(val) = *flags.lock().await {
+                return Ok(val);
+            }
+            let exists_in_cache = {
+                let mut bytes_cache = uid_store.byte_cache.lock()?;
+                let cache = bytes_cache.entry(uid).or_default();
+                cache.flags.is_some()
+            };
+            if !exists_in_cache {
+                let mut conn = connection.lock().await;
+                conn.examine_mailbox(mailbox_hash, &mut response, false)
                     .await?;
-                conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())
+                conn.send_command(format!("UID FETCH {} FLAGS", uid).as_bytes())
                     .await?;
                 conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
                     .await?;
@@ -143,21 +149,32 @@ impl BackendOp for ImapOp {
                     debug!("responses len is {}", v.len());
                     debug!(&response);
                     /* TODO: Trigger cache invalidation here. */
-                    debug!(format!("message with UID {} was not found", self.uid));
+                    debug!(format!("message with UID {} was not found", uid));
                     return Err(MeliError::new(format!(
                         "Invalid/unexpected response: {:?}",
                         response
                     ))
-                    .set_summary(format!("message with UID {} was not found?", self.uid)));
+                    .set_summary(format!("message with UID {} was not found?", uid)));
                 }
-                let (uid, (flags, _)) = v[0];
-                assert_eq!(uid, self.uid);
-                cache.flags = Some(flags);
-                self.flags.set(Some(flags));
-                Ok(())
-            })?;
-        }
-        Ok(self.flags.get().unwrap())
+                let (_uid, (_flags, _)) = v[0];
+                assert_eq!(uid, uid);
+                *flags.lock().await = Some(_flags);
+                let mut bytes_cache = uid_store.byte_cache.lock()?;
+                let cache = bytes_cache.entry(uid).or_default();
+                cache.flags = Some(_flags);
+            }
+            {
+                let val = {
+                    let mut bytes_cache = uid_store.byte_cache.lock()?;
+                    let cache = bytes_cache.entry(uid).or_default();
+                    let val = cache.flags;
+                    val
+                };
+                let mut f = flags.lock().await;
+                *f = val;
+                Ok(val.unwrap())
+            }
+        }))
     }
 
     fn set_flag(
@@ -165,8 +182,7 @@ impl BackendOp for ImapOp {
         flag: Flag,
         value: bool,
     ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
-        let mut flags = self.fetch_flags()?;
-        flags.set(flag, value);
+        let flags = self.fetch_flags()?;
 
         let mut response = String::with_capacity(8 * 1024);
         let connection = self.connection.clone();
@@ -174,6 +190,8 @@ impl BackendOp for ImapOp {
         let uid = self.uid;
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
+            let mut flags = flags.await?;
+            flags.set(flag, value);
             let mut conn = connection.lock().await;
             conn.select_mailbox(mailbox_hash, &mut response, false)
                 .await?;

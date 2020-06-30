@@ -23,7 +23,7 @@ use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use crate::backends::*;
 use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
-use crate::error::{MeliError, Result};
+use crate::error::{MeliError, Result, ResultIntoMeliError};
 use crate::shellexpand::ShellExpandTrait;
 use smallvec::SmallVec;
 use std::collections::{
@@ -665,7 +665,7 @@ impl BackendOp for NotmuchOp {
         Ok(self.bytes.as_ref().unwrap().as_bytes())
     }
 
-    fn fetch_flags(&self) -> Result<Flag> {
+    fn fetch_flags(&self) -> ResultFuture<Flag> {
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let index_lck = self.index.write().unwrap();
         unsafe {
@@ -676,15 +676,11 @@ impl BackendOp for NotmuchOp {
             )
         };
         let (flags, _tags) = TagIterator::new(self.lib.clone(), message).collect_flags_and_tags();
-        Ok(flags)
+        Ok(Box::pin(async move { Ok(flags) }))
     }
 
-    fn set_flag(
-        &mut self,
-        f: Flag,
-        value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
-        let mut flags = self.fetch_flags()?;
+    fn set_flag(&mut self, f: Flag, value: bool) -> ResultFuture<()> {
+        let mut flags = futures::executor::block_on(self.fetch_flags()?)?;
         flags.set(f, value);
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let mut index_lck = self.index.write().unwrap();
@@ -775,11 +771,7 @@ impl BackendOp for NotmuchOp {
         Ok(Box::pin(async { Ok(()) }))
     }
 
-    fn set_tag(
-        &mut self,
-        tag: String,
-        value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+    fn set_tag(&mut self, tag: String, value: bool) -> ResultFuture<()> {
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let index_lck = self.index.read().unwrap();
         unsafe {
@@ -1058,8 +1050,8 @@ fn notmuch_message_into_envelope(
             env.set_flags(flags);
             env
         })
-        .ok_or_else(|| {
+        .chain_err_summary(|| {
             index.write().unwrap().remove(&env_hash);
-            format!("could not parse path {:?}", c_str).into()
+            format!("could not parse path {:?}", c_str)
         })
 }

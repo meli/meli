@@ -225,17 +225,15 @@ impl Envelope {
         }
         Err(MeliError::new("Couldn't parse mail."))
     }
-    pub fn from_token(mut operation: Box<dyn BackendOp>, hash: EnvelopeHash) -> Option<Envelope> {
+
+    pub fn from_token(mut operation: Box<dyn BackendOp>, hash: EnvelopeHash) -> Result<Envelope> {
         let mut e = Envelope::new(hash);
-        e.flags = operation.fetch_flags().unwrap_or_default();
-        if let Ok(bytes) = operation.as_bytes() {
-            let res = e.populate_headers(bytes).ok();
-            if res.is_some() {
-                return Some(e);
-            }
-        }
-        None
+        e.flags = futures::executor::block_on(operation.fetch_flags()?)?;
+        let bytes = operation.as_bytes()?;
+        e.populate_headers(bytes)?;
+        Ok(e)
     }
+
     pub fn hash(&self) -> EnvelopeHash {
         self.hash
     }

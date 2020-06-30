@@ -437,17 +437,9 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 /// ```
 pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn as_bytes(&mut self) -> Result<&[u8]>;
-    fn fetch_flags(&self) -> Result<Flag>;
-    fn set_flag(
-        &mut self,
-        flag: Flag,
-        value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>>;
-    fn set_tag(
-        &mut self,
-        tag: String,
-        value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>>;
+    fn fetch_flags(&self) -> ResultFuture<Flag>;
+    fn set_flag(&mut self, flag: Flag, value: bool) -> ResultFuture<()>;
+    fn set_tag(&mut self, tag: String, value: bool) -> ResultFuture<()>;
 }
 
 /// Wrapper for BackendOps that are to be set read-only.
@@ -469,7 +461,7 @@ impl BackendOp for ReadOnlyOp {
     fn as_bytes(&mut self) -> Result<&[u8]> {
         self.op.as_bytes()
     }
-    fn fetch_flags(&self) -> Result<Flag> {
+    fn fetch_flags(&self) -> ResultFuture<Flag> {
         self.op.fetch_flags()
     }
     fn set_flag(&mut self, _flag: Flag, _value: bool) -> ResultFuture<()> {

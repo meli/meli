@@ -98,17 +98,14 @@ impl<'a> BackendOp for MaildirOp {
         Ok(unsafe { self.slice.as_ref().unwrap().as_slice() })
     }
 
-    fn fetch_flags(&self) -> Result<Flag> {
+    fn fetch_flags(&self) -> ResultFuture<Flag> {
         let path = self.path();
-        Ok(path.flags())
+        let ret = Ok(path.flags());
+        Ok(Box::pin(async move { ret }))
     }
 
-    fn set_flag(
-        &mut self,
-        f: Flag,
-        value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
-        let mut flags = self.fetch_flags()?;
+    fn set_flag(&mut self, f: Flag, value: bool) -> ResultFuture<()> {
+        let mut flags = futures::executor::block_on(self.fetch_flags()?)?;
         let old_hash = self.hash;
         let mailbox_hash = self.mailbox_hash;
         let hash_index = self.hash_index.clone();
@@ -153,11 +150,7 @@ impl<'a> BackendOp for MaildirOp {
         }))
     }
 
-    fn set_tag(
-        &mut self,
-        _tag: String,
-        _value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
+    fn set_tag(&mut self, _tag: String, _value: bool) -> ResultFuture<()> {
         Err(MeliError::new("Maildir doesn't support tags."))
     }
 }

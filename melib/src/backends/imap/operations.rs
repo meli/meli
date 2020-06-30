@@ -20,11 +20,11 @@
  */
 
 use super::*;
+use futures::lock::Mutex as FutureMutex;
 
 use crate::backends::*;
 use crate::email::*;
 use crate::error::{MeliError, Result};
-use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 
 /// `BackendOp` implementor for Imap
@@ -36,7 +36,7 @@ pub struct ImapOp {
     body: Option<String>,
     mailbox_path: String,
     mailbox_hash: MailboxHash,
-    flags: Cell<Option<Flag>>,
+    flags: Arc<FutureMutex<Option<Flag>>>,
     connection: Arc<Mutex<ImapConnection>>,
     uid_store: Arc<UIDStore>,
 }
@@ -57,7 +57,7 @@ impl ImapOp {
             body: None,
             mailbox_path,
             mailbox_hash,
-            flags: Cell::new(None),
+            flags: Arc::new(FutureMutex::new(None)),
             uid_store,
         }
     }
@@ -104,44 +104,65 @@ impl BackendOp for ImapOp {
         Ok(self.bytes.as_ref().unwrap().as_bytes())
     }
 
-    fn fetch_flags(&self) -> Result<Flag> {
-        if self.flags.get().is_some() {
-            return Ok(self.flags.get().unwrap());
-        }
-        let mut bytes_cache = self.uid_store.byte_cache.lock()?;
-        let cache = bytes_cache.entry(self.uid).or_default();
-        if cache.flags.is_some() {
-            self.flags.set(cache.flags);
-        } else {
-            let mut response = String::with_capacity(8 * 1024);
-            let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-            conn.examine_mailbox(self.mailbox_hash, &mut response, false)?;
-            conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())?;
-            conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)?;
-            debug!(
-                "fetch response is {} bytes and {} lines",
-                response.len(),
-                response.lines().collect::<Vec<&str>>().len()
-            );
-            let v = protocol_parser::uid_fetch_flags_response(response.as_bytes())
-                .map(|(_, v)| v)
-                .map_err(MeliError::from)?;
-            if v.len() != 1 {
-                debug!("responses len is {}", v.len());
-                debug!(&response);
-                /* TODO: Trigger cache invalidation here. */
-                debug!(format!("message with UID {} was not found", self.uid));
-                return Err(
-                    MeliError::new(format!("Invalid/unexpected response: {:?}", response))
-                        .set_summary(format!("message with UID {} was not found?", self.uid)),
-                );
+    fn fetch_flags(&self) -> ResultFuture<Flag> {
+        let connection = self.connection.clone();
+        let mailbox_hash = self.mailbox_hash;
+        let uid = self.uid;
+        let uid_store = self.uid_store.clone();
+        let flags = self.flags.clone();
+
+        let mut response = String::with_capacity(8 * 1024);
+        Ok(Box::pin(async move {
+            if let Some(val) = *flags.lock().await {
+                return Ok(val);
             }
-            let (uid, (flags, _)) = v[0];
-            assert_eq!(uid, self.uid);
-            cache.flags = Some(flags);
-            self.flags.set(Some(flags));
-        }
-        Ok(self.flags.get().unwrap())
+            let exists_in_cache = {
+                let mut bytes_cache = uid_store.byte_cache.lock()?;
+                let cache = bytes_cache.entry(uid).or_default();
+                cache.flags.is_some()
+            };
+            if !exists_in_cache {
+                let mut conn = try_lock(&connection, Some(std::time::Duration::new(2, 0)))?;
+                conn.examine_mailbox(mailbox_hash, &mut response, false)?;
+                conn.send_command(format!("UID FETCH {} FLAGS", uid).as_bytes())?;
+                conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)?;
+                debug!(
+                    "fetch response is {} bytes and {} lines",
+                    response.len(),
+                    response.lines().collect::<Vec<&str>>().len()
+                );
+                let v = protocol_parser::uid_fetch_flags_response(response.as_bytes())
+                    .map(|(_, v)| v)
+                    .map_err(MeliError::from)?;
+                if v.len() != 1 {
+                    debug!("responses len is {}", v.len());
+                    debug!(&response);
+                    /* TODO: Trigger cache invalidation here. */
+                    debug!(format!("message with UID {} was not found", uid));
+                    return Err(MeliError::new(format!(
+                        "Invalid/unexpected response: {:?}",
+                        response
+                    ))
+                    .set_summary(format!("message with UID {} was not found?", uid)));
+                }
+                let (_uid, (_flags, _)) = v[0];
+                assert_eq!(_uid, uid);
+                let mut bytes_cache = uid_store.byte_cache.lock()?;
+                let cache = bytes_cache.entry(uid).or_default();
+                cache.flags = Some(_flags);
+            }
+            {
+                let val = {
+                    let mut bytes_cache = uid_store.byte_cache.lock()?;
+                    let cache = bytes_cache.entry(uid).or_default();
+                    let val = cache.flags;
+                    val
+                };
+                let mut f = flags.lock().await;
+                *f = val;
+                Ok(val.unwrap())
+            }
+        }))
     }
 
     fn set_flag(
@@ -149,8 +170,7 @@ impl BackendOp for ImapOp {
         f: Flag,
         value: bool,
     ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
-        let mut flags = self.fetch_flags()?;
-        flags.set(f, value);
+        let flags = self.fetch_flags()?;
         let connection = self.connection.clone();
         let mailbox_hash = self.mailbox_hash;
         let uid = self.uid;
@@ -158,6 +178,8 @@ impl BackendOp for ImapOp {
 
         let mut response = String::with_capacity(8 * 1024);
         Ok(Box::pin(async move {
+            let mut flags = flags.await?;
+            flags.set(f, value);
             let mut conn = try_lock(&connection, Some(std::time::Duration::new(2, 0)))?;
             conn.select_mailbox(mailbox_hash, &mut response, false)?;
             debug!(&response);

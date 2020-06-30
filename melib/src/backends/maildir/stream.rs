@@ -147,7 +147,7 @@ impl MaildirStream {
                     (*map).insert(hash, PathBuf::from(file).into());
                 }
                 let op = Box::new(MaildirOp::new(hash, map.clone(), mailbox_hash));
-                if let Some(e) = Envelope::from_token(op, hash) {
+                if let Ok(e) = Envelope::from_token(op, hash) {
                     mailbox_index.lock().unwrap().insert(e.hash(), mailbox_hash);
                     if let Ok(cached) = cache_dir.place_cache_file(file_name) {
                         /* place result in cache directory */

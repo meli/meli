@@ -26,6 +26,7 @@ use crate::conf::AccountSettings;
 use crate::email::{Envelope, EnvelopeHash, Flag};
 use crate::error::{MeliError, Result};
 use crate::shellexpand::ShellExpandTrait;
+use futures::prelude::Stream;
 
 extern crate notify;
 use self::notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
@@ -280,7 +281,7 @@ impl MailBackend for MaildirType {
                             (*map).insert(hash, PathBuf::from(&file).into());
                         }
                         let op = Box::new(MaildirOp::new(hash, map.clone(), mailbox_hash));
-                        if let Some(e) = Envelope::from_token(op, hash) {
+                        if let Ok(e) = Envelope::from_token(op, hash) {
                             mailbox_index.lock().unwrap().insert(e.hash(), mailbox_hash);
                             let file_name = PathBuf::from(file)
                                 .strip_prefix(&root_path)
@@ -477,7 +478,7 @@ impl MailBackend for MaildirType {
                                         hash_indexes.clone(),
                                         mailbox_hash,
                                     ));
-                                    if let Some(env) = Envelope::from_token(op, new_hash) {
+                                    if let Ok(env) = Envelope::from_token(op, new_hash) {
                                         debug!("{}\t{:?}", new_hash, &pathbuf);
                                         debug!(
                                             "hash {}, path: {:?} couldn't be parsed",
@@ -1040,7 +1041,7 @@ impl MaildirType {
                                                 map.clone(),
                                                 mailbox_hash,
                                             ));
-                                            if let Some(e) = Envelope::from_token(op, hash) {
+                                            if let Ok(e) = Envelope::from_token(op, hash) {
                                                 mailbox_index
                                                     .lock()
                                                     .unwrap()
@@ -1220,7 +1221,7 @@ fn add_path_to_index(
         );
     }
     let op = Box::new(MaildirOp::new(hash, hash_index.clone(), mailbox_hash));
-    if let Some(e) = Envelope::from_token(op, hash) {
+    if let Ok(e) = Envelope::from_token(op, hash) {
         debug!("add_path_to_index gen {}\t{}", hash, file_name.display());
         if let Ok(cached) = cache_dir.place_cache_file(file_name) {
             debug!("putting in cache");
