@@ -214,7 +214,7 @@ impl MailListingTrait for PlainListing {
             let env_hash = self.get_env_under_cursor(self.cursor_pos.2, context);
             let temp = (self.new_cursor_pos.0, self.new_cursor_pos.1, env_hash);
             if !force && old_cursor_pos == self.new_cursor_pos {
-                self.view.update(temp);
+                self.view.update(temp, context);
             } else if self.unfocused {
                 self.view = MailView::new(temp, None, None, context);
             }

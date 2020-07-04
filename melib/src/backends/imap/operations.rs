@@ -31,12 +31,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Debug, Clone)]
 pub struct ImapOp {
     uid: usize,
-    bytes: Option<String>,
-    headers: Option<String>,
-    body: Option<String>,
-    mailbox_path: String,
     mailbox_hash: MailboxHash,
-    flags: Arc<FutureMutex<Option<Flag>>>,
     connection: Arc<Mutex<ImapConnection>>,
     uid_store: Arc<UIDStore>,
 }
@@ -52,56 +47,43 @@ impl ImapOp {
         ImapOp {
             uid,
             connection,
-            bytes: None,
-            headers: None,
-            body: None,
-            mailbox_path,
             mailbox_hash,
-            flags: Arc::new(FutureMutex::new(None)),
             uid_store,
         }
     }
 }
 
 impl BackendOp for ImapOp {
-    fn as_bytes(&mut self) -> Result<&[u8]> {
-        if self.bytes.is_none() {
+    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
+        let mut bytes_cache = self.uid_store.byte_cache.lock()?;
+        let cache = bytes_cache.entry(self.uid).or_default();
+        if cache.bytes.is_none() {
+            let mut response = String::with_capacity(8 * 1024);
+            {
+                let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
+                conn.examine_mailbox(self.mailbox_hash, &mut response)?;
+                conn.send_command(format!("UID FETCH {} (FLAGS RFC822)", self.uid).as_bytes())?;
+                conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)?;
+            }
+            debug!(
+                "fetch response is {} bytes and {} lines",
+                response.len(),
+                response.lines().collect::<Vec<&str>>().len()
+            );
+            let UidFetchResponse {
+                uid, flags, body, ..
+            } = protocol_parser::uid_fetch_response(&response)?.1;
+            assert_eq!(uid, self.uid);
+            assert!(body.is_some());
             let mut bytes_cache = self.uid_store.byte_cache.lock()?;
             let cache = bytes_cache.entry(self.uid).or_default();
-            if cache.bytes.is_some() {
-                self.bytes = cache.bytes.clone();
-            } else {
-                drop(cache);
-                drop(bytes_cache);
-                let mut response = String::with_capacity(8 * 1024);
-                {
-                    let mut conn =
-                        try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-                    conn.examine_mailbox(self.mailbox_hash, &mut response, false)?;
-                    conn.send_command(format!("UID FETCH {} (FLAGS RFC822)", self.uid).as_bytes())?;
-                    conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)?;
-                }
-                debug!(
-                    "fetch response is {} bytes and {} lines",
-                    response.len(),
-                    response.lines().collect::<Vec<&str>>().len()
-                );
-                let UidFetchResponse {
-                    uid, flags, body, ..
-                } = protocol_parser::uid_fetch_response(&response)?.1;
-                assert_eq!(uid, self.uid);
-                assert!(body.is_some());
-                let mut bytes_cache = self.uid_store.byte_cache.lock()?;
-                let cache = bytes_cache.entry(self.uid).or_default();
-                if let Some((flags, _)) = flags {
-                    cache.flags = Some(flags);
-                }
-                cache.bytes =
-                    Some(unsafe { std::str::from_utf8_unchecked(body.unwrap()).to_string() });
-                self.bytes = cache.bytes.clone();
+            if let Some((flags, _)) = flags {
+                cache.flags = Some(flags);
             }
+            cache.bytes = Some(unsafe { std::str::from_utf8_unchecked(body.unwrap()).to_string() });
         }
-        Ok(self.bytes.as_ref().unwrap().as_bytes())
+        let ret = cache.bytes.clone().unwrap().into_bytes();
+        Ok(Box::pin(async move { Ok(ret) }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {
@@ -109,13 +91,9 @@ impl BackendOp for ImapOp {
         let mailbox_hash = self.mailbox_hash;
         let uid = self.uid;
         let uid_store = self.uid_store.clone();
-        let flags = self.flags.clone();
 
         let mut response = String::with_capacity(8 * 1024);
         Ok(Box::pin(async move {
-            if let Some(val) = *flags.lock().await {
-                return Ok(val);
-            }
             let exists_in_cache = {
                 let mut bytes_cache = uid_store.byte_cache.lock()?;
                 let cache = bytes_cache.entry(uid).or_default();
@@ -158,8 +136,6 @@ impl BackendOp for ImapOp {
                     let val = cache.flags;
                     val
                 };
-                let mut f = flags.lock().await;
-                *f = val;
                 Ok(val.unwrap())
             }
         }))

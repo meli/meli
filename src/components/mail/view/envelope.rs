@@ -95,7 +95,6 @@ impl EnvelopeView {
             &body,
             Some(Box::new(|a: &Attachment, v: &mut Vec<u8>| {
                 if a.content_type().is_text_html() {
-                    use std::io::Write;
                     let settings = &context.settings;
                     if let Some(filter_invocation) = settings.pager.html_filter.as_ref() {
                         let command_obj = Command::new("sh")

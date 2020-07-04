@@ -203,6 +203,8 @@ pub trait MailListingTrait: ListingTrait {
                 }
                 ListingAction::CopyTo(ref mailbox_path) => {
                     drop(envelope);
+                    /*
+                     * FIXME
                     match account
                         .mailbox_by_path(mailbox_path)
                         .and_then(|mailbox_hash| {
@@ -219,10 +221,13 @@ pub trait MailListingTrait: ListingTrait {
                         }
                         Ok(fut) => {}
                     }
+                    */
                     continue;
                 }
                 ListingAction::CopyToOtherAccount(ref account_name, ref mailbox_path) => {
                     drop(envelope);
+                    /*
+                     * FIXME
                     if let Err(err) = op.as_bytes().map(|b| b.to_vec()).and_then(|bytes| {
                         let account_pos = context
                             .accounts
@@ -245,10 +250,13 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                         return;
                     }
+                    */
                     continue;
                 }
                 ListingAction::MoveTo(ref mailbox_path) => {
                     drop(envelope);
+                    /*
+                     * FIXME
                     if let Err(err) =
                         account
                             .mailbox_by_path(mailbox_path)
@@ -264,10 +272,12 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                         return;
                     }
+                    */
                     continue;
                 }
                 ListingAction::MoveToOtherAccount(ref account_name, ref mailbox_path) => {
                     drop(envelope);
+                    /* FIXME
                     if let Err(err) = op
                         .as_bytes()
                         .map(|b| b.to_vec())
@@ -302,26 +312,37 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                         return;
                     }
+                    */
                     continue;
                 }
                 ListingAction::Tag(Remove(ref tag_str)) => {
-                    if let Err(err) = op.set_tag(tag_str.to_string(), false) {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not set tag.".to_string()),
-                            err.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                        return;
+                    match op.set_tag(tag_str.to_string(), false) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Could not set tag.".to_string()),
+                                err.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            return;
+                        }
+                        Ok(fut) => {
+                            //FIXME
+                        }
                     }
                 }
                 ListingAction::Tag(Add(ref tag_str)) => {
-                    if let Err(err) = op.set_tag(tag_str.to_string(), true) {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not set tag.".to_string()),
-                            err.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                        return;
+                    match op.set_tag(tag_str.to_string(), true) {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Could not set tag.".to_string()),
+                                err.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            return;
+                        }
+                        Ok(fut) => {
+                            // FIXME
+                        }
                     }
                 }
                 _ => unreachable!(),

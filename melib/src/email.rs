@@ -229,8 +229,8 @@ impl Envelope {
     pub fn from_token(mut operation: Box<dyn BackendOp>, hash: EnvelopeHash) -> Result<Envelope> {
         let mut e = Envelope::new(hash);
         e.flags = futures::executor::block_on(operation.fetch_flags()?)?;
-        let bytes = operation.as_bytes()?;
-        e.populate_headers(bytes)?;
+        let bytes = futures::executor::block_on(operation.as_bytes()?)?;
+        e.populate_headers(&bytes)?;
         Ok(e)
     }
 
@@ -413,11 +413,6 @@ impl Envelope {
         _strings.join(", ")
     }
 
-    /// Requests bytes from backend and thus can fail
-    pub fn bytes(&self, mut operation: Box<dyn BackendOp>) -> Result<Vec<u8>> {
-        operation.as_bytes().map(|v| v.to_vec())
-    }
-
     pub fn body_bytes(&self, bytes: &[u8]) -> Attachment {
         let builder = AttachmentBuilder::new(bytes);
         builder.build()
@@ -439,8 +434,8 @@ impl Envelope {
     /// Requests bytes from backend and thus can fail
     pub fn body(&self, mut operation: Box<dyn BackendOp>) -> Result<Attachment> {
         debug!("searching body for {:?}", self.message_id_display());
-        let file = operation.as_bytes()?;
-        Ok(self.body_bytes(file))
+        let bytes = futures::executor::block_on(operation.as_bytes()?)?;
+        Ok(self.body_bytes(&bytes))
     }
 
     pub fn subject(&self) -> Cow<str> {

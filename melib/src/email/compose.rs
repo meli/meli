@@ -138,8 +138,8 @@ impl Draft {
         let mut ret = Draft::default();
         //TODO: Inform user if error
         {
-            let bytes = op.as_bytes().unwrap_or(&[]);
-            for (k, v) in envelope.headers(bytes).unwrap_or_else(|_| Vec::new()) {
+            let bytes = futures::executor::block_on(op.as_bytes()?)?;
+            for (k, v) in envelope.headers(&bytes).unwrap_or_else(|_| Vec::new()) {
                 if ignore_header(k.as_bytes()) {
                     continue;
                 }

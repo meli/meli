@@ -156,6 +156,7 @@ pub enum JobRequest {
     DeleteMailbox(oneshot::Receiver<Result<HashMap<MailboxHash, Mailbox>>>),
     //RenameMailbox,
     Search,
+    AsBytes,
     SetMailboxPermissions(MailboxHash, oneshot::Receiver<Result<()>>),
     SetMailboxSubscription(MailboxHash, oneshot::Receiver<Result<()>>),
     Watch(JoinHandle),
@@ -175,6 +176,7 @@ impl core::fmt::Debug for JobRequest {
             JobRequest::DeleteMailbox(_) => write!(f, "{}", "JobRequest::DeleteMailbox"),
             //JobRequest::RenameMailbox,
             JobRequest::Search => write!(f, "{}", "JobRequest::Search"),
+            JobRequest::AsBytes => write!(f, "{}", "JobRequest::AsBytes"),
             JobRequest::SetMailboxPermissions(_, _) => {
                 write!(f, "{}", "JobRequest::SetMailboxPermissions")
             }
@@ -1599,7 +1601,7 @@ impl Account {
                     }
                 }
                 //JobRequest::RenameMailbox,
-                JobRequest::Search => {
+                JobRequest::Search | JobRequest::AsBytes => {
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                             StatusEvent::JobFinished(job_id.clone()),

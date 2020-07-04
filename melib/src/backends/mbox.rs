@@ -182,14 +182,16 @@ impl MboxOp {
 }
 
 impl BackendOp for MboxOp {
-    fn as_bytes(&mut self) -> Result<&[u8]> {
+    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
         if self.slice.is_none() {
             self.slice = Some(Mmap::open_path(&self.path, Protection::Read)?);
         }
         /* Unwrap is safe since we use ? above. */
-        Ok(unsafe {
+        let ret = Ok((unsafe {
             &self.slice.as_ref().unwrap().as_slice()[self.offset..self.offset + self.length]
         })
+        .to_vec());
+        Ok(Box::pin(async move { ret }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {

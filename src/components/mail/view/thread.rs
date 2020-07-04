@@ -961,7 +961,7 @@ impl Component for ThreadView {
                 self.coordinates.1,
                 self.entries[self.current_pos()].msg_hash,
             );
-            self.mailview.update(coordinates);
+            self.mailview.update(coordinates, context);
         }
 
         if self.entries.len() == 1 {

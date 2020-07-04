@@ -436,7 +436,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 /// let operation = Box::new(FooOp {});
 /// ```
 pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
-    fn as_bytes(&mut self) -> Result<&[u8]>;
+    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>>;
     fn fetch_flags(&self) -> ResultFuture<Flag>;
     fn set_flag(&mut self, flag: Flag, value: bool) -> ResultFuture<()>;
     fn set_tag(&mut self, tag: String, value: bool) -> ResultFuture<()>;
@@ -458,7 +458,7 @@ impl ReadOnlyOp {
 }
 
 impl BackendOp for ReadOnlyOp {
-    fn as_bytes(&mut self) -> Result<&[u8]> {
+    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
         self.op.as_bytes()
     }
     fn fetch_flags(&self) -> ResultFuture<Flag> {

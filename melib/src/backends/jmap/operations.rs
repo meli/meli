@@ -56,7 +56,7 @@ impl JmapOp {
 }
 
 impl BackendOp for JmapOp {
-    fn as_bytes(&mut self) -> Result<&[u8]> {
+    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
         if self.bytes.is_none() {
             let mut store_lck = self.store.write().unwrap();
             if !(store_lck.byte_cache.contains_key(&self.hash)
@@ -86,7 +86,8 @@ impl BackendOp for JmapOp {
             }
             self.bytes = store_lck.byte_cache[&self.hash].bytes.clone();
         }
-        Ok(&self.bytes.as_ref().unwrap().as_bytes())
+        let ret = self.bytes.as_ref().unwrap().as_bytes().to_vec();
+        Ok(Box::pin(async move { Ok(ret) }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {

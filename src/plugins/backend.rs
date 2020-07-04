@@ -296,22 +296,24 @@ struct PluginOp {
 }
 
 impl BackendOp for PluginOp {
-    fn as_bytes(&mut self) -> Result<&[u8]> {
-        if let Some(ref bytes) = self.bytes {
-            return Ok(bytes.as_bytes());
-        }
-
-        if let Ok(mut channel) = self.channel.try_lock() {
-            channel.write_ref(&rmpv::ValueRef::Ext(BACKEND_OP_FN, b"as_bytes"))?;
-            debug!(channel.expect_ack())?;
-            channel.write_ref(&rmpv::ValueRef::Integer(self.hash.into()))?;
-            debug!(channel.expect_ack())?;
-            let bytes: Result<PluginResult<String>> = channel.from_read();
-            self.bytes = Some(bytes.map(Into::into).and_then(std::convert::identity)?);
-            Ok(self.bytes.as_ref().map(String::as_bytes).unwrap())
-        } else {
-            Err(MeliError::new("busy"))
-        }
+    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
+        let hash = self.hash;
+        let channel = self.channel.clone();
+        Ok(Box::pin(async move {
+            if let Ok(mut channel) = channel.try_lock() {
+                channel.write_ref(&rmpv::ValueRef::Ext(BACKEND_OP_FN, b"as_bytes"))?;
+                debug!(channel.expect_ack())?;
+                channel.write_ref(&rmpv::ValueRef::Integer(hash.into()))?;
+                debug!(channel.expect_ack())?;
+                let bytes: Result<PluginResult<String>> = channel.from_read();
+                Ok(bytes
+                    .map(Into::into)
+                    .and_then(std::convert::identity)?
+                    .into_bytes())
+            } else {
+                Err(MeliError::new("busy"))
+            }
+        }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {

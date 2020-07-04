@@ -646,7 +646,7 @@ struct NotmuchOp {
 }
 
 impl BackendOp for NotmuchOp {
-    fn as_bytes(&mut self) -> Result<&[u8]> {
+    fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
         let mut message: *mut notmuch_message_t = std::ptr::null_mut();
         let index_lck = self.index.write().unwrap();
         unsafe {
@@ -662,7 +662,8 @@ impl BackendOp for NotmuchOp {
         let mut response = String::new();
         f.read_to_string(&mut response)?;
         self.bytes = Some(response);
-        Ok(self.bytes.as_ref().unwrap().as_bytes())
+        let ret = Ok(self.bytes.as_ref().unwrap().as_bytes().to_vec());
+        Ok(Box::pin(async move { ret }))
     }
 
     fn fetch_flags(&self) -> ResultFuture<Flag> {

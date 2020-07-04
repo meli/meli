@@ -376,9 +376,6 @@ impl MailBackend for ImapType {
         };
         Ok(Box::new(ImapOp::new(
             uid,
-            self.uid_store.mailboxes.read().unwrap()[&mailbox_hash]
-                .imap_path()
-                .to_string(),
             mailbox_hash,
             self.connection.clone(),
             self.uid_store.clone(),

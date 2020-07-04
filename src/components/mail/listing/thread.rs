@@ -632,7 +632,7 @@ impl Component for ThreadListing {
             );
 
             if let Some(ref mut v) = self.view {
-                v.update(coordinates);
+                v.update(coordinates, context);
             } else {
                 self.view = Some(MailView::new(coordinates, None, None, context));
             }

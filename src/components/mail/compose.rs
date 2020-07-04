@@ -238,9 +238,10 @@ impl Composer {
                     Some(NotificationType::ERROR),
                 ));
             }
-            Ok(mut op) => {
-                let parent_bytes = op.as_bytes();
-                ret.draft = Draft::new_reply(&parent_message, parent_bytes.unwrap());
+            Ok(op) => {
+                //FIXME
+                //let parent_bytes = op.as_bytes();
+                //ret.draft = Draft::new_reply(&parent_message, parent_bytes.unwrap());
             }
         }
         let subject = parent_message.subject();
