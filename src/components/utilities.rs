@@ -30,7 +30,7 @@ pub use self::widgets::*;
 mod layouts;
 pub use self::layouts::*;
 
-use crate::jobs1::JobId;
+use crate::jobs::JobId;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy)]

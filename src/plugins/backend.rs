@@ -27,7 +27,6 @@ use melib::email::{Envelope, EnvelopeHash, Flag};
 use melib::error::{MeliError, Result};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::future::Future;
 use std::sync::{Arc, Mutex, RwLock};
 
 // TODO replace with melib::Envelope after simplifying melib::Envelope's

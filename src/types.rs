@@ -36,7 +36,7 @@ mod helpers;
 pub use self::helpers::*;
 
 use super::execute::Action;
-use super::jobs1::JobId;
+use super::jobs::JobId;
 use super::terminal::*;
 
 use melib::backends::{AccountHash, MailboxHash};

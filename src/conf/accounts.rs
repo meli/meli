@@ -24,7 +24,7 @@
  */
 
 use super::{AccountConf, FileMailboxConf};
-use crate::jobs1::{JobExecutor, JobId, JoinHandle};
+use crate::jobs::{JobExecutor, JobId, JoinHandle};
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
     AccountHash, BackendOp, Backends, MailBackend, Mailbox, MailboxHash, NotifyFn, ReadOnlyOp,
@@ -1401,13 +1401,11 @@ impl Account {
     }
 
     pub fn process_event(&mut self, job_id: &JobId) -> bool {
-        if debug!(self.active_jobs.contains_key(job_id)) {
-            match debug!(self.active_jobs.remove(job_id)).unwrap() {
+        if self.active_jobs.contains_key(job_id) {
+            match self.active_jobs.remove(job_id).unwrap() {
                 JobRequest::Mailboxes(mut chan) => {
-                    if let Some(mailboxes) = debug!(chan.try_recv()).unwrap() {
-                        if mailboxes.is_err()
-                            || debug!(self.init(Some(mailboxes.unwrap()))).is_err()
-                        {
+                    if let Some(mailboxes) = chan.try_recv().unwrap() {
+                        if mailboxes.is_err() || self.init(Some(mailboxes.unwrap())).is_err() {
                             if let Ok(mailboxes_job) =
                                 self.backend.read().unwrap().mailboxes_async()
                             {
@@ -1492,7 +1490,7 @@ impl Account {
                         .unwrap();
                 }
                 JobRequest::IsOnline(mut chan) => {
-                    let is_online = debug!(chan.try_recv()).unwrap();
+                    let is_online = chan.try_recv().unwrap();
                     if is_online.is_some() {
                         let is_online = is_online.unwrap();
                         if is_online.is_ok() {
@@ -1510,8 +1508,8 @@ impl Account {
                         self.active_jobs.insert(job_id, JobRequest::IsOnline(rcvr));
                     }
                 }
-                JobRequest::Refresh(mailbox_hash, mut chan) => {
-                    let r = debug!(chan.try_recv()).unwrap();
+                JobRequest::Refresh(_mailbox_hash, mut chan) => {
+                    let r = chan.try_recv().unwrap();
                     if r.is_some() && r.unwrap().is_ok() {
                         self.is_online = true;
                     }

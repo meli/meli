@@ -31,8 +31,7 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use crate::types::ThreadEvent;
-use crossbeam::channel;
-use crossbeam::deque::{Injector, Steal, Stealer, Worker};
+use crossbeam::deque::{Injector, Stealer, Worker};
 use crossbeam::sync::{Parker, Unparker};
 use crossbeam::Sender;
 pub use futures::channel::oneshot;

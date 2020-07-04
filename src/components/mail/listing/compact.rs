@@ -22,7 +22,7 @@
 use super::EntryStrings;
 use super::*;
 use crate::components::utilities::PageMovement;
-use crate::jobs1::{oneshot, JobId};
+use crate::jobs::{oneshot, JobId};
 use std::cmp;
 use std::convert::TryInto;
 use std::iter::FromIterator;

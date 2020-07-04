@@ -32,7 +32,7 @@ use super::*;
 use crate::plugins::PluginManager;
 use melib::backends::{AccountHash, MailboxHash, NotifyFn};
 
-use crate::jobs1::JobExecutor;
+use crate::jobs::JobExecutor;
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use smallvec::SmallVec;
 use std::collections::HashMap;
@@ -97,7 +97,6 @@ pub struct Context {
     receiver: Receiver<ThreadEvent>,
     input: InputHandler,
     work_controller: WorkController,
-    job_executor: Arc<JobExecutor>,
     pub children: Vec<std::process::Child>,
     pub plugin_manager: PluginManager,
 
@@ -336,7 +335,6 @@ impl State {
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),
                 work_controller,
-                job_executor,
                 children: vec![],
                 plugin_manager,
 

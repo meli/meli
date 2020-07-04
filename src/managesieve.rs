@@ -69,7 +69,7 @@ use crate::workers::*;
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3;
 
-pub mod jobs1;
+pub mod jobs;
 pub mod mailcap;
 pub mod plugins;
 
