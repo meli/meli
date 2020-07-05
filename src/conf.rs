@@ -167,8 +167,6 @@ pub struct FileAccount {
     cache_type: CacheType,
     #[serde(default = "false_val")]
     pub manual_refresh: bool,
-    #[serde(default = "false_val")]
-    pub is_async: bool,
     #[serde(default = "none")]
     pub refresh_command: Option<String>,
     #[serde(flatten)]
@@ -199,7 +197,6 @@ impl From<FileAccount> for AccountConf {
             display_name,
             subscribed_mailboxes: x.subscribed_mailboxes.clone(),
             mailboxes,
-            is_async: x.is_async,
             manual_refresh: x.manual_refresh,
             extra: x.extra.clone(),
         };
@@ -415,7 +412,6 @@ impl FileSettings {
                 mailboxes,
                 extra,
                 manual_refresh,
-                is_async,
                 refresh_command: _,
                 cache_type: _,
                 conf_override: _,
@@ -431,7 +427,6 @@ impl FileSettings {
                 display_name,
                 subscribed_mailboxes,
                 manual_refresh,
-                is_async,
                 mailboxes: mailboxes
                     .into_iter()
                     .map(|(k, v)| (k, v.mailbox_conf))

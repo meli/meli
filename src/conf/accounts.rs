@@ -152,6 +152,8 @@ pub struct Account {
     sender: Sender<ThreadEvent>,
     event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
     notify_fn: Arc<NotifyFn>,
+    is_async: bool,
+    is_remote: bool,
 }
 
 pub enum JobRequest {
@@ -333,7 +335,7 @@ impl Account {
         }
 
         let mut active_jobs = HashMap::default();
-        if settings.conf.is_async {
+        if backend.is_async() {
             if let Ok(mailboxes_job) = backend.mailboxes_async() {
                 if let Ok(online_job) = backend.is_online_async() {
                     let (rcvr, job_id) =
@@ -356,12 +358,14 @@ impl Account {
             collection: Default::default(),
             work_context,
             settings,
-            backend: Arc::new(RwLock::new(backend)),
             notify_fn,
             sender,
             job_executor,
             active_jobs,
             event_queue: VecDeque::with_capacity(8),
+            is_async: backend.is_async(),
+            is_remote: backend.is_remote(),
+            backend: Arc::new(RwLock::new(backend)),
         })
     }
 
@@ -495,7 +499,7 @@ impl Account {
             mailbox_entries.entry(*h).and_modify(|entry| {
                 if entry.conf.mailbox_conf.autoload {
                     entry.status = MailboxStatus::Parsing(0, 0);
-                    if self.settings.conf.is_async {
+                    if self.is_async {
                         if let Ok(mailbox_job) = self.backend.write().unwrap().get_async(&f) {
                             let mailbox_job = mailbox_job.into_future();
                             let (rcvr, job_id) = self.job_executor.spawn_specialized(mailbox_job);
@@ -857,7 +861,7 @@ impl Account {
         let r = RefreshEventConsumer::new(Box::new(move |r| {
             sender_.send(ThreadEvent::from(r)).unwrap();
         }));
-        if self.settings.conf.is_async {
+        if self.is_async {
             if let Ok(refresh_job) = self.backend.write().unwrap().refresh_async(mailbox_hash, r) {
                 let (rcvr, job_id) = self.job_executor.spawn_specialized(refresh_job);
                 self.sender
@@ -883,7 +887,7 @@ impl Account {
         let r = RefreshEventConsumer::new(Box::new(move |r| {
             sender_.send(ThreadEvent::from(r)).unwrap();
         }));
-        if self.settings.conf.is_async {
+        if self.is_async {
             if !self.active_jobs.values().any(|j| j.is_watch()) {
                 match self.backend.read().unwrap().watch_async(r) {
                     Ok(fut) => {
@@ -974,7 +978,7 @@ impl Account {
                             Ok(())
                         }
                         MailboxStatus::None => {
-                            if self.settings.conf.is_async {
+                            if self.is_async {
                                 if !self.active_jobs.values().any(|j| j.is_get(mailbox_hash)) {
                                     match self.backend.write().unwrap().get_async(
                                         &&self.mailbox_entries[&mailbox_hash].ref_mailbox,
@@ -1396,11 +1400,15 @@ impl Account {
     /* Call only in Context::is_online, since only Context can launch the watcher threads if an
      * account goes from offline to online. */
     pub fn is_online(&mut self) -> Result<()> {
+        if !self.is_remote {
+            return Ok(());
+        }
+
         if !self.is_online {
             self.backend.write().unwrap().connect();
         }
 
-        if self.settings.conf.is_async {
+        if self.is_async {
             if self.is_online {
                 return Ok(());
             }
