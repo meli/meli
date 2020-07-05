@@ -194,18 +194,6 @@ impl MailBackend for ImapType {
     }
 
     fn is_online(&self) -> Result<()> {
-        //if let Ok(mut g) = try_lock(&self.connection, None) {
-        //    let _ = g.connect();
-        //}
-        try_lock(
-            &self.uid_store.is_online,
-            Some(std::time::Duration::from_millis(12)),
-        )?
-        .1
-        .clone()
-    }
-
-    fn connect(&mut self) {
         let connection = self.connection.clone();
         let _ = std::thread::Builder::new()
             .name(format!("{} connecting", self.account_name.as_str(),))
@@ -214,6 +202,12 @@ impl MailBackend for ImapType {
                     let _ = g.connect();
                 }
             });
+        try_lock(
+            &self.uid_store.is_online,
+            Some(std::time::Duration::from_millis(12)),
+        )?
+        .1
+        .clone()
     }
 
     fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {

@@ -299,11 +299,12 @@ pub type ResultFuture<T> = Result<Pin<Box<dyn Future<Output = Result<T>> + Send 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_async(&self) -> bool;
     fn is_remote(&self) -> bool;
-    fn is_online(&self) -> Result<()>;
+    fn is_online(&self) -> Result<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
     fn is_online_async(&self) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn connect(&mut self) {}
     fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>>;
     fn get_async(
         &mut self,

@@ -152,8 +152,8 @@ pub struct Account {
     sender: Sender<ThreadEvent>,
     event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
     notify_fn: Arc<NotifyFn>,
-    is_async: bool,
-    is_remote: bool,
+    pub is_async: bool,
+    pub is_remote: bool,
 }
 
 pub enum JobRequest {
@@ -344,12 +344,11 @@ impl Account {
                 }
             }
         }
-
-        Ok(Account {
+        let mut ret = Account {
             index,
             hash,
             name,
-            is_online: false,
+            is_online: !backend.is_remote(),
             mailbox_entries: Default::default(),
             mailboxes_order: Default::default(),
             tree: Default::default(),
@@ -366,7 +365,13 @@ impl Account {
             is_async: backend.is_async(),
             is_remote: backend.is_remote(),
             backend: Arc::new(RwLock::new(backend)),
-        })
+        };
+
+        if !ret.is_remote && !ret.is_async {
+            ret.init(None)?;
+        }
+
+        Ok(ret)
     }
 
     fn init(&mut self, ref_mailboxes: Option<HashMap<MailboxHash, Mailbox>>) -> Result<()> {
@@ -1400,12 +1405,8 @@ impl Account {
     /* Call only in Context::is_online, since only Context can launch the watcher threads if an
      * account goes from offline to online. */
     pub fn is_online(&mut self) -> Result<()> {
-        if !self.is_remote {
+        if !self.is_remote && !self.is_async {
             return Ok(());
-        }
-
-        if !self.is_online {
-            self.backend.write().unwrap().connect();
         }
 
         if self.is_async {
@@ -1425,9 +1426,6 @@ impl Account {
                 self.init(None)?;
             }
             self.is_online = ret.is_ok();
-            if !self.is_online {
-                self.backend.write().unwrap().connect();
-            }
             ret
         }
     }

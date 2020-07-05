@@ -282,32 +282,11 @@ impl MailBackend for ImapType {
     fn is_online_async(&self) -> ResultFuture<()> {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            debug!("INSIDE is_online_async()");
             let mut conn = connection.lock().await;
-            debug!(conn.connect().await)?;
+            conn.connect().await?;
 
             Ok(())
         }))
-    }
-
-    fn is_online(&self) -> Result<()> {
-        Ok(())
-        //if let Ok(mut g) = try_lock(&self.connection, None) {
-        //    let _ = g.connect();
-        //}
-    }
-
-    fn connect(&mut self) {
-        /*
-        let connection = self.connection.clone();
-        let _ = std::thread::Builder::new()
-            .name(format!("{} connecting", self.account_name.as_str(),))
-            .spawn(move || {
-                if let Ok(mut g) = try_lock(&connection, None) {
-                    let _ = g.connect();
-                }
-            });
-        */
     }
 
     fn get(&mut self, _mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {

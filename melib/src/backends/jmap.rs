@@ -199,16 +199,13 @@ impl MailBackend for JmapType {
     }
 
     fn is_online(&self) -> Result<()> {
-        self.online.lock().unwrap().1.clone()
-    }
-
-    fn connect(&mut self) {
-        if self.is_online().is_err()
+        if self.online.lock().unwrap().1.is_err()
             && Instant::now().duration_since(self.online.lock().unwrap().0)
                 >= std::time::Duration::new(2, 0)
         {
             let _ = self.mailboxes();
         }
+        self.online.lock().unwrap().1.clone()
     }
 
     fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {

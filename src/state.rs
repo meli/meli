@@ -358,6 +358,9 @@ impl State {
         s.switch_to_alternate_screen();
         debug!("inserting mailbox hashes:");
         for i in 0..s.context.accounts.len() {
+            if !s.context.accounts[i].is_remote {
+                s.context.accounts[i].watch();
+            }
             if s.context.is_online(i).is_ok() && s.context.accounts[i].is_empty() {
                 //return Err(MeliError::new(format!(
                 //    "Account {} has no mailboxes configured.",
