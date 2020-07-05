@@ -40,8 +40,8 @@ use std::convert::TryInto;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-const DB_NAME: &'static str = "index.db";
-const INIT_SCRIPT: &'static str = "CREATE TABLE IF NOT EXISTS envelopes (
+const DB_NAME: &str = "index.db";
+const INIT_SCRIPT: &str = "CREATE TABLE IF NOT EXISTS envelopes (
                     id               INTEGER PRIMARY KEY,
                     account_id       INTEGER REFERENCES accounts ON UPDATE CASCADE,
                     hash             BLOB NOT NULL UNIQUE,

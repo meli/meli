@@ -308,7 +308,7 @@ macro_rules! property {
         pub fn $name(&self) -> $t {
             (self.$name).into()
         }
-    }
+    };
 }
 
 impl Thread {
@@ -842,7 +842,6 @@ impl Threads {
 
     fn inner_subsort_by(&self, _subsort: (SortField, SortOrder), _envelopes: &Envelopes) {
         //FIXME: self\.thread_nodes needs interior mutability */
-        return;
         /*
         let Threads {
             ref tree_index,

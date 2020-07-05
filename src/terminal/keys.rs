@@ -163,7 +163,7 @@ pub fn get_events(
     mut closure: impl FnMut((Key, Vec<u8>)),
     rx: &Receiver<InputCommand>,
     new_command_fd: RawFd,
-) -> () {
+) {
     let stdin = std::io::stdin();
     let stdin_fd = PollFd::new(std::io::stdin().as_raw_fd(), PollFlags::POLLIN);
     let new_command_pollfd = nix::poll::PollFd::new(new_command_fd, nix::poll::PollFlags::POLLIN);

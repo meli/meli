@@ -41,10 +41,10 @@ impl From<Mailto> for Draft {
             bcc,
             body,
         } = val;
-        ret.set_header("Subject", subject.unwrap_or(String::new()));
-        ret.set_header("Cc", cc.unwrap_or(String::new()));
-        ret.set_header("Bcc", bcc.unwrap_or(String::new()));
-        ret.set_body(body.unwrap_or(String::new()));
+        ret.set_header("Subject", subject.unwrap_or_default());
+        ret.set_header("Cc", cc.unwrap_or_default());
+        ret.set_header("Bcc", bcc.unwrap_or_default());
+        ret.set_body(body.unwrap_or_default());
         ret.set_header("To", address.to_string());
         debug!(ret)
     }
@@ -55,8 +55,8 @@ impl TryFrom<&[u8]> for Mailto {
 
     fn try_from(value: &[u8]) -> std::result::Result<Self, Self::Error> {
         let parse_res = super::parser::generic::mailto(value).map(|(_, v)| v);
-        if parse_res.is_ok() {
-            Ok(parse_res.unwrap())
+        if let Ok(res) = parse_res {
+            Ok(res)
         } else {
             debug!(
                 "parser::mailto returned error while parsing {}:\n{:?}",

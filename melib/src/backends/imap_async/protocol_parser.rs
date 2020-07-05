@@ -1358,9 +1358,9 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         i += 1;
     }
 
-    return Err(nom::Err::Error(
+    Err(nom::Err::Error(
         (input, "quoted(): not a quoted phrase").into(),
-    ));
+    ))
 }
 
 pub fn quoted_or_nil(input: &[u8]) -> IResult<&[u8], Option<Vec<u8>>> {
@@ -1529,9 +1529,9 @@ fn string_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
         i += 1;
     }
 
-    return Err(nom::Err::Error(
+    Err(nom::Err::Error(
         (input, "string_token(): not a quoted phrase").into(),
-    ));
+    ))
 }
 
 // ASTRING-CHAR = ATOM-CHAR / resp-specials

@@ -189,7 +189,7 @@ impl NotmuchDb {
         _is_subscribed: Box<dyn Fn(&str) -> bool>,
     ) -> Result<Box<dyn MailBackend>> {
         let lib = Arc::new(libloading::Library::new("libnotmuch.so.5")?);
-        let path = Path::new(s.root_mailbox.as_str()).expand().to_path_buf();
+        let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
             return Err(MeliError::new(format!(
                 "\"root_mailbox\" {} for account {} is not a valid path.",
@@ -243,7 +243,7 @@ impl NotmuchDb {
     }
 
     pub fn validate_config(s: &AccountSettings) -> Result<()> {
-        let path = Path::new(s.root_mailbox.as_str()).expand().to_path_buf();
+        let path = Path::new(s.root_mailbox.as_str()).expand();
         if !path.exists() {
             return Err(MeliError::new(format!(
                 "\"root_mailbox\" {} for account {} is not a valid path.",
@@ -580,7 +580,7 @@ impl MailBackend for NotmuchDb {
                     sender.send(RefreshEvent {
                         account_hash,
                         mailbox_hash: 0,
-                        kind: Failure(err.into()),
+                        kind: Failure(err),
                     });
                 }
             })?;
@@ -788,13 +788,11 @@ impl BackendOp for NotmuchOp {
                 index_lck[&self.hash]
             )));
         }
+        let c_tag = CString::new(tag.as_str()).unwrap();
         if value {
             if let Err(err) = try_call!(
                 self.lib,
-                call!(self.lib, notmuch_message_add_tag)(
-                    message,
-                    CString::new(tag.as_str()).unwrap().as_ptr(),
-                )
+                call!(self.lib, notmuch_message_add_tag)(message, c_tag.as_ptr(),)
             ) {
                 return Err(MeliError::new("Could not set tag.").set_source(Some(Arc::new(err))));
             }
@@ -802,10 +800,7 @@ impl BackendOp for NotmuchOp {
         } else {
             if let Err(err) = try_call!(
                 self.lib,
-                call!(self.lib, notmuch_message_remove_tag)(
-                    message,
-                    CString::new(tag.as_str()).unwrap().as_ptr(),
-                )
+                call!(self.lib, notmuch_message_remove_tag)(message, c_tag.as_ptr(),)
             ) {
                 return Err(MeliError::new("Could not set tag.").set_source(Some(Arc::new(err))));
             }

@@ -195,12 +195,11 @@ impl MailBackend for JmapType {
     }
 
     fn connect(&mut self) {
-        if self.is_online().is_err() {
-            if Instant::now().duration_since(self.online.lock().unwrap().0)
+        if self.is_online().is_err()
+            && Instant::now().duration_since(self.online.lock().unwrap().0)
                 >= std::time::Duration::new(2, 0)
-            {
-                let _ = self.mailboxes();
-            }
+        {
+            let _ = self.mailboxes();
         }
     }
 

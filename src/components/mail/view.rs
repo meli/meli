@@ -308,7 +308,6 @@ impl MailView {
                                 String::new(),
                                 Some(NotificationType::ERROR),
                             ));
-                            return;
                         }
                     }
                 } else if a.is_signed() {
@@ -338,7 +337,7 @@ impl MailView {
             }
             ViewMode::Source(Source::Raw) => String::from_utf8_lossy(body.body()).into_owned(),
             ViewMode::Url => {
-                let mut t = body_text.to_string();
+                let mut t = body_text;
                 for (lidx, l) in finder.links(&body.text()).enumerate() {
                     let offset = if lidx < 10 {
                         lidx * 3
@@ -411,26 +410,20 @@ impl MailView {
                 }
             } else {
                 match u.content_type() {
-                    ContentType::MessageRfc822 => {
-                        match EnvelopeWrapper::new(u.body().to_vec()) {
-                            Ok(wrapper) => {
-                                context.replies.push_back(UIEvent::Action(Tab(New(Some(
-                                    Box::new(EnvelopeView::new(
-                                        wrapper,
-                                        None,
-                                        None,
-                                        self.coordinates.0,
-                                    )),
-                                )))));
-                            }
-                            Err(e) => {
-                                context.replies.push_back(UIEvent::StatusEvent(
-                                    StatusEvent::DisplayMessage(format!("{}", e)),
-                                ));
-                            }
+                    ContentType::MessageRfc822 => match EnvelopeWrapper::new(u.body().to_vec()) {
+                        Ok(wrapper) => {
+                            context
+                                .replies
+                                .push_back(UIEvent::Action(Tab(New(Some(Box::new(
+                                    EnvelopeView::new(wrapper, None, None, self.coordinates.0),
+                                ))))));
                         }
-                        return;
-                    }
+                        Err(e) => {
+                            context.replies.push_back(UIEvent::StatusEvent(
+                                StatusEvent::DisplayMessage(format!("{}", e)),
+                            ));
+                        }
+                    },
 
                     ContentType::Text { .. } | ContentType::PGPSignature => {
                         self.mode = ViewMode::Attachment(lidx);
@@ -443,7 +436,6 @@ impl MailView {
                                 "Multipart attachments are not supported yet.".to_string(),
                             ),
                         ));
-                        return;
                     }
                     ContentType::Other { ref name, .. } => {
                         let attachment_type = u.mime_type();
@@ -522,7 +514,6 @@ impl MailView {
                                     )
                                 }),
                             ));
-                            return;
                         }
                     }
                     ContentType::OctetStream { ref name } => {
@@ -532,7 +523,6 @@ impl MailView {
                                 name.as_ref().map(|n| n.as_str()).unwrap_or("file")
                             )),
                         ));
-                        return;
                     }
                 }
             }
@@ -543,7 +533,6 @@ impl MailView {
                     "Attachment `{}` not found.",
                     lidx
                 ))));
-            return;
         }
     }
 }
@@ -770,11 +759,10 @@ impl Component for MailView {
                     let height = height!(area).saturating_sub(y).saturating_sub(1);
                     if self.pager.cursor_pos() >= self.headers_no {
                         get_y(upper_left)
-                    } else if height_p > height && self.headers_cursor < self.headers_no + 1 {
-                        y + 1
-                    } else if self.headers_cursor == 0 {
-                        y + 1
-                    } else if height_p < height {
+                    } else if (height_p > height && self.headers_cursor < self.headers_no + 1)
+                        || self.headers_cursor == 0
+                        || height_p < height
+                    {
                         y + 1
                     } else {
                         get_y(upper_left)
@@ -1226,9 +1214,7 @@ impl Component for MailView {
                         let url = {
                             let finder = LinkFinder::new();
                             let t = match body {
-                                Ok(body) => {
-                                    AttachmentBuilder::new(&body).build().text().to_string()
-                                }
+                                Ok(body) => AttachmentBuilder::new(&body).build().text(),
                                 Err(e) => {
                                     context.replies.push_back(UIEvent::Notification(
                                         Some("Failed to open e-mail".to_string()),
@@ -1504,7 +1490,6 @@ impl Component for MailView {
                                              * on its own */
                                             drop(detect);
                                             drop(envelope);
-                                            drop(account);
                                             return super::compose::send_draft(
                                                 ToggleFlag::False,
                                                 context,
@@ -1696,7 +1681,7 @@ fn attachment_tree(
                 attachment_tree(
                     (idx, (depth + 1, &sub_att_vec[i])),
                     branches,
-                    !(iter.peek() == None),
+                    iter.peek() != None,
                     s,
                 );
             }

@@ -283,7 +283,7 @@ impl CellBuffer {
         } else {
             scroll_region.right
         };
-        for y in top..=(top + offset - 1) {
+        for y in top..top + offset {
             for x in l..r {
                 self[(x, y)] = Cell::default();
             }
@@ -1103,7 +1103,7 @@ impl Color {
             _ => u8::from_str_radix(&s, 10)
                 .map_err(|_| de::Error::custom("invalid `color` value"))?,
         };
-        return Ok(Color::Byte(byte));
+        Ok(Color::Byte(byte))
     }
 }
 
@@ -2795,7 +2795,7 @@ fn test_cellbuffer_search() {
         for c in &buf.cellvec()[ind..std::cmp::min(buf.cellvec().len(), ind + 25)] {
             print!("{}", c.ch());
         }
-        println!("");
+        println!();
     }
 }
 

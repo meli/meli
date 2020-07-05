@@ -56,7 +56,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 pub type UID = usize;
 
-pub static SUPPORTED_CAPABILITIES: &'static [&'static str] =
+pub static SUPPORTED_CAPABILITIES: &[&str] =
     &["IDLE", "LOGIN", "LOGINDISABLED", "ENABLE", "IMAP4REV1"];
 
 #[derive(Debug, Default)]
@@ -387,10 +387,9 @@ impl MailBackend for ImapType {
             let path = {
                 let mailboxes = uid_store.mailboxes.lock().await;
 
-                let mailbox = mailboxes.get(&mailbox_hash).ok_or(MeliError::new(format!(
-                    "Mailbox with hash {} not found.",
-                    mailbox_hash
-                )))?;
+                let mailbox = mailboxes.get(&mailbox_hash).ok_or_else(|| {
+                    MeliError::new(format!("Mailbox with hash {} not found.", mailbox_hash))
+                })?;
                 if !mailbox.permissions.lock().unwrap().create_messages {
                     return Err(MeliError::new(format!(
                         "You are not allowed to create messages in mailbox {}",
@@ -402,7 +401,7 @@ impl MailBackend for ImapType {
             };
             let mut response = String::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
-            let flags = flags.unwrap_or(Flag::empty());
+            let flags = flags.unwrap_or_else(Flag::empty);
             conn.send_command(
                 format!(
                     "APPEND \"{}\" ({}) {{{}}}",
@@ -658,10 +657,10 @@ impl MailBackend for ImapType {
     fn set_mailbox_permissions(
         &mut self,
         mailbox_hash: MailboxHash,
-        val: crate::backends::MailboxPermissions,
+        _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
         let uid_store = self.uid_store.clone();
-        let connection = self.connection.clone();
+        //let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let mailboxes = uid_store.mailboxes.lock().await;
             let permissions = mailboxes[&mailbox_hash].permissions();
@@ -746,7 +745,7 @@ impl MailBackend for ImapType {
                             }
                             keyword => {
                                 s.push_str(" KEYWORD ");
-                                s.extend(keyword.chars());
+                                s.push_str(keyword);
                                 s.push_str(" ");
                             }
                         }
@@ -798,7 +797,7 @@ impl MailBackend for ImapType {
                             .map(usize::from_str)
                             .filter_map(std::result::Result::ok)
                             .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
-                            .map(|env_hash_ref| *env_hash_ref),
+                            .copied(),
                     ));
                 }
             }
@@ -1210,7 +1209,7 @@ async fn get_hlpr(
         debug!(
             "fetch response is {} bytes and {} lines",
             response.len(),
-            response.lines().collect::<Vec<&str>>().len()
+            response.lines().count()
         );
         let (_, v, _) = protocol_parser::uid_fetch_responses(&response)?;
         debug!("responses len is {}", v.len());

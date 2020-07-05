@@ -45,8 +45,8 @@ impl VCardVersion for VCardVersion3 {}
 
 pub struct CardDeserializer;
 
-static HEADER: &'static str = "BEGIN:VCARD\r\n"; //VERSION:4.0\r\n";
-static FOOTER: &'static str = "END:VCARD\r\n";
+static HEADER: &str = "BEGIN:VCARD\r\n"; //VERSION:4.0\r\n";
+static FOOTER: &str = "END:VCARD\r\n";
 
 #[derive(Debug)]
 pub struct VCard<T: VCardVersion>(

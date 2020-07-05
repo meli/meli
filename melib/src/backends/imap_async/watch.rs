@@ -170,7 +170,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     const _26_MINS: std::time::Duration = std::time::Duration::from_secs(26 * 60);
     /* duration interval to check other mailboxes for changes */
     const _5_MINS: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-    while let Some(line) = blockn.into_stream().await {
+    while let Some(line) = blockn.as_stream().await {
         let now = std::time::Instant::now();
         if now.duration_since(beat) >= _26_MINS {
             let mut main_conn_lck = main_conn.lock().await;
@@ -203,7 +203,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             .map(|(_, v)| v)
             .map_err(MeliError::from)
         {
-            Ok(Some(Recent(r))) => {
+            Ok(Some(Recent(_r))) => {
                 let mut conn = main_conn.lock().await;
                 /* UID SEARCH RECENT */
                 exit_on_error!(

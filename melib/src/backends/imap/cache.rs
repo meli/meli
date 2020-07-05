@@ -35,8 +35,8 @@ pub use sqlite3_m::*;
 mod sqlite3_m {
     use super::*;
     use crate::sqlite3;
-    const DB_NAME: &'static str = "header_cache.db";
-    const INIT_SCRIPT: &'static str = "PRAGMA foreign_keys = true;
+    const DB_NAME: &str = "header_cache.db";
+    const INIT_SCRIPT: &str = "PRAGMA foreign_keys = true;
     PRAGMA encoding = 'UTF-8';
 
     CREATE TABLE IF NOT EXISTS envelopes (

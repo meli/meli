@@ -84,7 +84,6 @@ pub mod jobs;
 pub mod mailcap;
 pub mod plugins;
 
-use nix;
 use std::os::raw::c_int;
 
 fn notify(

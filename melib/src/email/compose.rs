@@ -340,15 +340,15 @@ fn build_multipart(ret: &mut String, kind: MultipartType, parts: Vec<AttachmentB
     );
     ret.push('\n');
     /* rfc1341 */
-    ret.extend("This is a MIME formatted message with attachments. Use a MIME-compliant client to view it properly.\n".chars());
+    ret.push_str("This is a MIME formatted message with attachments. Use a MIME-compliant client to view it properly.\n");
     for sub in parts {
         ret.push_str("--");
-        ret.extend(boundary.chars());
+        ret.push_str(&boundary);
         ret.push('\n');
         print_attachment(ret, &kind, sub);
     }
     ret.push_str("--");
-    ret.extend(boundary.chars());
+    ret.push_str(&boundary);
     ret.push_str("--\n");
 }
 
@@ -365,7 +365,7 @@ fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder
             ret.push('\n');
         }
         Text { .. } => {
-            ret.extend(a.build().into_raw().chars());
+            ret.push_str(&a.build().into_raw());
             ret.push('\n');
         }
         Multipart {
@@ -384,7 +384,7 @@ fn print_attachment(ret: &mut String, kind: &MultipartType, a: AttachmentBuilder
             ret.push('\n');
         }
         MessageRfc822 | PGPSignature => {
-            ret.extend(format!("Content-Type: {}; charset=\"utf-8\"\n", kind).chars());
+            ret.push_str(&format!("Content-Type: {}; charset=\"utf-8\"\n", kind));
             ret.push('\n');
             ret.push_str(&String::from_utf8_lossy(a.raw()));
             ret.push('\n');

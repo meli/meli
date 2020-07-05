@@ -42,7 +42,6 @@ use super::terminal::*;
 use melib::backends::{AccountHash, MailboxHash};
 use melib::{EnvelopeHash, RefreshEvent, ThreadHash};
 use nix::unistd::Pid;
-use std;
 use std::fmt;
 use std::thread;
 use uuid::Uuid;

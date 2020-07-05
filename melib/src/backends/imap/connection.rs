@@ -274,7 +274,9 @@ impl ImapStream {
             }
         }
 
-        if capabilities.is_none() {
+        if let Some(capabilities) = capabilities {
+            Ok((capabilities, ret))
+        } else {
             /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so check
              * for lazy servers */
             drop(capabilities);
@@ -282,9 +284,6 @@ impl ImapStream {
             ret.read_response(&mut res).unwrap();
             let capabilities = protocol_parser::capabilities(res.as_bytes())?.1;
             let capabilities = HashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
-            Ok((capabilities, ret))
-        } else {
-            let capabilities = capabilities.unwrap();
             Ok((capabilities, ret))
         }
     }
@@ -523,7 +522,7 @@ impl ImapConnection {
             }
         }
         if let Ok(ref mut stream) = self.stream {
-            if let Ok(_) = action(stream) {
+            if action(stream).is_ok() {
                 self.uid_store.is_online.lock().unwrap().0 = Instant::now();
                 return Ok(());
             }

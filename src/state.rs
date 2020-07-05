@@ -679,7 +679,7 @@ impl State {
                     },
                 ),
             );
-            copy_area(&mut self.overlay_grid, &mut self.grid, area, area);
+            copy_area(&mut self.overlay_grid, &self.grid, area, area);
             self.overlay
                 .get_mut(0)
                 .unwrap()

@@ -72,7 +72,6 @@ pub use futures::stream::Stream;
 use std::future::Future;
 pub use std::pin::Pin;
 
-use std;
 use std::collections::HashMap;
 
 #[macro_export]
@@ -111,10 +110,10 @@ impl Default for Backends {
 }
 
 #[cfg(feature = "notmuch_backend")]
-pub const NOTMUCH_ERROR_MSG: &'static str =
+pub const NOTMUCH_ERROR_MSG: &str =
     "libnotmuch5 was not found in your system. Make sure it is installed and in the library paths.\n";
 #[cfg(not(feature = "notmuch_backend"))]
-pub const NOTMUCH_ERROR_MSG: &'static str = "this version of meli is not compiled with notmuch support. Use an appropriate version and make sure libnotmuch5 is installed and in the library paths.\n";
+pub const NOTMUCH_ERROR_MSG: &str = "this version of meli is not compiled with notmuch support. Use an appropriate version and make sure libnotmuch5 is installed and in the library paths.\n";
 
 impl Backends {
     pub fn new() -> Self {
@@ -306,7 +305,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>>;
     fn get_async(
         &mut self,
-        mailbox: &Mailbox,
+        _mailbox: &Mailbox,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
         Err(MeliError::new("Unimplemented."))
     }
@@ -329,7 +328,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId>;
-    fn watch_async(&self, sender: RefreshEventConsumer) -> ResultFuture<()> {
+    fn watch_async(&self, _sender: RefreshEventConsumer) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>>;
@@ -524,9 +523,7 @@ impl SpecialUsageMailbox {
             Some(SpecialUsageMailbox::Archive)
         } else if name.eq_ignore_ascii_case("drafts") {
             Some(SpecialUsageMailbox::Drafts)
-        } else if name.eq_ignore_ascii_case("junk") {
-            Some(SpecialUsageMailbox::Junk)
-        } else if name.eq_ignore_ascii_case("spam") {
+        } else if name.eq_ignore_ascii_case("junk") || name.eq_ignore_ascii_case("spam") {
             Some(SpecialUsageMailbox::Junk)
         } else if name.eq_ignore_ascii_case("sent") {
             Some(SpecialUsageMailbox::Sent)

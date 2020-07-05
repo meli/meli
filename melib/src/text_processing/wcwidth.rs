@@ -169,7 +169,7 @@ fn bisearch(ucs: WChar, table: &'static [Interval]) -> bool {
 
 pub fn wcwidth(ucs: WChar) -> Option<usize> {
     /* sorted list of non-overlapping intervals of non-spacing characters */
-    let combining: &'static [Interval] = &[
+    const COMBINING: &[Interval] = &[
         (0x0300, 0x034E),
         (0x0360, 0x0362),
         (0x0483, 0x0486),
@@ -285,7 +285,7 @@ pub fn wcwidth(ucs: WChar) -> Option<usize> {
         return Some(2);
     }
     /* binary search in table of non-spacing characters */
-    if bisearch(ucs, combining) {
+    if bisearch(ucs, COMBINING) {
         return Some(1);
     }
 
@@ -324,7 +324,7 @@ pub fn wcswidth(mut pwcs: WChar, mut n: usize) -> Option<usize> {
     Some(width)
 }
 
-const EMOJI_RANGES: &'static [Interval] = &[
+const EMOJI_RANGES: &[Interval] = &[
     (0x231A, 0x231B), //    ; Basic_Emoji              ; watch                                                          #  1.1  [2] (⌚..⌛)
     (0x23E9, 0x23EC), //    ; Basic_Emoji              ; fast-forward button                                            #  6.0  [4] (⏩..⏬)
     (0x23F0, 0x23F0), //          ; Basic_Emoji              ; alarm clock                                                    #  6.0  [1] (⏰)

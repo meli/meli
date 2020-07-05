@@ -233,7 +233,7 @@ mod braille {
                 for b in iter {
                     print!("{}", b);
                 }
-                println!("");
+                println!();
             }
 
             println!("fbird: ");
@@ -242,7 +242,7 @@ mod braille {
                 for b in iter {
                     print!("{}", b);
                 }
-                println!("");
+                println!();
             }
             println!("ABC QR code: ");
             for lines in _X_QRCODE.chunks(12) {
@@ -250,7 +250,7 @@ mod braille {
                 for b in iter {
                     print!("{}", b);
                 }
-                println!("");
+                println!();
             }
         }
     }

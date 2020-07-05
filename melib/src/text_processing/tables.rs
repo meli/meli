@@ -22,7 +22,7 @@
 use super::types::LineBreakClass;
 use super::types::LineBreakClass::*;
 
-pub const LINE_BREAK_RULES: &'static [(u32, u32, LineBreakClass)] = &[
+pub const LINE_BREAK_RULES: &[(u32, u32, LineBreakClass)] = &[
     (0x0, 0x8, CM),
     (0x9, 0x9, BA),
     (0xA, 0xA, LF),

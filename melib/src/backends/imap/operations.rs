@@ -37,7 +37,6 @@ pub struct ImapOp {
 impl ImapOp {
     pub fn new(
         uid: usize,
-        mailbox_path: String,
         mailbox_hash: MailboxHash,
         connection: Arc<Mutex<ImapConnection>>,
         uid_store: Arc<UIDStore>,
@@ -66,7 +65,7 @@ impl BackendOp for ImapOp {
             debug!(
                 "fetch response is {} bytes and {} lines",
                 response.len(),
-                response.lines().collect::<Vec<&str>>().len()
+                response.lines().count()
             );
             let UidFetchResponse {
                 uid, flags, body, ..
@@ -105,7 +104,7 @@ impl BackendOp for ImapOp {
                 debug!(
                     "fetch response is {} bytes and {} lines",
                     response.len(),
-                    response.lines().collect::<Vec<&str>>().len()
+                    response.lines().count()
                 );
                 let v = protocol_parser::uid_fetch_flags_response(response.as_bytes())
                     .map(|(_, v)| v)
@@ -131,8 +130,7 @@ impl BackendOp for ImapOp {
                 let val = {
                     let mut bytes_cache = uid_store.byte_cache.lock()?;
                     let cache = bytes_cache.entry(uid).or_default();
-                    let val = cache.flags;
-                    val
+                    cache.flags
                 };
                 Ok(val.unwrap())
             }
@@ -174,11 +172,13 @@ impl BackendOp for ImapOp {
                 Ok(v) => {
                     if v.len() == 1 {
                         debug!("responses len is {}", v.len());
-                        let (uid, (flags, _)) = v[0];
+                        let (uid, (_flags, _)) = v[0];
                         assert_eq!(uid, uid);
                     }
                 }
-                Err(e) => Err(e)?,
+                Err(e) => {
+                    return Err(e);
+                }
             }
             let mut bytes_cache = uid_store.byte_cache.lock()?;
             let cache = bytes_cache.entry(uid).or_default();

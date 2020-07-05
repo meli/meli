@@ -998,9 +998,9 @@ pub mod encodings {
 
     fn quoted_printable_soft_break(input: &[u8]) -> IResult<&[u8], &[u8]> {
         if input.len() < 2 {
-            return Err(nom::Err::Error(
+            Err(nom::Err::Error(
                 (input, "quoted_printable_soft_break(): found EOF").into(),
-            ));
+            ))
         } else if input[0] == b'=' && input[1] == b'\n' {
             Ok((&input[2..], &input[0..2])) // `=\n` is an escaped space character.
         } else if input.len() > 3 && input.starts_with(b"=\r\n") {
@@ -1158,7 +1158,7 @@ pub mod address {
     use crate::email::address::*;
     pub fn display_addr(input: &[u8]) -> IResult<&[u8], Address> {
         if input.is_empty() || input.len() < 3 {
-            return Err(nom::Err::Error((input, "display_addr(): EOF").into()));
+            Err(nom::Err::Error((input, "display_addr(): EOF").into()))
         } else if !is_whitespace!(input[0]) {
             let mut display_name = StrBuilder {
                 offset: 0,
@@ -1260,7 +1260,7 @@ pub mod address {
 
     fn addr_spec(input: &[u8]) -> IResult<&[u8], Address> {
         if input.is_empty() || input.len() < 3 {
-            return Err(nom::Err::Error((input, "addr_spec(): found EOF").into()));
+            Err(nom::Err::Error((input, "addr_spec(): found EOF").into()))
         } else if !is_whitespace!(input[0]) {
             let mut end = input[1..].len();
             let mut flag = false;
@@ -1394,22 +1394,22 @@ pub mod address {
     fn message_id_peek(input: &[u8]) -> IResult<&[u8], &[u8]> {
         let input_length = input.len();
         if input.is_empty() {
-            return Err(nom::Err::Error(
+            Err(nom::Err::Error(
                 (input, "message_id_peek(): found EOF").into(),
-            ));
+            ))
         } else if input_length == 2 || input[0] != b'<' {
-            return Err(nom::Err::Error(
+            Err(nom::Err::Error(
                 (input, "message_id_peek(): expected '<'").into(),
-            ));
+            ))
         } else {
             for (i, &x) in input.iter().take(input_length).enumerate().skip(1) {
                 if x == b'>' {
                     return Ok((&input[i + 1..], &input[0..=i]));
                 }
             }
-            return Err(nom::Err::Error(
+            Err(nom::Err::Error(
                 (input, "message_id_peek(): expected closing '>'").into(),
-            ));
+            ))
         }
     }
 

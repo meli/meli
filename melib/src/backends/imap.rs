@@ -52,7 +52,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 pub type UID = usize;
 
-pub static SUPPORTED_CAPABILITIES: &'static [&'static str] =
+pub static SUPPORTED_CAPABILITIES: &[&str] =
     &["IDLE", "LOGIN", "LOGINDISABLED", "ENABLE", "IMAP4REV1"];
 
 #[derive(Debug, Default)]
@@ -412,7 +412,7 @@ impl MailBackend for ImapType {
                         debug!(
                             "fetch response is {} bytes and {} lines",
                             response.len(),
-                            response.lines().collect::<Vec<&str>>().len()
+                            response.lines().count()
                         );
                         let (_, v, _) = protocol_parser::uid_fetch_responses(&response)?;
                         debug!("responses len is {}", v.len());
@@ -552,7 +552,7 @@ impl MailBackend for ImapType {
                         .send(RefreshEvent {
                             account_hash: uid_store.account_hash,
                             mailbox_hash,
-                            kind: RefreshEventKind::Failure(err.clone()),
+                            kind: RefreshEventKind::Failure(err),
                         });
 
                     return;
@@ -655,9 +655,6 @@ impl MailBackend for ImapType {
         };
         Ok(Box::new(ImapOp::new(
             uid,
-            self.uid_store.mailboxes.read().unwrap()[&mailbox_hash]
-                .imap_path()
-                .to_string(),
             mailbox_hash,
             self.connection.clone(),
             self.uid_store.clone(),
@@ -673,10 +670,9 @@ impl MailBackend for ImapType {
         let path = {
             let mailboxes = self.uid_store.mailboxes.read().unwrap();
 
-            let mailbox = mailboxes.get(&mailbox_hash).ok_or(MeliError::new(format!(
-                "Mailbox with hash {} not found.",
-                mailbox_hash
-            )))?;
+            let mailbox = mailboxes.get(&mailbox_hash).ok_or_else(|| {
+                MeliError::new(format!("Mailbox with hash {} not found.", mailbox_hash))
+            })?;
             if !mailbox.permissions.lock().unwrap().create_messages {
                 return Err(MeliError::new(format!(
                     "You are not allowed to create messages in mailbox {}",
@@ -688,7 +684,7 @@ impl MailBackend for ImapType {
         };
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(5, 0)))?;
-        let flags = flags.unwrap_or(Flag::empty());
+        let flags = flags.unwrap_or_else(Flag::empty);
         conn.send_command(
             format!(
                 "APPEND \"{}\" ({}) {{{}}}",

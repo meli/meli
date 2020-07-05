@@ -19,7 +19,6 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};

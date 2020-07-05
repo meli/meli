@@ -190,7 +190,7 @@ ReadWrite => write!(fmt, "This mailbox is selected with read-write permissions."
 impl ResponseCode {
     fn from(val: &str) -> ResponseCode {
         use ResponseCode::*;
-        if !val.starts_with("[") {
+        if !val.starts_with('[') {
             let msg = val.trim();
             return Alert(msg.to_string());
         }
@@ -235,7 +235,8 @@ pub enum ImapResponse {
 
 impl<T: AsRef<str>> From<T> for ImapResponse {
     fn from(val: T) -> ImapResponse {
-        let val: &str = val.as_ref().split_rn().last().unwrap_or(val.as_ref());
+        let val_ref = val.as_ref();
+        let val: &str = val_ref.split_rn().last().unwrap_or(val_ref);
         debug!(&val);
         let mut val = val[val.as_bytes().find(b" ").unwrap() + 1..].trim();
         // M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n
@@ -616,7 +617,7 @@ pub fn uid_fetch_responses(mut input: &str) -> ImapParseResult<Vec<UidFetchRespo
                 if let Some(el_alert) = el_alert {
                     match &mut alert {
                         Some(Alert(ref mut alert)) => {
-                            alert.extend(el_alert.0.chars());
+                            alert.push_str(&el_alert.0);
                         }
                         a @ None => *a = Some(el_alert),
                     }
@@ -994,13 +995,13 @@ pub fn flags(input: &str) -> IResult<&str, (Flag, Vec<String>)> {
     let mut keywords = Vec::new();
 
     let mut input = input;
-    while !input.starts_with(")") && !input.is_empty() {
-        if input.starts_with("\\") {
+    while !input.starts_with(')') && !input.is_empty() {
+        if input.starts_with('\\') {
             input = &input[1..];
         }
         let mut match_end = 0;
         while match_end < input.len() {
-            if input[match_end..].starts_with(" ") || input[match_end..].starts_with(")") {
+            if input[match_end..].starts_with(' ') || input[match_end..].starts_with(')') {
                 break;
             }
             match_end += 1;
@@ -1337,13 +1338,13 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
         i += 1;
     }
 
-    return Err(nom::Err::Error(
+    Err(nom::Err::Error(
         (input, "quoted(): not a quoted phrase").into(),
-    ));
+    ))
 }
 
 pub fn quoted_or_nil(input: &[u8]) -> IResult<&[u8], Option<Vec<u8>>> {
-    alt((map(tag("NIL"), |_| None), map(quoted, |v| Some(v))))(input.ltrim())
+    alt((map(tag("NIL"), |_| None), map(quoted, Some)))(input.ltrim())
     /*
     alt_complete!(map!(ws!(tag!("NIL")), |_| None) | map!(quoted, |v| Some(v))));
         */
@@ -1508,9 +1509,9 @@ fn string_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
         i += 1;
     }
 
-    return Err(nom::Err::Error(
+    Err(nom::Err::Error(
         (input, "string_token(): not a quoted phrase").into(),
-    ));
+    ))
 }
 
 // ASTRING-CHAR = ATOM-CHAR / resp-specials

@@ -206,21 +206,21 @@ where
             recv(rx) -> r => {
                 match r {
                     Ok(p @ AsyncStatus::Payload(_)) => {
-                        return Ok(p);
+                        Ok(p)
                     },
                     Ok(f @ AsyncStatus::Finished) => {
                         self.active = false;
-                        return Ok(f);
+                        Ok(f)
                     },
                     Ok(a) => {
-                        return Ok(a);
+                        Ok(a)
                     }
                     Err(_) => {
-                        return Err(());
+                        Err(())
                     },
                 }
             },
-        };
+        }
     }
     /// Polls worker thread and returns result.
     pub fn poll(&mut self) -> Result<AsyncStatus<T>, ()> {
@@ -231,25 +231,25 @@ where
         let rx = &self.rx;
         select! {
             default => {
-                return Ok(AsyncStatus::NoUpdate);
+                Ok(AsyncStatus::NoUpdate)
             },
             recv(rx) -> r => {
                 match r {
                     Ok(p @ AsyncStatus::Payload(_)) => {
-                        return Ok(p);
+                        Ok(p)
                     },
                     Ok(f @ AsyncStatus::Finished) => {
                         self.active = false;
-                        return Ok(f);
+                        Ok(f)
                     },
                     Ok(a) => {
-                        return Ok(a);
+                        Ok(a)
                     }
                     Err(_) => {
-                        return Err(());
+                        Err(())
                     },
                 }
             },
-        };
+        }
     }
 }

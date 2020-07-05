@@ -34,7 +34,6 @@ use melib::nom::{
 };
 pub use melib::thread::{SortField, SortOrder};
 use melib::MeliError;
-use std;
 pub mod actions;
 use actions::MailboxOperation;
 use std::collections::HashSet;
@@ -776,11 +775,7 @@ pub fn command_completion_suggestions(input: &str) -> Vec<String> {
         }
         if let Some((s, Filepath)) = _m.last() {
             let p = std::path::Path::new(s);
-            sugg.extend(
-                p.complete(true)
-                    .into_iter()
-                    .map(|m| m.into()),
-            );
+            sugg.extend(p.complete(true).into_iter().map(|m| m.into()));
         }
     }
     sugg.into_iter()

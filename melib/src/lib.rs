@@ -291,7 +291,7 @@ pub mod shellexpand {
                 // the end of the directory listing, right? Unfortunately, no. SYS_getdents64 is finicky.
                 // It sometimes writes a partial list of entries even if the full list would fit."
             }
-            return entries;
+            entries
         }
 
         #[cfg(not(target_os = "linux"))]

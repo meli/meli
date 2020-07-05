@@ -91,7 +91,7 @@ impl MailListingTrait for PlainListing {
     }
 
     fn get_focused_items(&self, _context: &Context) -> SmallVec<[ThreadHash; 8]> {
-        return SmallVec::new();
+        SmallVec::new()
         /*
         let is_selection_empty = self.selection.values().cloned().any(std::convert::identity);
         if is_selection_empty {
@@ -365,8 +365,8 @@ impl ListingTrait for PlainListing {
         for c in grid.row_iter(x..(x + self.data_columns.widths[3]), get_y(upper_left)) {
             grid[c].set_bg(bg_color).set_attrs(attrs);
         }
-        return;
     }
+
     /// Draw the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
@@ -601,7 +601,7 @@ impl ListingTrait for PlainListing {
         self.length = 0;
         self.filtered_selection.clear();
         self.filtered_order.clear();
-        self.filter_term = filter_term.to_string();
+        self.filter_term = filter_term;
         self.row_updates.clear();
         for v in self.selection.values_mut() {
             *v = false;

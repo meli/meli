@@ -1075,7 +1075,8 @@ impl Component for ThreadView {
                 {
                     let visible_entries: Vec<&usize> =
                         self.visible_entries.iter().flat_map(|v| v.iter()).collect();
-                    let search_old_cursor_pos = |entries: Vec<&usize>, x: usize| {
+                    /* search_old_cursor_pos */
+                    self.new_cursor_pos = (|entries: Vec<&usize>, x: usize| {
                         let mut low = 0;
                         let mut high = entries.len() - 1;
                         while low <= high {
@@ -1089,9 +1090,8 @@ impl Component for ThreadView {
                                 high = mid - 1;
                             }
                         }
-                        return high + 1; //mid
-                    };
-                    self.new_cursor_pos = search_old_cursor_pos(visible_entries, self.cursor_pos);
+                        high + 1 //mid
+                    })(visible_entries, self.cursor_pos);
                 }
                 self.cursor_pos = self.new_cursor_pos;
                 self.recalc_visible_entries();

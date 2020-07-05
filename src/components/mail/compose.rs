@@ -220,7 +220,7 @@ impl Composer {
                                     id,
                                     Box::new(
                                         results
-                                            .into_iter()
+                                            .iter()
                                             .map(|a| a.to_string())
                                             .collect::<Vec<String>>()
                                             .join(", "),
@@ -244,7 +244,6 @@ impl Composer {
         );
 
         drop(parent_message);
-        drop(account);
         match context.accounts[coordinates.0]
             .operation(msg)
             .and_then(|mut op| op.as_bytes())
@@ -262,7 +261,7 @@ impl Composer {
                     .spawn_specialized(fut);
                 context.accounts[coordinates.0]
                     .active_jobs
-                    .insert(job_id.clone(), JobRequest::AsBytes);
+                    .insert(job_id, JobRequest::AsBytes);
                 if let Ok(Some(parent_bytes)) = try_recv_timeout!(&mut rcvr) {
                     match parent_bytes {
                         Err(err) => {

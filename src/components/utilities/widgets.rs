@@ -86,13 +86,6 @@ impl Field {
         self.as_str().is_empty()
     }
 
-    pub fn to_string(&self) -> String {
-        match self {
-            Text(ref s, _) => s.as_str().to_string(),
-            Choice(ref v, ref cursor) => v[*cursor].clone(),
-        }
-    }
-
     pub fn into_string(self) -> String {
         match self {
             Text(s, _) => s.into_string(),
@@ -292,7 +285,14 @@ impl Component for Field {
 
 impl fmt::Display for Field {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        Display::fmt("field", f)
+        write!(
+            f,
+            "{}",
+            match self {
+                Text(ref s, _) => s.as_str().to_string(),
+                Choice(ref v, ref cursor) => v[*cursor].clone(),
+            }
+        )
     }
 }
 

@@ -422,12 +422,12 @@ impl Collection {
         }
     }
 
-    pub fn get_env<'g>(&'g self, env_hash: EnvelopeHash) -> EnvelopeRef<'g> {
-        let guard: RwLockReadGuard<'g, _> = self.envelopes.read().unwrap();
+    pub fn get_env(&'_ self, env_hash: EnvelopeHash) -> EnvelopeRef<'_> {
+        let guard: RwLockReadGuard<'_, _> = self.envelopes.read().unwrap();
         EnvelopeRef { guard, env_hash }
     }
 
-    pub fn get_env_mut<'g>(&'g mut self, env_hash: EnvelopeHash) -> EnvelopeRefMut<'g> {
+    pub fn get_env_mut(&'_ mut self, env_hash: EnvelopeHash) -> EnvelopeRefMut<'_> {
         let guard = self.envelopes.write().unwrap();
         EnvelopeRefMut { guard, env_hash }
     }

@@ -84,7 +84,7 @@ fn main() -> Result<(), std::io::Error> {
             .unwrap();
         file.write_all(b"use crate::types::LineBreakClass;\n\n")
             .unwrap();
-        file.write_all(b"const line_break_rules: &'static [(u32, u32, LineBreakClass)] = &[\n")
+        file.write_all(b"const LINE_BREAK_RULES: &[(u32, u32, LineBreakClass)] = &[\n")
             .unwrap();
         for l in &line_break_table {
             file.write_all(format!("    (0x{:X}, 0x{:X}, {:?}),\n", l.0, l.1, l.2).as_bytes())

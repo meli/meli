@@ -23,7 +23,6 @@
 Notification handling components.
 */
 use crate::types::RateLimit;
-use notify_rust;
 use std::process::{Command, Stdio};
 
 use super::*;

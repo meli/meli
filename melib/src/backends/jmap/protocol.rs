@@ -64,7 +64,7 @@ pub trait Method<OBJ: Object>: Serialize {
     const NAME: &'static str;
 }
 
-static USING: &'static [&'static str] = &["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"];
+static USING: &[&str] = &["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"];
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -208,9 +208,7 @@ pub fn get_message_list(conn: &JmapConnection, mailbox: &JmapMailbox) -> Result<
 pub fn get_message(conn: &JmapConnection, ids: &[String]) -> Result<Vec<Envelope>> {
     let email_call: EmailGet = EmailGet::new(
         Get::new()
-            .ids(Some(JmapArgument::value(
-                ids.iter().cloned().collect::<Vec<String>>(),
-            )))
+            .ids(Some(JmapArgument::value(ids.to_vec())))
             .account_id(conn.mail_account_id().to_string()),
     );
 

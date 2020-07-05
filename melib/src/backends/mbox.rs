@@ -31,7 +31,6 @@ use crate::email::*;
 use crate::error::{MeliError, Result};
 use crate::get_path_hash;
 use crate::shellexpand::ShellExpandTrait;
-use libc;
 use memmap::{Mmap, Protection};
 use nom::bytes::complete::tag;
 use nom::character::complete::digit1;
@@ -324,33 +323,33 @@ impl MboxReader {
                         Ok(mut env) => {
                             let mut flags = Flag::empty();
                             if env.other_headers().contains_key("Status") {
-                                if env.other_headers()["Status"].contains("F") {
+                                if env.other_headers()["Status"].contains('F') {
                                     flags.set(Flag::FLAGGED, true);
                                 }
-                                if env.other_headers()["Status"].contains("A") {
+                                if env.other_headers()["Status"].contains('A') {
                                     flags.set(Flag::REPLIED, true);
                                 }
-                                if env.other_headers()["Status"].contains("R") {
+                                if env.other_headers()["Status"].contains('R') {
                                     flags.set(Flag::SEEN, true);
                                 }
-                                if env.other_headers()["Status"].contains("D") {
+                                if env.other_headers()["Status"].contains('D') {
                                     flags.set(Flag::TRASHED, true);
                                 }
                             }
                             if env.other_headers().contains_key("X-Status") {
-                                if env.other_headers()["X-Status"].contains("F") {
+                                if env.other_headers()["X-Status"].contains('F') {
                                     flags.set(Flag::FLAGGED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("A") {
+                                if env.other_headers()["X-Status"].contains('A') {
                                     flags.set(Flag::REPLIED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("R") {
+                                if env.other_headers()["X-Status"].contains('R') {
                                     flags.set(Flag::SEEN, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("D") {
+                                if env.other_headers()["X-Status"].contains('D') {
                                     flags.set(Flag::TRASHED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("T") {
+                                if env.other_headers()["X-Status"].contains('T') {
                                     flags.set(Flag::DRAFT, true);
                                 }
                             }
@@ -422,33 +421,33 @@ impl MboxReader {
                         Ok(mut env) => {
                             let mut flags = Flag::empty();
                             if env.other_headers().contains_key("Status") {
-                                if env.other_headers()["Status"].contains("F") {
+                                if env.other_headers()["Status"].contains('F') {
                                     flags.set(Flag::FLAGGED, true);
                                 }
-                                if env.other_headers()["Status"].contains("A") {
+                                if env.other_headers()["Status"].contains('A') {
                                     flags.set(Flag::REPLIED, true);
                                 }
-                                if env.other_headers()["Status"].contains("R") {
+                                if env.other_headers()["Status"].contains('R') {
                                     flags.set(Flag::SEEN, true);
                                 }
-                                if env.other_headers()["Status"].contains("D") {
+                                if env.other_headers()["Status"].contains('D') {
                                     flags.set(Flag::TRASHED, true);
                                 }
                             }
                             if env.other_headers().contains_key("X-Status") {
-                                if env.other_headers()["X-Status"].contains("F") {
+                                if env.other_headers()["X-Status"].contains('F') {
                                     flags.set(Flag::FLAGGED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("A") {
+                                if env.other_headers()["X-Status"].contains('A') {
                                     flags.set(Flag::REPLIED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("R") {
+                                if env.other_headers()["X-Status"].contains('R') {
                                     flags.set(Flag::SEEN, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("D") {
+                                if env.other_headers()["X-Status"].contains('D') {
                                     flags.set(Flag::TRASHED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("T") {
+                                if env.other_headers()["X-Status"].contains('T') {
                                     flags.set(Flag::DRAFT, true);
                                 }
                             }
@@ -471,33 +470,33 @@ impl MboxReader {
                         Ok(mut env) => {
                             let mut flags = Flag::empty();
                             if env.other_headers().contains_key("Status") {
-                                if env.other_headers()["Status"].contains("F") {
+                                if env.other_headers()["Status"].contains('F') {
                                     flags.set(Flag::FLAGGED, true);
                                 }
-                                if env.other_headers()["Status"].contains("A") {
+                                if env.other_headers()["Status"].contains('A') {
                                     flags.set(Flag::REPLIED, true);
                                 }
-                                if env.other_headers()["Status"].contains("R") {
+                                if env.other_headers()["Status"].contains('R') {
                                     flags.set(Flag::SEEN, true);
                                 }
-                                if env.other_headers()["Status"].contains("D") {
+                                if env.other_headers()["Status"].contains('D') {
                                     flags.set(Flag::TRASHED, true);
                                 }
                             }
                             if env.other_headers().contains_key("X-Status") {
-                                if env.other_headers()["X-Status"].contains("F") {
+                                if env.other_headers()["X-Status"].contains('F') {
                                     flags.set(Flag::FLAGGED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("A") {
+                                if env.other_headers()["X-Status"].contains('A') {
                                     flags.set(Flag::REPLIED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("R") {
+                                if env.other_headers()["X-Status"].contains('R') {
                                     flags.set(Flag::SEEN, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("D") {
+                                if env.other_headers()["X-Status"].contains('D') {
                                     flags.set(Flag::TRASHED, true);
                                 }
-                                if env.other_headers()["X-Status"].contains("T") {
+                                if env.other_headers()["X-Status"].contains('T') {
                                     flags.set(Flag::DRAFT, true);
                                 }
                             }
@@ -583,9 +582,7 @@ impl MboxReader {
                             Ok((input, env))
                         }
                     }
-                    Err(_err) => {
-                        return Self::MboxRd.parse(orig_input);
-                    }
+                    Err(_err) => Self::MboxRd.parse(orig_input),
                 }
             }
         }
@@ -621,7 +618,7 @@ pub fn mbox_parse(
                         offset += 2;
                     }
                 } else {
-                    Err(e)?;
+                    return Err(e);
                 }
                 continue;
             }
@@ -636,7 +633,7 @@ pub fn mbox_parse(
 
         envelopes.push(env);
     }
-    return Ok((&[], envelopes));
+    Ok((&[], envelopes))
 }
 
 /// Mbox backend
@@ -662,7 +659,7 @@ impl MailBackend for MboxType {
             let mailbox_index = self.mailbox_index.clone();
             let mailboxes = self.mailboxes.clone();
             let mailbox_path = mailboxes.lock().unwrap()[&mailbox_hash].fs_path.clone();
-            let prefer_mbox_type = self.prefer_mbox_type.clone();
+            let prefer_mbox_type = self.prefer_mbox_type;
             let closure = move |_work_context| {
                 let tx = tx.clone();
                 let file = match std::fs::OpenOptions::new()
@@ -691,7 +688,7 @@ impl MailBackend for MboxType {
                 let index = mailboxes_lck[&mailbox_hash].index.clone();
                 drop(mailboxes_lck);
                 let payload = mbox_parse(index, contents.as_slice(), 0, prefer_mbox_type)
-                    .map_err(|e| MeliError::from(e))
+                    .map_err(MeliError::from)
                     .map(|(_, v)| {
                         for v in v.iter() {
                             mailbox_index_lck.insert(v.hash(), mailbox_hash);
@@ -735,7 +732,7 @@ impl MailBackend for MboxType {
             hasher.finish()
         };
         let mailboxes = self.mailboxes.clone();
-        let prefer_mbox_type = self.prefer_mbox_type.clone();
+        let prefer_mbox_type = self.prefer_mbox_type;
         let handle = std::thread::Builder::new()
             .name(format!("watching {}", self.account_name,))
             .spawn(move || {
@@ -813,7 +810,7 @@ impl MailBackend for MboxType {
                                     .lock()
                                     .unwrap()
                                     .values()
-                                    .any(|f| &f.fs_path == &pathbuf)
+                                    .any(|f| f.fs_path == pathbuf)
                                 {
                                     let mailbox_hash = get_path_hash!(&pathbuf);
                                     sender.send(RefreshEvent {
@@ -971,7 +968,7 @@ impl MboxType {
             .path
             .file_name()
             .map(|f| f.to_string_lossy().into())
-            .unwrap_or(String::new());
+            .unwrap_or_default();
         let hash = get_path_hash!(&ret.path);
 
         let read_only = if let Ok(metadata) = std::fs::metadata(&ret.path) {

@@ -422,11 +422,6 @@ impl ImapStream {
         self.stream.write_all(b"\r\n").await?;
         Ok(())
     }
-
-    pub async fn set_nonblocking(&mut self, val: bool) -> Result<()> {
-        //self.stream.set_nonblocking(val).await?;
-        Ok(())
-    }
 }
 
 impl ImapConnection {
@@ -549,11 +544,6 @@ impl ImapConnection {
 
     pub async fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
         self.stream.as_mut()?.send_raw(raw).await?;
-        Ok(())
-    }
-
-    pub async fn set_nonblocking(&mut self, val: bool) -> Result<()> {
-        self.stream.as_mut()?.set_nonblocking(val).await?;
         Ok(())
     }
 
@@ -699,7 +689,7 @@ impl ImapBlockingConnection {
         self.err.as_ref().map(String::as_str)
     }
 
-    pub fn into_stream<'a>(&'a mut self) -> impl Future<Output = Option<Vec<u8>>> + 'a {
+    pub fn as_stream<'a>(&'a mut self) -> impl Future<Output = Option<Vec<u8>>> + 'a {
         self.result.drain(0..self.prev_res_length);
         self.prev_res_length = 0;
         let mut break_flag = false;

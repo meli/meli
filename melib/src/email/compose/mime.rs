@@ -41,16 +41,14 @@ pub fn encode_header(value: &str) -> String {
                      *
                      * Whitespaces inside encoded tokens must be greedily taken,
                      * instead of splitting each non-ascii word into separate encoded tokens. */
-                    if !g.split_whitespace().collect::<Vec<&str>>().is_empty() {
+                    if !g.split_whitespace().next().is_none() {
                         ret.push_str(&format!(
                             "=?UTF-8?B?{}?=",
                             BASE64_MIME
                                 .encode(value[current_window_start..idx].as_bytes())
                                 .trim()
                         ));
-                        if idx != value.len() - 1
-                            && (idx == 0 || value[..idx].chars().last() != Some(' '))
-                        {
+                        if idx != value.len() - 1 && (idx == 0 || !value[..idx].ends_with(' ')) {
                             ret.push(' ');
                         }
                         is_current_window_ascii = true;

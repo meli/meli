@@ -754,7 +754,7 @@ pub use alg::linear;
 mod alg {
     use super::super::grapheme_clusters::TextProcessing;
     use super::super::*;
-    fn cost(i: usize, j: usize, width: usize, minima: &Vec<usize>, offsets: &Vec<usize>) -> usize {
+    fn cost(i: usize, j: usize, width: usize, minima: &[usize], offsets: &[usize]) -> usize {
         let w = offsets[j] + j - offsets[i] - i - 1;
         if w > width {
             return 65536 * (w - width);
@@ -773,7 +773,7 @@ mod alg {
         let mut stack = Vec::new();
         let mut i = 0;
         while i < rows.len() {
-            if stack.len() > 0 {
+            if !stack.is_empty() {
                 let c = columns[stack.len() - 1];
                 if cost(*stack.iter().last().unwrap(), c, width, minima, offsets)
                     < cost(rows[i], c, width, minima, offsets)
@@ -826,12 +826,12 @@ mod alg {
         {
             let mut prev = 0;
             for b in breaks {
-                if text[prev..b.0].ends_with("\n") && text[b.0..].starts_with("\n") {
-                    words.push(text[prev..b.0].trim_end_matches("\n"));
+                if text[prev..b.0].ends_with('\n') && text[b.0..].starts_with('\n') {
+                    words.push(text[prev..b.0].trim_end_matches('\n'));
                     words.push("\n\n");
                 } else if &text[prev..b.0] != "\n" {
-                    words.push(text[prev..b.0].trim_end_matches("\n"));
-                    if text[prev..b.0].ends_with("\n") {
+                    words.push(text[prev..b.0].trim_end_matches('\n'));
+                    if text[prev..b.0].ends_with('\n') {
                         words.push(" ");
                     }
                 }
@@ -922,7 +922,7 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
              * - Split lines with indices using str::match_indices()
              * - Iterate and reflow flow regions, and pass fixed regions through
              */
-            let lines_indices: Vec<usize> = text.match_indices("\n").map(|(i, _)| i).collect();
+            let lines_indices: Vec<usize> = text.match_indices('\n').map(|(i, _)| i).collect();
             let mut prev_index = 0;
             let mut in_paragraph = false;
             let mut paragraph_start = 0;
@@ -946,7 +946,7 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
                     })
                     .unwrap_or(0);
                 trimmed = &trimmed[p_str..];
-                if trimmed.starts_with(" ") {
+                if trimmed.starts_with(' ') {
                     /* Remove space stuffing before checking for ending space character.
                      * [rfc3676#section-4.4] */
                     trimmed = &trimmed[1..];
@@ -999,7 +999,6 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
 
                     let breaks = LineBreakCandidateIter::new(line)
                         .collect::<Vec<(usize, LineBreakCandidate)>>();
-                    &breaks.iter().enumerate().collect::<Vec<_>>();
                     if breaks.len() < 2 {
                         split(&mut ret, line, width);
                         continue;
@@ -1021,7 +1020,7 @@ pub fn split_lines_reflow(text: &str, reflow: Reflow, width: Option<usize>) -> V
                         };
                         if !line[prev_line_offset..end_offset].is_empty() {
                             if prev_line_offset == 0 {
-                                ret.push(format!("{}", &line[prev_line_offset..end_offset]));
+                                ret.push(line[prev_line_offset..end_offset].to_string());
                             } else {
                                 ret.push(format!("⤷{}", &line[prev_line_offset..end_offset]));
                             }
@@ -1046,7 +1045,7 @@ fn split(ret: &mut Vec<String>, mut line: &str, width: usize) {
     while !line.is_empty() {
         let mut chop_index = std::cmp::min(line.len().saturating_sub(1), width);
         while chop_index > 0 && !line.is_char_boundary(chop_index) {
-            chop_index = chop_index - 1;
+            chop_index -= 1;
         }
         if chop_index == 0 {
             ret.push(format!("⤷{}", line));
@@ -1113,11 +1112,11 @@ easy to take MORE than nothing.'"#;
     for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(30)) {
         println!("{}", l);
     }
-    println!("");
+    println!();
     for l in split_lines_reflow(text, Reflow::No, Some(30)) {
         println!("{}", l);
     }
-    println!("");
+    println!();
     let text = r#">>>Take some more tea.
 >>I've had nothing yet, so I can't take more.
 >You mean you can't take LESS, it's very easy to take 
@@ -1125,11 +1124,11 @@ easy to take MORE than nothing.'"#;
     for l in split_lines_reflow(text, Reflow::FormatFlowed, Some(20)) {
         println!("{}", l);
     }
-    println!("");
+    println!();
     for l in split_lines_reflow(text, Reflow::No, Some(20)) {
         println!("{}", l);
     }
-    println!("");
+    println!();
     use super::_ALICE_CHAPTER_1;
     for l in split_lines_reflow(_ALICE_CHAPTER_1, Reflow::FormatFlowed, Some(72)) {
         println!("{}", l);

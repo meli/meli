@@ -241,7 +241,7 @@ fn unlink_attrs<'k, 't: 'k>(theme: &'t Theme, mut key: &'k Cow<'static, str>) ->
     }
 }
 
-const DEFAULT_KEYS: &'static [&'static str] = &[
+const DEFAULT_KEYS: &[&str] = &[
     "theme_default",
     "status.bar",
     "status.notification",
@@ -504,7 +504,7 @@ mod regexp {
     use super::*;
     use crate::terminal::FormatTag;
 
-    pub(super) const DEFAULT_TEXT_FORMATTER_KEYS: &'static [&'static str] =
+    pub(super) const DEFAULT_TEXT_FORMATTER_KEYS: &[&str] =
         &["pager.envelope.body", "listing.from", "listing.subject"];
 
     #[derive(Clone)]
@@ -1582,7 +1582,7 @@ impl Default for Themes {
         add!("mail.view.thread.indentation.c", light = { bg: Color::Byte(175) }, dark = { bg: Color::Byte(175) }); // Pink3
         add!("mail.view.thread.indentation.d", light = { bg: Color::Byte(220) }, dark = { bg: Color::Byte(220) }); // Gold1
         add!("mail.view.thread.indentation.e", light = { bg: Color::Byte(172) }, dark = { bg: Color::Byte(172) }); // Orange3
-        add!("mail.view.thread.indentation.f", light = { bg: Color::Byte(072) }, dark = { bg: Color::Byte(072) }); // CadetBlue
+        add!("mail.view.thread.indentation.f", light = { bg: Color::Byte(72) }, dark = { bg: Color::Byte(72) }); // CadetBlue
 
         add!(
             "mail.listing.attachment_flag",
@@ -1727,29 +1727,27 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                     ThemeValue::Link(ref l, ColorField::LikeSelf)
                     | ThemeValue::Link(ref l, ColorField::Fg) => {
                         path.push((l, Course::Fg));
-                        if !visited[&(l, Course::Fg)]
-                            && is_cyclic_util(course, l, visited, stack, path, theme)
+                        if (!visited[&(l, Course::Fg)]
+                            && is_cyclic_util(course, l, visited, stack, path, theme))
+                            || stack[&(l, Course::Fg)]
                         {
-                            return true;
-                        } else if stack[&(l, Course::Fg)] {
                             return true;
                         }
                         path.pop();
                     }
                     ThemeValue::Link(ref l, ColorField::Bg) => {
                         path.push((l, Course::Bg));
-                        if !visited[&(l, Course::Bg)]
-                            && is_cyclic_util(Course::Bg, l, visited, stack, path, theme)
+                        if (!visited[&(l, Course::Bg)]
+                            && is_cyclic_util(Course::Bg, l, visited, stack, path, theme))
+                            || stack[&(l, Course::Bg)]
                         {
-                            return true;
-                        } else if stack[&(l, Course::Bg)] {
                             return true;
                         }
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
                         path.push((ident, Course::ColorAliasFg));
-                        if !visited[&(ident, Course::ColorAliasFg)]
+                        if (!visited[&(ident, Course::ColorAliasFg)]
                             && is_cyclic_util(
                                 Course::ColorAliasFg,
                                 ident,
@@ -1757,10 +1755,9 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                                 stack,
                                 path,
                                 theme,
-                            )
+                            ))
+                            || stack[&(ident, Course::ColorAliasFg)]
                         {
-                            return true;
-                        } else if stack[&(ident, Course::ColorAliasFg)] {
                             return true;
                         }
                         path.pop();
@@ -1771,29 +1768,27 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                     ThemeValue::Link(ref l, ColorField::LikeSelf)
                     | ThemeValue::Link(ref l, ColorField::Bg) => {
                         path.push((l, Course::Bg));
-                        if !visited[&(l, Course::Bg)]
-                            && is_cyclic_util(Course::Bg, l, visited, stack, path, theme)
+                        if (!visited[&(l, Course::Bg)]
+                            && is_cyclic_util(Course::Bg, l, visited, stack, path, theme))
+                            || stack[&(l, Course::Bg)]
                         {
-                            return true;
-                        } else if stack[&(l, Course::Bg)] {
                             return true;
                         }
                         path.pop();
                     }
                     ThemeValue::Link(ref l, ColorField::Fg) => {
                         path.push((l, Course::Fg));
-                        if !visited[&(l, Course::Fg)]
-                            && is_cyclic_util(Course::Fg, l, visited, stack, path, theme)
+                        if (!visited[&(l, Course::Fg)]
+                            && is_cyclic_util(Course::Fg, l, visited, stack, path, theme))
+                            || stack[&(l, Course::Fg)]
                         {
-                            return true;
-                        } else if stack[&(l, Course::Fg)] {
                             return true;
                         }
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
                         path.push((ident, Course::ColorAliasBg));
-                        if !visited[&(ident, Course::ColorAliasBg)]
+                        if (!visited[&(ident, Course::ColorAliasBg)]
                             && is_cyclic_util(
                                 Course::ColorAliasBg,
                                 ident,
@@ -1801,10 +1796,9 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                                 stack,
                                 path,
                                 theme,
-                            )
+                            ))
+                            || stack[&(ident, Course::ColorAliasBg)]
                         {
-                            return true;
-                        } else if stack[&(ident, Course::ColorAliasBg)] {
                             return true;
                         }
                         path.pop();
@@ -1814,22 +1808,27 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 Course::Attrs => match theme[k].attrs {
                     ThemeValue::Link(ref l, _) => {
                         path.push((l, course));
-                        if !visited[&(l, course)]
-                            && is_cyclic_util(course, l, visited, stack, path, theme)
+                        if (!visited[&(l, course)]
+                            && is_cyclic_util(course, l, visited, stack, path, theme))
+                            || stack[&(l, course)]
                         {
-                            return true;
-                        } else if stack[&(l, course)] {
                             return true;
                         }
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
                         path.push((ident, Course::AttrAlias));
-                        if !visited[&(ident, Course::AttrAlias)]
-                            && is_cyclic_util(Course::AttrAlias, ident, visited, stack, path, theme)
+                        if (!visited[&(ident, Course::AttrAlias)]
+                            && is_cyclic_util(
+                                Course::AttrAlias,
+                                ident,
+                                visited,
+                                stack,
+                                path,
+                                theme,
+                            ))
+                            || stack[&(ident, Course::AttrAlias)]
                         {
-                            return true;
-                        } else if stack[&(ident, Course::AttrAlias)] {
                             return true;
                         }
                         path.pop();
@@ -1848,22 +1847,20 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                             (_, ColorField::Bg) => Course::Bg,
                         };
                         path.push((l, course));
-                        if !visited[&(l, course)]
-                            && is_cyclic_util(course, l, visited, stack, path, theme)
+                        if (!visited[&(l, course)]
+                            && is_cyclic_util(course, l, visited, stack, path, theme))
+                            || stack[&(l, course)]
                         {
-                            return true;
-                        } else if stack[&(l, course)] {
                             return true;
                         }
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
                         path.push((ident, course));
-                        if !visited[&(ident, course)]
-                            && is_cyclic_util(course, ident, visited, stack, path, theme)
+                        if (!visited[&(ident, course)]
+                            && is_cyclic_util(course, ident, visited, stack, path, theme))
+                            || stack[&(ident, course)]
                         {
-                            return true;
-                        } else if stack[&(ident, course)] {
                             return true;
                         }
                         path.pop();
@@ -1873,22 +1870,20 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
                 Course::AttrAlias => match &theme.attr_aliases[k] {
                     ThemeValue::Link(ref l, ()) => {
                         path.push((l, Course::Attrs));
-                        if !visited[&(l, Course::Attrs)]
-                            && is_cyclic_util(Course::Attrs, l, visited, stack, path, theme)
+                        if (!visited[&(l, Course::Attrs)]
+                            && is_cyclic_util(Course::Attrs, l, visited, stack, path, theme))
+                            || stack[&(l, Course::Attrs)]
                         {
-                            return true;
-                        } else if stack[&(l, Course::Attrs)] {
                             return true;
                         }
                         path.pop();
                     }
                     ThemeValue::Alias(ref ident) => {
                         path.push((ident, course));
-                        if !visited[&(ident, course)]
-                            && is_cyclic_util(course, ident, visited, stack, path, theme)
+                        if (!visited[&(ident, course)]
+                            && is_cyclic_util(course, ident, visited, stack, path, theme))
+                            || stack[&(ident, course)]
                         {
-                            return true;
-                        } else if stack[&(ident, course)] {
                             return true;
                         }
                         path.pop();
@@ -1898,7 +1893,7 @@ fn is_cyclic(theme: &Theme) -> std::result::Result<(), String> {
             }
         }
         stack.entry((k, course)).and_modify(|e| *e = false);
-        return false;
+        false
     }
 
     let mut path = SmallVec::new();
@@ -1973,7 +1968,7 @@ fn test_theme_parsing() {
     let def = Themes::default();
     assert!(def.validate().is_ok());
     /* MUST SUCCEED: new user theme `hunter2`, theme `dark` has user redefinitions */
-    const TEST_STR: &'static str = r##"[dark]
+    const TEST_STR: &str = r##"[dark]
 "mail.listing.tag_default" = { fg = "White", bg = "HotPink3" }
 "mail.listing.attachment_flag" = { fg = "mail.listing.tag_default.bg" }
 "mail.view.headers" = { bg = "mail.listing.tag_default.fg" }
@@ -2008,20 +2003,20 @@ fn test_theme_parsing() {
     );
     assert!(parsed.validate().is_ok());
     /* MUST FAIL: theme `dark` contains a cycle */
-    const HAS_CYCLE: &'static str = r##"[dark]
+    const HAS_CYCLE: &str = r##"[dark]
 "mail.listing.compact.even" = { fg = "mail.listing.compact.odd" }
 "mail.listing.compact.odd" = { fg = "mail.listing.compact.even" }
 "##;
     let parsed: Themes = toml::from_str(HAS_CYCLE).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST FAIL: theme `dark` contains an invalid key */
-    const HAS_INVALID_KEYS: &'static str = r##"[dark]
+    const HAS_INVALID_KEYS: &str = r##"[dark]
 "asdfsafsa" = { fg = "Black" }
 "##;
     let parsed: std::result::Result<Themes, _> = toml::from_str(HAS_INVALID_KEYS);
     assert!(parsed.is_err());
     /* MUST SUCCEED: alias $Jebediah resolves to a valid color */
-    const TEST_ALIAS_STR: &'static str = r##"[dark]
+    const TEST_ALIAS_STR: &str = r##"[dark]
 color_aliases= { "Jebediah" = "#b4da55" }
 "mail.listing.tag_default" = { fg = "$Jebediah" }
 "##;
@@ -2036,42 +2031,42 @@ color_aliases= { "Jebediah" = "#b4da55" }
         Color::Rgb(180, 218, 85)
     );
     /* MUST FAIL: Mispell color alias $Jebediah as $Jebedia */
-    const TEST_INVALID_ALIAS_STR: &'static str = r##"[dark]
+    const TEST_INVALID_ALIAS_STR: &str = r##"[dark]
 color_aliases= { "Jebediah" = "#b4da55" }
 "mail.listing.tag_default" = { fg = "$Jebedia" }
 "##;
     let parsed: Themes = toml::from_str(TEST_INVALID_ALIAS_STR).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST FAIL: Color alias $Jebediah is defined as itself */
-    const TEST_CYCLIC_ALIAS_STR: &'static str = r##"[dark]
+    const TEST_CYCLIC_ALIAS_STR: &str = r##"[dark]
 color_aliases= { "Jebediah" = "$Jebediah" }
 "mail.listing.tag_default" = { fg = "$Jebediah" }
 "##;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST FAIL: Attr alias $Jebediah is defined as itself */
-    const TEST_CYCLIC_ALIAS_ATTR_STR: &'static str = r##"[dark]
+    const TEST_CYCLIC_ALIAS_ATTR_STR: &str = r##"[dark]
 attr_aliases= { "Jebediah" = "$Jebediah" }
 "mail.listing.tag_default" = { attrs = "$Jebediah" }
 "##;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_ATTR_STR).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST FAIL: alias $Jebediah resolves to a cycle */
-    const TEST_CYCLIC_ALIAS_STR_2: &'static str = r##"[dark]
+    const TEST_CYCLIC_ALIAS_STR_2: &str = r##"[dark]
 color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default" }
 "mail.listing.tag_default" = { fg = "$Jebediah" }
 "##;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR_2).unwrap();
     assert!(parsed.validate().is_err());
     /* MUST SUCCEED: alias $Jebediah resolves to a key's field */
-    const TEST_CYCLIC_ALIAS_STR_3: &'static str = r##"[dark]
+    const TEST_CYCLIC_ALIAS_STR_3: &str = r##"[dark]
 color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default.bg" }
 "mail.listing.tag_default" = { fg = "$Jebediah", bg = "Black" }
 "##;
     let parsed: Themes = toml::from_str(TEST_CYCLIC_ALIAS_STR_3).unwrap();
     assert!(parsed.validate().is_ok());
     /* MUST FAIL: alias $Jebediah resolves to an invalid key */
-    const TEST_INVALID_LINK_KEY_FIELD_STR: &'static str = r##"[dark]
+    const TEST_INVALID_LINK_KEY_FIELD_STR: &str = r##"[dark]
 color_aliases= { "Jebediah" = "$JebediahJr", "JebediahJr" = "mail.listing.tag_default.attrs" }
 "mail.listing.tag_default" = { fg = "$Jebediah", bg = "Black" }
 "##;

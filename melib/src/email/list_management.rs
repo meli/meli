@@ -61,7 +61,7 @@ impl<'a> ListAction<'a> {
                 });
 
                 vec.into_iter()
-                    .map(|elem| ListAction::from(elem))
+                    .map(ListAction::from)
                     .collect::<SmallVec<[ListAction<'a>; 4]>>()
             })
             .ok()
@@ -85,20 +85,20 @@ pub struct ListActions<'a> {
     pub unsubscribe: Option<SmallVec<[ListAction<'a>; 4]>>,
 }
 
-pub fn list_id_header<'a>(envelope: &'a Envelope) -> Option<&'a str> {
+pub fn list_id_header(envelope: &'_ Envelope) -> Option<&'_ str> {
     envelope
         .other_headers()
         .get("List-ID")
-        .or(envelope.other_headers().get("List-Id"))
+        .or_else(|| envelope.other_headers().get("List-Id"))
         .map(String::as_str)
 }
 
-pub fn list_id<'a>(header: Option<&'a str>) -> Option<&'a str> {
+pub fn list_id(header: Option<&'_ str>) -> Option<&'_ str> {
     /* rfc2919 https://tools.ietf.org/html/rfc2919 */
     /* list-id-header = "List-ID:" [phrase] "<" list-id ">" CRLF */
     header.and_then(|v| {
-        if let Some(l) = v.rfind("<") {
-            if let Some(r) = v.rfind(">") {
+        if let Some(l) = v.rfind('<') {
+            if let Some(r) = v.rfind('>') {
                 if l < r {
                     return Some(&v[l + 1..r]);
                 }
@@ -115,8 +115,8 @@ impl<'a> ListActions<'a> {
         ret.id = list_id_header(envelope);
 
         if let Some(archive) = envelope.other_headers().get("List-Archive") {
-            if archive.starts_with("<") {
-                if let Some(pos) = archive.find(">") {
+            if archive.starts_with('<') {
+                if let Some(pos) = archive.find('>') {
                     ret.archive = Some(&archive[1..pos]);
                 } else {
                     ret.archive = Some(archive);

@@ -134,7 +134,7 @@ impl EnvelopeView {
         .into_owned();
         match self.mode {
             ViewMode::Normal | ViewMode::Subview => {
-                let mut t = body_text.to_string();
+                let mut t = body_text;
                 if body.count_attachments() > 1 {
                     t = body
                         .attachments()
@@ -149,7 +149,7 @@ impl EnvelopeView {
             }
             ViewMode::Raw => String::from_utf8_lossy(body.body()).into_owned(),
             ViewMode::Url => {
-                let mut t = body_text.to_string();
+                let mut t = body_text;
                 for (lidx, l) in finder.links(&body.text()).enumerate() {
                     let offset = if lidx < 10 {
                         lidx * 3
@@ -521,10 +521,7 @@ impl Component for EnvelopeView {
                 let url = {
                     let envelope: &Envelope = self.wrapper.envelope();
                     let finder = LinkFinder::new();
-                    let t = envelope
-                        .body_bytes(self.wrapper.buffer())
-                        .text()
-                        .to_string();
+                    let t = envelope.body_bytes(self.wrapper.buffer()).text();
                     let links: Vec<Link> = finder.links(&t).collect();
                     if let Some(u) = links.get(lidx) {
                         u.as_str().to_string()

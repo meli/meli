@@ -56,7 +56,7 @@ pub fn timestamp_to_string(timestamp: UnixTimestamp, fmt: Option<&str>) -> Strin
         localtime_r(&i as *const i64, &mut new_tm as *mut ::libc::tm);
     }
     let fmt = fmt
-        .map(|slice| CString::new(slice))
+        .map(CString::new)
         .map(|res| res.ok())
         .and_then(|opt| opt);
     let format: &CStr = if let Some(ref s) = fmt {
@@ -139,13 +139,11 @@ fn year_to_secs(year: i64, is_leap: &mut bool) -> std::result::Result<i64, ()> {
                 centuries = 2;
                 rem -= 200;
             }
+        } else if rem >= 100 {
+            centuries = 1;
+            rem -= 100;
         } else {
-            if rem >= 100 {
-                centuries = 1;
-                rem -= 100;
-            } else {
-                centuries = 0;
-            }
+            centuries = 0;
         }
         if rem == 0 {
             *is_leap = false;
@@ -159,10 +157,10 @@ fn year_to_secs(year: i64, is_leap: &mut bool) -> std::result::Result<i64, ()> {
 
     leaps += 97 * cycles + 24 * centuries - if *is_leap { 1 } else { 0 };
 
-    return Ok(match (year - 100).overflowing_mul(31536000) {
-        (_, true) => return Err(()),
-        (res, false) => res + leaps * 86400 + 946684800 + 86400,
-    });
+    match (year - 100).overflowing_mul(31536000) {
+        (_, true) => Err(()),
+        (res, false) => Ok(res + leaps * 86400 + 946684800 + 86400),
+    }
 }
 
 fn month_to_secs(month: usize, is_leap: bool) -> i64 {
@@ -184,7 +182,7 @@ fn month_to_secs(month: usize, is_leap: bool) -> i64 {
     if is_leap && month >= 2 {
         t += 86400;
     }
-    return t;
+    t
 }
 
 pub fn rfc822_to_timestamp<T>(s: T) -> Result<UnixTimestamp>
@@ -239,7 +237,7 @@ where
                 .unwrap_or(0));
         }
     }
-    return Ok(0);
+    Ok(0)
 }
 
 pub fn rfc3339_to_timestamp<T>(s: T) -> Result<UnixTimestamp>
@@ -292,7 +290,7 @@ where
                 .unwrap_or(0));
         }
     }
-    return Ok(0);
+    Ok(0)
 }
 
 // FIXME: Handle non-local timezone?
@@ -311,7 +309,7 @@ where
         if ret.is_null() {
             return Ok(None);
         }
-        return Ok(Some(mktime(&new_tm as *const _) as u64));
+        Ok(Some(mktime(&new_tm as *const _) as u64))
     }
 }
 
@@ -443,7 +441,8 @@ fn test_rfcs() {
     );
 }
 
-const TIMEZONE_ABBR: &'static [(&'static [u8], (i8, i8))] = &[
+#[allow(clippy::zero_prefixed_literal)]
+const TIMEZONE_ABBR: &[(&[u8], (i8, i8))] = &[
     (b"ACDT", (10, 30)),
     (b"ACST", (09, 30)),
     (b"ACT", (-05, 0)),

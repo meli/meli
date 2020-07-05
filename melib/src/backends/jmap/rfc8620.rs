@@ -166,10 +166,10 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
         if !self.account_id.is_empty() {
             fields_no += 1;
         }
-        if !self.ids.is_none() {
+        if self.ids.is_some() {
             fields_no += 1;
         }
-        if !self.properties.is_none() {
+        if self.properties.is_some() {
             fields_no += 1;
         }
 
@@ -204,7 +204,7 @@ impl<OBJ: Object + Serialize + std::fmt::Debug> Serialize for Get<OBJ> {
             }
         }
 
-        if !self.properties.is_none() {
+        if self.properties.is_some() {
             state.serialize_field("properties", self.properties.as_ref().unwrap())?;
         }
 

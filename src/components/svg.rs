@@ -437,9 +437,9 @@ impl Component for SVGScreenshotFilter {
     fn set_id(&mut self, _id: ComponentId) {}
 }
 
-const CSS_STYLE: &'static str = r#"#t{font-family:'DejaVu Sans Mono',monospace;font-style:normal;font-size:14px;} text {dominant-baseline: text-before-edge; white-space: pre;} .f{fill:#e5e5e5;} .b{fill:#000;} .c0 {fill:#000;} .c1 {fill:#cd0000;} .c2 {fill:#00cd00;} .c3 {fill:#cdcd00;} .c4 {fill:#00e;} .c5 {fill:#cd00cd;} .c6 {fill:#00cdcd;} .c7 {fill:#e5e5e5;} .c8 {fill:#7f7f7f;} .c9 {fill:#f00;} .c10 {fill:#0f0;} .c11 {fill:#ff0;} .c12 {fill:#5c5cff;} .c13 {fill:#f0f;} .c14 {fill:#0ff;} .c15 {fill:#fff;}"#;
+const CSS_STYLE: &str = r#"#t{font-family:'DejaVu Sans Mono',monospace;font-style:normal;font-size:14px;} text {dominant-baseline: text-before-edge; white-space: pre;} .f{fill:#e5e5e5;} .b{fill:#000;} .c0 {fill:#000;} .c1 {fill:#cd0000;} .c2 {fill:#00cd00;} .c3 {fill:#cdcd00;} .c4 {fill:#00e;} .c5 {fill:#cd00cd;} .c6 {fill:#00cdcd;} .c7 {fill:#e5e5e5;} .c8 {fill:#7f7f7f;} .c9 {fill:#f00;} .c10 {fill:#0f0;} .c11 {fill:#ff0;} .c12 {fill:#5c5cff;} .c13 {fill:#f0f;} .c14 {fill:#0ff;} .c15 {fill:#fff;}"#;
 
-const XTERM_COLORS: &'static [(u8, u8, u8)] = &[
+const XTERM_COLORS: &[(u8, u8, u8)] = &[
     /*0*/ (0, 0, 0),
     /*1*/ (128, 0, 0),
     /*2*/ (0, 128, 0),

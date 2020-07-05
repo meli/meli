@@ -283,10 +283,7 @@ impl MailBackend for MaildirType {
                         let op = Box::new(MaildirOp::new(hash, map.clone(), mailbox_hash));
                         if let Ok(e) = Envelope::from_token(op, hash) {
                             mailbox_index.lock().unwrap().insert(e.hash(), mailbox_hash);
-                            let file_name = PathBuf::from(file)
-                                .strip_prefix(&root_path)
-                                .unwrap()
-                                .to_path_buf();
+                            let file_name = file.strip_prefix(&root_path).unwrap().to_path_buf();
                             if let Ok(cached) = cache_dir.place_cache_file(file_name) {
                                 /* place result in cache directory */
                                 let f = match fs::File::create(cached) {
@@ -449,7 +446,6 @@ impl MailBackend for MaildirType {
                                         *v = pathbuf.clone().into();
                                         *k
                                     } else {
-                                        drop(index_lock);
                                         drop(hash_indexes_lock);
                                         /* Did we just miss a Create event? In any case, create
                                          * envelope. */
@@ -608,7 +604,6 @@ impl MailBackend for MaildirType {
                                         .unwrap()
                                         .to_path_buf();
                                     debug!("filename = {:?}", file_name);
-                                    drop(index_lock);
                                     drop(hash_indexes_lock);
                                     if let Some(env) = add_path_to_index(
                                         &hash_indexes,
@@ -813,10 +808,11 @@ impl MaildirType {
                                 &settings,
                             ) {
                                 f.children = recurse_mailboxes(mailboxes, settings, &path)?;
-                                f.children
-                                    .iter()
-                                    .map(|c| mailboxes.get_mut(c).map(|f| f.parent = Some(f.hash)))
-                                    .count();
+                                for c in &f.children {
+                                    if let Some(f) = mailboxes.get_mut(c) {
+                                        f.parent = Some(f.hash);
+                                    }
+                                }
                                 children.push(f.hash);
                                 mailboxes.insert(f.hash, f);
                             } else {
@@ -834,14 +830,11 @@ impl MaildirType {
                                         true,
                                         &settings,
                                     ) {
-                                        f.children
-                                            .iter()
-                                            .map(|c| {
-                                                mailboxes
-                                                    .get_mut(c)
-                                                    .map(|f| f.parent = Some(f.hash))
-                                            })
-                                            .count();
+                                        for c in &f.children {
+                                            if let Some(f) = mailboxes.get_mut(c) {
+                                                f.parent = Some(f.hash);
+                                            }
+                                        }
                                         children.push(f.hash);
                                         mailboxes.insert(f.hash, f);
                                     }
@@ -881,18 +874,22 @@ impl MaildirType {
 
         if mailboxes.is_empty() {
             let children = recurse_mailboxes(&mut mailboxes, settings, &root_path)?;
-            children
-                .iter()
-                .map(|c| mailboxes.get_mut(c).map(|f| f.parent = None))
-                .count();
+            for c in &children {
+                if let Some(f) = mailboxes.get_mut(c) {
+                    f.parent = None;
+                }
+            }
         } else {
-            let root_hash = *mailboxes.keys().nth(0).unwrap();
+            let root_hash = *mailboxes.keys().next().unwrap();
             let children = recurse_mailboxes(&mut mailboxes, settings, &root_path)?;
-            children
-                .iter()
-                .map(|c| mailboxes.get_mut(c).map(|f| f.parent = Some(root_hash)))
-                .count();
-            mailboxes.get_mut(&root_hash).map(|f| f.children = children);
+            for c in &children {
+                if let Some(f) = mailboxes.get_mut(c) {
+                    f.parent = Some(root_hash);
+                }
+            }
+            if let Some(f) = mailboxes.get_mut(&root_hash) {
+                f.children = children;
+            }
         }
         for f in mailboxes.values_mut() {
             if is_subscribed(f.path()) {
@@ -1176,7 +1173,7 @@ impl MaildirType {
 
         let mut writer = io::BufWriter::new(file);
         writer.write_all(&bytes).unwrap();
-        return Ok(());
+        Ok(())
     }
 
     pub fn validate_config(s: &AccountSettings) -> Result<()> {

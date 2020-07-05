@@ -53,7 +53,6 @@ impl ImapOp {
 
 impl BackendOp for ImapOp {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>> {
-        let mut response = String::with_capacity(8 * 1024);
         let connection = self.connection.clone();
         let mailbox_hash = self.mailbox_hash;
         let uid = self.uid;
@@ -154,8 +153,7 @@ impl BackendOp for ImapOp {
                 let val = {
                     let mut bytes_cache = uid_store.byte_cache.lock()?;
                     let cache = bytes_cache.entry(uid).or_default();
-                    let val = cache.flags;
-                    val
+                    cache.flags
                 };
                 Ok(val.unwrap())
             }
@@ -200,7 +198,7 @@ impl BackendOp for ImapOp {
                 Ok(v) => {
                     if v.len() == 1 {
                         debug!("responses len is {}", v.len());
-                        let (_uid, (flags, _)) = v[0];
+                        let (_uid, (_flags, _)) = v[0];
                         assert_eq!(_uid, uid);
                     }
                 }

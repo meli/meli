@@ -515,8 +515,8 @@ impl ListingTrait for ConversationsListing {
                     .set_attrs(attrs);
             }
         }
-        return;
     }
+
     /// Draw the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
@@ -708,7 +708,7 @@ impl ListingTrait for ConversationsListing {
         self.length = 0;
         self.filtered_selection.clear();
         self.filtered_order.clear();
-        self.filter_term = filter_term.to_string();
+        self.filter_term = filter_term;
         self.row_updates.clear();
         for v in self.selection.values_mut() {
             *v = false;
@@ -1359,7 +1359,7 @@ impl Component for ConversationsListing {
                                 .spawn_specialized(job);
                             context.accounts[self.cursor_pos.0]
                                 .active_jobs
-                                .insert(job_id.clone(), crate::conf::accounts::JobRequest::Search);
+                                .insert(job_id, crate::conf::accounts::JobRequest::Search);
                             self.search_job = Some((filter_term.to_string(), chan, job_id));
                         }
                         Err(err) => {

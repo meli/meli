@@ -182,26 +182,26 @@ pub enum JobRequest {
 impl core::fmt::Debug for JobRequest {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
-            JobRequest::Mailboxes(_) => write!(f, "{}", "JobRequest::Mailboxes"),
+            JobRequest::Mailboxes(_) => write!(f, "JobRequest::Mailboxes"),
             JobRequest::Get(hash, _) => write!(f, "JobRequest::Get({})", hash),
-            JobRequest::IsOnline(_) => write!(f, "{}", "JobRequest::IsOnline"),
-            JobRequest::Refresh(_, _) => write!(f, "{}", "JobRequest::Refresh"),
-            JobRequest::SetFlags(_, _) => write!(f, "{}", "JobRequest::SetFlags"),
-            JobRequest::SaveMessage(_, _) => write!(f, "{}", "JobRequest::SaveMessage"),
-            JobRequest::CopyTo(_, _) => write!(f, "{}", "JobRequest::CopyTo"),
-            JobRequest::DeleteMessage(_, _) => write!(f, "{}", "JobRequest::DeleteMessage"),
-            JobRequest::CreateMailbox(_) => write!(f, "{}", "JobRequest::CreateMailbox"),
-            JobRequest::DeleteMailbox(_) => write!(f, "{}", "JobRequest::DeleteMailbox"),
+            JobRequest::IsOnline(_) => write!(f, "JobRequest::IsOnline"),
+            JobRequest::Refresh(_, _) => write!(f, "JobRequest::Refresh"),
+            JobRequest::SetFlags(_, _) => write!(f, "JobRequest::SetFlags"),
+            JobRequest::SaveMessage(_, _) => write!(f, "JobRequest::SaveMessage"),
+            JobRequest::CopyTo(_, _) => write!(f, "JobRequest::CopyTo"),
+            JobRequest::DeleteMessage(_, _) => write!(f, "JobRequest::DeleteMessage"),
+            JobRequest::CreateMailbox(_) => write!(f, "JobRequest::CreateMailbox"),
+            JobRequest::DeleteMailbox(_) => write!(f, "JobRequest::DeleteMailbox"),
             //JobRequest::RenameMailbox,
-            JobRequest::Search => write!(f, "{}", "JobRequest::Search"),
-            JobRequest::AsBytes => write!(f, "{}", "JobRequest::AsBytes"),
+            JobRequest::Search => write!(f, "JobRequest::Search"),
+            JobRequest::AsBytes => write!(f, "JobRequest::AsBytes"),
             JobRequest::SetMailboxPermissions(_, _) => {
-                write!(f, "{}", "JobRequest::SetMailboxPermissions")
+                write!(f, "JobRequest::SetMailboxPermissions")
             }
             JobRequest::SetMailboxSubscription(_, _) => {
-                write!(f, "{}", "JobRequest::SetMailboxSubscription")
+                write!(f, "JobRequest::SetMailboxSubscription")
             }
-            JobRequest::Watch(_) => write!(f, "{}", "JobRequest::Watch"),
+            JobRequest::Watch(_) => write!(f, "JobRequest::Watch"),
         }
     }
 }
@@ -501,7 +501,7 @@ impl Account {
                             let (rcvr, job_id) = self.job_executor.spawn_specialized(mailbox_job);
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                                    StatusEvent::NewJob(job_id.clone()),
+                                    StatusEvent::NewJob(job_id),
                                 )))
                                 .unwrap();
                             self.active_jobs.insert(job_id, JobRequest::Get(*h, rcvr));
@@ -836,7 +836,7 @@ impl Account {
                 let (rcvr, job_id) = self.job_executor.spawn_specialized(refresh_job);
                 self.sender
                     .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                        StatusEvent::NewJob(job_id.clone()),
+                        StatusEvent::NewJob(job_id),
                     )))
                     .unwrap();
                 self.active_jobs
@@ -959,7 +959,7 @@ impl Account {
                                                 self.job_executor.spawn_specialized(mailbox_job);
                                             self.sender
                                                 .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                                                    StatusEvent::NewJob(job_id.clone()),
+                                                    StatusEvent::NewJob(job_id),
                                                 )))
                                                 .unwrap();
                                             self.active_jobs.insert(
@@ -1150,7 +1150,7 @@ impl Account {
         let (rcvr, job_id) = self.job_executor.spawn_specialized(job);
         self.sender
             .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                StatusEvent::NewJob(job_id.clone()),
+                StatusEvent::NewJob(job_id),
             )))
             .unwrap();
         self.active_jobs
@@ -1465,7 +1465,7 @@ impl Account {
                 JobRequest::Get(mailbox_hash, mut chan) => {
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::JobFinished(job_id.clone()),
+                            StatusEvent::JobFinished(*job_id),
                         )))
                         .unwrap();
 
@@ -1491,7 +1491,7 @@ impl Account {
                     let (rcvr, job_id) = self.job_executor.spawn_specialized(rest.into_future());
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::NewJob(job_id.clone()),
+                            StatusEvent::NewJob(job_id),
                         )))
                         .unwrap();
                     self.active_jobs
@@ -1561,7 +1561,7 @@ impl Account {
                     }
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::JobFinished(job_id.clone()),
+                            StatusEvent::JobFinished(*job_id),
                         )))
                         .unwrap();
                 }
@@ -1664,7 +1664,7 @@ impl Account {
                 JobRequest::Search | JobRequest::AsBytes => {
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
-                            StatusEvent::JobFinished(job_id.clone()),
+                            StatusEvent::JobFinished(*job_id),
                         )))
                         .unwrap();
                 }

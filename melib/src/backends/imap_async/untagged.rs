@@ -304,7 +304,7 @@ impl ImapConnection {
                     Ok(mut v) => {
                         if let Some(uid) = v.pop() {
                             let lck = self.uid_store.uid_index.lock().unwrap();
-                            let env_hash = lck.get(&(mailbox_hash, uid)).map(|&h| h);
+                            let env_hash = lck.get(&(mailbox_hash, uid)).copied();
                             drop(lck);
                             if let Some(env_hash) = env_hash {
                                 if !flags.0.intersects(crate::email::Flag::SEEN) {

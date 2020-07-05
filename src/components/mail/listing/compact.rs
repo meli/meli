@@ -481,8 +481,8 @@ impl ListingTrait for CompactListing {
         for c in grid.row_iter(x..(self.data_columns.widths[3] + x), get_y(upper_left)) {
             grid[c].set_bg(bg_color).set_attrs(attrs);
         }
-        return;
     }
+
     /// Draw the list of `Envelope`s.
     fn draw_list(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
         if self.cursor_pos.1 != self.new_cursor_pos.1 || self.cursor_pos.0 != self.new_cursor_pos.0
@@ -616,8 +616,8 @@ impl ListingTrait for CompactListing {
             self.data_columns.widths[i] =
                 self.data_columns.segment_tree[i].get_max(top_idx, top_idx + rows) as usize;
         }
-        if self.data_columns.widths.iter().fold(0, |acc, &w| acc + w) > width {
-            let diff = self.data_columns.widths.iter().fold(0, |acc, &w| acc + w) - width;
+        if self.data_columns.widths.iter().sum::<usize>() > width {
+            let diff = self.data_columns.widths.iter().sum::<usize>() - width;
             if self.data_columns.widths[2] > 2 * diff {
                 self.data_columns.widths[2] -= diff;
             } else {

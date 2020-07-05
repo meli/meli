@@ -105,11 +105,6 @@ impl MaildirStream {
         map: HashIndexes,
         mailbox_index: Arc<Mutex<HashMap<EnvelopeHash, MailboxHash>>>,
     ) -> Result<Vec<Envelope>> {
-        let unseen = unseen.clone();
-        let total = total.clone();
-        let map = map.clone();
-        let mailbox_index = mailbox_index.clone();
-        let root_path = root_path.clone();
         let len = chunk.len();
         let size = if len <= 100 { 100 } else { (len / 100) * 100 };
         let mut local_r: Vec<Envelope> = Vec::with_capacity(chunk.len());

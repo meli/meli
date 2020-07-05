@@ -58,7 +58,7 @@ impl JmapConnection {
         };
         if server_conf.server_port != 443 {
             jmap_session_resource_url.push(':');
-            jmap_session_resource_url.extend(server_conf.server_port.to_string().chars());
+            jmap_session_resource_url.push_str(&server_conf.server_port.to_string());
         }
         jmap_session_resource_url.push_str("/.well-known/jmap");
 
