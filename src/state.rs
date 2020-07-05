@@ -126,6 +126,7 @@ impl Context {
         let ret = accounts[account_pos].is_online();
         if ret.is_ok() {
             if !was_online {
+                debug!("inserting mailbox hashes:");
                 for mailbox_node in accounts[account_pos].list_mailboxes() {
                     debug!(
                         "hash & mailbox: {:?} {}",
@@ -133,13 +134,6 @@ impl Context {
                         accounts[account_pos][&mailbox_node.hash].name()
                     );
                 }
-                /* Account::watch() needs
-                 * - work_controller to pass `work_context` to the watcher threads and then add them
-                 *   to the controller's static thread list,
-                 * - sender to pass a RefreshEventConsumer closure to watcher threads for them to
-                 *   inform the main binary that refresh events arrived
-                 * - replies to report any failures to the user
-                 */
                 accounts[account_pos].watch();
 
                 replies.push_back(UIEvent::AccountStatusChange(account_pos));
@@ -356,7 +350,6 @@ impl State {
         }
 
         s.switch_to_alternate_screen();
-        debug!("inserting mailbox hashes:");
         for i in 0..s.context.accounts.len() {
             if !s.context.accounts[i].is_remote {
                 s.context.accounts[i].watch();

@@ -1419,7 +1419,7 @@ impl Account {
                     self.active_jobs.insert(job_id, JobRequest::IsOnline(rcvr));
                 }
             }
-            return self.backend.read().unwrap().is_online();
+            return Err(MeliError::new("Attempting connection."));
         } else {
             let ret = self.backend.read().unwrap().is_online();
             if ret.is_ok() != self.is_online && ret.is_ok() {
@@ -1586,6 +1586,9 @@ impl Account {
                     if is_online.is_some() {
                         let is_online = is_online.unwrap();
                         if is_online.is_ok() {
+                            if !self.is_online {
+                                self.watch();
+                            }
                             self.is_online = true;
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
@@ -1603,6 +1606,9 @@ impl Account {
                 JobRequest::Refresh(_mailbox_hash, mut chan) => {
                     let r = chan.try_recv().unwrap();
                     if r.is_some() && r.unwrap().is_ok() {
+                        if !self.is_online {
+                            self.watch();
+                        }
                         self.is_online = true;
                     }
                     self.sender
