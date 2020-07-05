@@ -20,6 +20,7 @@
  */
 
 use super::*;
+use crate::conf::accounts::JobRequest;
 use crate::types::segment_tree::SegmentTree;
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
@@ -175,7 +176,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        //accout.job_executor.spawn_specialized(fut);
+                        let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                        account
+                            .active_jobs
+                            .insert(job_id, JobRequest::SetFlags(env_hash, rcvr));
                     }
                 },
                 ListingAction::SetUnseen => match envelope.set_unseen(op) {
@@ -184,7 +188,12 @@ pub trait MailListingTrait: ListingTrait {
                             StatusEvent::DisplayMessage(e.to_string()),
                         ));
                     }
-                    Ok(fut) => {}
+                    Ok(fut) => {
+                        let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                        account
+                            .active_jobs
+                            .insert(job_id, JobRequest::SetFlags(env_hash, rcvr));
+                    }
                 },
                 ListingAction::Delete => {
                     drop(envelope);
@@ -197,20 +206,21 @@ pub trait MailListingTrait: ListingTrait {
                             ));
                             return;
                         }
-                        Ok(fut) => {}
+                        Ok(fut) => {
+                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                            account
+                                .active_jobs
+                                .insert(job_id, JobRequest::DeleteMessage(env_hash, rcvr));
+                        }
                     }
                     continue;
                 }
                 ListingAction::CopyTo(ref mailbox_path) => {
                     drop(envelope);
-                    /*
-                     * FIXME
                     match account
                         .mailbox_by_path(mailbox_path)
-                        .and_then(|mailbox_hash| {
-                            op.as_bytes()
-                                .and_then(|bytes| account.save(bytes, mailbox_hash, None))
-                        }) {
+                        .and_then(|mailbox_hash| op.copy_to(mailbox_hash))
+                    {
                         Err(err) => {
                             context.replies.push_back(UIEvent::Notification(
                                 Some("Could not copy.".to_string()),
@@ -219,16 +229,18 @@ pub trait MailListingTrait: ListingTrait {
                             ));
                             return;
                         }
-                        Ok(fut) => {}
+                        Ok(fut) => {
+                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                            account
+                                .active_jobs
+                                .insert(job_id, JobRequest::SaveMessage(mailbox_hash, rcvr));
+                        }
                     }
-                    */
                     continue;
                 }
                 ListingAction::CopyToOtherAccount(ref account_name, ref mailbox_path) => {
                     drop(envelope);
-                    /*
-                     * FIXME
-                    if let Err(err) = op.as_bytes().map(|b| b.to_vec()).and_then(|bytes| {
+                    if let Err(err) = op.as_bytes().and_then(|bytes_fut| {
                         let account_pos = context
                             .accounts
                             .iter()
@@ -241,7 +253,11 @@ pub trait MailListingTrait: ListingTrait {
                             })?;
                         let account = &mut context.accounts[account_pos];
                         let mailbox_hash = account.mailbox_by_path(mailbox_path)?;
-                        account.save(&bytes, mailbox_hash, None)
+                        let (rcvr, job_id) = account.job_executor.spawn_specialized(bytes_fut);
+                        account
+                            .active_jobs
+                            .insert(job_id, JobRequest::CopyTo(mailbox_hash, rcvr));
+                        Ok(())
                     }) {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not copy.".to_string()),
@@ -250,21 +266,52 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                         return;
                     }
-                    */
                     continue;
                 }
                 ListingAction::MoveTo(ref mailbox_path) => {
                     drop(envelope);
-                    /*
-                     * FIXME
-                    if let Err(err) =
-                        account
-                            .mailbox_by_path(mailbox_path)
-                            .and_then(|mailbox_hash| {
-                                op.as_bytes()
-                                    .and_then(|bytes| account.save(bytes, mailbox_hash, None))
-                            })
+                    match account
+                        .mailbox_by_path(mailbox_path)
+                        .and_then(|mailbox_hash| op.copy_to(mailbox_hash))
                     {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Could not copy.".to_string()),
+                                err.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            return;
+                        }
+                        Ok(fut) => {
+                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                            account
+                                .active_jobs
+                                .insert(job_id, JobRequest::SaveMessage(mailbox_hash, rcvr));
+                        }
+                    }
+                    continue;
+                }
+                ListingAction::MoveToOtherAccount(ref account_name, ref mailbox_path) => {
+                    drop(envelope);
+                    if let Err(err) = op.as_bytes().and_then(|bytes_fut| {
+                        let account_pos = context
+                            .accounts
+                            .iter()
+                            .position(|el| el.name() == account_name)
+                            .ok_or_else(|| {
+                                MeliError::new(format!(
+                                    "`{}` is not a valid account name",
+                                    account_name
+                                ))
+                            })?;
+                        let account = &mut context.accounts[account_pos];
+                        let mailbox_hash = account.mailbox_by_path(mailbox_path)?;
+                        let (rcvr, job_id) = account.job_executor.spawn_specialized(bytes_fut);
+                        account
+                            .active_jobs
+                            .insert(job_id, JobRequest::CopyTo(mailbox_hash, rcvr));
+                        Ok(())
+                    }) {
                         context.replies.push_back(UIEvent::Notification(
                             Some("Could not copy.".to_string()),
                             err.to_string(),
@@ -272,46 +319,12 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                         return;
                     }
-                    */
-                    continue;
-                }
-                ListingAction::MoveToOtherAccount(ref account_name, ref mailbox_path) => {
-                    drop(envelope);
-                    /* FIXME
-                    if let Err(err) = op
-                        .as_bytes()
-                        .map(|b| b.to_vec())
-                        .and_then(|bytes| {
-                            let account_pos = context
-                                .accounts
-                                .iter()
-                                .position(|el| el.name() == account_name)
-                                .ok_or_else(|| {
-                                    MeliError::new(format!(
-                                        "`{}` is not a valid account name",
-                                        account_name
-                                    ))
-                                })?;
-                            let account = &mut context.accounts[account_pos];
-                            let mailbox_hash = account.mailbox_by_path(mailbox_path)?;
-                            account.save(&bytes, mailbox_hash, None)
-                        })
-                        .and_then(|()| {
-                            let account = &mut context.accounts[account_pos];
+                    /*
                             account
                                 .delete(env_hash, mailbox_hash)
                                 .chain_err_summary(|| {
                                     "Envelope was copied but removal from original account failed"
                                 })
-                        })
-                    {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not move.".to_string()),
-                            err.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                        return;
-                    }
                     */
                     continue;
                 }
@@ -326,7 +339,10 @@ pub trait MailListingTrait: ListingTrait {
                             return;
                         }
                         Ok(fut) => {
-                            //FIXME
+                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                            account
+                                .active_jobs
+                                .insert(job_id, JobRequest::SetFlags(env_hash, rcvr));
                         }
                     }
                 }
@@ -341,7 +357,10 @@ pub trait MailListingTrait: ListingTrait {
                             return;
                         }
                         Ok(fut) => {
-                            // FIXME
+                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                            account
+                                .active_jobs
+                                .insert(job_id, JobRequest::SetFlags(env_hash, rcvr));
                         }
                     }
                 }

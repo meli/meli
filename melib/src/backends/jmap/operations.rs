@@ -20,8 +20,6 @@
  */
 
 use super::*;
-
-use crate::error::Result;
 use std::cell::Cell;
 use std::sync::{Arc, RwLock};
 

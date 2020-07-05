@@ -329,6 +329,9 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         sender: RefreshEventConsumer,
         work_context: WorkContext,
     ) -> Result<std::thread::ThreadId>;
+    fn watch_async(&self, sender: RefreshEventConsumer) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>>;
     fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
         Err(MeliError::new("Unimplemented."))

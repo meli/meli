@@ -193,11 +193,15 @@ impl MailView {
                     .and_then(|mut op| op.as_bytes())
                 {
                     Ok(fut) => {
-                        let (chan, job_id) = account.job_executor.spawn_specialized(fut);
+                        let (mut chan, job_id) = account.job_executor.spawn_specialized(fut);
                         debug!(&job_id);
                         self.active_jobs.insert(job_id.clone());
                         account.active_jobs.insert(job_id, JobRequest::AsBytes);
-                        self.state = MailViewState::LoadingBody { job_id, chan };
+                        if let Ok(Some(bytes_result)) = try_recv_timeout!(&mut chan) {
+                            self.state = MailViewState::Loaded { body: bytes_result };
+                        } else {
+                            self.state = MailViewState::LoadingBody { job_id, chan };
+                        }
                     }
                     Err(err) => {
                         context.replies.push_back(UIEvent::StatusEvent(

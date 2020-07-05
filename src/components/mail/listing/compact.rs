@@ -1559,7 +1559,7 @@ impl Component for CompactListing {
                     .map(|(_, _, j)| j == job_id)
                     .unwrap_or(false) =>
             {
-                let (filter_term, mut rcvr, job_id) = self.search_job.take().unwrap();
+                let (filter_term, mut rcvr, _job_id) = self.search_job.take().unwrap();
                 let results = rcvr.try_recv().unwrap().unwrap();
                 self.filter(filter_term, results, context);
                 self.set_dirty(true);

@@ -21,9 +21,11 @@
 
 use super::*;
 use melib::list_management;
-
-use crate::terminal::embed::EmbedGrid;
 use melib::Draft;
+
+use crate::conf::accounts::JobRequest;
+use crate::jobs::{oneshot, JobId};
+use crate::terminal::embed::EmbedGrid;
 use nix::sys::wait::WaitStatus;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -64,6 +66,7 @@ impl std::ops::DerefMut for EmbedStatus {
 #[derive(Debug)]
 pub struct Composer {
     reply_context: Option<(MailboxHash, EnvelopeHash)>,
+    reply_bytes_request: Option<(JobId, oneshot::Receiver<Result<Vec<u8>>>)>,
     account_cursor: usize,
 
     cursor: Cursor,
@@ -89,6 +92,7 @@ impl Default for Composer {
         pager.set_reflow(text_processing::Reflow::FormatFlowed);
         Composer {
             reply_context: None,
+            reply_bytes_request: None,
             account_cursor: 0,
 
             cursor: Cursor::Headers,
@@ -229,21 +233,6 @@ impl Composer {
                 }
             }
         }
-
-        match account.operation(msg) {
-            Err(err) => {
-                context.replies.push_back(UIEvent::Notification(
-                    None,
-                    err.to_string(),
-                    Some(NotificationType::ERROR),
-                ));
-            }
-            Ok(op) => {
-                //FIXME
-                //let parent_bytes = op.as_bytes();
-                //ret.draft = Draft::new_reply(&parent_message, parent_bytes.unwrap());
-            }
-        }
         let subject = parent_message.subject();
         ret.draft.headers_mut().insert(
             "Subject".into(),
@@ -254,6 +243,54 @@ impl Composer {
             },
         );
 
+        drop(parent_message);
+        drop(account);
+        match context.accounts[coordinates.0]
+            .operation(msg)
+            .and_then(|mut op| op.as_bytes())
+        {
+            Err(err) => {
+                context.replies.push_back(UIEvent::Notification(
+                    None,
+                    err.to_string(),
+                    Some(NotificationType::ERROR),
+                ));
+            }
+            Ok(fut) => {
+                let (mut rcvr, job_id) = context.accounts[coordinates.0]
+                    .job_executor
+                    .spawn_specialized(fut);
+                context.accounts[coordinates.0]
+                    .active_jobs
+                    .insert(job_id.clone(), JobRequest::AsBytes);
+                if let Ok(Some(parent_bytes)) = try_recv_timeout!(&mut rcvr) {
+                    match parent_bytes {
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                None,
+                                err.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                        }
+                        Ok(parent_bytes) => {
+                            let env_hash = msg;
+                            let parent_message =
+                                context.accounts[coordinates.0].collection.get_env(env_hash);
+                            let mut new_draft = Draft::new_reply(&parent_message, &parent_bytes);
+                            new_draft
+                                .headers_mut()
+                                .extend(ret.draft.headers_mut().drain());
+                            new_draft
+                                .attachments_mut()
+                                .extend(ret.draft.attachments_mut().drain(..));
+                            ret.set_draft(new_draft);
+                        }
+                    }
+                } else {
+                    ret.reply_bytes_request = Some((job_id, rcvr));
+                }
+            }
+        }
         ret.account_cursor = coordinates.0;
         ret.reply_context = Some((coordinates.1, msg));
         ret
@@ -585,6 +622,48 @@ impl Component for Composer {
     fn process_event(&mut self, mut event: &mut UIEvent, context: &mut Context) -> bool {
         let shortcuts = self.get_shortcuts(context);
         match (&mut self.mode, &mut event) {
+            (_, UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)))
+                if self
+                    .reply_bytes_request
+                    .as_ref()
+                    .map(|(j, _)| j == job_id)
+                    .unwrap_or(false) =>
+            {
+                let bytes = self
+                    .reply_bytes_request
+                    .take()
+                    .unwrap()
+                    .1
+                    .try_recv()
+                    .unwrap()
+                    .unwrap();
+                match bytes {
+                    Ok(parent_bytes) => {
+                        let env_hash = self.reply_context.unwrap().1;
+                        let parent_message = context.accounts[self.account_cursor]
+                            .collection
+                            .get_env(env_hash);
+                        let mut new_draft = Draft::new_reply(&parent_message, &parent_bytes);
+                        new_draft
+                            .headers_mut()
+                            .extend(self.draft.headers_mut().drain());
+                        new_draft
+                            .attachments_mut()
+                            .extend(self.draft.attachments_mut().drain(..));
+                        self.set_draft(new_draft);
+                        self.set_dirty(true);
+                        self.initialized = false;
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some(format!("Failed to load parent envelope")),
+                            err.to_string(),
+                            Some(NotificationType::ERROR),
+                        ));
+                    }
+                }
+                return true;
+            }
             (ViewMode::Edit, _) => {
                 if self.pager.process_event(event, context) {
                     return true;

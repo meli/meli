@@ -569,7 +569,7 @@ impl ImapConnection {
         self.send_command(
             format!(
                 "SELECT \"{}\"",
-                self.uid_store.mailboxes.read().unwrap()[&mailbox_hash].imap_path()
+                self.uid_store.mailboxes.lock().await[&mailbox_hash].imap_path()
             )
             .as_bytes(),
         )
@@ -593,7 +593,7 @@ impl ImapConnection {
         self.send_command(
             format!(
                 "EXAMINE \"{}\"",
-                self.uid_store.mailboxes.read().unwrap()[&mailbox_hash].imap_path()
+                self.uid_store.mailboxes.lock().await[&mailbox_hash].imap_path()
             )
             .as_bytes(),
         )
@@ -679,27 +679,7 @@ pub struct ImapBlockingConnection {
 }
 
 impl From<ImapConnection> for ImapBlockingConnection {
-    fn from(_conn: ImapConnection) -> Self {
-        unimplemented!()
-        /*
-        conn.set_nonblocking(false)
-            .expect("set_nonblocking call failed");
-        conn.stream
-            .as_mut()
-            .map(|s| {
-                s.stream
-                    .set_write_timeout(Some(std::time::Duration::new(30, 0)))
-                    .expect("set_write_timeout call failed")
-            })
-            .expect("set_write_timeout call failed");
-        conn.stream
-            .as_mut()
-            .map(|s| {
-                s.stream
-                    .set_read_timeout(Some(std::time::Duration::new(30, 0)))
-                    .expect("set_read_timeout call failed")
-            })
-            .expect("set_read_timeout call failed");
+    fn from(conn: ImapConnection) -> Self {
         ImapBlockingConnection {
             buf: [0; 1024],
             conn,
@@ -707,7 +687,6 @@ impl From<ImapConnection> for ImapBlockingConnection {
             result: Vec::with_capacity(8 * 1024),
             err: None,
         }
-        */
     }
 }
 
@@ -719,67 +698,79 @@ impl ImapBlockingConnection {
     pub fn err(&self) -> Option<&str> {
         self.err.as_ref().map(String::as_str)
     }
-}
 
-impl Iterator for ImapBlockingConnection {
-    type Item = Vec<u8>;
-    fn next(&mut self) -> Option<Self::Item> {
-        unimplemented!()
-        /*
-
+    pub fn into_stream<'a>(&'a mut self) -> impl Future<Output = Option<Vec<u8>>> + 'a {
         self.result.drain(0..self.prev_res_length);
         self.prev_res_length = 0;
+        let mut break_flag = false;
         let mut prev_failure = None;
-        let ImapBlockingConnection {
-            ref mut prev_res_length,
-            ref mut result,
-            ref mut conn,
-            ref mut buf,
-            ref mut err,
-        } = self;
-        loop {
-            if conn.stream.is_err() {
-                debug!(&conn.stream);
+        async move {
+            if self.conn.stream.is_err() {
+                debug!(&self.conn.stream);
                 return None;
             }
-            match conn.stream.as_mut().unwrap().stream.read(buf) {
-                Ok(0) => return None,
-                Ok(b) => {
-                    result.extend_from_slice(&buf[0..b]);
-                    debug!(unsafe { std::str::from_utf8_unchecked(result) });
-                    if let Some(pos) = result.find(b"\r\n") {
-                        *prev_res_length = pos + b"\r\n".len();
-                        return Some(result[0..*prev_res_length].to_vec());
-                    }
-                    prev_failure = None;
+            loop {
+                if let Some(y) = read(self, &mut break_flag, &mut prev_failure).await {
+                    return Some(y);
                 }
-                Err(e)
-                    if e.kind() == std::io::ErrorKind::WouldBlock
-                        || e.kind() == std::io::ErrorKind::Interrupted =>
-                {
-                    debug!(&e);
-                    if let Some(prev_failure) = prev_failure.as_ref() {
-                        if Instant::now().duration_since(*prev_failure)
-                            >= std::time::Duration::new(60 * 5, 0)
-                        {
-                            *err = Some(e.to_string());
-                            return None;
-                        }
-                    } else {
-                        prev_failure = Some(Instant::now());
-                    }
-                    continue;
-                }
-                Err(e) => {
-                    debug!(&conn.stream);
-                    debug!(&e);
-                    *err = Some(e.to_string());
+                if break_flag {
                     return None;
                 }
             }
         }
-        */
     }
+}
+
+async fn read(
+    conn: &mut ImapBlockingConnection,
+    break_flag: &mut bool,
+    prev_failure: &mut Option<std::time::Instant>,
+) -> Option<Vec<u8>> {
+    let ImapBlockingConnection {
+        ref mut prev_res_length,
+        ref mut result,
+        ref mut conn,
+        ref mut buf,
+        ref mut err,
+    } = conn;
+
+    match conn.stream.as_mut().unwrap().stream.read(buf).await {
+        Ok(0) => {
+            *break_flag = true;
+        }
+        Ok(b) => {
+            result.extend_from_slice(&buf[0..b]);
+            debug!(unsafe { std::str::from_utf8_unchecked(result) });
+            if let Some(pos) = result.find(b"\r\n") {
+                *prev_res_length = pos + b"\r\n".len();
+                return Some(result[0..*prev_res_length].to_vec());
+            }
+            *prev_failure = None;
+        }
+        Err(e)
+            if e.kind() == std::io::ErrorKind::WouldBlock
+                || e.kind() == std::io::ErrorKind::Interrupted =>
+        {
+            debug!(&e);
+            if let Some(prev_failure) = prev_failure.as_ref() {
+                if Instant::now().duration_since(*prev_failure)
+                    >= std::time::Duration::new(60 * 5, 0)
+                {
+                    *err = Some(e.to_string());
+                    *break_flag = true;
+                }
+            } else {
+                *prev_failure = Some(Instant::now());
+            }
+        }
+        Err(e) => {
+            debug!(&conn.stream);
+            debug!(&e);
+            *err = Some(e.to_string());
+            *break_flag = true;
+        }
+    }
+    None
 }
 
 fn lookup_ipv4(host: &str, port: u16) -> Result<SocketAddr> {

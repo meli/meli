@@ -142,7 +142,7 @@ impl JobExecutor {
                         let MeliTask { task, id } = meli_task;
                         debug!("Worker {} got task {:?}", i, id);
                         let _ = catch_unwind(|| task.run());
-                        debug!("Worker {} got result {:?}", i, id);
+                        debug!("Worker {} returned after {:?}", i, id);
                     }
                 })
                 .unwrap();

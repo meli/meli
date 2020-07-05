@@ -20,8 +20,6 @@
  */
 
 use super::*;
-use futures::lock::Mutex as FutureMutex;
-
 use crate::backends::*;
 use crate::email::*;
 use crate::error::{MeliError, Result};

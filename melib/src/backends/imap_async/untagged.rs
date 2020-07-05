@@ -57,7 +57,7 @@ impl ImapConnection {
             MailboxSelection::None => return Ok(false),
         };
         let mailbox =
-            std::clone::Clone::clone(&self.uid_store.mailboxes.read().unwrap()[&mailbox_hash]);
+            std::clone::Clone::clone(&self.uid_store.mailboxes.lock().await[&mailbox_hash]);
 
         let mut response = String::with_capacity(8 * 1024);
         let untagged_response =

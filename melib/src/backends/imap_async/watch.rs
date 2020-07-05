@@ -60,7 +60,7 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
     conn.connect().await?;
     let mut response = String::with_capacity(8 * 1024);
     loop {
-        let mailboxes = uid_store.mailboxes.read()?;
+        let mailboxes = uid_store.mailboxes.lock().await;
         for mailbox in mailboxes.values() {
             examine_updates(mailbox, &mut conn, &uid_store).await?;
         }
@@ -84,8 +84,8 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     conn.connect().await?;
     let mailbox: ImapMailbox = match uid_store
         .mailboxes
-        .read()
-        .unwrap()
+        .lock()
+        .await
         .values()
         .find(|f| f.parent.is_none() && (f.special_usage() == SpecialUsageMailbox::Inbox))
         .map(std::clone::Clone::clone)
@@ -158,37 +158,38 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
             }
             Err(e) => {
                 debug!("{:?}", e);
-                panic!("could not select mailbox");
+                return Err(e).chain_err_summary(|| "could not select mailbox");
             }
         };
     }
     exit_on_error!(conn, mailbox_hash, conn.send_command(b"IDLE").await);
-    let mut iter = ImapBlockingConnection::from(conn);
+    let mut blockn = ImapBlockingConnection::from(conn);
     let mut beat = std::time::Instant::now();
     let mut watch = std::time::Instant::now();
     /* duration interval to send heartbeat */
-    let _26_mins = std::time::Duration::from_secs(26 * 60);
+    const _26_MINS: std::time::Duration = std::time::Duration::from_secs(26 * 60);
     /* duration interval to check other mailboxes for changes */
-    let _5_mins = std::time::Duration::from_secs(5 * 60);
-    while let Some(line) = iter.next() {
+    const _5_MINS: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+    while let Some(line) = blockn.into_stream().await {
         let now = std::time::Instant::now();
-        if now.duration_since(beat) >= _26_mins {
+        if now.duration_since(beat) >= _26_MINS {
             let mut main_conn_lck = main_conn.lock().await;
             exit_on_error!(
-                iter.conn,
+                blockn.conn,
                 mailbox_hash,
-                iter.conn.send_raw(b"DONE").await
-                iter.conn.read_response(&mut response, RequiredResponses::empty()).await
-                iter.conn.send_command(b"IDLE").await
+                blockn.conn.send_raw(b"DONE").await
+                blockn.conn.read_response(&mut response, RequiredResponses::empty()).await
+                blockn.conn.send_command(b"IDLE").await
                 main_conn_lck.send_command(b"NOOP").await
                 main_conn_lck.read_response(&mut response, RequiredResponses::empty()).await
             );
             beat = now;
         }
-        if now.duration_since(watch) >= _5_mins {
+        if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
             let mut conn = main_conn.lock().await;
-            for mailbox in uid_store.mailboxes.read().unwrap().values() {
+            let mailboxes = uid_store.mailboxes.lock().await;
+            for mailbox in mailboxes.values() {
                 exit_on_error!(
                     conn,
                     mailbox_hash,
@@ -243,6 +244,10 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                                         .contains_key(&(mailbox_hash, uid))
                                     {
                                         if let Ok(mut env) = Envelope::from_bytes(
+                                            /* unwrap() is safe since we ask for RFC822 in the
+                                             * above FETCH, thus uid_fetch_responses() if
+                                             * returns a successful parse, it will include the
+                                             * RFC822 response */
                                             body.unwrap(),
                                             flags.as_ref().map(|&(f, _)| f),
                                         ) {
@@ -346,9 +351,8 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                 let mut conn = main_conn.lock().await;
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
                  * */
-                let mut prev_exists = mailbox.exists.lock().unwrap();
                 debug!("exists {}", n);
-                if n > prev_exists.len() {
+                if n > mailbox.exists.lock().unwrap().len() {
                     exit_on_error!(
                         conn,
                         mailbox_hash,
@@ -356,7 +360,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                         conn.send_command(
                             &[
                             b"FETCH",
-                            format!("{}:{}", prev_exists.len() + 1, n).as_bytes(),
+                            format!("{}:{}", mailbox.exists.lock().unwrap().len() + 1, n).as_bytes(),
                             b"(UID FLAGS RFC822)",
                             ]
                             .join(&b' '),
@@ -418,7 +422,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
                                             &[(uid, &env)],
                                         )?;
                                     }
-                                    prev_exists.insert_new(env.hash());
+                                    mailbox.exists.lock().unwrap().insert_new(env.hash());
 
                                     conn.add_refresh_event(RefreshEvent {
                                         account_hash: uid_store.account_hash,
@@ -488,7 +492,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         }
     }
     debug!("IDLE connection dropped");
-    let err: &str = iter.err().unwrap_or("Unknown reason.");
+    let err: &str = blockn.err().unwrap_or("Unknown reason.");
     main_conn.lock().await.add_refresh_event(RefreshEvent {
         account_hash: uid_store.account_hash,
         mailbox_hash,
@@ -759,7 +763,7 @@ pub async fn examine_updates(
         }
         Err(e) => {
             debug!("{:?}", e);
-            panic!("could not select mailbox");
+            return Err(e).chain_err_summary(|| "could not select mailbox");
         }
     };
     Ok(())

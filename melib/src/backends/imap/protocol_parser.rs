@@ -658,13 +658,13 @@ pub fn uid_fetch_response_(
             let (input, _) = take_while(is_digit)(input)?;
             let (input, result) = permutation((
                 preceded(
-                    tag("UID "),
+                    alt((tag("UID "), tag(" UID "))),
                     map_res(digit1, |s| {
                         usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
                     }),
                 ),
                 opt(preceded(
-                    tag("FLAGS "),
+                    alt((tag("FLAGS "), tag(" FLAGS "))),
                     delimited(tag("("), byte_flags, tag(")")),
                 )),
                 length_data(delimited(
@@ -685,13 +685,16 @@ pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], Vec<(usize, (Fla
     many0(|input| -> IResult<&[u8], (usize, (Flag, Vec<String>))> {
         let (input, _) = tag("* ")(input)?;
         let (input, _) = take_while(is_digit)(input)?;
-        let (input, _) = tag(" FETCH ( ")(input)?;
+        let (input, _) = tag(" FETCH (")(input)?;
         let (input, uid_flags) = permutation((
             preceded(
-                tag("UID "),
+                alt((tag("UID "), tag(" UID "))),
                 map_res(digit1, |s| usize::from_str(to_str!(s))),
             ),
-            preceded(tag("FLAGS "), delimited(tag("("), byte_flags, tag(")"))),
+            preceded(
+                alt((tag("FLAGS "), tag(" FLAGS "))),
+                delimited(tag("("), byte_flags, tag(")")),
+            ),
         ))(input.ltrim())?;
         let (input, _) = tag(")\r\n")(input)?;
         Ok((input, (uid_flags.0, uid_flags.1)))
@@ -1356,13 +1359,13 @@ pub fn uid_fetch_envelopes_response(
             let (input, _) = tag(" FETCH (")(input)?;
             let (input, uid_flags) = permutation((
                 preceded(
-                    tag("UID "),
+                    alt((tag("UID "), tag(" UID "))),
                     map_res(digit1, |s| {
                         usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
                     }),
                 ),
                 opt(preceded(
-                    tag("FLAGS "),
+                    alt((tag("FLAGS "), tag(" FLAGS "))),
                     delimited(tag("("), byte_flags, tag(")")),
                 )),
             ))(input.ltrim())?;
@@ -1424,31 +1427,31 @@ pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
     let (input, _) = tag(" (")(input)?;
     let (input, result) = permutation((
         opt(preceded(
-            tag("MESSAGES "),
+            alt((tag("MESSAGES "), tag(" MESSAGES "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
-            tag("RECENT "),
+            alt((tag("RECENT "), tag(" RECENT "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
-            tag("UIDNEXT "),
+            alt((tag("UIDNEXT "), tag(" UIDNEXT "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
-            tag("UIDVALIDITY "),
+            alt((tag("UIDVALIDITY "), tag(" UIDVALIDITY "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
-            tag("UNSEEN "),
+            alt((tag("UNSEEN "), tag(" UNSEEN "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),

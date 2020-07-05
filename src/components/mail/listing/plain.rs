@@ -59,6 +59,11 @@ pub struct PlainListing {
     /// Cache current view.
     data_columns: DataColumns,
 
+    search_job: Option<(
+        String,
+        oneshot::Receiver<Result<SmallVec<[EnvelopeHash; 512]>>>,
+        JobId,
+    )>,
     filter_term: String,
     filtered_selection: Vec<EnvelopeHash>,
     filtered_order: HashMap<EnvelopeHash, usize>,
@@ -587,71 +592,41 @@ impl ListingTrait for PlainListing {
         results: Result<SmallVec<[EnvelopeHash; 512]>>,
         context: &Context,
     ) {
-        /*
-            if filter_term.is_empty() {
-                return;
-            }
+        if filter_term.is_empty() {
+            return;
+        }
 
-            self.order.clear();
-            self.selection.clear();
-            self.length = 0;
-            self.filtered_selection.clear();
-            self.filtered_order.clear();
-            self.filter_term = filter_term.to_string();
-            self.row_updates.clear();
-            for v in self.selection.values_mut() {
-                *v = false;
-            }
+        self.order.clear();
+        self.selection.clear();
+        self.length = 0;
+        self.filtered_selection.clear();
+        self.filtered_order.clear();
+        self.filter_term = filter_term.to_string();
+        self.row_updates.clear();
+        for v in self.selection.values_mut() {
+            *v = false;
+        }
 
-            let account = &context.accounts[self.cursor_pos.0];
-            match account.search(&self.filter_term, self.sort, self.cursor_pos.1) {
-                Ok(results) => {
-                    /*
-                    for env_hash in results {
-                        if !account.collection.contains_key(&env_hash) {
-                            continue;
-                        }
-                        if self.filtered_order.contains_key(&env_hash) {
-                            continue;
-                        }
-                        if self.all_envelopes.contains(&env_hash) {
-                            self.filtered_selection.push(env_hash);
-                            self.filtered_order
-                                .insert(env_hash, self.filtered_selection.len() - 1);
-                        }
+        let account = &context.accounts[self.cursor_pos.0];
+        match results {
+            Ok(results) => {
+                for env_hash in results {
+                    if !account.collection.contains_key(&env_hash) {
+                        continue;
                     }
-                    if !self.filtered_selection.is_empty() {
-                        self.new_cursor_pos.2 =
-                            std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
-                    } else {
-                        let default_cell = {
-                            let mut ret = Cell::with_char(' ');
-                            ret.set_fg(self.color_cache.theme_default.fg)
-                                .set_bg(self.color_cache.theme_default.bg)
-                                .set_attrs(self.color_cache.theme_default.attrs);
-                            ret
-                        };
-                        self.data_columns.columns[0] =
-                            CellBuffer::new_with_context(0, 0, default_cell, context);
+                    if self.filtered_order.contains_key(&env_hash) {
+                        continue;
                     }
-                    self.redraw_list(
-                        context,
-                        Box::new(self.filtered_selection.clone().into_iter())
-                            as Box<dyn Iterator<Item = EnvelopeHash>>,
-                    );
-                    */
+                    if self.all_envelopes.contains(&env_hash) {
+                        self.filtered_selection.push(env_hash);
+                        self.filtered_order
+                            .insert(env_hash, self.filtered_selection.len() - 1);
+                    }
                 }
-                Err(e) => {
-                    self.cursor_pos.2 = 0;
-                    self.new_cursor_pos.2 = 0;
-                    let message = format!(
-                        "Encountered an error while searching for `{}`: {}.",
-                        &self.filter_term, e
-                    );
-                    log(
-                        format!("Failed to search for term {}: {}", &self.filter_term, e),
-                        ERROR,
-                    );
+                if !self.filtered_selection.is_empty() {
+                    self.new_cursor_pos.2 =
+                        std::cmp::min(self.filtered_selection.len() - 1, self.cursor_pos.2);
+                } else {
                     let default_cell = {
                         let mut ret = Cell::with_char(' ');
                         ret.set_fg(self.color_cache.theme_default.fg)
@@ -660,19 +635,45 @@ impl ListingTrait for PlainListing {
                         ret
                     };
                     self.data_columns.columns[0] =
-                        CellBuffer::new_with_context(message.len(), 1, default_cell, context);
-                    write_string_to_grid(
-                        &message,
-                        &mut self.data_columns.columns[0],
-                        self.color_cache.theme_default.fg,
-                        self.color_cache.theme_default.bg,
-                        self.color_cache.theme_default.attrs,
-                        ((0, 0), (message.len() - 1, 0)),
-                        None,
-                    );
+                        CellBuffer::new_with_context(0, 0, default_cell, context);
                 }
+                self.redraw_list(
+                    context,
+                    Box::new(self.filtered_selection.clone().into_iter())
+                        as Box<dyn Iterator<Item = EnvelopeHash>>,
+                );
             }
-        */
+            Err(e) => {
+                self.cursor_pos.2 = 0;
+                self.new_cursor_pos.2 = 0;
+                let message = format!(
+                    "Encountered an error while searching for `{}`: {}.",
+                    &self.filter_term, e
+                );
+                log(
+                    format!("Failed to search for term {}: {}", &self.filter_term, e),
+                    ERROR,
+                );
+                let default_cell = {
+                    let mut ret = Cell::with_char(' ');
+                    ret.set_fg(self.color_cache.theme_default.fg)
+                        .set_bg(self.color_cache.theme_default.bg)
+                        .set_attrs(self.color_cache.theme_default.attrs);
+                    ret
+                };
+                self.data_columns.columns[0] =
+                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+                write_string_to_grid(
+                    &message,
+                    &mut self.data_columns.columns[0],
+                    self.color_cache.theme_default.fg,
+                    self.color_cache.theme_default.bg,
+                    self.color_cache.theme_default.attrs,
+                    ((0, 0), (message.len() - 1, 0)),
+                    None,
+                );
+            }
+        }
     }
 
     fn set_movement(&mut self, mvm: PageMovement) {
@@ -701,6 +702,7 @@ impl PlainListing {
             thread_node_hashes: HashMap::default(),
             order: HashMap::default(),
             filter_term: String::new(),
+            search_job: None,
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
             selection: HashMap::default(),
@@ -1276,8 +1278,41 @@ impl Component for PlainListing {
                 return true;
             }
             UIEvent::Action(Action::Listing(Search(ref filter_term))) if !self.unfocused => {
-                //self.filter(filter_term, context);
-                self.dirty = true;
+                match context.accounts[self.cursor_pos.0].search(
+                    filter_term,
+                    self.sort,
+                    self.cursor_pos.1,
+                ) {
+                    Ok(job) => {
+                        let (chan, job_id) = context.accounts[self.cursor_pos.0]
+                            .job_executor
+                            .spawn_specialized(job);
+                        context.accounts[self.cursor_pos.0]
+                            .active_jobs
+                            .insert(job_id.clone(), crate::conf::accounts::JobRequest::Search);
+                        self.search_job = Some((filter_term.to_string(), chan, job_id));
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not perform search".to_string()),
+                            err.to_string(),
+                            Some(crate::types::NotificationType::ERROR),
+                        ));
+                    }
+                };
+                self.set_dirty(true);
+            }
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self
+                    .search_job
+                    .as_ref()
+                    .map(|(_, _, j)| j == job_id)
+                    .unwrap_or(false) =>
+            {
+                let (filter_term, mut rcvr, _job_id) = self.search_job.take().unwrap();
+                let results = rcvr.try_recv().unwrap().unwrap();
+                self.filter(filter_term, results, context);
+                self.set_dirty(true);
             }
             _ => {}
         }

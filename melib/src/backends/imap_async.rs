@@ -135,7 +135,7 @@ pub struct UIDStore {
     byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 
-    mailboxes: Arc<RwLock<HashMap<MailboxHash, ImapMailbox>>>,
+    mailboxes: Arc<FutureMutex<HashMap<MailboxHash, ImapMailbox>>>,
     is_online: Arc<Mutex<(Instant, Result<()>)>>,
     refresh_events: Arc<Mutex<Vec<RefreshEvent>>>,
     sender: Arc<RwLock<Option<RefreshEventConsumer>>>,
@@ -151,7 +151,7 @@ impl Default for UIDStore {
             uid_index: Default::default(),
             msn_index: Default::default(),
             byte_cache: Default::default(),
-            mailboxes: Arc::new(RwLock::new(Default::default())),
+            mailboxes: Arc::new(FutureMutex::new(Default::default())),
             tag_index: Arc::new(RwLock::new(Default::default())),
             is_online: Arc::new(Mutex::new((
                 Instant::now(),
@@ -204,18 +204,17 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
         sender: RefreshEventConsumer,
     ) -> ResultFuture<()> {
-        let inbox = self
-            .uid_store
-            .mailboxes
-            .read()
-            .unwrap()
-            .get(&mailbox_hash)
-            .map(std::clone::Clone::clone)
-            .unwrap();
         let main_conn = self.connection.clone();
         *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
         Ok(Box::pin(async move {
+            let inbox = uid_store
+                .mailboxes
+                .lock()
+                .await
+                .get(&mailbox_hash)
+                .map(std::clone::Clone::clone)
+                .unwrap();
             let mut conn = main_conn.lock().await;
             watch::examine_updates(&inbox, &mut conn, &uid_store).await?;
             Ok(())
@@ -227,7 +226,7 @@ impl MailBackend for ImapType {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             {
-                let mailboxes = uid_store.mailboxes.read().unwrap();
+                let mailboxes = uid_store.mailboxes.lock().await;
                 if !mailboxes.is_empty() {
                     return Ok(mailboxes
                         .iter()
@@ -236,7 +235,7 @@ impl MailBackend for ImapType {
                 }
             }
             let new_mailboxes = ImapType::imap_mailboxes(&connection).await?;
-            let mut mailboxes = uid_store.mailboxes.write()?;
+            let mut mailboxes = uid_store.mailboxes.lock().await;
             *mailboxes = new_mailboxes;
             /*
             let mut invalid_configs = vec![];
@@ -314,7 +313,7 @@ impl MailBackend for ImapType {
         _mailbox_hash: MailboxHash,
         _sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
-        unimplemented!()
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn watch(
@@ -323,45 +322,39 @@ impl MailBackend for ImapType {
         _work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
         Ok(std::thread::current().id())
-        //Err(MeliError::new("Unimplemented."))
-        //unimplemented!()
-        /*
+    }
+
+    fn watch_async(&self, sender: RefreshEventConsumer) -> ResultFuture<()> {
+        debug!("watch_async called");
         let conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
         let main_conn = self.connection.clone();
         *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
-        let handle = std::thread::Builder::new()
-            .name(format!("{} imap connection", self.account_name.as_str(),))
-            .spawn(move || {
-                let thread = std::thread::current();
-                work_context
-                    .set_status
-                    .send((thread.id(), "watching".to_string()))
-                    .unwrap();
-                let has_idle: bool = main_conn
-                    .lock()
-                    .unwrap()
-                    .capabilities
-                    .iter()
-                    .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"));
-                //let kit = ImapWatchKit {
-                //    conn,
-                //    main_conn,
-                //    uid_store,
-                //    work_context,
-                //};
-                //if has_idle {
-                //    idle(kit).ok().take();
-                //} else {
-                //    poll_with_examine(kit).ok().take();
-                //}
-            })?;
-        Ok(handle.thread().id())
-            */
+        Ok(Box::pin(async move {
+            let has_idle: bool = main_conn
+                .lock()
+                .await
+                .capabilities
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"));
+            debug!(has_idle);
+            let kit = ImapWatchKit {
+                conn,
+                main_conn,
+                uid_store,
+            };
+            if has_idle {
+                idle(kit).await?;
+            } else {
+                poll_with_examine(kit).await?;
+            }
+            debug!("watch_async future returning");
+            Ok(())
+        }))
     }
 
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
-        unimplemented!()
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
@@ -392,7 +385,7 @@ impl MailBackend for ImapType {
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
             let path = {
-                let mailboxes = uid_store.mailboxes.read().unwrap();
+                let mailboxes = uid_store.mailboxes.lock().await;
 
                 let mailbox = mailboxes.get(&mailbox_hash).ok_or(MeliError::new(format!(
                     "Mailbox with hash {} not found.",
@@ -468,7 +461,7 @@ impl MailBackend for ImapType {
              */
 
             {
-                let mailboxes = uid_store.mailboxes.write().unwrap();
+                let mailboxes = uid_store.mailboxes.lock().await;
                 for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
                     if path.starts_with(&root_mailbox.name) {
                         debug!("path starts with {:?}", &root_mailbox);
@@ -508,7 +501,7 @@ impl MailBackend for ImapType {
             let ret: Result<()> = ImapResponse::from(&response).into();
             ret?;
             let new_hash = get_path_hash!(path.as_str());
-            uid_store.mailboxes.write().unwrap().clear();
+            uid_store.mailboxes.lock().await.clear();
             Ok((new_hash, new_mailbox_fut?.await.map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?))
         }))
     }
@@ -525,7 +518,7 @@ impl MailBackend for ImapType {
             let no_select: bool;
             let is_subscribed: bool;
             {
-                let mailboxes = uid_store.mailboxes.read().unwrap();
+                let mailboxes = uid_store.mailboxes.lock().await;
                 no_select = mailboxes[&mailbox_hash].no_select;
                 is_subscribed = mailboxes[&mailbox_hash].is_subscribed();
                 imap_path = mailboxes[&mailbox_hash].imap_path().to_string();
@@ -563,7 +556,7 @@ impl MailBackend for ImapType {
             }
             let ret: Result<()> = ImapResponse::from(&response).into();
             ret?;
-            uid_store.mailboxes.write().unwrap().clear();
+            uid_store.mailboxes.lock().await.clear();
             new_mailbox_fut?.await.map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
         }))
     }
@@ -578,7 +571,7 @@ impl MailBackend for ImapType {
         Ok(Box::pin(async move {
             let command: String;
             {
-                let mailboxes = uid_store.mailboxes.write().unwrap();
+                let mailboxes = uid_store.mailboxes.lock().await;
                 if mailboxes[&mailbox_hash].is_subscribed() == new_val {
                     return Ok(());
                 }
@@ -604,8 +597,8 @@ impl MailBackend for ImapType {
             if ret.is_ok() {
                 uid_store
                     .mailboxes
-                    .write()
-                    .unwrap()
+                    .lock()
+                    .await
                     .entry(mailbox_hash)
                     .and_modify(|entry| {
                         let _ = entry.set_is_subscribed(new_val);
@@ -627,7 +620,7 @@ impl MailBackend for ImapType {
             let command: String;
             let mut response = String::with_capacity(8 * 1024);
             {
-                let mailboxes = uid_store.mailboxes.write().unwrap();
+                let mailboxes = uid_store.mailboxes.lock().await;
                 let permissions = mailboxes[&mailbox_hash].permissions();
                 if !permissions.delete_mailbox {
                     return Err(MeliError::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
@@ -654,10 +647,10 @@ impl MailBackend for ImapType {
             let new_hash = get_path_hash!(new_path.as_str());
             let ret: Result<()> = ImapResponse::from(&response).into();
             ret?;
-            uid_store.mailboxes.write().unwrap().clear();
+            uid_store.mailboxes.lock().await.clear();
             new_mailbox_fut?.await.map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
             Ok(BackendMailbox::clone(
-                &uid_store.mailboxes.read().unwrap()[&new_hash],
+                &uid_store.mailboxes.lock().await[&new_hash],
             ))
         }))
     }
@@ -670,7 +663,7 @@ impl MailBackend for ImapType {
         let uid_store = self.uid_store.clone();
         let connection = self.connection.clone();
         Ok(Box::pin(async move {
-            let mailboxes = uid_store.mailboxes.write().unwrap();
+            let mailboxes = uid_store.mailboxes.lock().await;
             let permissions = mailboxes[&mailbox_hash].permissions();
             if !permissions.change_permissions {
                 return Err(MeliError::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
@@ -1076,7 +1069,7 @@ async fn get_hlpr(
     max_uid: &mut Option<usize>,
 ) -> Result<Vec<Envelope>> {
     let (permissions, mailbox_path, mailbox_exists, no_select, unseen) = {
-        let f = &uid_store.mailboxes.read().unwrap()[&mailbox_hash];
+        let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
         (
             f.permissions.clone(),
             f.imap_path().to_string(),

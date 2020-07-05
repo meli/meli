@@ -126,6 +126,26 @@ impl RequiredResponses {
     }
 }
 
+#[test]
+fn test_imap_required_responses() {
+    let mut ret = String::new();
+    let required_responses = RequiredResponses::FETCH_REQUIRED;
+    let response =
+        &"* 1040 FETCH (UID 1064 FLAGS ())\r\nM15 OK Fetch completed (0.001 + 0.299 secs).\r\n"
+            [0..];
+    for l in response.split_rn() {
+        /*debug!("check line: {}", &l);*/
+        if required_responses.check(l) {
+            ret.push_str(l);
+        }
+    }
+    assert_eq!(&ret, "* 1040 FETCH (UID 1064 FLAGS ())\r\n");
+    let v = protocol_parser::uid_fetch_flags_response(response.as_bytes())
+        .unwrap()
+        .1;
+    assert_eq!(v.len(), 1);
+}
+
 #[derive(Debug)]
 pub struct Alert(String);
 pub type ImapParseResult<'a, T> = Result<(&'a str, T, Option<Alert>)>;
@@ -171,18 +191,18 @@ impl std::fmt::Display for ResponseCode {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         use ResponseCode::*;
         match self {
-    Alert(s)=> write!(fmt, "ALERT: {}", s),
-    Badcharset(None)=> write!(fmt, "Given charset is not supported by this server."),
-    Badcharset(Some(s))=> write!(fmt, "Given charset is not supported by this server. Supported ones are: {}", s),
-    Capability => write!(fmt, "Capability response"),
-    Parse(s) => write!(fmt, "Server error in parsing message headers: {}", s),
-    Permanentflags(s) => write!(fmt, "Mailbox supports these flags: {}", s),
-    ReadOnly=> write!(fmt, "This mailbox is selected read-only."),
-ReadWrite => write!(fmt, "This mailbox is selected with read-write permissions."),
-    Trycreate => write!(fmt, "Failed to operate on the target mailbox because it doesn't exist. Try creating it first."),
-    Uidnext(uid) => write!(fmt, "Next UID value is {}", uid),
-    Uidvalidity(uid) => write!(fmt, "Next UIDVALIDITY value is {}", uid),
-    Unseen(uid) => write!(fmt, "First message without the \\Seen flag is {}", uid),
+            Alert(s)=> write!(fmt, "ALERT: {}", s),
+            Badcharset(None)=> write!(fmt, "Given charset is not supported by this server."),
+            Badcharset(Some(s))=> write!(fmt, "Given charset is not supported by this server. Supported ones are: {}", s),
+            Capability => write!(fmt, "Capability response"),
+            Parse(s) => write!(fmt, "Server error in parsing message headers: {}", s),
+            Permanentflags(s) => write!(fmt, "Mailbox supports these flags: {}", s),
+            ReadOnly=> write!(fmt, "This mailbox is selected read-only."),
+            ReadWrite => write!(fmt, "This mailbox is selected with read-write permissions."),
+            Trycreate => write!(fmt, "Failed to operate on the target mailbox because it doesn't exist. Try creating it first."),
+            Uidnext(uid) => write!(fmt, "Next UID value is {}", uid),
+            Uidvalidity(uid) => write!(fmt, "Next UIDVALIDITY value is {}", uid),
+            Unseen(uid) => write!(fmt, "First message without the \\Seen flag is {}", uid),
         }
     }
 }
@@ -658,13 +678,13 @@ pub fn uid_fetch_response_(
             let (input, _) = take_while(is_digit)(input)?;
             let (input, result) = permutation((
                 preceded(
-                    tag("UID "),
+                    alt((tag("UID "), tag(" UID "))),
                     map_res(digit1, |s| {
                         usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
                     }),
                 ),
                 opt(preceded(
-                    tag("FLAGS "),
+                    alt((tag("FLAGS "), tag(" FLAGS "))),
                     delimited(tag("("), byte_flags, tag(")")),
                 )),
                 length_data(delimited(
@@ -684,15 +704,18 @@ pub fn uid_fetch_response_(
 pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], Vec<(usize, (Flag, Vec<String>))>> {
     many0(|input| -> IResult<&[u8], (usize, (Flag, Vec<String>))> {
         let (input, _) = tag("* ")(input)?;
-        let (input, _) = take_while(is_digit)(input)?;
-        let (input, _) = tag(" FETCH ( ")(input)?;
+        let (input, _msn) = take_while(is_digit)(input)?;
+        let (input, _) = tag(" FETCH (")(input)?;
         let (input, uid_flags) = permutation((
             preceded(
-                tag("UID "),
+                alt((tag("UID "), tag(" UID "))),
                 map_res(digit1, |s| usize::from_str(to_str!(s))),
             ),
-            preceded(tag("FLAGS "), delimited(tag("("), byte_flags, tag(")"))),
-        ))(input.ltrim())?;
+            preceded(
+                alt((tag("FLAGS "), tag(" FLAGS "))),
+                delimited(tag("("), byte_flags, tag(")")),
+            ),
+        ))(input)?;
         let (input, _) = tag(")\r\n")(input)?;
         Ok((input, (uid_flags.0, uid_flags.1)))
     })(input)
@@ -1357,13 +1380,13 @@ pub fn uid_fetch_envelopes_response(
             let (input, _) = tag(" FETCH (")(input)?;
             let (input, uid_flags) = permutation((
                 preceded(
-                    tag("UID "),
+                    alt((tag("UID "), tag(" UID "))),
                     map_res(digit1, |s| {
                         usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
                     }),
                 ),
                 opt(preceded(
-                    tag("FLAGS "),
+                    alt((tag("FLAGS "), tag(" FLAGS "))),
                     delimited(tag("("), byte_flags, tag(")")),
                 )),
             ))(input.ltrim())?;
@@ -1425,31 +1448,31 @@ pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
     let (input, _) = tag(" (")(input)?;
     let (input, result) = permutation((
         opt(preceded(
-            tag("MESSAGES "),
+            alt((tag("MESSAGES "), tag(" MESSAGES "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
-            tag("RECENT "),
+            alt((tag("RECENT "), tag(" RECENT "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
-            tag("UIDNEXT "),
+            alt((tag("UIDNEXT "), tag(" UIDNEXT "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
-            tag("UIDVALIDITY "),
+            alt((tag("UIDVALIDITY "), tag(" UIDVALIDITY "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),
         )),
         opt(preceded(
-            tag("UNSEEN "),
+            alt((tag("UNSEEN "), tag(" UNSEEN "))),
             map_res(digit1, |s| {
                 usize::from_str(unsafe { std::str::from_utf8_unchecked(s) })
             }),

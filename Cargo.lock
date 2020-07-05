@@ -943,6 +943,7 @@ dependencies = [
  "nix",
  "nom",
  "notify",
+ "pin-utils",
  "reqwest",
  "rusqlite",
  "serde",
