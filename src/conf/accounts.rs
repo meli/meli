@@ -507,12 +507,18 @@ impl Account {
                             self.active_jobs.insert(job_id, JobRequest::Get(*h, rcvr));
                         }
                     } else {
-                        entry.worker = Account::new_worker(
+                        entry.worker = match Account::new_worker(
                             f.clone(),
                             &mut self.backend,
                             &self.work_context,
                             self.notify_fn.clone(),
-                        );
+                        ) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                entry.status = MailboxStatus::Failed(err);
+                                None
+                            }
+                        };
                     }
                 }
             });
@@ -532,8 +538,8 @@ impl Account {
         backend: &Arc<RwLock<Box<dyn MailBackend>>>,
         work_context: &WorkContext,
         notify_fn: Arc<NotifyFn>,
-    ) -> Worker {
-        let mut mailbox_handle = backend.write().unwrap().get(&mailbox);
+    ) -> Result<Worker> {
+        let mut mailbox_handle = backend.write().unwrap().get(&mailbox)?;
         let mut builder = AsyncBuilder::new();
         let our_tx = builder.tx();
         let mailbox_hash = mailbox.hash();
@@ -597,7 +603,7 @@ impl Account {
         if let Some(w) = w.work() {
             work_context.new_work.send(w).unwrap();
         }
-        Some(w)
+        Ok(Some(w))
     }
     pub fn reload(&mut self, event: RefreshEvent, mailbox_hash: MailboxHash) -> Option<UIEvent> {
         if !self.mailbox_entries[&mailbox_hash].status.is_available() {
@@ -777,20 +783,35 @@ impl Account {
                     return Some(EnvelopeRemove(env_hash, thread_hash));
                 }
                 RefreshEventKind::Rescan => {
-                    let handle = Account::new_worker(
+                    let handle = match Account::new_worker(
                         self.mailbox_entries[&mailbox_hash].ref_mailbox.clone(),
                         &mut self.backend,
                         &self.work_context,
                         self.notify_fn.clone(),
-                    );
+                    ) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            let ret = Some(Notification(
+                                None,
+                                err.to_string(),
+                                Some(crate::types::NotificationType::ERROR),
+                            ));
+                            self.mailbox_entries
+                                .entry(mailbox_hash)
+                                .and_modify(|entry| {
+                                    entry.status = MailboxStatus::Failed(err);
+                                });
+                            return ret;
+                        }
+                    };
                     self.mailbox_entries
                         .entry(mailbox_hash)
                         .and_modify(|entry| {
                             entry.worker = handle;
                         });
                 }
-                RefreshEventKind::Failure(e) => {
-                    debug!("RefreshEvent Failure: {}", e.to_string());
+                RefreshEventKind::Failure(err) => {
+                    debug!("RefreshEvent Failure: {}", err.to_string());
                     /*
                     context
                         .1
@@ -802,6 +823,11 @@ impl Account {
                         .expect("Could not send event on main channel");
                     */
                     self.watch();
+                    return Some(Notification(
+                        None,
+                        err.to_string(),
+                        Some(crate::types::NotificationType::ERROR),
+                    ));
                 }
             }
         }
@@ -982,12 +1008,22 @@ impl Account {
                                     }
                                 }
                             } else if self.mailbox_entries[&mailbox_hash].worker.is_none() {
-                                let handle = Account::new_worker(
+                                let handle = match Account::new_worker(
                                     self.mailbox_entries[&mailbox_hash].ref_mailbox.clone(),
                                     &mut self.backend,
                                     &self.work_context,
                                     self.notify_fn.clone(),
-                                );
+                                ) {
+                                    Ok(v) => v,
+                                    Err(err) => {
+                                        self.mailbox_entries.entry(mailbox_hash).and_modify(
+                                            |entry| {
+                                                entry.status = MailboxStatus::Failed(err);
+                                            },
+                                        );
+                                        return Err(0);
+                                    }
+                                };
                                 self.mailbox_entries
                                     .entry(mailbox_hash)
                                     .and_modify(|entry| {
@@ -1233,19 +1269,23 @@ impl Account {
                             parent.ref_mailbox = mailboxes.remove(&parent_hash).unwrap();
                         });
                 }
+                let (status, worker) = match Account::new_worker(
+                    mailboxes[&mailbox_hash].clone(),
+                    &mut self.backend,
+                    &self.work_context,
+                    self.notify_fn.clone(),
+                ) {
+                    Ok(v) => (MailboxStatus::Parsing(0, 0), v),
+                    Err(err) => (MailboxStatus::Failed(err), None),
+                };
 
                 self.mailbox_entries.insert(
                     mailbox_hash,
                     MailboxEntry {
                         name: mailboxes[&mailbox_hash].path().to_string(),
-                        status: MailboxStatus::Parsing(0, 0),
+                        status,
                         conf: new,
-                        worker: Account::new_worker(
-                            mailboxes[&mailbox_hash].clone(),
-                            &mut self.backend,
-                            &self.work_context,
-                            self.notify_fn.clone(),
-                        ),
+                        worker,
                         ref_mailbox: mailboxes.remove(&mailbox_hash).unwrap(),
                     },
                 );

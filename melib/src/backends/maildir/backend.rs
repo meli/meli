@@ -195,8 +195,8 @@ impl MailBackend for MaildirType {
         Ok(Box::pin(async { res }))
     }
 
-    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
-        self.multicore(4, mailbox)
+    fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
+        Ok(self.multicore(4, mailbox))
     }
 
     fn get_async(

@@ -203,7 +203,7 @@ impl MailBackend for JmapType {
         }
     }
 
-    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
+    fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
         let mailboxes = self.mailboxes.clone();
         let store = self.store.clone();
@@ -224,7 +224,7 @@ impl MailBackend for JmapType {
             };
             Box::new(closure)
         };
-        w.build(handle)
+        Ok(w.build(handle))
     }
 
     fn watch(

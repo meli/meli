@@ -208,7 +208,7 @@ impl MailBackend for ImapType {
             });
     }
 
-    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
+    fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
         let handle = {
             let tx = w.tx();
@@ -517,7 +517,7 @@ impl MailBackend for ImapType {
             };
             Box::new(closure)
         };
-        w.build(handle)
+        Ok(w.build(handle))
     }
 
     fn refresh(

@@ -321,7 +321,7 @@ impl MailBackend for NotmuchDb {
     fn is_online(&self) -> Result<()> {
         Ok(())
     }
-    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
+    fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
         let mailbox_hash = mailbox.hash();
         let database = NotmuchDb::new_connection(self.path.as_path(), self.lib.clone(), false);
@@ -394,7 +394,7 @@ impl MailBackend for NotmuchDb {
             };
             Box::new(closure)
         };
-        w.build(handle)
+        Ok(w.build(handle))
     }
 
     fn watch(

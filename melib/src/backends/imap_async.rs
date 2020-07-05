@@ -304,8 +304,8 @@ impl MailBackend for ImapType {
         */
     }
 
-    fn get(&mut self, _mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
-        unimplemented!()
+    fn get(&mut self, _mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn refresh(
@@ -321,7 +321,7 @@ impl MailBackend for ImapType {
         _sender: RefreshEventConsumer,
         _work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
-        Ok(std::thread::current().id())
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn watch_async(&self, sender: RefreshEventConsumer) -> ResultFuture<()> {

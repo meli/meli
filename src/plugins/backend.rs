@@ -85,7 +85,7 @@ impl MailBackend for PluginBackend {
 
     fn connect(&mut self) {}
 
-    fn get(&mut self, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
+    fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
         let _mailbox_hash = mailbox.hash();
         let channel = self.channel.clone();
@@ -179,7 +179,7 @@ impl MailBackend for PluginBackend {
             };
             Box::new(closure)
         };
-        w.build(handle)
+        Ok(w.build(handle))
     }
 
     fn refresh(
