@@ -647,6 +647,14 @@ pub struct MboxType {
 }
 
 impl MailBackend for MboxType {
+    fn is_async(&self) -> bool {
+        false
+    }
+
+    fn is_remote(&self) -> bool {
+        false
+    }
+
     fn is_online(&self) -> Result<()> {
         Ok(())
     }

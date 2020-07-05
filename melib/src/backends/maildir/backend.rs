@@ -175,6 +175,14 @@ pub fn move_to_cur(p: PathBuf) -> Result<PathBuf> {
 }
 
 impl MailBackend for MaildirType {
+    fn is_async(&self) -> bool {
+        false
+    }
+
+    fn is_remote(&self) -> bool {
+        false
+    }
+
     fn is_online(&self) -> Result<()> {
         Ok(())
     }

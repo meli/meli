@@ -65,6 +65,16 @@ impl Drop for PluginBackend {
 }
 
 impl MailBackend for PluginBackend {
+    fn is_async(&self) -> bool {
+        // TODO
+        false
+    }
+
+    fn is_remote(&self) -> bool {
+        // TODO
+        false
+    }
+
     fn is_online(&self) -> Result<()> {
         if let Ok(mut is_online) = self.is_online.try_lock() {
             let now = std::time::Instant::now();

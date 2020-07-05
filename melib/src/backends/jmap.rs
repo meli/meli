@@ -190,6 +190,14 @@ pub struct JmapType {
 }
 
 impl MailBackend for JmapType {
+    fn is_async(&self) -> bool {
+        false
+    }
+
+    fn is_remote(&self) -> bool {
+        true
+    }
+
     fn is_online(&self) -> Result<()> {
         self.online.lock().unwrap().1.clone()
     }

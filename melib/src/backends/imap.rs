@@ -185,6 +185,14 @@ pub(self) fn try_lock<T>(
 }
 
 impl MailBackend for ImapType {
+    fn is_async(&self) -> bool {
+        false
+    }
+
+    fn is_remote(&self) -> bool {
+        true
+    }
+
     fn is_online(&self) -> Result<()> {
         //if let Ok(mut g) = try_lock(&self.connection, None) {
         //    let _ = g.connect();

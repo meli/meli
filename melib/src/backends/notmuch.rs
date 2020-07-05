@@ -318,9 +318,18 @@ impl NotmuchDb {
 }
 
 impl MailBackend for NotmuchDb {
+    fn is_async(&self) -> bool {
+        false
+    }
+
+    fn is_remote(&self) -> bool {
+        false
+    }
+
     fn is_online(&self) -> Result<()> {
         Ok(())
     }
+
     fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
         let mailbox_hash = mailbox.hash();
