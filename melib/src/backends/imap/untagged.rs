@@ -19,7 +19,7 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::ImapConnection;
+use super::{ImapConnection, MailboxSelection};
 use crate::backends::imap::protocol_parser::{
     ImapLineSplit, RequiredResponses, UidFetchResponse, UntaggedResponse,
 };
@@ -51,11 +51,9 @@ impl ImapConnection {
                 } else { Ok(()) }?;)+
             };
         }
-        //FIXME
-        let mailbox_hash = if let Some(mailbox_hash) = self.current_mailbox {
-            mailbox_hash
-        } else {
-            return Ok(false);
+        let mailbox_hash = match self.current_mailbox {
+            MailboxSelection::Select(h) | MailboxSelection::Examine(h) => h,
+            MailboxSelection::None => return Ok(false),
         };
         let mailbox =
             std::clone::Clone::clone(&self.uid_store.mailboxes.read().unwrap()[&mailbox_hash]);

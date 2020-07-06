@@ -81,7 +81,7 @@ impl BackendOp for ImapOp {
                 {
                     let mut conn =
                         try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-                    conn.examine_mailbox(self.mailbox_hash, &mut response)?;
+                    conn.examine_mailbox(self.mailbox_hash, &mut response, false)?;
                     conn.send_command(format!("UID FETCH {} (FLAGS RFC822)", self.uid).as_bytes())?;
                     conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)?;
                 }
@@ -131,7 +131,7 @@ impl BackendOp for ImapOp {
                 &self.connection,
                 Some(std::time::Duration::new(2, 0))
             ));
-            or_return_default!(conn.examine_mailbox(self.mailbox_hash, &mut response));
+            or_return_default!(conn.examine_mailbox(self.mailbox_hash, &mut response, false));
             or_return_default!(
                 conn.send_command(format!("UID FETCH {} FLAGS", self.uid).as_bytes())
             );
@@ -170,7 +170,7 @@ impl BackendOp for ImapOp {
 
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-        conn.select_mailbox(self.mailbox_hash, &mut response)?;
+        conn.select_mailbox(self.mailbox_hash, &mut response, false)?;
         debug!(&response);
         conn.send_command(
             format!(
@@ -205,7 +205,7 @@ impl BackendOp for ImapOp {
     fn set_tag(&mut self, envelope: &mut Envelope, tag: String, value: bool) -> Result<()> {
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-        conn.select_mailbox(self.mailbox_hash, &mut response)?;
+        conn.select_mailbox(self.mailbox_hash, &mut response, false)?;
         conn.send_command(
             format!(
                 "UID STORE {} {}FLAGS.SILENT ({})",

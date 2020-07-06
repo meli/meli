@@ -49,13 +49,25 @@ pub struct ImapStream {
     protocol: ImapProtocol,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum MailboxSelection {
+    None,
+    Select(MailboxHash),
+    Examine(MailboxHash),
+}
+
+impl MailboxSelection {
+    pub fn take(&mut self) -> Self {
+        std::mem::replace(self, MailboxSelection::None)
+    }
+}
 #[derive(Debug)]
 pub struct ImapConnection {
     pub stream: Result<ImapStream>,
     pub server_conf: ImapServerConf,
     pub capabilities: Capabilities,
     pub uid_store: Arc<UIDStore>,
-    pub current_mailbox: Option<MailboxHash>,
+    pub current_mailbox: MailboxSelection,
 }
 
 impl Drop for ImapStream {
@@ -395,7 +407,7 @@ impl ImapConnection {
             server_conf: server_conf.clone(),
             capabilities: Capabilities::default(),
             uid_store,
-            current_mailbox: None,
+            current_mailbox: MailboxSelection::None,
         }
     }
 
@@ -531,7 +543,15 @@ impl ImapConnection {
         Err(MeliError::new("Connection timed out"))
     }
 
-    pub fn select_mailbox(&mut self, mailbox_hash: MailboxHash, ret: &mut String) -> Result<()> {
+    pub fn select_mailbox(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        ret: &mut String,
+        force: bool,
+    ) -> Result<()> {
+        if !force && self.current_mailbox == MailboxSelection::Select(mailbox_hash) {
+            return Ok(());
+        }
         self.send_command(
             format!(
                 "SELECT \"{}\"",
@@ -541,11 +561,19 @@ impl ImapConnection {
         )?;
         self.read_response(ret, RequiredResponses::SELECT_REQUIRED)?;
         debug!("select response {}", ret);
-        self.current_mailbox = Some(mailbox_hash);
+        self.current_mailbox = MailboxSelection::Select(mailbox_hash);
         Ok(())
     }
 
-    pub fn examine_mailbox(&mut self, mailbox_hash: MailboxHash, ret: &mut String) -> Result<()> {
+    pub fn examine_mailbox(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        ret: &mut String,
+        force: bool,
+    ) -> Result<()> {
+        if !force && self.current_mailbox == MailboxSelection::Examine(mailbox_hash) {
+            return Ok(());
+        }
         self.send_command(
             format!(
                 "EXAMINE \"{}\"",
@@ -555,29 +583,32 @@ impl ImapConnection {
         )?;
         self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)?;
         debug!("examine response {}", ret);
-        self.current_mailbox = Some(mailbox_hash);
+        self.current_mailbox = MailboxSelection::Examine(mailbox_hash);
         Ok(())
     }
 
     pub fn unselect(&mut self) -> Result<()> {
-        if let Some(mailbox_hash) = self.current_mailbox.take() {
-            let mut response = String::with_capacity(8 * 1024);
-            if self
-                .capabilities
-                .iter()
-                .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
-            {
-                self.send_command(b"UNSELECT")?;
-                self.read_response(&mut response, RequiredResponses::empty())?;
-            } else {
-                /* `RFC3691 - UNSELECT Command` states: "[..] IMAP4 provides this
-                 * functionality (via a SELECT command with a nonexistent mailbox name or
-                 * reselecting the same mailbox with EXAMINE command)[..]
-                 */
-                
-                self.select_mailbox(mailbox_hash, &mut response)?;
-                self.examine_mailbox(mailbox_hash, &mut response)?;
-            }
+        match self.current_mailbox.take() {
+            MailboxSelection::Examine(mailbox_hash) | MailboxSelection::Select(mailbox_hash) => {
+                let mut response = String::with_capacity(8 * 1024);
+                if self
+                    .capabilities
+                        .iter()
+                        .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
+                {
+                    self.send_command(b"UNSELECT")?;
+                    self.read_response(&mut response, RequiredResponses::empty())?;
+                } else {
+                    /* `RFC3691 - UNSELECT Command` states: "[..] IMAP4 provides this
+                     * functionality (via a SELECT command with a nonexistent mailbox name or
+                     * reselecting the same mailbox with EXAMINE command)[..]
+                     */
+
+                    self.select_mailbox(mailbox_hash, &mut response, true)?;
+                    self.examine_mailbox(mailbox_hash, &mut response, true)?;
+                }
+            },
+        MailboxSelection::None => {},
         }
         Ok(())
     }
@@ -596,13 +627,7 @@ impl ImapConnection {
     pub fn create_uid_msn_cache(&mut self, mailbox_hash: MailboxHash, low: usize) -> Result<()> {
         debug_assert!(low > 0);
         let mut response = String::new();
-        if self
-            .current_mailbox
-            .map(|h| h != mailbox_hash)
-            .unwrap_or(true)
-        {
-            self.examine_mailbox(mailbox_hash, &mut response)?;
-        }
+        self.examine_mailbox(mailbox_hash, &mut response, false)?;
         self.send_command(format!("UID SEARCH {}:*", low).as_bytes())?;
         self.read_response(&mut response, RequiredResponses::SEARCH)?;
         debug!("uid search response {:?}", &response);

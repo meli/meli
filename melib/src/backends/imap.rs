@@ -296,7 +296,7 @@ impl MailBackend for ImapType {
 
                     /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
                      * returns READ-ONLY for both cases) */
-                    conn.select_mailbox(mailbox_hash, &mut response)
+                    conn.select_mailbox(mailbox_hash, &mut response, true)
                         .chain_err_summary(|| {
                             format!("Could not select mailbox {}", mailbox_path)
                         })?;
@@ -360,7 +360,7 @@ impl MailBackend for ImapType {
                         return Ok(());
                     }
                     /* reselecting the same mailbox with EXAMINE prevents expunging it */
-                    conn.examine_mailbox(mailbox_hash, &mut response)?;
+                    conn.examine_mailbox(mailbox_hash, &mut response, true)?;
                     if examine_response.uidnext == 0 {
                         /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
                         conn.send_command(
@@ -782,7 +782,9 @@ impl MailBackend for ImapType {
         let mut response = String::with_capacity(8 * 1024);
         {
             let mut conn_lck = try_lock(&self.connection, None)?;
-            if !mailboxes[&mailbox_hash].no_select && conn_lck.current_mailbox == Some(mailbox_hash)
+            if !mailboxes[&mailbox_hash].no_select
+                && (conn_lck.current_mailbox == MailboxSelection::Examine(mailbox_hash)
+                    || conn_lck.current_mailbox == MailboxSelection::Select(mailbox_hash))
             {
                 /* make sure mailbox is not selected before it gets deleted, otherwise
                  * connection gets dropped by server */
@@ -998,7 +1000,7 @@ impl MailBackend for ImapType {
 
         let mut response = String::with_capacity(8 * 1024);
         let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-        conn.examine_mailbox(mailbox_hash, &mut response)?;
+        conn.examine_mailbox(mailbox_hash, &mut response, false)?;
         conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str).as_bytes())?;
         conn.read_response(&mut response, RequiredResponses::SEARCH)?;
         debug!(&response);
