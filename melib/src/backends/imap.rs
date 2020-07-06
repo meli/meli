@@ -361,6 +361,7 @@ impl MailBackend for ImapType {
                     }
                     /* reselecting the same mailbox with EXAMINE prevents expunging it */
                     conn.examine_mailbox(mailbox_hash, &mut response, true)?;
+                    conn.create_uid_msn_cache(mailbox_hash, 1)?;
                     if examine_response.uidnext == 0 {
                         /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
                         conn.send_command(
