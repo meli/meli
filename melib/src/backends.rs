@@ -33,25 +33,20 @@ macro_rules! tag_hash {
 
 #[cfg(feature = "imap_backend")]
 pub mod imap;
-#[cfg(feature = "imap_backend")]
-pub mod imap_async;
-//#[cfg(feature = "imap_backend")]
-//pub mod imap2;
-#[cfg(feature = "maildir_backend")]
-pub mod maildir;
-#[cfg(feature = "mbox_backend")]
-pub mod mbox;
 #[cfg(feature = "notmuch_backend")]
 pub mod notmuch;
 #[cfg(feature = "notmuch_backend")]
 pub use self::notmuch::NotmuchDb;
 #[cfg(feature = "jmap_backend")]
 pub mod jmap;
-#[cfg(feature = "jmap_backend")]
-pub use self::jmap::JmapType;
-
+#[cfg(feature = "maildir_backend")]
+pub mod maildir;
+#[cfg(feature = "mbox_backend")]
+pub mod mbox;
 #[cfg(feature = "imap_backend")]
 pub use self::imap::ImapType;
+#[cfg(feature = "jmap_backend")]
+pub use self::jmap::JmapType;
 use crate::async_workers::*;
 use crate::conf::AccountSettings;
 use crate::error::{MeliError, Result};
@@ -145,15 +140,8 @@ impl Backends {
             b.register(
                 "imap".to_string(),
                 Backend {
-                    create_fn: Box::new(|| Box::new(|f, i| ImapType::new(f, i))),
-                    validate_conf_fn: Box::new(ImapType::validate_config),
-                },
-            );
-            b.register(
-                "imap_async".to_string(),
-                Backend {
-                    create_fn: Box::new(|| Box::new(|f, i| imap_async::ImapType::new(f, i))),
-                    validate_conf_fn: Box::new(imap_async::ImapType::validate_config),
+                    create_fn: Box::new(|| Box::new(|f, i| imap::ImapType::new(f, i))),
+                    validate_conf_fn: Box::new(imap::ImapType::validate_config),
                 },
             );
         }

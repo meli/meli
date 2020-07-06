@@ -22,26 +22,23 @@ use super::*;
 use crate::backends::SpecialUsageMailbox;
 use crate::email::parser::BytesExt;
 use crate::email::parser::BytesIterExt;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Arguments for IMAP watching functions
 pub struct ImapWatchKit {
     pub conn: ImapConnection,
-    pub main_conn: Arc<Mutex<ImapConnection>>,
+    pub main_conn: Arc<FutureMutex<ImapConnection>>,
     pub uid_store: Arc<UIDStore>,
-    pub work_context: WorkContext,
 }
 
 macro_rules! exit_on_error {
-    ($conn:expr, $mailbox_hash:ident, $work_context:ident, $thread_id:ident, $($result:expr)+) => {
+    ($conn:expr, $mailbox_hash:ident, $($result:expr)+) => {
         $(if let Err(e) = $result {
             *$conn.uid_store.is_online.lock().unwrap() = (
             Instant::now(),
             Err(e.clone()),
         );
             debug!("failure: {}", e.to_string());
-            $work_context.set_status.send(($thread_id, e.to_string())).unwrap();
-            $work_context.finished.send($thread_id).unwrap();
             let account_hash = $conn.uid_store.account_hash;
             $conn.add_refresh_event(RefreshEvent {
                 account_hash,
@@ -53,50 +50,29 @@ macro_rules! exit_on_error {
     };
 }
 
-pub fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
+pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
     debug!("poll with examine");
     let ImapWatchKit {
         mut conn,
         main_conn,
         uid_store,
-        work_context,
     } = kit;
-    loop {
-        if super::try_lock(&uid_store.is_online, Some(std::time::Duration::new(10, 0)))?
-            .1
-            .is_ok()
-        {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    conn.connect()?;
+    conn.connect().await?;
     let mut response = String::with_capacity(8 * 1024);
-    let thread_id: std::thread::ThreadId = std::thread::current().id();
     loop {
-        work_context
-            .set_status
-            .send((thread_id, "sleeping...".to_string()))
-            .unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(5 * 60 * 1000));
-        let mailboxes = uid_store.mailboxes.read()?;
+        let mailboxes = uid_store.mailboxes.lock().await;
         for mailbox in mailboxes.values() {
-            work_context
-                .set_status
-                .send((
-                    thread_id,
-                    format!("examining `{}` for updates...", mailbox.path()),
-                ))
-                .unwrap();
-            examine_updates(mailbox, &mut conn, &uid_store, &work_context)?;
+            examine_updates(mailbox, &mut conn, &uid_store).await?;
         }
-        let mut main_conn = super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
-        main_conn.send_command(b"NOOP")?;
-        main_conn.read_response(&mut response, RequiredResponses::empty())?;
+        let mut main_conn = main_conn.lock().await;
+        main_conn.send_command(b"NOOP").await?;
+        main_conn
+            .read_response(&mut response, RequiredResponses::empty())
+            .await?;
     }
 }
 
-pub fn idle(kit: ImapWatchKit) -> Result<()> {
+pub async fn idle(kit: ImapWatchKit) -> Result<()> {
     debug!("IDLE");
     /* IDLE only watches the connection's selected mailbox. We will IDLE on INBOX and every ~5
      * minutes wake up and poll the others */
@@ -104,23 +80,12 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         mut conn,
         main_conn,
         uid_store,
-        work_context,
     } = kit;
-    loop {
-        if super::try_lock(&uid_store.is_online, Some(std::time::Duration::new(10, 0)))?
-            .1
-            .is_ok()
-        {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
-    conn.connect()?;
-    let thread_id: std::thread::ThreadId = std::thread::current().id();
+    conn.connect().await?;
     let mailbox: ImapMailbox = match uid_store
         .mailboxes
-        .read()
-        .unwrap()
+        .lock()
+        .await
         .values()
         .find(|f| f.parent.is_none() && (f.special_usage() == SpecialUsageMailbox::Inbox))
         .map(std::clone::Clone::clone)
@@ -129,10 +94,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
         None => {
             let err = MeliError::new("INBOX mailbox not found in local mailbox index. meli may have not parsed the IMAP mailboxes correctly");
             debug!("failure: {}", err.to_string());
-            work_context
-                .set_status
-                .send((thread_id, err.to_string()))
-                .unwrap();
             conn.add_refresh_event(RefreshEvent {
                 account_hash: uid_store.account_hash,
                 mailbox_hash: 0,
@@ -147,10 +108,10 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     exit_on_error!(
         conn,
         mailbox_hash,
-        work_context,
-        thread_id,
         conn.send_command(format!("SELECT \"{}\"", mailbox.imap_path()).as_bytes())
+            .await
         conn.read_response(&mut response, RequiredResponses::SELECT_REQUIRED)
+            .await
     );
     debug!("select response {}", &response);
     {
@@ -197,71 +158,44 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
             }
             Err(e) => {
                 debug!("{:?}", e);
-                panic!("could not select mailbox");
+                return Err(e).chain_err_summary(|| "could not select mailbox");
             }
         };
     }
-    exit_on_error!(
-        conn,
-        mailbox_hash,
-        work_context,
-        thread_id,
-        conn.send_command(b"IDLE")
-    );
-    work_context
-        .set_status
-        .send((thread_id, "IDLEing".to_string()))
-        .unwrap();
-    let mut iter = ImapBlockingConnection::from(conn);
+    exit_on_error!(conn, mailbox_hash, conn.send_command(b"IDLE").await);
+    let mut blockn = ImapBlockingConnection::from(conn);
     let mut beat = std::time::Instant::now();
     let mut watch = std::time::Instant::now();
     /* duration interval to send heartbeat */
-    let _26_mins = std::time::Duration::from_secs(26 * 60);
+    const _26_MINS: std::time::Duration = std::time::Duration::from_secs(26 * 60);
     /* duration interval to check other mailboxes for changes */
-    let _5_mins = std::time::Duration::from_secs(5 * 60);
-    while let Some(line) = iter.next() {
+    const _5_MINS: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+    while let Some(line) = blockn.as_stream().await {
         let now = std::time::Instant::now();
-        if now.duration_since(beat) >= _26_mins {
-            let mut main_conn_lck =
-                super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
+        if now.duration_since(beat) >= _26_MINS {
+            let mut main_conn_lck = main_conn.lock().await;
             exit_on_error!(
-                iter.conn,
+                blockn.conn,
                 mailbox_hash,
-                work_context,
-                thread_id,
-                iter.conn.set_nonblocking(true)
-                iter.conn.send_raw(b"DONE")
-                iter.conn.read_response(&mut response, RequiredResponses::empty())
-                iter.conn.send_command(b"IDLE")
-                iter.conn.set_nonblocking(false)
-                main_conn_lck.send_command(b"NOOP")
-                main_conn_lck.read_response(&mut response, RequiredResponses::empty())
+                blockn.conn.send_raw(b"DONE").await
+                blockn.conn.read_response(&mut response, RequiredResponses::empty()).await
+                blockn.conn.send_command(b"IDLE").await
+                main_conn_lck.send_command(b"NOOP").await
+                main_conn_lck.read_response(&mut response, RequiredResponses::empty()).await
             );
             beat = now;
         }
-        if now.duration_since(watch) >= _5_mins {
+        if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
-            let mut conn = try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
-            for mailbox in uid_store.mailboxes.read().unwrap().values() {
-                work_context
-                    .set_status
-                    .send((
-                        thread_id,
-                        format!("examining `{}` for updates...", mailbox.path()),
-                    ))
-                    .unwrap();
+            let mut conn = main_conn.lock().await;
+            let mailboxes = uid_store.mailboxes.lock().await;
+            for mailbox in mailboxes.values() {
                 exit_on_error!(
                     conn,
                     mailbox_hash,
-                    work_context,
-                    thread_id,
-                    examine_updates(mailbox, &mut conn, &uid_store, &work_context,)
+                    examine_updates(mailbox, &mut conn, &uid_store).await
                 );
             }
-            work_context
-                .set_status
-                .send((thread_id, "done examining mailboxes.".to_string()))
-                .unwrap();
             watch = now;
         }
         *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
@@ -269,21 +203,15 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
             .map(|(_, v)| v)
             .map_err(MeliError::from)
         {
-            Ok(Some(Recent(r))) => {
-                let mut conn = super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
-                work_context
-                    .set_status
-                    .send((thread_id, format!("got `{} RECENT` notification", r)))
-                    .unwrap();
+            Ok(Some(Recent(_r))) => {
+                let mut conn = main_conn.lock().await;
                 /* UID SEARCH RECENT */
                 exit_on_error!(
                     conn,
                     mailbox_hash,
-                    work_context,
-                    thread_id,
-                    conn.examine_mailbox(mailbox_hash, &mut response, false)
-                    conn.send_command(b"UID SEARCH RECENT")
-                    conn.read_response(&mut response, RequiredResponses::SEARCH)
+                    conn.examine_mailbox(mailbox_hash, &mut response, false).await
+                    conn.send_command(b"UID SEARCH RECENT").await
+                    conn.read_response(&mut response, RequiredResponses::SEARCH).await
                 );
                 match protocol_parser::search_results_raw(response.as_bytes())
                     .map(|(_, v)| v)
@@ -296,31 +224,19 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                         exit_on_error!(
                             conn,
                             mailbox_hash,
-                            work_context,
-                            thread_id,
                             conn.send_command(
                                 &[&b"UID FETCH"[..], &v.trim().split(|b| b == &b' ').join(b','), &b"(FLAGS RFC822)"[..]]
                                 .join(&b' '),
-                                )
-                            conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                                ).await
+                            conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
                         );
                         debug!(&response);
                         match protocol_parser::uid_fetch_responses(&response) {
                             Ok((_, v, _)) => {
-                                let len = v.len();
-                                let mut ctr = 0;
                                 for UidFetchResponse {
                                     uid, flags, body, ..
                                 } in v
                                 {
-                                    work_context
-                                        .set_status
-                                        .send((
-                                            thread_id,
-                                            format!("parsing {}/{} envelopes..", ctr, len),
-                                        ))
-                                        .unwrap();
-                                    ctr += 1;
                                     if !uid_store
                                         .uid_index
                                         .lock()
@@ -328,6 +244,10 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         .contains_key(&(mailbox_hash, uid))
                                     {
                                         if let Ok(mut env) = Envelope::from_bytes(
+                                            /* unwrap() is safe since we ask for RFC822 in the
+                                             * above FETCH, thus uid_fetch_responses() if
+                                             * returns a successful parse, it will include the
+                                             * RFC822 response */
                                             body.unwrap(),
                                             flags.as_ref().map(|&(f, _)| f),
                                         ) {
@@ -383,10 +303,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                         }
                                     }
                                 }
-                                work_context
-                                    .set_status
-                                    .send((thread_id, format!("parsed {}/{} envelopes.", ctr, len)))
-                                    .unwrap();
                             }
                             Err(e) => {
                                 debug!(e);
@@ -409,11 +325,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 // immediately decremented by 1, and this decrement is reflected in
                 // message sequence numbers in subsequent responses (including other
                 // untagged EXPUNGE responses).
-                let mut conn = super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
-                work_context
-                    .set_status
-                    .send((thread_id, format!("got `{} EXPUNGED` notification", n)))
-                    .unwrap();
+                let mut conn = main_conn.lock().await;
                 let deleted_uid = uid_store
                     .msn_index
                     .lock()
@@ -436,69 +348,43 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 });
             }
             Ok(Some(Exists(n))) => {
-                let mut conn = super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
+                let mut conn = main_conn.lock().await;
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
                  * */
-                let mut prev_exists = mailbox.exists.lock().unwrap();
                 debug!("exists {}", n);
-                work_context
-                    .set_status
-                    .send((
-                        thread_id,
-                        format!(
-                            "got `{} EXISTS` notification (EXISTS was previously {} for {}",
-                            n,
-                            prev_exists.len(),
-                            mailbox.path()
-                        ),
-                    ))
-                    .unwrap();
-                if n > prev_exists.len() {
+                if n > mailbox.exists.lock().unwrap().len() {
                     exit_on_error!(
                         conn,
                         mailbox_hash,
-                        work_context,
-                        thread_id,
-                        conn.examine_mailbox(mailbox_hash, &mut response, false)
+                        conn.examine_mailbox(mailbox_hash, &mut response, false).await
                         conn.send_command(
                             &[
                             b"FETCH",
-                            format!("{}:{}", prev_exists.len() + 1, n).as_bytes(),
+                            format!("{}:{}", mailbox.exists.lock().unwrap().len() + 1, n).as_bytes(),
                             b"(UID FLAGS RFC822)",
                             ]
                             .join(&b' '),
-                        )
-                        conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                        ).await
+                        conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
                     );
                     match protocol_parser::uid_fetch_responses(&response) {
                         Ok((_, v, _)) => {
-                            let len = v.len();
-                            let mut ctr = 0;
                             'fetch_responses_b: for UidFetchResponse {
                                 uid, flags, body, ..
                             } in v
                             {
-                                work_context
-                                    .set_status
-                                    .send((
-                                        thread_id,
-                                        format!("parsing {}/{} envelopes..", ctr, len),
-                                    ))
-                                    .unwrap();
                                 if uid_store
                                     .uid_index
                                     .lock()
                                     .unwrap()
                                     .contains_key(&(mailbox_hash, uid))
                                 {
-                                    ctr += 1;
                                     continue 'fetch_responses_b;
                                 }
                                 if let Ok(mut env) = Envelope::from_bytes(
                                     body.unwrap(),
                                     flags.as_ref().map(|&(f, _)| f),
                                 ) {
-                                    ctr += 1;
                                     uid_store
                                         .hash_index
                                         .lock()
@@ -536,7 +422,7 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                             &[(uid, &env)],
                                         )?;
                                     }
-                                    prev_exists.insert_new(env.hash());
+                                    mailbox.exists.lock().unwrap().insert_new(env.hash());
 
                                     conn.add_refresh_event(RefreshEvent {
                                         account_hash: uid_store.account_hash,
@@ -545,10 +431,6 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                                     });
                                 }
                             }
-                            work_context
-                                .set_status
-                                .send((thread_id, format!("parsed {}/{} envelopes.", ctr, len)))
-                                .unwrap();
                         }
                         Err(e) => {
                             debug!(e);
@@ -560,22 +442,20 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
                 /* a * {msg_seq} FETCH (FLAGS ({flags})) was received, so find out UID from msg_seq
                  * and send update
                  */
-                let mut conn = super::try_lock(&main_conn, Some(std::time::Duration::new(10, 0)))?;
+                let mut conn = main_conn.lock().await;
                 debug!("fetch {} {:?}", msg_seq, flags);
                 exit_on_error!(
                     conn,
                     mailbox_hash,
-                    work_context,
-                    thread_id,
-                    conn.examine_mailbox(mailbox_hash, &mut response, false)
+                    conn.examine_mailbox(mailbox_hash, &mut response, false).await
                     conn.send_command(
                         &[
                         b"UID SEARCH ",
                         format!("{}", msg_seq).as_bytes(),
                         ]
                         .join(&b' '),
-                    )
-                    conn.read_response(&mut response, RequiredResponses::SEARCH)
+                    ).await
+                    conn.read_response(&mut response, RequiredResponses::SEARCH).await
                 );
                 match search_results(response.split_rn().next().unwrap_or("").as_bytes())
                     .map(|(_, v)| v)
@@ -610,19 +490,10 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
             Ok(Some(Bye { .. })) => break,
             Ok(None) | Err(_) => {}
         }
-        work_context
-            .set_status
-            .send((thread_id, "IDLEing".to_string()))
-            .unwrap();
     }
     debug!("IDLE connection dropped");
-    let err: &str = iter.err().unwrap_or("Unknown reason.");
-    work_context
-        .set_status
-        .send((thread_id, "IDLE connection dropped".to_string()))
-        .unwrap();
-    work_context.finished.send(thread_id).unwrap();
-    main_conn.lock().unwrap().add_refresh_event(RefreshEvent {
+    let err: &str = blockn.err().unwrap_or("Unknown reason.");
+    main_conn.lock().await.add_refresh_event(RefreshEvent {
         account_hash: uid_store.account_hash,
         mailbox_hash,
         kind: RefreshEventKind::Failure(MeliError::new(format!(
@@ -633,22 +504,19 @@ pub fn idle(kit: ImapWatchKit) -> Result<()> {
     Err(MeliError::new(format!("IDLE connection dropped: {}", err)))
 }
 
-pub fn examine_updates(
+pub async fn examine_updates(
     mailbox: &ImapMailbox,
     conn: &mut ImapConnection,
     uid_store: &Arc<UIDStore>,
-    work_context: &WorkContext,
 ) -> Result<()> {
-    let thread_id: std::thread::ThreadId = std::thread::current().id();
     let mailbox_hash = mailbox.hash();
     debug!("examining mailbox {} {}", mailbox_hash, mailbox.path());
     let mut response = String::with_capacity(8 * 1024);
     exit_on_error!(
         conn,
         mailbox_hash,
-        work_context,
-        thread_id,
         conn.examine_mailbox(mailbox_hash, &mut response, true)
+            .await
     );
     *uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
     let uidvalidity;
@@ -690,7 +558,6 @@ pub fn examine_updates(
                     });
                 }
             }
-            let mut prev_exists = mailbox.exists.lock().unwrap();
             let n = ok.exists;
             if ok.recent > 0 {
                 {
@@ -698,10 +565,8 @@ pub fn examine_updates(
                     exit_on_error!(
                         conn,
                         mailbox_hash,
-                        work_context,
-                        thread_id,
-                        conn.send_command(b"UID SEARCH RECENT")
-                        conn.read_response(&mut response, RequiredResponses::SEARCH)
+                        conn.send_command(b"UID SEARCH RECENT").await
+                        conn.read_response(&mut response, RequiredResponses::SEARCH).await
                     );
                     match protocol_parser::search_results_raw(response.as_bytes())
                         .map(|(_, v)| v)
@@ -714,13 +579,11 @@ pub fn examine_updates(
                             exit_on_error!(
                                 conn,
                                 mailbox_hash,
-                                work_context,
-                                thread_id,
                                 conn.send_command(
                                 &[&b"UID FETCH"[..], &v.trim().split(|b| b == &b' ').join(b','), &b"(FLAGS RFC822)"[..]]
                                     .join(&b' '),
-                                    )
-                                conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                                    ).await
+                                conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
                             );
                             debug!(&response);
                             match protocol_parser::uid_fetch_responses(&response) {
@@ -786,6 +649,7 @@ pub fn examine_updates(
                                                     &[(uid, &env)],
                                                 )?;
                                             }
+                                            let mut prev_exists = mailbox.exists.lock().unwrap();
                                             prev_exists.insert_new(env.hash());
 
                                             conn.add_refresh_event(RefreshEvent {
@@ -810,24 +674,22 @@ pub fn examine_updates(
                         }
                     }
                 }
-            } else if n > prev_exists.len() {
+            } else if n > mailbox.exists.lock().unwrap().len() {
                 /* UID FETCH ALL UID, cross-ref, then FETCH difference headers
                  * */
                 debug!("exists {}", n);
                 exit_on_error!(
                     conn,
                     mailbox_hash,
-                    work_context,
-                    thread_id,
                     conn.send_command(
                         &[
                         b"FETCH",
-                        format!("{}:{}", prev_exists.len() + 1, n).as_bytes(),
+                        format!("{}:{}", mailbox.exists.lock().unwrap().len() + 1, n).as_bytes(),
                         b"(UID FLAGS RFC822)",
                         ]
                         .join(&b' '),
-                        )
-                    conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+                        ).await
+                    conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED).await
                 );
                 match protocol_parser::uid_fetch_responses(&response) {
                     Ok((_, v, _)) => {
@@ -883,7 +745,7 @@ pub fn examine_updates(
                                         &[(uid, &env)],
                                     )?;
                                 }
-                                prev_exists.insert_new(env.hash());
+                                mailbox.exists.lock().unwrap().insert_new(env.hash());
 
                                 conn.add_refresh_event(RefreshEvent {
                                     account_hash: uid_store.account_hash,
@@ -901,7 +763,7 @@ pub fn examine_updates(
         }
         Err(e) => {
             debug!("{:?}", e);
-            panic!("could not select mailbox");
+            return Err(e).chain_err_summary(|| "could not select mailbox");
         }
     };
     Ok(())

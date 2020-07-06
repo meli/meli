@@ -73,6 +73,8 @@ pub mod jobs;
 pub mod mailcap;
 pub mod plugins;
 
+use futures::executor::block_on;
+
 /// Opens an interactive shell on a managesieve server. Suggested use is with rlwrap(1)
 ///
 /// # Example invocation:
@@ -108,7 +110,7 @@ fn main() -> Result<()> {
         std::process::exit(1);
     }
     let mut conn = new_managesieve_connection(&settings.accounts[&account_name].account)?;
-    conn.connect()?;
+    block_on(conn.connect())?;
     let mut res = String::with_capacity(8 * 1024);
 
     let mut input = String::new();
@@ -124,8 +126,8 @@ fn main() -> Result<()> {
                 if input.trim().eq_ignore_ascii_case("logout") {
                     break;
                 }
-                conn.send_command(input.as_bytes()).unwrap();
-                conn.read_lines(&mut res, String::new()).unwrap();
+                block_on(conn.send_command(input.as_bytes()))?;
+                block_on(conn.read_lines(&mut res, String::new()))?;
                 println!("out: {}", res.trim());
             }
             Err(error) => println!("error: {}", error),

@@ -126,6 +126,26 @@ impl RequiredResponses {
     }
 }
 
+#[test]
+fn test_imap_required_responses() {
+    let mut ret = String::new();
+    let required_responses = RequiredResponses::FETCH_REQUIRED;
+    let response =
+        &"* 1040 FETCH (UID 1064 FLAGS ())\r\nM15 OK Fetch completed (0.001 + 0.299 secs).\r\n"
+            [0..];
+    for l in response.split_rn() {
+        /*debug!("check line: {}", &l);*/
+        if required_responses.check(l) {
+            ret.push_str(l);
+        }
+    }
+    assert_eq!(&ret, "* 1040 FETCH (UID 1064 FLAGS ())\r\n");
+    let v = protocol_parser::uid_fetch_flags_response(response.as_bytes())
+        .unwrap()
+        .1;
+    assert_eq!(v.len(), 1);
+}
+
 #[derive(Debug)]
 pub struct Alert(String);
 pub type ImapParseResult<'a, T> = Result<(&'a str, T, Option<Alert>)>;
@@ -171,18 +191,18 @@ impl std::fmt::Display for ResponseCode {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         use ResponseCode::*;
         match self {
-    Alert(s)=> write!(fmt, "ALERT: {}", s),
-    Badcharset(None)=> write!(fmt, "Given charset is not supported by this server."),
-    Badcharset(Some(s))=> write!(fmt, "Given charset is not supported by this server. Supported ones are: {}", s),
-    Capability => write!(fmt, "Capability response"),
-    Parse(s) => write!(fmt, "Server error in parsing message headers: {}", s),
-    Permanentflags(s) => write!(fmt, "Mailbox supports these flags: {}", s),
-    ReadOnly=> write!(fmt, "This mailbox is selected read-only."),
-ReadWrite => write!(fmt, "This mailbox is selected with read-write permissions."),
-    Trycreate => write!(fmt, "Failed to operate on the target mailbox because it doesn't exist. Try creating it first."),
-    Uidnext(uid) => write!(fmt, "Next UID value is {}", uid),
-    Uidvalidity(uid) => write!(fmt, "Next UIDVALIDITY value is {}", uid),
-    Unseen(uid) => write!(fmt, "First message without the \\Seen flag is {}", uid),
+            Alert(s)=> write!(fmt, "ALERT: {}", s),
+            Badcharset(None)=> write!(fmt, "Given charset is not supported by this server."),
+            Badcharset(Some(s))=> write!(fmt, "Given charset is not supported by this server. Supported ones are: {}", s),
+            Capability => write!(fmt, "Capability response"),
+            Parse(s) => write!(fmt, "Server error in parsing message headers: {}", s),
+            Permanentflags(s) => write!(fmt, "Mailbox supports these flags: {}", s),
+            ReadOnly=> write!(fmt, "This mailbox is selected read-only."),
+            ReadWrite => write!(fmt, "This mailbox is selected with read-write permissions."),
+            Trycreate => write!(fmt, "Failed to operate on the target mailbox because it doesn't exist. Try creating it first."),
+            Uidnext(uid) => write!(fmt, "Next UID value is {}", uid),
+            Uidvalidity(uid) => write!(fmt, "Next UIDVALIDITY value is {}", uid),
+            Unseen(uid) => write!(fmt, "First message without the \\Seen flag is {}", uid),
         }
     }
 }
@@ -190,7 +210,7 @@ ReadWrite => write!(fmt, "This mailbox is selected with read-write permissions."
 impl ResponseCode {
     fn from(val: &str) -> ResponseCode {
         use ResponseCode::*;
-        if !val.starts_with('[') {
+        if !val.starts_with("[") {
             let msg = val.trim();
             return Alert(msg.to_string());
         }
@@ -235,8 +255,7 @@ pub enum ImapResponse {
 
 impl<T: AsRef<str>> From<T> for ImapResponse {
     fn from(val: T) -> ImapResponse {
-        let val_ref = val.as_ref();
-        let val: &str = val_ref.split_rn().last().unwrap_or(val_ref);
+        let val: &str = val.as_ref().split_rn().last().unwrap_or(val.as_ref());
         debug!(&val);
         let mut val = val[val.as_bytes().find(b" ").unwrap() + 1..].trim();
         // M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n
@@ -617,7 +636,7 @@ pub fn uid_fetch_responses(mut input: &str) -> ImapParseResult<Vec<UidFetchRespo
                 if let Some(el_alert) = el_alert {
                     match &mut alert {
                         Some(Alert(ref mut alert)) => {
-                            alert.push_str(&el_alert.0);
+                            alert.extend(el_alert.0.chars());
                         }
                         a @ None => *a = Some(el_alert),
                     }
@@ -685,7 +704,7 @@ pub fn uid_fetch_response_(
 pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], Vec<(usize, (Flag, Vec<String>))>> {
     many0(|input| -> IResult<&[u8], (usize, (Flag, Vec<String>))> {
         let (input, _) = tag("* ")(input)?;
-        let (input, _) = take_while(is_digit)(input)?;
+        let (input, _msn) = take_while(is_digit)(input)?;
         let (input, _) = tag(" FETCH (")(input)?;
         let (input, uid_flags) = permutation((
             preceded(
@@ -696,7 +715,7 @@ pub fn uid_fetch_flags_response(input: &[u8]) -> IResult<&[u8], Vec<(usize, (Fla
                 alt((tag("FLAGS "), tag(" FLAGS "))),
                 delimited(tag("("), byte_flags, tag(")")),
             ),
-        ))(input.ltrim())?;
+        ))(input)?;
         let (input, _) = tag(")\r\n")(input)?;
         Ok((input, (uid_flags.0, uid_flags.1)))
     })(input)
@@ -832,6 +851,7 @@ pub enum UntaggedResponse {
 }
 
 pub fn untagged_responses(input: &[u8]) -> IResult<&[u8], Option<UntaggedResponse>> {
+    debug!("Parse untagged response from {:?}", to_str!(input));
     let (input, _) = tag("* ")(input)?;
     let (input, num) = map_res(digit1, |s| usize::from_str(to_str!(s)))(input)?;
     let (input, _) = tag(" ")(input)?;
@@ -995,13 +1015,13 @@ pub fn flags(input: &str) -> IResult<&str, (Flag, Vec<String>)> {
     let mut keywords = Vec::new();
 
     let mut input = input;
-    while !input.starts_with(')') && !input.is_empty() {
-        if input.starts_with('\\') {
+    while !input.starts_with(")") && !input.is_empty() {
+        if input.starts_with("\\") {
             input = &input[1..];
         }
         let mut match_end = 0;
         while match_end < input.len() {
-            if input[match_end..].starts_with(' ') || input[match_end..].starts_with(')') {
+            if input[match_end..].starts_with(" ") || input[match_end..].starts_with(")") {
                 break;
             }
             match_end += 1;
@@ -1344,7 +1364,7 @@ pub fn quoted(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
 }
 
 pub fn quoted_or_nil(input: &[u8]) -> IResult<&[u8], Option<Vec<u8>>> {
-    alt((map(tag("NIL"), |_| None), map(quoted, Some)))(input.ltrim())
+    alt((map(tag("NIL"), |_| None), map(quoted, |v| Some(v))))(input.ltrim())
     /*
     alt_complete!(map!(ws!(tag!("NIL")), |_| None) | map!(quoted, |v| Some(v))));
         */

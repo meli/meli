@@ -21,15 +21,18 @@
 
 use super::protocol_parser::{ImapLineSplit, ImapResponse, RequiredResponses};
 use crate::backends::MailboxHash;
+use crate::connections::Connection;
 use crate::email::parser::BytesExt;
 use crate::error::*;
-use std::io::Read;
-use std::io::Write;
 extern crate native_tls;
+use futures::io::{AsyncReadExt, AsyncWriteExt};
 use native_tls::TlsConnector;
+pub use smol::Async as AsyncWrapper;
 use std::collections::HashSet;
+use std::future::Future;
 use std::iter::FromIterator;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -45,7 +48,7 @@ pub enum ImapProtocol {
 #[derive(Debug)]
 pub struct ImapStream {
     cmd_id: usize,
-    stream: native_tls::TlsStream<std::net::TcpStream>,
+    stream: AsyncWrapper<Connection>,
     protocol: ImapProtocol,
 }
 
@@ -61,117 +64,136 @@ impl MailboxSelection {
         std::mem::replace(self, MailboxSelection::None)
     }
 }
+
 #[derive(Debug)]
 pub struct ImapConnection {
     pub stream: Result<ImapStream>,
     pub server_conf: ImapServerConf,
-    pub capabilities: Capabilities,
     pub uid_store: Arc<UIDStore>,
     pub current_mailbox: MailboxSelection,
 }
 
 impl Drop for ImapStream {
     fn drop(&mut self) {
-        self.send_command(b"LOGOUT").ok().take();
+        //self.send_command(b"LOGOUT").ok().take();
     }
 }
 
 impl ImapStream {
-    pub fn new_connection(server_conf: &ImapServerConf) -> Result<(Capabilities, ImapStream)> {
-        use std::io::prelude::*;
+    pub async fn new_connection(
+        server_conf: &ImapServerConf,
+    ) -> Result<(Capabilities, ImapStream)> {
         use std::net::TcpStream;
         let path = &server_conf.server_hostname;
 
-        let mut connector = TlsConnector::builder();
-        if server_conf.danger_accept_invalid_certs {
-            connector.danger_accept_invalid_certs(true);
-        }
-        let connector = connector.build()?;
-
-        let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
-            a
-        } else {
-            return Err(MeliError::new(format!(
-                "Could not lookup address {}",
-                &path
-            )));
-        };
-
-        let mut socket = TcpStream::connect_timeout(&addr, std::time::Duration::new(4, 0))?;
-        socket.set_read_timeout(Some(std::time::Duration::new(4, 0)))?;
-        socket.set_write_timeout(Some(std::time::Duration::new(4, 0)))?;
         let cmd_id = 1;
-        if server_conf.use_starttls {
-            let mut buf = vec![0; 1024];
-            match server_conf.protocol {
-                ImapProtocol::IMAP => {
-                    socket.write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())?
-                }
-                ImapProtocol::ManageSieve => {
-                    let len = socket.read(&mut buf)?;
-                    debug!(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
-                    debug!(socket.write_all(b"STARTTLS\r\n")?);
-                }
+        let stream = if server_conf.use_tls {
+            let mut connector = TlsConnector::builder();
+            if server_conf.danger_accept_invalid_certs {
+                connector.danger_accept_invalid_certs(true);
             }
-            let mut response = String::with_capacity(1024);
-            let mut broken = false;
-            let now = std::time::Instant::now();
+            let connector = connector.build()?;
 
-            while now.elapsed().as_secs() < 3 {
-                let len = socket.read(&mut buf)?;
-                response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
+            let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
+                a
+            } else {
+                return Err(MeliError::new(format!(
+                    "Could not lookup address {}",
+                    &path
+                )));
+            };
+
+            let mut socket = AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
+                &addr,
+                std::time::Duration::new(4, 0),
+            )?))?;
+            if server_conf.use_starttls {
+                let mut buf = vec![0; 1024];
                 match server_conf.protocol {
                     ImapProtocol::IMAP => {
-                        if response.starts_with("* OK ") && response.find("\r\n").is_some() {
-                            if let Some(pos) = response.as_bytes().find(b"\r\n") {
-                                response.drain(0..pos + 2);
+                        socket
+                            .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
+                            .await?
+                    }
+                    ImapProtocol::ManageSieve => {
+                        socket.read(&mut buf).await?;
+                        socket.write_all(b"STARTTLS\r\n").await?;
+                    }
+                }
+                let mut response = String::with_capacity(1024);
+                let mut broken = false;
+                let now = std::time::Instant::now();
+
+                while now.elapsed().as_secs() < 3 {
+                    let len = socket.read(&mut buf).await?;
+                    response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
+                    match server_conf.protocol {
+                        ImapProtocol::IMAP => {
+                            if response.starts_with("* OK ") && response.find("\r\n").is_some() {
+                                if let Some(pos) = response.as_bytes().find(b"\r\n") {
+                                    response.drain(0..pos + 2);
+                                }
+                            }
+                        }
+                        ImapProtocol::ManageSieve => {
+                            if response.starts_with("OK ") && response.find("\r\n").is_some() {
+                                response.clear();
+                                broken = true;
+                                break;
                             }
                         }
                     }
-                    ImapProtocol::ManageSieve => {
-                        if response.starts_with("OK ") && response.find("\r\n").is_some() {
-                            response.clear();
-                            broken = true;
-                            break;
-                        }
+                    if response.starts_with("M1 OK") {
+                        broken = true;
+                        break;
                     }
                 }
-                if response.starts_with("M1 OK") {
-                    broken = true;
-                    break;
+                if !broken {
+                    return Err(MeliError::new(format!(
+                        "Could not initiate TLS negotiation to {}.",
+                        path
+                    )));
                 }
             }
-            if !broken {
-                return Err(MeliError::new(format!(
-                    "Could not initiate TLS negotiation to {}.",
-                    path
-                )));
-            }
-        }
 
-        socket
-            .set_nonblocking(true)
-            .expect("set_nonblocking call failed");
-        let stream = {
-            let mut conn_result = connector.connect(path, socket);
-            if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) = conn_result {
-                let mut midhandshake_stream = Some(midhandshake_stream);
-                loop {
-                    match midhandshake_stream.take().unwrap().handshake() {
-                        Ok(r) => {
-                            conn_result = Ok(r);
-                            break;
-                        }
-                        Err(native_tls::HandshakeError::WouldBlock(stream)) => {
-                            midhandshake_stream = Some(stream);
-                        }
-                        p => {
-                            p?;
+            {
+                // FIXME: This is blocking
+                let socket = socket.into_inner()?;
+                let mut conn_result = connector.connect(path, socket);
+                if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
+                    conn_result
+                {
+                    let mut midhandshake_stream = Some(midhandshake_stream);
+                    loop {
+                        match midhandshake_stream.take().unwrap().handshake() {
+                            Ok(r) => {
+                                conn_result = Ok(r);
+                                break;
+                            }
+                            Err(native_tls::HandshakeError::WouldBlock(stream)) => {
+                                midhandshake_stream = Some(stream);
+                            }
+                            p => {
+                                p?;
+                            }
                         }
                     }
                 }
+                AsyncWrapper::new(Connection::Tls(conn_result?))?
             }
-            conn_result?
+        } else {
+            let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
+                a
+            } else {
+                return Err(MeliError::new(format!(
+                    "Could not lookup address {}",
+                    &path
+                )));
+            };
+            AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
+                &addr,
+                std::time::Duration::new(4, 0),
+            )?))?
         };
         let mut res = String::with_capacity(8 * 1024);
         let mut ret = ImapStream {
@@ -181,7 +203,7 @@ impl ImapStream {
         };
         if let ImapProtocol::ManageSieve = server_conf.protocol {
             use data_encoding::BASE64;
-            ret.read_response(&mut res)?;
+            ret.read_response(&mut res).await?;
             ret.send_command(
                 format!(
                     "AUTHENTICATE \"PLAIN\" \"{}\"",
@@ -194,13 +216,14 @@ impl ImapStream {
                     )
                 )
                 .as_bytes(),
-            )?;
-            ret.read_response(&mut res)?;
+            )
+            .await?;
+            ret.read_response(&mut res).await?;
             return Ok((Default::default(), ret));
         }
 
-        ret.send_command(b"CAPABILITY")?;
-        ret.read_response(&mut res)?;
+        ret.send_command(b"CAPABILITY").await?;
+        ret.read_response(&mut res).await?;
         let capabilities: std::result::Result<Vec<&[u8]>, _> = res
             .split_rn()
             .find(|l| l.starts_with("* CAPABILITY"))
@@ -244,11 +267,12 @@ impl ImapStream {
                 &server_conf.server_username, &server_conf.server_password
             )
             .as_bytes(),
-        )?;
+        )
+        .await?;
         let tag_start = format!("M{} ", (ret.cmd_id - 1));
 
         loop {
-            ret.read_lines(&mut res, &String::new(), false)?;
+            ret.read_lines(&mut res, &String::new(), false).await?;
             let mut should_break = false;
             for l in res.split_rn() {
                 if l.starts_with("* CAPABILITY") {
@@ -274,29 +298,31 @@ impl ImapStream {
             }
         }
 
-        if let Some(capabilities) = capabilities {
-            Ok((capabilities, ret))
-        } else {
+        if capabilities.is_none() {
             /* sending CAPABILITY after LOGIN automatically is an RFC recommendation, so check
              * for lazy servers */
             drop(capabilities);
-            ret.send_command(b"CAPABILITY")?;
-            ret.read_response(&mut res).unwrap();
+            ret.send_command(b"CAPABILITY").await?;
+            ret.read_response(&mut res).await.unwrap();
             let capabilities = protocol_parser::capabilities(res.as_bytes())?.1;
             let capabilities = HashSet::from_iter(capabilities.into_iter().map(|s| s.to_vec()));
+            Ok((capabilities, ret))
+        } else {
+            let capabilities = capabilities.unwrap();
             Ok((capabilities, ret))
         }
     }
 
-    pub fn read_response(&mut self, ret: &mut String) -> Result<()> {
+    pub async fn read_response(&mut self, ret: &mut String) -> Result<()> {
         let id = match self.protocol {
             ImapProtocol::IMAP => format!("M{} ", self.cmd_id - 1),
             ImapProtocol::ManageSieve => String::new(),
         };
-        self.read_lines(ret, &id, true)
+        self.read_lines(ret, &id, true).await?;
+        Ok(())
     }
 
-    pub fn read_lines(
+    pub async fn read_lines(
         &mut self,
         ret: &mut String,
         termination_string: &str,
@@ -306,7 +332,7 @@ impl ImapStream {
         ret.clear();
         let mut last_line_idx: usize = 0;
         loop {
-            match self.stream.read(&mut buf) {
+            match self.stream.read(&mut buf).await {
                 Ok(0) => break,
                 Ok(b) => {
                     ret.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..b]) });
@@ -317,10 +343,10 @@ impl ImapStream {
                         if let Some(prev_line) =
                             ret[last_line_idx..pos + last_line_idx].rfind("\r\n")
                         {
-                            last_line_idx += prev_line + 2;
-                            pos -= prev_line + 2;
+                            last_line_idx += prev_line + "\r\n".len();
+                            pos -= prev_line + "\r\n".len();
                         }
-                        if pos + "\r\n".len() == ret[last_line_idx..].len() {
+                        if Some(pos + "\r\n".len()) == ret.get(last_line_idx..).map(|r| r.len()) {
                             if !termination_string.is_empty()
                                 && ret[last_line_idx..].starts_with(termination_string)
                             {
@@ -333,7 +359,7 @@ impl ImapStream {
                                 break;
                             }
                         }
-                        last_line_idx += pos + 2;
+                        last_line_idx += pos + "\r\n".len();
                     }
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -344,29 +370,33 @@ impl ImapStream {
                 }
             }
         }
+        //debug!("returning IMAP response:\n{:?}", &ret);
         Ok(())
     }
 
-    pub fn wait_for_continuation_request(&mut self) -> Result<()> {
+    pub async fn wait_for_continuation_request(&mut self) -> Result<()> {
         let term = "+ ".to_string();
         let mut ret = String::new();
-        self.read_lines(&mut ret, &term, false)
+        self.read_lines(&mut ret, &term, false).await?;
+        Ok(())
     }
 
-    pub fn send_command(&mut self, command: &[u8]) -> Result<()> {
+    pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
         let command = command.trim();
         match self.protocol {
             ImapProtocol::IMAP => {
-                self.stream.write_all(b"M")?;
-                self.stream.write_all(self.cmd_id.to_string().as_bytes())?;
-                self.stream.write_all(b" ")?;
+                self.stream.write_all(b"M").await?;
+                self.stream
+                    .write_all(self.cmd_id.to_string().as_bytes())
+                    .await?;
+                self.stream.write_all(b" ").await?;
                 self.cmd_id += 1;
             }
             ImapProtocol::ManageSieve => {}
         }
 
-        self.stream.write_all(command)?;
-        self.stream.write_all(b"\r\n")?;
+        self.stream.write_all(command).await?;
+        self.stream.write_all(b"\r\n").await?;
         match self.protocol {
             ImapProtocol::IMAP => {
                 debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
@@ -378,20 +408,15 @@ impl ImapStream {
         Ok(())
     }
 
-    pub fn send_literal(&mut self, data: &[u8]) -> Result<()> {
-        self.stream.write_all(data)?;
-        self.stream.write_all(b"\r\n")?;
+    pub async fn send_literal(&mut self, data: &[u8]) -> Result<()> {
+        self.stream.write_all(data).await?;
+        self.stream.write_all(b"\r\n").await?;
         Ok(())
     }
 
-    pub fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
-        self.stream.write_all(raw)?;
-        self.stream.write_all(b"\r\n")?;
-        Ok(())
-    }
-
-    pub fn set_nonblocking(&mut self, val: bool) -> Result<()> {
-        self.stream.get_mut().set_nonblocking(val)?;
+    pub async fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
+        self.stream.write_all(raw).await?;
+        self.stream.write_all(b"\r\n").await?;
         Ok(())
     }
 }
@@ -404,13 +429,12 @@ impl ImapConnection {
         ImapConnection {
             stream: Err(MeliError::new("Offline".to_string())),
             server_conf: server_conf.clone(),
-            capabilities: Capabilities::default(),
             uid_store,
             current_mailbox: MailboxSelection::None,
         }
     }
 
-    pub fn connect(&mut self) -> Result<()> {
+    pub async fn connect(&mut self) -> Result<()> {
         if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
             if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
                 *status = Err(MeliError::new("Connection timed out"));
@@ -421,7 +445,7 @@ impl ImapConnection {
             self.uid_store.is_online.lock().unwrap().0 = Instant::now();
             return Ok(());
         }
-        let new_stream = ImapStream::new_connection(&self.server_conf);
+        let new_stream = debug!(ImapStream::new_connection(&self.server_conf).await);
         if new_stream.is_err() {
             *self.uid_store.is_online.lock().unwrap() = (
                 Instant::now(),
@@ -432,117 +456,94 @@ impl ImapConnection {
         }
         let (capabilities, stream) = new_stream?;
         self.stream = Ok(stream);
-        self.capabilities = capabilities;
+        *self.uid_store.capabilities.lock().unwrap() = capabilities;
         Ok(())
     }
 
-    pub fn read_response(
-        &mut self,
-        ret: &mut String,
+    pub fn read_response<'a>(
+        &'a mut self,
+        ret: &'a mut String,
         required_responses: RequiredResponses,
-    ) -> Result<()> {
-        let mut response = String::new();
-        ret.clear();
-        self.try_send(|s| s.read_response(&mut response))?;
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            let mut response = String::new();
+            ret.clear();
+            self.stream.as_mut()?.read_response(&mut response).await?;
 
-        match self.server_conf.protocol {
-            ImapProtocol::IMAP => {
-                let r: ImapResponse = ImapResponse::from(&response);
-                match r {
-                    ImapResponse::Bye(ref response_code) => {
-                        self.stream = Err(MeliError::new(format!(
-                            "Offline: received BYE: {:?}",
-                            response_code
-                        )));
-                        ret.push_str(&response);
-                    }
-                    ImapResponse::No(ref response_code) => {
-                        debug!("Received NO response: {:?} {:?}", response_code, response);
-                        ret.push_str(&response);
-                    }
-                    ImapResponse::Bad(ref response_code) => {
-                        debug!("Received BAD response: {:?} {:?}", response_code, response);
-                        ret.push_str(&response);
-                    }
-                    _ => {
-                        /*debug!(
-                            "check every line for required_responses: {:#?}",
-                            &required_responses
-                        );*/
-                        for l in response.split_rn() {
-                            /*debug!("check line: {}", &l);*/
-                            if required_responses.check(l) || !self.process_untagged(l)? {
-                                ret.push_str(l);
+            match self.server_conf.protocol {
+                ImapProtocol::IMAP => {
+                    let r: ImapResponse = ImapResponse::from(&response);
+                    match r {
+                        ImapResponse::Bye(ref response_code) => {
+                            self.stream = Err(MeliError::new(format!(
+                                "Offline: received BYE: {:?}",
+                                response_code
+                            )));
+                            ret.push_str(&response);
+                        }
+                        ImapResponse::No(ref response_code) => {
+                            debug!("Received NO response: {:?} {:?}", response_code, response);
+                            ret.push_str(&response);
+                        }
+                        ImapResponse::Bad(ref response_code) => {
+                            debug!("Received BAD response: {:?} {:?}", response_code, response);
+                            ret.push_str(&response);
+                        }
+                        _ => {
+                            /*debug!(
+                                "check every line for required_responses: {:#?}",
+                                &required_responses
+                            );*/
+                            for l in response.split_rn() {
+                                /*debug!("check line: {}", &l);*/
+                                if required_responses.check(l) || !self.process_untagged(l).await? {
+                                    ret.push_str(l);
+                                }
                             }
                         }
-                        //ret.push_str(&response);
                     }
+                    r.into()
                 }
-                r.into()
+                ImapProtocol::ManageSieve => {
+                    ret.push_str(&response);
+                    Ok(())
+                }
             }
-            ImapProtocol::ManageSieve => {
-                ret.push_str(&response);
-                Ok(())
-            }
-        }
+        })
     }
 
-    pub fn read_lines(&mut self, ret: &mut String, termination_string: String) -> Result<()> {
-        self.try_send(|s| s.read_lines(ret, &termination_string, false))
+    pub async fn read_lines(&mut self, ret: &mut String, termination_string: String) -> Result<()> {
+        self.stream
+            .as_mut()?
+            .read_lines(ret, &termination_string, false)
+            .await?;
+        Ok(())
     }
 
-    pub fn wait_for_continuation_request(&mut self) -> Result<()> {
-        self.try_send(|s| s.wait_for_continuation_request())
+    pub async fn wait_for_continuation_request(&mut self) -> Result<()> {
+        self.stream
+            .as_mut()?
+            .wait_for_continuation_request()
+            .await?;
+        Ok(())
     }
 
-    pub fn send_command(&mut self, command: &[u8]) -> Result<()> {
-        self.try_send(|s| s.send_command(command))
+    pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
+        self.stream.as_mut()?.send_command(command).await?;
+        Ok(())
     }
 
-    pub fn send_literal(&mut self, data: &[u8]) -> Result<()> {
-        self.try_send(|s| s.send_literal(data))
+    pub async fn send_literal(&mut self, data: &[u8]) -> Result<()> {
+        self.stream.as_mut()?.send_literal(data).await?;
+        Ok(())
     }
 
-    pub fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
-        self.try_send(|s| s.send_raw(raw))
+    pub async fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
+        self.stream.as_mut()?.send_raw(raw).await?;
+        Ok(())
     }
 
-    pub fn set_nonblocking(&mut self, val: bool) -> Result<()> {
-        self.try_send(|s| s.set_nonblocking(val))
-    }
-
-    pub fn try_send(
-        &mut self,
-        mut action: impl FnMut(&mut ImapStream) -> Result<()>,
-    ) -> Result<()> {
-        if let (instant, ref mut status @ Ok(())) = *self.uid_store.is_online.lock().unwrap() {
-            if Instant::now().duration_since(instant) >= std::time::Duration::new(60 * 30, 0) {
-                *status = Err(MeliError::new("Connection timed out"));
-                self.stream = Err(MeliError::new("Connection timed out"));
-            }
-        }
-        if let Ok(ref mut stream) = self.stream {
-            if action(stream).is_ok() {
-                self.uid_store.is_online.lock().unwrap().0 = Instant::now();
-                return Ok(());
-            }
-        }
-        let new_stream = ImapStream::new_connection(&self.server_conf);
-        if new_stream.is_err() {
-            *self.uid_store.is_online.lock().unwrap() = (
-                Instant::now(),
-                Err(new_stream.as_ref().unwrap_err().clone()),
-            );
-        } else {
-            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
-        }
-        let (capabilities, stream) = new_stream?;
-        self.stream = Ok(stream);
-        self.capabilities = capabilities;
-        Err(MeliError::new("Connection timed out"))
-    }
-
-    pub fn select_mailbox(
+    pub async fn select_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
         ret: &mut String,
@@ -554,17 +555,19 @@ impl ImapConnection {
         self.send_command(
             format!(
                 "SELECT \"{}\"",
-                self.uid_store.mailboxes.read().unwrap()[&mailbox_hash].imap_path()
+                self.uid_store.mailboxes.lock().await[&mailbox_hash].imap_path()
             )
             .as_bytes(),
-        )?;
-        self.read_response(ret, RequiredResponses::SELECT_REQUIRED)?;
+        )
+        .await?;
+        self.read_response(ret, RequiredResponses::SELECT_REQUIRED)
+            .await?;
         debug!("select response {}", ret);
         self.current_mailbox = MailboxSelection::Select(mailbox_hash);
         Ok(())
     }
 
-    pub fn examine_mailbox(
+    pub async fn examine_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
         ret: &mut String,
@@ -576,37 +579,44 @@ impl ImapConnection {
         self.send_command(
             format!(
                 "EXAMINE \"{}\"",
-                self.uid_store.mailboxes.read().unwrap()[&mailbox_hash].imap_path()
+                self.uid_store.mailboxes.lock().await[&mailbox_hash].imap_path()
             )
             .as_bytes(),
-        )?;
-        self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)?;
+        )
+        .await?;
+        self.read_response(ret, RequiredResponses::EXAMINE_REQUIRED)
+            .await?;
         debug!("examine response {}", ret);
         self.current_mailbox = MailboxSelection::Examine(mailbox_hash);
         Ok(())
     }
 
-    pub fn unselect(&mut self) -> Result<()> {
+    pub async fn unselect(&mut self) -> Result<()> {
         match self.current_mailbox.take() {
-            MailboxSelection::Examine(mailbox_hash) | MailboxSelection::Select(mailbox_hash) => {
-                let mut response = String::with_capacity(8 * 1024);
-                if self
-                    .capabilities
-                        .iter()
-                        .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
-                {
-                    self.send_command(b"UNSELECT")?;
-                    self.read_response(&mut response, RequiredResponses::empty())?;
-                } else {
-                    /* `RFC3691 - UNSELECT Command` states: "[..] IMAP4 provides this
-                     * functionality (via a SELECT command with a nonexistent mailbox name or
-                     * reselecting the same mailbox with EXAMINE command)[..]
-                     */
-
-                    self.select_mailbox(mailbox_hash, &mut response, true)?;
-                    self.examine_mailbox(mailbox_hash, &mut response, true)?;
-                }
-            },
+            MailboxSelection::Examine(mailbox_hash) |
+            MailboxSelection::Select(mailbox_hash) =>{
+            let mut response = String::with_capacity(8 * 1024);
+            if self
+                .uid_store
+                .capabilities
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"UNSELECT"))
+            {
+                self.send_command(b"UNSELECT").await?;
+                self.read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+            } else {
+                /* `RFC3691 - UNSELECT Command` states: "[..] IMAP4 provides this
+                 * functionality (via a SELECT command with a nonexistent mailbox name or
+                 * reselecting the same mailbox with EXAMINE command)[..]
+                 */
+                
+                self.select_mailbox(mailbox_hash, &mut response, true).await?;
+                self.examine_mailbox(mailbox_hash, &mut response, true).await?;
+            }
+        },
         MailboxSelection::None => {},
         }
         Ok(())
@@ -623,12 +633,19 @@ impl ImapConnection {
         }
     }
 
-    pub fn create_uid_msn_cache(&mut self, mailbox_hash: MailboxHash, low: usize) -> Result<()> {
+    pub async fn create_uid_msn_cache(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        low: usize,
+    ) -> Result<()> {
         debug_assert!(low > 0);
         let mut response = String::new();
-        self.examine_mailbox(mailbox_hash, &mut response, false)?;
-        self.send_command(format!("UID SEARCH {}:*", low).as_bytes())?;
-        self.read_response(&mut response, RequiredResponses::SEARCH)?;
+        self.examine_mailbox(mailbox_hash, &mut response, false)
+            .await?;
+        self.send_command(format!("UID SEARCH {}:*", low).as_bytes())
+            .await?;
+        self.read_response(&mut response, RequiredResponses::SEARCH)
+            .await?;
         debug!("uid search response {:?}", &response);
         let mut msn_index_lck = self.uid_store.msn_index.lock().unwrap();
         let msn_index = msn_index_lck.entry(mailbox_hash).or_default();
@@ -651,27 +668,7 @@ pub struct ImapBlockingConnection {
 }
 
 impl From<ImapConnection> for ImapBlockingConnection {
-    fn from(mut conn: ImapConnection) -> Self {
-        conn.set_nonblocking(false)
-            .expect("set_nonblocking call failed");
-        conn.stream
-            .as_mut()
-            .map(|s| {
-                s.stream
-                    .get_mut()
-                    .set_write_timeout(Some(std::time::Duration::new(30, 0)))
-                    .expect("set_write_timeout call failed")
-            })
-            .expect("set_write_timeout call failed");
-        conn.stream
-            .as_mut()
-            .map(|s| {
-                s.stream
-                    .get_mut()
-                    .set_read_timeout(Some(std::time::Duration::new(30, 0)))
-                    .expect("set_read_timeout call failed")
-            })
-            .expect("set_read_timeout call failed");
+    fn from(conn: ImapConnection) -> Self {
         ImapBlockingConnection {
             buf: [0; 1024],
             conn,
@@ -690,63 +687,79 @@ impl ImapBlockingConnection {
     pub fn err(&self) -> Option<&str> {
         self.err.as_ref().map(String::as_str)
     }
-}
 
-impl Iterator for ImapBlockingConnection {
-    type Item = Vec<u8>;
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn as_stream<'a>(&'a mut self) -> impl Future<Output = Option<Vec<u8>>> + 'a {
         self.result.drain(0..self.prev_res_length);
         self.prev_res_length = 0;
+        let mut break_flag = false;
         let mut prev_failure = None;
-        let ImapBlockingConnection {
-            ref mut prev_res_length,
-            ref mut result,
-            ref mut conn,
-            ref mut buf,
-            ref mut err,
-        } = self;
-        loop {
-            if conn.stream.is_err() {
-                debug!(&conn.stream);
+        async move {
+            if self.conn.stream.is_err() {
+                debug!(&self.conn.stream);
                 return None;
             }
-            match conn.stream.as_mut().unwrap().stream.read(buf) {
-                Ok(0) => return None,
-                Ok(b) => {
-                    result.extend_from_slice(&buf[0..b]);
-                    debug!(unsafe { std::str::from_utf8_unchecked(result) });
-                    if let Some(pos) = result.find(b"\r\n") {
-                        *prev_res_length = pos + b"\r\n".len();
-                        return Some(result[0..*prev_res_length].to_vec());
-                    }
-                    prev_failure = None;
+            loop {
+                if let Some(y) = read(self, &mut break_flag, &mut prev_failure).await {
+                    return Some(y);
                 }
-                Err(e)
-                    if e.kind() == std::io::ErrorKind::WouldBlock
-                        || e.kind() == std::io::ErrorKind::Interrupted =>
-                {
-                    debug!(&e);
-                    if let Some(prev_failure) = prev_failure.as_ref() {
-                        if Instant::now().duration_since(*prev_failure)
-                            >= std::time::Duration::new(60 * 5, 0)
-                        {
-                            *err = Some(e.to_string());
-                            return None;
-                        }
-                    } else {
-                        prev_failure = Some(Instant::now());
-                    }
-                    continue;
-                }
-                Err(e) => {
-                    debug!(&conn.stream);
-                    debug!(&e);
-                    *err = Some(e.to_string());
+                if break_flag {
                     return None;
                 }
             }
         }
     }
+}
+
+async fn read(
+    conn: &mut ImapBlockingConnection,
+    break_flag: &mut bool,
+    prev_failure: &mut Option<std::time::Instant>,
+) -> Option<Vec<u8>> {
+    let ImapBlockingConnection {
+        ref mut prev_res_length,
+        ref mut result,
+        ref mut conn,
+        ref mut buf,
+        ref mut err,
+    } = conn;
+
+    match conn.stream.as_mut().unwrap().stream.read(buf).await {
+        Ok(0) => {
+            *break_flag = true;
+        }
+        Ok(b) => {
+            result.extend_from_slice(&buf[0..b]);
+            debug!(unsafe { std::str::from_utf8_unchecked(result) });
+            if let Some(pos) = result.find(b"\r\n") {
+                *prev_res_length = pos + b"\r\n".len();
+                return Some(result[0..*prev_res_length].to_vec());
+            }
+            *prev_failure = None;
+        }
+        Err(e)
+            if e.kind() == std::io::ErrorKind::WouldBlock
+                || e.kind() == std::io::ErrorKind::Interrupted =>
+        {
+            debug!(&e);
+            if let Some(prev_failure) = prev_failure.as_ref() {
+                if Instant::now().duration_since(*prev_failure)
+                    >= std::time::Duration::new(60 * 5, 0)
+                {
+                    *err = Some(e.to_string());
+                    *break_flag = true;
+                }
+            } else {
+                *prev_failure = Some(Instant::now());
+            }
+        }
+        Err(e) => {
+            debug!(&conn.stream);
+            debug!(&e);
+            *err = Some(e.to_string());
+            *break_flag = true;
+        }
+    }
+    None
 }
 
 fn lookup_ipv4(host: &str, port: u16) -> Result<SocketAddr> {

@@ -36,7 +36,7 @@ mod cache;
 pub mod managesieve;
 mod untagged;
 
-use crate::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
+use crate::async_workers::{Async, WorkContext};
 use crate::backends::{
     RefreshEventKind::{self, *},
     *,
@@ -44,9 +44,13 @@ use crate::backends::{
 use crate::conf::AccountSettings;
 use crate::email::*;
 use crate::error::{MeliError, Result, ResultIntoMeliError};
+use futures::lock::Mutex as FutureMutex;
+use futures::stream::Stream;
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::future::Future;
 use std::hash::Hasher;
+use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
@@ -70,6 +74,7 @@ pub struct ImapServerConf {
     pub server_password: String,
     pub server_port: u16,
     pub use_starttls: bool,
+    pub use_tls: bool,
     pub danger_accept_invalid_certs: bool,
     pub protocol: ImapProtocol,
 }
@@ -123,6 +128,7 @@ macro_rules! get_conf_val {
 pub struct UIDStore {
     account_hash: AccountHash,
     cache_headers: bool,
+    capabilities: Arc<Mutex<Capabilities>>,
     uidvalidity: Arc<Mutex<HashMap<MailboxHash, UID>>>,
     hash_index: Arc<Mutex<HashMap<EnvelopeHash, (UID, MailboxHash)>>>,
     uid_index: Arc<Mutex<HashMap<(MailboxHash, UID), EnvelopeHash>>>,
@@ -131,7 +137,7 @@ pub struct UIDStore {
     byte_cache: Arc<Mutex<HashMap<UID, EnvelopeCache>>>,
     tag_index: Arc<RwLock<BTreeMap<u64, String>>>,
 
-    mailboxes: Arc<RwLock<HashMap<MailboxHash, ImapMailbox>>>,
+    mailboxes: Arc<FutureMutex<HashMap<MailboxHash, ImapMailbox>>>,
     is_online: Arc<Mutex<(Instant, Result<()>)>>,
     refresh_events: Arc<Mutex<Vec<RefreshEvent>>>,
     sender: Arc<RwLock<Option<RefreshEventConsumer>>>,
@@ -142,12 +148,13 @@ impl Default for UIDStore {
         UIDStore {
             account_hash: 0,
             cache_headers: false,
+            capabilities: Default::default(),
             uidvalidity: Default::default(),
             hash_index: Default::default(),
             uid_index: Default::default(),
             msn_index: Default::default(),
             byte_cache: Default::default(),
-            mailboxes: Arc::new(RwLock::new(Default::default())),
+            mailboxes: Arc::new(FutureMutex::new(Default::default())),
             tag_index: Arc::new(RwLock::new(Default::default())),
             is_online: Arc::new(Mutex::new((
                 Instant::now(),
@@ -163,486 +170,179 @@ impl Default for UIDStore {
 pub struct ImapType {
     account_name: String,
     is_subscribed: Arc<IsSubscribedFn>,
-    connection: Arc<Mutex<ImapConnection>>,
+    connection: Arc<FutureMutex<ImapConnection>>,
     server_conf: ImapServerConf,
     uid_store: Arc<UIDStore>,
     can_create_flags: Arc<Mutex<bool>>,
 }
 
-#[inline(always)]
-pub(self) fn try_lock<T>(
-    connection: &Arc<Mutex<T>>,
-    dur: Option<std::time::Duration>,
-) -> Result<std::sync::MutexGuard<T>> {
-    let now = Instant::now();
-    while Instant::now().duration_since(now) <= dur.unwrap_or(std::time::Duration::from_millis(100))
-    {
-        if let Ok(guard) = connection.try_lock() {
-            return Ok(guard);
-        }
-    }
-    Err("Connection timeout".into())
-}
-
 impl MailBackend for ImapType {
     fn is_async(&self) -> bool {
-        false
+        true
     }
-
     fn is_remote(&self) -> bool {
         true
     }
-
-    fn is_online(&self) -> Result<()> {
+    fn get_async(
+        &mut self,
+        mailbox: &Mailbox,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
+        let uid_store = self.uid_store.clone();
+        let can_create_flags = self.can_create_flags.clone();
+        let mailbox_hash = mailbox.hash();
         let connection = self.connection.clone();
-        let _ = std::thread::Builder::new()
-            .name(format!("{} connecting", self.account_name.as_str(),))
-            .spawn(move || {
-                if let Ok(mut g) = try_lock(&connection, None) {
-                    let _ = g.connect();
-                }
-            });
-        try_lock(
-            &self.uid_store.is_online,
-            Some(std::time::Duration::from_millis(12)),
-        )?
-        .1
-        .clone()
-    }
-
-    fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
-        let mut w = AsyncBuilder::new();
-        let handle = {
-            let tx = w.tx();
-            let uid_store = self.uid_store.clone();
-            let can_create_flags = self.can_create_flags.clone();
-            let mailbox_hash = mailbox.hash();
-            let (permissions, mailbox_path, mailbox_exists, no_select, unseen) = {
-                let f = &self.uid_store.mailboxes.read().unwrap()[&mailbox_hash];
-                (
-                    f.permissions.clone(),
-                    f.imap_path().to_string(),
-                    f.exists.clone(),
-                    f.no_select,
-                    f.unseen.clone(),
-                )
-            };
-            let connection = self.connection.clone();
-            let closure = move |_work_context| {
-                if no_select {
-                    tx.send(AsyncStatus::Payload(Ok(Vec::new()))).unwrap();
-                    tx.send(AsyncStatus::Finished).unwrap();
+        let mut max_uid: Option<usize> = None;
+        let mut valid_hash_set: HashSet<EnvelopeHash> = HashSet::default();
+        let mut our_unseen: BTreeSet<EnvelopeHash> = Default::default();
+        Ok(Box::pin(async_stream::try_stream! {
+            let (cached_hash_set, cached_payload) = get_cached_envs(mailbox_hash, &mut our_unseen, &uid_store)?;
+            yield cached_payload;
+            loop {
+                let res = get_hlpr(&connection, mailbox_hash,&cached_hash_set, &can_create_flags, &mut our_unseen, &mut valid_hash_set, &uid_store, &mut max_uid).await?;
+                yield res;
+                if max_uid == Some(1) || max_uid == Some(0) {
                     return;
                 }
-                let _tx = tx.clone();
-                if let Err(err) = (move || {
-                    let tx = _tx;
-                    let mut our_unseen: BTreeSet<EnvelopeHash> = Default::default();
-                    let mut valid_hash_set: HashSet<EnvelopeHash> = HashSet::default();
-                    let cached_hash_set: HashSet<EnvelopeHash> =
-                        (|| -> Result<HashSet<EnvelopeHash>> {
-                            if !uid_store.cache_headers {
-                                return Ok(HashSet::default());
-                            }
 
-                            let uidvalidities = uid_store.uidvalidity.lock().unwrap();
+            }
+        }))
+    }
 
-                            let v = if let Some(v) = uidvalidities.get(&mailbox_hash) {
-                                v
-                            } else {
-                                return Ok(HashSet::default());
-                            };
-                            let cached_envs: (cache::MaxUID, Vec<(UID, Envelope)>);
-                            cache::save_envelopes(uid_store.account_hash, mailbox_hash, *v, &[])
-                                .chain_err_summary(|| {
-                                    "Could not save envelopes in cache in get()"
-                                })?;
-                            cached_envs =
-                                cache::get_envelopes(uid_store.account_hash, mailbox_hash, *v)
-                                    .chain_err_summary(|| {
-                                        "Could not get envelopes in cache in get()"
-                                    })?;
-                            let (_max_uid, envelopes) = debug!(cached_envs);
-                            let ret = envelopes.iter().map(|(_, env)| env.hash()).collect();
-                            if !envelopes.is_empty() {
-                                let mut payload = vec![];
-                                for (uid, env) in envelopes {
-                                    if !env.is_seen() {
-                                        our_unseen.insert(env.hash());
-                                    }
-                                    uid_store
-                                        .hash_index
-                                        .lock()
-                                        .unwrap()
-                                        .insert(env.hash(), (uid, mailbox_hash));
-                                    uid_store
-                                        .uid_index
-                                        .lock()
-                                        .unwrap()
-                                        .insert((mailbox_hash, uid), env.hash());
-                                    payload.push(env);
-                                }
-                                debug!("sending cached payload for {}", mailbox_hash);
+    fn refresh_async(
+        &mut self,
+        mailbox_hash: MailboxHash,
+        sender: RefreshEventConsumer,
+    ) -> ResultFuture<()> {
+        let main_conn = self.connection.clone();
+        *self.uid_store.sender.write().unwrap() = Some(sender);
+        let uid_store = self.uid_store.clone();
+        Ok(Box::pin(async move {
+            let inbox = uid_store
+                .mailboxes
+                .lock()
+                .await
+                .get(&mailbox_hash)
+                .map(std::clone::Clone::clone)
+                .unwrap();
+            let mut conn = main_conn.lock().await;
+            watch::examine_updates(&inbox, &mut conn, &uid_store).await?;
+            Ok(())
+        }))
+    }
 
-                                unseen.lock().unwrap().insert_set(our_unseen.clone());
-                                tx.send(AsyncStatus::Payload(Ok(payload))).unwrap();
-                            }
-                            Ok(ret)
-                        })()
-                        .unwrap_or_default();
-
-                    let mut conn = connection.lock()?;
-                    debug!("locked for get {}", mailbox_path);
-                    let mut response = String::with_capacity(8 * 1024);
-
-                    /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
-                     * returns READ-ONLY for both cases) */
-                    conn.select_mailbox(mailbox_hash, &mut response, true)
-                        .chain_err_summary(|| {
-                            format!("Could not select mailbox {}", mailbox_path)
-                        })?;
-                    let mut examine_response = protocol_parser::select_response(&response)
-                        .chain_err_summary(|| {
-                            format!(
-                                "Could not parse select response for mailbox {}",
-                                mailbox_path
-                            )
-                        })?;
-                    *can_create_flags.lock().unwrap() = examine_response.can_create_flags;
-                    debug!(
-                        "mailbox: {} examine_response: {:?}",
-                        mailbox_path, examine_response
-                    );
-                    {
-                        let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
-
-                        let v = uidvalidities
-                            .entry(mailbox_hash)
-                            .or_insert(examine_response.uidvalidity);
-                        if uid_store.cache_headers {
-                            let _ = cache::save_envelopes(
-                                uid_store.account_hash,
-                                mailbox_hash,
-                                examine_response.uidvalidity,
-                                &[],
-                            );
-                        }
-                        *v = examine_response.uidvalidity;
-                        let mut permissions = permissions.lock().unwrap();
-                        permissions.create_messages = !examine_response.read_only;
-                        permissions.remove_messages = !examine_response.read_only;
-                        permissions.set_flags = !examine_response.read_only;
-                        permissions.rename_messages = !examine_response.read_only;
-                        permissions.delete_messages = !examine_response.read_only;
-                        permissions.delete_messages = !examine_response.read_only;
-                        mailbox_exists
-                            .lock()
-                            .unwrap()
-                            .set_not_yet_seen(examine_response.exists);
-                    }
-                    if examine_response.exists == 0 {
-                        if uid_store.cache_headers {
-                            for &env_hash in &cached_hash_set {
-                                conn.add_refresh_event(RefreshEvent {
-                                    account_hash: uid_store.account_hash,
-                                    mailbox_hash,
-                                    kind: RefreshEventKind::Remove(env_hash),
-                                });
-                            }
-                            let _ = cache::save_envelopes(
-                                uid_store.account_hash,
-                                mailbox_hash,
-                                examine_response.uidvalidity,
-                                &[],
-                            );
-                        }
-                        tx.send(AsyncStatus::Payload(Ok(Vec::new()))).unwrap();
-                        tx.send(AsyncStatus::Finished).unwrap();
-                        return Ok(());
-                    }
-                    /* reselecting the same mailbox with EXAMINE prevents expunging it */
-                    conn.examine_mailbox(mailbox_hash, &mut response, true)?;
-                    conn.create_uid_msn_cache(mailbox_hash, 1)?;
-                    if examine_response.uidnext == 0 {
-                        /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
-                        conn.send_command(
-                            format!("STATUS \"{}\" (UIDNEXT)", mailbox_path).as_bytes(),
-                        )?;
-                        conn.read_response(&mut response, RequiredResponses::STATUS)?;
-                        let (_, status) = protocol_parser::status_response(response.as_bytes())?;
-                        if let Some(uidnext) = status.uidnext {
-                            if uidnext == 0 {
-                                return Err(MeliError::new(
-                                    "IMAP server error: zero UIDNEXt with nonzero exists.",
-                                ));
-                            }
-                            examine_response.uidnext = uidnext;
-                        } else {
-                            return Err(MeliError::new("IMAP server did not reply with UIDNEXT"));
-                        }
-                    }
-                    let mut max_uid_left: usize = examine_response.uidnext - 1;
-
-                    let mut tag_lck = uid_store.tag_index.write().unwrap();
-
-                    while max_uid_left > 0 {
-                        let mut envelopes = vec![];
-                        debug!("{} max_uid_left= {}", mailbox_hash, max_uid_left);
-                        if max_uid_left == 1 {
-                            debug!("UID FETCH 1 (UID FLAGS ENVELOPE BODYSTRUCTURE)");
-                            conn.send_command(b"UID FETCH 1 (UID FLAGS ENVELOPE BODYSTRUCTURE)")?;
-                        } else {
-                            conn.send_command(
-                                debug!(format!(
-                                    "UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)",
-                                    std::cmp::max(
-                                        std::cmp::max(max_uid_left.saturating_sub(500), 1),
-                                        1
-                                    ),
-                                    max_uid_left
-                                ))
-                                .as_bytes(),
-                            )?
-                        };
-                        conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
-                            .chain_err_summary(|| {
-                                format!(
-                                    "Could not parse fetch response for mailbox {}",
-                                    mailbox_path
-                                )
-                            })?;
-                        debug!(
-                            "fetch response is {} bytes and {} lines",
-                            response.len(),
-                            response.lines().count()
-                        );
-                        let (_, v, _) = protocol_parser::uid_fetch_responses(&response)?;
-                        debug!("responses len is {}", v.len());
-                        for UidFetchResponse {
-                            uid,
-                            message_sequence_number,
-                            flags,
-                            envelope,
-                            ..
-                        } in v
-                        {
-                            let mut env = envelope.unwrap();
-                            let mut h = DefaultHasher::new();
-                            h.write_usize(uid);
-                            h.write(mailbox_path.as_bytes());
-                            env.set_hash(h.finish());
-                            valid_hash_set.insert(env.hash());
-                            if let Some((flags, keywords)) = flags {
-                                if !flags.intersects(Flag::SEEN) {
-                                    our_unseen.insert(env.hash());
-                                }
-                                env.set_flags(flags);
-                                for f in keywords {
-                                    let hash = tag_hash!(f);
-                                    if !tag_lck.contains_key(&hash) {
-                                        tag_lck.insert(hash, f);
-                                    }
-                                    env.labels_mut().push(hash);
-                                }
-                            }
-                            uid_store
-                                .msn_index
-                                .lock()
-                                .unwrap()
-                                .entry(mailbox_hash)
-                                .or_default()
-                                .insert(message_sequence_number - 1, uid);
-                            uid_store
-                                .hash_index
-                                .lock()
-                                .unwrap()
-                                .insert(env.hash(), (uid, mailbox_hash));
-                            uid_store
-                                .uid_index
-                                .lock()
-                                .unwrap()
-                                .insert((mailbox_hash, uid), env.hash());
-                            envelopes.push((uid, env));
-                        }
-                        max_uid_left =
-                            std::cmp::max(std::cmp::max(max_uid_left.saturating_sub(500), 1), 1);
-                        debug!("sending payload for {}", mailbox_hash);
-                        if uid_store.cache_headers {
-                            cache::save_envelopes(
-                                uid_store.account_hash,
-                                mailbox_hash,
-                                examine_response.uidvalidity,
-                                &envelopes
-                                    .iter()
-                                    .map(|(uid, env)| (*uid, env))
-                                    .collect::<SmallVec<[(UID, &Envelope); 1024]>>(),
-                            )
-                            .chain_err_summary(|| {
-                                format!(
-                                    "Could not save envelopes in cache for mailbox {}",
-                                    mailbox_path
-                                )
-                            })?;
-                        }
-                        for &env_hash in cached_hash_set.difference(&valid_hash_set) {
-                            conn.add_refresh_event(RefreshEvent {
-                                account_hash: uid_store.account_hash,
-                                mailbox_hash,
-                                kind: RefreshEventKind::Remove(env_hash),
-                            });
-                        }
-                        let progress = envelopes.len();
-                        unseen
-                            .lock()
-                            .unwrap()
-                            .insert_set(our_unseen.iter().cloned().collect());
-                        mailbox_exists.lock().unwrap().insert_existing_set(
-                            envelopes.iter().map(|(_, env)| env.hash()).collect::<_>(),
-                        );
-                        tx.send(AsyncStatus::Payload(Ok(envelopes
-                            .into_iter()
-                            .map(|(_, env)| env)
-                            .collect::<Vec<Envelope>>())))
-                            .unwrap();
-                        tx.send(AsyncStatus::ProgressReport(progress)).unwrap();
-                        if max_uid_left == 1 {
-                            break;
-                        }
-                    }
-                    drop(conn);
-                    Ok(())
-                })() {
-                    debug!("sending error payload for {}: {:?}", mailbox_hash, &err);
-                    tx.send(AsyncStatus::Payload(Err(err))).unwrap();
+    fn mailboxes_async(&self) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            {
+                let mailboxes = uid_store.mailboxes.lock().await;
+                if !mailboxes.is_empty() {
+                    return Ok(mailboxes
+                        .iter()
+                        .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Mailbox))
+                        .collect());
                 }
-                tx.send(AsyncStatus::Finished).unwrap();
-            };
-            Box::new(closure)
-        };
-        Ok(w.build(handle))
+            }
+            let new_mailboxes = ImapType::imap_mailboxes(&connection).await?;
+            let mut mailboxes = uid_store.mailboxes.lock().await;
+            *mailboxes = new_mailboxes;
+            /*
+            let mut invalid_configs = vec![];
+            for m in mailboxes.values() {
+                if m.is_subscribed() != (self.is_subscribed)(m.path()) {
+                    invalid_configs.push((m.path(), m.is_subscribed()));
+                }
+            }
+            if !invalid_configs.is_empty() {
+                let mut err_string = format!("{}: ", self.account_name);
+                for (m, server_value) in invalid_configs.iter() {
+                    err_string.extend(format!(
+                            "Mailbox `{}` is {}subscribed on server but {}subscribed in your configuration. These settings have to match.\n",
+                            if *server_value { "" } else { "not " },
+                            if *server_value { "not " } else { "" },
+                            m
+                ).chars());
+                }
+                return Err(MeliError::new(err_string));
+            }
+            mailboxes.retain(|_, f| (self.is_subscribed)(f.path()));
+            */
+            let keys = mailboxes.keys().cloned().collect::<HashSet<MailboxHash>>();
+            let mut uid_lock = uid_store.uidvalidity.lock().unwrap();
+            for f in mailboxes.values_mut() {
+                uid_lock.entry(f.hash()).or_default();
+                f.children.retain(|c| keys.contains(c));
+            }
+            drop(uid_lock);
+            Ok(mailboxes
+                .iter()
+                .filter(|(_, f)| f.is_subscribed)
+                .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Mailbox))
+                .collect())
+        }))
+    }
+
+    fn is_online_async(&self) -> ResultFuture<()> {
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mut conn = connection.lock().await;
+            conn.connect().await?;
+
+            Ok(())
+        }))
+    }
+
+    fn get(&mut self, _mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn refresh(
         &mut self,
-        mailbox_hash: MailboxHash,
-        sender: RefreshEventConsumer,
+        _mailbox_hash: MailboxHash,
+        _sender: RefreshEventConsumer,
     ) -> Result<Async<()>> {
-        let inbox = self
-            .uid_store
-            .mailboxes
-            .read()
-            .unwrap()
-            .get(&mailbox_hash)
-            .map(std::clone::Clone::clone)
-            .unwrap();
-        let main_conn = self.connection.clone();
-        *self.uid_store.sender.write().unwrap() = Some(sender);
-        let uid_store = self.uid_store.clone();
-        let account_name = self.account_name.clone();
-        let w = AsyncBuilder::new();
-        let closure = move |work_context: WorkContext| {
-            let thread = std::thread::current();
-            let mut conn = match try_lock(&main_conn, Some(std::time::Duration::new(2, 0))) {
-                Ok(conn) => conn,
-                Err(err) => {
-                    uid_store
-                        .sender
-                        .read()
-                        .unwrap()
-                        .as_ref()
-                        .unwrap()
-                        .send(RefreshEvent {
-                            account_hash: uid_store.account_hash,
-                            mailbox_hash,
-                            kind: RefreshEventKind::Failure(err),
-                        });
-
-                    return;
-                }
-            };
-            work_context
-                .set_name
-                .send((
-                    thread.id(),
-                    format!("refreshing {} imap connection", account_name.as_str(),),
-                ))
-                .unwrap();
-
-            work_context
-                .set_status
-                .send((thread.id(), "refresh".to_string()))
-                .unwrap();
-            watch::examine_updates(&inbox, &mut conn, &uid_store, &work_context)
-                .ok()
-                .take();
-        };
-        Ok(w.build(Box::new(closure)))
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn watch(
         &self,
-        sender: RefreshEventConsumer,
-        work_context: WorkContext,
+        _sender: RefreshEventConsumer,
+        _work_context: WorkContext,
     ) -> Result<std::thread::ThreadId> {
+        Err(MeliError::new("Unimplemented."))
+    }
+
+    fn watch_async(&self, sender: RefreshEventConsumer) -> ResultFuture<()> {
+        debug!("watch_async called");
         let conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
         let main_conn = self.connection.clone();
         *self.uid_store.sender.write().unwrap() = Some(sender);
         let uid_store = self.uid_store.clone();
-        let handle = std::thread::Builder::new()
-            .name(format!("{} imap connection", self.account_name.as_str(),))
-            .spawn(move || {
-                let thread = std::thread::current();
-                work_context
-                    .set_status
-                    .send((thread.id(), "watching".to_string()))
-                    .unwrap();
-                let has_idle: bool = main_conn
-                    .lock()
-                    .unwrap()
-                    .capabilities
-                    .iter()
-                    .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"));
-                let kit = ImapWatchKit {
-                    conn,
-                    main_conn,
-                    uid_store,
-                    work_context,
-                };
-                if has_idle {
-                    idle(kit).ok().take();
-                } else {
-                    poll_with_examine(kit).ok().take();
-                }
-            })?;
-        Ok(handle.thread().id())
+        Ok(Box::pin(async move {
+            let has_idle: bool = uid_store
+                .capabilities
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"IDLE"));
+            debug!(has_idle);
+            let kit = ImapWatchKit {
+                conn,
+                main_conn,
+                uid_store,
+            };
+            if has_idle {
+                idle(kit).await?;
+            } else {
+                poll_with_examine(kit).await?;
+            }
+            debug!("watch_async future returning");
+            Ok(())
+        }))
     }
 
     fn mailboxes(&self) -> Result<HashMap<MailboxHash, Mailbox>> {
-        {
-            let mailboxes = self.uid_store.mailboxes.read().unwrap();
-            if !mailboxes.is_empty() {
-                return Ok(mailboxes
-                    .iter()
-                    .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Mailbox))
-                    .collect());
-            }
-        }
-        let new_mailboxes = ImapType::imap_mailboxes(&self.connection)?;
-        let mut mailboxes = self.uid_store.mailboxes.write()?;
-        *mailboxes = new_mailboxes;
-        mailboxes.retain(|_, f| (self.is_subscribed)(f.path()));
-        let keys = mailboxes.keys().cloned().collect::<HashSet<MailboxHash>>();
-        let mut uid_lock = self.uid_store.uidvalidity.lock().unwrap();
-        for f in mailboxes.values_mut() {
-            uid_lock.entry(f.hash()).or_default();
-            f.children.retain(|c| keys.contains(c));
-        }
-        drop(uid_lock);
-        Ok(mailboxes
-            .iter()
-            .filter(|(_, f)| f.is_subscribed)
-            .map(|(h, f)| (*h, Box::new(Clone::clone(f)) as Mailbox))
-            .collect())
+        Err(MeliError::new("Unimplemented."))
     }
 
     fn operation(&self, hash: EnvelopeHash) -> Result<Box<dyn BackendOp>> {
@@ -669,38 +369,44 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> ResultFuture<()> {
-        let path = {
-            let mailboxes = self.uid_store.mailboxes.read().unwrap();
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let path = {
+                let mailboxes = uid_store.mailboxes.lock().await;
 
-            let mailbox = mailboxes.get(&mailbox_hash).ok_or_else(|| {
-                MeliError::new(format!("Mailbox with hash {} not found.", mailbox_hash))
-            })?;
-            if !mailbox.permissions.lock().unwrap().create_messages {
-                return Err(MeliError::new(format!(
-                    "You are not allowed to create messages in mailbox {}",
-                    mailbox.path()
-                )));
-            }
+                let mailbox = mailboxes.get(&mailbox_hash).ok_or_else(|| {
+                    MeliError::new(format!("Mailbox with hash {} not found.", mailbox_hash))
+                })?;
+                if !mailbox.permissions.lock().unwrap().create_messages {
+                    return Err(MeliError::new(format!(
+                        "You are not allowed to create messages in mailbox {}",
+                        mailbox.path()
+                    )));
+                }
 
-            mailbox.imap_path().to_string()
-        };
-        let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(5, 0)))?;
-        let flags = flags.unwrap_or_else(Flag::empty);
-        conn.send_command(
-            format!(
-                "APPEND \"{}\" ({}) {{{}}}",
-                &path,
-                flags_to_imap_list!(flags),
-                bytes.len()
+                mailbox.imap_path().to_string()
+            };
+            let mut response = String::with_capacity(8 * 1024);
+            let mut conn = connection.lock().await;
+            let flags = flags.unwrap_or_else(Flag::empty);
+            conn.send_command(
+                format!(
+                    "APPEND \"{}\" ({}) {{{}}}",
+                    &path,
+                    flags_to_imap_list!(flags),
+                    bytes.len()
+                )
+                .as_bytes(),
             )
-            .as_bytes(),
-        )?;
-        // wait for "+ Ready for literal data" reply
-        conn.wait_for_continuation_request()?;
-        conn.send_literal(&bytes)?;
-        conn.read_response(&mut response, RequiredResponses::empty())?;
-        Ok(Box::pin(async { Ok(()) }))
+            .await?;
+            // wait for "+ Ready for literal data" reply
+            conn.wait_for_continuation_request().await?;
+            conn.send_literal(&bytes).await?;
+            conn.read_response(&mut response, RequiredResponses::empty())
+                .await?;
+            Ok(())
+        }))
     }
 
     fn as_any(&self) -> &dyn ::std::any::Any {
@@ -723,102 +429,123 @@ impl MailBackend for ImapType {
         &mut self,
         mut path: String,
     ) -> ResultFuture<(MailboxHash, HashMap<MailboxHash, Mailbox>)> {
-        /* Must transform path to something the IMAP server will accept
-         *
-         * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
-         * must use this delimeter to indicate children of this mailbox.
-         *
-         * A new root mailbox should have the default delimeter, which can be found out by issuing
-         * an empty LIST command as described in RFC3501:
-         * C: A101 LIST "" ""
-         * S: * LIST (\Noselect) "/" ""
-         *
-         * The default delimiter for us is '/' just like UNIX paths. I apologise if this
-         * decision is unpleasant for you.
-         */
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        let new_mailbox_fut = self.mailboxes_async();
+        Ok(Box::pin(async move {
+            /* Must transform path to something the IMAP server will accept
+             *
+             * Each root mailbox has a hierarchy delimeter reported by the LIST entry. All paths
+             * must use this delimeter to indicate children of this mailbox.
+             *
+             * A new root mailbox should have the default delimeter, which can be found out by issuing
+             * an empty LIST command as described in RFC3501:
+             * C: A101 LIST "" ""
+             * S: * LIST (\Noselect) "/" ""
+             *
+             * The default delimiter for us is '/' just like UNIX paths. I apologise if this
+             * decision is unpleasant for you.
+             */
 
-        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
-        for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
-            if path.starts_with(&root_mailbox.name) {
-                debug!("path starts with {:?}", &root_mailbox);
-                path = path.replace(
-                    '/',
-                    (root_mailbox.separator as char).encode_utf8(&mut [0; 4]),
-                );
-                break;
+            {
+                let mailboxes = uid_store.mailboxes.lock().await;
+                for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
+                    if path.starts_with(&root_mailbox.name) {
+                        debug!("path starts with {:?}", &root_mailbox);
+                        path = path.replace(
+                            '/',
+                            (root_mailbox.separator as char).encode_utf8(&mut [0; 4]),
+                        );
+                        break;
+                    }
+                }
+
+                if mailboxes.values().any(|f| f.path == path) {
+                    return Err(MeliError::new(format!(
+                        "Mailbox named `{}` already exists.",
+                        path,
+                    )));
+                }
             }
-        }
 
-        if mailboxes.values().any(|f| f.path == path) {
-            return Err(MeliError::new(format!(
-                "Mailbox named `{}` in account `{}` already exists.",
-                path, self.account_name,
-            )));
-        }
+            let mut response = String::with_capacity(8 * 1024);
+            {
+                let mut conn_lck = connection.lock().await;
 
-        let mut response = String::with_capacity(8 * 1024);
-        {
-            let mut conn_lck = try_lock(&self.connection, None)?;
-
-            conn_lck.send_command(format!("CREATE \"{}\"", path,).as_bytes())?;
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-            conn_lck.send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())?;
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-        }
-        let ret: Result<()> = ImapResponse::from(&response).into();
-        ret?;
-        let new_hash = get_path_hash!(path.as_str());
-        mailboxes.clear();
-        drop(mailboxes);
-        let ret =
-            Ok((new_hash, self.mailboxes().map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?));
-        Ok(Box::pin(async { ret }))
+                conn_lck
+                    .send_command(format!("CREATE \"{}\"", path,).as_bytes())
+                    .await?;
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+                conn_lck
+                    .send_command(format!("SUBSCRIBE \"{}\"", path,).as_bytes())
+                    .await?;
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+            }
+            let ret: Result<()> = ImapResponse::from(&response).into();
+            ret?;
+            let new_hash = get_path_hash!(path.as_str());
+            uid_store.mailboxes.lock().await.clear();
+            Ok((new_hash, new_mailbox_fut?.await.map_err(|err| MeliError::new(format!("Mailbox create was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err)))?))
+        }))
     }
 
     fn delete_mailbox(
         &mut self,
         mailbox_hash: MailboxHash,
     ) -> ResultFuture<HashMap<MailboxHash, Mailbox>> {
-        let mailboxes = self.uid_store.mailboxes.read().unwrap();
-        let permissions = mailboxes[&mailbox_hash].permissions();
-        if !permissions.delete_mailbox {
-            return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
-        }
-        let mut response = String::with_capacity(8 * 1024);
-        {
-            let mut conn_lck = try_lock(&self.connection, None)?;
-            if !mailboxes[&mailbox_hash].no_select
-                && (conn_lck.current_mailbox == MailboxSelection::Examine(mailbox_hash)
-                    || conn_lck.current_mailbox == MailboxSelection::Select(mailbox_hash))
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        let new_mailbox_fut = self.mailboxes_async();
+        Ok(Box::pin(async move {
+            let imap_path: String;
+            let no_select: bool;
+            let is_subscribed: bool;
             {
-                /* make sure mailbox is not selected before it gets deleted, otherwise
-                 * connection gets dropped by server */
-                conn_lck.unselect()?;
+                let mailboxes = uid_store.mailboxes.lock().await;
+                no_select = mailboxes[&mailbox_hash].no_select;
+                is_subscribed = mailboxes[&mailbox_hash].is_subscribed();
+                imap_path = mailboxes[&mailbox_hash].imap_path().to_string();
+                let permissions = mailboxes[&mailbox_hash].permissions();
+                if !permissions.delete_mailbox {
+                    return Err(MeliError::new(format!("You do not have permission to delete `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                }
             }
-            if mailboxes[&mailbox_hash].is_subscribed() {
-                conn_lck.send_command(
-                    format!("UNSUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
-                )?;
-                conn_lck.read_response(&mut response, RequiredResponses::empty())?;
+            let mut response = String::with_capacity(8 * 1024);
+            {
+                let mut conn_lck = connection.lock().await;
+                if !no_select
+                    && (conn_lck.current_mailbox == MailboxSelection::Examine(mailbox_hash)
+                        || conn_lck.current_mailbox == MailboxSelection::Select(mailbox_hash))
+                {
+                    /* make sure mailbox is not selected before it gets deleted, otherwise
+                     * connection gets dropped by server */
+                    conn_lck.unselect().await?;
+                }
+                if is_subscribed {
+                    conn_lck
+                        .send_command(format!("UNSUBSCRIBE \"{}\"", &imap_path).as_bytes())
+                        .await?;
+                    conn_lck
+                        .read_response(&mut response, RequiredResponses::empty())
+                        .await?;
+                }
+
+                conn_lck
+                    .send_command(debug!(format!("DELETE \"{}\"", &imap_path,)).as_bytes())
+                    .await?;
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
             }
-
-            conn_lck.send_command(
-                debug!(format!(
-                    "DELETE \"{}\"",
-                    mailboxes[&mailbox_hash].imap_path()
-                ))
-                .as_bytes(),
-            )?;
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-        }
-        let ret: Result<()> = ImapResponse::from(&response).into();
-        ret?;
-        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
-        mailboxes.clear();
-        drop(mailboxes);
-        let res = self.mailboxes().map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into());
-
-        Ok(Box::pin(async { res }))
+            let ret: Result<()> = ImapResponse::from(&response).into();
+            ret?;
+            uid_store.mailboxes.lock().await.clear();
+            new_mailbox_fut?.await.map_err(|err| format!("Mailbox delete was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err).into())
+        }))
     }
 
     fn set_mailbox_subscription(
@@ -826,33 +553,46 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
         new_val: bool,
     ) -> ResultFuture<()> {
-        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
-        if mailboxes[&mailbox_hash].is_subscribed() == new_val {
-            return Ok(Box::pin(async { Ok(()) }));
-        }
-
-        let mut response = String::with_capacity(8 * 1024);
-        {
-            let mut conn_lck = try_lock(&self.connection, None)?;
-            if new_val {
-                conn_lck.send_command(
-                    format!("SUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
-                )?;
-            } else {
-                conn_lck.send_command(
-                    format!("UNSUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path()).as_bytes(),
-                )?;
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let command: String;
+            {
+                let mailboxes = uid_store.mailboxes.lock().await;
+                if mailboxes[&mailbox_hash].is_subscribed() == new_val {
+                    return Ok(());
+                }
+                command = format!("SUBSCRIBE \"{}\"", mailboxes[&mailbox_hash].imap_path());
             }
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-        }
 
-        let ret: Result<()> = ImapResponse::from(&response).into();
-        if ret.is_ok() {
-            mailboxes.entry(mailbox_hash).and_modify(|entry| {
-                let _ = entry.set_is_subscribed(new_val);
-            });
-        }
-        Ok(Box::pin(async { ret }))
+            let mut response = String::with_capacity(8 * 1024);
+            {
+                let mut conn_lck = connection.lock().await;
+                if new_val {
+                    conn_lck.send_command(command.as_bytes()).await?;
+                } else {
+                    conn_lck
+                        .send_command(format!("UN{}", command).as_bytes())
+                        .await?;
+                }
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+            }
+
+            let ret: Result<()> = ImapResponse::from(&response).into();
+            if ret.is_ok() {
+                uid_store
+                    .mailboxes
+                    .lock()
+                    .await
+                    .entry(mailbox_hash)
+                    .and_modify(|entry| {
+                        let _ = entry.set_is_subscribed(new_val);
+                    });
+            }
+            ret
+        }))
     }
 
     fn rename_mailbox(
@@ -860,54 +600,64 @@ impl MailBackend for ImapType {
         mailbox_hash: MailboxHash,
         mut new_path: String,
     ) -> ResultFuture<Mailbox> {
-        let mut mailboxes = self.uid_store.mailboxes.write().unwrap();
-        let permissions = mailboxes[&mailbox_hash].permissions();
-        if !permissions.delete_mailbox {
-            return Err(MeliError::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
-        }
-        let mut response = String::with_capacity(8 * 1024);
-        if mailboxes[&mailbox_hash].separator != b'/' {
-            new_path = new_path.replace(
-                '/',
-                (mailboxes[&mailbox_hash].separator as char).encode_utf8(&mut [0; 4]),
-            );
-        }
-        {
-            let mut conn_lck = try_lock(&self.connection, None)?;
-            conn_lck.send_command(
-                debug!(format!(
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        let new_mailbox_fut = self.mailboxes_async();
+        Ok(Box::pin(async move {
+            let command: String;
+            let mut response = String::with_capacity(8 * 1024);
+            {
+                let mailboxes = uid_store.mailboxes.lock().await;
+                let permissions = mailboxes[&mailbox_hash].permissions();
+                if !permissions.delete_mailbox {
+                    return Err(MeliError::new(format!("You do not have permission to rename mailbox `{}` (rename is equivalent to delete + create). Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+                }
+                if mailboxes[&mailbox_hash].separator != b'/' {
+                    new_path = new_path.replace(
+                        '/',
+                        (mailboxes[&mailbox_hash].separator as char).encode_utf8(&mut [0; 4]),
+                    );
+                }
+                command = format!(
                     "RENAME \"{}\" \"{}\"",
                     mailboxes[&mailbox_hash].imap_path(),
                     new_path
-                ))
-                .as_bytes(),
-            )?;
-            conn_lck.read_response(&mut response, RequiredResponses::empty())?;
-        }
-        let new_hash = get_path_hash!(new_path.as_str());
-        let ret: Result<()> = ImapResponse::from(&response).into();
-        ret?;
-        mailboxes.clear();
-        drop(mailboxes);
-        self.mailboxes().map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
-
-        let ret = Ok(BackendMailbox::clone(
-            &self.uid_store.mailboxes.read().unwrap()[&new_hash],
-        ));
-        Ok(Box::pin(async { ret }))
+                );
+            }
+            {
+                let mut conn_lck = connection.lock().await;
+                conn_lck.send_command(debug!(command).as_bytes()).await?;
+                conn_lck
+                    .read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+            }
+            let new_hash = get_path_hash!(new_path.as_str());
+            let ret: Result<()> = ImapResponse::from(&response).into();
+            ret?;
+            uid_store.mailboxes.lock().await.clear();
+            new_mailbox_fut?.await.map_err(|err| format!("Mailbox rename was succesful (returned `{}`) but listing mailboxes afterwards returned `{}`", response, err))?;
+            Ok(BackendMailbox::clone(
+                &uid_store.mailboxes.lock().await[&new_hash],
+            ))
+        }))
     }
 
     fn set_mailbox_permissions(
         &mut self,
         mailbox_hash: MailboxHash,
-        _val: MailboxPermissions,
+        _val: crate::backends::MailboxPermissions,
     ) -> ResultFuture<()> {
-        let mailboxes = self.uid_store.mailboxes.write().unwrap();
-        let permissions = mailboxes[&mailbox_hash].permissions();
-        if !permissions.change_permissions {
-            return Err(MeliError::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
-        }
-        Ok(Box::pin(async { Err(MeliError::new("Unimplemented.")) }))
+        let uid_store = self.uid_store.clone();
+        //let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let mailboxes = uid_store.mailboxes.lock().await;
+            let permissions = mailboxes[&mailbox_hash].permissions();
+            if !permissions.change_permissions {
+                return Err(MeliError::new(format!("You do not have permission to change permissions for mailbox `{}`. Set permissions for this mailbox are {}", mailboxes[&mailbox_hash].name(), permissions)));
+            }
+
+            Err(MeliError::new("Unimplemented."))
+        }))
     }
 
     fn search(
@@ -983,7 +733,7 @@ impl MailBackend for ImapType {
                             }
                             keyword => {
                                 s.push_str(" KEYWORD ");
-                                s.extend(keyword.chars());
+                                s.push_str(keyword);
                                 s.push_str(" ");
                             }
                         }
@@ -1009,32 +759,38 @@ impl MailBackend for ImapType {
         }
         let mut query_str = String::new();
         rec(&query, &mut query_str);
+        let connection = self.connection.clone();
+        let uid_store = self.uid_store.clone();
 
-        let mut response = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))?;
-        conn.examine_mailbox(mailbox_hash, &mut response, false)?;
-        conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str).as_bytes())?;
-        conn.read_response(&mut response, RequiredResponses::SEARCH)?;
-        debug!(&response);
+        Ok(Box::pin(async move {
+            let mut response = String::with_capacity(8 * 1024);
+            let mut conn = connection.lock().await;
+            conn.examine_mailbox(mailbox_hash, &mut response, false)
+                .await?;
+            conn.send_command(format!("UID SEARCH CHARSET UTF-8 {}", query_str).as_bytes())
+                .await?;
+            conn.read_response(&mut response, RequiredResponses::SEARCH)
+                .await?;
+            debug!(&response);
 
-        let mut lines = response.lines();
-        for l in lines.by_ref() {
-            if l.starts_with("* SEARCH") {
-                use std::iter::FromIterator;
-                let uid_index = self.uid_store.uid_index.lock()?;
-                let ret = Ok(SmallVec::from_iter(
-                    l["* SEARCH".len()..]
-                        .trim()
-                        .split_whitespace()
-                        .map(usize::from_str)
-                        .filter_map(std::result::Result::ok)
-                        .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
-                        .map(|env_hash_ref| *env_hash_ref),
-                ));
-                return Ok(Box::pin(async { ret }));
+            let mut lines = response.lines();
+            for l in lines.by_ref() {
+                if l.starts_with("* SEARCH") {
+                    use std::iter::FromIterator;
+                    let uid_index = uid_store.uid_index.lock()?;
+                    return Ok(SmallVec::from_iter(
+                        l["* SEARCH".len()..]
+                            .trim()
+                            .split_whitespace()
+                            .map(usize::from_str)
+                            .filter_map(std::result::Result::ok)
+                            .filter_map(|uid| uid_index.get(&(mailbox_hash, uid)))
+                            .copied(),
+                    ));
+                }
             }
-        }
-        Err(MeliError::new(response))
+            Err(MeliError::new(response))
+        }))
     }
 }
 
@@ -1067,7 +823,8 @@ impl ImapType {
             std::str::from_utf8(&output.stdout)?.trim_end().to_string()
         };
         let server_port = get_conf_val!(s["server_port"], 143)?;
-        let use_starttls = get_conf_val!(s["use_starttls"], !(server_port == 993))?;
+        let use_tls = get_conf_val!(s["use_tls"], true)?;
+        let use_starttls = use_tls && get_conf_val!(s["use_starttls"], !(server_port == 993))?;
         let danger_accept_invalid_certs: bool =
             get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         let server_conf = ImapServerConf {
@@ -1075,6 +832,7 @@ impl ImapType {
             server_username: server_username.to_string(),
             server_password,
             server_port,
+            use_tls,
             use_starttls,
             danger_accept_invalid_certs,
             protocol: ImapProtocol::IMAP,
@@ -1097,12 +855,14 @@ impl ImapType {
             is_subscribed: Arc::new(IsSubscribedFn(is_subscribed)),
 
             can_create_flags: Arc::new(Mutex::new(false)),
-            connection: Arc::new(Mutex::new(connection)),
+            connection: Arc::new(FutureMutex::new(connection)),
             uid_store,
         }))
     }
 
     pub fn shell(&mut self) {
+        unimplemented!()
+        /*
         let mut conn = ImapConnection::new_connection(&self.server_conf, self.uid_store.clone());
         conn.connect().unwrap();
         let mut res = String::with_capacity(8 * 1024);
@@ -1134,16 +894,19 @@ impl ImapType {
                 Err(error) => debug!("error: {}", error),
             }
         }
+            */
     }
 
-    pub fn imap_mailboxes(
-        connection: &Arc<Mutex<ImapConnection>>,
+    pub async fn imap_mailboxes(
+        connection: &Arc<FutureMutex<ImapConnection>>,
     ) -> Result<HashMap<MailboxHash, ImapMailbox>> {
         let mut mailboxes: HashMap<MailboxHash, ImapMailbox> = Default::default();
         let mut res = String::with_capacity(8 * 1024);
-        let mut conn = try_lock(&connection, Some(std::time::Duration::new(2, 0)))?;
-        conn.send_command(b"LIST \"\" \"*\"")?;
-        conn.read_response(&mut res, RequiredResponses::LIST_REQUIRED)?;
+        let mut conn = connection.lock().await;
+        conn.send_command(b"LIST \"\" \"*\"").await?;
+        let _ = conn
+            .read_response(&mut res, RequiredResponses::LIST_REQUIRED)
+            .await?;
         debug!("out: {}", &res);
         let mut lines = res.lines();
         /* Remove "M__ OK .." line */
@@ -1182,10 +945,11 @@ impl ImapType {
             }
         }
         mailboxes.retain(|_, v| v.hash != 0);
-        conn.send_command(b"LSUB \"\" \"*\"")?;
-        conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)?;
-        debug!("out: {}", &res);
+        conn.send_command(b"LSUB \"\" \"*\"").await?;
+        conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
+            .await?;
         let mut lines = res.lines();
+        debug!("out: {}", &res);
         /* Remove "M__ OK .." line */
         lines.next_back();
         for l in lines.map(|l| l.trim()) {
@@ -1205,17 +969,6 @@ impl ImapType {
         Ok(debug!(mailboxes))
     }
 
-    pub fn capabilities(&self) -> Vec<String> {
-        try_lock(&self.connection, Some(std::time::Duration::new(2, 0)))
-            .map(|c| {
-                c.capabilities
-                    .iter()
-                    .map(|c| String::from_utf8_lossy(c).into())
-                    .collect::<Vec<String>>()
-            })
-            .unwrap_or_default()
-    }
-
     pub fn validate_config(s: &AccountSettings) -> Result<()> {
         get_conf_val!(s["server_hostname"])?;
         get_conf_val!(s["server_username"])?;
@@ -1227,10 +980,337 @@ impl ImapType {
                 s.name.as_str(),
             )));
         }
-        get_conf_val!(s["server_port"], 143)?;
-        get_conf_val!(s["use_starttls"], false)?;
+        let server_port = get_conf_val!(s["server_port"], 143)?;
+        let use_tls = get_conf_val!(s["use_tls"], true)?;
+        let use_starttls = get_conf_val!(s["use_starttls"], !(server_port == 993))?;
+        if !use_tls && use_starttls {
+            return Err(MeliError::new(format!(
+                "Configuration error ({}): incompatible use_tls and use_starttls values: use_tls = false, use_starttls = true",
+                s.name.as_str(),
+            )));
+        }
         get_conf_val!(s["danger_accept_invalid_certs"], false)?;
         get_conf_val!(s["X_header_caching"], false)?;
         Ok(())
     }
+
+    pub fn capabilities(&self) -> Vec<String> {
+        self.uid_store
+            .capabilities
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|c| String::from_utf8_lossy(c).into())
+            .collect::<Vec<String>>()
+    }
+}
+
+fn get_cached_envs(
+    mailbox_hash: MailboxHash,
+    our_unseen: &mut BTreeSet<EnvelopeHash>,
+    uid_store: &UIDStore,
+) -> Result<(HashSet<EnvelopeHash>, Vec<Envelope>)> {
+    if !uid_store.cache_headers {
+        return Ok((HashSet::default(), vec![]));
+    }
+
+    let uidvalidities = uid_store.uidvalidity.lock().unwrap();
+
+    let v = if let Some(v) = uidvalidities.get(&mailbox_hash) {
+        v
+    } else {
+        return Ok((HashSet::default(), vec![]));
+    };
+    let cached_envs: (cache::MaxUID, Vec<(UID, Envelope)>);
+    cache::save_envelopes(uid_store.account_hash, mailbox_hash, *v, &[])
+        .chain_err_summary(|| "Could not save envelopes in cache in get()")?;
+    cached_envs = cache::get_envelopes(uid_store.account_hash, mailbox_hash, *v)
+        .chain_err_summary(|| "Could not get envelopes in cache in get()")?;
+    let (_max_uid, envelopes) = debug!(cached_envs);
+    let ret = envelopes.iter().map(|(_, env)| env.hash()).collect();
+    let payload = if !envelopes.is_empty() {
+        let mut payload = vec![];
+        for (uid, env) in envelopes {
+            if !env.is_seen() {
+                our_unseen.insert(env.hash());
+            }
+            uid_store
+                .hash_index
+                .lock()
+                .unwrap()
+                .insert(env.hash(), (uid, mailbox_hash));
+            uid_store
+                .uid_index
+                .lock()
+                .unwrap()
+                .insert((mailbox_hash, uid), env.hash());
+            payload.push(env);
+        }
+        debug!("sending cached payload for {}", mailbox_hash);
+
+        payload
+    } else {
+        vec![]
+    };
+    Ok((ret, payload))
+}
+
+async fn get_hlpr(
+    connection: &Arc<FutureMutex<ImapConnection>>,
+    mailbox_hash: MailboxHash,
+    cached_hash_set: &HashSet<EnvelopeHash>,
+    can_create_flags: &Arc<Mutex<bool>>,
+    our_unseen: &mut BTreeSet<EnvelopeHash>,
+    valid_hash_set: &mut HashSet<EnvelopeHash>,
+    uid_store: &UIDStore,
+    max_uid: &mut Option<usize>,
+) -> Result<Vec<Envelope>> {
+    let (permissions, mailbox_path, mailbox_exists, no_select, unseen) = {
+        let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
+        (
+            f.permissions.clone(),
+            f.imap_path().to_string(),
+            f.exists.clone(),
+            f.no_select,
+            f.unseen.clone(),
+        )
+    };
+    if no_select {
+        *max_uid = Some(0);
+        return Ok(Vec::new());
+    }
+    let mut conn = connection.lock().await;
+    debug!("locked for get {}", mailbox_path);
+    let mut response = String::with_capacity(8 * 1024);
+    let max_uid_left = if let Some(max_uid) = max_uid {
+        *max_uid
+    } else {
+        conn.create_uid_msn_cache(mailbox_hash, 1).await?;
+        /* first SELECT the mailbox to get READ/WRITE permissions (because EXAMINE only
+         * returns READ-ONLY for both cases) */
+        conn.select_mailbox(mailbox_hash, &mut response, true)
+            .await
+            .chain_err_summary(|| format!("Could not select mailbox {}", mailbox_path))?;
+        let mut examine_response =
+            protocol_parser::select_response(&response).chain_err_summary(|| {
+                format!(
+                    "Could not parse select response for mailbox {}",
+                    mailbox_path
+                )
+            })?;
+        *can_create_flags.lock().unwrap() = examine_response.can_create_flags;
+        debug!(
+            "mailbox: {} examine_response: {:?}",
+            mailbox_path, examine_response
+        );
+        {
+            let mut uidvalidities = uid_store.uidvalidity.lock().unwrap();
+
+            let v = uidvalidities
+                .entry(mailbox_hash)
+                .or_insert(examine_response.uidvalidity);
+            if uid_store.cache_headers {
+                let _ = cache::save_envelopes(
+                    uid_store.account_hash,
+                    mailbox_hash,
+                    examine_response.uidvalidity,
+                    &[],
+                );
+            }
+            *v = examine_response.uidvalidity;
+            let mut permissions = permissions.lock().unwrap();
+            permissions.create_messages = !examine_response.read_only;
+            permissions.remove_messages = !examine_response.read_only;
+            permissions.set_flags = !examine_response.read_only;
+            permissions.rename_messages = !examine_response.read_only;
+            permissions.delete_messages = !examine_response.read_only;
+            permissions.delete_messages = !examine_response.read_only;
+            mailbox_exists
+                .lock()
+                .unwrap()
+                .set_not_yet_seen(examine_response.exists);
+        }
+        if examine_response.exists == 0 {
+            if uid_store.cache_headers {
+                for &env_hash in cached_hash_set {
+                    conn.add_refresh_event(RefreshEvent {
+                        account_hash: uid_store.account_hash,
+                        mailbox_hash,
+                        kind: RefreshEventKind::Remove(env_hash),
+                    });
+                }
+                let _ = cache::save_envelopes(
+                    uid_store.account_hash,
+                    mailbox_hash,
+                    examine_response.uidvalidity,
+                    &[],
+                );
+            }
+            *max_uid = Some(0);
+            return Ok(Vec::new());
+        }
+        /* reselecting the same mailbox with EXAMINE prevents expunging it */
+        conn.examine_mailbox(mailbox_hash, &mut response, true)
+            .await?;
+        if examine_response.uidnext == 0 {
+            /* UIDNEXT shouldn't be 0, since exists != 0 at this point */
+            conn.send_command(format!("STATUS \"{}\" (UIDNEXT)", mailbox_path).as_bytes())
+                .await?;
+            conn.read_response(&mut response, RequiredResponses::STATUS)
+                .await?;
+            let (_, status) = protocol_parser::status_response(response.as_bytes())?;
+            if let Some(uidnext) = status.uidnext {
+                if uidnext == 0 {
+                    return Err(MeliError::new(
+                        "IMAP server error: zero UIDNEXt with nonzero exists.",
+                    ));
+                }
+                examine_response.uidnext = uidnext;
+            } else {
+                return Err(MeliError::new("IMAP server did not reply with UIDNEXT"));
+            }
+        }
+        *max_uid = Some(examine_response.uidnext - 1);
+        examine_response.uidnext - 1
+    };
+    let chunk_size = 600;
+
+    let mut payload = vec![];
+    conn.examine_mailbox(mailbox_hash, &mut response, false)
+        .await?;
+    if max_uid_left > 0 {
+        let mut envelopes = vec![];
+        debug!("{} max_uid_left= {}", mailbox_hash, max_uid_left);
+        if max_uid_left == 1 {
+            debug!("UID FETCH 1 (UID FLAGS ENVELOPE BODYSTRUCTURE)");
+            conn.send_command(b"UID FETCH 1 (UID FLAGS ENVELOPE BODYSTRUCTURE)")
+                .await?;
+        } else {
+            conn.send_command(
+                debug!(format!(
+                    "UID FETCH {}:{} (UID FLAGS ENVELOPE BODYSTRUCTURE)",
+                    std::cmp::max(std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1), 1),
+                    max_uid_left
+                ))
+                .as_bytes(),
+            )
+            .await?
+        };
+        conn.read_response(&mut response, RequiredResponses::FETCH_REQUIRED)
+            .await
+            .chain_err_summary(|| {
+                format!(
+                    "Could not parse fetch response for mailbox {}",
+                    mailbox_path
+                )
+            })?;
+        debug!(
+            "fetch response is {} bytes and {} lines",
+            response.len(),
+            response.lines().count()
+        );
+        let (_, v, _) = protocol_parser::uid_fetch_responses(&response)?;
+        debug!("responses len is {}", v.len());
+        for UidFetchResponse {
+            uid,
+            message_sequence_number,
+            flags,
+            envelope,
+            ..
+        } in v
+        {
+            let mut env = envelope.unwrap();
+            let mut h = DefaultHasher::new();
+            h.write_usize(uid);
+            h.write(mailbox_path.as_bytes());
+            env.set_hash(h.finish());
+            /*
+            debug!(
+                "env hash {} {} UID = {} MSN = {}",
+                env.hash(),
+                env.subject(),
+                uid,
+                message_sequence_number
+            );
+            */
+            valid_hash_set.insert(env.hash());
+            let mut tag_lck = uid_store.tag_index.write().unwrap();
+            if let Some((flags, keywords)) = flags {
+                if !flags.intersects(Flag::SEEN) {
+                    our_unseen.insert(env.hash());
+                }
+                env.set_flags(flags);
+                for f in keywords {
+                    let hash = tag_hash!(f);
+                    if !tag_lck.contains_key(&hash) {
+                        tag_lck.insert(hash, f);
+                    }
+                    env.labels_mut().push(hash);
+                }
+            }
+            uid_store
+                .msn_index
+                .lock()
+                .unwrap()
+                .entry(mailbox_hash)
+                .or_default()
+                .insert(message_sequence_number - 1, uid);
+            uid_store
+                .hash_index
+                .lock()
+                .unwrap()
+                .insert(env.hash(), (uid, mailbox_hash));
+            uid_store
+                .uid_index
+                .lock()
+                .unwrap()
+                .insert((mailbox_hash, uid), env.hash());
+            envelopes.push((uid, env));
+        }
+        debug!("sending payload for {}", mailbox_hash);
+        if uid_store.cache_headers {
+            //FIXME
+            cache::save_envelopes(
+                uid_store.account_hash,
+                mailbox_hash,
+                uid_store.uidvalidity.lock().unwrap()[&mailbox_hash],
+                &envelopes
+                    .iter()
+                    .map(|(uid, env)| (*uid, env))
+                    .collect::<SmallVec<[(UID, &Envelope); 1024]>>(),
+            )
+            .chain_err_summary(|| {
+                format!(
+                    "Could not save envelopes in cache for mailbox {}",
+                    mailbox_path
+                )
+            })?;
+        }
+        for &env_hash in cached_hash_set.difference(&valid_hash_set) {
+            conn.add_refresh_event(RefreshEvent {
+                account_hash: uid_store.account_hash,
+                mailbox_hash,
+                kind: RefreshEventKind::Remove(env_hash),
+            });
+        }
+        unseen
+            .lock()
+            .unwrap()
+            .insert_set(our_unseen.iter().cloned().collect());
+        mailbox_exists
+            .lock()
+            .unwrap()
+            .insert_existing_set(envelopes.iter().map(|(_, env)| env.hash()).collect::<_>());
+        drop(conn);
+        payload.extend(envelopes.into_iter().map(|(_, env)| env));
+    }
+    *max_uid = if max_uid_left <= 1 {
+        Some(0)
+    } else {
+        Some(std::cmp::max(
+            std::cmp::max(max_uid_left.saturating_sub(chunk_size), 1),
+            1,
+        ))
+    };
+    Ok(payload)
 }

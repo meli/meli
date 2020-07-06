@@ -97,6 +97,7 @@ pub fn new_managesieve_connection(s: &AccountSettings) -> Result<ImapConnection>
         server_password: server_password.to_string(),
         server_port,
         use_starttls: true,
+        use_tls: true,
         danger_accept_invalid_certs,
         protocol: ImapProtocol::ManageSieve,
     };

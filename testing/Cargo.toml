@@ -17,10 +17,6 @@ path = "src/mboxparse.rs"
 name = "imapconn"
 path = "src/imap_conn.rs"
 
-[[bin]]
-name = "managesieve_conn"
-path = "src/managesieve.rs"
-
 [dependencies]
 melib = { path = "../melib", version = "*", features = ["debug-tracing", "unicode_algorithms"] }
 
