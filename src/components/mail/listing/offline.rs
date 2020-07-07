@@ -26,7 +26,7 @@ use crate::components::utilities::PageMovement;
 pub struct OfflineListing {
     cursor_pos: (usize, MailboxHash),
     _row_updates: SmallVec<[ThreadHash; 8]>,
-
+    dirty: bool,
     id: ComponentId,
 }
 
@@ -88,6 +88,7 @@ impl OfflineListing {
         OfflineListing {
             cursor_pos,
             _row_updates: SmallVec::new(),
+            dirty: true,
             id: ComponentId::new_v4(),
         }
     }
@@ -95,6 +96,10 @@ impl OfflineListing {
 
 impl Component for OfflineListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        if !self.dirty {
+            return;
+        }
+        self.dirty = false;
         let theme_default = conf::value(context, "theme_default");
         clear_area(grid, area, theme_default);
         if let Err(err) = context.is_online(self.cursor_pos.0) {
@@ -117,19 +122,53 @@ impl Component for OfflineListing {
                 None,
             );
         } else {
+            let (_, mut y) = write_string_to_grid(
+                "loading...",
+                grid,
+                Color::Byte(243),
+                theme_default.bg,
+                theme_default.attrs,
+                area,
+                None,
+            );
+            let mut jobs: SmallVec<[_; 64]> = context.accounts[self.cursor_pos.0]
+                .active_jobs
+                .iter()
+                .collect();
+            jobs.sort_by_key(|(j, _)| *j);
+            for (job_id, j) in jobs {
+                write_string_to_grid(
+                    &format!("{}: {:?}", job_id, j),
+                    grid,
+                    theme_default.fg,
+                    theme_default.bg,
+                    theme_default.attrs,
+                    (set_y(upper_left!(area), y + 1), bottom_right!(area)),
+                    None,
+                );
+                y += 1;
+            }
+
             context
                 .replies
                 .push_back(UIEvent::AccountStatusChange(self.cursor_pos.0));
         }
         context.dirty_areas.push_back(area);
     }
-    fn process_event(&mut self, _event: &mut UIEvent, _context: &mut Context) -> bool {
+    fn process_event(&mut self, event: &mut UIEvent, _context: &mut Context) -> bool {
+        match event {
+            UIEvent::AccountStatusChange(idx) if *idx == self.cursor_pos.0 => self.dirty = true,
+            _ => {}
+        }
         false
     }
     fn is_dirty(&self) -> bool {
-        false
+        self.dirty
     }
-    fn set_dirty(&mut self, _value: bool) {}
+
+    fn set_dirty(&mut self, value: bool) {
+        self.dirty = true;
+    }
 
     fn id(&self) -> ComponentId {
         self.id

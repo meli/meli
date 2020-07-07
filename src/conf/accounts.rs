@@ -136,7 +136,7 @@ pub struct Account {
     pub index: usize,
     name: String,
     hash: AccountHash,
-    pub is_online: bool,
+    pub is_online: Result<()>,
     pub(crate) mailbox_entries: HashMap<MailboxHash, MailboxEntry>,
     pub(crate) mailboxes_order: Vec<MailboxHash>,
     tree: Vec<MailboxNode>,
@@ -348,7 +348,11 @@ impl Account {
             index,
             hash,
             name,
-            is_online: !backend.is_remote(),
+            is_online: if !backend.is_remote() {
+                Ok(())
+            } else {
+                Err(MeliError::new("Attempting connection."))
+            },
             mailbox_entries: Default::default(),
             mailboxes_order: Default::default(),
             tree: Default::default(),
@@ -1410,7 +1414,7 @@ impl Account {
         }
 
         if self.is_async {
-            if self.is_online {
+            if self.is_online.is_ok() {
                 return Ok(());
             }
             if !self.active_jobs.values().any(JobRequest::is_online) {
@@ -1419,13 +1423,20 @@ impl Account {
                     self.active_jobs.insert(job_id, JobRequest::IsOnline(rcvr));
                 }
             }
-            return Err(MeliError::new("Attempting connection."));
+            return self.is_online.clone();
         } else {
             let ret = self.backend.read().unwrap().is_online();
-            if ret.is_ok() != self.is_online && ret.is_ok() {
-                self.init(None)?;
+            if ret.is_ok() != self.is_online.is_ok() {
+                if ret.is_ok() {
+                    self.init(None)?;
+                }
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                        self.index,
+                    )))
+                    .unwrap();
             }
-            self.is_online = ret.is_ok();
+            self.is_online = ret.clone();
             ret
         }
     }
@@ -1583,20 +1594,20 @@ impl Account {
                 }
                 JobRequest::IsOnline(mut chan) => {
                     let is_online = chan.try_recv().unwrap();
-                    if is_online.is_some() {
-                        let is_online = is_online.unwrap();
+                    if let Some(is_online) = is_online {
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                                self.index,
+                            )))
+                            .unwrap();
                         if is_online.is_ok() {
-                            if !self.is_online {
+                            if self.is_online.is_err() {
                                 self.watch();
                             }
-                            self.is_online = true;
-                            self.sender
-                                .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
-                                    self.index,
-                                )))
-                                .unwrap();
+                            self.is_online = Ok(());
                             return true;
                         }
+                        self.is_online = is_online;
                     }
                     if let Ok(online_job) = self.backend.read().unwrap().is_online_async() {
                         let (rcvr, job_id) = self.job_executor.spawn_specialized(online_job);
@@ -1605,11 +1616,18 @@ impl Account {
                 }
                 JobRequest::Refresh(_mailbox_hash, mut chan) => {
                     let r = chan.try_recv().unwrap();
-                    if r.is_some() && r.unwrap().is_ok() {
-                        if !self.is_online {
-                            self.watch();
+                    if let Some(r) = r {
+                        if r.is_ok() {
+                            if self.is_online.is_err() {
+                                self.watch();
+                            }
                         }
-                        self.is_online = true;
+                        self.is_online = Ok(());
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::AccountStatusChange(
+                                self.index,
+                            )))
+                            .unwrap();
                     }
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(

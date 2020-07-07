@@ -59,7 +59,9 @@ fn find_task<T>(local: &Worker<T>, global: &Injector<T>, stealers: &[Stealer<T>]
 
 macro_rules! uuid_hash_type {
     ($n:ident) => {
-        #[derive(PartialEq, Hash, Eq, Copy, Clone, Serialize, Deserialize, Default)]
+        #[derive(
+            PartialEq, Hash, Eq, Copy, Clone, Ord, PartialOrd, Serialize, Deserialize, Default,
+        )]
         pub struct $n(Uuid);
 
         impl core::fmt::Debug for $n {

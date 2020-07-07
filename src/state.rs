@@ -122,7 +122,7 @@ impl Context {
             ref mut replies,
             ..
         } = self;
-        let was_online = accounts[account_pos].is_online;
+        let was_online = accounts[account_pos].is_online.is_ok();
         let ret = accounts[account_pos].is_online();
         if ret.is_ok() {
             if !was_online {
