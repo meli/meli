@@ -355,6 +355,17 @@ impl StatusPanel {
                 )
                 .0,
             );
+            if let Err(err) = a.is_online.as_ref() {
+                write_string_to_grid(
+                    &err.to_string(),
+                    &mut self.content,
+                    self.theme_default.fg,
+                    self.theme_default.bg,
+                    self.theme_default.attrs,
+                    ((5, y + 6), (5 + column_width, y + 6)),
+                    Some(5),
+                );
+            }
             /* next column */
             write_string_to_grid(
                 "Special Mailboxes:",
