@@ -202,12 +202,13 @@ impl Default for ShortcutsOverride {
 pub struct ComposingSettingsOverride {
     #[doc = " A command to pipe new emails to"]
     #[doc = " Required"]
+    #[serde(alias = "mailer-command", alias = "mailer-cmd", alias = "mailer_cmd")]
     #[serde(default)]
-    pub mailer_cmd: Option<String>,
+    pub mailer_command: Option<String>,
     #[doc = " Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up."]
-    #[serde(alias = "editor-cmd")]
+    #[serde(alias = "editor-command", alias = "editor-cmd", alias = "editor_cmd")]
     #[serde(default)]
-    pub editor_cmd: Option<Option<String>>,
+    pub editor_command: Option<Option<String>>,
     #[doc = " Embed editor (for terminal interfaces) instead of forking and waiting."]
     #[serde(default)]
     pub embed: Option<bool>,
@@ -225,8 +226,8 @@ pub struct ComposingSettingsOverride {
 impl Default for ComposingSettingsOverride {
     fn default() -> Self {
         ComposingSettingsOverride {
-            mailer_cmd: None,
-            editor_cmd: None,
+            mailer_command: None,
+            editor_command: None,
             embed: None,
             format_flowed: None,
             default_header_values: None,

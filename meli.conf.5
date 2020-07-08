@@ -106,8 +106,8 @@ script = "notify-send"
 
 [composing]
 # required for sending e-mail
-mailer_cmd = 'msmtp --read-recipients --read-envelope-from'
-editor_cmd = 'vim +/^$'
+mailer_command = 'msmtp --read-recipients --read-envelope-from'
+editor_command = 'vim +/^$'
 
 [shortcuts]
 [shortcuts.composing]
@@ -323,9 +323,9 @@ Example:
 .El
 .Sh COMPOSING
 .Bl -tag -width 36n
-.It Ic mailer_cmd Ar String
+.It Ic mailer_command Ar String
 command to pipe new mail to, exit code must be 0 for success.
-.It Ic editor_cmd Ar String
+.It Ic editor_command Ar String
 command to launch editor.
 Can have arguments.
 Draft filename is given as the last argument.

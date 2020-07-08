@@ -947,17 +947,17 @@ impl Component for Composer {
                     && shortcut!(key == shortcuts[Self::DESCRIPTION]["edit_mail"]) =>
             {
                 /* Edit draft in $EDITOR */
-                let editor = if let Some(editor_cmd) =
-                    mailbox_acc_settings!(context[self.account_cursor].composing.editor_cmd)
+                let editor = if let Some(editor_command) =
+                    mailbox_acc_settings!(context[self.account_cursor].composing.editor_command)
                         .as_ref()
                 {
-                    editor_cmd.to_string()
+                    editor_command.to_string()
                 } else {
                     match std::env::var("EDITOR") {
                         Err(e) => {
                             context.replies.push_back(UIEvent::Notification(
                             Some(e.to_string()),
-                            "$EDITOR is not set. You can change an envvar's value with setenv or set composing.editor_cmd setting in your configuration.".to_string(),
+                            "$EDITOR is not set. You can change an envvar's value with setenv or set composing.editor_command setting in your configuration.".to_string(),
                             Some(NotificationType::ERROR),
                         ));
                             return true;
@@ -1000,13 +1000,16 @@ impl Component for Composer {
                     context.input_kill();
                 }
 
-                let editor_cmd = format!("{} {}", editor, f.path().display());
+                let editor_command = format!("{} {}", editor, f.path().display());
                 log(
-                    format!("Executing: sh -c \"{}\"", editor_cmd.replace("\"", "\\\"")),
+                    format!(
+                        "Executing: sh -c \"{}\"",
+                        editor_command.replace("\"", "\\\"")
+                    ),
                     DEBUG,
                 );
                 match Command::new("sh")
-                    .args(&["-c", &editor_cmd])
+                    .args(&["-c", &editor_command])
                     .stdin(Stdio::inherit())
                     .stdout(Stdio::inherit())
                     .spawn()
@@ -1051,18 +1054,18 @@ impl Component for Composer {
             }
             UIEvent::Action(ref a) => {
                 match a {
-                    Action::Compose(ComposeAction::AddAttachmentPipe(ref cmd)) => {
-                        if cmd.is_empty() {
+                    Action::Compose(ComposeAction::AddAttachmentPipe(ref command)) => {
+                        if command.is_empty() {
                             context.replies.push_back(UIEvent::Notification(
                                 None,
-                                format!("pipe cmd value is invalid: {}", cmd),
+                                format!("pipe command value is invalid: {}", command),
                                 Some(NotificationType::ERROR),
                             ));
                             return false;
                         }
                         let f = create_temp_file(&[], None, None, true);
                         match std::process::Command::new("sh")
-                            .args(&["-c", cmd])
+                            .args(&["-c", command])
                             .stdin(std::process::Stdio::null())
                             .stdout(std::process::Stdio::from(f.file()))
                             .spawn()
@@ -1070,7 +1073,7 @@ impl Component for Composer {
                             Ok(child) => {
                                 let _ = child
                                     .wait_with_output()
-                                    .expect("failed to launch cmd")
+                                    .expect("failed to launch command")
                                     .stdout;
                                 let mut attachment =
                                     match melib::email::attachment_from_file(f.path()) {
@@ -1100,7 +1103,7 @@ impl Component for Composer {
                             Err(err) => {
                                 context.replies.push_back(UIEvent::Notification(
                                     None,
-                                    format!("could not execute pipe cmd {}: {}", cmd, err),
+                                    format!("could not execute pipe command {}: {}", command, err),
                                     Some(NotificationType::ERROR),
                                 ));
                                 return true;
@@ -1280,18 +1283,18 @@ pub fn send_draft(
     use std::io::Write;
     use std::process::{Command, Stdio};
     let format_flowed = *mailbox_acc_settings!(context[account_cursor].composing.format_flowed);
-    let cmd = mailbox_acc_settings!(context[account_cursor].composing.mailer_cmd);
-    if cmd.is_empty() {
+    let command = mailbox_acc_settings!(context[account_cursor].composing.mailer_command);
+    if command.is_empty() {
         context.replies.push_back(UIEvent::Notification(
             None,
-            String::from("mailer_cmd configuration value is empty"),
+            String::from("mailer_command configuration value is empty"),
             Some(NotificationType::ERROR),
         ));
         return false;
     }
     let bytes;
     let mut msmtp = Command::new("sh")
-        .args(&["-c", cmd])
+        .args(&["-c", command])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -1395,12 +1398,12 @@ pub fn send_draft(
         let error_message = if let Some(exit_code) = output.code() {
             format!(
                 "Could not send e-mail using `{}`: Process exited with {}",
-                cmd, exit_code
+                command, exit_code
             )
         } else {
             format!(
                 "Could not send e-mail using `{}`: Process was killed by signal",
-                cmd
+                command
             )
         };
         context.replies.push_back(UIEvent::Notification(

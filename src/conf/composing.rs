@@ -28,11 +28,16 @@ use std::collections::HashMap;
 pub struct ComposingSettings {
     /// A command to pipe new emails to
     /// Required
-    #[serde(alias = "mailer-cmd")]
-    pub mailer_cmd: String,
+    #[serde(alias = "mailer-command", alias = "mailer-cmd", alias = "mailer_cmd")]
+    pub mailer_command: String,
     /// Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
-    #[serde(default = "none", alias = "editor-cmd")]
-    pub editor_cmd: Option<String>,
+    #[serde(
+        default = "none",
+        alias = "editor-command",
+        alias = "editor-cmd",
+        alias = "editor_cmd"
+    )]
+    pub editor_command: Option<String>,
     /// Embed editor (for terminal interfaces) instead of forking and waiting.
     #[serde(default = "false_val")]
     pub embed: bool,
@@ -49,8 +54,8 @@ pub struct ComposingSettings {
 impl Default for ComposingSettings {
     fn default() -> Self {
         ComposingSettings {
-            mailer_cmd: String::new(),
-            editor_cmd: None,
+            mailer_command: String::new(),
+            editor_command: None,
             embed: false,
             format_flowed: true,
             default_header_values: HashMap::default(),

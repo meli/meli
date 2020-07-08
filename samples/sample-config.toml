@@ -105,8 +105,8 @@
 
 #[composing]
 # required for sending e-mail
-#mailer_cmd = 'msmtp --read-recipients --read-envelope-from'
-#editor_cmd = 'vim +/^$' # optional, by default $EDITOR is used.
+#mailer_command = 'msmtp --read-recipients --read-envelope-from'
+#editor_command = 'vim +/^$' # optional, by default $EDITOR is used.
 #
 #
 #[pgp]
