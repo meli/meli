@@ -102,7 +102,7 @@ use super::*;
                                 if !attr_inner_value.starts_with("( default")
                                     && !attr_inner_value.starts_with("( default =")
                                 {
-                                    return None;
+                                    return Some(new_attr);
                                 }
                                 if attr_inner_value.starts_with("( default =") {
                                     let rest = g.stream().clone().into_iter().skip(4);
