@@ -194,13 +194,15 @@ impl MailView {
                 {
                     Ok(fut) => {
                         let (mut chan, job_id) = account.job_executor.spawn_specialized(fut);
-                        debug!(&job_id);
-                        self.active_jobs.insert(job_id.clone());
-                        account.active_jobs.insert(job_id, JobRequest::AsBytes);
                         if let Ok(Some(bytes_result)) = try_recv_timeout!(&mut chan) {
                             self.state = MailViewState::Loaded { body: bytes_result };
                         } else {
                             self.state = MailViewState::LoadingBody { job_id, chan };
+                            self.active_jobs.insert(job_id);
+                            account.active_jobs.insert(job_id, JobRequest::AsBytes);
+                            context
+                                .replies
+                                .push_back(UIEvent::StatusEvent(StatusEvent::NewJob(job_id)));
                         }
                     }
                     Err(err) => {
@@ -1031,7 +1033,6 @@ impl Component for MailView {
                     }
                     self.active_jobs.remove(job_id);
                     self.set_dirty(true);
-                    return true;
                 }
                 _ => {
                     if self.pager.process_event(event, context) {
