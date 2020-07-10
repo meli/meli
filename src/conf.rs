@@ -312,9 +312,13 @@ impl FileSettings {
     pub fn new() -> Result<FileSettings> {
         let config_path = get_config_file()?;
         if !config_path.exists() {
+            let path_string = config_path.display().to_string();
+            if path_string.is_empty() {
+                return Err(MeliError::new("No configuration found."));
+            }
             println!(
                 "No configuration found. Would you like to generate one in {}? [Y/n]",
-                config_path.display()
+                path_string
             );
             let mut buffer = String::new();
             let stdin = io::stdin();
@@ -327,7 +331,7 @@ impl FileSettings {
                     .expect("Could not read from stdin.");
 
                 match buffer.trim() {
-                    "Y" | "y" | "yes" | "YES" | "Yes" => {
+                    "" | "Y" | "y" | "yes" | "YES" | "Yes" => {
                         create_config_file(&config_path)?;
                         return Err(MeliError::new(
                             "Edit the sample configuration and relaunch meli.",
@@ -339,7 +343,7 @@ impl FileSettings {
                     _ => {
                         println!(
                             "No configuration found. Would you like to generate one in {}? [Y/n]",
-                            config_path.display()
+                            path_string
                         );
                     }
                 }
