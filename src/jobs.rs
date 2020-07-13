@@ -157,8 +157,8 @@ impl JobExecutor {
         F: Future<Output = Result<()>> + Send + 'static,
     {
         let job_id = JobId::new();
-        let _job_id = job_id.clone();
-        let __job_id = job_id.clone();
+        let _job_id = job_id;
+        let __job_id = job_id;
         let finished_sender = self.sender.clone();
         let injector = self.global_queue.clone();
         // Create a task and schedule it for execution.
@@ -191,8 +191,8 @@ impl JobExecutor {
         let (sender, receiver) = oneshot::channel();
         let finished_sender = self.sender.clone();
         let job_id = JobId::new();
-        let _job_id = job_id.clone();
-        let __job_id = job_id.clone();
+        let _job_id = job_id;
+        let __job_id = job_id;
         let injector = self.global_queue.clone();
         // Create a task and schedule it for execution.
         let (task, _) = async_task::spawn(

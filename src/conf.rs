@@ -787,7 +787,7 @@ mod pp {
                     p = prefix.join(p)
                 }
 
-                ret.extend(pp_helper(&p, level + 1)?.chars());
+                ret.push_str(&pp_helper(&p, level + 1)?);
             } else {
                 ret.push_str(l);
                 ret.push('\n');
@@ -812,7 +812,7 @@ mod pp {
             for theme_mailbox in xdg_dirs.find_config_files("themes") {
                 let read_dir = std::fs::read_dir(theme_mailbox)?;
                 for theme in read_dir {
-                    ret.extend(pp_helper(&theme?.path(), 0)?.chars());
+                    ret.push_str(&pp_helper(&theme?.path(), 0)?);
                 }
             }
         }

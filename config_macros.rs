@@ -105,13 +105,13 @@ use super::*;
                                     return Some(new_attr);
                                 }
                                 if attr_inner_value.starts_with("( default =") {
-                                    let rest = g.stream().clone().into_iter().skip(4);
+                                    let rest = g.stream().into_iter().skip(4);
                                     new_attr.tokens = quote! { ( #(#rest)*) };
                                     if new_attr.tokens.to_string().as_str() == "( )" {
                                         return None;
                                     }
                                 } else if attr_inner_value.starts_with("( default") {
-                                    let rest = g.stream().clone().into_iter().skip(2);
+                                    let rest = g.stream().into_iter().skip(2);
                                     new_attr.tokens = quote! { ( #(#rest)*) };
                                     if new_attr.tokens.to_string().as_str() == "( )" {
                                         return None;

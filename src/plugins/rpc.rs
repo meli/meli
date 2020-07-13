@@ -37,7 +37,7 @@ impl RpcChannel {
     pub fn new(stream: UnixStream, session: &Uuid) -> Result<RpcChannel> {
         let mut ret = RpcChannel {
             stream,
-            session: session.clone(),
+            session: *session,
         };
         let greeting: PluginGreeting = ret.from_read().map_err(|err| {
             MeliError::new(format!("Could not get correct plugin greeting: {}", err))

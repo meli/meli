@@ -81,16 +81,16 @@ impl MailcapEntry {
         let mut lines_iter = content.lines();
         while let Some(l) = lines_iter.next() {
             let l = l.trim();
-            if l.starts_with("#") {
+            if l.starts_with('#') {
                 continue;
             }
             if l.is_empty() {
                 continue;
             }
 
-            if l.ends_with("\\") {
+            if l.ends_with('\\') {
                 let l = format!("{}{}", &l[..l.len() - 2], lines_iter.next().unwrap());
-                let mut parts_iter = l.split(";");
+                let mut parts_iter = l.split(';');
                 let key = parts_iter.next().unwrap();
                 let cmd = parts_iter.next().unwrap();
                 //let flags = parts_iter.next().unwrap();
@@ -112,7 +112,7 @@ impl MailcapEntry {
                 }
                 hash_map.insert(key.to_string(), cmd.to_string());
             } else {
-                let mut parts_iter = l.split(";");
+                let mut parts_iter = l.split(';');
                 let key = parts_iter.next().unwrap();
                 let cmd = parts_iter.next().unwrap();
                 //let flags = parts_iter.next().unwrap();
@@ -163,7 +163,7 @@ impl MailcapEntry {
                             p
                         }
                         "%t" => a.content_type().to_string(),
-                        param if param.starts_with("%{") && param.ends_with("}") => {
+                        param if param.starts_with("%{") && param.ends_with('}') => {
                             let param = &param["%{".len()..param.len() - 1];
                             if let Some(v) = params.iter().find(|(k, _)| *k == param.as_bytes()) {
                                 String::from_utf8_lossy(v.1).into()

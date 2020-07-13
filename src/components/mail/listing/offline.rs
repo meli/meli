@@ -166,7 +166,7 @@ impl Component for OfflineListing {
         self.dirty
     }
 
-    fn set_dirty(&mut self, value: bool) {
+    fn set_dirty(&mut self, _value: bool) {
         self.dirty = true;
     }
 

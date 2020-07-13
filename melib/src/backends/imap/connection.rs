@@ -446,11 +446,8 @@ impl ImapConnection {
             return Ok(());
         }
         let new_stream = debug!(ImapStream::new_connection(&self.server_conf).await);
-        if new_stream.is_err() {
-            *self.uid_store.is_online.lock().unwrap() = (
-                Instant::now(),
-                Err(new_stream.as_ref().unwrap_err().clone()),
-            );
+        if let Err(err) = new_stream.as_ref() {
+            *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Err(err.clone()));
         } else {
             *self.uid_store.is_online.lock().unwrap() = (Instant::now(), Ok(()));
         }

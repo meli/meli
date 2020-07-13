@@ -1055,11 +1055,11 @@ impl Account {
                     }
                     Ok(AsyncStatus::Payload(payload)) => {
                         debug!("got payload in status for {}", mailbox_hash);
-                        if payload.is_err() {
+                        if let Err(err) = payload {
                             self.mailbox_entries
                                 .entry(mailbox_hash)
                                 .and_modify(|entry| {
-                                    entry.status = MailboxStatus::Failed(payload.unwrap_err());
+                                    entry.status = MailboxStatus::Failed(err);
                                 });
                             self.sender
                                 .send(ThreadEvent::UIEvent(UIEvent::StartupCheck(mailbox_hash)))
@@ -1554,11 +1554,11 @@ impl Account {
                     self.active_jobs
                         .insert(job_id, JobRequest::Get(mailbox_hash, rcvr));
                     let payload = payload.unwrap();
-                    if payload.is_err() {
+                    if let Err(err) = payload {
                         self.mailbox_entries
                             .entry(mailbox_hash)
                             .and_modify(|entry| {
-                                entry.status = MailboxStatus::Failed(payload.unwrap_err());
+                                entry.status = MailboxStatus::Failed(err);
                             });
                         self.sender
                             .send(ThreadEvent::UIEvent(UIEvent::MailboxUpdate((

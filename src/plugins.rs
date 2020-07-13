@@ -188,22 +188,22 @@ impl PluginManager {
                 let channel = RpcChannel::new(stream, &session)?;
 
                 for h in &plugin.hooks {
-                    self.add_listener(h, session.clone());
+                    self.add_listener(h, session);
                 }
 
-                self.instances.insert(session.clone(), child);
-                self.sessions.insert(session.clone(), plugin.name.clone());
-                self.streams.insert(session.clone(), channel);
+                self.instances.insert(session, child);
+                self.sessions.insert(session, plugin.name.clone());
+                self.streams.insert(session, channel);
                 self.plugins.insert(plugin.name.clone(), plugin);
                 Ok(())
             }
             PluginKind::Filter => {
                 let session = Uuid::new_v4();
                 for h in &plugin.hooks {
-                    self.add_listener(h, session.clone());
+                    self.add_listener(h, session);
                 }
 
-                self.sessions.insert(session.clone(), plugin.name.clone());
+                self.sessions.insert(session, plugin.name.clone());
                 self.plugins.insert(plugin.name.clone(), plugin);
                 /* send init message to plugin to register hooks */
                 Ok(())
