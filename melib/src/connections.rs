@@ -139,3 +139,16 @@ impl std::os::unix::io::AsRawFd for Connection {
         }
     }
 }
+
+pub fn lookup_ipv4(host: &str, port: u16) -> crate::Result<std::net::SocketAddr> {
+    use std::net::ToSocketAddrs;
+
+    let addrs = (host, port).to_socket_addrs()?;
+    for addr in addrs {
+        if let std::net::SocketAddr::V4(_) = addr {
+            return Ok(addr);
+        }
+    }
+
+    Err(crate::error::MeliError::new("Cannot lookup address"))
+}

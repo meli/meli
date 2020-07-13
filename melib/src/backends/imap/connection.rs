@@ -21,7 +21,7 @@
 
 use super::protocol_parser::{ImapLineSplit, ImapResponse, RequiredResponses};
 use crate::backends::MailboxHash;
-use crate::connections::Connection;
+use crate::connections::{lookup_ipv4, Connection};
 use crate::email::parser::BytesExt;
 use crate::error::*;
 extern crate native_tls;
@@ -31,7 +31,6 @@ pub use smol::Async as AsyncWrapper;
 use std::collections::HashSet;
 use std::future::Future;
 use std::iter::FromIterator;
-use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
@@ -757,17 +756,4 @@ async fn read(
         }
     }
     None
-}
-
-fn lookup_ipv4(host: &str, port: u16) -> Result<SocketAddr> {
-    use std::net::ToSocketAddrs;
-
-    let addrs = (host, port).to_socket_addrs()?;
-    for addr in addrs {
-        if let SocketAddr::V4(_) = addr {
-            return Ok(addr);
-        }
-    }
-
-    Err(MeliError::new("Cannot lookup address"))
 }
