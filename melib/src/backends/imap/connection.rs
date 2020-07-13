@@ -64,6 +64,10 @@ impl MailboxSelection {
     }
 }
 
+async fn try_await(cl: impl Future<Output = Result<()>> + Send) -> Result<()> {
+    cl.await
+}
+
 #[derive(Debug)]
 pub struct ImapConnection {
     pub stream: Result<ImapStream>,
@@ -91,7 +95,9 @@ impl ImapStream {
             if server_conf.danger_accept_invalid_certs {
                 connector.danger_accept_invalid_certs(true);
             }
-            let connector = connector.build()?;
+            let connector = connector
+                .build()
+                .chain_err_kind(crate::error::ErrorKind::Network)?;
 
             let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
                 a
@@ -102,21 +108,27 @@ impl ImapStream {
                 )));
             };
 
-            let mut socket = AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
-                &addr,
-                std::time::Duration::new(4, 0),
-            )?))?;
+            let mut socket = AsyncWrapper::new(Connection::Tcp(
+                TcpStream::connect_timeout(&addr, std::time::Duration::new(4, 0))
+                    .chain_err_kind(crate::error::ErrorKind::Network)?,
+            ))
+            .chain_err_kind(crate::error::ErrorKind::Network)?;
             if server_conf.use_starttls {
                 let mut buf = vec![0; 1024];
                 match server_conf.protocol {
-                    ImapProtocol::IMAP => {
-                        socket
-                            .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
-                            .await?
-                    }
+                    ImapProtocol::IMAP => socket
+                        .write_all(format!("M{} STARTTLS\r\n", cmd_id).as_bytes())
+                        .await
+                        .chain_err_kind(crate::error::ErrorKind::Network)?,
                     ImapProtocol::ManageSieve => {
-                        socket.read(&mut buf).await?;
-                        socket.write_all(b"STARTTLS\r\n").await?;
+                        socket
+                            .read(&mut buf)
+                            .await
+                            .chain_err_kind(crate::error::ErrorKind::Network)?;
+                        socket
+                            .write_all(b"STARTTLS\r\n")
+                            .await
+                            .chain_err_kind(crate::error::ErrorKind::Network)?;
                     }
                 }
                 let mut response = String::with_capacity(1024);
@@ -124,7 +136,10 @@ impl ImapStream {
                 let now = std::time::Instant::now();
 
                 while now.elapsed().as_secs() < 3 {
-                    let len = socket.read(&mut buf).await?;
+                    let len = socket
+                        .read(&mut buf)
+                        .await
+                        .chain_err_kind(crate::error::ErrorKind::Network)?;
                     response.push_str(unsafe { std::str::from_utf8_unchecked(&buf[0..len]) });
                     match server_conf.protocol {
                         ImapProtocol::IMAP => {
@@ -157,7 +172,9 @@ impl ImapStream {
 
             {
                 // FIXME: This is blocking
-                let socket = socket.into_inner()?;
+                let socket = socket
+                    .into_inner()
+                    .chain_err_kind(crate::error::ErrorKind::Network)?;
                 let mut conn_result = connector.connect(path, socket);
                 if let Err(native_tls::HandshakeError::WouldBlock(midhandshake_stream)) =
                     conn_result
@@ -173,12 +190,15 @@ impl ImapStream {
                                 midhandshake_stream = Some(stream);
                             }
                             p => {
-                                p?;
+                                p.chain_err_kind(crate::error::ErrorKind::Network)?;
                             }
                         }
                     }
                 }
-                AsyncWrapper::new(Connection::Tls(conn_result?))?
+                AsyncWrapper::new(Connection::Tls(
+                    conn_result.chain_err_kind(crate::error::ErrorKind::Network)?,
+                ))
+                .chain_err_kind(crate::error::ErrorKind::Network)?
             }
         } else {
             let addr = if let Ok(a) = lookup_ipv4(path, server_conf.server_port) {
@@ -189,10 +209,11 @@ impl ImapStream {
                     &path
                 )));
             };
-            AsyncWrapper::new(Connection::Tcp(TcpStream::connect_timeout(
-                &addr,
-                std::time::Duration::new(4, 0),
-            )?))?
+            AsyncWrapper::new(Connection::Tcp(
+                TcpStream::connect_timeout(&addr, std::time::Duration::new(4, 0))
+                    .chain_err_kind(crate::error::ErrorKind::Network)?,
+            ))
+            .chain_err_kind(crate::error::ErrorKind::Network)?
         };
         let mut res = String::with_capacity(8 * 1024);
         let mut ret = ImapStream {
@@ -256,7 +277,8 @@ impl ImapStream {
             return Err(MeliError::new(format!(
                 "Could not connect to {}: server does not accept logins [LOGINDISABLED]",
                 &server_conf.server_hostname
-            )));
+            ))
+            .set_err_kind(crate::error::ErrorKind::Authentication));
         }
 
         let mut capabilities = None;
@@ -287,7 +309,8 @@ impl ImapStream {
                         return Err(MeliError::new(format!(
                             "Could not connect. Server replied with '{}'",
                             l[tag_start.len()..].trim()
-                        )));
+                        ))
+                        .set_err_kind(crate::error::ErrorKind::Authentication));
                     }
                     should_break = true;
                 }
@@ -365,7 +388,7 @@ impl ImapStream {
                     continue;
                 }
                 Err(e) => {
-                    return Err(MeliError::from(e));
+                    return Err(MeliError::from(e).set_err_kind(crate::error::ErrorKind::Network));
                 }
             }
         }
@@ -381,42 +404,66 @@ impl ImapStream {
     }
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
-        let command = command.trim();
-        match self.protocol {
-            ImapProtocol::IMAP => {
-                self.stream.write_all(b"M").await?;
-                self.stream
-                    .write_all(self.cmd_id.to_string().as_bytes())
-                    .await?;
-                self.stream.write_all(b" ").await?;
-                self.cmd_id += 1;
+        if let Err(err) = try_await(async move {
+            let command = command.trim();
+            match self.protocol {
+                ImapProtocol::IMAP => {
+                    self.stream.write_all(b"M").await?;
+                    self.stream
+                        .write_all(self.cmd_id.to_string().as_bytes())
+                        .await?;
+                    self.stream.write_all(b" ").await?;
+                    self.cmd_id += 1;
+                }
+                ImapProtocol::ManageSieve => {}
             }
-            ImapProtocol::ManageSieve => {}
-        }
 
-        self.stream.write_all(command).await?;
-        self.stream.write_all(b"\r\n").await?;
-        match self.protocol {
-            ImapProtocol::IMAP => {
-                debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
-                    std::str::from_utf8_unchecked(command)
-                });
+            self.stream.write_all(command).await?;
+            self.stream.write_all(b"\r\n").await?;
+            match self.protocol {
+                ImapProtocol::IMAP => {
+                    debug!("sent: M{} {}", self.cmd_id - 1, unsafe {
+                        std::str::from_utf8_unchecked(command)
+                    });
+                }
+                ImapProtocol::ManageSieve => {}
             }
-            ImapProtocol::ManageSieve => {}
+            Ok(())
+        })
+        .await
+        {
+            Err(err.set_err_kind(crate::error::ErrorKind::Network))
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     pub async fn send_literal(&mut self, data: &[u8]) -> Result<()> {
-        self.stream.write_all(data).await?;
-        self.stream.write_all(b"\r\n").await?;
-        Ok(())
+        if let Err(err) = try_await(async move {
+            self.stream.write_all(data).await?;
+            self.stream.write_all(b"\r\n").await?;
+            Ok(())
+        })
+        .await
+        {
+            Err(err.set_err_kind(crate::error::ErrorKind::Network))
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
-        self.stream.write_all(raw).await?;
-        self.stream.write_all(b"\r\n").await?;
-        Ok(())
+        if let Err(err) = try_await(async move {
+            self.stream.write_all(raw).await?;
+            self.stream.write_all(b"\r\n").await?;
+            Ok(())
+        })
+        .await
+        {
+            Err(err.set_err_kind(crate::error::ErrorKind::Network))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -525,18 +572,39 @@ impl ImapConnection {
     }
 
     pub async fn send_command(&mut self, command: &[u8]) -> Result<()> {
-        self.stream.as_mut()?.send_command(command).await?;
-        Ok(())
+        if let Err(err) =
+            try_await(async { self.stream.as_mut()?.send_command(command).await }).await
+        {
+            if err.kind.is_network() {
+                self.connect().await?;
+            }
+            Err(err)
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn send_literal(&mut self, data: &[u8]) -> Result<()> {
-        self.stream.as_mut()?.send_literal(data).await?;
-        Ok(())
+        if let Err(err) = try_await(async { self.stream.as_mut()?.send_literal(data).await }).await
+        {
+            if err.kind.is_network() {
+                self.connect().await?;
+            }
+            Err(err)
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn send_raw(&mut self, raw: &[u8]) -> Result<()> {
-        self.stream.as_mut()?.send_raw(raw).await?;
-        Ok(())
+        if let Err(err) = try_await(async { self.stream.as_mut()?.send_raw(raw).await }).await {
+            if err.kind.is_network() {
+                self.connect().await?;
+            }
+            Err(err)
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn select_mailbox(

@@ -34,17 +34,42 @@ use std::sync::Arc;
 
 pub type Result<T> = result::Result<T, MeliError>;
 
+#[derive(Debug, Copy, PartialEq, Clone)]
+pub enum ErrorKind {
+    None,
+    Authentication,
+    Network,
+}
+
+impl ErrorKind {
+    pub fn is_network(&self) -> bool {
+        match self {
+            ErrorKind::Network => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_authentication(&self) -> bool {
+        match self {
+            ErrorKind::Authentication => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MeliError {
     pub summary: Option<Cow<'static, str>>,
     pub details: Cow<'static, str>,
     pub source: Option<std::sync::Arc<dyn Error + Send + Sync + 'static>>,
+    pub kind: ErrorKind,
 }
 
 pub trait IntoMeliError {
     fn set_err_summary<M>(self, msg: M) -> MeliError
     where
         M: Into<Cow<'static, str>>;
+    fn set_err_kind(self, kind: ErrorKind) -> MeliError;
 }
 
 pub trait ResultIntoMeliError<T> {
@@ -52,6 +77,8 @@ pub trait ResultIntoMeliError<T> {
     where
         F: Fn() -> M,
         M: Into<Cow<'static, str>>;
+
+    fn chain_err_kind(self, kind: ErrorKind) -> Result<T>;
 }
 
 impl<I: Into<MeliError>> IntoMeliError for I {
@@ -62,6 +89,12 @@ impl<I: Into<MeliError>> IntoMeliError for I {
     {
         let err: MeliError = self.into();
         err.set_summary(msg)
+    }
+
+    #[inline]
+    fn set_err_kind(self, kind: ErrorKind) -> MeliError {
+        let err: MeliError = self.into();
+        err.set_kind(kind)
     }
 }
 
@@ -74,6 +107,11 @@ impl<T, I: Into<MeliError>> ResultIntoMeliError<T> for std::result::Result<T, I>
     {
         self.map_err(|err| err.set_err_summary(msg_fn()))
     }
+
+    #[inline]
+    fn chain_err_kind(self, kind: ErrorKind) -> Result<T> {
+        self.map_err(|err| err.set_err_kind(kind))
+    }
 }
 
 impl MeliError {
@@ -85,6 +123,7 @@ impl MeliError {
             summary: None,
             details: msg.into(),
             source: None,
+            kind: ErrorKind::None,
         }
     }
 
@@ -105,6 +144,11 @@ impl MeliError {
         new_val: Option<std::sync::Arc<dyn Error + Send + Sync + 'static>>,
     ) -> MeliError {
         self.source = new_val;
+        self
+    }
+
+    pub fn set_kind(mut self, new_val: ErrorKind) -> MeliError {
+        self.kind = new_val;
         self
     }
 }
