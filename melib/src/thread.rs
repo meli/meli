@@ -20,9 +20,9 @@
  */
 
 /*!
- * This module implements Jamie Zawinski's (threading algorithm)
- * [https://www.jwz.org/doc/threading.html]. It is a bit of a beast, so prepare for a lot of
- * bloated code that's necessary for the crap modern e-mail is. Quoted comments (/* " .. " */) are
+ * e-mail threading (conversations)
+ *
+ * This module implements Jamie Zawinski's [threading algorithm](https://www.jwz.org/doc/threading.html). Quoted comments (/* " .. " */) are
  * taken almost verbatim from the algorithm.
  *
  * The entry point of this module is the `Threads` struct and its `new` method. It contains

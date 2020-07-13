@@ -25,6 +25,7 @@
 //!   read/writes/updates through it. (see module `melib::backends`)
 //! - Decode attachments (see module `melib::email::attachments`)
 //! - Create new mail (see `email::Draft`)
+//! - Send mail with an SMTP client (see module `smtp`)
 //! - Manage an `addressbook` i.e. have contacts (see module `addressbook`)
 //! - Build thread structures out of a list of mail via their `In-Reply-To` and `References` header
 //!   values (see module `thread`)
