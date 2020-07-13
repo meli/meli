@@ -83,6 +83,14 @@ impl Address {
             Address::Group(_) => String::new(),
         }
     }
+
+    pub fn address_spec_raw(&self) -> &[u8] {
+        match self {
+            Address::Mailbox(m) => m.address_spec.display_bytes(&m.raw),
+            Address::Group(g) => &g.raw,
+        }
+    }
+
     pub fn get_fqdn(&self) -> Option<String> {
         match self {
             Address::Mailbox(m) => {

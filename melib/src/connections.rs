@@ -150,6 +150,8 @@ pub fn lookup_ipv4(host: &str, port: u16) -> crate::Result<std::net::SocketAddr>
         }
     }
 
-    Err(crate::error::MeliError::new("Cannot lookup address")
-        .set_kind(crate::error::ErrorKind::Network))
+    Err(
+        crate::error::MeliError::new(format!("Could not lookup address {}:{}", host, port))
+            .set_kind(crate::error::ErrorKind::Network),
+    )
 }

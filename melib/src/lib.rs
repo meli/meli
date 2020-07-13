@@ -117,6 +117,8 @@ pub mod connections;
 pub mod parsec;
 pub mod search;
 
+#[cfg(feature = "smtp")]
+pub mod smtp;
 #[cfg(feature = "sqlite3")]
 pub mod sqlite3;
 
@@ -132,6 +134,7 @@ extern crate bitflags;
 extern crate uuid;
 pub use smallvec;
 
+pub use futures;
 pub use smol;
 
 pub use crate::backends::{Backends, RefreshEvent, RefreshEventConsumer, SpecialUsageMailbox};
