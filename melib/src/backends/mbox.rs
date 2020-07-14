@@ -740,6 +740,7 @@ impl MailBackend for MboxType {
             hasher.finish()
         };
         let mailboxes = self.mailboxes.clone();
+        let mailbox_index = self.mailbox_index.clone();
         let prefer_mbox_type = self.prefer_mbox_type;
         let handle = std::thread::Builder::new()
             .name(format!("watching {}", self.account_name,))
@@ -788,11 +789,13 @@ impl MailBackend for MboxType {
                                 {
                                     if let Ok((_, envelopes)) = mbox_parse(
                                         mailbox_lock[&mailbox_hash].index.clone(),
-                                        &contents[mailbox_lock[&mailbox_hash].content.len()..],
+                                        &contents,
                                         mailbox_lock[&mailbox_hash].content.len(),
                                         prefer_mbox_type,
                                     ) {
+                                        let mut mailbox_index_lck = mailbox_index.lock().unwrap();
                                         for env in envelopes {
+                                            mailbox_index_lck.insert(env.hash(), mailbox_hash);
                                             sender.send(RefreshEvent {
                                                 account_hash,
                                                 mailbox_hash,
