@@ -22,7 +22,7 @@
 use super::EntryStrings;
 use super::*;
 use crate::components::utilities::PageMovement;
-use crate::jobs::{oneshot, JobId};
+use crate::jobs::{oneshot, JobId, JoinHandle};
 use std::cmp;
 use std::iter::FromIterator;
 
@@ -80,7 +80,7 @@ pub struct PlainListing {
     _row_updates: SmallVec<[ThreadHash; 8]>,
     color_cache: ColorCache,
 
-    active_jobs: HashMap<JobId, oneshot::Receiver<Result<()>>>,
+    active_jobs: HashMap<JobId, (JoinHandle, oneshot::Receiver<Result<()>>)>,
     movement: Option<PageMovement>,
     id: ComponentId,
 }
@@ -1031,8 +1031,8 @@ impl PlainListing {
                     )));
             }
             Ok(fut) => {
-                let (handle, job_id) = account.job_executor.spawn_specialized(fut);
-                self.active_jobs.insert(job_id, handle);
+                let (rcvr, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                self.active_jobs.insert(job_id, (handle, rcvr));
             }
         }
         self.row_updates.push(env_hash);
@@ -1284,12 +1284,13 @@ impl Component for PlainListing {
                     self.cursor_pos.1,
                 ) {
                     Ok(job) => {
-                        let (chan, job_id) = context.accounts[self.cursor_pos.0]
+                        let (chan, handle, job_id) = context.accounts[self.cursor_pos.0]
                             .job_executor
                             .spawn_specialized(job);
-                        context.accounts[self.cursor_pos.0]
-                            .active_jobs
-                            .insert(job_id.clone(), crate::conf::accounts::JobRequest::Search);
+                        context.accounts[self.cursor_pos.0].active_jobs.insert(
+                            job_id,
+                            crate::conf::accounts::JobRequest::Search(handle),
+                        );
                         self.search_job = Some((filter_term.to_string(), chan, job_id));
                     }
                     Err(err) => {

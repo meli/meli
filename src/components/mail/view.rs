@@ -193,13 +193,16 @@ impl MailView {
                     .and_then(|mut op| op.as_bytes())
                 {
                     Ok(fut) => {
-                        let (mut chan, job_id) = account.job_executor.spawn_specialized(fut);
+                        let (mut chan, handle, job_id) =
+                            account.job_executor.spawn_specialized(fut);
                         if let Ok(Some(bytes_result)) = try_recv_timeout!(&mut chan) {
                             self.state = MailViewState::Loaded { body: bytes_result };
                         } else {
                             self.state = MailViewState::LoadingBody { job_id, chan };
                             self.active_jobs.insert(job_id);
-                            account.active_jobs.insert(job_id, JobRequest::AsBytes);
+                            account
+                                .active_jobs
+                                .insert(job_id, JobRequest::AsBytes(handle));
                             context
                                 .replies
                                 .push_back(UIEvent::StatusEvent(StatusEvent::NewJob(job_id)));
@@ -218,10 +221,11 @@ impl MailView {
                     .and_then(|mut op| op.set_flag(Flag::SEEN, true))
                 {
                     Ok(fut) => {
-                        let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
-                        account
-                            .active_jobs
-                            .insert(job_id, JobRequest::SetFlags(self.coordinates.2, rcvr));
+                        let (rcvr, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        account.active_jobs.insert(
+                            job_id,
+                            JobRequest::SetFlags(self.coordinates.2, handle, rcvr),
+                        );
                     }
                     Err(e) => {
                         context.replies.push_back(UIEvent::StatusEvent(

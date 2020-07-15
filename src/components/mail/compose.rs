@@ -256,12 +256,12 @@ impl Composer {
                 ));
             }
             Ok(fut) => {
-                let (mut rcvr, job_id) = context.accounts[coordinates.0]
+                let (mut rcvr, handle, job_id) = context.accounts[coordinates.0]
                     .job_executor
                     .spawn_specialized(fut);
                 context.accounts[coordinates.0]
                     .active_jobs
-                    .insert(job_id, JobRequest::AsBytes);
+                    .insert(job_id, JobRequest::AsBytes(handle));
                 if let Ok(Some(parent_bytes)) = try_recv_timeout!(&mut rcvr) {
                     match parent_bytes {
                         Err(err) => {

@@ -176,10 +176,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                        let (rcvr, handle, job_id) = account.job_executor.spawn_specialized(fut);
                         account
                             .active_jobs
-                            .insert(job_id, JobRequest::SetFlags(env_hash, rcvr));
+                            .insert(job_id, JobRequest::SetFlags(env_hash, handle, rcvr));
                     }
                 },
                 ListingAction::SetUnseen => match envelope.set_unseen(op) {
@@ -189,10 +189,10 @@ pub trait MailListingTrait: ListingTrait {
                         ));
                     }
                     Ok(fut) => {
-                        let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                        let (rcvr, handle, job_id) = account.job_executor.spawn_specialized(fut);
                         account
                             .active_jobs
-                            .insert(job_id, JobRequest::SetFlags(env_hash, rcvr));
+                            .insert(job_id, JobRequest::SetFlags(env_hash, handle, rcvr));
                     }
                 },
                 ListingAction::Delete => {
@@ -207,10 +207,11 @@ pub trait MailListingTrait: ListingTrait {
                             return;
                         }
                         Ok(fut) => {
-                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                            let (rcvr, handle, job_id) =
+                                account.job_executor.spawn_specialized(fut);
                             account
                                 .active_jobs
-                                .insert(job_id, JobRequest::DeleteMessage(env_hash, rcvr));
+                                .insert(job_id, JobRequest::DeleteMessage(env_hash, handle, rcvr));
                         }
                     }
                     continue;
@@ -230,10 +231,12 @@ pub trait MailListingTrait: ListingTrait {
                             return;
                         }
                         Ok(fut) => {
-                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
-                            account
-                                .active_jobs
-                                .insert(job_id, JobRequest::SaveMessage(mailbox_hash, rcvr));
+                            let (rcvr, handle, job_id) =
+                                account.job_executor.spawn_specialized(fut);
+                            account.active_jobs.insert(
+                                job_id,
+                                JobRequest::SaveMessage(mailbox_hash, handle, rcvr),
+                            );
                         }
                     }
                     continue;
@@ -253,10 +256,11 @@ pub trait MailListingTrait: ListingTrait {
                             })?;
                         let account = &mut context.accounts[account_pos];
                         let mailbox_hash = account.mailbox_by_path(mailbox_path)?;
-                        let (rcvr, job_id) = account.job_executor.spawn_specialized(bytes_fut);
+                        let (rcvr, handle, job_id) =
+                            account.job_executor.spawn_specialized(bytes_fut);
                         account
                             .active_jobs
-                            .insert(job_id, JobRequest::CopyTo(mailbox_hash, rcvr));
+                            .insert(job_id, JobRequest::CopyTo(mailbox_hash, handle, rcvr));
                         Ok(())
                     }) {
                         context.replies.push_back(UIEvent::Notification(
@@ -283,10 +287,12 @@ pub trait MailListingTrait: ListingTrait {
                             return;
                         }
                         Ok(fut) => {
-                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
-                            account
-                                .active_jobs
-                                .insert(job_id, JobRequest::SaveMessage(mailbox_hash, rcvr));
+                            let (rcvr, handle, job_id) =
+                                account.job_executor.spawn_specialized(fut);
+                            account.active_jobs.insert(
+                                job_id,
+                                JobRequest::SaveMessage(mailbox_hash, handle, rcvr),
+                            );
                         }
                     }
                     continue;
@@ -306,10 +312,11 @@ pub trait MailListingTrait: ListingTrait {
                             })?;
                         let account = &mut context.accounts[account_pos];
                         let mailbox_hash = account.mailbox_by_path(mailbox_path)?;
-                        let (rcvr, job_id) = account.job_executor.spawn_specialized(bytes_fut);
+                        let (rcvr, handle, job_id) =
+                            account.job_executor.spawn_specialized(bytes_fut);
                         account
                             .active_jobs
-                            .insert(job_id, JobRequest::CopyTo(mailbox_hash, rcvr));
+                            .insert(job_id, JobRequest::CopyTo(mailbox_hash, handle, rcvr));
                         Ok(())
                     }) {
                         context.replies.push_back(UIEvent::Notification(
@@ -339,10 +346,11 @@ pub trait MailListingTrait: ListingTrait {
                             return;
                         }
                         Ok(fut) => {
-                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                            let (rcvr, handle, job_id) =
+                                account.job_executor.spawn_specialized(fut);
                             account
                                 .active_jobs
-                                .insert(job_id, JobRequest::SetFlags(env_hash, rcvr));
+                                .insert(job_id, JobRequest::SetFlags(env_hash, handle, rcvr));
                         }
                     }
                 }
@@ -357,10 +365,11 @@ pub trait MailListingTrait: ListingTrait {
                             return;
                         }
                         Ok(fut) => {
-                            let (rcvr, job_id) = account.job_executor.spawn_specialized(fut);
+                            let (rcvr, handle, job_id) =
+                                account.job_executor.spawn_specialized(fut);
                             account
                                 .active_jobs
-                                .insert(job_id, JobRequest::SetFlags(env_hash, rcvr));
+                                .insert(job_id, JobRequest::SetFlags(env_hash, handle, rcvr));
                         }
                     }
                 }

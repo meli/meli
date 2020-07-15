@@ -183,7 +183,7 @@ impl JobExecutor {
     }
 
     ///// Spawns a future on the executor.
-    pub fn spawn_specialized<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JobId)
+    pub fn spawn_specialized<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JoinHandle, JobId)
     where
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
@@ -195,13 +195,14 @@ impl JobExecutor {
         let __job_id = job_id;
         let injector = self.global_queue.clone();
         // Create a task and schedule it for execution.
-        let (task, _) = async_task::spawn(
+        let (task, handle) = async_task::spawn(
             async move {
                 let res = future.await;
                 let _ = sender.send(res);
                 finished_sender
                     .send(ThreadEvent::JobFinished(__job_id))
                     .unwrap();
+                Ok(())
             },
             move |task| injector.push(MeliTask { task, id: _job_id }),
             (),
@@ -211,7 +212,7 @@ impl JobExecutor {
             unparker.unpark();
         }
 
-        (receiver, job_id)
+        (receiver, JoinHandle(handle), job_id)
     }
 }
 

@@ -1534,12 +1534,12 @@ impl Component for CompactListing {
                     self.cursor_pos.1,
                 ) {
                     Ok(job) => {
-                        let (chan, job_id) = context.accounts[self.cursor_pos.0]
+                        let (chan, handle, job_id) = context.accounts[self.cursor_pos.0]
                             .job_executor
                             .spawn_specialized(job);
                         context.accounts[self.cursor_pos.0]
                             .active_jobs
-                            .insert(job_id.clone(), crate::conf::accounts::JobRequest::Search);
+                            .insert(job_id, crate::conf::accounts::JobRequest::Search(handle));
                         self.search_job = Some((filter_term.to_string(), chan, job_id));
                     }
                     Err(err) => {
