@@ -21,6 +21,8 @@
 
 use super::*;
 use crate::components::utilities::PageMovement;
+use std::cmp;
+use std::convert::TryInto;
 
 const MAX_COLS: usize = 500;
 
@@ -35,9 +37,11 @@ pub struct ThreadListing {
     sort: (SortField, SortOrder),
     subsort: (SortField, SortOrder),
     /// Cache current view.
-    content: CellBuffer,
     color_cache: ColorCache,
 
+    data_columns: DataColumns,
+    rows_drawn: SegmentTree,
+    rows: Vec<((usize, bool, bool, EnvelopeHash), EntryStrings)>,
     row_updates: SmallVec<[ThreadHash; 8]>,
     order: HashMap<EnvelopeHash, usize>,
     /// If we must redraw on next redraw event
@@ -77,6 +81,8 @@ impl MailListingTrait for ThreadListing {
             highlighted: crate::conf::value(context, "mail.listing.plain.even_highlighted"),
             even: crate::conf::value(context, "mail.listing.plain.even"),
             odd: crate::conf::value(context, "mail.listing.plain.odd"),
+            even_unseen: crate::conf::value(context, "mail.listing.plain.even_unseen"),
+            odd_unseen: crate::conf::value(context, "mail.listing.plain.odd_unseen"),
             selected: crate::conf::value(context, "mail.listing.plain.even_selected"),
             attachment_flag: crate::conf::value(context, "mail.listing.attachment_flag"),
             thread_snooze_flag: crate::conf::value(context, "mail.listing.thread_snooze_flag"),
@@ -100,9 +106,8 @@ impl MailListingTrait for ThreadListing {
                 };
                 let message: String =
                     context.accounts[self.cursor_pos.0][&self.cursor_pos.1].status();
-                self.content =
-                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
+                /*
                 write_string_to_grid(
                     message.as_str(),
                     &mut self.content,
@@ -112,6 +117,7 @@ impl MailListingTrait for ThreadListing {
                     ((0, 0), (MAX_COLS - 1, 0)),
                     None,
                 );
+                */
                 return;
             }
         }
@@ -147,6 +153,7 @@ impl MailListingTrait for ThreadListing {
         };
         if threads.len() == 0 {
             let message = format!("Mailbox `{}` is empty.", account[&self.cursor_pos.1].name());
+            /*
             self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(
                 &message,
@@ -157,10 +164,24 @@ impl MailListingTrait for ThreadListing {
                 ((0, 0), (message.len() - 1, 0)),
                 None,
             );
+            */
             return;
         }
-        self.content =
-            CellBuffer::new_with_context(MAX_COLS, threads.len() + 1, default_cell, context);
+        let mut rows = Vec::with_capacity(1024);
+        let mut min_width = (0, 0, 0, 0, 0);
+        let mut row_widths: (
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+            SmallVec<[u8; 1024]>,
+        ) = (
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+            SmallVec::new(),
+        );
 
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
         let mut thread_idx = 0; // needed for alternate thread colors
@@ -183,40 +204,75 @@ impl MailListingTrait for ThreadListing {
                 let envelope: EnvelopeRef =
                     account.collection.get_env(thread_node.message().unwrap());
                 self.order.insert(envelope.hash(), idx);
-                let fg_color = if !envelope.is_seen() {
-                    Color::Byte(0)
-                } else {
-                    Color::Default
-                };
-                let bg_color = if !envelope.is_seen() {
-                    Color::Byte(251)
-                } else if thread_idx % 2 == 0 {
-                    Color::Byte(236)
-                } else {
-                    Color::Default
-                };
-                let (x, _) = write_string_to_grid(
-                    &ThreadListing::make_thread_entry(
-                        &envelope,
-                        idx,
-                        indentation,
-                        thread_node_hash,
-                        threads,
-                        &indentations,
-                        has_sibling,
-                    ),
-                    &mut self.content,
-                    fg_color,
-                    bg_color,
-                    Attr::DEFAULT,
-                    ((0, idx), (MAX_COLS - 1, idx)),
-                    None,
-                );
-
-                for x in x..MAX_COLS {
-                    self.content[(x, idx)].set_ch(' ');
-                    self.content[(x, idx)].set_bg(bg_color);
+                use melib::search::QueryTrait;
+                if let Some(filter_query) = mailbox_settings!(
+                    context[self.cursor_pos.0][&self.cursor_pos.1]
+                        .listing
+                        .filter
+                )
+                .as_ref()
+                {
+                    if !envelope.is_match(filter_query) {
+                        continue;
+                    }
                 }
+
+                let mut entry_strings = self.make_entry_string(&envelope, context);
+                entry_strings.subject = SubjectString(ThreadListing::make_thread_entry(
+                    &envelope,
+                    idx,
+                    indentation,
+                    thread_node_hash,
+                    threads,
+                    &indentations,
+                    has_sibling,
+                ));
+                row_widths.1.push(
+                    entry_strings
+                        .date
+                        .grapheme_width()
+                        .try_into()
+                        .unwrap_or(255),
+                ); /* date */
+                row_widths.2.push(
+                    entry_strings
+                        .from
+                        .grapheme_width()
+                        .try_into()
+                        .unwrap_or(255),
+                ); /* from */
+                row_widths.3.push(
+                    entry_strings
+                        .flag
+                        .grapheme_width()
+                        .try_into()
+                        .unwrap_or(255),
+                ); /* flags */
+                row_widths.4.push(
+                    (entry_strings.subject.grapheme_width()
+                        + 1
+                        + entry_strings.tags.grapheme_width())
+                    .try_into()
+                    .unwrap_or(255),
+                );
+                min_width.1 = cmp::max(min_width.1, entry_strings.date.grapheme_width()); /* date */
+                min_width.2 = cmp::max(min_width.2, entry_strings.from.grapheme_width()); /* from */
+                min_width.3 = cmp::max(min_width.3, entry_strings.flag.grapheme_width()); /* flags */
+                min_width.4 = cmp::max(
+                    min_width.4,
+                    entry_strings.subject.grapheme_width()
+                        + 1
+                        + entry_strings.tags.grapheme_width(),
+                ); /* tags + subject */
+                rows.push((
+                    (
+                        idx,
+                        envelope.is_seen(),
+                        envelope.has_attachments(),
+                        envelope.hash(),
+                    ),
+                    entry_strings,
+                ));
                 idx += 1;
             } else {
                 continue;
@@ -238,6 +294,38 @@ impl MailListingTrait for ThreadListing {
                 _ => {}
             }
         }
+        min_width.0 = idx.saturating_sub(1).to_string().len();
+        /* index column */
+        self.data_columns.columns[0] =
+            CellBuffer::new_with_context(min_width.0, rows.len(), default_cell, context);
+
+        /* date column */
+        self.data_columns.columns[1] =
+            CellBuffer::new_with_context(min_width.1, rows.len(), default_cell, context);
+        /* from column */
+        self.data_columns.columns[2] =
+            CellBuffer::new_with_context(min_width.2, rows.len(), default_cell, context);
+        self.data_columns.segment_tree[2] = row_widths.2.into();
+        /* flags column */
+        self.data_columns.columns[3] =
+            CellBuffer::new_with_context(min_width.3, rows.len(), default_cell, context);
+        /* subject column */
+        self.data_columns.columns[4] =
+            CellBuffer::new_with_context(min_width.4, rows.len(), default_cell, context);
+        self.data_columns.segment_tree[4] = row_widths.4.into();
+
+        self.rows = rows;
+        self.rows_drawn = SegmentTree::from(
+            std::iter::repeat(1)
+                .take(self.rows.len())
+                .collect::<SmallVec<_>>(),
+        );
+        debug_assert!(self.rows_drawn.array.len() == self.rows.len());
+        self.draw_rows(
+            context,
+            0,
+            std::cmp::min(80, self.rows.len().saturating_sub(1)),
+        );
         self.length = self.order.len();
     }
 }
@@ -264,12 +352,6 @@ impl ListingTrait for ThreadListing {
         let bottom_right = bottom_right!(area);
         if self.length == 0 {
             clear_area(grid, area, self.color_cache.theme_default);
-            copy_area(
-                grid,
-                &self.content,
-                area,
-                ((0, 0), pos_dec(self.content.size(), (1, 1))),
-            );
             context.dirty_areas.push_back(area);
             return;
         }
@@ -315,6 +397,13 @@ impl ListingTrait for ThreadListing {
         let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
 
         let top_idx = page_no * rows;
+        self.draw_rows(
+            context,
+            top_idx,
+            cmp::min(self.length.saturating_sub(1), top_idx + rows - 1),
+        );
+
+        /*
         if !self.initialised {
             self.initialised = false;
             copy_area(
@@ -334,6 +423,7 @@ impl ListingTrait for ThreadListing {
             );
             context.dirty_areas.push_back(area);
         }
+        */
         /* If cursor position has changed, remove the highlight from the previous position and
          * apply it in the new one. */
         if self.cursor_pos.2 != self.new_cursor_pos.2 && prev_page_no == page_no {
@@ -356,6 +446,171 @@ impl ListingTrait for ThreadListing {
         }
 
         /* Page_no has changed, so draw new page */
+        if self.new_cursor_pos.2 >= self.length {
+            self.new_cursor_pos.2 = self.length - 1;
+            self.cursor_pos.2 = self.new_cursor_pos.2;
+        }
+
+        let width = width!(area);
+        self.data_columns.widths = Default::default();
+        self.data_columns.widths[0] = self.data_columns.columns[0].size().0;
+        self.data_columns.widths[1] = self.data_columns.columns[1].size().0; /* date*/
+        self.data_columns.widths[2] = self.data_columns.columns[2].size().0; /* from */
+        self.data_columns.widths[3] = self.data_columns.columns[3].size().0; /* flags */
+        self.data_columns.widths[4] = self.data_columns.columns[4].size().0; /* subject */
+
+        let min_col_width = std::cmp::min(
+            15,
+            std::cmp::min(self.data_columns.widths[4], self.data_columns.widths[2]),
+        );
+        if self.data_columns.widths[0] + self.data_columns.widths[1] + 3 * min_col_width + 8 > width
+        {
+            let remainder = width
+                .saturating_sub(self.data_columns.widths[0])
+                .saturating_sub(self.data_columns.widths[1])
+                .saturating_sub(4);
+            self.data_columns.widths[2] = remainder / 6;
+            self.data_columns.widths[4] =
+                ((2 * remainder) / 3).saturating_sub(self.data_columns.widths[3]);
+        } else {
+            let remainder = width
+                .saturating_sub(self.data_columns.widths[0])
+                .saturating_sub(self.data_columns.widths[1])
+                .saturating_sub(8);
+            if min_col_width + self.data_columns.widths[4] > remainder {
+                self.data_columns.widths[4] =
+                    remainder.saturating_sub(min_col_width + self.data_columns.widths[3]);
+                self.data_columns.widths[2] = min_col_width;
+            }
+        }
+        for &i in &[2, 4] {
+            /* Set From and Subject column widths to their maximum value width in the range
+             * [top_idx, top_idx + rows]. By using a segment tree the query is O(logn), which is
+             * great!
+             */
+            self.data_columns.widths[i] =
+                self.data_columns.segment_tree[i].get_max(top_idx, top_idx + rows) as usize;
+        }
+        if self.data_columns.widths.iter().sum::<usize>() > width {
+            let diff = self.data_columns.widths.iter().sum::<usize>() - width;
+            if self.data_columns.widths[2] > 2 * diff {
+                self.data_columns.widths[2] -= diff;
+            } else {
+                self.data_columns.widths[2] = std::cmp::max(
+                    15,
+                    self.data_columns.widths[2].saturating_sub((2 * diff) / 3),
+                );
+                self.data_columns.widths[4] = std::cmp::max(
+                    15,
+                    self.data_columns.widths[4].saturating_sub(diff / 3 + diff % 3),
+                );
+            }
+        }
+        clear_area(grid, area, self.color_cache.theme_default);
+        /* Page_no has changed, so draw new page */
+        let mut x = get_x(upper_left);
+        let mut flag_x = 0;
+        for i in 0..self.data_columns.columns.len() {
+            let column_width = self.data_columns.columns[i].size().0;
+            if i == 3 {
+                flag_x = x;
+            }
+            if self.data_columns.widths[i] == 0 {
+                continue;
+            }
+            copy_area(
+                grid,
+                &self.data_columns.columns[i],
+                (
+                    set_x(upper_left, x),
+                    set_x(
+                        bottom_right,
+                        std::cmp::min(get_x(bottom_right), x + (self.data_columns.widths[i])),
+                    ),
+                ),
+                (
+                    (0, top_idx),
+                    (column_width.saturating_sub(1), self.length - 1),
+                ),
+            );
+            x += self.data_columns.widths[i] + 2; // + SEPARATOR
+            if x > get_x(bottom_right) {
+                break;
+            }
+        }
+
+        for c in &self.data_columns.columns {
+            debug!(c.size());
+        }
+        debug!(top_idx);
+        for r in 0..cmp::min(self.length - top_idx, rows) {
+            debug!(r);
+            let (fg_color, bg_color) = {
+                let c = &self.data_columns.columns[0][(0, r + top_idx)];
+                /*
+                let thread_hash = self.get_thread_under_cursor(r + top_idx);
+
+                if self.selection[&thread_hash] {
+                    (c.fg(), self.color_cache.selected.bg)
+                } else {
+                }
+                */
+                (c.fg(), c.bg())
+            };
+            change_colors(
+                grid,
+                (
+                    pos_inc(upper_left, (0, r)),
+                    (flag_x.saturating_sub(1), get_y(upper_left) + r),
+                ),
+                fg_color,
+                bg_color,
+            );
+            for x in flag_x
+                ..std::cmp::min(
+                    get_x(bottom_right),
+                    flag_x + 2 + self.data_columns.widths[3],
+                )
+            {
+                grid[(x, get_y(upper_left) + r)].set_bg(bg_color);
+            }
+            change_colors(
+                grid,
+                (
+                    (
+                        flag_x + 2 + self.data_columns.widths[3],
+                        get_y(upper_left) + r,
+                    ),
+                    (get_x(bottom_right), get_y(upper_left) + r),
+                ),
+                fg_color,
+                bg_color,
+            );
+        }
+
+        /* TODO: highlight selected entries */
+        self.highlight_line(
+            grid,
+            (
+                set_y(upper_left, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+                set_y(bottom_right, get_y(upper_left) + (self.cursor_pos.2 % rows)),
+            ),
+            self.cursor_pos.2,
+            context,
+        );
+
+        if top_idx + rows > self.length {
+            clear_area(
+                grid,
+                (
+                    pos_inc(upper_left, (0, self.length - top_idx)),
+                    bottom_right,
+                ),
+                self.color_cache.theme_default,
+            );
+        }
+        context.dirty_areas.push_back(area);
+        /*
         copy_area(
             grid,
             &self.content,
@@ -372,6 +627,7 @@ impl ListingTrait for ThreadListing {
             context,
         );
         context.dirty_areas.push_back(area);
+        */
     }
 
     fn highlight_line(&mut self, grid: &mut CellBuffer, area: Area, idx: usize, context: &Context) {
@@ -421,8 +677,10 @@ impl ThreadListing {
             length: 0,
             sort: (Default::default(), Default::default()),
             subsort: (Default::default(), Default::default()),
-            content: CellBuffer::new(0, 0, Cell::with_char(' ')),
             color_cache: ColorCache::default(),
+            data_columns: DataColumns::default(),
+            rows_drawn: SegmentTree::default(),
+            rows: vec![],
             row_updates: SmallVec::new(),
             order: HashMap::default(),
             dirty: true,
@@ -456,12 +714,6 @@ impl ThreadListing {
         } else {
             Color::Default
         };
-        change_colors(
-            &mut self.content,
-            ((0, idx), (MAX_COLS - 1, idx)),
-            fg_color,
-            bg_color,
-        );
     }
 
     fn make_thread_entry(
@@ -478,7 +730,7 @@ impl ThreadListing {
         let has_parent = thread_node.has_parent();
         let show_subject = thread_node.show_subject();
 
-        let mut s = format!("{}{}{} ", idx, " ", ThreadListing::format_date(&envelope));
+        let mut s = String::new(); //format!("{}{}{} ", idx, " ", ThreadListing::format_date(&envelope));
         for i in 0..indent {
             if indentations.len() > i && indentations[i] {
                 s.push('│');
@@ -501,11 +753,13 @@ impl ThreadListing {
             s.push('>');
         }
 
+        /*
         s.push_str(if envelope.has_attachments() {
             "📎"
         } else {
             ""
         });
+        */
         if show_subject {
             s.push_str(&format!("{:.85}", envelope.subject()));
         }
@@ -538,10 +792,246 @@ impl ThreadListing {
             _ => melib::datetime::timestamp_to_string(envelope.datetime(), None),
         }
     }
+
+    fn make_entry_string(&self, e: &Envelope, context: &Context) -> EntryStrings {
+        let mut tags = String::new();
+        let mut colors: SmallVec<[_; 8]> = SmallVec::new();
+        let backend_lck = context.accounts[self.cursor_pos.0].backend.read().unwrap();
+        if let Some(t) = backend_lck.tags() {
+            let tags_lck = t.read().unwrap();
+            for t in e.labels().iter() {
+                if mailbox_settings!(
+                    context[self.cursor_pos.0][&self.cursor_pos.1]
+                        .tags
+                        .ignore_tags
+                )
+                .contains(t)
+                    || !tags_lck.contains_key(t)
+                {
+                    continue;
+                }
+                tags.push(' ');
+                tags.push_str(tags_lck.get(t).as_ref().unwrap());
+                tags.push(' ');
+                colors.push(
+                    mailbox_settings!(context[self.cursor_pos.0][&self.cursor_pos.1].tags.colors)
+                        .get(t)
+                        .map(|&c| c),
+                );
+            }
+            if !tags.is_empty() {
+                tags.pop();
+            }
+        }
+        let mut subject = e.subject().to_string();
+        subject.truncate_at_boundary(150);
+        EntryStrings {
+            date: DateString(ConversationsListing::format_date(context, e.date())),
+            subject: SubjectString(subject),
+            flag: FlagString(format!("{}", if e.has_attachments() { "📎" } else { "" },)),
+            from: FromString(address_list!((e.from()) as comma_sep_list)),
+            tags: TagString(tags, colors),
+        }
+    }
+
+    fn draw_rows(&mut self, context: &Context, start: usize, end: usize) {
+        if self.length == 0 {
+            return;
+        }
+        debug_assert!(end >= start);
+        if self.rows_drawn.get_max(start, end) == 0 {
+            debug!("not drawing {}-{}", start, end);
+            return;
+        }
+        debug!("drawing {}-{}", start, end);
+        for i in start..=end {
+            self.rows_drawn.update(i, 0);
+        }
+        let min_width = (
+            self.data_columns.columns[0].size().0,
+            self.data_columns.columns[1].size().0,
+            self.data_columns.columns[2].size().0,
+            self.data_columns.columns[3].size().0,
+            self.data_columns.columns[4].size().0,
+        );
+        let account = &context.accounts[self.cursor_pos.0];
+
+        for ((idx, is_seen, has_attachments, env_hash), strings) in
+            self.rows.iter().skip(start).take(end - start + 1)
+        {
+            debug!("drawing {} {:?}", idx, strings);
+            let idx = *idx;
+            if !context.accounts[self.cursor_pos.0].contains_key(*env_hash) {
+                //debug!("key = {}", root_env_hash);
+                //debug!(
+                //    "name = {} {}",
+                //    account[&self.cursor_pos.1].name(),
+                //    context.accounts[self.cursor_pos.0].name()
+                //);
+                //debug!("{:#?}", context.accounts);
+
+                panic!();
+            }
+            let row_attr = if *is_seen {
+                if idx % 2 == 0 {
+                    self.color_cache.even
+                } else {
+                    self.color_cache.odd
+                }
+            } else if idx % 2 == 0 {
+                self.color_cache.even_unseen
+            } else {
+                self.color_cache.odd_unseen
+            };
+            let (x, _) = write_string_to_grid(
+                &idx.to_string(),
+                &mut self.data_columns.columns[0],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.0, idx)),
+                None,
+            );
+            for x in x..min_width.0 {
+                self.data_columns.columns[0][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.date,
+                &mut self.data_columns.columns[1],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.1, idx)),
+                None,
+            );
+            for x in x..min_width.1 {
+                self.data_columns.columns[1][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.from,
+                &mut self.data_columns.columns[2],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.2, idx)),
+                None,
+            );
+            #[cfg(feature = "regexp")]
+            {
+                for text_formatter in crate::conf::text_format_regexps(context, "listing.from") {
+                    let t = self.data_columns.columns[2].insert_tag(text_formatter.tag);
+                    for (start, end) in text_formatter.regexp.find_iter(strings.from.as_str()) {
+                        self.data_columns.columns[2].set_tag(t, (start, idx), (end, idx));
+                    }
+                }
+            }
+            for x in x..min_width.2 {
+                self.data_columns.columns[2][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.flag,
+                &mut self.data_columns.columns[3],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.3, idx)),
+                None,
+            );
+            for x in x..min_width.3 {
+                self.data_columns.columns[3][(x, idx)]
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            let (x, _) = write_string_to_grid(
+                &strings.subject,
+                &mut self.data_columns.columns[4],
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
+                ((0, idx), (min_width.4, idx)),
+                None,
+            );
+            #[cfg(feature = "regexp")]
+            {
+                for text_formatter in crate::conf::text_format_regexps(context, "listing.subject") {
+                    let t = self.data_columns.columns[4].insert_tag(text_formatter.tag);
+                    for (start, end) in text_formatter.regexp.find_iter(strings.subject.as_str()) {
+                        self.data_columns.columns[4].set_tag(t, (start, idx), (end, idx));
+                    }
+                }
+            }
+            let x = {
+                let mut x = x + 1;
+                for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+                    let color = color.unwrap_or(self.color_cache.tag_default.bg);
+                    let (_x, _) = write_string_to_grid(
+                        t,
+                        &mut self.data_columns.columns[4],
+                        self.color_cache.tag_default.fg,
+                        color,
+                        self.color_cache.tag_default.attrs,
+                        ((x + 1, idx), (min_width.4, idx)),
+                        None,
+                    );
+                    self.data_columns.columns[4][(x, idx)].set_bg(color);
+                    if _x < min_width.4 {
+                        self.data_columns.columns[4][(_x, idx)]
+                            .set_bg(color)
+                            .set_keep_bg(true);
+                    }
+                    for x in (x + 1).._x {
+                        self.data_columns.columns[4][(x, idx)]
+                            .set_keep_fg(true)
+                            .set_keep_bg(true)
+                            .set_keep_attrs(true);
+                    }
+                    self.data_columns.columns[4][(x, idx)].set_keep_bg(true);
+                    x = _x + 1;
+                }
+                x
+            };
+            for x in x..min_width.4 {
+                self.data_columns.columns[4][(x, idx)]
+                    .set_ch(' ')
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
+            }
+            if *has_attachments {
+                self.data_columns.columns[3][(0, idx)].set_fg(self.color_cache.attachment_flag.fg);
+            }
+        }
+    }
 }
 
 impl Component for ThreadListing {
     fn draw(&mut self, grid: &mut CellBuffer, area: Area, context: &mut Context) {
+        /*
+        if !self.row_updates.is_empty() {
+            let (upper_left, bottom_right) = area;
+            while let Some(row) = self.row_updates.pop() {
+                let row: usize = self.order[&row];
+
+                let rows = get_y(bottom_right) - get_y(upper_left) + 1;
+                let page_no = (self.new_cursor_pos.2).wrapping_div(rows);
+
+                let top_idx = page_no * rows;
+                if row >= top_idx && row <= top_idx + rows {
+                    let area = (
+                        set_y(upper_left, get_y(upper_left) + (row % rows)),
+                        set_y(bottom_right, get_y(upper_left) + (row % rows)),
+                    );
+                    self.highlight_line(grid, area, row, context);
+                    context.dirty_areas.push_back(area);
+                }
+            }
+        }
+        */
         if !self.unfocused {
             if !self.is_dirty() {
                 return;
@@ -673,6 +1163,46 @@ impl Component for ThreadListing {
             UIEvent::StartupCheck(ref f) if *f == self.cursor_pos.1 => {
                 self.refresh_mailbox(context, false);
                 self.set_dirty(true);
+            }
+            UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
+                let account = &context.accounts[self.cursor_pos.0];
+                let threads = &account.collection.threads[&self.cursor_pos.1];
+                if !account.collection.contains_key(&new_hash) {
+                    return false;
+                }
+                if let Some(row) = self.order.remove(old_hash) {
+                    self.order.insert(*new_hash, row);
+                    (self.rows[row].0).3 = *new_hash;
+                    //self.row_updates.push(old_hash);
+                }
+
+                self.dirty = true;
+
+                self.view.as_mut().map(|c| {
+                    c.process_event(&mut UIEvent::EnvelopeRename(*old_hash, *new_hash), context)
+                });
+            }
+            UIEvent::EnvelopeRemove(ref env_hash, _) => {
+                if self.order.contains_key(env_hash) {
+                    self.refresh_mailbox(context, false);
+                    self.set_dirty(true);
+                }
+            }
+            UIEvent::EnvelopeUpdate(ref env_hash) => {
+                let account = &context.accounts[self.cursor_pos.0];
+                let threads = &account.collection.threads[&self.cursor_pos.1];
+                if !account.collection.contains_key(env_hash) {
+                    return false;
+                }
+                if self.order.contains_key(env_hash) {
+                    //self.row_updates.push(*env_hash);
+                }
+
+                self.dirty = true;
+
+                self.view
+                    .as_mut()
+                    .map(|c| c.process_event(&mut UIEvent::EnvelopeUpdate(*env_hash), context));
             }
             UIEvent::ChangeMode(UIMode::Normal) => {
                 self.dirty = true;
