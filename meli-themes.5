@@ -29,10 +29,10 @@ mail client
 .Nm meli
 comes with two themes,
 .Ic dark
-(the default) and
+(default) and
 .Ic light .
 .sp
-Custom themes can be defined as lists of key-values in the configuration files:
+Custom themes are defined as lists of key-values in the configuration files:
 .Bl -bullet  -compact
 .It
 .Pa $XDG_CONFIG_HOME/meli/config.toml
@@ -48,15 +48,18 @@ theme = "dark"
 .Sh DESCRIPTION
 Themes for
 .Nm meli
-are described in the configuration language TOML.
-They are key-value tables defined in the TERMINAL section of the configuration file.
+are described in the configuration language TOML, as they are key-value tables defined in the TERMINAL section of the configuration file.
 Each key defines the semantic location of the theme attribute within the application.
-For example, "mail.listing.compact.* keys are settings for the `compact` mail listing style.
+For example,
+.Ic mail.listing.compact.*
+keys are settings for the
+.Ic compact
+mail listing style.
 A setting contains three fields: fg for foreground color, bg for background color, and attrs for text attribute.
 .sp
 .Dl \&"widget.key.label\&" = { fg = \&"Default\&", bg = \&"Default\&", attrs = \&"Default\&" }
 .sp
-Each field contains a value, and each value can either be a color/attribute, a link (key name) or a valid alias.
+Each field contains a value, which may be either a color/attribute, a link (key name) or a valid alias.
 An alias is a string starting with the \&"\&$\&" character and must be declared in advance in the
 .Ic color_aliases
 or
@@ -134,8 +137,8 @@ Color values are of type String with the following valid contents:
 .It
 "Default" is the terminal default. (Case-sensitive)
 .It
-Hex triplet eg #FFFFFF for RGB colors
-(three letter shorthand also valid, eg #09c → #0099cc) (Case-insensitive)
+Hex triplet e.g. #FFFFFF for RGB colors.
+Three character shorthand is also valid, e.g. #09c → #0099cc (Case-insensitive)
 .It
 0-255 byte for 256 colors.
 .It
@@ -162,7 +165,7 @@ is explicitly set to true by the user,
 is ignored.
 .El
 .sp
-In this mode, cursor locations (i.e. currently selected entries/items) will use the "reverse video" ANSI attribute to inverse the terminal's default foreground/background colors.
+In this mode, cursor locations (i.e., currently selected entries/items) will use the "reverse video" ANSI attribute to invert the terminal's default foreground/background colors.
 .Sh VALID KEYS
 .Bl -bullet  -compact
 .It

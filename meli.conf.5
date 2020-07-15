@@ -26,8 +26,7 @@
 .Sh SYNOPSIS
 .Pa $XDG_CONFIG_HOME/meli/config.toml
 .Sh DESCRIPTION
-Configuration for meli is written in TOML.
-Few things to consider before writing TOML (quoting the spec):
+Configuration for meli is written in TOML which has a few things to consider (quoting the spec):
 .Pp
 .Bl -bullet -compact
 .It
@@ -123,24 +122,24 @@ set_seen = 'n'
 theme = "light"
 .Ed
 .Pp
-available options are listed below.
-.Sy default values are shown in parentheses.
+Available options are listed below.
+Default values are shown in parentheses.
 .Sh ACCOUNTS
 .Bl -tag -width 36n
 .It Ic root_mailbox Ar String
-the backend-specific path of the root_mailbox, usually INBOX.
+The backend-specific path of the root_mailbox, usually INBOX.
 .It Ic format Ar String Op maildir mbox imap notmuch jmap
-the format of the mail backend.
+The format of the mail backend.
 .It Ic subscribed_mailboxes Ar [String,]
-an array of mailbox paths to display in the UI.
+An array of mailbox paths to display in the UI.
 Paths are relative to the root mailbox (eg "INBOX/Sent", not "Sent").
 The glob wildcard
 .Em \&*
 can be used to match every mailbox name and path.
 .It Ic identity Ar String
-your e-mail address that is inserted in the From: headers of outgoing mail
+Your e-mail address that is inserted in the From: headers of outgoing mail.
 .It Ic index_style Ar String
-set the way mailboxes are displayed
+Sets the way mailboxes are displayed.
 .El
 .TS
 allbox tab(:);
@@ -152,26 +151,31 @@ plain:shows one row per mail, regardless of threading
 .TE
 .Bl -tag -width 36n
 .It Ic display_name Ar String
-(optional) a name which can be combined with your address:
-"Name <email@address.tld>"
+.Pq Em optional
+A name which can be combined with your address: "Name <email@address.tld>".
 .It Ic read_only Ar boolean
-attempt to not make any changes to this account.
+Attempt to not make any changes to this account.
 .Pq Em false
 .It Ic manual_refresh Ar boolean
-(optional) if true, do not monitor account for changes (you can use shortcut listing.refresh)
+.Pq Em optional
+If true, do not monitor account for changes (you can use shortcut listing.refresh)
 .Pq Em false
 .It Ic refresh_command Ar String
-(optional) command to execute when manually refreshing (shortcut listing.refresh)
+.Pq Em optional
+command to execute when manually refreshing (shortcut listing.refresh)
 .Pq Em None
 .It Ic cache_type Ar String
-(optional) choose which cache backend to use.
+.Pq Em optional
+Choose which cache backend to use.
 Available options are 'none' and 'sqlite3'
 .Pq Em "sqlite3"
 .It Ic vcard_folder Ar String
-(optional) Folder that contains .vcf files.
+.Pq Em optional
+Folder that contains .vcf files.
 They are parsed and imported read-only.
 .It Ic mailboxes Ar mailbox
-(optional) configuration for each mailbox.
+.Pq Em optional
+Configuration for each mailbox.
 Its format is described below in
 .Sx mailboxes Ns
 \&.
@@ -182,7 +186,7 @@ points to the directory which contains the
 .Pa .notmuch/
 subdirectory.
 notmuch mailboxes are virtual, since they are defined by user-given notmuch queries.
-Thus you have to explicitly state the mailboxes you want in the
+You must explicitly state the mailboxes you want in the
 .Ic mailboxes
 field and set the
 .Ar query
@@ -204,46 +208,59 @@ IMAP specific options are:
 example:
 .Qq mail.example.tld
 .It Ic server_username Ar String
+Server username
 .It Ic server_password Ar String
+Server password
 .It Ic server_password_command Ar String
-(optional) Use instead of
+.Pq Em optional
+Use instead of
 .Ic server_password
 .It Ic server_port Ar number
-(optional)
+.Pq Em optional
+The port to connect to
 .\" default value
 .Pq Em 143
 .It Ic use_starttls Ar boolean
-(optional) if port is 993 and use_starttls is unspecified, it becomes false by default.
+.Pq Em optional
+If port is 993 and use_starttls is unspecified, it becomes false by default.
 .\" default value
 .Pq Em true
 .It Ic danger_accept_invalid_certs Ar boolean
-(optional) do not validate TLS certificates.
+.Pq Em optional
+Do not validate TLS certificates.
 .\" default value
 .Pq Em false
 .El
 .Ss JMAP only
-JMAP specific options are:
+JMAP specific options
 .Bl -tag -width 36n
 .It Ic server_hostname Ar String
 example:
 .Qq mail.example.tld
 .It Ic server_username Ar String
+Server username
 .It Ic server_password Ar String
+Server password
 .It Ic server_port Ar number
-(optional)
+.Pq Em optional
+The port to connect to
 .\" default value
 .Pq Em 443
 .It Ic danger_accept_invalid_certs Ar boolean
-(optional) do not validate TLS certificates.
+.Pq Em optional
+Do not validate TLS certificates.
 .\" default value
 .Pq Em false
 .El
 .Ss mbox only
-mbox specific options are:
+mbox specific options
 .Bl -tag -width 36n
 .It Ic prefer_mbox_type Ar String
-(optional) prefer specific mbox format reader for each message. Default is mboxcl2 format. If the preferred format fails, the message is retried with mboxrd and then if it fails again there's a recover attempt, which discards the invalid message.
-Valid values are:
+.Pq Em optional
+Prefer specific mbox format reader for each message.
+Default is mboxcl2 format.
+If the preferred format fails, the message is retried with mboxrd and then if it fails again there's a recover attempt, which discards the invalid message.
+Valid values
 .Bl -bullet -compact
 .It
 .Ar auto
@@ -259,7 +276,7 @@ Valid values are:
 .\" default value
 .Pq Em auto
 .El
-to set multiple mailboxes, you have to explicitly state the mailboxes you want in the
+To set multiple mailboxes, you have to explicitly state the mailboxes you want in the
 .Ic mailboxes
 field and set the
 .Ar path
@@ -270,28 +287,34 @@ Example:
 format = "mbox"
 mailboxes."Python mailing list" = { path = "~/.mail/python.mbox", subscribe = true, autoload = true }
 .Ed
-.Sh mailboxes
+.Ss MAILBOXES
 .Bl -tag -width 36n
 .It Ic alias Ar String
-(optional) show a different name for this mailbox in the UI
+.Pq Em optional
+Show a different name for this mailbox in the UI
 .It Ic autoload Ar boolean
-(optional) load this mailbox on startup
+.Pq Em optional
+Load this mailbox on startup
 .\" default value
 .Pq Em true
 .It Ic subscribe Ar boolean
-(optional) watch this mailbox for updates
+.Pq Em optional
+Watch this mailbox for updates
 .\" default value
 .Pq Em true
 .It Ic ignore Ar boolean
-(optional) silently insert updates for this mailbox, if any
+.Pq Em optional
+Silently insert updates for this mailbox, if any
 .\" default value
 .Pq Em false
 .It Ic usage Ar boolean
-(optional) special usage of this mailbox.
+.Pq Em optional
+special usage of this mailbox.
 Valid values are:
 .Bl -bullet -compact
 .It
 .Ar Normal
+.Pq Em default
 .It
 .Ar Inbox
 .It
@@ -308,12 +331,16 @@ Valid values are:
 .Ar Trash
 .El
 otherwise usage is inferred from the mailbox title.
+If for example your Sent folder is not named "Sent", you must explicitly set it.
 .It Ic conf_override Ar boolean
-(optional) override global settings for this mailbox.
+.Pq Em optional
+Override global settings for this mailbox.
 Available sections to override are
 .Em pager, notifications, shortcuts, composing
 and the account options
-.Em identity and index_style Ns
+.Em identity
+and
+.Em index_style Ns
 \&.
 Example:
 .Bd -literal
@@ -324,23 +351,27 @@ Example:
 .Ed
 .El
 .Sh COMPOSING
+Composing specific options
 .Bl -tag -width 36n
 .It Ic send_mail Ar String|SmtpServerConf
-command to pipe new mail to (exit code must be 0 for success) or settings for an SMTP server connection.
+Command to pipe new mail to (exit code must be 0 for success) or settings for an SMTP server connection.
 See section
 .Sx SMTP Connections
 for its fields.
 .It Ic editor_command Ar String
-command to launch editor.
+Command to launch editor.
 Can have arguments.
 Draft filename is given as the last argument.
 If it's missing, the environment variable $EDITOR is looked up.
 .It Ic embed Ar boolean
-(optional) embed editor within meli
+.Pq Em optional
+Embed editor within meli.
+Editor must be xterm compliant.
 .\" default value
 .Pq Em false
 .It Ic format_flowed Ar boolean
-(optional) set format=flowed [RFC3676] in text/plain attachments.
+.Pq Em optional
+Set format=flowed [RFC3676] in text/plain attachments.
 .\" default value
 .Pq Em true
 .It Ic default_header_values Ar hash table String[String]
@@ -348,26 +379,46 @@ Default header values used when creating a new draft.
 .El
 .Sh SHORTCUTS
 Shortcuts can take the following values:
-.Qq Em Backspace
-.Qq Em Left
-.Qq Em Right
-.Qq Em Up
-.Qq Em Down
-.Qq Em Home
-.Qq Em End
-.Qq Em PageUp
-.Qq Em PageDown
-.Qq Em Delete
-.Qq Em Insert
-.Qq Em Enter
-.Qq Em Tab
-.Qq Em Esc
-.Qq Em F1..F12
-.Qq Em M-char
-.Qq Em C-char
-and
-.Qq Em char Ns
-, where char is a single character string.
+.Bl -bullet -compact
+.It
+.Em Backspace
+.It
+.Em Left
+.It
+.Em Right
+.It
+.Em Up
+.It
+.Em Down
+.It
+.Em Home
+.It
+.Em End
+.It
+.Em PageUp
+.It
+.Em PageDown
+.It
+.Em Delete
+.It
+.Em Insert
+.It
+.Em Enter
+.It
+.Em Tab
+.It
+.Em Esc
+.It
+.Em F1..F12
+.It
+.Em M-char
+.It
+.Em C-char
+.It
+.Em char
+.El
+.Em char
+is a single character string.
 .sp
 The headings before each list indicate the map key of the shortcut list.
 For example for the first list titled
@@ -520,7 +571,7 @@ Edit mail.
 .sp
 .Em envelope-view
 .Pp
-To "select" an attachment, type its index (you will see the typed result in the command buffer on your bottom right of the status line) and then issue the corresponding command.
+To select an attachment, type its index (you will see the typed result in the command buffer on the bottom right of the status line), then issue the corresponding command.
 .Bl -tag -width 36n
 .It Ic add_addresses_to_contacts Ns
 Select addresses from envelope to add to contacts.
@@ -550,7 +601,7 @@ Opens selected attachment with
 .It Ic open_mailcap
 Opens selected attachment according to its mailcap entry.
 See
-.Xr meli.1 FILES
+.Xr meli 1 FILES
 for the mailcap file locations.
 .\" default value
 .Pq Em m
@@ -560,7 +611,7 @@ Go to url of given index
 .Pq Em g
 .It Ic toggle_url_mode
 Toggles url open mode.
-When active, it prepends an index next to each url that you can select by typing and open by issuing
+When active, it prepends an index next to each url that you can select by typing the index and open by issuing
 .Ic go_to_url
 .\" default value
 .Pq Em u
@@ -601,81 +652,88 @@ Go to next page.
 .Sh NOTIFICATIONS
 .Bl -tag -width 36n
 .It Ic enable Ar boolean
-enable freedesktop-spec notifications.
-this is usually what you want
+Enable freedesktop-spec notifications.
 .\" default value
 .Pq Em true
 .It Ic script Ar String
-(optional) script to pass notifications to, with title as 1st arg and body as 2nd
+.Pq Em optional
+Script to pass notifications to, with title as 1st arg and body as 2nd
 .\" default value
-.Pq Em none
+.Pq Em none Ns
+\&.
 .It Ic xbiff_file_path Ar String
-(optional) file that gets its size updated when new mail arrives
+.Pq Em optional
+File that gets its size updated when new mail arrives.
 .Pq Em none
 .\" default value
 .It Ic play_sound Ar boolean
-(optional) play theme sound in notifications if possible
+.Pq Em optional
+Play theme sound in notifications if possible.
 .Pq Em false
 .\" default value
 .It Ic sound_file Ar String
-(optional) play sound file in notifications if possible
+.Pq Em optional
+Play sound file in notifications if possible.
 .\" default value
 .Pq Em none
 .El
 .Sh PAGER
 .Bl -tag -width 36n
-.It Ic pager_context Ar num
-(optional) number of context lines when going to next page.
-(Unimplemented)
-.\" default value
-.Pq Em 0
 .It Ic headers_sticky Ar boolean
-(optional) always show headers when scrolling.
+.Pq Em optional
+Always show headers when scrolling.
 .\" default value
 .Pq Em true
 .It Ic html_filter Ar String
-(optional) pipe html attachments through this filter before display
+.Pq Em optional
+Pipe html attachments through this filter before display
 .\" default value
 .Pq Em none
 .It Ic filter Ar String
-(optional) a command to pipe mail output through for viewing in pager.
+.Pq Em optional
+A command to pipe mail output through for viewing in pager.
 .\" default value
 .Pq Em none
 .It Ic format_flowed Ar bool
-(optional) respect format=flowed
+.Pq Em optional
+Respect format=flowed
 .\" default value
 .Pq Em true
 .It Ic split_long_lines Ar bool
-(optional) Split long lines that would overflow on the x axis.
+.Pq Em optional
+Split long lines that would overflow on the x axis.
 .\" default value
 .Pq Em true
 .It Ic minimum_width Ar num
-(optional) Minimum text width in columns.
+.Pq Em optional
+Minimum text width in columns.
 .\" default value
 .Pq Em 80
-.It Ic auto_choose_multipart_alternative Ar boolean,
-(optional) Choose `text/html` alternative if `text/plain` is empty in `multipart/alternative` attachments.
+.It Ic auto_choose_multipart_alternative Ar boolean
+.Pq Em optional
+Choose `text/html` alternative if `text/plain` is empty in `multipart/alternative` attachments.
 .\" default value
 .Pq Em true
 .El
 .Sh LISTING
 .Bl -tag -width 36n
-.It Ic context_lines Ar num
-(optional) number of context lines when going to next page.
-(Unimplemented)
-.\" default value
-.Pq Em 0
 .It Ic datetime_fmt Ar String
-(optional) datetime formatting passed verbatim to strftime(3).
+.Pq Em optional
+Datetime formatting passed verbatim to strftime(3).
 .\" default value
 .Pq Em \&%Y-\&%m-\&%d \&%T
 .It Ic recent_dates Ar Boolean
-(optional) Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
+.Pq Em optional
+Show recent dates as `X {minutes,hours,days} ago`, up to 7 days.
 .\" default value
 .Pq Em true
 .It Ic filter Ar Query
-(optional) Show only envelopes matching this query (for query syntax see
-.Xr meli 1 )
+.Pq Em optional
+Show only envelopes matching this query.
+.Po
+For query syntax see
+.Xr meli 1 QUERY ABNF SYNTAX
+.Pc
 .\" default value
 .Pq Em None
 .Pp
@@ -687,12 +745,14 @@ filter = "not flags:seen" # show only unseen messages
 .Sh TAGS
 .Bl -tag -width 36n
 .It Ic colours Ar hash table String[Color]
-(optional) set UI colors for tags
+.Pq Em optional
+Set UI colors for tags
 .It Ic ignore_tags Ar Array String
-(optional) hide tags (not the tagged messages themselves)
+.Pq Em optional
+Hide tags (not the tagged messages themselves)
 .El
 .sp
-example configuration:
+Example:
 .sp
 .Bd -literal
 [tags]
@@ -707,42 +767,49 @@ colors = { signed="#Ff6600", replied="DeepSkyBlue4", draft="#f00", replied="8" }
 .Sh PGP
 .Bl -tag -width 36n
 .It Ic auto_verify_signatures Ar boolean
-auto verify signed e-mail according to RFC3156
+Auto verify signed e-mail according to RFC3156
 .\" default value
 .Pq Em true
 .It Ic auto_sign Ar boolean
-(optional) always sign sent messages
+.Pq Em optional
+Always sign sent messages
 .\" default value
 .Pq Em false
 .It Ic key Ar String
-(optional) key to be used when signing/encrypting (not functional yet)
+.Pq Em optional
+Key to be used when signing/encrypting (not functional yet)
 .\" default value
 .Pq Em none
 .It Ic gpg_binary Ar String
-(optional) gpg binary name or file location to use
+.Pq Em optional
+The gpg binary name or file location to use
 .\" default value
 .Pq Em "gpg2"
 .El
 .Sh TERMINAL
 .Bl -tag -width 36n
 .It Ic theme Ar String
-(optional) select between these themes: light / dark
+.Pq Em optional
+Theme name to use.
 .\" default value
 .Pq Em dark
 .It Ic ascii_drawing Ar boolean
-(optional) if true, box drawing will be done with ascii characters.
+.Pq Em optional
+If true, box drawing will be done with ascii characters.
 .\" default value
 .Pq Em false
 .It Ic use_color Ar boolean
-(optional) if false, no ANSI colors are used
+.Pq Em optional
+If false, no ANSI colors are used.
 .\" default value
 .Pq Em true
 .It Ic window_title Ar String
-(optional) set window title in xterm compatible terminals (empty string means no window title is set)
+.Pq Em optional
+Set window title in xterm compatible terminals An empty string means no window title is set.
 .\" default value
 .Pq Em "meli"
 .It Ic themes Ar hash table String[String[Attribute]]
-define UI themes.
+Define UI themes.
 See
 .Xr meli-themes 5
 for details.
@@ -763,13 +830,17 @@ theme = "themeB"
 .Sh LOG
 .Bl -tag -width 36n
 .It Ic log_file Ar String
-(optional) path of the log file
+.Pq Em optional
+path of the log file
 .\" default value
 .Pq Pa $XDG_DATA_HOME/meli/meli.log
 .It Ic maximum_level Ar String
-(optional) maximum level of messages to log. All levels less or equal to the
+.Pq Em optional
+maximum level of messages to log.
+All levels less or equal to the
 .Ic maximum_level
-will be appended to the log file. Available levels are, in partial order:
+will be appended to the log file.
+Available levels are, in partial order:
 .Bl -bullet -compact
 .It
 .Em OFF
@@ -801,7 +872,8 @@ server hostname
 .It Ic port Ar Integer
 server port
 .It Ic envelope_from Ar String
-(optional) address to set as sender in SMTP transactions
+.Pq Em optional
+address to set as sender in SMTP transactions
 .\" default value
 .Pq Em none
 .It Ic auth Ar SmtpAuth
@@ -810,14 +882,16 @@ See
 .Sx SmtpAuth
 subsection.
 .It Ic security Ar SmtpSecurity
-(optional) gpg binary name or file location to use
+.Pq Em optional
+gpg binary name or file location to use
 .\" default value
 .Po see
 .Sx SmtpSecurity
 subsection
 .Pc
 .It Ic extensions Ar SmtpExtensions
-(optional) set support for SMTP extensions if they are advertised by the server
+.Pq Em optional
+set support for SMTP extensions if they are advertised by the server
 .\" default value
 .Po see
 .Sx SmtpExtensions
@@ -834,7 +908,8 @@ For type "auto":
 .It Ic username Ar String
 .It Ic password Ar String|SmtpPassword
 .It Ic require_auth Ar bool
-(optional) require authentication in every case
+.Pq Em optional
+require authentication in every case
 .\" default value
 .Pq Em true
 .El

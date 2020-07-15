@@ -23,7 +23,7 @@ The Makefile *should* be portable and not require a specific `make` version.
 
 # Documentation
 
-After installing meli, see `meli(1)` and `meli.conf(5)` for documentation.
+After installing meli, see `meli(1)` and `meli.conf(5)` for documentation. Sample configuration and theme files can be found in the `samples/` subdirectory.
 
 # Building
 

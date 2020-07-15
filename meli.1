@@ -55,19 +55,19 @@ View mail from input file.
 .Nm
 is a terminal mail client aiming for extensive and user-frendly configurability.
 .Bd -literal
-         ^^      .-=-=-=-.  ^^
-     ^^        (`-=-=-=-=-`)         ^^
-             (`-=-=-=-=-=-=-`)  ^^         ^^
-       ^^   (`-=-=-=-=-=-=-=-`)   ^^
-           ( `-=-=-=-(@)-=-=-` )      ^^
-           (`-=-=-=-=-=-=-=-=-`)  ^^
-           (`-=-=-=-=-=-=-=-=-`)          ^^
-           (`-=-=-=-=-=-=-=-=-`)
-    ^^     (`-=-=-=-=-=-=-=-=-`)  ^^
-       ^^   (`-=-=-=-=-=-=-=-`)          ^^
-             (`-=-=-=-=-=-=-`)  ^^
-      ^^       (`-=-=-=-=-`)
-                `-=-=-=-=-`          ^^
+     ^^      .-=-=-=-.  ^^
+ ^^        (`-=-=-=-=-`)         ^^
+         (`-=-=-=-=-=-=-`)  ^^         ^^
+   ^^   (`-=-=-=-=-=-=-=-`)   ^^
+       ( `-=-=-=-(@)-=-=-` )      ^^
+       (`-=-=-=-=-=-=-=-=-`)  ^^
+       (`-=-=-=-=-=-=-=-=-`)          ^^
+       (`-=-=-=-=-=-=-=-=-`)
+^^     (`-=-=-=-=-=-=-=-=-`)  ^^
+   ^^   (`-=-=-=-=-=-=-=-`)          ^^
+         (`-=-=-=-=-=-=-`)  ^^
+  ^^       (`-=-=-=-=-`)
+            `-=-=-=-=-`          ^^
 .Ed
 .Sh STARTING WITH meli
 When launched for the first time,
@@ -75,29 +75,27 @@ When launched for the first time,
 will search for its configuration directory,
 .Pa $XDG_CONFIG_HOME/meli/ Ns
 \&.
-If it doesn't exist, you will be asked if you want to create one along with a sample configuration.
-The sample configuration
-.Pa $XDG_CONFIG_HOME/meli/config.toml
-includes comments with the basic settings required for setting up accounts allowing you to copy and edit right away.
+If it doesn't exist, you will be asked if you want to create one and presented with a sample configuration file
+.Pq Pa $XDG_CONFIG_HOME/meli/config.toml
+that includes the basic settings required for setting up accounts allowing you to copy and edit right away.
 See
 .Xr meli.conf 5
 for the available configuration options.
 .Pp
 At any time, you may press
 .Cm \&?
-to show a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
+for a searchable list of all available actions and shortcuts, along with every possible setting and command that your version supports.
 .Pp
-The main visual navigation tool is the left-side sidebar.
-The menu's visibility may be toggled with
+The main visual navigation tool, the left-side sidebar may be toggled with
 .Cm `
 (shortcuts.listing:
 .Ic toggle_menu_visibility Ns
 ).
 .Pp
-The view into each mailbox has 4 modes: plain, threaded, conversations and compact.
-Plain views each mail indvidually, threaded shows their thread relationship visually, and conversations includes one entry per thread of emails (compact is one row per thread).
+Each mailbox may be viewed in 4 modes:
+Plain views each mail individually, Threaded shows their thread relationship visually, Conversations collapses each thread of emails into a single entry, Compact shows one row per thread.
 .Pp
-If you're using a light color palette in your terminal, you may set
+If you're using a light color palette in your terminal, you should set
 .Em theme = "light"
 in the
 .Em terminal
@@ -107,14 +105,21 @@ See
 for complete documentation on user themes.
 .Sh VIEWING MAIL
 Open attachments by typing their index in the attachments list and then
-.Cm a Ns
-\&.
+.Cm a
+.Po
+shortcut
+.Ic open_attachment
+.Pc .
 .Nm
-will attempt to open text inside its pager and other content via
+will attempt to open text inside its pager, and other content via
 .Cm xdg-open Ns
 \&.
 Press
 .Cm m
+.Po
+shortcut
+.Ic open_mailcap
+.Pc
 instead to use the mailcap entry for the MIME type of the attachment, if any.
 See
 .Sx FILES
@@ -122,6 +127,8 @@ for the location of the mailcap files and
 .Xr mailcap 5
 for their syntax.
 You can save individual attachments with the
+.Em EXECUTE
+command
 .Cm save-attachment Ar INDEX Ar path-to-file
 where
 .Ar INDEX
@@ -129,18 +136,27 @@ is the attachment's index in the listing.
 If the zeroth index is provided, the entire message is saved.
 If the path provided is a directory, the message is saved as an eml file with its filename set to the messages message-id.
 .Sh SEARCH
-Each e-mail storage backend has its default search method.
+Each e-mail storage backend has a default search method assigned.
 .Em IMAP
 uses the SEARCH command,
 .Em notmuch
 uses libnotmuch and
 .Em Maildir/mbox
-have to do a slow linear search.
-Thus it is advised to use a cache on
+performs a slow linear search.
+It is advised to use a cache on
 .Em Maildir/mbox
 accounts.
 .Nm Ns
-, if built with sqlite3, includes the ability to perform full text search on the following fields: From, To, Cc, Bcc, In-Reply-To, References, Subject and Date.
+, if built with sqlite3, includes the ability to perform full text search on the following fields:
+.Em From ,
+.Em To ,
+.Em Cc ,
+.Em Bcc ,
+.Em In-Reply-To ,
+.Em References ,
+.Em Subject
+and
+.Em Date .
 The message body (in plain text human readable form) and the flags can also be queried.
 To enable sqlite3 indexing for an account set
 .Em cache_type
@@ -182,6 +198,37 @@ to
 will relay your queries to the IMAP server.
 Expect a delay between query and response.
 Sqlite3 on the contrary at reasonable mailbox sizes should have a non noticable delay.
+.Ss QUERY ABNF SYNTAX
+.Bl -bullet
+.It
+.Li query = \&"(\&" query \&")\&" | from | to | cc | bcc | alladdresses | subject | flags | has_attachments | query \&"or\&" query | query \&"and\&" query | not query
+.It
+.Li not = \&"not\&" | \&"!\&"
+.It
+.Li quoted = ALPHA / SP *(ALPHA / DIGIT / SP)
+.It
+.Li term = ALPHA *(ALPHA / DIGIT) | DQUOTE quoted DQUOTE
+.It
+.Li tagname = term
+.It
+.Li flagval = \&"passed\&" | \&"replied\&" | \&"seen\&" | \&"read\&" | \&"junk\&" | \&"trash\&" | \&"trashed\&" | \&"draft\&" | \&"flagged\&" | tagname
+.It
+.Li flagterm = flagval | flagval \&",\&" flagterm
+.It
+.Li from = \&"from:\&" term
+.It
+.Li to = \&"to:\&" term
+.It
+.Li cc = \&"cc:\&" term
+.It
+.Li bcc = \&"bcc:\&" term
+.It
+.Li alladdresses = \&"alladdresses:\&" term
+.It
+.Li subject = \&"subject:\&" term
+.It
+.Li flags = \&"flags:\&" flag | \&"tags:\&" flag | \&"is:\&" flag
+.El
 .Sh TAGS
 .Nm
 supports tagging in notmuch and IMAP/JMAP backends.
@@ -197,54 +244,40 @@ and
 .Ic ignore_tags
 for how to set tag colors and tag visiblity)
 .Sh COMPOSING
-To send mail, press
+.Ss Opening the message Composer tab
+To create a new mail message, press
 .Cm m
-while viewing the appropriate account to open a new composing tab.
+(shortcut
+.Ic new_mail Ns
+) while viewing a mailbox.
 To reply to a mail, press
-.Cm R Ns
-\&.
-You may edit some of the header fields from within the view, by selecting with the arrow keys and pressing
+.Cm R
+.Po
+shortcut
+.Ic reply
+.Pc .
+Both these actions open the mail composer view in a new tab.
+.Ss Editing text
+.Bl -bullet -compact
+.It
+Edit the header fields by selecting with the arrow keys and pressing
 .Cm enter
 to enter
-.Ar INSERT
-mode.
+.Em INSERT
+mode and
+.Cm Esc
+key to exit.
+.It
 At any time you may press
 .Cm e
-to launch your editor (see
+(shortcut
+.Ic edit_mail Ns
+) to launch your editor (see
 .Xr meli.conf 5 COMPOSING Ns
 , setting
 .Ic editor_command
 for how to select which editor to launch).
-Attachments may be handled with the
-.Em add-attachment Ns
-,
-.Em remove-attachment
-commands (see below).
-Finally, pressing
-.Cm s
-will send your message according to your settings
-.Po
-see
-.Xr meli.conf 5 COMPOSING Ns
-, setting
-.Ic send_mail
-.Pc Ns
-\&.
-To save your draft without sending it, issue command
-.Cm close
-and select 'save as draft'.
-.Pp
-With no Draft or Sent mailbox,
-.Nm
-tries first saving mail in your INBOX and then at any other mailbox.
-On complete failure to save your draft or sent message it will be saved in your
-.Em tmp
-directory instead and you will be notified of its location.
-.Pp
-To open a draft for editing later, select your draft in the mail listing and press
-.Cm e Ns
-\&.
-.sp
+.It
 Your editor can be used in
 .Nm Ns
 \&'s embed terminal emulator by setting
@@ -252,14 +285,54 @@ Your editor can be used in
 to
 .Em true
 in your composing settings.
+.It
 When launched, your editor captures all input until it exits or stops.
+.It
 To stop your editor and return to
 .Nm
-issue Ctrl-z and to resume editing press the
+press Ctrl-z and to resume editing press the
 .Ic edit_mail
-command again (default
-.Em e Ns
-).
+command again
+.Po
+default
+.Em e
+.Pc .
+.El
+.Ss Attachments
+Attachments may be handled with the
+.Cm add-attachment Ns
+,
+.Cm remove-attachment
+commands (see below).
+.Ss Sending
+Finally, pressing
+.Cm s
+(shortcut
+.Ic send_mail Ns
+) will send your message according to your settings
+.Po
+see
+.Xr meli.conf 5 COMPOSING Ns
+, setting
+.Ic send_mail
+.Pc Ns
+\&.
+With no Draft or Sent mailbox,
+.Nm
+tries first saving mail in your INBOX and then at any other mailbox.
+On complete failure to save your draft or sent message it will be saved in your
+.Em tmp
+directory instead and you will be notified of its location.
+.Ss Drafts
+To save your draft without sending it, issue
+.Em EXECUTE
+command
+.Cm close
+and select 'save as draft'.
+.sp
+To open a draft for further editing, select your draft in the mail listing and press
+.Ic edit_mail Ns
+\&.
 .Sh CONTACTS
 .Nm
 supports two kinds of contact backends:
@@ -282,10 +355,25 @@ They are loaded read only.
 See
 .Xr meli.conf 5 ACCOUNTS
 for the complete account configuration values.
-.Sh EXECUTE mode
-Commands are issued in EXECUTE mode, by default started with Space and exited with Escape key.
-.Pp
-the following commands are valid in the mail listing context:
+.Sh MODES
+.Bl -tag -compact -width 8n
+.It NORMAL
+is the default mode
+.It EXECUTE
+commands are issued in
+.Em EXECUTE
+mode, by default started with Space and exited with
+.Cm Esc
+key.
+.It EMBED
+is the mode of the embed terminal emulator
+.It INSERT
+captures all input as text input, and is exited with
+.Cm Esc
+key.
+.El
+.Ss EXECUTE Mode
+.Ss Mail listing commands
 .Bl -tag -width 36n
 .It Cm set Ar plain | threaded | compact | conversations
 set the way mailboxes are displayed
@@ -317,6 +405,7 @@ search mailbox with
 key.
 Escape exits search results
 .It Cm set read, set unread
+Set read status of message.
 .It Cm create-mailbox Ar ACCOUNT Ar MAILBOX_PATH
 create mailbox with given path.
 Be careful with backends and separator sensitivity (eg IMAP)
@@ -327,10 +416,10 @@ unsubscribe to mailbox with given path
 .It Cm rename-mailbox Ar ACCOUNT Ar MAILBOX_PATH_SRC Ar MAILBOX_PATH_DEST
 rename mailbox
 .It Cm delete-mailbox Ar ACCOUNT Ar MAILBOX_PATH
-delete mailbox
+deletes mailbox in the mail backend.
+This action is unreversible.
 .El
-.Pp
-envelope view commands:
+.Ss Mail view commands
 .Bl -tag -width 36n
 .It Cm pipe Ar EXECUTABLE Ar ARGS
 pipe pager contents to binary
@@ -342,8 +431,7 @@ unsubscribe automatically from list of viewed envelope
 open list archive with
 .Cm xdg-open
 .El
-.Pp
-composing mail commands:
+.Ss composing mail commands
 .Bl -tag -width 36n
 .It Cm add-attachment Ar PATH
 in composer, add
@@ -358,11 +446,13 @@ remove attachment with given index
 .It Cm toggle sign
 toggle between signing and not signing this message.
 If the gpg invocation fails then the mail won't be sent.
+See
+.Xr meli.conf 5 PGP
+for PGP configuration.
 .It Cm save-draft
 saves a copy of the draft in the Draft folder
 .El
-.Pp
-generic commands:
+.Ss generic commands
 .Bl -tag -width 36n
 .It Cm open-in-tab
 opens envelope view in new tab
@@ -378,108 +468,18 @@ print environment variable
 .Ar KEY
 .El
 .Sh SHORTCUTS
-Non-complete list of shortcuts and their default values.
-.Bl -tag -width 36n
-.It Ic open_thread
-\&'\\n'
-.It Ic exit_thread
-\&'i'
-.It Ic create_contact
-\&'c'
-.It Ic edit_contact
-\&'e'
-.It Ic prev_page
-PageUp,
-.It Ic next_page
-PageDown
-.It Ic prev_mailbox
-\&'K'
-.It Ic next_mailbox
-\&'J'
-.It Ic prev_account
-\&'l'
-.It Ic next_account
-\&'h'
-.It Ic new_mail
-\&'m'
-.It Ic scroll_up
-\&'k'
-.It Ic scroll_down
-\&'j'
-.It Ic page_up
-PageUp
-.It Ic page_down
-PageDown
-.It Ic toggle-menu-visibility
-\&'`'
-.It Ic select
-\&'v'
-.It Ic `
-toggles hiding of sidebar in mail listings
-.It Ic \&?
-opens up a shortcut window that shows available actions in the current component you are using (eg mail listing, contact list, mail composing)
-.It Ic m
-starts a new mail composer
-.It Ic R
-replies to the viewed mail.
-.It Ic u
-displays numbers next to urls in the body text of an email and
-.Ar n Ns Ic g
-opens the
-.Ar n Ns
-th
-url with xdg-open
-.It Ar n Ns Ic a
-opens the
-.Ar n Ns
-th
-attachment.
-.It Ar n Ns Ic m
-opens the
-.Ar n Ns
-th
-attachment according to its mailcap entry.
-.It Ic v
-(un)selects mail entries in mail listings
-.El
-.Sh QUERY ABNF SYNTAX
-.Bl -bullet
-.It
-.Li query = \&"(\&" query \&")\&" | from | to | cc | bcc | alladdresses | subject | flags | has_attachments | query \&"or\&" query | query \&"and\&" query | not query
-.It
-.Li not = \&"not\&" | \&"!\&"
-.It
-.Li quoted = ALPHA / SP *(ALPHA / DIGIT / SP)
-.It
-.Li term = ALPHA *(ALPHA / DIGIT) | DQUOTE quoted DQUOTE
-.It
-.Li tagname = term
-.It
-.Li flagval = \&"passed\&" | \&"replied\&" | \&"seen\&" | \&"read\&" | \&"junk\&" | \&"trash\&" | \&"trashed\&" | \&"draft\&" | \&"flagged\&" | tagname
-.It
-.Li flagterm = flagval | flagval \&",\&" flagterm
-.It
-.Li from = \&"from:\&" term
-.It
-.Li to = \&"to:\&" term
-.It
-.Li cc = \&"cc:\&" term
-.It
-.Li bcc = \&"bcc:\&" term
-.It
-.Li alladdresses = \&"alladdresses:\&" term
-.It
-.Li subject = \&"subject:\&" term
-.It
-.Li flags = \&"flags:\&" flag | \&"tags:\&" flag | \&"is:\&" flag
-.El
+See
+.Xr meli.conf 5 SHORTCUTS
+for shortcuts and their default values.
 .Sh EXIT STATUS
 .Nm
 exits with 0 on a successful run.
 Other exit statuses are:
-.Bl -tag -width 2n
+.Bl -tag -width 5n
 .It 1
 catchall for general errors
+.It 101
+process panic
 .El
 .Sh ENVIRONMENT
 .Bl -tag -width "$XDG_CONFIG_HOME/meli/plugins/*" -offset indent
@@ -508,10 +508,9 @@ defaults to
 and appropriates the following locations:
 .Bl -tag -width "$XDG_CONFIG_HOME/meli/plugins/*" -offset indent
 .It Pa $XDG_CONFIG_HOME/meli/
-User configuration directory.
+User configuration directory
 .It Pa $XDG_CONFIG_HOME/meli/config.toml
-User configuration file.
-See
+User configuration file, see
 .Xr meli.conf 5
 for its syntax and values.
 .It Pa $XDG_CONFIG_HOME/meli/hooks/*
