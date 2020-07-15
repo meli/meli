@@ -38,6 +38,7 @@ pub use self::helpers::*;
 use super::execute::Action;
 use super::jobs::JobId;
 use super::terminal::*;
+use crate::components::{Component, ComponentId};
 
 use melib::backends::{AccountHash, MailboxHash};
 use melib::{EnvelopeHash, RefreshEvent, ThreadHash};
@@ -125,8 +126,8 @@ pub enum UIEvent {
     EnvelopeRemove(EnvelopeHash, ThreadHash),
     Contacts(ContactEvent),
     Compose(ComposeEvent),
-    FinishedUIDialog(crate::components::ComponentId, UIMessage),
-    GlobalUIDialog(Box<dyn crate::components::Component>),
+    FinishedUIDialog(ComponentId, UIMessage),
+    GlobalUIDialog(Box<dyn Component>),
     Timer(u8),
 }
 

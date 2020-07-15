@@ -69,10 +69,11 @@ debug = false
 members = ["melib", "testing", ]
 
 [features]
-default = ["sqlite3", "notmuch", "regexp"]
+default = ["sqlite3", "notmuch", "regexp", "smtp"]
 notmuch = ["melib/notmuch_backend", ]
 jmap = ["melib/jmap_backend",]
 sqlite3 = ["melib/sqlite3"]
+smtp = ["melib/smtp"]
 regexp = ["pcre2"]
 cli-docs = []
 svgscreenshot = ["svg_crate"]

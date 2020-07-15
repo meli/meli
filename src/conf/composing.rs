@@ -28,8 +28,7 @@ use std::collections::HashMap;
 pub struct ComposingSettings {
     /// A command to pipe new emails to
     /// Required
-    #[serde(alias = "mailer-command", alias = "mailer-cmd", alias = "mailer_cmd")]
-    pub mailer_command: String,
+    pub send_mail: SendMail,
     /// Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up.
     #[serde(
         default = "none",
@@ -54,11 +53,19 @@ pub struct ComposingSettings {
 impl Default for ComposingSettings {
     fn default() -> Self {
         ComposingSettings {
-            mailer_command: String::new(),
+            send_mail: SendMail::ShellCommand("/bin/false".into()),
             editor_command: None,
             embed: false,
             format_flowed: true,
             default_header_values: HashMap::default(),
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum SendMail {
+    #[cfg(feature = "smtp")]
+    Smtp(melib::smtp::SmtpServerConf),
+    ShellCommand(String),
 }

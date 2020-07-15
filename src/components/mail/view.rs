@@ -1495,14 +1495,23 @@ impl Component for MailView {
                                              * on its own */
                                             drop(detect);
                                             drop(envelope);
-                                            return super::compose::send_draft(
+                                            if let Err(err) = super::compose::send_draft(
                                                 ToggleFlag::False,
                                                 context,
                                                 self.coordinates.0,
                                                 draft,
                                                 SpecialUsageMailbox::Sent,
                                                 Flag::SEEN,
-                                            );
+                                                true,
+                                            ) {
+                                                context.replies.push_back(UIEvent::StatusEvent(
+                                                    StatusEvent::DisplayMessage(format!(
+                                                        "Couldn't send unsubscribe e-mail: {}",
+                                                        err
+                                                    )),
+                                                ));
+                                            }
+                                            return true;
                                         }
                                     }
                                     list_management::ListAction::Url(url) => {

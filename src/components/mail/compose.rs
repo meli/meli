@@ -24,7 +24,7 @@ use melib::list_management;
 use melib::Draft;
 
 use crate::conf::accounts::JobRequest;
-use crate::jobs::{oneshot, JobId};
+use crate::jobs::{JobChannel, JobId, JoinHandle};
 use crate::terminal::embed::EmbedGrid;
 use nix::sys::wait::WaitStatus;
 use std::str::FromStr;
@@ -66,7 +66,7 @@ impl std::ops::DerefMut for EmbedStatus {
 #[derive(Debug)]
 pub struct Composer {
     reply_context: Option<(MailboxHash, EnvelopeHash)>,
-    reply_bytes_request: Option<(JobId, oneshot::Receiver<Result<Vec<u8>>>)>,
+    reply_bytes_request: Option<(JobId, JobChannel<Vec<u8>>)>,
     account_cursor: usize,
 
     cursor: Cursor,
@@ -120,6 +120,7 @@ enum ViewMode {
     Embed,
     SelectRecipients(UIDialog<Address>),
     Send(UIConfirmationDialog),
+    WaitingForSendResult(UIDialog<char>, JoinHandle, JobId, JobChannel<()>),
 }
 
 impl ViewMode {
@@ -612,6 +613,10 @@ impl Component for Composer {
                 /* Let user choose whether to quit with/without saving or cancel */
                 s.draw(grid, center_area(area, s.content.size()), context);
             }
+            ViewMode::WaitingForSendResult(ref mut s, _, _, _) => {
+                /* Let user choose whether to wait for success or cancel */
+                s.draw(grid, center_area(area, s.content.size()), context);
+            }
         }
         self.dirty = false;
         self.draw_attachments(grid, attachment_area, context);
@@ -673,28 +678,61 @@ impl Component for Composer {
             {
                 if let Some(true) = result.downcast_ref::<bool>() {
                     self.update_draft();
-                    if send_draft(
+                    match send_draft(
                         self.sign_mail,
                         context,
                         self.account_cursor,
                         self.draft.clone(),
                         SpecialUsageMailbox::Sent,
                         Flag::SEEN,
+                        false,
                     ) {
-                        context
-                            .replies
-                            .push_back(UIEvent::Action(Tab(Kill(self.id))));
-                    } else {
-                        save_draft(
-                            self.draft.clone().finalise().unwrap().as_bytes(),
-                            context,
-                            SpecialUsageMailbox::Drafts,
-                            Flag::SEEN | Flag::DRAFT,
-                            self.account_cursor,
-                        );
+                        Ok(Some((job_id, handle, chan))) => {
+                            self.mode = ViewMode::WaitingForSendResult(
+                                UIDialog::new(
+                                    "Waiting for confirmation.. The tab will close automatically on successful submission.",
+                                    vec![
+                                    ('c', "force close tab".to_string()),
+                                    ('n', "close this message and return to edit mode".to_string()),
+                                    ],
+                                    true,
+                                    Some(Box::new(move |id: ComponentId, results: &[char]| {
+                                        Some(UIEvent::FinishedUIDialog(
+                                                id,
+                                                Box::new(results.get(0).map(|c| *c).unwrap_or('c')),
+                                        ))
+                                    })),
+                                    context,
+                                ), handle, job_id, chan);
+                        }
+                        Ok(None) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                Some("Sent.".into()),
+                                String::new(),
+                                Some(NotificationType::INFO),
+                            ));
+                            context
+                                .replies
+                                .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                        }
+                        Err(err) => {
+                            context.replies.push_back(UIEvent::Notification(
+                                None,
+                                err.to_string(),
+                                Some(NotificationType::ERROR),
+                            ));
+                            save_draft(
+                                self.draft.clone().finalise().unwrap().as_bytes(),
+                                context,
+                                SpecialUsageMailbox::Drafts,
+                                Flag::SEEN | Flag::DRAFT,
+                                self.account_cursor,
+                            );
+                            self.mode = ViewMode::Edit;
+                        }
                     }
                 }
-                self.mode = ViewMode::Edit;
+                self.set_dirty(true);
                 return true;
             }
             (ViewMode::Send(ref mut selector), _) => {
@@ -749,6 +787,59 @@ impl Component for Composer {
                 return true;
             }
             (ViewMode::Discard(_, ref mut selector), _) => {
+                if selector.process_event(event, context) {
+                    return true;
+                }
+            }
+            (
+                ViewMode::WaitingForSendResult(ref selector, _, _, _),
+                UIEvent::FinishedUIDialog(id, result),
+            ) if selector.id() == *id => {
+                if let Some(key) = result.downcast_mut::<char>() {
+                    match key {
+                        'c' => {
+                            context
+                                .replies
+                                .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                            return true;
+                        }
+                        'n' => {
+                            self.set_dirty(true);
+                            if let ViewMode::WaitingForSendResult(_, handle, job_id, chan) =
+                                std::mem::replace(&mut self.mode, ViewMode::Edit)
+                            {
+                                context.accounts[self.account_cursor].active_jobs.insert(
+                                    job_id,
+                                    JobRequest::SendMessageBackground(handle, chan),
+                                );
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                return true;
+            }
+            (
+                ViewMode::WaitingForSendResult(_, _, ref our_job_id, ref mut chan),
+                UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)),
+            ) if *our_job_id == *job_id => {
+                let result = chan.try_recv().unwrap();
+                if let Some(Err(err)) = result {
+                    self.mode = ViewMode::Edit;
+                    context.replies.push_back(UIEvent::Notification(
+                        None,
+                        err.to_string(),
+                        Some(NotificationType::ERROR),
+                    ));
+                    self.set_dirty(true);
+                } else {
+                    context
+                        .replies
+                        .push_back(UIEvent::Action(Tab(Kill(self.id))));
+                }
+                return true;
+            }
+            (ViewMode::WaitingForSendResult(ref mut selector, _, _, _), _) => {
                 if selector.process_event(event, context) {
                     return true;
                 }
@@ -1279,76 +1370,58 @@ pub fn send_draft(
     mut draft: Draft,
     mailbox_type: SpecialUsageMailbox,
     flags: Flag,
-) -> bool {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
+    complete_in_background: bool,
+) -> Result<Option<(JobId, JoinHandle, JobChannel<()>)>> {
     let format_flowed = *mailbox_acc_settings!(context[account_cursor].composing.format_flowed);
-    let command = mailbox_acc_settings!(context[account_cursor].composing.mailer_command);
-    if command.is_empty() {
-        context.replies.push_back(UIEvent::Notification(
-            None,
-            String::from("mailer_command configuration value is empty"),
-            Some(NotificationType::ERROR),
-        ));
-        return false;
-    }
-    let bytes;
-    let mut msmtp = Command::new("sh")
-        .args(&["-c", command])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to start mailer command");
-    {
-        let stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
-        if sign_mail.is_true() {
-            let mut content_type = ContentType::default();
-            if format_flowed {
-                if let ContentType::Text {
-                    ref mut parameters, ..
-                } = content_type
-                {
-                    parameters.push((b"format".to_vec(), b"flowed".to_vec()));
-                }
+    if sign_mail.is_true() {
+        let mut content_type = ContentType::default();
+        if format_flowed {
+            if let ContentType::Text {
+                ref mut parameters, ..
+            } = content_type
+            {
+                parameters.push((b"format".to_vec(), b"flowed".to_vec()));
             }
+        }
 
-            let mut body: AttachmentBuilder = Attachment::new(
-                content_type,
+        let mut body: AttachmentBuilder = Attachment::new(
+            content_type,
+            Default::default(),
+            std::mem::replace(&mut draft.body, String::new()).into_bytes(),
+        )
+        .into();
+        if !draft.attachments.is_empty() {
+            let mut parts = std::mem::replace(&mut draft.attachments, Vec::new());
+            parts.insert(0, body);
+            let boundary = ContentType::make_boundary(&parts);
+            body = Attachment::new(
+                ContentType::Multipart {
+                    boundary: boundary.into_bytes(),
+                    kind: MultipartType::Mixed,
+                    parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
+                },
                 Default::default(),
-                std::mem::replace(&mut draft.body, String::new()).into_bytes(),
+                Vec::new(),
             )
             .into();
-            if !draft.attachments.is_empty() {
-                let mut parts = std::mem::replace(&mut draft.attachments, Vec::new());
-                parts.insert(0, body);
-                let boundary = ContentType::make_boundary(&parts);
-                body = Attachment::new(
-                    ContentType::Multipart {
-                        boundary: boundary.into_bytes(),
-                        kind: MultipartType::Mixed,
-                        parts: parts.into_iter().map(|a| a.into()).collect::<Vec<_>>(),
-                    },
-                    Default::default(),
-                    Vec::new(),
-                )
-                .into();
-            }
-            let output = crate::components::mail::pgp::sign(
-                body.into(),
-                mailbox_acc_settings!(context[account_cursor].pgp.gpg_binary)
-                    .as_ref()
-                    .map(|s| s.as_str()),
-                mailbox_acc_settings!(context[account_cursor].pgp.key)
-                    .as_ref()
-                    .map(|s| s.as_str()),
-            );
-            if let Err(e) = &output {
-                debug!("{:?} could not sign draft msg", e);
+        }
+        let output = crate::components::mail::pgp::sign(
+            body.into(),
+            mailbox_acc_settings!(context[account_cursor].pgp.gpg_binary)
+                .as_ref()
+                .map(|s| s.as_str()),
+            mailbox_acc_settings!(context[account_cursor].pgp.key)
+                .as_ref()
+                .map(|s| s.as_str()),
+        );
+        match output {
+            Err(err) => {
+                debug!("{:?} could not sign draft msg", err);
                 log(
                     format!(
                         "Could not sign draft in account `{}`: {}.",
                         context.accounts[account_cursor].name(),
-                        e.to_string()
+                        err.to_string()
                     ),
                     ERROR,
                 );
@@ -1357,62 +1430,38 @@ pub fn send_draft(
                         "Could not sign draft in account `{}`.",
                         context.accounts[account_cursor].name()
                     )),
-                    e.to_string(),
+                    err.to_string(),
                     Some(NotificationType::ERROR),
                 ));
-                return false;
+                return Err(err);
             }
-            draft.attachments.push(output.unwrap());
-        } else {
-            let mut content_type = ContentType::default();
-            if format_flowed {
-                if let ContentType::Text {
-                    ref mut parameters, ..
-                } = content_type
-                {
-                    parameters.push((b"format".to_vec(), b"flowed".to_vec()));
-                }
-
-                let body: AttachmentBuilder = Attachment::new(
-                    content_type,
-                    Default::default(),
-                    std::mem::replace(&mut draft.body, String::new()).into_bytes(),
-                )
-                .into();
-                draft.attachments.insert(0, body);
+            Ok(output) => {
+                draft.attachments.push(output);
             }
         }
-        bytes = draft.finalise().unwrap();
-        stdin
-            .write_all(bytes.as_bytes())
-            .expect("Failed to write to stdin");
-    }
-    let output = msmtp.wait().expect("Failed to wait on mailer");
-    if output.success() {
-        context.replies.push_back(UIEvent::Notification(
-            Some("Sent.".into()),
-            String::new(),
-            None,
-        ));
     } else {
-        let error_message = if let Some(exit_code) = output.code() {
-            format!(
-                "Could not send e-mail using `{}`: Process exited with {}",
-                command, exit_code
+        let mut content_type = ContentType::default();
+        if format_flowed {
+            if let ContentType::Text {
+                ref mut parameters, ..
+            } = content_type
+            {
+                parameters.push((b"format".to_vec(), b"flowed".to_vec()));
+            }
+
+            let body: AttachmentBuilder = Attachment::new(
+                content_type,
+                Default::default(),
+                std::mem::replace(&mut draft.body, String::new()).into_bytes(),
             )
-        } else {
-            format!(
-                "Could not send e-mail using `{}`: Process was killed by signal",
-                command
-            )
-        };
-        context.replies.push_back(UIEvent::Notification(
-            Some("Message not sent.".into()),
-            error_message.clone(),
-            Some(NotificationType::ERROR),
-        ));
-        log(error_message, ERROR);
+            .into();
+            draft.attachments.insert(0, body);
+        }
     }
+    let bytes = draft.finalise().unwrap();
+    let send_mail = mailbox_acc_settings!(context[account_cursor].composing.send_mail).clone();
+    let ret =
+        context.accounts[account_cursor].send(bytes.clone(), send_mail, complete_in_background);
     save_draft(
         bytes.as_bytes(),
         context,
@@ -1420,7 +1469,7 @@ pub fn send_draft(
         flags,
         account_cursor,
     );
-    true
+    ret
 }
 
 pub fn save_draft(

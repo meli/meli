@@ -202,9 +202,8 @@ impl Default for ShortcutsOverride {
 pub struct ComposingSettingsOverride {
     #[doc = " A command to pipe new emails to"]
     #[doc = " Required"]
-    #[serde(alias = "mailer-command", alias = "mailer-cmd", alias = "mailer_cmd")]
     #[serde(default)]
-    pub mailer_command: Option<String>,
+    pub send_mail: Option<SendMail>,
     #[doc = " Command to launch editor. Can have arguments. Draft filename is given as the last argument. If it's missing, the environment variable $EDITOR is looked up."]
     #[serde(alias = "editor-command", alias = "editor-cmd", alias = "editor_cmd")]
     #[serde(default)]
@@ -226,7 +225,7 @@ pub struct ComposingSettingsOverride {
 impl Default for ComposingSettingsOverride {
     fn default() -> Self {
         ComposingSettingsOverride {
-            mailer_command: None,
+            send_mail: None,
             editor_command: None,
             embed: None,
             format_flowed: None,

@@ -24,7 +24,7 @@
  */
 
 use super::{AccountConf, FileMailboxConf};
-use crate::jobs::{JobExecutor, JobId, JoinHandle};
+use crate::jobs::{JobChannel, JobExecutor, JobId, JoinHandle};
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
     AccountHash, BackendOp, Backends, MailBackend, Mailbox, MailboxHash, NotifyFn, ReadOnlyOp,
@@ -173,7 +173,8 @@ pub enum JobRequest {
     Refresh(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
     SetFlags(EnvelopeHash, JoinHandle, oneshot::Receiver<Result<()>>),
     SaveMessage(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
-    SendMessage(JoinHandle, oneshot::Receiver<Result<()>>),
+    SendMessage,
+    SendMessageBackground(JoinHandle, JobChannel<()>),
     CopyTo(MailboxHash, JoinHandle, oneshot::Receiver<Result<Vec<u8>>>),
     DeleteMessage(EnvelopeHash, JoinHandle, oneshot::Receiver<Result<()>>),
     CreateMailbox(
@@ -215,7 +216,10 @@ impl core::fmt::Debug for JobRequest {
                 write!(f, "JobRequest::SetMailboxSubscription")
             }
             JobRequest::Watch(_) => write!(f, "JobRequest::Watch"),
-            JobRequest::SendMessage(_, _) => write!(f, "JobRequest::SendMessage"),
+            JobRequest::SendMessage => write!(f, "JobRequest::SendMessage"),
+            JobRequest::SendMessageBackground(_, _) => {
+                write!(f, "JobRequest::SendMessageBackground")
+            }
         }
     }
 }
@@ -1221,6 +1225,81 @@ impl Account {
         Ok(())
     }
 
+    pub fn send(
+        &mut self,
+        message: String,
+        send_mail: crate::conf::composing::SendMail,
+        complete_in_background: bool,
+    ) -> Result<Option<(JobId, JoinHandle, JobChannel<()>)>> {
+        use crate::conf::composing::SendMail;
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        debug!(&send_mail);
+        match send_mail {
+            SendMail::ShellCommand(ref command) => {
+                if command.is_empty() {
+                    return Err(MeliError::new(
+                        "send_mail shell command configuration value is empty",
+                    ));
+                }
+                let mut msmtp = Command::new("sh")
+                    .args(&["-c", command])
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+                    .expect("Failed to start mailer command");
+                {
+                    let stdin = msmtp.stdin.as_mut().expect("failed to open stdin");
+                    stdin
+                        .write_all(message.as_bytes())
+                        .expect("Failed to write to stdin");
+                }
+                let output = msmtp.wait().expect("Failed to wait on mailer");
+                if output.success() {
+                    melib::log("Message sent.", melib::LoggingLevel::TRACE);
+                } else {
+                    let error_message = if let Some(exit_code) = output.code() {
+                        format!(
+                            "Could not send e-mail using `{}`: Process exited with {}",
+                            command, exit_code
+                        )
+                    } else {
+                        format!(
+                            "Could not send e-mail using `{}`: Process was killed by signal",
+                            command
+                        )
+                    };
+                    melib::log(&error_message, melib::LoggingLevel::ERROR);
+                    return Err(
+                        MeliError::new(error_message.clone()).set_summary("Message not sent.")
+                    );
+                }
+                Ok(None)
+            }
+            #[cfg(feature = "smtp")]
+            SendMail::Smtp(conf) => {
+                let (chan, handle, job_id) = self.job_executor.spawn_specialized(async move {
+                    let mut smtp_connection =
+                        melib::smtp::SmtpConnection::new_connection(conf).await?;
+                    smtp_connection.mail_transaction(&message).await
+                });
+                self.sender
+                    .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                        StatusEvent::NewJob(job_id),
+                    )))
+                    .unwrap();
+                if complete_in_background {
+                    self.active_jobs
+                        .insert(job_id, JobRequest::SendMessageBackground(handle, chan));
+                    return Ok(None);
+                } else {
+                    self.active_jobs.insert(job_id, JobRequest::SendMessage);
+                }
+                Ok(Some((job_id, handle, chan)))
+            }
+        }
+    }
+
     pub fn delete(
         &mut self,
         env_hash: EnvelopeHash,
@@ -1677,6 +1756,30 @@ impl Account {
                             )))
                             .expect("Could not send event on main channel");
                     }
+                }
+                JobRequest::SendMessage => {
+                    self.sender
+                        .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                            StatusEvent::JobFinished(*job_id),
+                        )))
+                        .unwrap();
+                }
+                JobRequest::SendMessageBackground(_, mut chan) => {
+                    let r = chan.try_recv().unwrap();
+                    if let Some(Err(err)) = r {
+                        self.sender
+                            .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                Some("Could not send message".to_string()),
+                                err.to_string(),
+                                Some(crate::types::NotificationType::ERROR),
+                            )))
+                            .expect("Could not send event on main channel");
+                    }
+                    self.sender
+                        .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                            StatusEvent::JobFinished(*job_id),
+                        )))
+                        .unwrap();
                 }
                 JobRequest::CopyTo(mailbox_hash, _, mut chan) => {
                     if let Err(err) = chan

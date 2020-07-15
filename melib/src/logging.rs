@@ -79,7 +79,7 @@ thread_local!(static LOG: Arc<Mutex<LoggingBackend>> = Arc::new(Mutex::new({
     }}))
 );
 
-pub fn log(val: String, level: LoggingLevel) {
+pub fn log<S: AsRef<str>>(val: S, level: LoggingLevel) {
     LOG.with(|f| {
         let mut b = f.lock().unwrap();
         if level <= b.level {
@@ -91,7 +91,7 @@ pub fn log(val: String, level: LoggingLevel) {
             b.dest.write_all(b" [").unwrap();
             b.dest.write_all(level.to_string().as_bytes()).unwrap();
             b.dest.write_all(b"]: ").unwrap();
-            b.dest.write_all(val.as_bytes()).unwrap();
+            b.dest.write_all(val.as_ref().as_bytes()).unwrap();
             b.dest.write_all(b"\n").unwrap();
             b.dest.flush().unwrap();
         }

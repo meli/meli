@@ -77,7 +77,7 @@ macro_rules! uuid_hash_type {
         }
 
         impl $n {
-            fn new() -> Self {
+            pub fn new() -> Self {
                 $n(Uuid::new_v4())
             }
             pub fn null() -> Self {
@@ -215,6 +215,8 @@ impl JobExecutor {
         (receiver, JoinHandle(handle), job_id)
     }
 }
+
+pub type JobChannel<T> = oneshot::Receiver<Result<T>>;
 
 ///// Spawns a future on the executor.
 //fn spawn<F, R>(future: F) -> JoinHandle<R>
