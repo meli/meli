@@ -105,7 +105,8 @@
 
 #[composing]
 # required for sending e-mail
-#mailer_command = 'msmtp --read-recipients --read-envelope-from'
+#send_mail = 'msmtp --read-recipients --read-envelope-from'
+#send_mail = { hostname = "smtp.mail.tld", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 #editor_command = 'vim +/^$' # optional, by default $EDITOR is used.
 #
 #

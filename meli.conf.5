@@ -96,6 +96,7 @@ root_mailbox = "/var/mail/username"
 format = "mbox"
 index_style = "Compact"
 identity="username@hostname.local"
+composing.send_mail = { hostname = "localhost", port = 25, auth = { type = "none" }, security = { type = "none" } }
 
 [pager]
 filter = "COLUMNS=72 /usr/local/bin/pygmentize -l email"
@@ -106,7 +107,8 @@ script = "notify-send"
 
 [composing]
 # required for sending e-mail
-mailer_command = 'msmtp --read-recipients --read-envelope-from'
+send_mail = 'msmtp --read-recipients --read-envelope-from'
+#send_mail = { hostname = "smtp.mail.tld", port = 587, auth = { type = "auto", username = "user", password = { type = "command_eval", value = "gpg2 --no-tty -q -d ~/.passwords/user.gpg" } }, security = { type = "STARTTLS" } }
 editor_command = 'vim +/^$'
 
 [shortcuts]
@@ -174,7 +176,7 @@ Its format is described below in
 .Sx mailboxes Ns
 \&.
 .El
-.Sh notmuch only
+.Ss notmuch only
 .Ic root_mailbox
 points to the directory which contains the
 .Pa .notmuch/
@@ -195,7 +197,7 @@ format = "notmuch"
   "Drafts" = {  query="tag:draft", subscribe = true }
   "Sent" = {  query="from:username@server.tld from:username2@server.tld", subscribe = true }
 .Ed
-.Sh IMAP only
+.Ss IMAP only
 IMAP specific options are:
 .Bl -tag -width 36n
 .It Ic server_hostname Ar String
@@ -219,7 +221,7 @@ example:
 .\" default value
 .Pq Em false
 .El
-.Sh JMAP only
+.Ss JMAP only
 JMAP specific options are:
 .Bl -tag -width 36n
 .It Ic server_hostname Ar String
@@ -236,7 +238,7 @@ example:
 .\" default value
 .Pq Em false
 .El
-.Sh mbox only
+.Ss mbox only
 mbox specific options are:
 .Bl -tag -width 36n
 .It Ic prefer_mbox_type Ar String
@@ -323,8 +325,11 @@ Example:
 .El
 .Sh COMPOSING
 .Bl -tag -width 36n
-.It Ic mailer_command Ar String
-command to pipe new mail to, exit code must be 0 for success.
+.It Ic send_mail Ar String|SmtpServerConf
+command to pipe new mail to (exit code must be 0 for success) or settings for an SMTP server connection.
+See section
+.Sx SMTP Connections
+for its fields.
 .It Ic editor_command Ar String
 command to launch editor.
 Can have arguments.
@@ -788,6 +793,86 @@ to
 \&.
 .\" default value
 .Pq Em INFO
+.El
+.Sh SMTP Connections
+.Bl -tag -width 36n
+.It Ic hostname Ar String
+server hostname
+.It Ic port Ar Integer
+server port
+.It Ic envelope_from Ar String
+(optional) address to set as sender in SMTP transactions
+.\" default value
+.Pq Em none
+.It Ic auth Ar SmtpAuth
+SMTP server authentication.
+See
+.Sx SmtpAuth
+subsection.
+.It Ic security Ar SmtpSecurity
+(optional) gpg binary name or file location to use
+.\" default value
+.Po see
+.Sx SmtpSecurity
+subsection
+.Pc
+.It Ic extensions Ar SmtpExtensions
+(optional) set support for SMTP extensions if they are advertised by the server
+.\" default value
+.Po see
+.Sx SmtpExtensions
+subsection
+.Pc
+.El
+.Ss SmtpAuth
+.Bl -tag -width 36n
+.It Ic type Ar "none" | "auto"
+.El
+.Pp
+For type "auto":
+.Bl -tag -width 36n
+.It Ic username Ar String
+.It Ic password Ar String|SmtpPassword
+.It Ic require_auth Ar bool
+(optional) require authentication in every case
+.\" default value
+.Pq Em true
+.El
+.Ss SmtpPassword
+.Bl -tag -width 36n
+.It Ic type Ar "raw" | "command_evaluation"
+.It Ic value Ar String
+Either a raw password string, or command to execute.
+.El
+.Ss SmtpSecurity
+Default security type is
+.Em auto Ns
+\&.
+.Bl -tag -width 36n
+.It Ic type Ar "none" | "auto" | "starttls" | "tls"
+.It Ic danger_accept_invalid_certs Ar bool
+Accept invalid SSL/TLS certificates
+.\" default value
+.Pq Em false
+.El
+.Ss SmtpExtensions
+.Bl -tag -width 36n
+.It Ic pipelining Ar bool
+rfc2920
+.\" default value
+.Pq Em true
+.It Ic chunking Ar bool
+rfc3030
+.\" default value
+.Pq Em true
+.It Ic prdr Ar bool
+draft-hall-prdr-00
+.\" default value
+.Pq Em true
+.It Ic dsn_notify Ar String
+RFC3461
+.\" default value
+.Pq Em FAILURE
 .El
 .Sh SEE ALSO
 .Xr meli 1 ,
