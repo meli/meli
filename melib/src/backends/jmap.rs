@@ -198,6 +198,10 @@ impl MailBackend for JmapType {
         true
     }
 
+    fn supports_search(&self) -> bool {
+        true
+    }
+
     fn is_online(&self) -> Result<()> {
         if self.online.lock().unwrap().1.is_err()
             && Instant::now().duration_since(self.online.lock().unwrap().0)

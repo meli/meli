@@ -183,6 +183,10 @@ impl MailBackend for MaildirType {
         false
     }
 
+    fn supports_search(&self) -> bool {
+        false
+    }
+
     fn is_online(&self) -> Result<()> {
         Ok(())
     }

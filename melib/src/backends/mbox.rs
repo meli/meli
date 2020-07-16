@@ -710,6 +710,10 @@ impl MailBackend for MboxType {
         false
     }
 
+    fn supports_search(&self) -> bool {
+        false
+    }
+
     fn is_online(&self) -> Result<()> {
         Ok(())
     }

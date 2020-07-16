@@ -183,6 +183,11 @@ impl MailBackend for ImapType {
     fn is_remote(&self) -> bool {
         true
     }
+
+    fn supports_search(&self) -> bool {
+        true
+    }
+
     fn get_async(
         &mut self,
         mailbox: &Mailbox,

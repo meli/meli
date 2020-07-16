@@ -287,6 +287,7 @@ pub type ResultFuture<T> = Result<Pin<Box<dyn Future<Output = Result<T>> + Send 
 pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_async(&self) -> bool;
     fn is_remote(&self) -> bool;
+    fn supports_search(&self) -> bool;
     fn is_online(&self) -> Result<()> {
         Err(MeliError::new("Unimplemented."))
     }

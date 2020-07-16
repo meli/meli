@@ -326,6 +326,10 @@ impl MailBackend for NotmuchDb {
         false
     }
 
+    fn supports_search(&self) -> bool {
+        true
+    }
+
     fn is_online(&self) -> Result<()> {
         Ok(())
     }
