@@ -374,6 +374,18 @@ define_commands!([
                       }
                   )
                 },
+                { tags: ["select"],
+                  desc: "select <TERM>, selects envelopes matching with given term",
+                  tokens: &[One(Literal("select")), One(RestOfStringValue)],
+                  parser:(
+                      fn select(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("select")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, string) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+                          Ok((input, Listing(Select(String::from(string)))))
+                      }
+                  )
+                },
                 { tags: ["list-archive", "list-post", "list-unsubscribe", "list-"],
                   desc: "list-[unsubscribe/post/archive]",
                   tokens: &[One(Alternatives(&[to_stream!(One(Literal("list-archive"))), to_stream!(One(Literal("list-post"))), to_stream!(One(Literal("list-unsubscribe")))]))],
@@ -681,6 +693,7 @@ fn listing_action(input: &[u8]) -> IResult<&[u8], Action> {
         delete_message,
         copymove,
         search,
+        select,
         toggle_thread_snooze,
         open_in_new_tab,
         _tag,

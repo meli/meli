@@ -67,6 +67,11 @@ pub struct CompactListing {
         oneshot::Receiver<Result<SmallVec<[EnvelopeHash; 512]>>>,
         JobId,
     )>,
+    select_job: Option<(
+        String,
+        oneshot::Receiver<Result<SmallVec<[EnvelopeHash; 512]>>>,
+        JobId,
+    )>,
     filter_term: String,
     filtered_selection: Vec<ThreadHash>,
     filtered_order: HashMap<ThreadHash, usize>,
@@ -112,6 +117,8 @@ impl MailListingTrait for CompactListing {
     /// chosen.
     fn refresh_mailbox(&mut self, context: &mut Context, force: bool) {
         self.dirty = true;
+        self.all_threads.clear();
+        self.selection.clear();
         let old_cursor_pos = self.cursor_pos;
         if !(self.cursor_pos.0 == self.new_cursor_pos.0
             && self.cursor_pos.1 == self.new_cursor_pos.1)
@@ -172,7 +179,6 @@ impl MailListingTrait for CompactListing {
         }
 
         let threads = &context.accounts[self.cursor_pos.0].collection.threads[&self.cursor_pos.1];
-        self.all_threads.clear();
         let mut roots = threads.roots();
         threads.group_inner_sort_by(
             &mut roots,
@@ -203,7 +209,6 @@ impl MailListingTrait for CompactListing {
 
         let threads = &account.collection.threads[&self.cursor_pos.1];
         self.order.clear();
-        self.selection.clear();
         self.length = 0;
         let mut rows = Vec::with_capacity(1024);
         let mut min_width = (0, 0, 0, 0, 0);
@@ -849,6 +854,7 @@ impl CompactListing {
             all_threads: HashSet::default(),
             order: HashMap::default(),
             search_job: None,
+            select_job: None,
             filter_term: String::new(),
             filtered_selection: Vec::new(),
             filtered_order: HashMap::default(),
@@ -1280,6 +1286,54 @@ impl CompactListing {
             }
         }
     }
+
+    fn select(
+        &mut self,
+        search_term: &str,
+        results: Result<SmallVec<[EnvelopeHash; 512]>>,
+        context: &mut Context,
+    ) {
+        let account = &context.accounts[self.cursor_pos.0];
+        match results {
+            Ok(results) => {
+                let threads = &account.collection.threads[&self.cursor_pos.1];
+                for env_hash in results {
+                    if !account.collection.contains_key(&env_hash) {
+                        continue;
+                    }
+                    debug!(account.collection.get_env(env_hash).subject());
+                    let env_thread_node_hash = account.collection.get_env(env_hash).thread();
+                    if !threads.thread_nodes.contains_key(&env_thread_node_hash) {
+                        continue;
+                    }
+                    let thread =
+                        threads.find_group(threads.thread_nodes[&env_thread_node_hash].group);
+                    if self.all_threads.contains(&thread) {
+                        self.selection
+                            .entry(thread)
+                            .and_modify(|entry| *entry = true);
+                    }
+                }
+            }
+            Err(err) => {
+                self.cursor_pos.2 = 0;
+                self.new_cursor_pos.2 = 0;
+                let message = format!(
+                    "Encountered an error while searching for `{}`: {}.",
+                    search_term, err
+                );
+                log(
+                    format!("Failed to search for term {}: {}", search_term, err),
+                    ERROR,
+                );
+                context.replies.push_back(UIEvent::Notification(
+                    Some("Could not perform search".to_string()),
+                    err.to_string(),
+                    Some(crate::types::NotificationType::ERROR),
+                ));
+            }
+        }
+    }
 }
 
 impl Component for CompactListing {
@@ -1552,6 +1606,35 @@ impl Component for CompactListing {
                 };
                 self.set_dirty(true);
             }
+            UIEvent::Action(Action::Listing(Select(ref search_term))) if !self.unfocused => {
+                match context.accounts[self.cursor_pos.0].search(
+                    search_term,
+                    self.sort,
+                    self.cursor_pos.1,
+                ) {
+                    Ok(job) => {
+                        let (mut chan, handle, job_id) = context.accounts[self.cursor_pos.0]
+                            .job_executor
+                            .spawn_specialized(job);
+                        if let Ok(Some(search_result)) = try_recv_timeout!(&mut chan) {
+                            self.select(search_term, search_result, context);
+                        } else {
+                            context.accounts[self.cursor_pos.0]
+                                .active_jobs
+                                .insert(job_id, crate::conf::accounts::JobRequest::Search(handle));
+                            self.select_job = Some((search_term.to_string(), chan, job_id));
+                        }
+                    }
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::Notification(
+                            Some("Could not perform search".to_string()),
+                            err.to_string(),
+                            Some(crate::types::NotificationType::ERROR),
+                        ));
+                    }
+                };
+                self.set_dirty(true);
+            }
             UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
                 if self
                     .search_job
@@ -1562,6 +1645,18 @@ impl Component for CompactListing {
                 let (filter_term, mut rcvr, _job_id) = self.search_job.take().unwrap();
                 let results = rcvr.try_recv().unwrap().unwrap();
                 self.filter(filter_term, results, context);
+                self.set_dirty(true);
+            }
+            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id))
+                if self
+                    .select_job
+                    .as_ref()
+                    .map(|(_, _, j)| j == job_id)
+                    .unwrap_or(false) =>
+            {
+                let (search_term, mut rcvr, _job_id) = self.select_job.take().unwrap();
+                let results = rcvr.try_recv().unwrap().unwrap();
+                self.select(&search_term, results, context);
                 self.set_dirty(true);
             }
             _ => {}

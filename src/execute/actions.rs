@@ -44,6 +44,7 @@ pub enum ListingAction {
     SetCompact,
     SetConversations,
     Search(String),
+    Select(String),
     SetSeen,
     SetUnseen,
     CopyTo(MailboxPath),
