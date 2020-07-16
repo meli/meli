@@ -1563,46 +1563,45 @@ impl Account {
     ) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
         use melib::parsec::Parser;
         let query = melib::search::query().parse(search_term)?.1;
-        self.backend
-            .read()
-            .unwrap()
-            .search(query, Some(mailbox_hash))
-        /*
-        #[cfg(feature = "sqlite3")]
-        {
-            crate::sqlite3::search(search_term, sort)
-        }
-
-        #[cfg(not(feature = "sqlite3"))]
-        {
-            let mut ret = SmallVec::new();
-            let envelopes = self.collection.envelopes.read().unwrap();
-
-            for &env_hash in self.collection[&mailbox_hash].iter() {
-                let envelope = &envelopes[&env_hash];
-                if envelope.subject().contains(&search_term) {
-                    ret.push(env_hash);
-                    continue;
-                }
-                if envelope.field_from_to_string().contains(&search_term) {
-                    ret.push(env_hash);
-                    continue;
-                }
-                let op = if let Ok(op) = self.operation(env_hash) {
-                    op
+        match self.settings.conf.search_backend {
+            #[cfg(feature = "sqlite3")]
+            crate::conf::SearchBackend::Sqlite3 => crate::sqlite3::search(search_term, _sort),
+            crate::conf::SearchBackend::None => {
+                if self.backend.read().unwrap().supports_search() {
+                    self.backend
+                        .read()
+                        .unwrap()
+                        .search(query, Some(mailbox_hash))
                 } else {
-                    continue;
-                };
-                let body = envelope.body(op)?;
-                let decoded = decode_rec(&body, None);
-                let body_text = String::from_utf8_lossy(&decoded);
-                if body_text.contains(&search_term) {
-                    ret.push(env_hash);
+                    let mut ret = SmallVec::new();
+                    let envelopes = self.collection.envelopes.read().unwrap();
+
+                    for &env_hash in self.collection[&mailbox_hash].iter() {
+                        let envelope = &envelopes[&env_hash];
+                        if envelope.subject().contains(&search_term) {
+                            ret.push(env_hash);
+                            continue;
+                        }
+                        if envelope.field_from_to_string().contains(&search_term) {
+                            ret.push(env_hash);
+                            continue;
+                        }
+                        let op = if let Ok(op) = self.operation(env_hash) {
+                            op
+                        } else {
+                            continue;
+                        };
+                        let body = envelope.body(op)?;
+                        let decoded = decode_rec(&body, None);
+                        let body_text = String::from_utf8_lossy(&decoded);
+                        if body_text.contains(&search_term) {
+                            ret.push(env_hash);
+                        }
+                    }
+                    Ok(Box::pin(async { Ok(ret) }))
                 }
             }
-            Ok(ret)
         }
-                */
     }
 
     pub fn mailbox_by_path(&self, path: &str) -> Result<MailboxHash> {

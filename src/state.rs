@@ -97,6 +97,7 @@ pub struct Context {
     receiver: Receiver<ThreadEvent>,
     input: InputHandler,
     work_controller: WorkController,
+    job_executor: Arc<JobExecutor>,
     pub children: Vec<std::process::Child>,
     pub plugin_manager: PluginManager,
 
@@ -329,6 +330,7 @@ impl State {
                 replies: VecDeque::with_capacity(5),
                 temp_files: Vec::new(),
                 work_controller,
+                job_executor,
                 children: vec![],
                 plugin_manager,
 
@@ -838,10 +840,51 @@ impl State {
                     ));
                 }
             }
+            #[cfg(feature = "sqlite3")]
             AccountAction(ref account_name, ReIndex) => {
-                #[cfg(feature = "sqlite3")]
-                match crate::sqlite3::index(&mut self.context, account_name) {
-                    Ok(()) => {
+                let account_index = if let Some(a) = self
+                    .context
+                    .accounts
+                    .iter()
+                    .position(|acc| acc.name() == account_name)
+                {
+                    a
+                } else {
+                    self.context.replies.push_back(UIEvent::Notification(
+                        None,
+                        format!("Account {} was not found.", account_name),
+                        Some(NotificationType::ERROR),
+                    ));
+                    return;
+                };
+                if *self.context.accounts[account_index]
+                    .settings
+                    .conf
+                    .search_backend()
+                    != crate::conf::SearchBackend::Sqlite3
+                {
+                    self.context.replies.push_back(UIEvent::Notification(
+                        None,
+                        format!(
+                            "Account {} doesn't have an sqlite3 search backend.",
+                            account_name
+                        ),
+                        Some(NotificationType::ERROR),
+                    ));
+                    return;
+                }
+                match crate::sqlite3::index(&mut self.context, account_index) {
+                    Ok(job) => {
+                        let (channel, handle, job_id) =
+                            self.context.job_executor.spawn_blocking(job);
+                        self.context.accounts[account_index].active_jobs.insert(
+                            job_id,
+                            crate::conf::accounts::JobRequest::Generic {
+                                name: "Message index rebuild".into(),
+                                handle,
+                                channel,
+                            },
+                        );
                         self.context.replies.push_back(UIEvent::Notification(
                             None,
                             "Message index rebuild started.".to_string(),
@@ -856,15 +899,15 @@ impl State {
                         ));
                     }
                 }
-                #[cfg(not(feature = "sqlite3"))]
-                {
-                    self.context.replies.push_back(UIEvent::Notification(
-                        None,
-                        "Message index rebuild failed: meli is not built with sqlite3 support."
-                            .to_string(),
-                        Some(NotificationType::ERROR),
-                    ));
-                }
+            }
+            #[cfg(not(feature = "sqlite3"))]
+            AccountAction(ref account_name, ReIndex) => {
+                self.context.replies.push_back(UIEvent::Notification(
+                    None,
+                    "Message index rebuild failed: meli is not built with sqlite3 support."
+                        .to_string(),
+                    Some(NotificationType::ERROR),
+                ));
             }
             v => {
                 self.rcv_event(UIEvent::Action(v));

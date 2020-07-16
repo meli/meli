@@ -22,16 +22,20 @@
 /*! Use an sqlite3 database for fast searching.
  */
 use crate::melib::parsec::Parser;
+use crate::melib::ResultIntoMeliError;
 use melib::search::{
     escape_double_quote, query,
     Query::{self, *},
 };
 use melib::{
-    backends::MailBackend,
+    backends::{MailBackend, ResultFuture},
     email::{Envelope, EnvelopeHash},
     log,
+    sqlite3::{
+        self as melib_sqlite3,
+        rusqlite::{self, params},
+    },
     thread::{SortField, SortOrder},
-    sqlite3::{self as melib_sqlite3, rusqlite::{self, params}},
     MeliError, Result, ERROR,
 };
 
@@ -147,7 +151,10 @@ pub fn insert(
 
     let conn = melib_sqlite3::open_db(db_path)?;
     let backend_lck = backend.read().unwrap();
-    let body = match backend_lck.operation(envelope.hash()).and_then(|op| envelope.body(op)) {
+    let body = match backend_lck
+        .operation(envelope.hash())
+        .and_then(|op| envelope.body(op))
+    {
         Ok(body) => body.text(),
         Err(err) => {
             debug!(
@@ -258,35 +265,14 @@ pub fn remove(env_hash: EnvelopeHash) -> Result<()> {
     Ok(())
 }
 
-pub fn index(context: &mut crate::state::Context, account_name: &str) -> Result<()> {
-    let account = if let Some(a) = context
-        .accounts
-        .iter()
-        .find(|acc| acc.name() == account_name)
-    {
-        a
-    } else {
-        return Err(MeliError::new(format!(
-            "Account {} was not found.",
-            account_name
-        )));
-    };
-
-    let (acc_name, acc_mutex, backend_mutex): (String, Arc<RwLock<_>>, Arc<_>) =
-        if *account.settings.conf.cache_type() != crate::conf::CacheType::Sqlite3 {
-            return Err(MeliError::new(format!(
-                "Account {} doesn't have an sqlite3 search backend.",
-                account_name
-            )));
-        } else {
-            (
-                account.name().to_string(),
-                account.collection.envelopes.clone(),
-                account.backend.clone(),
-            )
-        };
+pub fn index(context: &mut crate::state::Context, account_index: usize) -> ResultFuture<()> {
+    let account = &context.accounts[account_index];
+    let (acc_name, acc_mutex, backend_mutex): (String, Arc<RwLock<_>>, Arc<_>) = (
+        account.name().to_string(),
+        account.collection.envelopes.clone(),
+        account.backend.clone(),
+    );
     let conn = melib_sqlite3::open_or_create_db(DB_NAME, Some(INIT_SCRIPT))?;
-    let work_context = context.work_controller().get_context();
     let env_hashes = acc_mutex
         .read()
         .unwrap()
@@ -295,106 +281,66 @@ pub fn index(context: &mut crate::state::Context, account_name: &str) -> Result<
         .collect::<Vec<_>>();
 
     /* Sleep, index and repeat in order not to block the main process */
-    let handle = std::thread::Builder::new().name(String::from("rebuilding index")).spawn(move || {
-        let thread_id = std::thread::current().id();
-
-        let sleep_dur = std::time::Duration::from_millis(20);
-            if let Err(err) = conn.execute(
-                "INSERT OR REPLACE INTO accounts (name) VALUES (?1)", params![acc_name.as_str(),],).map_err(|e| MeliError::new(e.to_string())) {
-                debug!("{}",
-                    format!(
-                        "Failed to update index: {}",
-                        err.to_string()
-                    ));
-                log(
-                    format!(
-                        "Failed to update index: {}",
-                        err.to_string()
-                    ),
-                    ERROR,
-                );
-            } 
-            let account_id: i32 = {
-                let mut stmt = conn.prepare("SELECT id FROM accounts WHERE name = ?").unwrap();
-                let x = stmt.query_map(params![acc_name.as_str()], |row| row.get(0)).unwrap().next().unwrap().unwrap();
-                x
-            };
-            let mut ctr = 0;
-            debug!("{}", format!("Rebuilding {} index. {}/{}", acc_name, ctr, env_hashes.len()));
-            work_context
-                .set_status
-                .send((thread_id, format!("Rebuilding {} index. {}/{}", acc_name, ctr, env_hashes.len())))
+    Ok(Box::pin(async move {
+        conn.execute(
+            "INSERT OR REPLACE INTO accounts (name) VALUES (?1)",
+            params![acc_name.as_str(),],
+        )
+        .chain_err_summary(|| "Failed to update index:")?;
+        let account_id: i32 = {
+            let mut stmt = conn
+                .prepare("SELECT id FROM accounts WHERE name = ?")
                 .unwrap();
-            for chunk in env_hashes.chunks(200) {
-                ctr += chunk.len();
-                let envelopes_lck = acc_mutex.read().unwrap();
-                let backend_lck = backend_mutex.read().unwrap();
-                for env_hash in chunk {
-                    if let Some(e) = envelopes_lck.get(&env_hash) {
-                        let body = match backend_lck.operation(e.hash()).and_then(|op| e.body(op)) {
-                            Ok(body) => body.text(),
-                            Err(err) => {
-                                debug!("{}",
-                                    format!(
-                                        "Failed to open envelope {}: {}",
-                                        e.message_id_display(),
-                                        err.to_string()
-                                    ));
-                                log(
-                                    format!(
-                                        "Failed to open envelope {}: {}",
-                                        e.message_id_display(),
-                                        err.to_string()
-                                    ),
-                                    ERROR,
-                                );
-                                return;
-                            }
-                        };
-                        if let Err(err) = conn.execute(
-                            "INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
+            let x = stmt
+                .query_map(params![acc_name.as_str()], |row| row.get(0))
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap();
+            x
+        };
+        let mut ctr = 0;
+        debug!(
+            "{}",
+            format!(
+                "Rebuilding {} index. {}/{}",
+                acc_name,
+                ctr,
+                env_hashes.len()
+            )
+        );
+        for chunk in env_hashes.chunks(200) {
+            ctr += chunk.len();
+            let envelopes_lck = acc_mutex.read().unwrap();
+            let backend_lck = backend_mutex.read().unwrap();
+            for env_hash in chunk {
+                if let Some(e) = envelopes_lck.get(&env_hash) {
+                    let body = backend_lck
+                        .operation(e.hash())
+                        .and_then(|op| e.body(op))
+                        .chain_err_summary(|| {
+                            format!("Failed to open envelope {}", e.message_id_display(),)
+                        })?
+                        .text()
+                        .replace('\0', "");
+                    conn.execute("INSERT OR REPLACE INTO envelopes (account_id, hash, date, _from, _to, cc, bcc, subject, message_id, in_reply_to, _references, flags, has_attachments, body_text, timestamp)
               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
               params![account_id, e.hash().to_be_bytes().to_vec(), e.date_as_str(), e.field_from_to_string(), e.field_to_to_string(), e.field_cc_to_string(), e.field_bcc_to_string(), e.subject().into_owned().trim_end_matches('\u{0}'), e.message_id_display().to_string(), e.in_reply_to_display().map(|f| f.to_string()).unwrap_or(String::new()), e.field_references_to_string(), i64::from(e.flags().bits()), if e.has_attachments() { 1 } else { 0 }, body, e.date().to_be_bytes().to_vec()],
-                        )
-                            .map_err(|e| MeliError::new(e.to_string())) {
-                                debug!("{}",
-                                    format!(
-                                        "Failed to insert envelope {}: {}",
-                                        e.message_id_display(),
-                                        err.to_string()
-                                    ));
-                                log(
-                                    format!(
-                                        "Failed to insert envelope {}: {}",
-                                        e.message_id_display(),
-                                        err.to_string()
-                                    ),
-                                    ERROR,
-                                );
-              }
-                    }
+                        ).chain_err_summary(|| format!( "Failed to insert envelope {}", e.message_id_display()))?;
                 }
-                drop(envelopes_lck);
-                work_context
-                    .set_status
-                    .send((thread_id, format!("Rebuilding {} index. {}/{}", acc_name, ctr, env_hashes.len())))
-                    .unwrap();
-                std::thread::sleep(sleep_dur);
+            }
+            drop(envelopes_lck);
+            let sleep_dur = std::time::Duration::from_millis(20);
+            std::thread::sleep(sleep_dur);
         }
-        work_context.finished.send(thread_id).unwrap();
-    })?;
-    context.work_controller().static_threads.lock()?.insert(
-        handle.thread().id(),
-        String::from("Rebuilding sqlite3 index").into(),
-    );
-
-    Ok(())
+        Ok(())
+    }))
 }
 
 pub fn search(
     term: &str,
     (sort_field, sort_order): (SortField, SortOrder),
-) -> Result<SmallVec<[EnvelopeHash; 512]>> {
+) -> ResultFuture<SmallVec<[EnvelopeHash; 512]>> {
     let db_path = melib_sqlite3::db_path(DB_NAME)?;
     if !db_path.exists() {
         return Err(MeliError::new(
@@ -438,7 +384,7 @@ pub fn search(
             ))
         })
         .collect::<Result<SmallVec<[EnvelopeHash; 512]>>>();
-    results
+    Ok(Box::pin(async { results }))
 }
 
 /// Translates a `Query` to an Sqlite3 expression in a `String`.
