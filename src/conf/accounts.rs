@@ -169,6 +169,11 @@ pub enum JobRequest {
             Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>,
         )>,
     ),
+    Generic {
+        name: String,
+        handle: JoinHandle,
+        channel: JobChannel<()>,
+    },
     IsOnline(JoinHandle, oneshot::Receiver<Result<()>>),
     Refresh(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
     SetFlags(EnvelopeHash, JoinHandle, oneshot::Receiver<Result<()>>),
@@ -196,6 +201,7 @@ pub enum JobRequest {
 impl core::fmt::Debug for JobRequest {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
+            JobRequest::Generic { name, .. } => write!(f, "JobRequest::Generic({})", name),
             JobRequest::Mailboxes(_, _) => write!(f, "JobRequest::Mailboxes"),
             JobRequest::Get(hash, _, _) => write!(f, "JobRequest::Get({})", hash),
             JobRequest::IsOnline(_, _) => write!(f, "JobRequest::IsOnline"),
@@ -1936,6 +1942,39 @@ impl Account {
                 }
                 JobRequest::Watch(_) => {
                     debug!("JobRequest::Watch finished??? ");
+                }
+                JobRequest::Generic {
+                    name,
+                    mut channel,
+                    handle: _,
+                } => {
+                    let r = channel.try_recv().unwrap();
+                    match r {
+                        Some(Err(err)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!("{}: {} failed", &self.name, name,)),
+                                    err.to_string(),
+                                    Some(crate::types::NotificationType::ERROR),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
+                        Some(Ok(_)) => {
+                            self.sender
+                                .send(ThreadEvent::UIEvent(UIEvent::Notification(
+                                    Some(format!("{}: {} succeeded", &self.name, name,)),
+                                    String::new(),
+                                    Some(crate::types::NotificationType::INFO),
+                                )))
+                                .expect("Could not send event on main channel");
+                        }
+                        None => {}
+                    }
+                    self.sender
+                        .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
+                            StatusEvent::JobFinished(*job_id),
+                        )))
+                        .unwrap();
                 }
             }
             true
