@@ -214,6 +214,14 @@ impl JobExecutor {
 
         (receiver, JoinHandle(handle), job_id)
     }
+
+    pub fn spawn_blocking<F, R>(&self, future: F) -> (oneshot::Receiver<R>, JoinHandle, JobId)
+    where
+        F: Future<Output = R> + Send + 'static,
+        R: Send + 'static,
+    {
+        self.spawn_specialized(smol::Task::blocking(async move { future.await }))
+    }
 }
 
 pub type JobChannel<T> = oneshot::Receiver<Result<T>>;
