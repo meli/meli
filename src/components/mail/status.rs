@@ -460,17 +460,17 @@ impl Component for AccountStatus {
         );
         write_string_to_grid(
             &if a.settings.account().format() == "imap"
-                && *a.settings.conf.cache_type() == CacheType::None
+                && *a.settings.conf.search_backend() == SearchBackend::None
             {
                 "server-side search".to_string()
             } else if a.settings.account().format() == "notmuch"
-                && *a.settings.conf.cache_type() == CacheType::None
+                && *a.settings.conf.search_backend() == SearchBackend::None
             {
                 "notmuch database".to_string()
             } else {
                 #[cfg(feature = "sqlite3")]
                 {
-                    if *a.settings.conf.cache_type() == CacheType::Sqlite3 {
+                    if *a.settings.conf.search_backend() == SearchBackend::Sqlite3 {
                         if let Ok(path) = crate::sqlite3::db_path() {
                             format!("sqlite3 database {}", path.display())
                         } else {

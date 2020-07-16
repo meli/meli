@@ -164,7 +164,7 @@ pub struct FileAccount {
     #[serde(default)]
     mailboxes: HashMap<String, FileMailboxConf>,
     #[serde(default)]
-    cache_type: CacheType,
+    search_backend: SearchBackend,
     #[serde(default = "false_val")]
     pub manual_refresh: bool,
     #[serde(default = "none")]
@@ -220,8 +220,8 @@ impl FileAccount {
         &self.root_mailbox
     }
 
-    pub fn cache_type(&self) -> &CacheType {
-        &self.cache_type
+    pub fn search_backend(&self) -> &SearchBackend {
+        &self.search_backend
     }
 }
 
@@ -417,7 +417,7 @@ impl FileSettings {
                 extra,
                 manual_refresh,
                 refresh_command: _,
-                cache_type: _,
+                search_backend: _,
                 conf_override: _,
             } = acc.clone();
 
@@ -630,26 +630,26 @@ impl Serialize for IndexStyle {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum CacheType {
+pub enum SearchBackend {
     None,
     #[cfg(feature = "sqlite3")]
     Sqlite3,
 }
 
-impl Default for CacheType {
+impl Default for SearchBackend {
     fn default() -> Self {
         #[cfg(feature = "sqlite3")]
         {
-            CacheType::Sqlite3
+            SearchBackend::Sqlite3
         }
         #[cfg(not(feature = "sqlite3"))]
         {
-            CacheType::None
+            SearchBackend::None
         }
     }
 }
 
-impl<'de> Deserialize<'de> for CacheType {
+impl<'de> Deserialize<'de> for SearchBackend {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -657,22 +657,22 @@ impl<'de> Deserialize<'de> for CacheType {
         let s = <String>::deserialize(deserializer)?;
         match s.as_str() {
             #[cfg(feature = "sqlite3")]
-            "sqlite3" => Ok(CacheType::Sqlite3),
-            "nothing" | "none" | "" => Ok(CacheType::None),
-            _ => Err(de::Error::custom("invalid `index_cache` value")),
+            "sqlite3" => Ok(SearchBackend::Sqlite3),
+            "nothing" | "none" | "" => Ok(SearchBackend::None),
+            _ => Err(de::Error::custom("invalid `search_backend` value")),
         }
     }
 }
 
-impl Serialize for CacheType {
+impl Serialize for SearchBackend {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         match self {
             #[cfg(feature = "sqlite3")]
-            CacheType::Sqlite3 => serializer.serialize_str("sqlite3"),
-            CacheType::None => serializer.serialize_str("none"),
+            SearchBackend::Sqlite3 => serializer.serialize_str("sqlite3"),
+            SearchBackend::None => serializer.serialize_str("none"),
         }
     }
 }

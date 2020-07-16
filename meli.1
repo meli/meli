@@ -143,7 +143,7 @@ uses the SEARCH command,
 uses libnotmuch and
 .Em Maildir/mbox
 performs a slow linear search.
-It is advised to use a cache on
+It is advised to use a search backend on
 .Em Maildir/mbox
 accounts.
 .Nm Ns
@@ -159,7 +159,7 @@ and
 .Em Date .
 The message body (in plain text human readable form) and the flags can also be queried.
 To enable sqlite3 indexing for an account set
-.Em cache_type
+.Em search_backend
 to
 .Em sqlite3
 in the configuration file and to create the sqlite3 index issue command
@@ -190,7 +190,7 @@ Quotes should always be escaped.
 .Sy Important Notice about IMAP/JMAP
 .sp
 To prevent downloading all your messages from your IMAP/JMAP server, don't set
-.Em cache_type
+.Em search_backend
 to
 .Em sqlite3 Ns
 \&.

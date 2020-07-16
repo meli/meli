@@ -353,7 +353,7 @@ impl Account {
         };
 
         if settings.account().format() == "imap" {
-            settings.conf.cache_type = crate::conf::CacheType::None;
+            settings.conf.search_backend = crate::conf::SearchBackend::None;
         }
 
         let mut active_jobs = HashMap::default();
