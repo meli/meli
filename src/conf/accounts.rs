@@ -1089,6 +1089,20 @@ impl Account {
                             .into_iter()
                             .map(|e| (e.hash(), e))
                             .collect::<HashMap<EnvelopeHash, Envelope>>();
+                        self.mailbox_entries
+                            .entry(mailbox_hash)
+                            .and_modify(|entry| match entry.status {
+                                MailboxStatus::None => {
+                                    entry.status = MailboxStatus::Parsing(envelopes.len(), 0);
+                                }
+                                MailboxStatus::Parsing(ref mut done, _) => {
+                                    *done += envelopes.len();
+                                }
+                                MailboxStatus::Failed(_) => {
+                                    entry.status = MailboxStatus::Parsing(envelopes.len(), 0);
+                                }
+                                MailboxStatus::Available => {}
+                            });
                         if let Some(updated_mailboxes) =
                             self.collection
                                 .merge(envelopes, mailbox_hash, self.sent_mailbox)
