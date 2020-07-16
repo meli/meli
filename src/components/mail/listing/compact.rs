@@ -1109,6 +1109,8 @@ impl CompactListing {
                 }
                 (false, false) => {}
             }
+            *self.rows.get_mut(idx).unwrap() = ((idx, (thread_hash, env_hash)), strings);
+            self.rows_drawn.update(idx, 1);
         }
     }
 
