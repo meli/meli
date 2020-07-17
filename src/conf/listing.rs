@@ -19,8 +19,9 @@
  * along with meli. If not, see <http://www.gnu.org/licenses/>.
  */
 
-use super::{default_vals::*, IndexStyle};
+use super::{default_vals::*, DotAddressable, IndexStyle};
 use melib::search::Query;
+use melib::{MeliError, Result};
 
 /// Settings for mail listings
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -57,6 +58,28 @@ impl Default for ListingSettings {
             recent_dates: true,
             filter: None,
             index_style: IndexStyle::default(),
+        }
+    }
+}
+
+impl DotAddressable for ListingSettings {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(field) => {
+                let tail = &path[1..];
+                match *field {
+                    "context_lines" => self.context_lines.lookup(field, tail),
+                    "datetime_fmt" => self.datetime_fmt.lookup(field, tail),
+                    "recent_dates" => self.recent_dates.lookup(field, tail),
+                    "filter" => self.filter.lookup(field, tail),
+                    "index_style" => self.index_style.lookup(field, tail),
+                    other => Err(MeliError::new(format!(
+                        "{} has no field named {}",
+                        parent_field, other
+                    ))),
+                }
+            }
+            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
         }
     }
 }

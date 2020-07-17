@@ -23,7 +23,8 @@
 
 use super::default_vals::*;
 use super::deserializers::*;
-use melib::ToggleFlag;
+use super::DotAddressable;
+use melib::{MeliError, Result, ToggleFlag};
 
 /// Settings for the pager function.
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -100,6 +101,35 @@ impl Default for PagerSettings {
             split_long_lines: true,
             minimum_width: 80,
             auto_choose_multipart_alternative: ToggleFlag::InternalVal(true),
+        }
+    }
+}
+
+impl DotAddressable for PagerSettings {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(field) => {
+                let tail = &path[1..];
+                match *field {
+                    "pager_context" => self.pager_context.lookup(field, tail),
+                    "pager_stop" => self.pager_stop.lookup(field, tail),
+                    "headers_sticky" => self.headers_sticky.lookup(field, tail),
+                    "pager_ratio" => self.pager_ratio.lookup(field, tail),
+                    "filter" => self.filter.lookup(field, tail),
+                    "html_filter" => self.html_filter.lookup(field, tail),
+                    "format_flowed" => self.format_flowed.lookup(field, tail),
+                    "split_long_lines" => self.split_long_lines.lookup(field, tail),
+                    "minimum_width" => self.minimum_width.lookup(field, tail),
+                    "auto_choose_multipart_alternative" => {
+                        self.auto_choose_multipart_alternative.lookup(field, tail)
+                    }
+                    other => Err(MeliError::new(format!(
+                        "{} has no field named {}",
+                        parent_field, other
+                    ))),
+                }
+            }
+            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
         }
     }
 }

@@ -249,7 +249,7 @@ pub struct FileSettings {
     pub log: LogSettings,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct AccountConf {
     pub(crate) account: AccountSettings,
     pub(crate) conf: FileAccount,
@@ -272,7 +272,7 @@ impl AccountConf {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct Settings {
     pub accounts: HashMap<String, AccountConf>,
     pub pager: PagerSettings,
@@ -826,4 +826,85 @@ pub struct LogSettings {
     log_file: Option<PathBuf>,
     #[serde(default)]
     maximum_level: melib::LoggingLevel,
+}
+
+pub trait DotAddressable: Serialize {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        if !path.is_empty() {
+            Err(MeliError::new(format!(
+                "{} has no fields, it is of type {}",
+                parent_field,
+                std::any::type_name::<Self>()
+            )))
+        } else {
+            Ok(toml::to_string(self).map_err(|err| err.to_string())?)
+        }
+    }
+}
+
+impl DotAddressable for bool {}
+
+impl DotAddressable for String {}
+impl DotAddressable for IndexStyle {}
+impl DotAddressable for u64 {}
+impl DotAddressable for crate::terminal::Color {}
+impl DotAddressable for crate::terminal::Attr {}
+impl DotAddressable for usize {}
+impl DotAddressable for Query {}
+impl DotAddressable for melib::LoggingLevel {}
+impl DotAddressable for PathBuf {}
+impl DotAddressable for ToggleFlag {}
+impl<T: DotAddressable> DotAddressable for Option<T> {}
+impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash, V: DotAddressable> DotAddressable
+    for HashMap<K, V>
+{
+}
+impl<K: DotAddressable + std::cmp::Eq + std::hash::Hash> DotAddressable for HashSet<K> {}
+
+impl DotAddressable for LogSettings {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(field) => {
+                let tail = &path[1..];
+                match *field {
+                    "log_file" => self.log_file.lookup(field, tail),
+                    "maximum_level" => self.maximum_level.lookup(field, tail),
+
+                    other => Err(MeliError::new(format!(
+                        "{} has no field named {}",
+                        parent_field, other
+                    ))),
+                }
+            }
+            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+        }
+    }
+}
+impl DotAddressable for Settings {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(field) => {
+                let tail = &path[1..];
+                match *field {
+                    "accounts" => Err(MeliError::new("unimplemented")),
+                    "pager" => self.pager.lookup(field, tail),
+                    "listing" => self.listing.lookup(field, tail),
+                    "notifications" => Err(MeliError::new("unimplemented")),
+                    "shortcuts" => Err(MeliError::new("unimplemented")),
+                    "tags" => Err(MeliError::new("unimplemented")),
+                    "composing" => Err(MeliError::new("unimplemented")),
+                    "pgp" => Err(MeliError::new("unimplemented")),
+                    "terminal" => self.terminal.lookup(field, tail),
+                    "plugins" => Err(MeliError::new("unimplemented")),
+                    "log" => self.log.lookup(field, tail),
+
+                    other => Err(MeliError::new(format!(
+                        "{} has no field named {}",
+                        parent_field, other
+                    ))),
+                }
+            }
+            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+        }
+    }
 }

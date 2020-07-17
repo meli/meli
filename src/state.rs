@@ -909,6 +909,18 @@ impl State {
                     Some(NotificationType::ERROR),
                 ));
             }
+            AccountAction(ref _account_name, PrintSetting(ref setting)) => {
+                let path = setting.split(".").collect::<SmallVec<[&str; 16]>>();
+                self.context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::UpdateStatus(format!(
+                        "{}",
+                        self.context
+                            .settings
+                            .lookup("settings", &path)
+                            .unwrap_or_else(|err| err.to_string())
+                    ))));
+            }
             v => {
                 self.rcv_event(UIEvent::Action(v));
             }

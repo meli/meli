@@ -646,7 +646,21 @@ define_commands!([
                            )(input.trim())
                        }
                    )
-                 }
+                },
+                { tags: ["print "],
+                  desc: "print ACCOUNT SETTING",
+                  tokens: &[One(Literal("print")), One(AccountName), One(QuotedStringValue)],
+                  parser:(
+                      fn print_setting(input: &[u8]) -> IResult<&[u8], Action> {
+                          let (input, _) = tag("print")(input.trim())?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, account) = quoted_argument(input)?;
+                          let (input, _) = is_a(" ")(input)?;
+                          let (input, setting) = quoted_argument(input)?;
+                          Ok((input, AccountAction(account.to_string(), PrintSetting(setting.to_string()))))
+                      }
+                  )
+                }
 ]);
 
 fn usize_c(input: &[u8]) -> IResult<&[u8], usize> {
@@ -705,7 +719,7 @@ fn compose_action(input: &[u8]) -> IResult<&[u8], Action> {
 }
 
 fn account_action(input: &[u8]) -> IResult<&[u8], Action> {
-    reindex(input)
+    alt((reindex, print_setting))(input)
 }
 
 fn view(input: &[u8]) -> IResult<&[u8], Action> {

@@ -22,8 +22,9 @@
 //! Settings for terminal display
 
 use super::deserializers::non_empty_string;
+use super::DotAddressable;
 use super::Themes;
-use super::ToggleFlag;
+use melib::{MeliError, Result, ToggleFlag};
 
 /// Settings for terminal display
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -59,5 +60,27 @@ impl TerminalSettings {
         !((std::env::var("NO_COLOR").is_ok()
             && (self.use_color.is_false() || self.use_color.is_internal()))
             || (self.use_color.is_false() && !self.use_color.is_internal()))
+    }
+}
+
+impl DotAddressable for TerminalSettings {
+    fn lookup(&self, parent_field: &str, path: &[&str]) -> Result<String> {
+        match path.first() {
+            Some(field) => {
+                let tail = &path[1..];
+                match *field {
+                    "theme" => self.theme.lookup(field, tail),
+                    "themes" => Err(MeliError::new("unimplemented")),
+                    "ascii_drawing" => self.ascii_drawing.lookup(field, tail),
+                    "use_color" => self.use_color.lookup(field, tail),
+                    "window_title" => self.window_title.lookup(field, tail),
+                    other => Err(MeliError::new(format!(
+                        "{} has no field named {}",
+                        parent_field, other
+                    ))),
+                }
+            }
+            None => Ok(toml::to_string(self).map_err(|err| err.to_string())?),
+        }
     }
 }

@@ -91,6 +91,7 @@ pub enum ComposeAction {
 #[derive(Debug)]
 pub enum AccountAction {
     ReIndex,
+    PrintSetting(String),
 }
 
 #[derive(Debug)]
