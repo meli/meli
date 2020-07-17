@@ -230,7 +230,7 @@ impl MailBackend for ImapType {
                 .map(std::clone::Clone::clone)
                 .unwrap();
             let mut conn = main_conn.lock().await;
-            watch::examine_updates(&inbox, &mut conn, &uid_store).await?;
+            watch::examine_updates(inbox, &mut conn, &uid_store).await?;
             Ok(())
         }))
     }

@@ -60,8 +60,11 @@ pub async fn poll_with_examine(kit: ImapWatchKit) -> Result<()> {
     conn.connect().await?;
     let mut response = String::with_capacity(8 * 1024);
     loop {
-        let mailboxes = uid_store.mailboxes.lock().await;
-        for mailbox in mailboxes.values() {
+        let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
+            let mailboxes_lck = uid_store.mailboxes.lock().await;
+            mailboxes_lck.clone()
+        };
+        for (_, mailbox) in mailboxes {
             examine_updates(mailbox, &mut conn, &uid_store).await?;
         }
         let mut main_conn = main_conn.lock().await;
@@ -188,8 +191,11 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
         if now.duration_since(watch) >= _5_MINS {
             /* Time to poll all inboxes */
             let mut conn = main_conn.lock().await;
-            let mailboxes = uid_store.mailboxes.lock().await;
-            for mailbox in mailboxes.values() {
+            let mailboxes: HashMap<MailboxHash, ImapMailbox> = {
+                let mailboxes_lck = uid_store.mailboxes.lock().await;
+                mailboxes_lck.clone()
+            };
+            for (_, mailbox) in mailboxes {
                 exit_on_error!(
                     conn,
                     mailbox_hash,
@@ -505,7 +511,7 @@ pub async fn idle(kit: ImapWatchKit) -> Result<()> {
 }
 
 pub async fn examine_updates(
-    mailbox: &ImapMailbox,
+    mailbox: ImapMailbox,
     conn: &mut ImapConnection,
     uid_store: &Arc<UIDStore>,
 ) -> Result<()> {
