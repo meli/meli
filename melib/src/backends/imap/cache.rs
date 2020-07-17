@@ -55,7 +55,7 @@ mod sqlite3_m {
     CREATE INDEX IF NOT EXISTS envelope_idx ON envelopes(mailbox_hash, uid, validity);
     CREATE INDEX IF NOT EXISTS uidvalidity_idx ON uidvalidity(mailbox_hash);";
 
-    pub fn get_envelopes(
+    pub fn fetch_envelopes(
         account_hash: AccountHash,
         mailbox_hash: MailboxHash,
         uidvalidity: usize,
@@ -155,7 +155,7 @@ pub use filesystem_m::*;
 #[cfg(not(feature = "sqlite3"))]
 mod filesystem_m {
     use super::*;
-    pub fn get_envelopes(
+    pub fn fetch_envelopes(
         _account_hash: AccountHash,
         _mailbox_hash: MailboxHash,
         _uidvalidity: usize,

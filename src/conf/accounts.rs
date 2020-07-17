@@ -161,7 +161,7 @@ pub enum JobRequest {
         JoinHandle,
         oneshot::Receiver<Result<HashMap<MailboxHash, Mailbox>>>,
     ),
-    Get(
+    Fetch(
         MailboxHash,
         JoinHandle,
         oneshot::Receiver<(
@@ -203,7 +203,7 @@ impl core::fmt::Debug for JobRequest {
         match self {
             JobRequest::Generic { name, .. } => write!(f, "JobRequest::Generic({})", name),
             JobRequest::Mailboxes(_, _) => write!(f, "JobRequest::Mailboxes"),
-            JobRequest::Get(hash, _, _) => write!(f, "JobRequest::Get({})", hash),
+            JobRequest::Fetch(hash, _, _) => write!(f, "JobRequest::Fetch({})", hash),
             JobRequest::IsOnline(_, _) => write!(f, "JobRequest::IsOnline"),
             JobRequest::Refresh(_, _, _) => write!(f, "JobRequest::Refresh"),
             JobRequest::SetFlags(_, _, _) => write!(f, "JobRequest::SetFlags"),
@@ -238,9 +238,9 @@ impl JobRequest {
         }
     }
 
-    fn is_get(&self, mailbox_hash: MailboxHash) -> bool {
+    fn is_fetch(&self, mailbox_hash: MailboxHash) -> bool {
         match self {
-            JobRequest::Get(h, _, _) if *h == mailbox_hash => true,
+            JobRequest::Fetch(h, _, _) if *h == mailbox_hash => true,
             _ => false,
         }
     }
@@ -531,7 +531,7 @@ impl Account {
                 if entry.conf.mailbox_conf.autoload {
                     entry.status = MailboxStatus::Parsing(0, 0);
                     if self.is_async {
-                        if let Ok(mailbox_job) = self.backend.write().unwrap().get_async(&f) {
+                        if let Ok(mailbox_job) = self.backend.write().unwrap().fetch_async(&f) {
                             let mailbox_job = mailbox_job.into_future();
                             let (rcvr, handle, job_id) =
                                 self.job_executor.spawn_specialized(mailbox_job);
@@ -541,7 +541,7 @@ impl Account {
                                 )))
                                 .unwrap();
                             self.active_jobs
-                                .insert(job_id, JobRequest::Get(*h, handle, rcvr));
+                                .insert(job_id, JobRequest::Fetch(*h, handle, rcvr));
                         }
                     } else {
                         entry.worker = match Account::new_worker(
@@ -576,7 +576,7 @@ impl Account {
         work_context: &WorkContext,
         notify_fn: Arc<NotifyFn>,
     ) -> Result<Worker> {
-        let mut mailbox_handle = backend.write().unwrap().get(&mailbox)?;
+        let mut mailbox_handle = backend.write().unwrap().fetch(&mailbox)?;
         let mut builder = AsyncBuilder::new();
         let our_tx = builder.tx();
         let mailbox_hash = mailbox.hash();
@@ -1012,8 +1012,8 @@ impl Account {
                         }
                         MailboxStatus::None => {
                             if self.is_async {
-                                if !self.active_jobs.values().any(|j| j.is_get(mailbox_hash)) {
-                                    match self.backend.write().unwrap().get_async(
+                                if !self.active_jobs.values().any(|j| j.is_fetch(mailbox_hash)) {
+                                    match self.backend.write().unwrap().fetch_async(
                                         &&self.mailbox_entries[&mailbox_hash].ref_mailbox,
                                     ) {
                                         Ok(mailbox_job) => {
@@ -1027,7 +1027,7 @@ impl Account {
                                                 .unwrap();
                                             self.active_jobs.insert(
                                                 job_id,
-                                                JobRequest::Get(mailbox_hash, handle, rcvr),
+                                                JobRequest::Fetch(mailbox_hash, handle, rcvr),
                                             );
                                         }
                                         Err(err) => {
@@ -1633,7 +1633,7 @@ impl Account {
                         }
                     }
                 }
-                JobRequest::Get(mailbox_hash, _, mut chan) => {
+                JobRequest::Fetch(mailbox_hash, _, mut chan) => {
                     self.sender
                         .send(ThreadEvent::UIEvent(UIEvent::StatusEvent(
                             StatusEvent::JobFinished(*job_id),
@@ -1667,7 +1667,7 @@ impl Account {
                         )))
                         .unwrap();
                     self.active_jobs
-                        .insert(job_id, JobRequest::Get(mailbox_hash, handle, rcvr));
+                        .insert(job_id, JobRequest::Fetch(mailbox_hash, handle, rcvr));
                     let payload = payload.unwrap();
                     if let Err(err) = payload {
                         self.mailbox_entries

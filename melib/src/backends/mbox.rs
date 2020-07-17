@@ -718,7 +718,7 @@ impl MailBackend for MboxType {
         Ok(())
     }
 
-    fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
+    fn fetch(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
         let handle = {
             let tx = w.tx();

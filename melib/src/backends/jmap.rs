@@ -212,7 +212,7 @@ impl MailBackend for JmapType {
         self.online.lock().unwrap().1.clone()
     }
 
-    fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
+    fn fetch(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
         let mailboxes = self.mailboxes.clone();
         let store = self.store.clone();

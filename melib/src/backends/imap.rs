@@ -188,7 +188,7 @@ impl MailBackend for ImapType {
         true
     }
 
-    fn get_async(
+    fn fetch_async(
         &mut self,
         mailbox: &Mailbox,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
@@ -200,10 +200,10 @@ impl MailBackend for ImapType {
         let mut valid_hash_set: HashSet<EnvelopeHash> = HashSet::default();
         let mut our_unseen: BTreeSet<EnvelopeHash> = Default::default();
         Ok(Box::pin(async_stream::try_stream! {
-            let (cached_hash_set, cached_payload) = get_cached_envs(mailbox_hash, &mut our_unseen, &uid_store)?;
+            let (cached_hash_set, cached_payload) = fetch_cached_envs(mailbox_hash, &mut our_unseen, &uid_store)?;
             yield cached_payload;
             loop {
-                let res = get_hlpr(&connection, mailbox_hash,&cached_hash_set, &can_create_flags, &mut our_unseen, &mut valid_hash_set, &uid_store, &mut max_uid).await?;
+                let res = fetch_hlpr(&connection, mailbox_hash, &cached_hash_set, &can_create_flags, &mut our_unseen, &mut valid_hash_set, &uid_store, &mut max_uid).await?;
                 yield res;
                 if max_uid == Some(1) || max_uid == Some(0) {
                     return;
@@ -297,7 +297,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn get(&mut self, _mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
+    fn fetch(&mut self, _mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
         Err(MeliError::new("Unimplemented."))
     }
 
@@ -1010,7 +1010,7 @@ impl ImapType {
     }
 }
 
-fn get_cached_envs(
+fn fetch_cached_envs(
     mailbox_hash: MailboxHash,
     our_unseen: &mut BTreeSet<EnvelopeHash>,
     uid_store: &UIDStore,
@@ -1029,7 +1029,7 @@ fn get_cached_envs(
     let cached_envs: (cache::MaxUID, Vec<(UID, Envelope)>);
     cache::save_envelopes(uid_store.account_hash, mailbox_hash, *v, &[])
         .chain_err_summary(|| "Could not save envelopes in cache in get()")?;
-    cached_envs = cache::get_envelopes(uid_store.account_hash, mailbox_hash, *v)
+    cached_envs = cache::fetch_envelopes(uid_store.account_hash, mailbox_hash, *v)
         .chain_err_summary(|| "Could not get envelopes in cache in get()")?;
     let (_max_uid, envelopes) = debug!(cached_envs);
     let ret = envelopes.iter().map(|(_, env)| env.hash()).collect();
@@ -1060,7 +1060,7 @@ fn get_cached_envs(
     Ok((ret, payload))
 }
 
-async fn get_hlpr(
+async fn fetch_hlpr(
     connection: &Arc<FutureMutex<ImapConnection>>,
     mailbox_hash: MailboxHash,
     cached_hash_set: &HashSet<EnvelopeHash>,
@@ -1085,7 +1085,7 @@ async fn get_hlpr(
         return Ok(Vec::new());
     }
     let mut conn = connection.lock().await;
-    debug!("locked for get {}", mailbox_path);
+    debug!("locked for fetch {}", mailbox_path);
     let mut response = String::with_capacity(8 * 1024);
     let max_uid_left = if let Some(max_uid) = max_uid {
         *max_uid

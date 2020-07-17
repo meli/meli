@@ -294,8 +294,8 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
     fn is_online_async(&self) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
-    fn get(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>>;
-    fn get_async(
+    fn fetch(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>>;
+    fn fetch_async(
         &mut self,
         _mailbox: &Mailbox,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
