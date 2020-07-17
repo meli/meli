@@ -194,6 +194,7 @@ impl MailListingTrait for ThreadListing {
         let thread_nodes: &HashMap<ThreadNodeHash, ThreadNode> = &threads.thread_nodes();
         /* This is just a desugared for loop so that we can use .peek() */
         let mut idx = 0;
+        let mut prev_group = ThreadHash::null();
         while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
             let thread_node = &thread_nodes[&thread_node_hash];
 
@@ -216,6 +217,8 @@ impl MailListingTrait for ThreadListing {
                         continue;
                     }
                 }
+                let is_root = threads.find_group(thread_node.group) != prev_group;
+                prev_group = threads.find_group(thread_node.group);
 
                 let mut entry_strings = self.make_entry_string(&envelope, context);
                 entry_strings.subject = SubjectString(ThreadListing::make_thread_entry(
@@ -226,6 +229,7 @@ impl MailListingTrait for ThreadListing {
                     threads,
                     &indentations,
                     has_sibling,
+                    is_root,
                 ));
                 row_widths.1.push(
                     entry_strings
@@ -539,12 +543,7 @@ impl ListingTrait for ThreadListing {
             }
         }
 
-        for c in &self.data_columns.columns {
-            debug!(c.size());
-        }
-        debug!(top_idx);
         for r in 0..cmp::min(self.length - top_idx, rows) {
-            debug!(r);
             let (fg_color, bg_color) = {
                 let c = &self.data_columns.columns[0][(0, r + top_idx)];
                 /*
@@ -724,10 +723,10 @@ impl ThreadListing {
         threads: &Threads,
         indentations: &[bool],
         has_sibling: bool,
-        //op: Box<BackendOp>,
+        is_root: bool,
     ) -> String {
         let thread_node = &threads[&node_idx];
-        let has_parent = thread_node.has_parent();
+        let has_parent = thread_node.has_parent() && !is_root;
         let show_subject = thread_node.show_subject();
 
         let mut s = String::new(); //format!("{}{}{} ", idx, " ", ThreadListing::format_date(&envelope));
@@ -840,10 +839,10 @@ impl ThreadListing {
         }
         debug_assert!(end >= start);
         if self.rows_drawn.get_max(start, end) == 0 {
-            debug!("not drawing {}-{}", start, end);
+            //debug!("not drawing {}-{}", start, end);
             return;
         }
-        debug!("drawing {}-{}", start, end);
+        //debug!("drawing {}-{}", start, end);
         for i in start..=end {
             self.rows_drawn.update(i, 0);
         }
@@ -859,7 +858,6 @@ impl ThreadListing {
         for ((idx, is_seen, has_attachments, env_hash), strings) in
             self.rows.iter().skip(start).take(end - start + 1)
         {
-            debug!("drawing {} {:?}", idx, strings);
             let idx = *idx;
             if !context.accounts[self.cursor_pos.0].contains_key(*env_hash) {
                 //debug!("key = {}", root_env_hash);
