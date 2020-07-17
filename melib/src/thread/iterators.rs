@@ -46,8 +46,8 @@ pub struct ThreadsGroupIterator<'a> {
 }
 impl<'a> Iterator for ThreadsGroupIterator<'a> {
     type Item = (usize, ThreadNodeHash, bool);
-    fn next(&mut self) -> Option<(usize, ThreadNodeHash, bool)> {
-        {
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
             let mut tree = &(*self.root_tree);
             for i in self.stack.iter() {
                 tree = &self.thread_nodes[&tree[*i]].children;
@@ -71,7 +71,7 @@ impl<'a> Iterator for ThreadsGroupIterator<'a> {
                     if self.thread_nodes[&ret.1].message.is_some() {
                         return Some(ret);
                     } else {
-                        return self.next();
+                        continue;
                     }
                 }
                 self.pos += 1;
@@ -80,7 +80,6 @@ impl<'a> Iterator for ThreadsGroupIterator<'a> {
                 }
             }
         }
-        self.next()
     }
 }
 /* `ThreadIterator` returns messages of a specific thread according to the sorted order. For example, for the following
@@ -106,7 +105,7 @@ pub struct ThreadGroupIterator<'a> {
 impl<'a> Iterator for ThreadGroupIterator<'a> {
     type Item = (usize, ThreadNodeHash);
     fn next(&mut self) -> Option<(usize, ThreadNodeHash)> {
-        {
+        loop {
             let mut tree = &[self.group][..];
             for i in self.stack.iter() {
                 tree = self.thread_nodes[&tree[*i]].children.as_slice();
@@ -125,7 +124,7 @@ impl<'a> Iterator for ThreadGroupIterator<'a> {
                     if self.thread_nodes[&ret.1].message.is_some() {
                         return Some(ret);
                     } else {
-                        return self.next();
+                        continue;
                     }
                 }
                 self.pos += 1;
@@ -134,6 +133,5 @@ impl<'a> Iterator for ThreadGroupIterator<'a> {
                 }
             }
         }
-        self.next()
     }
 }
