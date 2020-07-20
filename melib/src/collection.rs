@@ -23,7 +23,6 @@ use super::*;
 use crate::backends::MailboxHash;
 use core::ops::{Index, IndexMut};
 use smallvec::SmallVec;
-use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -61,20 +60,17 @@ impl DerefMut for EnvelopeRefMut<'_> {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Default, Serialize)]
+#[derive(Debug, Clone, Default)]
 pub struct Collection {
     pub envelopes: Arc<RwLock<HashMap<EnvelopeHash, Envelope>>>,
-    message_ids: HashMap<Vec<u8>, EnvelopeHash>,
-    date_index: BTreeMap<UnixTimestamp, EnvelopeHash>,
-    subject_index: Option<BTreeMap<String, EnvelopeHash>>,
     pub threads: HashMap<MailboxHash, Threads>,
     sent_mailbox: Option<MailboxHash>,
     pub mailboxes: HashMap<MailboxHash, HashSet<EnvelopeHash>>,
 }
 
+/*
 impl Drop for Collection {
     fn drop(&mut self) {
-        /*
             let cache_dir: xdg::BaseDirectories =
                 xdg::BaseDirectories::with_profile("meli", "threads".to_string()).unwrap();
             if let Ok(cached) = cache_dir.place_cache_file("threads") {
@@ -88,28 +84,17 @@ impl Drop for Collection {
                 let writer = io::BufWriter::new(f);
                 bincode::serialize_into(writer, &self.threads).unwrap();
             }
-        */
     }
 }
+*/
 
 impl Collection {
     pub fn new(envelopes: HashMap<EnvelopeHash, Envelope>) -> Collection {
-        let date_index = BTreeMap::new();
-        let subject_index = None;
-        let message_ids = HashMap::with_capacity_and_hasher(2048, Default::default());
-
-        /* Scrap caching for now. When a cached threads file is loaded, we must remove/rehash the
-         * thread nodes that shouldn't exist anymore (e.g. because their file moved from /new to
-         * /cur, or it was deleted).
-         */
         let threads = HashMap::with_capacity_and_hasher(16, Default::default());
         let mailboxes = HashMap::with_capacity_and_hasher(16, Default::default());
 
         Collection {
             envelopes: Arc::new(RwLock::new(envelopes)),
-            date_index,
-            message_ids,
-            subject_index,
             threads,
             mailboxes,
             sent_mailbox: None,
@@ -157,8 +142,6 @@ impl Collection {
             m.insert(new_hash);
         });
         envelope.set_hash(new_hash);
-        self.message_ids
-            .insert(envelope.message_id().raw().to_vec(), new_hash);
         self.envelopes.write().unwrap().insert(new_hash, envelope);
         {
             if self
@@ -196,9 +179,6 @@ impl Collection {
         sent_mailbox: Option<MailboxHash>,
     ) -> Option<SmallVec<[MailboxHash; 8]>> {
         self.sent_mailbox = sent_mailbox;
-        for (h, e) in new_envelopes.iter() {
-            self.message_ids.insert(e.message_id().raw().to_vec(), *h);
-        }
 
         let &mut Collection {
             ref mut threads,
@@ -312,8 +292,6 @@ impl Collection {
             m.remove(&old_hash);
             m.insert(new_hash);
         });
-        self.message_ids
-            .insert(envelope.message_id().raw().to_vec(), new_hash);
         self.envelopes.write().unwrap().insert(new_hash, envelope);
         if self
             .sent_mailbox
@@ -390,16 +368,9 @@ impl Collection {
 
     pub fn insert(&mut self, envelope: Envelope, mailbox_hash: MailboxHash) -> bool {
         let hash = envelope.hash();
-        if self.message_ids.contains_key(envelope.message_id().raw()) {
-            /* Duplicate. For example could be same message sent to two mailing lists and we get
-             * it twice */
-            return true;
-        };
         self.mailboxes.entry(mailbox_hash).and_modify(|m| {
             m.insert(hash);
         });
-        self.message_ids
-            .insert(envelope.message_id().raw().to_vec(), hash);
         self.envelopes.write().unwrap().insert(hash, envelope);
         self.threads
             .entry(mailbox_hash)
