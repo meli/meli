@@ -190,11 +190,10 @@ impl MailBackend for ImapType {
 
     fn fetch_async(
         &mut self,
-        mailbox: &Mailbox,
+        mailbox_hash: MailboxHash,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>> {
         let uid_store = self.uid_store.clone();
         let can_create_flags = self.can_create_flags.clone();
-        let mailbox_hash = mailbox.hash();
         let connection = self.connection.clone();
         let mut max_uid: Option<usize> = None;
         let mut valid_hash_set: HashSet<EnvelopeHash> = HashSet::default();
@@ -297,7 +296,7 @@ impl MailBackend for ImapType {
         }))
     }
 
-    fn fetch(&mut self, _mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
+    fn fetch(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>> {
         Err(MeliError::new("Unimplemented."))
     }
 

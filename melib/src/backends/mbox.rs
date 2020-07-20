@@ -718,11 +718,10 @@ impl MailBackend for MboxType {
         Ok(())
     }
 
-    fn fetch(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
         let handle = {
             let tx = w.tx();
-            let mailbox_hash = mailbox.hash();
             let mailbox_index = self.mailbox_index.clone();
             let mailboxes = self.mailboxes.clone();
             let mailbox_path = mailboxes.lock().unwrap()[&mailbox_hash].fs_path.clone();

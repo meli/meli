@@ -207,17 +207,16 @@ impl MailBackend for MaildirType {
         Ok(Box::pin(async { res }))
     }
 
-    fn fetch(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
-        Ok(self.multicore(4, mailbox))
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>> {
+        Ok(self.multicore(4, mailbox_hash))
     }
 
     fn fetch_async(
         &mut self,
-        mailbox: &Mailbox,
+        mailbox_hash: MailboxHash,
     ) -> Result<core::pin::Pin<Box<dyn Stream<Item = Result<Vec<Envelope>>> + Send + 'static>>>
     {
-        let mailbox: &MaildirMailbox = &self.mailboxes[&self.owned_mailbox_idx(mailbox)];
-        let mailbox_hash = mailbox.hash();
+        let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
         let unseen = mailbox.unseen.clone();
         let total = mailbox.total.clone();
         let path: PathBuf = mailbox.fs_path().into();
@@ -928,23 +927,14 @@ impl MaildirType {
             path: root_path,
         }))
     }
-    fn owned_mailbox_idx(&self, mailbox: &Mailbox) -> MailboxHash {
-        *self
-            .mailboxes
-            .iter()
-            .find(|(_, f)| f.hash() == mailbox.hash())
-            .unwrap()
-            .0
-    }
 
-    pub fn multicore(&mut self, cores: usize, mailbox: &Mailbox) -> Async<Result<Vec<Envelope>>> {
+    pub fn multicore(&mut self, cores: usize, mailbox_hash: MailboxHash) -> Async<Result<Vec<Envelope>>> {
         let mut w = AsyncBuilder::new();
         let cache_dir = xdg::BaseDirectories::with_profile("meli", &self.name).unwrap();
 
         let handle = {
             let tx = w.tx();
-            let mailbox: &MaildirMailbox = &self.mailboxes[&self.owned_mailbox_idx(mailbox)];
-            let mailbox_hash = mailbox.hash();
+            let mailbox: &MaildirMailbox = &self.mailboxes[&mailbox_hash];
             let unseen = mailbox.unseen.clone();
             let total = mailbox.total.clone();
             let tx_final = w.tx();

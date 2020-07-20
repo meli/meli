@@ -334,9 +334,8 @@ impl MailBackend for NotmuchDb {
         Ok(())
     }
 
-    fn fetch(&mut self, mailbox: &Mailbox) -> Result<Async<Result<Vec<Envelope>>>> {
+    fn fetch(&mut self, mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
-        let mailbox_hash = mailbox.hash();
         let database = NotmuchDb::new_connection(self.path.as_path(), self.lib.clone(), false);
         let index = self.index.clone();
         let mailbox_index = self.mailbox_index.clone();

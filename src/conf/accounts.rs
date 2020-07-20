@@ -531,7 +531,7 @@ impl Account {
                 if entry.conf.mailbox_conf.autoload {
                     entry.status = MailboxStatus::Parsing(0, 0);
                     if self.is_async {
-                        if let Ok(mailbox_job) = self.backend.write().unwrap().fetch_async(&f) {
+                        if let Ok(mailbox_job) = self.backend.write().unwrap().fetch_async(*h) {
                             let mailbox_job = mailbox_job.into_future();
                             let (rcvr, handle, job_id) =
                                 self.job_executor.spawn_specialized(mailbox_job);
@@ -545,7 +545,7 @@ impl Account {
                         }
                     } else {
                         entry.worker = match Account::new_worker(
-                            f.clone(),
+                            &f,
                             &mut self.backend,
                             &self.work_context,
                             self.notify_fn.clone(),
@@ -571,15 +571,15 @@ impl Account {
     }
 
     fn new_worker(
-        mailbox: Mailbox,
+        mailbox: &Mailbox,
         backend: &Arc<RwLock<Box<dyn MailBackend>>>,
         work_context: &WorkContext,
         notify_fn: Arc<NotifyFn>,
     ) -> Result<Worker> {
-        let mut mailbox_handle = backend.write().unwrap().fetch(&mailbox)?;
+        let mailbox_hash = mailbox.hash();
+        let mut mailbox_handle = backend.write().unwrap().fetch(mailbox_hash)?;
         let mut builder = AsyncBuilder::new();
         let our_tx = builder.tx();
-        let mailbox_hash = mailbox.hash();
         let priority = match mailbox.special_usage() {
             SpecialUsageMailbox::Inbox => 0,
             SpecialUsageMailbox::Sent => 1,
@@ -601,9 +601,9 @@ impl Account {
          * workers causing no actual parsing to be done. If we could yield from within the worker
          * threads' closures this could be avoided, but it requires green threads.
          */
+        let name = format!("Parsing {}", mailbox.path());
         builder.set_priority(priority).set_is_static(true);
         let mut w = builder.build(Box::new(move |work_context| {
-            let name = format!("Parsing {}", mailbox.path());
             let work = mailbox_handle.work().unwrap();
             work_context.new_work.send(work).unwrap();
             let thread_id = std::thread::current().id();
@@ -821,7 +821,7 @@ impl Account {
                 }
                 RefreshEventKind::Rescan => {
                     let handle = match Account::new_worker(
-                        self.mailbox_entries[&mailbox_hash].ref_mailbox.clone(),
+                        &self.mailbox_entries[&mailbox_hash].ref_mailbox,
                         &mut self.backend,
                         &self.work_context,
                         self.notify_fn.clone(),
@@ -1013,9 +1013,9 @@ impl Account {
                         MailboxStatus::None => {
                             if self.is_async {
                                 if !self.active_jobs.values().any(|j| j.is_fetch(mailbox_hash)) {
-                                    match self.backend.write().unwrap().fetch_async(
-                                        &&self.mailbox_entries[&mailbox_hash].ref_mailbox,
-                                    ) {
+                                    let mailbox_job =
+                                        self.backend.write().unwrap().fetch_async(mailbox_hash);
+                                    match mailbox_job {
                                         Ok(mailbox_job) => {
                                             let mailbox_job = mailbox_job.into_future();
                                             let (rcvr, handle, job_id) =
@@ -1046,7 +1046,7 @@ impl Account {
                                 }
                             } else if self.mailbox_entries[&mailbox_hash].worker.is_none() {
                                 let handle = match Account::new_worker(
-                                    self.mailbox_entries[&mailbox_hash].ref_mailbox.clone(),
+                                    &self.mailbox_entries[&mailbox_hash].ref_mailbox,
                                     &mut self.backend,
                                     &self.work_context,
                                     self.notify_fn.clone(),
@@ -1396,7 +1396,7 @@ impl Account {
                         });
                 }
                 let (status, worker) = match Account::new_worker(
-                    mailboxes[&mailbox_hash].clone(),
+                    &mailboxes[&mailbox_hash],
                     &mut self.backend,
                     &self.work_context,
                     self.notify_fn.clone(),
