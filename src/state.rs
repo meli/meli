@@ -51,16 +51,22 @@ struct InputHandler {
     pipe: (RawFd, RawFd),
     rx: Receiver<InputCommand>,
     tx: Sender<InputCommand>,
+    state_tx: Sender<ThreadEvent>,
+    control: std::sync::Weak<()>,
 }
 
 impl InputHandler {
-    fn restore(&self, tx: Sender<ThreadEvent>) {
+    fn restore(&mut self) {
+        let working = Arc::new(());
+        let control = Arc::downgrade(&working);
+
         /* Clear channel without blocking. switch_to_main_screen() issues a kill when
          * returning from a fork and there's no input thread, so the newly created thread will
          * receive it and die. */
         //let _ = self.rx.try_iter().count();
         let rx = self.rx.clone();
         let pipe = self.pipe.0;
+        let tx = self.state_tx.clone();
         thread::Builder::new()
             .name("input-thread".to_string())
             .spawn(move || {
@@ -70,14 +76,26 @@ impl InputHandler {
                     },
                     &rx,
                     pipe,
+                    working,
                 )
             })
             .unwrap();
+        self.control = control;
     }
 
     fn kill(&self) {
         let _ = nix::unistd::write(self.pipe.1, &[1]);
         self.tx.send(InputCommand::Kill).unwrap();
+    }
+
+    fn check(&mut self) {
+        match self.control.upgrade() {
+            Some(_) => {}
+            None => {
+                debug!("restarting input_thread");
+                self.restore();
+            }
+        }
     }
 }
 
@@ -95,7 +113,7 @@ pub struct Context {
     pub replies: VecDeque<UIEvent>,
     sender: Sender<ThreadEvent>,
     receiver: Receiver<ThreadEvent>,
-    input: InputHandler,
+    input_thread: InputHandler,
     work_controller: WorkController,
     job_executor: Arc<JobExecutor>,
     pub children: Vec<std::process::Child>,
@@ -110,11 +128,11 @@ impl Context {
     }
 
     pub fn input_kill(&self) {
-        self.input.kill();
+        self.input_thread.kill();
     }
 
-    pub fn restore_input(&self) {
-        self.input.restore(self.sender.clone());
+    pub fn restore_input(&mut self) {
+        self.input_thread.restore();
     }
 
     pub fn is_online(&mut self, account_pos: usize) -> Result<()> {
@@ -299,6 +317,8 @@ impl State {
 
         timer.thread().unpark();
 
+        let working = Arc::new(());
+        let control = Arc::downgrade(&working);
         let mut s = State {
             cols,
             rows,
@@ -334,13 +354,15 @@ impl State {
                 children: vec![],
                 plugin_manager,
 
-                sender,
-                receiver,
-                input: InputHandler {
+                input_thread: InputHandler {
                     pipe: input_thread_pipe,
                     rx: input_thread.1,
                     tx: input_thread.0,
+                    control,
+                    state_tx: sender.clone(),
                 },
+                sender,
+                receiver,
             },
         };
         s.draw_rate_limit
@@ -1128,5 +1150,6 @@ impl State {
         if ctr != self.context.accounts.len() {
             self.timer.thread().unpark();
         }
+        self.context.input_thread.check();
     }
 }

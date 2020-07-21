@@ -163,6 +163,7 @@ pub fn get_events(
     mut closure: impl FnMut((Key, Vec<u8>)),
     rx: &Receiver<InputCommand>,
     new_command_fd: RawFd,
+    working: std::sync::Arc<()>,
 ) {
     let stdin = std::io::stdin();
     let stdin_fd = PollFd::new(std::io::stdin().as_raw_fd(), PollFlags::POLLIN);
@@ -229,6 +230,7 @@ pub fn get_events(
             }
         };
     }
+    drop(working);
 }
 
 impl<'de> Deserialize<'de> for Key {
