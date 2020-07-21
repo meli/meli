@@ -24,6 +24,69 @@ use crate::components::utilities::PageMovement;
 use crate::jobs::{oneshot, JobId};
 use std::iter::FromIterator;
 
+macro_rules! row_attr {
+    ($field:ident, $color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+        let fg = if $unseen {
+            $color_cache.unseen.fg
+        } else if $highlighted {
+            $color_cache.highlighted.fg
+        } else if $selected {
+            $color_cache.selected.fg
+        } else {
+            $color_cache.$field.fg
+        };
+        let bg = if $unseen {
+            $color_cache.unseen.bg
+        } else if $highlighted {
+            $color_cache.highlighted.bg
+        } else if $selected {
+            $color_cache.selected.bg
+        } else {
+            $color_cache.$field.bg
+        };
+        let attrs = if $unseen {
+            $color_cache.unseen.attrs
+        } else if $highlighted {
+            $color_cache.highlighted.attrs
+        } else if $selected {
+            $color_cache.selected.attrs
+        } else {
+            $color_cache.$field.attrs
+        };
+        ThemeAttribute { fg, bg, attrs }
+    }};
+    ($color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
+        let fg = if $unseen {
+            $color_cache.unseen.fg
+        } else if $highlighted {
+            $color_cache.highlighted.fg
+        } else if $selected {
+            $color_cache.selected.fg
+        } else {
+            $color_cache.theme_default.fg
+        };
+        let bg = if $unseen {
+            $color_cache.unseen.bg
+        } else if $highlighted {
+            $color_cache.highlighted.bg
+        } else if $selected {
+            $color_cache.selected.bg
+        } else {
+            $color_cache.theme_default.bg
+        };
+        let attrs = if $unseen {
+            $color_cache.unseen.attrs
+        } else if $highlighted {
+            $color_cache.highlighted.attrs
+        } else if $selected {
+            $color_cache.selected.attrs
+        } else {
+            $color_cache.theme_default.attrs
+        };
+        ThemeAttribute { fg, bg, attrs }
+    }};
+}
+
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `ThreadView`.
 #[derive(Debug)]
@@ -295,36 +358,30 @@ impl MailListingTrait for ConversationsListing {
                 panic!();
             }
             let thread = threads.thread_ref(thread);
-            let fg_color = if thread.unseen() > 0 {
-                self.color_cache.unseen.fg
-            } else {
-                self.color_cache.theme_default.fg
-            };
-            let bg_color = if thread.unseen() > 0 {
-                self.color_cache.unseen.bg
-            } else {
-                self.color_cache.theme_default.bg
-            };
+
+            let row_attr = row_attr!(self.color_cache, thread.unseen() > 0, false, false,);
             /* draw flags */
             let (x, _) = write_string_to_grid(
                 &strings.flag,
                 &mut self.content,
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
+                row_attr.fg,
+                row_attr.bg,
+                row_attr.attrs,
                 ((0, 3 * idx), (width - 1, 3 * idx)),
                 None,
             );
             for x in x..(x + 3) {
-                self.content[(x, 3 * idx)].set_bg(bg_color);
+                self.content[(x, 3 * idx)].set_bg(row_attr.bg);
             }
+            let subject_attr =
+                row_attr!(subject, self.color_cache, thread.unseen() > 0, false, false);
             /* draw subject */
             let (mut x, _) = write_string_to_grid(
                 &strings.subject,
                 &mut self.content,
-                fg_color,
-                bg_color,
-                Attr::BOLD,
+                subject_attr.fg,
+                subject_attr.bg,
+                subject_attr.attrs,
                 ((x, 3 * idx), (width - 1, 3 * idx)),
                 None,
             );
@@ -354,32 +411,34 @@ impl MailListingTrait for ConversationsListing {
             for x in x..width {
                 self.content[(x, 3 * idx)]
                     .set_ch(' ')
-                    .set_fg(fg_color)
-                    .set_bg(bg_color);
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg);
             }
+            let date_attr = row_attr!(date, self.color_cache, thread.unseen() > 0, false, false);
             /* Next line, draw date */
             let (x, _) = write_string_to_grid(
                 &strings.date,
                 &mut self.content,
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
+                date_attr.fg,
+                date_attr.bg,
+                date_attr.attrs,
                 ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
                 None,
             );
             for x in x..(x + 4) {
                 self.content[(x, 3 * idx + 1)]
                     .set_ch('▁')
-                    .set_fg(fg_color)
-                    .set_bg(bg_color);
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg);
             }
+            let from_attr = row_attr!(from, self.color_cache, thread.unseen() > 0, false, false);
             /* draw from */
             let (x, _) = write_string_to_grid(
                 &strings.from,
                 &mut self.content,
-                fg_color,
-                bg_color,
-                Attr::DEFAULT,
+                from_attr.fg,
+                from_attr.bg,
+                from_attr.attrs,
                 ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
                 None,
             );
@@ -387,14 +446,14 @@ impl MailListingTrait for ConversationsListing {
             for x in x..width {
                 self.content[(x, 3 * idx + 1)]
                     .set_ch('▁')
-                    .set_fg(fg_color)
-                    .set_bg(bg_color);
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg);
             }
             for x in 0..width {
                 self.content[(x, 3 * idx + 2)]
                     .set_ch('▓')
                     .set_fg(padding_fg)
-                    .set_bg(bg_color);
+                    .set_bg(row_attr.bg);
             }
         }
         if self.length == 0 && self.filter_term.is_empty() {
@@ -446,32 +505,17 @@ impl ListingTrait for ConversationsListing {
         let threads = account.collection.get_threads(self.cursor_pos.1);
         let thread = threads.thread_ref(thread_hash);
 
-        let fg_color = if thread.unseen() > 0 {
-            self.color_cache.unseen.fg
-        } else if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted.fg
-        } else if self.selection[&thread_hash] {
-            self.color_cache.selected.fg
+        let row_attr = row_attr!(
+            self.color_cache,
+            thread.unseen() > 0,
+            self.cursor_pos.2 == idx,
+            self.selection[&thread_hash]
+        );
+
+        let padding_fg = if thread.unseen() > 0 {
+            self.color_cache.unseen_padding.fg
         } else {
-            self.color_cache.theme_default.fg
-        };
-        let bg_color = if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted.bg
-        } else if self.selection[&thread_hash] {
-            self.color_cache.selected.bg
-        } else if thread.unseen() > 0 {
-            self.color_cache.unseen.bg
-        } else {
-            self.color_cache.theme_default.bg
-        };
-        let attrs = if self.cursor_pos.2 == idx {
-            self.color_cache.highlighted.attrs
-        } else if self.selection[&thread_hash] {
-            self.color_cache.selected.attrs
-        } else if thread.unseen() > 0 {
-            self.color_cache.unseen.attrs
-        } else {
-            self.color_cache.theme_default.attrs
+            self.color_cache.padding.fg
         };
 
         copy_area(
@@ -480,46 +524,43 @@ impl ListingTrait for ConversationsListing {
             area,
             ((0, 3 * idx), pos_dec(self.content.size(), (1, 1))),
         );
-
-        let padding_fg = self.color_cache.padding.fg;
-
         let (upper_left, bottom_right) = area;
         let width = self.content.size().0;
         let (x, y) = upper_left;
         if self.cursor_pos.2 == idx || self.selection[&thread_hash] {
             for x in x..=get_x(bottom_right) {
                 grid[(x, y)]
-                    .set_fg(fg_color)
-                    .set_bg(bg_color)
-                    .set_attrs(attrs);
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
 
                 grid[(x, y + 1)]
-                    .set_fg(fg_color)
-                    .set_bg(bg_color)
-                    .set_attrs(attrs);
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
 
                 grid[(x, y + 2)]
                     .set_fg(padding_fg)
-                    .set_bg(bg_color)
-                    .set_attrs(attrs);
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
             }
         } else if width < width!(area) {
             /* fill any remaining columns, if our view is wider than self.content */
             for x in (x + width)..=get_x(bottom_right) {
                 grid[(x, y)]
-                    .set_fg(fg_color)
-                    .set_bg(bg_color)
-                    .set_attrs(attrs);
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
 
                 grid[(x, y + 1)]
-                    .set_fg(fg_color)
-                    .set_bg(bg_color)
-                    .set_attrs(attrs);
+                    .set_fg(row_attr.fg)
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
 
                 grid[(x, y + 2)]
                     .set_fg(padding_fg)
-                    .set_bg(bg_color)
-                    .set_attrs(attrs);
+                    .set_bg(row_attr.bg)
+                    .set_attrs(row_attr.attrs);
             }
         }
     }
@@ -883,7 +924,7 @@ impl ConversationsListing {
         if thread.len() > 1 {
             EntryStrings {
                 date: DateString(ConversationsListing::format_date(context, thread.date())),
-                subject: SubjectString(format!("{} ({})", subject, thread.len(),)),
+                subject: SubjectString(format!("{} ({})", subject, thread.len())),
                 flag: FlagString(format!(
                     "{}{}",
                     if thread.has_attachments() { "📎" } else { "" },
@@ -967,17 +1008,14 @@ impl ConversationsListing {
 
         let env_hash = threads.thread_nodes()[&thread_node_hash].message().unwrap();
 
-        let fg_color = if thread.unseen() > 0 {
-            self.color_cache.unseen.fg
+        let row_attr = row_attr!(self.color_cache, thread.unseen() > 0, false, false);
+
+        let padding_fg = if thread.unseen() > 0 {
+            self.color_cache.unseen_padding.fg
         } else {
-            self.color_cache.theme_default.fg
+            self.color_cache.padding.fg
         };
-        let bg_color = if thread.unseen() > 0 {
-            self.color_cache.unseen.bg
-        } else {
-            self.color_cache.theme_default.bg
-        };
-        let padding_fg = self.color_cache.padding.fg;
+
         let mut from_address_list = Vec::new();
         let mut from_address_set: std::collections::HashSet<Vec<u8>> =
             std::collections::HashSet::new();
@@ -1008,22 +1046,23 @@ impl ConversationsListing {
         let (x, _) = write_string_to_grid(
             &strings.flag,
             &mut self.content,
-            fg_color,
-            bg_color,
-            Attr::DEFAULT,
+            row_attr.fg,
+            row_attr.bg,
+            row_attr.attrs,
             ((0, 3 * idx), (width - 1, 3 * idx)),
             None,
         );
         for c in self.content.row_iter(x..(x + 4), 3 * idx) {
-            self.content[c].set_bg(bg_color);
+            self.content[c].set_bg(row_attr.bg);
         }
+        let subject_attr = row_attr!(subject, self.color_cache, thread.unseen() > 0, false, false);
         /* draw subject */
         let (x, _) = write_string_to_grid(
             &strings.subject,
             &mut self.content,
-            fg_color,
-            bg_color,
-            Attr::BOLD,
+            subject_attr.fg,
+            subject_attr.bg,
+            subject_attr.attrs,
             ((x, 3 * idx), (width - 1, 3 * idx)),
             None,
         );
@@ -1060,41 +1099,43 @@ impl ConversationsListing {
         };
         for c in self.content.row_iter(x..width, 3 * idx) {
             self.content[c].set_ch(' ');
-            self.content[c].set_bg(bg_color);
+            self.content[c].set_bg(row_attr.bg);
         }
+        let date_attr = row_attr!(date, self.color_cache, thread.unseen() > 0, false, false);
         /* Next line, draw date */
         let (x, _) = write_string_to_grid(
             &strings.date,
             &mut self.content,
-            fg_color,
-            bg_color,
-            Attr::DEFAULT,
+            date_attr.fg,
+            date_attr.bg,
+            date_attr.attrs,
             ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
             None,
         );
         for c in self.content.row_iter(x..(x + 5), 3 * idx + 1) {
             self.content[c].set_ch('▁');
-            self.content[c].set_bg(bg_color);
+            self.content[c].set_bg(row_attr.bg);
         }
+        let from_attr = row_attr!(from, self.color_cache, thread.unseen() > 0, false, false);
         /* draw from */
         let (x, _) = write_string_to_grid(
             &strings.from,
             &mut self.content,
-            fg_color,
-            bg_color,
-            Attr::DEFAULT,
+            from_attr.fg,
+            from_attr.bg,
+            from_attr.attrs,
             ((x + 4, 3 * idx + 1), (width - 1, 3 * idx + 1)),
             None,
         );
 
         for c in self.content.row_iter(x..width, 3 * idx + 1) {
             self.content[c].set_ch('▁');
-            self.content[c].set_bg(bg_color);
+            self.content[c].set_bg(row_attr.bg);
         }
         for c in self.content.row_iter(0..width, 3 * idx + 2) {
             self.content[c].set_ch('▓');
             self.content[c].set_fg(padding_fg);
-            self.content[c].set_bg(bg_color);
+            self.content[c].set_bg(row_attr.bg);
         }
     }
 }

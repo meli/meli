@@ -1352,13 +1352,18 @@ impl Listing {
             }
         }
 
+        let account_attrs = if must_highlight_account {
+            crate::conf::value(context, "mail.sidebar_highlighted_account_name")
+        } else {
+            crate::conf::value(context, "mail.sidebar_account_name")
+        };
         /* Print account name first */
         write_string_to_grid(
             &a.name,
             grid,
-            self.theme_default.fg,
-            self.theme_default.bg,
-            Attr::BOLD,
+            account_attrs.fg,
+            account_attrs.bg,
+            account_attrs.attrs,
             area,
             None,
         );

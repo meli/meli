@@ -254,9 +254,11 @@ const DEFAULT_KEYS: &[&str] = &[
     "widgets.form.highlighted",
     "widgets.options.highlighted",
     "mail.sidebar",
+    "mail.sidebar_account_name",
     "mail.sidebar_unread_count",
     "mail.sidebar_index",
     "mail.sidebar_highlighted",
+    "mail.sidebar_highlighted_account_name",
     "mail.sidebar_highlighted_unread_count",
     "mail.sidebar_highlighted_index",
     "mail.sidebar_highlighted_account",
@@ -1319,6 +1321,19 @@ impl Default for Themes {
         /* Mail Sidebar */
 
         add!("mail.sidebar");
+        add!(
+            "mail.sidebar_account_name",
+            dark = {
+                fg: "mail.sidebar",
+                bg: "mail.sidebar",
+                attrs: Attr::BOLD,
+            },
+            light = {
+                fg: "mail.sidebar",
+                bg: "mail.sidebar",
+                attrs: Attr::BOLD,
+            }
+        );
         add!("mail.sidebar_unread_count", dark = { fg: Color::Byte(243) });
         add!("mail.sidebar_index", dark = { fg: Color::Byte(243) });
         add!("mail.sidebar_highlighted", dark = { fg: Color::Byte(233), bg: Color::Byte(15) });
@@ -1349,6 +1364,19 @@ impl Default for Themes {
             dark = {
                 fg: Color::Byte(15),
                 bg: Color::Byte(233),
+            }
+        );
+        add!(
+            "mail.sidebar_highlighted_account_name",
+            dark = {
+                fg: "mail.sidebar_highlighted_account",
+                bg: "mail.sidebar_highlighted_account",
+                attrs: Attr::BOLD,
+            },
+            light = {
+                fg: "mail.sidebar_highlighted_account",
+                bg: "mail.sidebar_highlighted_account",
+                attrs: Attr::BOLD,
             }
         );
         add!(
