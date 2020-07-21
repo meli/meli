@@ -152,7 +152,9 @@ impl MailListingTrait for ConversationsListing {
             }
         }
 
-        let threads = &context.accounts[self.cursor_pos.0].collection.threads[&self.cursor_pos.1];
+        let threads = context.accounts[self.cursor_pos.0]
+            .collection
+            .get_threads(self.cursor_pos.1);
         self.all_threads.clear();
         let mut roots = threads.roots();
         threads.group_inner_sort_by(
@@ -183,7 +185,7 @@ impl MailListingTrait for ConversationsListing {
     ) {
         let account = &context.accounts[self.cursor_pos.0];
 
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
         self.order.clear();
         self.selection.clear();
         self.length = 0;
@@ -255,8 +257,13 @@ impl MailListingTrait for ConversationsListing {
                 }
             }
 
-            let strings =
-                self.make_entry_string(root_envelope, context, &from_address_list, threads, thread);
+            let strings = self.make_entry_string(
+                root_envelope,
+                context,
+                &from_address_list,
+                &threads,
+                thread,
+            );
             max_entry_columns = std::cmp::max(
                 max_entry_columns,
                 strings.flag.len()
@@ -436,7 +443,7 @@ impl ListingTrait for ConversationsListing {
         let thread_hash = self.get_thread_under_cursor(idx);
 
         let account = &context.accounts[self.cursor_pos.0];
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
         let thread = threads.thread_ref(thread_hash);
 
         let fg_color = if thread.unseen() > 0 {
@@ -717,7 +724,7 @@ impl ListingTrait for ConversationsListing {
         let account = &context.accounts[self.cursor_pos.0];
         match results {
             Ok(results) => {
-                let threads = &account.collection.threads[&self.cursor_pos.1];
+                let threads = account.collection.get_threads(self.cursor_pos.1);
                 for env_hash in results {
                     if !account.collection.contains_key(&env_hash) {
                         continue;
@@ -952,7 +959,7 @@ impl ConversationsListing {
 
     fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
         let account = &context.accounts[self.cursor_pos.0];
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
         let thread = threads.thread_ref(thread_hash);
         let thread_node_hash = threads.thread_group_iter(thread_hash).next().unwrap().1;
         let idx: usize = self.order[&thread_hash];
@@ -989,8 +996,13 @@ impl ConversationsListing {
             }
         }
         let envelope: EnvelopeRef = account.collection.get_env(env_hash);
-        let strings =
-            self.make_entry_string(&envelope, context, &from_address_list, threads, thread_hash);
+        let strings = self.make_entry_string(
+            &envelope,
+            context,
+            &from_address_list,
+            &threads,
+            thread_hash,
+        );
         drop(envelope);
         /* draw flags */
         let (x, _) = write_string_to_grid(
@@ -1236,7 +1248,7 @@ impl Component for ConversationsListing {
                 }
                 UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                     let account = &context.accounts[self.cursor_pos.0];
-                    let threads = &account.collection.threads[&self.cursor_pos.1];
+                    let threads = account.collection.get_threads(self.cursor_pos.1);
                     if !account.collection.contains_key(&new_hash) {
                         return false;
                     }
@@ -1246,6 +1258,7 @@ impl Component for ConversationsListing {
                     }
                     let thread: ThreadHash =
                         threads.find_group(threads.thread_nodes()[&env_thread_node_hash].group);
+                    drop(threads);
                     if self.order.contains_key(&thread) {
                         self.row_updates.push(thread);
                     }
@@ -1257,7 +1270,7 @@ impl Component for ConversationsListing {
                 }
                 UIEvent::EnvelopeUpdate(ref env_hash) => {
                     let account = &context.accounts[self.cursor_pos.0];
-                    let threads = &account.collection.threads[&self.cursor_pos.1];
+                    let threads = account.collection.get_threads(self.cursor_pos.1);
                     if !account.collection.contains_key(&env_hash) {
                         return false;
                     }
@@ -1267,6 +1280,7 @@ impl Component for ConversationsListing {
                     }
                     let thread: ThreadHash =
                         threads.find_group(threads.thread_nodes()[&env_thread_node_hash].group);
+                    drop(threads);
                     if self.order.contains_key(&thread) {
                         self.row_updates.push(thread);
                     }
@@ -1315,6 +1329,8 @@ impl Component for ConversationsListing {
                         account
                             .collection
                             .threads
+                            .write()
+                            .unwrap()
                             .entry(self.cursor_pos.1)
                             .and_modify(|threads| {
                                 let is_snoozed = threads.thread_ref(thread).snoozed();

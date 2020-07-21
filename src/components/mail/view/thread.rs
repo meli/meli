@@ -161,7 +161,7 @@ impl ThreadView {
 
     fn initiate(&mut self, expanded_hash: Option<ThreadNodeHash>, context: &Context) {
         let account = &context.accounts[self.coordinates.0];
-        let threads = &account.collection.threads[&self.coordinates.1];
+        let threads = account.collection.get_threads(self.coordinates.1);
 
         if !threads.groups.contains_key(&self.thread_group) {
             return;
@@ -648,7 +648,7 @@ impl ThreadView {
         let y = if self.dirty {
             clear_area(grid, area, crate::conf::value(context, "theme_default"));
             let account = &context.accounts[self.coordinates.0];
-            let threads = &account.collection.threads[&self.coordinates.1];
+            let threads = account.collection.get_threads(self.coordinates.1);
             let thread_root = threads
                 .thread_group_iter(self.thread_group)
                 .next()
@@ -751,7 +751,7 @@ impl ThreadView {
         let y = {
             clear_area(grid, area, crate::conf::value(context, "theme_default"));
             let account = &context.accounts[self.coordinates.0];
-            let threads = &account.collection.threads[&self.coordinates.1];
+            let threads = account.collection.get_threads(self.coordinates.1);
             let thread_root = threads
                 .thread_group_iter(self.thread_group)
                 .next()

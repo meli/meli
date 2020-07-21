@@ -726,7 +726,10 @@ impl Account {
                 RefreshEventKind::Create(envelope) => {
                     let env_hash = envelope.hash();
                     if self.collection.contains_key(&env_hash)
-                        && self.collection[&mailbox_hash].contains(&env_hash)
+                        && self
+                            .collection
+                            .get_mailbox(mailbox_hash)
+                            .contains(&env_hash)
                     {
                         return None;
                     }
@@ -770,10 +773,13 @@ impl Account {
 
                     let thread = {
                         let thread_hash = self.collection.get_env(env_hash).thread();
-                        self.collection.threads[&mailbox_hash]
-                            .find_group(self.collection.threads[&mailbox_hash][&thread_hash].group)
+                        self.collection.get_threads(mailbox_hash).find_group(
+                            self.collection.get_threads(mailbox_hash)[&thread_hash].group,
+                        )
                     };
-                    if self.collection.threads[&mailbox_hash]
+                    if self
+                        .collection
+                        .get_threads(mailbox_hash)
                         .thread_ref(thread)
                         .snoozed()
                     {
@@ -797,8 +803,9 @@ impl Account {
                 RefreshEventKind::Remove(env_hash) => {
                     let thread_hash = {
                         let thread_hash = self.collection.get_env(env_hash).thread();
-                        self.collection.threads[&mailbox_hash]
-                            .find_group(self.collection.threads[&mailbox_hash][&thread_hash].group)
+                        self.collection.get_threads(mailbox_hash).find_group(
+                            self.collection.get_threads(mailbox_hash)[&thread_hash].group,
+                        )
                     };
                     #[cfg(feature = "sqlite3")]
                     {
@@ -1006,7 +1013,12 @@ impl Account {
                 None => {
                     return match self.mailbox_entries[&mailbox_hash].status {
                         MailboxStatus::Available | MailboxStatus::Parsing(_, _)
-                            if self.collection.mailboxes.contains_key(&mailbox_hash) =>
+                            if self
+                                .collection
+                                .mailboxes
+                                .read()
+                                .unwrap()
+                                .contains_key(&mailbox_hash) =>
                         {
                             Ok(())
                         }
@@ -1157,7 +1169,12 @@ impl Account {
         }
         if self.mailbox_entries[&mailbox_hash].status.is_available()
             || (self.mailbox_entries[&mailbox_hash].status.is_parsing()
-                && self.collection.mailboxes.contains_key(&mailbox_hash))
+                && self
+                    .collection
+                    .mailboxes
+                    .read()
+                    .unwrap()
+                    .contains_key(&mailbox_hash))
         {
             Ok(())
         } else {
@@ -1346,10 +1363,6 @@ impl Account {
         })
     }
 
-    pub fn thread(&self, h: ThreadNodeHash, f: MailboxHash) -> &ThreadNode {
-        &self.collection.threads[&f].thread_nodes()[&h]
-    }
-
     pub fn mailbox_operation(
         &mut self,
         op: crate::execute::actions::MailboxOperation,
@@ -1417,9 +1430,13 @@ impl Account {
                 );
                 self.collection
                     .threads
+                    .write()
+                    .unwrap()
                     .insert(mailbox_hash, Threads::default());
                 self.collection
                     .mailboxes
+                    .write()
+                    .unwrap()
                     .insert(mailbox_hash, Default::default());
                 build_mailboxes_order(
                     &mut self.tree,
@@ -1451,7 +1468,11 @@ impl Account {
                 if self.sent_mailbox == Some(mailbox_hash) {
                     self.sent_mailbox = None;
                 }
-                self.collection.threads.remove(&mailbox_hash);
+                self.collection
+                    .threads
+                    .write()
+                    .unwrap()
+                    .remove(&mailbox_hash);
                 let deleted_mailbox = self.mailbox_entries.remove(&mailbox_hash).unwrap();
                 /* if deleted mailbox had parent, we need to update its children field */
                 if let Some(parent_hash) = deleted_mailbox.ref_mailbox.parent() {
@@ -1461,7 +1482,11 @@ impl Account {
                             parent.ref_mailbox = mailboxes.remove(&parent_hash).unwrap();
                         });
                 }
-                self.collection.mailboxes.remove(&mailbox_hash);
+                self.collection
+                    .mailboxes
+                    .write()
+                    .unwrap()
+                    .remove(&mailbox_hash);
                 build_mailboxes_order(
                     &mut self.tree,
                     &self.mailbox_entries,
@@ -1576,7 +1601,7 @@ impl Account {
                     let mut ret = SmallVec::new();
                     let envelopes = self.collection.envelopes.read().unwrap();
 
-                    for &env_hash in self.collection[&mailbox_hash].iter() {
+                    for &env_hash in self.collection.get_mailbox(mailbox_hash).iter() {
                         let envelope = &envelopes[&env_hash];
                         if envelope.subject().contains(&search_term) {
                             ret.push(env_hash);

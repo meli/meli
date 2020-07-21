@@ -148,9 +148,13 @@ pub trait MailListingTrait: ListingTrait {
         let account = &mut context.accounts[account_pos];
         let mut envs_to_set: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
         let mailbox_hash = self.coordinates().1;
-        for (_, h) in account.collection.threads[&mailbox_hash].thread_group_iter(thread_hash) {
+        for (_, h) in account
+            .collection
+            .get_threads(mailbox_hash)
+            .thread_group_iter(thread_hash)
+        {
             envs_to_set.push(
-                account.collection.threads[&mailbox_hash].thread_nodes()[&h]
+                account.collection.get_threads(mailbox_hash).thread_nodes()[&h]
                     .message()
                     .unwrap(),
             );
@@ -1209,7 +1213,7 @@ impl Component for Listing {
             MailboxStatus::Available | MailboxStatus::Parsing(_, _) => format!(
                 "Mailbox: {}, Messages: {}, New: {}",
                 account[&mailbox_hash].ref_mailbox.name(),
-                account.collection[&mailbox_hash].len(),
+                account.collection.get_mailbox(mailbox_hash).len(),
                 account[&mailbox_hash]
                     .ref_mailbox
                     .count()

@@ -169,7 +169,9 @@ impl MailListingTrait for PlainListing {
                 return;
             }
         }
-        self.local_collection = context.accounts[self.cursor_pos.0].collection[&self.cursor_pos.1]
+        self.local_collection = context.accounts[self.cursor_pos.0]
+            .collection
+            .get_mailbox(self.cursor_pos.1)
             .iter()
             .cloned()
             .collect();
@@ -178,8 +180,9 @@ impl MailListingTrait for PlainListing {
             .envelopes
             .read()
             .unwrap();
-        self.thread_node_hashes = context.accounts[self.cursor_pos.0].collection
-            [&self.cursor_pos.1]
+        self.thread_node_hashes = context.accounts[self.cursor_pos.0]
+            .collection
+            .get_mailbox(self.cursor_pos.1)
             .iter()
             .map(|h| (*h, env_lck[h].thread()))
             .collect();
@@ -232,7 +235,7 @@ impl MailListingTrait for PlainListing {
         items: Box<dyn Iterator<Item = ThreadHash>>,
     ) {
         let account = &context.accounts[self.cursor_pos.0];
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
         let roots = items
             .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
             .collect::<_>();
@@ -1218,7 +1221,10 @@ impl Component for PlainListing {
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
                 if !account.collection.contains_key(new_hash)
-                    || !account.collection[&self.cursor_pos.1].contains(new_hash)
+                    || !account
+                        .collection
+                        .get_mailbox(self.cursor_pos.1)
+                        .contains(new_hash)
                 {
                     return false;
                 }
@@ -1244,7 +1250,10 @@ impl Component for PlainListing {
             UIEvent::EnvelopeUpdate(ref env_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
                 if !account.collection.contains_key(env_hash)
-                    || !account.collection[&self.cursor_pos.1].contains(env_hash)
+                    || !account
+                        .collection
+                        .get_mailbox(self.cursor_pos.1)
+                        .contains(env_hash)
                 {
                     return false;
                 }

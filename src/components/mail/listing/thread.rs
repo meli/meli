@@ -121,7 +121,9 @@ impl MailListingTrait for ThreadListing {
                 return;
             }
         }
-        let threads = &context.accounts[self.cursor_pos.0].collection.threads[&self.cursor_pos.1];
+        let threads = context.accounts[self.cursor_pos.0]
+            .collection
+            .get_threads(self.cursor_pos.1);
         let mut roots = threads.roots();
         threads.group_inner_sort_by(
             &mut roots,
@@ -141,7 +143,7 @@ impl MailListingTrait for ThreadListing {
         items: Box<dyn Iterator<Item = ThreadHash>>,
     ) {
         let account = &context.accounts[self.cursor_pos.0];
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
         self.length = 0;
         self.order.clear();
         let default_cell = {
@@ -226,7 +228,7 @@ impl MailListingTrait for ThreadListing {
                     idx,
                     indentation,
                     thread_node_hash,
-                    threads,
+                    &threads,
                     &indentations,
                     has_sibling,
                     is_root,
@@ -1164,7 +1166,6 @@ impl Component for ThreadListing {
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
-                let threads = &account.collection.threads[&self.cursor_pos.1];
                 if !account.collection.contains_key(&new_hash) {
                     return false;
                 }
@@ -1188,7 +1189,6 @@ impl Component for ThreadListing {
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
-                let threads = &account.collection.threads[&self.cursor_pos.1];
                 if !account.collection.contains_key(env_hash) {
                     return false;
                 }

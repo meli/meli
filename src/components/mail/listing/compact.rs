@@ -247,7 +247,9 @@ impl MailListingTrait for CompactListing {
             }
         }
 
-        let threads = &context.accounts[self.cursor_pos.0].collection.threads[&self.cursor_pos.1];
+        let threads = context.accounts[self.cursor_pos.0]
+            .collection
+            .get_threads(self.cursor_pos.1);
         let mut roots = threads.roots();
         threads.group_inner_sort_by(
             &mut roots,
@@ -276,7 +278,7 @@ impl MailListingTrait for CompactListing {
     ) {
         let account = &context.accounts[self.cursor_pos.0];
 
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
         self.order.clear();
         self.length = 0;
         let mut rows = Vec::with_capacity(1024);
@@ -341,7 +343,7 @@ impl MailListingTrait for CompactListing {
                 }
             }
 
-            let entry_strings = self.make_entry_string(&root_envelope, context, threads, thread);
+            let entry_strings = self.make_entry_string(&root_envelope, context, &threads, thread);
             row_widths.1.push(
                 entry_strings
                     .date
@@ -462,7 +464,7 @@ impl ListingTrait for CompactListing {
         let thread_hash = self.get_thread_under_cursor(idx);
 
         let account = &context.accounts[self.cursor_pos.0];
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
         let thread = threads.thread_ref(thread_hash);
 
         let row_attr = row_attr!(
@@ -685,7 +687,7 @@ impl ListingTrait for CompactListing {
         }
 
         let account = &context.accounts[self.cursor_pos.0];
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
         for r in 0..cmp::min(self.length - top_idx, rows) {
             let thread_hash = self.get_thread_under_cursor(r + top_idx);
             let row_attr = row_attr!(
@@ -767,7 +769,7 @@ impl ListingTrait for CompactListing {
         let account = &context.accounts[self.cursor_pos.0];
         match results {
             Ok(results) => {
-                let threads = &account.collection.threads[&self.cursor_pos.1];
+                let threads = account.collection.get_threads(self.cursor_pos.1);
                 for env_hash in results {
                     if !account.collection.contains_key(&env_hash) {
                         continue;
@@ -971,7 +973,7 @@ impl CompactListing {
 
     fn update_line(&mut self, context: &Context, thread_hash: ThreadHash) {
         let account = &context.accounts[self.cursor_pos.0];
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
         let thread = threads.thread_ref(thread_hash);
         let thread_node_hash = threads.thread_group_iter(thread_hash).next().unwrap().1;
         if let Some(env_hash) = threads.thread_nodes()[&thread_node_hash].message() {
@@ -993,7 +995,7 @@ impl CompactListing {
                 self.color_cache.odd
             };
             let envelope: EnvelopeRef = account.collection.get_env(env_hash);
-            let strings = self.make_entry_string(&envelope, context, threads, thread_hash);
+            let strings = self.make_entry_string(&envelope, context, &threads, thread_hash);
             drop(envelope);
             let columns = &mut self.data_columns.columns;
             let min_width = (
@@ -1136,7 +1138,7 @@ impl CompactListing {
         );
         let account = &context.accounts[self.cursor_pos.0];
 
-        let threads = &account.collection.threads[&self.cursor_pos.1];
+        let threads = account.collection.get_threads(self.cursor_pos.1);
 
         for ((idx, (thread_hash, root_env_hash)), strings) in
             self.rows.iter().skip(start).take(end - start + 1)
@@ -1309,7 +1311,7 @@ impl CompactListing {
         let account = &context.accounts[self.cursor_pos.0];
         match results {
             Ok(results) => {
-                let threads = &account.collection.threads[&self.cursor_pos.1];
+                let threads = account.collection.get_threads(self.cursor_pos.1);
                 for env_hash in results {
                     if !account.collection.contains_key(&env_hash) {
                         continue;
@@ -1497,6 +1499,8 @@ impl Component for CompactListing {
                             account
                                 .collection
                                 .threads
+                                .write()
+                                .unwrap()
                                 .entry(self.cursor_pos.1)
                                 .and_modify(|threads| {
                                     let is_snoozed = threads.thread_ref(thread).snoozed();
@@ -1526,7 +1530,7 @@ impl Component for CompactListing {
             }
             UIEvent::EnvelopeRename(ref old_hash, ref new_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
-                let threads = &account.collection.threads[&self.cursor_pos.1];
+                let threads = account.collection.get_threads(self.cursor_pos.1);
                 if !account.collection.contains_key(&new_hash) {
                     return false;
                 }
@@ -1536,6 +1540,7 @@ impl Component for CompactListing {
                 }
                 let thread: ThreadHash =
                     threads.find_group(threads.thread_nodes()[&new_env_thread_node_hash].group);
+                drop(threads);
                 if self.order.contains_key(&thread) {
                     self.row_updates.push(thread);
                 }
@@ -1553,7 +1558,7 @@ impl Component for CompactListing {
             }
             UIEvent::EnvelopeUpdate(ref env_hash) => {
                 let account = &context.accounts[self.cursor_pos.0];
-                let threads = &account.collection.threads[&self.cursor_pos.1];
+                let threads = account.collection.get_threads(self.cursor_pos.1);
                 if !account.collection.contains_key(&env_hash) {
                     return false;
                 }
@@ -1563,6 +1568,7 @@ impl Component for CompactListing {
                 }
                 let thread: ThreadHash =
                     threads.find_group(threads.thread_nodes()[&new_env_thread_node_hash].group);
+                drop(threads);
                 if self.order.contains_key(&thread) {
                     self.row_updates.push(thread);
                 }
