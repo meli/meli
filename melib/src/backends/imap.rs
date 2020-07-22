@@ -56,8 +56,15 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 pub type UID = usize;
 
-pub static SUPPORTED_CAPABILITIES: &[&str] =
-    &["IDLE", "LOGIN", "LOGINDISABLED", "ENABLE", "IMAP4REV1"];
+pub static SUPPORTED_CAPABILITIES: &[&str] = &[
+    "IDLE",
+    "LOGIN",
+    "LOGINDISABLED",
+    "ENABLE",
+    "IMAP4REV1",
+    "SPECIAL-USE",
+    "UNSELECT",
+];
 
 #[derive(Debug, Default)]
 pub struct EnvelopeCache {
