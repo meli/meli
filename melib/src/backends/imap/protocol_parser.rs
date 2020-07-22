@@ -392,6 +392,7 @@ pub fn list_mailbox_result(input: &[u8]) -> IResult<&[u8], ImapMailbox> {
     let (input, separator) = delimited(tag(b"\""), take(1_u32), tag(b"\""))(input)?;
     let (input, _) = take(1_u32)(input)?;
     let (input, path) = mailbox_token(input)?;
+    let (input, _) = tag("\r\n")(input)?;
     Ok((
         input,
         ({
@@ -1565,5 +1566,5 @@ fn string_token(input: &[u8]) -> IResult<&[u8], &[u8]> {
 // atom-specials = "(" / ")" / "{" / SP / CTL / list-wildcards / quoted-specials / resp-specials
 fn astring_char_tokens(input: &[u8]) -> IResult<&[u8], &[u8]> {
     // FIXME
-    is_not(" ")(input)
+    is_not(" \r\n")(input)
 }

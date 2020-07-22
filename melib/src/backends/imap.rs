@@ -919,10 +919,10 @@ impl ImapType {
             .read_response(&mut res, RequiredResponses::LIST_REQUIRED)
             .await?;
         debug!("out: {}", &res);
-        let mut lines = res.lines();
+        let mut lines = res.split_rn();
         /* Remove "M__ OK .." line */
         lines.next_back();
-        for l in lines.map(|l| l.trim()) {
+        for l in lines {
             if let Ok(mut mailbox) =
                 protocol_parser::list_mailbox_result(l.as_bytes()).map(|(_, v)| v)
             {
@@ -959,11 +959,11 @@ impl ImapType {
         conn.send_command(b"LSUB \"\" \"*\"").await?;
         conn.read_response(&mut res, RequiredResponses::LSUB_REQUIRED)
             .await?;
-        let mut lines = res.lines();
+        let mut lines = res.split_rn();
         debug!("out: {}", &res);
         /* Remove "M__ OK .." line */
         lines.next_back();
-        for l in lines.map(|l| l.trim()) {
+        for l in lines {
             if let Ok(subscription) =
                 protocol_parser::list_mailbox_result(l.as_bytes()).map(|(_, v)| v)
             {
