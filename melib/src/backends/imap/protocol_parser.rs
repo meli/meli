@@ -1459,6 +1459,7 @@ pub fn bodystructure_has_attachments(input: &[u8]) -> bool {
 
 #[derive(Debug, Default, Clone)]
 pub struct StatusResponse {
+    pub mailbox: Option<MailboxHash>,
     pub messages: Option<usize>,
     pub recent: Option<usize>,
     pub uidnext: Option<usize>,
@@ -1468,9 +1469,11 @@ pub struct StatusResponse {
 
 // status = "STATUS" SP mailbox SP "(" status-att *(SP status-att) ")"
 // status-att = "MESSAGES" / "RECENT" / "UIDNEXT" / "UIDVALIDITY" / "UNSEEN"
+//* STATUS INBOX (MESSAGES 1057 UNSEEN 0)
 pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
     let (input, _) = tag("* STATUS ")(input)?;
-    let (input, _) = take_until(" (")(input)?;
+    let (input, mailbox) = take_until(" (")(input)?;
+    let mailbox = mailbox_token(mailbox).map(|(_, m)| get_path_hash!(m)).ok();
     let (input, _) = tag(" (")(input)?;
     let (input, result) = permutation((
         opt(preceded(
@@ -1508,6 +1511,7 @@ pub fn status_response(input: &[u8]) -> IResult<&[u8], StatusResponse> {
     Ok((
         input,
         StatusResponse {
+            mailbox,
             messages: result.0,
             recent: result.1,
             uidnext: result.2,

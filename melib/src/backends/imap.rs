@@ -60,6 +60,7 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "IDLE",
     "LOGIN",
     "LOGINDISABLED",
+    "LIST-STATUS",
     "ENABLE",
     "IMAP4REV1",
     "SPECIAL-USE",
@@ -914,10 +915,26 @@ impl ImapType {
         let mut mailboxes: HashMap<MailboxHash, ImapMailbox> = Default::default();
         let mut res = String::with_capacity(8 * 1024);
         let mut conn = connection.lock().await;
-        conn.send_command(b"LIST \"\" \"*\"").await?;
-        let _ = conn
-            .read_response(&mut res, RequiredResponses::LIST_REQUIRED)
+        let has_list_status: bool = conn
+            .uid_store
+            .capabilities
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|cap| cap.eq_ignore_ascii_case(b"LIST-STATUS"));
+        if has_list_status {
+            conn.send_command(b"LIST \"\" \"*\" RETURN (STATUS (MESSAGES UNSEEN))")
+                .await?;
+            conn.read_response(
+                &mut res,
+                RequiredResponses::LIST_REQUIRED | RequiredResponses::STATUS,
+            )
             .await?;
+        } else {
+            conn.send_command(b"LIST \"\" \"*\"").await?;
+            conn.read_response(&mut res, RequiredResponses::LIST_REQUIRED)
+                .await?;
+        }
         debug!("out: {}", &res);
         let mut lines = res.split_rn();
         /* Remove "M__ OK .." line */
@@ -950,6 +967,20 @@ impl ImapType {
                     *entry = mailbox;
                 } else {
                     mailboxes.insert(mailbox.hash, mailbox);
+                }
+            } else if let Ok(status) =
+                protocol_parser::status_response(l.as_bytes()).map(|(_, v)| v)
+            {
+                if let Some(mailbox_hash) = status.mailbox {
+                    if mailboxes.contains_key(&mailbox_hash) {
+                        let entry = mailboxes.entry(mailbox_hash).or_default();
+                        if let Some(total) = status.messages {
+                            entry.exists.lock().unwrap().set_not_yet_seen(total);
+                        }
+                        if let Some(total) = status.unseen {
+                            entry.unseen.lock().unwrap().set_not_yet_seen(total);
+                        }
+                    }
                 }
             } else {
                 debug!("parse error for {:?}", l);
