@@ -299,6 +299,31 @@ fn test_imap_response() {
     assert_eq!(ImapResponse::from("M12 NO [CANNOT] Invalid mailbox name: Name must not have \'/\' characters (0.000 + 0.098 + 0.097 secs).\r\n"), ImapResponse::No(ResponseCode::Alert("Invalid mailbox name: Name must not have '/' characters".to_string())));
 }
 
+impl<'a> std::iter::DoubleEndedIterator for ImapLineIterator<'a> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.slice.is_empty() {
+            None
+        } else if let Some(pos) = self.slice.rfind("\r\n") {
+            if self.slice[..pos].is_empty() {
+                self.slice = &self.slice[..pos];
+                None
+            } else if let Some(prev_pos) = self.slice[..pos].rfind("\r\n") {
+                let ret = &self.slice[prev_pos + 2..pos + 2];
+                self.slice = &self.slice[..prev_pos + 2];
+                Some(ret)
+            } else {
+                let ret = self.slice;
+                self.slice = &self.slice[ret.len()..];
+                Some(ret)
+            }
+        } else {
+            let ret = self.slice;
+            self.slice = &self.slice[ret.len()..];
+            Some(ret)
+        }
+    }
+}
+
 impl<'a> Iterator for ImapLineIterator<'a> {
     type Item = &'a str;
 
