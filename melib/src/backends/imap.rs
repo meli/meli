@@ -207,6 +207,11 @@ impl MailBackend for ImapType {
         let mut valid_hash_set: HashSet<EnvelopeHash> = HashSet::default();
         let mut our_unseen: BTreeSet<EnvelopeHash> = Default::default();
         Ok(Box::pin(async_stream::try_stream! {
+            {
+                let f = &uid_store.mailboxes.lock().await[&mailbox_hash];
+                f.exists.lock().unwrap().clear();
+                f.unseen.lock().unwrap().clear();
+            };
             let (cached_hash_set, cached_payload) = fetch_cached_envs(mailbox_hash, &mut our_unseen, &uid_store)?;
             yield cached_payload;
             loop {
