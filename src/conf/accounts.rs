@@ -33,7 +33,7 @@ use melib::backends::{
 use melib::email::*;
 use melib::error::{MeliError, Result};
 use melib::text_processing::GlobMatch;
-use melib::thread::{SortField, SortOrder, ThreadNode, ThreadNodeHash, Threads};
+use melib::thread::{SortField, SortOrder, Threads};
 use melib::AddressBook;
 use melib::Collection;
 use smallvec::SmallVec;

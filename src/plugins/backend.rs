@@ -98,7 +98,7 @@ impl MailBackend for PluginBackend {
         }
     }
 
-    fn fetch(&mut self, mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>> {
+    fn fetch(&mut self, _mailbox_hash: MailboxHash) -> Result<Async<Result<Vec<Envelope>>>> {
         let mut w = AsyncBuilder::new();
         let channel = self.channel.clone();
         let handle = {

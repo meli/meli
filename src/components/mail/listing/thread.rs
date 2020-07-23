@@ -24,8 +24,6 @@ use crate::components::utilities::PageMovement;
 use std::cmp;
 use std::convert::TryInto;
 
-const MAX_COLS: usize = 500;
-
 /// A list of all mail (`Envelope`s) in a `Mailbox`. On `\n` it opens the `Envelope` content in a
 /// `MailView`.
 #[derive(Debug)]
@@ -106,18 +104,18 @@ impl MailListingTrait for ThreadListing {
                 };
                 let message: String =
                     context.accounts[self.cursor_pos.0][&self.cursor_pos.1].status();
+                self.data_columns.columns[0] =
+                    CellBuffer::new_with_context(message.len(), 1, default_cell, context);
                 self.length = 0;
-                /*
                 write_string_to_grid(
                     message.as_str(),
-                    &mut self.content,
+                    &mut self.data_columns.columns[0],
                     self.color_cache.theme_default.fg,
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
-                    ((0, 0), (MAX_COLS - 1, 0)),
+                    ((0, 0), (message.len().saturating_sub(1), 0)),
                     None,
                 );
-                */
                 return;
             }
         }
@@ -155,18 +153,17 @@ impl MailListingTrait for ThreadListing {
         };
         if threads.len() == 0 {
             let message = format!("Mailbox `{}` is empty.", account[&self.cursor_pos.1].name());
-            /*
-            self.content = CellBuffer::new_with_context(message.len(), 1, default_cell, context);
+            self.data_columns.columns[0] =
+                CellBuffer::new_with_context(message.len(), 1, default_cell, context);
             write_string_to_grid(
-                &message,
-                &mut self.content,
+                message.as_str(),
+                &mut self.data_columns.columns[0],
                 self.color_cache.theme_default.fg,
                 self.color_cache.theme_default.bg,
                 self.color_cache.theme_default.attrs,
                 ((0, 0), (message.len() - 1, 0)),
                 None,
             );
-            */
             return;
         }
         let mut rows = Vec::with_capacity(1024);
@@ -186,9 +183,6 @@ impl MailListingTrait for ThreadListing {
         );
 
         let mut indentations: Vec<bool> = Vec::with_capacity(6);
-        let mut thread_idx = 0; // needed for alternate thread colors
-                                /* Draw threaded view. */
-
         let roots = items
             .filter_map(|r| threads.groups[&r].root().map(|r| r.root))
             .collect::<_>();
@@ -200,9 +194,6 @@ impl MailListingTrait for ThreadListing {
         while let Some((indentation, thread_node_hash, has_sibling)) = iter.next() {
             let thread_node = &thread_nodes[&thread_node_hash];
 
-            if indentation == 0 {
-                thread_idx += 1;
-            }
             if thread_node.has_message() {
                 let envelope: EnvelopeRef =
                     account.collection.get_env(thread_node.message().unwrap());
@@ -225,7 +216,6 @@ impl MailListingTrait for ThreadListing {
                 let mut entry_strings = self.make_entry_string(&envelope, context);
                 entry_strings.subject = SubjectString(ThreadListing::make_thread_entry(
                     &envelope,
-                    idx,
                     indentation,
                     thread_node_hash,
                     &threads,
@@ -693,7 +683,9 @@ impl ThreadListing {
         }
     }
 
-    fn highlight_line_self(&mut self, idx: usize, context: &Context) {
+    fn highlight_line_self(&mut self, _idx: usize, _context: &Context) {
+        /*
+         * FIXME
         if self.length == 0 {
             return;
         }
@@ -703,23 +695,11 @@ impl ThreadListing {
             .collection
             .get_env(env_hash);
 
-        let fg_color = if !envelope.is_seen() {
-            Color::Byte(0)
-        } else {
-            Color::Default
-        };
-        let bg_color = if !envelope.is_seen() {
-            Color::Byte(251)
-        } else if idx % 2 == 0 {
-            Color::Byte(236)
-        } else {
-            Color::Default
-        };
+        */
     }
 
     fn make_thread_entry(
         envelope: &Envelope,
-        idx: usize,
         indent: usize,
         node_idx: ThreadNodeHash,
         threads: &Threads,
@@ -777,21 +757,6 @@ impl ThreadListing {
                 panic!();
             })
             .0
-    }
-
-    fn format_date(envelope: &Envelope) -> String {
-        let d = std::time::UNIX_EPOCH + std::time::Duration::from_secs(envelope.date());
-        let now: std::time::Duration = std::time::SystemTime::now()
-            .duration_since(d)
-            .unwrap_or_else(|_| std::time::Duration::new(std::u64::MAX, 0));
-        match now.as_secs() {
-            n if n < 10 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(8)),
-            n if n < 24 * 60 * 60 => format!("{} hours ago{}", n / (60 * 60), " ".repeat(7)),
-            n if n < 4 * 24 * 60 * 60 => {
-                format!("{} days ago{}", n / (24 * 60 * 60), " ".repeat(9))
-            }
-            _ => melib::datetime::timestamp_to_string(envelope.datetime(), None),
-        }
     }
 
     fn make_entry_string(&self, e: &Envelope, context: &Context) -> EntryStrings {
@@ -855,7 +820,6 @@ impl ThreadListing {
             self.data_columns.columns[3].size().0,
             self.data_columns.columns[4].size().0,
         );
-        let account = &context.accounts[self.cursor_pos.0];
 
         for ((idx, is_seen, has_attachments, env_hash), strings) in
             self.rows.iter().skip(start).take(end - start + 1)

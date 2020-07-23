@@ -21,7 +21,6 @@
 
 use super::*;
 use crate::backends::MailboxHash;
-use core::ops::{Index, IndexMut};
 use smallvec::SmallVec;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -489,7 +488,6 @@ impl Collection {
         }
     }
 }
-
 
 pub struct RwRef<'g, K: std::cmp::Eq + std::hash::Hash, V> {
     guard: RwLockReadGuard<'g, HashMap<K, V>>,

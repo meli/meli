@@ -24,8 +24,6 @@ use crate::melib::text_processing::TextProcessing;
 use melib::CardId;
 use std::cmp;
 
-const MAX_COLS: usize = 500;
-
 #[derive(Debug, PartialEq)]
 enum ViewMode {
     List,
@@ -220,7 +218,7 @@ impl ContactList {
                 self.theme_default.fg,
                 self.theme_default.bg,
                 self.theme_default.attrs,
-                ((0, 0), (MAX_COLS - 1, 0)),
+                ((0, 0), (message.len() - 1, 0)),
                 None,
             );
             return;

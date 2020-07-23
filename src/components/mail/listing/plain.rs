@@ -26,8 +26,6 @@ use crate::jobs::{oneshot, JobId, JoinHandle};
 use std::cmp;
 use std::iter::FromIterator;
 
-const MAX_COLS: usize = 500;
-
 macro_rules! address_list {
     (($name:expr) as comma_sep_list) => {{
         let mut ret: String =
@@ -163,7 +161,7 @@ impl MailListingTrait for PlainListing {
                     self.color_cache.theme_default.fg,
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
-                    ((0, 0), (MAX_COLS - 1, 0)),
+                    ((0, 0), (message.len().saturating_sub(1), 0)),
                     None,
                 );
                 return;
@@ -982,7 +980,7 @@ impl PlainListing {
                 self.color_cache.theme_default.fg,
                 self.color_cache.theme_default.bg,
                 self.color_cache.theme_default.attrs,
-                ((0, 0), (MAX_COLS - 1, 0)),
+                ((0, 0), (message.len() - 1, 0)),
                 None,
             );
         }
@@ -1296,10 +1294,9 @@ impl Component for PlainListing {
                         let (chan, handle, job_id) = context.accounts[self.cursor_pos.0]
                             .job_executor
                             .spawn_specialized(job);
-                        context.accounts[self.cursor_pos.0].active_jobs.insert(
-                            job_id,
-                            crate::conf::accounts::JobRequest::Search(handle),
-                        );
+                        context.accounts[self.cursor_pos.0]
+                            .active_jobs
+                            .insert(job_id, crate::conf::accounts::JobRequest::Search(handle));
                         self.search_job = Some((filter_term.to_string(), chan, job_id));
                     }
                     Err(err) => {

@@ -27,8 +27,6 @@ use std::cmp;
 use std::convert::TryInto;
 use std::iter::FromIterator;
 
-const MAX_COLS: usize = 500;
-
 macro_rules! address_list {
     (($name:expr) as comma_sep_list) => {{
         let mut ret: String =
@@ -240,7 +238,7 @@ impl MailListingTrait for CompactListing {
                     self.color_cache.theme_default.fg,
                     self.color_cache.theme_default.bg,
                     self.color_cache.theme_default.attrs,
-                    ((0, 0), (MAX_COLS - 1, 0)),
+                    ((0, 0), (message.len() - 1, 0)),
                     None,
                 );
                 return;
@@ -435,7 +433,7 @@ impl MailListingTrait for CompactListing {
                 self.color_cache.theme_default.fg,
                 self.color_cache.theme_default.bg,
                 self.color_cache.theme_default.attrs,
-                ((0, 0), (MAX_COLS - 1, 0)),
+                ((0, 0), (message.len() - 1, 0)),
                 None,
             );
         }
@@ -1337,13 +1335,10 @@ impl CompactListing {
                     "Encountered an error while searching for `{}`: {}.",
                     search_term, err
                 );
-                log(
-                    format!("Failed to search for term {}: {}", search_term, err),
-                    ERROR,
-                );
+                log(message.clone(), ERROR);
                 context.replies.push_back(UIEvent::Notification(
                     Some("Could not perform search".to_string()),
-                    err.to_string(),
+                    message,
                     Some(crate::types::NotificationType::ERROR),
                 ));
             }
