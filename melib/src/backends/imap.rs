@@ -65,6 +65,7 @@ pub static SUPPORTED_CAPABILITIES: &[&str] = &[
     "IMAP4REV1",
     "SPECIAL-USE",
     "UNSELECT",
+    "LITERAL+",
 ];
 
 #[derive(Debug, Default)]
@@ -407,18 +408,37 @@ impl MailBackend for ImapType {
             let mut response = String::with_capacity(8 * 1024);
             let mut conn = connection.lock().await;
             let flags = flags.unwrap_or_else(Flag::empty);
-            conn.send_command(
-                format!(
-                    "APPEND \"{}\" ({}) {{{}}}",
-                    &path,
-                    flags_to_imap_list!(flags),
-                    bytes.len()
+            let has_literal_plus: bool = uid_store
+                .capabilities
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|cap| cap.eq_ignore_ascii_case(b"LITERAL+"));
+            if has_literal_plus {
+                conn.send_command(
+                    format!(
+                        "APPEND \"{}\" ({}) {{{}+}}",
+                        &path,
+                        flags_to_imap_list!(flags),
+                        bytes.len()
+                    )
+                    .as_bytes(),
                 )
-                .as_bytes(),
-            )
-            .await?;
-            // wait for "+ Ready for literal data" reply
-            conn.wait_for_continuation_request().await?;
+                .await?;
+            } else {
+                conn.send_command(
+                    format!(
+                        "APPEND \"{}\" ({}) {{{}}}",
+                        &path,
+                        flags_to_imap_list!(flags),
+                        bytes.len()
+                    )
+                    .as_bytes(),
+                )
+                .await?;
+                // wait for "+ Ready for literal data" reply
+                conn.wait_for_continuation_request().await?;
+            }
             conn.send_literal(&bytes).await?;
             conn.read_response(&mut response, RequiredResponses::empty())
                 .await?;
