@@ -200,9 +200,7 @@ impl MailView {
                         } else {
                             self.state = MailViewState::LoadingBody { job_id, chan };
                             self.active_jobs.insert(job_id);
-                            account
-                                .active_jobs
-                                .insert(job_id, JobRequest::AsBytes(handle));
+                            account.insert_job(job_id, JobRequest::AsBytes(handle));
                             context
                                 .replies
                                 .push_back(UIEvent::StatusEvent(StatusEvent::NewJob(job_id)));
@@ -216,15 +214,17 @@ impl MailView {
                 }
             }
             if !account.collection.get_env(self.coordinates.2).is_seen() {
-                match account
-                    .operation(self.coordinates.2)
-                    .and_then(|mut op| op.set_flag(Flag::SEEN, true))
-                {
+                let job = account.backend.write().unwrap().set_flags(
+                    self.coordinates.2.into(),
+                    self.coordinates.1,
+                    smallvec::smallvec![(Ok(Flag::SEEN), true)],
+                );
+                match job {
                     Ok(fut) => {
                         let (rcvr, handle, job_id) = account.job_executor.spawn_specialized(fut);
-                        account.active_jobs.insert(
+                        account.insert_job(
                             job_id,
-                            JobRequest::SetFlags(self.coordinates.2, handle, rcvr),
+                            JobRequest::SetFlags(self.coordinates.2.into(), handle, rcvr),
                         );
                     }
                     Err(e) => {
@@ -235,7 +235,7 @@ impl MailView {
                             )),
                         ));
                     }
-                }
+                };
             }
         }
     }

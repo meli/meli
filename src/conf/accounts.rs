@@ -27,8 +27,9 @@ use super::{AccountConf, FileMailboxConf};
 use crate::jobs::{JobChannel, JobExecutor, JobId, JoinHandle};
 use melib::async_workers::{Async, AsyncBuilder, AsyncStatus, WorkContext};
 use melib::backends::{
-    AccountHash, BackendOp, Backends, MailBackend, Mailbox, MailboxHash, NotifyFn, ReadOnlyOp,
-    RefreshEvent, RefreshEventConsumer, RefreshEventKind, ResultFuture, SpecialUsageMailbox,
+    AccountHash, BackendOp, Backends, EnvelopeHashBatch, MailBackend, Mailbox, MailboxHash,
+    NotifyFn, ReadOnlyOp, RefreshEvent, RefreshEventConsumer, RefreshEventKind, ResultFuture,
+    SpecialUsageMailbox,
 };
 use melib::email::*;
 use melib::error::{MeliError, Result};
@@ -178,12 +179,12 @@ pub enum JobRequest {
     },
     IsOnline(JoinHandle, oneshot::Receiver<Result<()>>),
     Refresh(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
-    SetFlags(EnvelopeHash, JoinHandle, oneshot::Receiver<Result<()>>),
+    SetFlags(EnvelopeHashBatch, JoinHandle, oneshot::Receiver<Result<()>>),
     SaveMessage(MailboxHash, JoinHandle, oneshot::Receiver<Result<()>>),
     SendMessage,
     SendMessageBackground(JoinHandle, JobChannel<()>),
     CopyTo(MailboxHash, JoinHandle, oneshot::Receiver<Result<Vec<u8>>>),
-    DeleteMessage(EnvelopeHash, JoinHandle, oneshot::Receiver<Result<()>>),
+    DeleteMessages(EnvelopeHashBatch, JoinHandle, oneshot::Receiver<Result<()>>),
     CreateMailbox(
         JoinHandle,
         oneshot::Receiver<Result<(MailboxHash, HashMap<MailboxHash, Mailbox>)>>,
@@ -211,7 +212,7 @@ impl core::fmt::Debug for JobRequest {
             JobRequest::SetFlags(_, _, _) => write!(f, "JobRequest::SetFlags"),
             JobRequest::SaveMessage(_, _, _) => write!(f, "JobRequest::SaveMessage"),
             JobRequest::CopyTo(_, _, _) => write!(f, "JobRequest::CopyTo"),
-            JobRequest::DeleteMessage(_, _, _) => write!(f, "JobRequest::DeleteMessage"),
+            JobRequest::DeleteMessages(_, _, _) => write!(f, "JobRequest::DeleteMessages"),
             JobRequest::CreateMailbox(_, _) => write!(f, "JobRequest::CreateMailbox"),
             JobRequest::DeleteMailbox(_, _) => write!(f, "JobRequest::DeleteMailbox"),
             //JobRequest::RenameMailbox,
@@ -1860,7 +1861,7 @@ impl Account {
                             .expect("Could not send event on main channel");
                     }
                 }
-                JobRequest::DeleteMessage(_, _, mut chan) => {
+                JobRequest::DeleteMessages(_, _, mut chan) => {
                     let r = chan.try_recv().unwrap();
                     if let Some(Err(err)) = r {
                         self.sender

@@ -248,14 +248,6 @@ impl BackendOp for MboxOp {
         }
         Ok(Box::pin(async move { Ok(flags) }))
     }
-
-    fn set_flag(&mut self, _flag: Flag, _value: bool) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn set_tag(&mut self, _tag: String, _value: bool) -> ResultFuture<()> {
-        Err(MeliError::new("mbox doesn't support tags."))
-    }
 }
 
 #[derive(Debug, Clone, Copy)]

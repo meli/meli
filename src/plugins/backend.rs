@@ -331,12 +331,4 @@ impl BackendOp for PluginOp {
     fn fetch_flags(&self) -> ResultFuture<Flag> {
         Err(MeliError::new("Unimplemented."))
     }
-
-    fn set_flag(&mut self, _f: Flag, _value: bool) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
-
-    fn set_tag(&mut self, _tag: String, _value: bool) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
 }

@@ -22,8 +22,10 @@
 use super::*;
 use crate::conf::accounts::JobRequest;
 use crate::types::segment_tree::SegmentTree;
+use melib::backends::EnvelopeHashBatch;
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 use std::ops::{Deref, DerefMut};
 
 mod conversations;
@@ -141,248 +143,201 @@ pub trait MailListingTrait: ListingTrait {
     fn perform_action(
         &mut self,
         context: &mut Context,
-        thread_hash: ThreadHash,
+        thread_hashes: SmallVec<[ThreadHash; 8]>,
         a: &ListingAction,
     ) {
         let account_pos = self.coordinates().0;
         let account = &mut context.accounts[account_pos];
         let mut envs_to_set: SmallVec<[EnvelopeHash; 8]> = SmallVec::new();
         let mailbox_hash = self.coordinates().1;
-        for (_, h) in account
-            .collection
-            .get_threads(mailbox_hash)
-            .thread_group_iter(thread_hash)
         {
-            envs_to_set.push(
-                account.collection.get_threads(mailbox_hash).thread_nodes()[&h]
-                    .message()
-                    .unwrap(),
-            );
+            let threads_lck = account.collection.get_threads(mailbox_hash);
+            for thread_hash in thread_hashes {
+                for (_, h) in threads_lck.thread_group_iter(thread_hash) {
+                    envs_to_set.push(threads_lck.thread_nodes()[&h].message().unwrap());
+                }
+                self.row_updates().push(thread_hash);
+            }
         }
-        for env_hash in envs_to_set {
-            let account = &mut context.accounts[self.coordinates().0];
-            let mut op =
-                match account.operation(env_hash) {
-                    Ok(op) => op,
+        if envs_to_set.is_empty() {
+            return;
+        }
+        let env_hashes = EnvelopeHashBatch::try_from(envs_to_set.as_slice()).unwrap();
+        match a {
+            ListingAction::SetSeen => {
+                let job = account.backend.write().unwrap().set_flags(
+                    env_hashes.clone(),
+                    mailbox_hash,
+                    smallvec::smallvec![(Ok(Flag::SEEN), true)],
+                );
+                match job {
                     Err(err) => {
                         context.replies.push_back(UIEvent::StatusEvent(
                             StatusEvent::DisplayMessage(err.to_string()),
                         ));
-                        continue;
-                    }
-                };
-            let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
-            match a {
-                ListingAction::SetSeen => match envelope.set_seen(op) {
-                    Err(e) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(e.to_string()),
-                        ));
                     }
                     Ok(fut) => {
-                        let (rcvr, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
                         account
-                            .active_jobs
-                            .insert(job_id, JobRequest::SetFlags(env_hash, handle, rcvr));
-                    }
-                },
-                ListingAction::SetUnseen => match envelope.set_unseen(op) {
-                    Err(e) => {
-                        context.replies.push_back(UIEvent::StatusEvent(
-                            StatusEvent::DisplayMessage(e.to_string()),
-                        ));
-                    }
-                    Ok(fut) => {
-                        let (rcvr, handle, job_id) = account.job_executor.spawn_specialized(fut);
-                        account
-                            .active_jobs
-                            .insert(job_id, JobRequest::SetFlags(env_hash, handle, rcvr));
-                    }
-                },
-                ListingAction::Delete => {
-                    drop(envelope);
-                    match account.delete(env_hash, mailbox_hash) {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Could not delete.".to_string()),
-                                err.to_string(),
-                                Some(NotificationType::ERROR),
-                            ));
-                            return;
-                        }
-                        Ok(fut) => {
-                            let (rcvr, handle, job_id) =
-                                account.job_executor.spawn_specialized(fut);
-                            account
-                                .active_jobs
-                                .insert(job_id, JobRequest::DeleteMessage(env_hash, handle, rcvr));
-                        }
-                    }
-                    continue;
-                }
-                ListingAction::CopyTo(ref mailbox_path) => {
-                    drop(envelope);
-                    match account
-                        .mailbox_by_path(mailbox_path)
-                        .and_then(|mailbox_hash| op.copy_to(mailbox_hash))
-                    {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Could not copy.".to_string()),
-                                err.to_string(),
-                                Some(NotificationType::ERROR),
-                            ));
-                            return;
-                        }
-                        Ok(fut) => {
-                            let (rcvr, handle, job_id) =
-                                account.job_executor.spawn_specialized(fut);
-                            account.active_jobs.insert(
-                                job_id,
-                                JobRequest::SaveMessage(mailbox_hash, handle, rcvr),
-                            );
-                        }
-                    }
-                    continue;
-                }
-                ListingAction::CopyToOtherAccount(ref account_name, ref mailbox_path) => {
-                    drop(envelope);
-                    if let Err(err) = op.as_bytes().and_then(|bytes_fut| {
-                        let account_pos = context
-                            .accounts
-                            .iter()
-                            .position(|el| el.name() == account_name)
-                            .ok_or_else(|| {
-                                MeliError::new(format!(
-                                    "`{}` is not a valid account name",
-                                    account_name
-                                ))
-                            })?;
-                        let account = &mut context.accounts[account_pos];
-                        let mailbox_hash = account.mailbox_by_path(mailbox_path)?;
-                        let (rcvr, handle, job_id) =
-                            account.job_executor.spawn_specialized(bytes_fut);
-                        account
-                            .active_jobs
-                            .insert(job_id, JobRequest::CopyTo(mailbox_hash, handle, rcvr));
-                        Ok(())
-                    }) {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not copy.".to_string()),
-                            err.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                        return;
-                    }
-                    continue;
-                }
-                ListingAction::MoveTo(ref mailbox_path) => {
-                    drop(envelope);
-                    match account
-                        .mailbox_by_path(mailbox_path)
-                        .and_then(|mailbox_hash| op.copy_to(mailbox_hash))
-                    {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Could not copy.".to_string()),
-                                err.to_string(),
-                                Some(NotificationType::ERROR),
-                            ));
-                            return;
-                        }
-                        Ok(fut) => {
-                            let (rcvr, handle, job_id) =
-                                account.job_executor.spawn_specialized(fut);
-                            account.active_jobs.insert(
-                                job_id,
-                                JobRequest::SaveMessage(mailbox_hash, handle, rcvr),
-                            );
-                        }
-                    }
-                    continue;
-                }
-                ListingAction::MoveToOtherAccount(ref account_name, ref mailbox_path) => {
-                    drop(envelope);
-                    if let Err(err) = op.as_bytes().and_then(|bytes_fut| {
-                        let account_pos = context
-                            .accounts
-                            .iter()
-                            .position(|el| el.name() == account_name)
-                            .ok_or_else(|| {
-                                MeliError::new(format!(
-                                    "`{}` is not a valid account name",
-                                    account_name
-                                ))
-                            })?;
-                        let account = &mut context.accounts[account_pos];
-                        let mailbox_hash = account.mailbox_by_path(mailbox_path)?;
-                        let (rcvr, handle, job_id) =
-                            account.job_executor.spawn_specialized(bytes_fut);
-                        account
-                            .active_jobs
-                            .insert(job_id, JobRequest::CopyTo(mailbox_hash, handle, rcvr));
-                        Ok(())
-                    }) {
-                        context.replies.push_back(UIEvent::Notification(
-                            Some("Could not copy.".to_string()),
-                            err.to_string(),
-                            Some(NotificationType::ERROR),
-                        ));
-                        return;
-                    }
-                    /*
-                            account
-                                .delete(env_hash, mailbox_hash)
-                                .chain_err_summary(|| {
-                                    "Envelope was copied but removal from original account failed"
-                                })
-                    */
-                    continue;
-                }
-                ListingAction::Tag(Remove(ref tag_str)) => {
-                    match op.set_tag(tag_str.to_string(), false) {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Could not set tag.".to_string()),
-                                err.to_string(),
-                                Some(NotificationType::ERROR),
-                            ));
-                            return;
-                        }
-                        Ok(fut) => {
-                            let (rcvr, handle, job_id) =
-                                account.job_executor.spawn_specialized(fut);
-                            account
-                                .active_jobs
-                                .insert(job_id, JobRequest::SetFlags(env_hash, handle, rcvr));
-                        }
+                            .insert_job(job_id, JobRequest::SetFlags(env_hashes, handle, channel));
                     }
                 }
-                ListingAction::Tag(Add(ref tag_str)) => {
-                    match op.set_tag(tag_str.to_string(), true) {
-                        Err(err) => {
-                            context.replies.push_back(UIEvent::Notification(
-                                Some("Could not set tag.".to_string()),
-                                err.to_string(),
-                                Some(NotificationType::ERROR),
-                            ));
-                            return;
-                        }
-                        Ok(fut) => {
-                            let (rcvr, handle, job_id) =
-                                account.job_executor.spawn_specialized(fut);
-                            account
-                                .active_jobs
-                                .insert(job_id, JobRequest::SetFlags(env_hash, handle, rcvr));
-                        }
-                    }
-                }
-                _ => unreachable!(),
             }
-            self.row_updates().push(thread_hash);
-            self.set_dirty(true);
-            drop(envelope);
+            ListingAction::SetUnseen => {
+                let job = account.backend.write().unwrap().set_flags(
+                    env_hashes.clone(),
+                    mailbox_hash,
+                    smallvec::smallvec![(Ok(Flag::SEEN), false)],
+                );
+                match job {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                    }
+                    Ok(fut) => {
+                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        account
+                            .insert_job(job_id, JobRequest::SetFlags(env_hashes, handle, channel));
+                    }
+                }
+            }
+            ListingAction::Tag(Remove(ref tag_str)) => {
+                let job = account.backend.write().unwrap().set_flags(
+                    env_hashes.clone(),
+                    mailbox_hash,
+                    smallvec::smallvec![(Err(tag_str.to_string()), false)],
+                );
+                match job {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                    }
+                    Ok(fut) => {
+                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        account
+                            .insert_job(job_id, JobRequest::SetFlags(env_hashes, handle, channel));
+                    }
+                }
+            }
+            ListingAction::Tag(Add(ref tag_str)) => {
+                let job = account.backend.write().unwrap().set_flags(
+                    env_hashes.clone(),
+                    mailbox_hash,
+                    smallvec::smallvec![(Err(tag_str.to_string()), true)],
+                );
+                match job {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                    }
+                    Ok(fut) => {
+                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        account
+                            .insert_job(job_id, JobRequest::SetFlags(env_hashes, handle, channel));
+                    }
+                }
+            }
+            ListingAction::Delete => {
+                let job = account
+                    .backend
+                    .write()
+                    .unwrap()
+                    .delete_messages(env_hashes.clone(), mailbox_hash);
+                match job {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                    }
+                    Ok(fut) => {
+                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        account.insert_job(
+                            job_id,
+                            JobRequest::DeleteMessages(env_hashes, handle, channel),
+                        );
+                    }
+                }
+            }
+            ListingAction::CopyTo(ref mailbox_path) => {
+                match account
+                    .mailbox_by_path(mailbox_path)
+                    .and_then(|destination_mailbox_hash| {
+                        account.backend.write().unwrap().copy_messages(
+                            env_hashes,
+                            mailbox_hash,
+                            destination_mailbox_hash,
+                            /* move? */ false,
+                            /* flags */ None,
+                        )
+                    }) {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                    }
+                    Ok(fut) => {
+                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        account.insert_job(
+                            job_id,
+                            JobRequest::Generic {
+                                name: "message copying".into(),
+                                handle,
+                                channel,
+                            },
+                        );
+                    }
+                }
+            }
+            ListingAction::CopyToOtherAccount(ref _account_name, ref _mailbox_path) => {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                        "Unimplemented.".into(),
+                    )));
+            }
+            ListingAction::MoveTo(ref mailbox_path) => {
+                match account
+                    .mailbox_by_path(mailbox_path)
+                    .and_then(|destination_mailbox_hash| {
+                        account.backend.write().unwrap().copy_messages(
+                            env_hashes,
+                            mailbox_hash,
+                            destination_mailbox_hash,
+                            /* move? */ true,
+                            /* flags */ None,
+                        )
+                    }) {
+                    Err(err) => {
+                        context.replies.push_back(UIEvent::StatusEvent(
+                            StatusEvent::DisplayMessage(err.to_string()),
+                        ));
+                    }
+                    Ok(fut) => {
+                        let (channel, handle, job_id) = account.job_executor.spawn_specialized(fut);
+                        account.insert_job(
+                            job_id,
+                            JobRequest::Generic {
+                                name: "message moving".into(),
+                                handle,
+                                channel,
+                            },
+                        );
+                    }
+                }
+            }
+            ListingAction::MoveToOtherAccount(ref _account_name, ref _mailbox_path) => {
+                context
+                    .replies
+                    .push_back(UIEvent::StatusEvent(StatusEvent::DisplayMessage(
+                        "Unimplemented.".into(),
+                    )));
+            }
+            _ => unreachable!(),
         }
+        self.set_dirty(true);
     }
 
     fn row_updates(&mut self) -> &mut SmallVec<[ThreadHash; 8]>;
@@ -787,9 +742,7 @@ impl Component for Listing {
                     | Action::Listing(a @ ListingAction::Delete)
                     | Action::Listing(a @ ListingAction::Tag(_)) => {
                         let focused = self.component.get_focused_items(context);
-                        for i in focused {
-                            self.component.perform_action(context, i, a);
-                        }
+                        self.component.perform_action(context, focused, a);
                         self.component.set_dirty(true);
                         return true;
                     }

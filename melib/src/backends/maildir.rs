@@ -104,56 +104,6 @@ impl<'a> BackendOp for MaildirOp {
         let ret = Ok(path.flags());
         Ok(Box::pin(async move { ret }))
     }
-
-    fn set_flag(&mut self, f: Flag, value: bool) -> ResultFuture<()> {
-        let mut flags = futures::executor::block_on(self.fetch_flags()?)?;
-        let old_hash = self.hash;
-        let mailbox_hash = self.mailbox_hash;
-        let hash_index = self.hash_index.clone();
-        let path = self.path();
-        Ok(Box::pin(async move {
-            let path = path;
-            let path = path.to_str().unwrap(); // Assume UTF-8 validity
-            let idx: usize = path
-                .rfind(":2,")
-                .ok_or_else(|| MeliError::new(format!("Invalid email filename: {:?}", path)))?
-                + 3;
-            let mut new_name: String = path[..idx].to_string();
-            flags.set(f, value);
-
-            if !(flags & Flag::DRAFT).is_empty() {
-                new_name.push('D');
-            }
-            if !(flags & Flag::FLAGGED).is_empty() {
-                new_name.push('F');
-            }
-            if !(flags & Flag::PASSED).is_empty() {
-                new_name.push('P');
-            }
-            if !(flags & Flag::REPLIED).is_empty() {
-                new_name.push('R');
-            }
-            if !(flags & Flag::SEEN).is_empty() {
-                new_name.push('S');
-            }
-            if !(flags & Flag::TRASHED).is_empty() {
-                new_name.push('T');
-            }
-            let new_name: PathBuf = new_name.into();
-            let mut map = hash_index.lock().unwrap();
-            let map = map.entry(mailbox_hash).or_default();
-            map.entry(old_hash).or_default().modified = Some(PathMod::Path(new_name.clone()));
-
-            debug!("renaming {:?} to {:?}", path, new_name);
-            fs::rename(&path, &new_name)?;
-            debug!("success in rename");
-            Ok(())
-        }))
-    }
-
-    fn set_tag(&mut self, _tag: String, _value: bool) -> ResultFuture<()> {
-        Err(MeliError::new("Maildir doesn't support tags."))
-    }
 }
 
 #[derive(Debug, Default, Clone)]

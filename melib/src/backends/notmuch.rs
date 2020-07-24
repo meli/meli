@@ -75,14 +75,14 @@ impl Error for NotmuchError {
 
 macro_rules! try_call {
     ($lib:expr, $call:expr) => {{
-        let status = unsafe { $call };
+        let status = $call;
         if status == _notmuch_status_NOTMUCH_STATUS_SUCCESS {
             Ok(())
         } else {
-            let c_str = unsafe { call!($lib, notmuch_status_to_string)(status) };
-            Err(NotmuchError(unsafe {
-                CStr::from_ptr(c_str).to_string_lossy().into_owned()
-            }))
+            let c_str = call!($lib, notmuch_status_to_string)(status);
+            Err(NotmuchError(
+                CStr::from_ptr(c_str).to_string_lossy().into_owned(),
+            ))
         }
     }};
 }
@@ -551,14 +551,16 @@ impl MailBackend for NotmuchDb {
                                 let database_lck = database.inner.read().unwrap();
                                 index.write().unwrap().retain(|&env_hash, msg_id| {
                                     let mut message: *mut notmuch_message_t = std::ptr::null_mut();
-                                    if let Err(err) = try_call!(
-                                        lib,
-                                        call!(lib, notmuch_database_find_message)(
-                                            *database_lck,
-                                            msg_id.as_ptr(),
-                                            &mut message as *mut _,
+                                    if let Err(err) = unsafe {
+                                        try_call!(
+                                            lib,
+                                            call!(lib, notmuch_database_find_message)(
+                                                *database_lck,
+                                                msg_id.as_ptr(),
+                                                &mut message as *mut _,
+                                            )
                                         )
-                                    ) {
+                                    } {
                                         debug!(err);
                                         false
                                     } else {
@@ -638,6 +640,135 @@ impl MailBackend for NotmuchDb {
         Ok(Box::pin(async { Ok(()) }))
     }
 
+    fn set_flags(
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        _mailbox_hash: MailboxHash,
+        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+    ) -> ResultFuture<()> {
+        let database = Self::new_connection(self.path.as_path(), self.lib.clone(), true)?;
+        let tag_index = self.tag_index.clone();
+        let mut index_lck = self.index.write().unwrap();
+        for env_hash in env_hashes.iter() {
+            let mut message: *mut notmuch_message_t = std::ptr::null_mut();
+            unsafe {
+                call!(self.lib, notmuch_database_find_message)(
+                    *database.inner.read().unwrap(),
+                    index_lck[&env_hash].as_ptr(),
+                    &mut message as *mut _,
+                )
+            };
+            if message.is_null() {
+                return Err(MeliError::new(format!(
+                    "Error, message with path {:?} not found in notmuch database.",
+                    index_lck[&env_hash]
+                )));
+            }
+
+            let tags = TagIterator::new(self.lib.clone(), message).collect::<Vec<&CStr>>();
+            //flags.set(f, value);
+
+            macro_rules! cstr {
+                ($l:literal) => {
+                    &CStr::from_bytes_with_nul_unchecked($l)
+                };
+            }
+            macro_rules! add_tag {
+                ($l:literal) => {{
+                    add_tag!(unsafe { cstr!($l) })
+                }};
+                ($l:expr) => {{
+                    let l = $l;
+                    if tags.contains(l) {
+                        continue;
+                    }
+                    if let Err(err) = unsafe {
+                        try_call!(
+                            self.lib,
+                            call!(self.lib, notmuch_message_add_tag)(message, l.as_ptr())
+                        )
+                    } {
+                        return Err(
+                            MeliError::new("Could not set tag.").set_source(Some(Arc::new(err)))
+                        );
+                    }
+                }};
+            }
+            macro_rules! remove_tag {
+                ($l:literal) => {{
+                    remove_tag!(unsafe { cstr!($l) })
+                }};
+                ($l:expr) => {{
+                    let l = $l;
+                    if !tags.contains(l) {
+                        continue;
+                    }
+                    if let Err(err) = unsafe {
+                        try_call!(
+                            self.lib,
+                            call!(self.lib, notmuch_message_remove_tag)(message, l.as_ptr())
+                        )
+                    } {
+                        return Err(
+                            MeliError::new("Could not set tag.").set_source(Some(Arc::new(err)))
+                        );
+                    }
+                }};
+            }
+
+            for (f, v) in flags.iter() {
+                let value = *v;
+                match f {
+                    Ok(Flag::DRAFT) if value => add_tag!(b"draft\0"),
+                    Ok(Flag::DRAFT) => remove_tag!(b"draft\0"),
+                    Ok(Flag::FLAGGED) if value => add_tag!(b"flagged\0"),
+                    Ok(Flag::FLAGGED) => remove_tag!(b"flagged\0"),
+                    Ok(Flag::PASSED) if value => add_tag!(b"passed\0"),
+                    Ok(Flag::PASSED) => remove_tag!(b"passed\0"),
+                    Ok(Flag::REPLIED) if value => add_tag!(b"replied\0"),
+                    Ok(Flag::REPLIED) => remove_tag!(b"replied\0"),
+                    Ok(Flag::SEEN) if value => remove_tag!(b"unread\0"),
+                    Ok(Flag::SEEN) => add_tag!(b"unread\0"),
+                    Ok(Flag::TRASHED) if value => add_tag!(b"trashed\0"),
+                    Ok(Flag::TRASHED) => remove_tag!(b"trashed\0"),
+                    Ok(_) => debug!("flags is {:?} value = {}", f, value),
+                    Err(tag) if value => {
+                        let c_tag = CString::new(tag.as_str()).unwrap();
+                        add_tag!(&c_tag.as_ref());
+                    }
+                    Err(tag) => {
+                        let c_tag = CString::new(tag.as_str()).unwrap();
+                        add_tag!(&c_tag.as_ref());
+                    }
+                }
+            }
+
+            /* Update message filesystem path. */
+            if let Err(err) = unsafe {
+                try_call!(
+                    self.lib,
+                    call!(self.lib, notmuch_message_tags_to_maildir_flags)(message)
+                )
+            } {
+                return Err(MeliError::new("Could not set flags.").set_source(Some(Arc::new(err))));
+            }
+
+            let msg_id = unsafe { call!(self.lib, notmuch_message_get_message_id)(message) };
+            let c_str = unsafe { CStr::from_ptr(msg_id) };
+            if let Some(p) = index_lck.get_mut(&env_hash) {
+                *p = c_str.into();
+            }
+        }
+        for (f, v) in flags.iter() {
+            if let (Err(tag), true) = (f, v) {
+                let hash = tag_hash!(tag);
+                tag_index.write().unwrap().insert(hash, tag.to_string());
+            }
+        }
+
+        Ok(Box::pin(async { Ok(()) }))
+    }
+
     fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
@@ -690,139 +821,6 @@ impl BackendOp for NotmuchOp {
         };
         let (flags, _tags) = TagIterator::new(self.lib.clone(), message).collect_flags_and_tags();
         Ok(Box::pin(async move { Ok(flags) }))
-    }
-
-    fn set_flag(&mut self, f: Flag, value: bool) -> ResultFuture<()> {
-        let mut flags = futures::executor::block_on(self.fetch_flags()?)?;
-        flags.set(f, value);
-        let mut message: *mut notmuch_message_t = std::ptr::null_mut();
-        let mut index_lck = self.index.write().unwrap();
-        unsafe {
-            call!(self.lib, notmuch_database_find_message)(
-                *self.database.inner.read().unwrap(),
-                index_lck[&self.hash].as_ptr(),
-                &mut message as *mut _,
-            )
-        };
-        if message.is_null() {
-            return Err(MeliError::new(format!(
-                "Error, message with path {:?} not found in notmuch database.",
-                index_lck[&self.hash]
-            )));
-        }
-
-        // TODO: freeze/thaw message.
-        let tags = TagIterator::new(self.lib.clone(), message).collect::<Vec<&CStr>>();
-        debug!(&tags);
-
-        macro_rules! cstr {
-            ($l:literal) => {
-                CStr::from_bytes_with_nul_unchecked($l)
-            };
-        }
-        macro_rules! add_tag {
-            ($l:literal) => {{
-                if tags.contains(unsafe { &cstr!($l) }) {
-                    return Ok(Box::pin(async { Ok(()) }));
-                }
-                if let Err(err) = try_call!(
-                    self.lib,
-                    call!(self.lib, notmuch_message_add_tag)(message, cstr!($l).as_ptr())
-                ) {
-                    return Err(
-                        MeliError::new("Could not set tag.").set_source(Some(Arc::new(err)))
-                    );
-                }
-            }};
-        }
-        macro_rules! remove_tag {
-            ($l:literal) => {{
-                if !tags.contains(unsafe { &cstr!($l) }) {
-                    return Ok(Box::pin(async { Ok(()) }));
-                }
-                if let Err(err) = try_call!(
-                    self.lib,
-                    call!(self.lib, notmuch_message_remove_tag)(message, cstr!($l).as_ptr())
-                ) {
-                    return Err(
-                        MeliError::new("Could not set tag.").set_source(Some(Arc::new(err)))
-                    );
-                }
-            }};
-        }
-
-        match f {
-            Flag::DRAFT if value => add_tag!(b"draft\0"),
-            Flag::DRAFT => remove_tag!(b"draft\0"),
-            Flag::FLAGGED if value => add_tag!(b"flagged\0"),
-            Flag::FLAGGED => remove_tag!(b"flagged\0"),
-            Flag::PASSED if value => add_tag!(b"passed\0"),
-            Flag::PASSED => remove_tag!(b"passed\0"),
-            Flag::REPLIED if value => add_tag!(b"replied\0"),
-            Flag::REPLIED => remove_tag!(b"replied\0"),
-            Flag::SEEN if value => remove_tag!(b"unread\0"),
-            Flag::SEEN => add_tag!(b"unread\0"),
-            Flag::TRASHED if value => add_tag!(b"trashed\0"),
-            Flag::TRASHED => remove_tag!(b"trashed\0"),
-            _ => debug!("flags is {:?} value = {}", f, value),
-        }
-
-        /* Update message filesystem path. */
-        if let Err(err) = try_call!(
-            self.lib,
-            call!(self.lib, notmuch_message_tags_to_maildir_flags)(message)
-        ) {
-            return Err(MeliError::new("Could not set tag.").set_source(Some(Arc::new(err))));
-        }
-
-        let msg_id = unsafe { call!(self.lib, notmuch_message_get_message_id)(message) };
-        let c_str = unsafe { CStr::from_ptr(msg_id) };
-        if let Some(p) = index_lck.get_mut(&self.hash) {
-            *p = c_str.into();
-        }
-
-        Ok(Box::pin(async { Ok(()) }))
-    }
-
-    fn set_tag(&mut self, tag: String, value: bool) -> ResultFuture<()> {
-        let mut message: *mut notmuch_message_t = std::ptr::null_mut();
-        let index_lck = self.index.read().unwrap();
-        unsafe {
-            call!(self.lib, notmuch_database_find_message)(
-                *self.database.inner.read().unwrap(),
-                index_lck[&self.hash].as_ptr(),
-                &mut message as *mut _,
-            )
-        };
-        if message.is_null() {
-            return Err(MeliError::new(format!(
-                "Error, message with path {:?} not found in notmuch database.",
-                index_lck[&self.hash]
-            )));
-        }
-        let c_tag = CString::new(tag.as_str()).unwrap();
-        if value {
-            if let Err(err) = try_call!(
-                self.lib,
-                call!(self.lib, notmuch_message_add_tag)(message, c_tag.as_ptr(),)
-            ) {
-                return Err(MeliError::new("Could not set tag.").set_source(Some(Arc::new(err))));
-            }
-            debug!("added tag {}", &tag);
-        } else {
-            if let Err(err) = try_call!(
-                self.lib,
-                call!(self.lib, notmuch_message_remove_tag)(message, c_tag.as_ptr(),)
-            ) {
-                return Err(MeliError::new("Could not set tag.").set_source(Some(Arc::new(err))));
-            }
-            debug!("removed tag {}", &tag);
-        }
-        let hash = tag_hash!(tag);
-        if value {
-            self.tag_index.write().unwrap().insert(hash, tag);
-        }
-        Ok(Box::pin(async { Ok(()) }))
     }
 }
 
@@ -976,11 +974,13 @@ impl<'s> Query<'s> {
 
     fn count(&self) -> Result<u32> {
         let mut count = 0_u32;
-        try_call!(
-            self.lib,
-            call!(self.lib, notmuch_query_count_messages)(self.ptr, &mut count as *mut _)
-        )
-        .map_err(|err| err.0)?;
+        unsafe {
+            try_call!(
+                self.lib,
+                call!(self.lib, notmuch_query_count_messages)(self.ptr, &mut count as *mut _)
+            )
+            .map_err(|err| err.0)?;
+        }
         Ok(count)
     }
 

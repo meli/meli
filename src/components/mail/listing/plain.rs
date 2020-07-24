@@ -1011,19 +1011,25 @@ impl PlainListing {
 
     fn perform_action(&mut self, context: &mut Context, env_hash: EnvelopeHash, a: &ListingAction) {
         let account = &mut context.accounts[self.cursor_pos.0];
-        let hash = account.collection.get_env(env_hash).hash();
-        match account.operation(hash).and_then(|op| {
-            let mut envelope: EnvelopeRefMut = account.collection.get_env_mut(env_hash);
+        match {
             match a {
-                ListingAction::SetSeen => envelope.set_seen(op),
-                ListingAction::SetUnseen => envelope.set_unseen(op),
+                ListingAction::SetSeen => account.backend.write().unwrap().set_flags(
+                    env_hash.into(),
+                    self.cursor_pos.1,
+                    smallvec::smallvec![(Ok(Flag::SEEN), true)],
+                ),
+                ListingAction::SetUnseen => account.backend.write().unwrap().set_flags(
+                    env_hash.into(),
+                    self.cursor_pos.1,
+                    smallvec::smallvec![(Ok(Flag::SEEN), false)],
+                ),
                 ListingAction::Delete => {
                     /* do nothing */
                     Err(MeliError::new("Delete is unimplemented"))
                 }
                 _ => unreachable!(),
             }
-        }) {
+        } {
             Err(e) => {
                 context
                     .replies
@@ -1295,8 +1301,7 @@ impl Component for PlainListing {
                             .job_executor
                             .spawn_specialized(job);
                         context.accounts[self.cursor_pos.0]
-                            .active_jobs
-                            .insert(job_id, crate::conf::accounts::JobRequest::Search(handle));
+                            .insert_job(job_id, crate::conf::accounts::JobRequest::Search(handle));
                         self.search_job = Some((filter_term.to_string(), chan, job_id));
                     }
                     Err(err) => {

@@ -335,6 +335,31 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
         mailbox_hash: MailboxHash,
         flags: Option<Flag>,
     ) -> ResultFuture<()>;
+    fn copy_messages(
+        &mut self,
+        _env_hashes: EnvelopeHashBatch,
+        _source_mailbox_hash: MailboxHash,
+        _destination_mailbox_hash: MailboxHash,
+        _move_: bool,
+        _destination_flags: Option<Flag>,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+    fn set_flags(
+        &mut self,
+        _env_hashes: EnvelopeHashBatch,
+        _mailbox_hash: MailboxHash,
+        _flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
+    fn delete_messages(
+        &self,
+        _env_hashes: EnvelopeHashBatch,
+        _mailbox_hash: MailboxHash,
+    ) -> ResultFuture<()> {
+        Err(MeliError::new("Unimplemented."))
+    }
     fn delete(&self, _env_hash: EnvelopeHash, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
         Err(MeliError::new("Unimplemented."))
     }
@@ -431,12 +456,7 @@ pub trait MailBackend: ::std::fmt::Debug + Send + Sync {
 /// ```
 pub trait BackendOp: ::std::fmt::Debug + ::std::marker::Send {
     fn as_bytes(&mut self) -> ResultFuture<Vec<u8>>;
-    fn copy_to(&self, _mailbox_hash: MailboxHash) -> ResultFuture<()> {
-        Err(MeliError::new("Unimplemented."))
-    }
     fn fetch_flags(&self) -> ResultFuture<Flag>;
-    fn set_flag(&mut self, flag: Flag, value: bool) -> ResultFuture<()>;
-    fn set_tag(&mut self, tag: String, value: bool) -> ResultFuture<()>;
 }
 
 /// Wrapper for BackendOps that are to be set read-only.
@@ -460,12 +480,6 @@ impl BackendOp for ReadOnlyOp {
     }
     fn fetch_flags(&self) -> ResultFuture<Flag> {
         self.op.fetch_flags()
-    }
-    fn set_flag(&mut self, _flag: Flag, _value: bool) -> ResultFuture<()> {
-        Err(MeliError::new("read-only set."))
-    }
-    fn set_tag(&mut self, _tag: String, _value: bool) -> ResultFuture<()> {
-        Err(MeliError::new("read-only set."))
     }
 }
 
@@ -649,5 +663,40 @@ impl Default for MailboxPermissions {
 impl std::fmt::Display for MailboxPermissions {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(fmt, "{:#?}", self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnvelopeHashBatch {
+    pub first: EnvelopeHash,
+    pub rest: SmallVec<[EnvelopeHash; 64]>,
+}
+
+impl From<EnvelopeHash> for EnvelopeHashBatch {
+    fn from(value: EnvelopeHash) -> Self {
+        EnvelopeHashBatch {
+            first: value,
+            rest: SmallVec::new(),
+        }
+    }
+}
+
+impl std::convert::TryFrom<&[EnvelopeHash]> for EnvelopeHashBatch {
+    type Error = ();
+
+    fn try_from(value: &[EnvelopeHash]) -> std::result::Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err(());
+        }
+        Ok(EnvelopeHashBatch {
+            first: value[0],
+            rest: value[1..].iter().cloned().collect(),
+        })
+    }
+}
+
+impl EnvelopeHashBatch {
+    fn iter(&self) -> impl std::iter::Iterator<Item = EnvelopeHash> + '_ {
+        std::iter::once(self.first).chain(self.rest.iter().cloned())
     }
 }

@@ -446,6 +446,202 @@ impl MailBackend for ImapType {
         }))
     }
 
+    fn copy_messages(
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        source_mailbox_hash: MailboxHash,
+        destination_mailbox_hash: MailboxHash,
+        move_: bool,
+        destination_flags: Option<Flag>,
+    ) -> ResultFuture<()> {
+        let uid_store = self.uid_store.clone();
+        let connection = self.connection.clone();
+        Ok(Box::pin(async move {
+            let dest_path = {
+                let mailboxes = uid_store.mailboxes.lock().await;
+                let mailbox = mailboxes
+                    .get(&source_mailbox_hash)
+                    .ok_or_else(|| MeliError::new("Source mailbox not found"))?;
+                if move_ && !mailbox.permissions.lock().unwrap().delete_messages {
+                    return Err(MeliError::new(format!(
+                        "You are not allowed to delete messages from mailbox {}",
+                        mailbox.path()
+                    )));
+                }
+                let mailbox = mailboxes
+                    .get(&destination_mailbox_hash)
+                    .ok_or_else(|| MeliError::new("Destination mailbox not found"))?;
+                if !mailbox.permissions.lock().unwrap().create_messages {
+                    return Err(MeliError::new(format!(
+                        "You are not allowed to delete messages from mailbox {}",
+                        mailbox.path()
+                    )));
+                }
+
+                mailbox.imap_path().to_string()
+            };
+            let mut response = String::with_capacity(8 * 1024);
+            let mut conn = connection.lock().await;
+            conn.select_mailbox(source_mailbox_hash, &mut response, false)
+                .await?;
+            let command = {
+                let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                let mut cmd = format!("UID COPY {}", hash_index_lck[&env_hashes.first].0);
+                for env_hash in &env_hashes.rest {
+                    cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
+                }
+                format!("{} \"{}\"", cmd, dest_path)
+            };
+            conn.send_command(command.as_bytes()).await?;
+            conn.read_response(&mut response, RequiredResponses::empty())
+                .await?;
+            if let Some(_flags) = destination_flags {
+                //FIXME
+            }
+            if move_ {
+                let command = {
+                    let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                    let mut cmd = format!("UID STORE {}", hash_index_lck[&env_hashes.first].0);
+                    for env_hash in env_hashes.rest {
+                        cmd = format!("{},{}", cmd, hash_index_lck[&env_hash].0);
+                    }
+                    format!("{} +FLAGS.SILENT (\\Deleted)", cmd)
+                };
+                conn.send_command(command.as_bytes()).await?;
+                conn.read_response(&mut response, RequiredResponses::empty())
+                    .await?;
+            }
+            Ok(())
+        }))
+    }
+
+    fn set_flags(
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
+        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+    ) -> ResultFuture<()> {
+        let connection = self.connection.clone();
+        let uid_store = self.uid_store.clone();
+        Ok(Box::pin(async move {
+            let mut response = String::with_capacity(8 * 1024);
+            let mut conn = connection.lock().await;
+            conn.select_mailbox(mailbox_hash, &mut response, false)
+                .await?;
+            if flags.iter().any(|(_, b)| *b) {
+                /* Set flags/tags to true */
+                let command = {
+                    let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                    let mut cmd = format!("UID STORE {}", hash_index_lck[&env_hashes.first].0);
+                    for env_hash in &env_hashes.rest {
+                        cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
+                    }
+                    cmd = format!("{} +FLAGS.SILENT (", cmd);
+                    for (f, v) in flags.iter() {
+                        if !*v {
+                            continue;
+                        }
+                        match f {
+                            Ok(flag) if *flag == Flag::REPLIED => {
+                                cmd.push_str("\\Answered ");
+                            }
+                            Ok(flag) if *flag == Flag::FLAGGED => {
+                                cmd.push_str("\\Flagged ");
+                            }
+                            Ok(flag) if *flag == Flag::TRASHED => {
+                                cmd.push_str("\\Deleted ");
+                            }
+                            Ok(flag) if *flag == Flag::SEEN => {
+                                cmd.push_str("\\Seen ");
+                            }
+                            Ok(flag) if *flag == Flag::DRAFT => {
+                                cmd.push_str("\\Draft ");
+                            }
+                            Ok(_) => {
+                                crate::log(
+                                    format!(
+                        "Application error: more than one flag bit set in set_flags: {:?}", flags
+                    ),
+                                    crate::ERROR,
+                                );
+                                return Err(MeliError::new(format!(
+                        "Application error: more than one flag bit set in set_flags: {:?}", flags
+                    )));
+                            }
+                            Err(tag) => {
+                                cmd.push_str(tag);
+                                cmd.push(' ');
+                            }
+                        }
+                    }
+                    // pop last space
+                    cmd.pop();
+                    cmd.push(')');
+                    cmd
+                };
+                conn.send_command(command.as_bytes()).await?;
+                conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)
+                    .await?;
+            }
+            if flags.iter().any(|(_, b)| !*b) {
+                /* Set flags/tags to false */
+                let command = {
+                    let hash_index_lck = uid_store.hash_index.lock().unwrap();
+                    let mut cmd = format!("UID STORE {}", hash_index_lck[&env_hashes.first].0);
+                    for env_hash in &env_hashes.rest {
+                        cmd = format!("{},{}", cmd, hash_index_lck[env_hash].0);
+                    }
+                    cmd = format!("{} -FLAGS.SILENT (", cmd);
+                    for (f, v) in flags.iter() {
+                        if *v {
+                            continue;
+                        }
+                        match f {
+                            Ok(flag) if *flag == Flag::REPLIED => {
+                                cmd.push_str("\\Answered ");
+                            }
+                            Ok(flag) if *flag == Flag::FLAGGED => {
+                                cmd.push_str("\\Flagged ");
+                            }
+                            Ok(flag) if *flag == Flag::TRASHED => {
+                                cmd.push_str("\\Deleted ");
+                            }
+                            Ok(flag) if *flag == Flag::SEEN => {
+                                cmd.push_str("\\Seen ");
+                            }
+                            Ok(flag) if *flag == Flag::DRAFT => {
+                                cmd.push_str("\\Draft ");
+                            }
+                            Ok(_) => {
+                                crate::log(
+                                    format!(
+                        "Application error: more than one flag bit set in set_flags: {:?}", flags
+                    ),
+                                    crate::ERROR,
+                                );
+                                return Err(MeliError::new(format!(
+                        "Application error: more than one flag bit set in set_flags: {:?}", flags
+                    )));
+                            }
+                            Err(tag) => {
+                                cmd.push_str(tag);
+                                cmd.push(' ');
+                            }
+                        }
+                    }
+                    // pop last space
+                    cmd.pop();
+                    cmd.push(')');
+                    cmd
+                };
+                conn.send_command(command.as_bytes()).await?;
+                conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)
+                    .await?;
+            }
+            Ok(())
+        }))
+    }
+
     fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }

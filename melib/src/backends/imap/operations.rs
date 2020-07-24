@@ -23,7 +23,7 @@ use super::*;
 
 use crate::backends::*;
 use crate::email::*;
-use crate::error::{MeliError, Result};
+use crate::error::MeliError;
 use std::sync::Arc;
 
 /// `BackendOp` implementor for Imap
@@ -157,96 +157,6 @@ impl BackendOp for ImapOp {
                 };
                 Ok(val.unwrap())
             }
-        }))
-    }
-
-    fn set_flag(
-        &mut self,
-        flag: Flag,
-        value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
-        let flags = self.fetch_flags()?;
-
-        let mut response = String::with_capacity(8 * 1024);
-        let connection = self.connection.clone();
-        let mailbox_hash = self.mailbox_hash;
-        let uid = self.uid;
-        let uid_store = self.uid_store.clone();
-        Ok(Box::pin(async move {
-            let mut flags = flags.await?;
-            flags.set(flag, value);
-            let mut conn = connection.lock().await;
-            conn.select_mailbox(mailbox_hash, &mut response, false)
-                .await?;
-            debug!(&response);
-            conn.send_command(
-                format!(
-                    "UID STORE {} FLAGS.SILENT ({})",
-                    uid,
-                    flags_to_imap_list!(flags)
-                )
-                .as_bytes(),
-            )
-            .await?;
-            conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)
-                .await?;
-            debug!(&response);
-            match protocol_parser::uid_fetch_flags_response(response.as_bytes())
-                .map(|(_, v)| v)
-                .map_err(MeliError::from)
-            {
-                Ok(v) => {
-                    if v.len() == 1 {
-                        debug!("responses len is {}", v.len());
-                        let (_uid, (_flags, _)) = v[0];
-                        assert_eq!(_uid, uid);
-                    }
-                }
-                Err(e) => Err(e)?,
-            }
-            let mut bytes_cache = uid_store.byte_cache.lock()?;
-            let cache = bytes_cache.entry(uid).or_default();
-            cache.flags = Some(flags);
-            Ok(())
-        }))
-    }
-
-    fn set_tag(
-        &mut self,
-        tag: String,
-        value: bool,
-    ) -> Result<Pin<Box<dyn Future<Output = Result<()>> + Send>>> {
-        let mut response = String::with_capacity(8 * 1024);
-        let connection = self.connection.clone();
-        let mailbox_hash = self.mailbox_hash;
-        let uid = self.uid;
-        let uid_store = self.uid_store.clone();
-        Ok(Box::pin(async move {
-            let mut conn = connection.lock().await;
-            conn.select_mailbox(mailbox_hash, &mut response, false)
-                .await?;
-            conn.send_command(
-                format!(
-                    "UID STORE {} {}FLAGS.SILENT ({})",
-                    uid,
-                    if value { "+" } else { "-" },
-                    &tag
-                )
-                .as_bytes(),
-            )
-            .await?;
-            conn.read_response(&mut response, RequiredResponses::STORE_REQUIRED)
-                .await?;
-            protocol_parser::uid_fetch_flags_response(response.as_bytes())
-                .map(|(_, v)| v)
-                .map_err(MeliError::from)?;
-            let hash = tag_hash!(tag);
-            if value {
-                uid_store.tag_index.write().unwrap().insert(hash, tag);
-            } else {
-                uid_store.tag_index.write().unwrap().remove(&hash);
-            }
-            Ok(())
         }))
     }
 }

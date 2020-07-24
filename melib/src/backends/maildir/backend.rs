@@ -697,6 +697,76 @@ impl MailBackend for MaildirType {
         }))
     }
 
+    fn set_flags(
+        &mut self,
+        env_hashes: EnvelopeHashBatch,
+        mailbox_hash: MailboxHash,
+        flags: SmallVec<[(std::result::Result<Flag, String>, bool); 8]>,
+    ) -> ResultFuture<()> {
+        let hash_index = self.hash_indexes.clone();
+        if flags.iter().any(|(f, _)| f.is_err()) {
+            return Err(MeliError::new("Maildir doesn't support tags."));
+        }
+
+        Ok(Box::pin(async move {
+            let mut hash_indexes_lck = hash_index.lock().unwrap();
+            let hash_index = hash_indexes_lck.entry(mailbox_hash).or_default();
+
+            for env_hash in env_hashes.iter() {
+                let _path = {
+                    if !hash_index.contains_key(&env_hash) {
+                        continue;
+                    }
+                    if let Some(modif) = &hash_index[&env_hash].modified {
+                        match modif {
+                            PathMod::Path(ref path) => path.clone(),
+                            PathMod::Hash(hash) => hash_index[&hash].to_path_buf(),
+                        }
+                    } else {
+                        hash_index[&env_hash].to_path_buf()
+                    }
+                };
+                let mut env_flags = _path.flags();
+                let path = _path.to_str().unwrap(); // Assume UTF-8 validity
+                let idx: usize = path
+                    .rfind(":2,")
+                    .ok_or_else(|| MeliError::new(format!("Invalid email filename: {:?}", path)))?
+                    + 3;
+                let mut new_name: String = path[..idx].to_string();
+                for (f, value) in flags.iter() {
+                    env_flags.set(*f.as_ref().unwrap(), *value);
+                }
+
+                if !(env_flags & Flag::DRAFT).is_empty() {
+                    new_name.push('D');
+                }
+                if !(env_flags & Flag::FLAGGED).is_empty() {
+                    new_name.push('F');
+                }
+                if !(env_flags & Flag::PASSED).is_empty() {
+                    new_name.push('P');
+                }
+                if !(env_flags & Flag::REPLIED).is_empty() {
+                    new_name.push('R');
+                }
+                if !(env_flags & Flag::SEEN).is_empty() {
+                    new_name.push('S');
+                }
+                if !(env_flags & Flag::TRASHED).is_empty() {
+                    new_name.push('T');
+                }
+                let new_name: PathBuf = new_name.into();
+                hash_index.entry(env_hash).or_default().modified =
+                    Some(PathMod::Path(new_name.clone()));
+
+                debug!("renaming {:?} to {:?}", path, new_name);
+                fs::rename(&path, &new_name)?;
+                debug!("success in rename");
+            }
+            Ok(())
+        }))
+    }
+
     fn as_any(&self) -> &dyn ::std::any::Any {
         self
     }
