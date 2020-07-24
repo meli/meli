@@ -130,7 +130,11 @@ impl MailboxEntry {
     }
 
     pub fn name(&self) -> &str {
-        &self.name
+        if let Some(name) = self.conf.mailbox_conf.alias.as_ref() {
+            name
+        } else {
+            &self.ref_mailbox.name()
+        }
     }
 }
 

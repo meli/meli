@@ -1165,7 +1165,8 @@ impl Component for Listing {
         match account[&mailbox_hash].status {
             MailboxStatus::Available | MailboxStatus::Parsing(_, _) => format!(
                 "Mailbox: {}, Messages: {}, New: {}",
-                account[&mailbox_hash].ref_mailbox.name(),
+                account[&mailbox_hash].name(),
+                // FIXME
                 account.collection.get_mailbox(mailbox_hash).len(),
                 account[&mailbox_hash]
                     .ref_mailbox
@@ -1412,7 +1413,7 @@ impl Listing {
                 None,
             );
             let (x, _) = write_string_to_grid(
-                mailboxes[&mailbox_idx].name(),
+                context.accounts[a.index].mailbox_entries[&mailbox_idx].name(),
                 grid,
                 att.fg,
                 att.bg,
