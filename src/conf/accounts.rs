@@ -48,6 +48,7 @@ use futures::channel::oneshot;
 use futures::future::FutureExt;
 pub use futures::stream::Stream;
 use futures::stream::StreamExt;
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::fs;
 use std::io;
@@ -173,7 +174,7 @@ pub enum JobRequest {
         )>,
     ),
     Generic {
-        name: String,
+        name: Cow<'static, str>,
         handle: JoinHandle,
         channel: JobChannel<()>,
     },
