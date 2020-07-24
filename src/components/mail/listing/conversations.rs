@@ -26,64 +26,66 @@ use std::iter::FromIterator;
 
 macro_rules! row_attr {
     ($field:ident, $color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
-        let fg = if $unseen {
-            $color_cache.unseen.fg
-        } else if $highlighted {
-            $color_cache.highlighted.fg
-        } else if $selected {
-            $color_cache.selected.fg
-        } else {
-            $color_cache.$field.fg
-        };
-        let bg = if $unseen {
-            $color_cache.unseen.bg
-        } else if $highlighted {
-            $color_cache.highlighted.bg
-        } else if $selected {
-            $color_cache.selected.bg
-        } else {
-            $color_cache.$field.bg
-        };
-        let attrs = if $unseen {
-            $color_cache.unseen.attrs
-        } else if $highlighted {
-            $color_cache.highlighted.attrs
-        } else if $selected {
-            $color_cache.selected.attrs
-        } else {
-            $color_cache.$field.attrs
-        };
-        ThemeAttribute { fg, bg, attrs }
+        ThemeAttribute {
+            fg: if $highlighted {
+                $color_cache.highlighted.fg
+            } else if $selected {
+                $color_cache.selected.fg
+            } else if $unseen {
+                $color_cache.unseen.fg
+            } else {
+                $color_cache.$field.fg
+            },
+            bg: if $highlighted {
+                $color_cache.highlighted.bg
+            } else if $selected {
+                $color_cache.selected.bg
+            } else if $unseen {
+                $color_cache.unseen.bg
+            } else {
+                $color_cache.$field.bg
+            },
+            attrs: if $highlighted {
+                $color_cache.highlighted.attrs
+            } else if $selected {
+                $color_cache.selected.attrs
+            } else if $unseen {
+                $color_cache.unseen.attrs
+            } else {
+                $color_cache.$field.attrs
+            },
+        }
     }};
     ($color_cache:expr, $unseen:expr, $highlighted:expr, $selected:expr  $(,)*) => {{
-        let fg = if $unseen {
-            $color_cache.unseen.fg
-        } else if $highlighted {
-            $color_cache.highlighted.fg
-        } else if $selected {
-            $color_cache.selected.fg
-        } else {
-            $color_cache.theme_default.fg
-        };
-        let bg = if $unseen {
-            $color_cache.unseen.bg
-        } else if $highlighted {
-            $color_cache.highlighted.bg
-        } else if $selected {
-            $color_cache.selected.bg
-        } else {
-            $color_cache.theme_default.bg
-        };
-        let attrs = if $unseen {
-            $color_cache.unseen.attrs
-        } else if $highlighted {
-            $color_cache.highlighted.attrs
-        } else if $selected {
-            $color_cache.selected.attrs
-        } else {
-            $color_cache.theme_default.attrs
-        };
-        ThemeAttribute { fg, bg, attrs }
+        ThemeAttribute {
+            fg: if $highlighted {
+                $color_cache.highlighted.fg
+            } else if $selected {
+                $color_cache.selected.fg
+            } else if $unseen {
+                $color_cache.unseen.fg
+            } else {
+                $color_cache.theme_default.fg
+            },
+            bg: if $highlighted {
+                $color_cache.highlighted.bg
+            } else if $selected {
+                $color_cache.selected.bg
+            } else if $unseen {
+                $color_cache.unseen.bg
+            } else {
+                $color_cache.theme_default.bg
+            },
+            attrs: if $highlighted {
+                $color_cache.highlighted.attrs
+            } else if $selected {
+                $color_cache.selected.attrs
+            } else if $unseen {
+                $color_cache.unseen.attrs
+            } else {
+                $color_cache.theme_default.attrs
+            },
+        }
     }};
 }
 
@@ -1057,7 +1059,7 @@ impl ConversationsListing {
         }
         let subject_attr = row_attr!(subject, self.color_cache, thread.unseen() > 0, false, false);
         /* draw subject */
-        let (x, _) = write_string_to_grid(
+        let (mut x, _) = write_string_to_grid(
             &strings.subject,
             &mut self.content,
             subject_attr.fg,
@@ -1066,40 +1068,34 @@ impl ConversationsListing {
             ((x, 3 * idx), (width - 1, 3 * idx)),
             None,
         );
-        let x = {
-            let mut x = x + 1;
-            for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
-                let color = color.unwrap_or(self.color_cache.tag_default.bg);
-                let (_x, _) = write_string_to_grid(
-                    t,
-                    &mut self.content,
-                    self.color_cache.tag_default.fg,
-                    color,
-                    self.color_cache.tag_default.attrs,
-                    ((x + 1, 3 * idx), (width - 1, 3 * idx)),
-                    None,
-                );
-                for c in self.content.row_iter(x..(x + 1), 3 * idx) {
-                    self.content[c].set_bg(color);
-                }
-                for c in self.content.row_iter(_x..(_x + 1), 3 * idx) {
-                    self.content[c].set_bg(color);
-                    self.content[c].set_keep_bg(true);
-                }
-                for c in self.content.row_iter(x + 1..(_x + 1), 3 * idx) {
-                    self.content[c].set_keep_fg(true);
-                    self.content[c].set_keep_bg(true);
-                }
-                for c in self.content.row_iter(x..(x + 1), 3 * idx) {
-                    self.content[c].set_keep_bg(true);
-                }
-                x = _x + 1;
+        for (t, &color) in strings.tags.split_whitespace().zip(strings.tags.1.iter()) {
+            let color = color.unwrap_or(self.color_cache.tag_default.bg);
+            let (_x, _) = write_string_to_grid(
+                t,
+                &mut self.content,
+                self.color_cache.tag_default.fg,
+                color,
+                self.color_cache.tag_default.attrs,
+                ((x + 1, 3 * idx), (width - 1, 3 * idx)),
+                None,
+            );
+            self.content[(x, 3 * idx)].set_bg(color);
+            if _x < width {
+                self.content[(_x, 3 * idx)].set_bg(color).set_keep_bg(true);
             }
-            x
-        };
+            for x in (x + 1).._x {
+                self.content[(x, 3 * idx)]
+                    .set_keep_fg(true)
+                    .set_keep_bg(true);
+            }
+            self.content[(x, 3 * idx)].set_keep_bg(true);
+            x = _x + 1;
+        }
         for c in self.content.row_iter(x..width, 3 * idx) {
-            self.content[c].set_ch(' ');
-            self.content[c].set_bg(row_attr.bg);
+            self.content[c]
+                .set_ch(' ')
+                .set_fg(row_attr.fg)
+                .set_bg(row_attr.bg);
         }
         let date_attr = row_attr!(date, self.color_cache, thread.unseen() > 0, false, false);
         /* Next line, draw date */
@@ -1112,9 +1108,11 @@ impl ConversationsListing {
             ((0, 3 * idx + 1), (width - 1, 3 * idx + 1)),
             None,
         );
-        for c in self.content.row_iter(x..(x + 5), 3 * idx + 1) {
-            self.content[c].set_ch('▁');
-            self.content[c].set_bg(row_attr.bg);
+        for c in self.content.row_iter(x..(x + 4), 3 * idx + 1) {
+            self.content[c]
+                .set_ch('▁')
+                .set_fg(row_attr.fg)
+                .set_bg(row_attr.bg);
         }
         let from_attr = row_attr!(from, self.color_cache, thread.unseen() > 0, false, false);
         /* draw from */
@@ -1129,13 +1127,16 @@ impl ConversationsListing {
         );
 
         for c in self.content.row_iter(x..width, 3 * idx + 1) {
-            self.content[c].set_ch('▁');
-            self.content[c].set_bg(row_attr.bg);
+            self.content[c]
+                .set_ch('▁')
+                .set_fg(row_attr.fg)
+                .set_bg(row_attr.bg);
         }
         for c in self.content.row_iter(0..width, 3 * idx + 2) {
-            self.content[c].set_ch('▓');
-            self.content[c].set_fg(padding_fg);
-            self.content[c].set_bg(row_attr.bg);
+            self.content[c]
+                .set_ch('▓')
+                .set_fg(padding_fg)
+                .set_bg(row_attr.bg);
         }
     }
 }

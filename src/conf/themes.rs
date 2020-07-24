@@ -1512,9 +1512,11 @@ impl Default for Themes {
             "mail.listing.conversations.highlighted",
             dark = {
                 bg: Color::Byte(246),
+                attrs: Attr::BOLD,
             },
             light = {
-                bg: Color::Byte(246)
+                bg: Color::Byte(246),
+                attrs: Attr::BOLD,
             }
         );
         add!("mail.listing.conversations.selected",
