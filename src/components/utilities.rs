@@ -1163,7 +1163,8 @@ impl Component for StatusBar {
                 self.status = format!("{} | {}", self.mode, std::mem::replace(s, String::new()));
                 self.dirty = true;
             }
-            UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)) => {
+            UIEvent::StatusEvent(StatusEvent::JobCanceled(ref job_id))
+            | UIEvent::StatusEvent(StatusEvent::JobFinished(ref job_id)) => {
                 self.in_progress_jobs.remove(job_id);
                 if self.in_progress_jobs.is_empty() {
                     self.progress_spinner.stop();
