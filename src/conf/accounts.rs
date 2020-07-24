@@ -534,7 +534,9 @@ impl Account {
                 continue;
             }
             mailbox_entries.entry(*h).and_modify(|entry| {
-                if entry.conf.mailbox_conf.autoload {
+                if entry.conf.mailbox_conf.autoload
+                    || entry.ref_mailbox.special_usage() == SpecialUsageMailbox::Inbox
+                {
                     entry.status = MailboxStatus::Parsing(0, 0);
                     if self.is_async {
                         if let Ok(mailbox_job) = self.backend.write().unwrap().fetch_async(*h) {
