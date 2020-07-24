@@ -525,10 +525,12 @@ impl ImapConnection {
                             ret.push_str(&response);
                         }
                         ImapResponse::No(ref response_code) => {
+                            //FIXME return error
                             debug!("Received NO response: {:?} {:?}", response_code, response);
                             ret.push_str(&response);
                         }
                         ImapResponse::Bad(ref response_code) => {
+                            //FIXME return error
                             debug!("Received BAD response: {:?} {:?}", response_code, response);
                             ret.push_str(&response);
                         }

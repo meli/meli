@@ -682,6 +682,13 @@ impl MailBackend for ImapType {
 
             {
                 let mailboxes = uid_store.mailboxes.lock().await;
+
+                if mailboxes.values().any(|f| f.path == path) {
+                    return Err(MeliError::new(format!(
+                        "Mailbox named `{}` already exists.",
+                        path,
+                    )));
+                }
                 for root_mailbox in mailboxes.values().filter(|f| f.parent.is_none()) {
                     if path.starts_with(&root_mailbox.name) {
                         debug!("path starts with {:?}", &root_mailbox);
@@ -693,12 +700,8 @@ impl MailBackend for ImapType {
                     }
                 }
 
-                if mailboxes.values().any(|f| f.path == path) {
-                    return Err(MeliError::new(format!(
-                        "Mailbox named `{}` already exists.",
-                        path,
-                    )));
-                }
+                /* FIXME  Do not try to CREATE a sub-mailbox in a mailbox that has the \Noinferiors
+                 * flag set. */
             }
 
             let mut response = String::with_capacity(8 * 1024);
@@ -1386,7 +1389,6 @@ async fn fetch_hlpr(
             permissions.remove_messages = !examine_response.read_only;
             permissions.set_flags = !examine_response.read_only;
             permissions.rename_messages = !examine_response.read_only;
-            permissions.delete_messages = !examine_response.read_only;
             permissions.delete_messages = !examine_response.read_only;
             mailbox_exists
                 .lock()

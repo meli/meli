@@ -539,6 +539,7 @@ pub fn uid_fetch_response(input: &str) -> ImapParseResult<UidFetchResponse<'_>> 
     let mut has_attachments = false;
     while i < input.len() {
         eat_whitespace!(break);
+        bounds!(break);
 
         if input[i..].starts_with("UID ") {
             i += "UID ".len();
@@ -877,12 +878,12 @@ pub enum UntaggedResponse {
 }
 
 pub fn untagged_responses(input: &[u8]) -> IResult<&[u8], Option<UntaggedResponse>> {
-    debug!("Parse untagged response from {:?}", to_str!(input));
     let (input, _) = tag("* ")(input)?;
     let (input, num) = map_res(digit1, |s| usize::from_str(to_str!(s)))(input)?;
     let (input, _) = tag(" ")(input)?;
     let (input, _tag) = take_until("\r\n")(input)?;
     let (input, _) = tag("\r\n")(input)?;
+    debug!("Parse untagged response from {:?}", to_str!(input));
     Ok((input, {
         use UntaggedResponse::*;
         match _tag {
