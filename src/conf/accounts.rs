@@ -37,6 +37,7 @@ use melib::thread::{SortField, SortOrder, Threads};
 use melib::AddressBook;
 use melib::Collection;
 use smallvec::SmallVec;
+use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
 
 use crate::types::UIEvent::{self, EnvelopeRemove, EnvelopeRename, EnvelopeUpdate, Notification};
@@ -149,6 +150,7 @@ pub struct Account {
 
     pub job_executor: Arc<JobExecutor>,
     pub active_jobs: HashMap<JobId, JobRequest>,
+    pub active_job_instants: BTreeMap<std::time::Instant, JobId>,
     sender: Sender<ThreadEvent>,
     event_queue: VecDeque<(MailboxHash, RefreshEvent)>,
     notify_fn: Arc<NotifyFn>,
@@ -357,12 +359,14 @@ impl Account {
         }
 
         let mut active_jobs = HashMap::default();
+        let mut active_job_instants = BTreeMap::default();
         if backend.is_async() {
             if let Ok(mailboxes_job) = backend.mailboxes_async() {
                 if let Ok(online_job) = backend.is_online_async() {
                     let (rcvr, handle, job_id) =
                         job_executor.spawn_specialized(online_job.then(|_| mailboxes_job));
                     active_jobs.insert(job_id, JobRequest::Mailboxes(handle, rcvr));
+                    active_job_instants.insert(std::time::Instant::now(), job_id);
                 }
             }
         }
@@ -387,6 +391,7 @@ impl Account {
             sender,
             job_executor,
             active_jobs,
+            active_job_instants,
             event_queue: VecDeque::with_capacity(8),
             is_async: backend.is_async(),
             is_remote: backend.is_remote(),
@@ -542,6 +547,8 @@ impl Account {
                                 .unwrap();
                             self.active_jobs
                                 .insert(job_id, JobRequest::Fetch(*h, handle, rcvr));
+                            self.active_job_instants
+                                .insert(std::time::Instant::now(), job_id);
                         }
                     } else {
                         entry.worker = match Account::new_worker(
@@ -911,6 +918,8 @@ impl Account {
                     .unwrap();
                 self.active_jobs
                     .insert(job_id, JobRequest::Refresh(mailbox_hash, handle, rcvr));
+                self.active_job_instants
+                    .insert(std::time::Instant::now(), job_id);
             }
         } else {
             let mut h = self.backend.write().unwrap().refresh(mailbox_hash, r)?;
@@ -1259,6 +1268,8 @@ impl Account {
             .unwrap();
         self.active_jobs
             .insert(job_id, JobRequest::SaveMessage(mailbox_hash, handle, rcvr));
+        self.active_job_instants
+            .insert(std::time::Instant::now(), job_id);
         Ok(())
     }
 
@@ -1328,9 +1339,11 @@ impl Account {
                 if complete_in_background {
                     self.active_jobs
                         .insert(job_id, JobRequest::SendMessageBackground(handle, chan));
+                    self.active_job_instants
+                        .insert(std::time::Instant::now(), job_id);
                     return Ok(None);
                 } else {
-                    self.active_jobs.insert(job_id, JobRequest::SendMessage);
+                    self.insert_job(job_id, JobRequest::SendMessage);
                 }
                 Ok(Some((job_id, handle, chan)))
             }
@@ -1556,10 +1569,10 @@ impl Account {
                 return Ok(());
             }
             if !self.active_jobs.values().any(JobRequest::is_online) {
-                if let Ok(online_job) = self.backend.read().unwrap().is_online_async() {
+                let online_job = self.backend.read().unwrap().is_online_async();
+                if let Ok(online_job) = online_job {
                     let (rcvr, handle, job_id) = self.job_executor.spawn_specialized(online_job);
-                    self.active_jobs
-                        .insert(job_id, JobRequest::IsOnline(handle, rcvr));
+                    self.insert_job(job_id, JobRequest::IsOnline(handle, rcvr));
                 }
             }
             return self.is_online.clone();
@@ -1654,6 +1667,8 @@ impl Account {
                                     self.job_executor.spawn_specialized(mailboxes_job);
                                 self.active_jobs
                                     .insert(job_id, JobRequest::Mailboxes(handle, rcvr));
+                                self.active_job_instants
+                                    .insert(std::time::Instant::now(), job_id);
                             }
                         }
                     }
@@ -1693,6 +1708,8 @@ impl Account {
                         .unwrap();
                     self.active_jobs
                         .insert(job_id, JobRequest::Fetch(mailbox_hash, handle, rcvr));
+                    self.active_job_instants
+                        .insert(std::time::Instant::now(), job_id);
                     let payload = payload.unwrap();
                     if let Err(err) = payload {
                         self.mailbox_entries
@@ -1754,6 +1771,8 @@ impl Account {
                             self.job_executor.spawn_specialized(online_job);
                         self.active_jobs
                             .insert(job_id, JobRequest::IsOnline(handle, rcvr));
+                        self.active_job_instants
+                            .insert(std::time::Instant::now(), job_id);
                     }
                 }
                 JobRequest::Refresh(_mailbox_hash, _, mut chan) => {
@@ -2005,6 +2024,12 @@ impl Account {
         } else {
             false
         }
+    }
+
+    pub fn insert_job(&mut self, job_id: JobId, job: JobRequest) {
+        self.active_jobs.insert(job_id, job);
+        self.active_job_instants
+            .insert(std::time::Instant::now(), job_id);
     }
 }
 
