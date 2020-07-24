@@ -1010,6 +1010,10 @@ impl Account {
         &self.name
     }
 
+    pub fn hash(&self) -> AccountHash {
+        self.hash
+    }
+
     pub fn load(&mut self, mailbox_hash: MailboxHash) -> result::Result<(), usize> {
         if mailbox_hash == 0 {
             return Err(0);
