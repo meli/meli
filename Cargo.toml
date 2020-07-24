@@ -22,6 +22,10 @@ path = "src/bin.rs"
 name = "managesieve"
 path = "src/managesieve.rs"
 
+#[[bin]]
+#name = "async"
+#path = "src/async.rs"
+
 [dependencies]
 xdg = "2.1.0"
 crossbeam = "0.7.2"
@@ -46,7 +50,7 @@ libc = {version = "0.2.59", features = ["extra_traits",]}
 rmp = "^0.8"
 rmpv = { version = "^0.4.2", features=["with-serde",] }
 rmp-serde = "^0.14.0"
-smallvec = { version = "1.1.0", features = ["serde", ] }
+smallvec = { version = "^1.4.0", features = ["serde", ] }
 bitflags = "1.0"
 pcre2 = { version = "0.2.3", optional = true }
 structopt = { version = "0.3.14", default-features = false }

@@ -39,6 +39,7 @@ extern crate uuid;
 
 extern crate bitflags;
 extern crate serde_json;
+#[macro_use]
 extern crate smallvec;
 extern crate termion;
 
