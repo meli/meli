@@ -244,7 +244,9 @@ define_commands!([
                        fn seen_flag<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
                            let (input, _) = tag("set")(input.trim())?;
                            let (input, _) = is_a(" ")(input)?;
-                           alt((map(tag("seen"), |_| Listing(SetSeen)), map(tag("unseen"), |_| Listing(SetUnseen))))(input)
+                           let (input, ret) = alt((map(tag("seen"), |_| Listing(SetSeen)), map(tag("unseen"), |_| Listing(SetUnseen))))(input)?;
+                           let (input, _) = eof(input)?;
+                           Ok((input, ret))
                        }
                      )
                  },
@@ -253,7 +255,9 @@ define_commands!([
                    tokens: &[One(Literal("delete"))],
                    parser: (
                        fn delete_message<'a>(input: &'a [u8]) -> IResult<&'a [u8], Action> {
-                           map(preceded(tag("delete"), eof), |_| Listing(Delete))(input)
+                           let (input, ret) = map(preceded(tag("delete"), eof), |_| Listing(Delete))(input)?;
+                           let (input, _) = eof(input)?;
+                           Ok((input, ret))
                        }
                    )
                  },
@@ -304,7 +308,9 @@ define_commands!([
                    tokens: &[One(Literal("close"))],
                    parser: (
                        fn close(input: &[u8]) -> IResult<&[u8], Action> {
-                           map(tag("close"), |_| Tab(Close))(input.trim())
+                           let (input, _) = tag("close")(input)?;
+                           let (input, _) = eof(input)?;
+                           Ok( (input, { Tab(Close) }))
                        }
                    )
                  },
@@ -315,7 +321,9 @@ define_commands!([
                        fn goto(input: &[u8]) -> IResult<&[u8], Action> {
                            let (input, _) = tag("go")(input)?;
                            let (input, _) = is_a(" ")(input)?;
-                           map(usize_c, Action::ViewMailbox)(input)
+                           let (input, nth) = usize_c(input)?;
+                           let (input, _) = eof(input)?;
+                           Ok( (input, { Action::ViewMailbox(nth) }))
                        }
                    )
                  },
@@ -327,6 +335,7 @@ define_commands!([
                            let (input, _) = tag("subsort")(input)?;
                            let (input, _) = is_a(" ")(input)?;
                            let (input, p) = pair(sortfield, sortorder)(input)?;
+                           let (input, _) = eof(input)?;
                            Ok((input, SubSort(p.0, p.1)))
                        }
                    )
@@ -339,6 +348,7 @@ define_commands!([
                           let (input, _) = tag("sort")(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, p) = separated_pair(sortfield, tag(" "), sortorder)(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input, (Sort(p.0, p.1))))
                       }
                   )},
@@ -349,7 +359,9 @@ define_commands!([
                       fn toggle(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("set")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
-                          alt((threaded, plain, compact, conversations))(input)
+                          let (input, ret) = alt((threaded, plain, compact, conversations))(input)?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, ret))
                       }
                   )
                 },
@@ -358,7 +370,9 @@ define_commands!([
                   tokens: &[One(Literal("toggle_thread_snooze"))],
                   parser: (
                       fn toggle_thread_snooze(input: &[u8]) -> IResult<&[u8], Action> {
-                          map(tag("toggle_thread_snooze"), |_| ToggleThreadSnooze)(input.trim())
+                          let (input, _) = tag("toggle_thread_snooze")(input.trim())?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, ToggleThreadSnooze))
                       }
                   )
                 },
@@ -370,6 +384,7 @@ define_commands!([
                           let (input, _) = tag("search")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, string) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input, Listing(Search(String::from(string)))))
                       }
                   )
@@ -382,6 +397,7 @@ define_commands!([
                           let (input, _) = tag("select")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, string) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input, Listing(Select(String::from(string)))))
                       }
                   )
@@ -391,7 +407,7 @@ define_commands!([
                   tokens: &[One(Alternatives(&[to_stream!(One(Literal("list-archive"))), to_stream!(One(Literal("list-post"))), to_stream!(One(Literal("list-unsubscribe")))]))],
                   parser: (
                       fn mailinglist(input: &[u8]) -> IResult<&[u8], Action> {
-                          alt((
+                          let (input, ret) = alt((
                               map(tag("list-post"), |_| MailingListAction(ListPost))
                               , map(tag("list-unsubscribe"), |_| MailingListAction(
                                       ListUnsubscribe
@@ -399,7 +415,9 @@ define_commands!([
                               , map(tag("list-archive"), |_| MailingListAction(
                                       ListArchive
                               ))
-                          ))(input.trim())
+                          ))(input.trim())?;
+                          let (input, _) = eof(input)?;
+                          Ok((input, ret))
                       }
                   )
                 },
@@ -413,6 +431,7 @@ define_commands!([
                           let (input, key) = map_res(take_until("="), std::str::from_utf8)(input)?;
                           let (input, _) = tag("=")(input.trim())?;
                           let (input, val) = map_res(not_line_ending, std::str::from_utf8)(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input, SetEnv(key.to_string(), val.to_string())))
                       }
                   )
@@ -425,6 +444,7 @@ define_commands!([
                           let (input, _) = tag("printenv")(input.ltrim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, key) = map_res(not_line_ending, std::str::from_utf8)(input.trim())?;
+                          let (input, _) = eof(input)?;
                           Ok((input, PrintEnv(key.to_string())))
                       }
                   )
@@ -442,18 +462,20 @@ define_commands!([
                                       let (input, bin) = quoted_argument(input)?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, args) = separated_list(is_a(" "), quoted_argument)(input)?;
+                                      let (input, _) = eof(input)?;
                                       Ok((input, {
                                           View(Pipe(bin.to_string(), args.into_iter().map(String::from).collect::<Vec<String>>()))
                                       }))
                                   },
-                                      |input: &'a [u8]| -> IResult<&'a [u8], Action> {
-                                          let (input, _) = tag("pipe")(input.trim())?;
-                                          let (input, _) = is_a(" ")(input)?;
-                                          let (input, bin) = quoted_argument(input.trim())?;
-                                          Ok((input, {
-                                              View(Pipe(bin.to_string(), Vec::new()))
-                                          }))
-                                      }
+                                  |input: &'a [u8]| -> IResult<&'a [u8], Action> {
+                                      let (input, _) = tag("pipe")(input.trim())?;
+                                      let (input, _) = is_a(" ")(input)?;
+                                      let (input, bin) = quoted_argument(input.trim())?;
+                                      let (input, _) = eof(input)?;
+                                      Ok((input, {
+                                          View(Pipe(bin.to_string(), Vec::new()))
+                                      }))
+                                  }
                           ))(input)
                       }
                   )
@@ -470,11 +492,13 @@ define_commands!([
                                       let (input, _) = tag("<")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, cmd) = quoted_argument(input)?;
+                                      let (input, _) = eof(input)?;
                                       Ok((input, Compose(AddAttachmentPipe(cmd.to_string()))))
                                   }, |input: &'a [u8]| -> IResult<&'a [u8], Action> {
                                       let (input, _) = tag("add-attachment")(input.trim())?;
                                       let (input, _) = is_a(" ")(input)?;
                                       let (input, path) = quoted_argument(input)?;
+                                      let (input, _) = eof(input)?;
                                       Ok((input, Compose(AddAttachment(path.to_string()))))
                                   }
                               ))(input)
@@ -489,6 +513,7 @@ define_commands!([
                           let (input, _) = tag("remove-attachment")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, idx) = map_res(quoted_argument, usize::from_str)(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input, Compose(RemoveAttachment(idx))))
                       }
                   )
@@ -512,6 +537,7 @@ define_commands!([
                           let (input, _) = tag("toggle")(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, _) = tag("sign")(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input, Compose(ToggleSign)))
                       }
                   )
@@ -526,6 +552,7 @@ define_commands!([
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input,Mailbox(account.to_string(), MailboxOperation::Create(path.to_string()))))
                       }
                   )
@@ -540,6 +567,7 @@ define_commands!([
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input,Mailbox(account.to_string(), MailboxOperation::Subscribe(path.to_string()))))
                       }
                   )
@@ -554,6 +582,7 @@ define_commands!([
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input, Mailbox(account.to_string(), MailboxOperation::Unsubscribe(path.to_string()))))
                       }
                   )
@@ -570,6 +599,7 @@ define_commands!([
                           let (input, src) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, dest) = quoted_argument(input)?;
+                          let (input, _) = eof(input)?;
                           Ok((input, Mailbox(account.to_string(), MailboxOperation::Rename(src.to_string(), dest.to_string()))))
                       }
                   )
@@ -584,6 +614,7 @@ define_commands!([
                           let (input, account) = quoted_argument(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input)?;
+                          let (input, _) = eof(input)?;
                           Ok ((input, Mailbox(account.to_string(), MailboxOperation::Delete(path.to_string()))))
                       }
                   )
@@ -596,6 +627,7 @@ define_commands!([
                           let (input, _) = tag("reindex")(input.trim())?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, account) = quoted_argument(input)?;
+                          let (input, _) = eof(input)?;
                           Ok( (input, AccountAction(account.to_string(), ReIndex)))
                       }
                   )
@@ -606,6 +638,7 @@ define_commands!([
                   parser:(
                       fn open_in_new_tab(input: &[u8]) -> IResult<&[u8], Action> {
                           let (input, _) = tag("open-in-tab")(input.trim())?;
+                          let (input, _) = eof(input)?;
                           Ok((input, Listing(OpenInNewTab)))
                       }
                   )
@@ -620,6 +653,7 @@ define_commands!([
                           let (input, idx) = map_res(quoted_argument, usize::from_str)(input)?;
                           let (input, _) = is_a(" ")(input)?;
                           let (input, path) = quoted_argument(input.trim())?;
+                          let (input, _) = eof(input)?;
                           Ok((input, View(SaveAttachment(idx, path.to_string()))))
                       }
                   )
@@ -635,11 +669,13 @@ define_commands!([
                                    let (input, _) = tag("add")(input.trim())?;
                                    let (input, _) = is_a(" ")(input)?;
                                    let (input, tag) = quoted_argument(input.trim())?;
+                                   let (input, _) = eof(input)?;
                                    Ok((input, Listing(Tag(Add(tag.to_string())))))
                                }, |input: &'a [u8]| -> IResult<&'a [u8], Action> {
                                    let (input, _) = tag("remove")(input.trim())?;
                                    let (input, _) = is_a(" ")(input)?;
                                    let (input, tag) = quoted_argument(input.trim())?;
+                                   let (input, _) = eof(input)?;
                                    Ok((input, Listing(Tag(Remove(tag.to_string())))))
                                }
                                ))
